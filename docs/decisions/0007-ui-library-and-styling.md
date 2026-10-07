@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Gate:** `gate:technology`
 - **Issue:** #6
-- **Date:** 2026-10-07
+- **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 
 ## Context
 
@@ -34,10 +34,10 @@ The decision is about tooling. The visual theme (palette, type scale, radius, sp
 
 | Open decision | What this ADR assumes | What happens if it goes the other way |
 | --- | --- | --- |
-| #1 package manager, Node, layout | **Package manager:** any of npm, pnpm, Yarn (node-modules linker), or Bun.<br>**Node:** 24 LTS or 26.<br>**Layout:** a single root package with `src/` and `design/` at the root. | **Package manager:** no change. None of the recommended packages has an install lifecycle script (checked on the npm registry). In a scratch install, the only blocked script was `@parcel/watcher`'s, which `@angular/build` already brings.<br>**Layout:** if #1 picks a workspace, the paths below gain the app's directory prefix. |
+| #1 package manager, Node, layout | **Package manager:** any of npm, pnpm, Yarn (node-modules linker), or Bun.<br>**Node:** 24 LTS or 26.<br>**Layout:** a single root package with `src/` and `design/` at the root. | **Package manager:** no change. None of the recommended packages has an install lifecycle script (checked on the npm registry). In a scratch install, the only blocked script was `@parcel/watcher`'s, which `@angular/build` already brings. Under ADR 0003's proposed policy (npm 11.20, `strict-allow-scripts=true`, the five-entry `allowScripts` map), all twelve packages installed into an SSR app with no new entry.<br>**Layout:** if #1 picks a workspace, the paths below gain the app's directory prefix. |
 | #3 unit-test runner | Vitest through the Angular builder. | Helm directives and icon components are ordinary Angular code, so any runner can test them. |
 | #4 e2e and accessibility | Playwright with axe. Screenshots at 360px and 1280px. | The self-hosted font chosen below makes rendering the same on macOS and on Linux CI runners, whichever runner is chosen. |
-| #5 rendering mode | CSR only. | Every option compared here also supports SSR, so the choice holds. |
+| #5 rendering mode (PR #18, ADR 0006) | **Hybrid rendering.** Public pages are `RenderMode.Server` and hydrate in the browser, static pages are prerendered, and `/app/**` is client-only. Public pages include the registration form, so form controls, buttons, icons, and the font all render on the server. | **Tested for the recommended stack** in a scratch Angular 22.2 SSR app; see "Server rendering and hydration". If #5 went back to CSR only, nothing here would change. |
 
 ## Options
 
@@ -127,7 +127,7 @@ These numbers are indicative only:
     - Tailwind's CSS compiler pulls in `lightningcss` 1.33 (MPL-2.0). It runs only at build time and is not shipped.
   - **Version support:** spartan "supports the two latest major Angular versions" ([version support](https://www.spartan.ng/documentation/version-support)).
   - **Lag behind Angular majors:** Angular 22.0.0 was published on 2026-06-03, and the first stable brain release allowing it (1.0.0) on 2026-06-24, 21 days later.
-- **Zoneless support.** The spartan 1.0 changelog says: "spartan is zoneless-ready and server-side-rendering compatible out of the box" ([changelog source](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(documentation)/documentation/changelog.page.ts)). brain's directives use signals and OnPush.
+- **Zoneless and SSR support.** The spartan 1.0 changelog says: "spartan is zoneless-ready and server-side-rendering compatible out of the box" ([changelog source](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(documentation)/documentation/changelog.page.ts)). brain's directives use signals and OnPush. The system tested this claim on an Angular 22.2 Server route; see "Server rendering and hydration" under Recommendation.
 - **Styling and tokens.**
   - The tokens are CSS custom properties in OKLCH, defined in `:root` with a `.dark` override: `--background`, `--foreground`, `--primary`, `--primary-foreground`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--ring`, `--radius`, and others.
   - Tailwind maps them to utilities, for example `bg-primary`.
@@ -339,6 +339,73 @@ The same steps would serve Option C's Tailwind variant. Option A has no equivale
 
 **The #10 placeholder mockup is not a style reference.** It is produced before any tokens exist, so the first feature screen's mockup defines the visual language from the tokens above.
 
+### Server rendering and hydration (ADR 0006)
+
+ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires this ADR to show that its components render on a Server route and hydrate without errors, and to state how its form controls bind to signal forms.
+
+**Test (2026-10-07).** The system built a scratch `ng new --ssr` app on Node 26.11.0, installed with npm 11.20.0 under ADR 0003's strict script policy.
+
+- **Packages:**
+  - `@angular/*` 22.2.1, `@angular/ssr` 22.2.1, zoneless, `provideClientHydration()` with the v22 defaults;
+  - the twelve packages in the table above;
+  - helm source for `utils`, `button`, `input`, `label`, `dialog`, and `select`, copied from the `@spartan-ng/cli` 1.6.1 templates (the same source as the docs' "Manual" tab), plus the `style-vega.css` preset.
+- **The `/ui` page (`RenderMode.Server`):**
+  - a heading;
+  - a Lucide icon through `<ng-icon>`;
+  - a `hlmLabel` and `input[hlmInput]` bound with `[formField]`;
+  - a `hlm-select` bound with `[formField]`;
+  - a `hlm-dialog` whose trigger is a `hlmBtn` with an icon.
+- **Tests:** Playwright 1.64.0 (Chromium) against `node dist/<app>/server/server.mjs`, on both a development build and a production build.
+
+| Check | Development build | Production build |
+| --- | --- | --- |
+| Raw server HTML, JavaScript disabled: helm classes present (`spartan-button`, `spartan-input`, `spartan-label`, `spartan-select-trigger`), `<ng-icon>` contains an inline `<svg>`, select trigger has `role="combobox"` and `aria-expanded="false"`, input has `value`, `name`, and `required` from the signal form | pass | pass |
+| Hydration: no `console.error`, no `pageerror`, no `NG0…` warning. Dev mode logged "Angular hydrated 7 component(s) and 42 node(s), 0 component(s) were skipped". Hydration mismatch checks run only in development builds (ADR 0005). | pass | pass (no console output at all) |
+| After hydration: typing into the input updates the signal model. Opening the select and choosing an option updates the model. Opening the dialog shows the model values, and Cancel closes it. | pass | pass |
+| Inter: the `.woff2` is requested from the app's own origin (`/media/…`), returns 200 `font/woff2`, and `document.fonts.check('16px "Inter Variable"')` is true. The computed `font-family` is Inter. | pass | pass |
+
+**What the source shows (`@spartan-ng/brain` 1.6.1 `fesm2022`, helm templates, `@ng-icons/core` 36.1.0):**
+
+- **Helm classes are server-rendered.** Helm's `classes()` helper (`utils/hlm.ts`) writes `element.className` from an `effect()`. Its own comment explains that it does not use `afterRenderEffect` because that "doesn't run in SSR contexts". Its `MutationObserver` and its transition suppression during hydration run only when `isPlatformBrowser` is true. Rewriting `class` after hydration changes no DOM structure, so it cannot cause NG0500.
+- **brain's browser APIs are guarded.**
+  - Browser-only work sits in `afterNextRender`, behind `isPlatformBrowser`, or behind `typeof ResizeObserver`/`MutationObserver` checks. This covers `autocomplete`, `checkbox`, `combobox`, `core`, `dialog`, `overlay`, `select`, `slider`, `sonner`, `switch`, `tabs`, and `tooltip`.
+  - Direct `document` access in `navigation-menu` happens only in keyboard-focus handlers.
+  - `sonner` reaches `matchMedia` through injected document and window references, inside `afterNextRender` or behind `isPlatformBrowser`.
+  - `message-scroller`, a chat-style scroller this product does not plan to use, calls `window.*` inside `afterNextRender`, behind `typeof window` guards, and in animation-frame cleanup. It was not exercised.
+  - A search of all 84 `fesm2022` files found no other use of the `window`, `document`, `navigator`, `localStorage`, or `matchMedia` globals.
+  - Only `dialog` and `select` (with `button`, `input`, and `label`) were rendered in the test. Every other brain primitive that a feature adopts gets its SSR check in that feature's e2e test, through the raw-HTML and hydration checks of ADR 0005.
+- **ng-icons has an explicit server path.** On the server, `NgIcon` writes the SVG through `innerHTML` and marks the host `data-ng-icon-ssr`. On hydration it reuses that markup. The icon is in the raw HTML, so it does not pop in after load.
+
+**Caveats, which feature issues must follow:**
+
+1. **Overlay content is not in the server HTML.**
+   - Dialog bodies, select options, popovers, tooltips, and toasts are created through CDK portals only when opened in the browser. The raw `/ui` HTML contained the dialog trigger and the select placeholder, but not the dialog title or any option label.
+   - Anything that must be indexable or appear in link previews belongs in page content, not inside an overlay. Examples: league details, price, and registration status.
+2. **Toasts: set an explicit theme.** `hlm-toaster` with `theme="system"` resolves to `light` on the server (`getActualTheme` reads `matchMedia` only in the browser) and may flip after hydration. Use a fixed theme, or render the toaster only in the browser.
+3. **Copied helm code is project code under ADR 0006's Server-route rules:**
+   - no `window`/`document`/`localStorage` outside `afterNextRender`;
+   - no platform branches that change DOM structure;
+   - no direct DOM manipulation other than through helm's `classes()`.
+
+   The PR that re-copies helm from upstream reviews the diff against those rules.
+4. **`provideSpartanHlm()`** (helm `utils`) goes in `app.config.ts`. It sets the CDK overlay `usePopover: false` default, and the server config inherits it through `mergeApplicationConfig`.
+5. **Fonts under SSR.**
+   - Fontsource's `@font-face` rules compile into `styles.css`, and the font files are emitted to `dist/<app>/browser/media/`. The generated `src/server.ts` serves them with `express.static` (`maxAge: '1y'`). Production file names are content-hashed (`inter-latin-wght-normal-<hash>.woff2`), so the year-long cache is safe.
+   - In the production build, Angular's critical-CSS inlining (beasties, through `@angular/ssr`) inlined the critical rules, including `@font-face`, into the server HTML. It also added `<link rel="preload" as="font" crossorigin href="/media/inter-latin-wght-normal-<hash>.woff2">`, so the Latin subset starts downloading with the HTML. The full stylesheet then loads without blocking render.
+   - #9's host must serve `dist/<app>/browser/media/` with the other static assets, with long-lived caching.
+   - No third-party font request is made on any route.
+
+**Signal forms binding** (ADR 0006 adopts signal forms):
+
+- **Native-element helm directives** (`[hlmInput]`, `[hlmTextarea]`) bind with `[formField]` directly on the native `<input>`/`<textarea>`. The server HTML then carries `value`, `name`, and `required`.
+- **brain's composite controls and helm's `hlm-native-select`** implement `ControlValueAccessor` (`NG_VALUE_ACCESSOR`):
+  - brain: `select`, `combobox`, `autocomplete`, `checkbox`, `switch`, `radio-group`, `slider`, `toggle-group`, `input-otp`, `command`, and `questionnaire`;
+  - helm: the `hlm-native-select` component, which wraps a `<select>`.
+
+  They bind with `[formField]` through `FormField`'s `ControlValueAccessor` compatibility path.
+- spartan's own docs show this pattern: the select "form" example uses `form()`, `FormRoot`, and `[formField]` on `hlm-select` ([`select--form.preview.ts`](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(select)/select--form.preview.ts)). The scratch test bound `hlm-select` the same way and got model updates both ways.
+- This is ADR 0006's "a `ControlValueAccessor` is used only when a #6 library requires it" case. Custom controls written in the repo implement `FormValueControl`/`FormCheckboxControl` instead.
+
 ### Accessibility responsibilities under this option
 
 - **brain:** provides ARIA roles, keyboard interaction, and focus management for its primitives.
@@ -362,6 +429,11 @@ The same steps would serve Option C's Tailwind variant. Option A has no equivale
   6. **Mockup:** the first mockup, built with the kit and approved through `gate:ui-design`.
   
   Copied helm files are vendored code. The PR should list them separately so reviewers can tell them from hand-written code.
+
+  Because of ADR 0006, the same work also:
+  - adds `provideSpartanHlm()` to `app.config.ts`;
+  - for each public page that uses helm components, includes the ADR 0005 raw-HTML assertion (helm classes and icon `<svg>` present without JavaScript) and the hydration check;
+  - keeps indexable content out of overlays (caveat 1 under "Server rendering and hydration").
 - **Ongoing maintenance:**
   - Helm code is the project's to maintain. Upstream helm fixes are applied by re-copying from the spartan docs and reviewing the diff.
   - Angular major upgrades depend on a brain release.
@@ -418,4 +490,11 @@ The same steps would serve Option C's Tailwind variant. Option A has no equivale
   - `@fontsource-variable/inter` 5.3.0 `LICENSE` and file sizes
   - [Inter on Fontsource](https://fontsource.org/fonts/inter)
   - LG München I, 3 O 17493/20, 20 Jan 2022: [University of Regensburg summary](https://www.uni-regensburg.de/universitaet/aktuelles/nachrichten/nachricht/04-04-2022_dynamische-einbindung-von-google-fonts-ohne-einwilligung-verstoesst-gegen-dsgvo), [IHK summary](https://www.ihk.de/bergische/recht-und-steuern/wettbewerbsrecht/google-fonts-5646176)
+- **Server rendering (added for ADR 0006):**
+  - [Angular: server and hybrid rendering](https://angular.dev/guide/ssr)
+  - [Angular: hydration](https://angular.dev/guide/hydration)
+  - [spartan select with signal forms (`select--form.preview.ts`)](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(select)/select--form.preview.ts)
+  - [spartan dialog example (`dialog.preview.ts`)](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(dialog)/dialog.preview.ts)
+  - Package contents: `@spartan-ng/cli` 1.6.1 `src/generators/ui/libs/{utils,button,input,label,dialog,select,native-select,textarea}/files/**` and `src/generators/ui/style-vega.css`; `@spartan-ng/brain` 1.6.1 `fesm2022/*.mjs`; `@ng-icons/core` 36.1.0 `fesm2022/ng-icons-core.mjs`.
+  - Scratch SSR app, 2026-10-07: Node 26.11.0, npm 11.20.0 under ADR 0003's policy, `@angular/*` and `@angular/ssr` 22.2.1, Playwright 1.64.0 (Chromium). Results are in "Server rendering and hydration".
 - **Measurements:** scratch builds with Angular CLI 22.2.2 on Node 24.16.0, 2026-10-07. They covered the bundle sizes in the Options table and the `mockup-kit` configuration test (mockup-only class present in `mockup-kit.css`, absent from `styles.css`, kit not injected into `index.html`).
