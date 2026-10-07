@@ -16,7 +16,9 @@ Sport-specific rules (scoring, team size, standings) must be configurable per sp
 
 ## Organizations and public registration
 
-- Public pages are needed at launch: anyone can browse an organization's leagues and register for them from those pages (owner answer on #5).
+Leagues belong to an organization, which an organizer runs.
+
+- Public pages are needed at launch: visitors can view an organization's leagues and locations on public pages; users can register for those leagues from them (owner answer on #5: "users will need to be able to register to organizations leagues").
 - An organization can have multiple locations where its leagues are held (owner answer on #5).
 
 ## Platform requirements
@@ -28,11 +30,12 @@ Sport-specific rules (scoring, team size, standings) must be configurable per sp
 
 ## Constraints
 
-Owner answers; the decisions that apply them are in `docs/decisions/`.
+Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted` ADRs in `docs/decisions/` are decided.
 
-- **Sign-in (#7):** email one-time code or magic link, plus Google, at launch. The auth provider's free tier at launch.
+- **Sign-in (#7):** email one-time code or magic link, plus Google, at launch.
+- **Auth budget (#7):** the auth provider's free tier at launch.
 - **Accounts (#7):** adults only at launch. Minors appear as roster entries managed by a guardian or organizer.
-- **Hosting budget (#9):** up to about $25/month for hosting and Convex combined; the host's terms must allow commercial use.
+- **Hosting budget (#9):** up to about $25/month for hosting and Convex combined; the terms of both the host and the Convex plan must allow commercial use.
 - **Previews (#9):** every PR gets a preview deployment with its own Convex backend.
 - **Domain (#9):** the host's default domain until the first production release.
 
