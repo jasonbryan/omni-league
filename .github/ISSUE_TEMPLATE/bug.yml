@@ -1,0 +1,28 @@
+name: Bug
+description: Something behaves differently from what was specified.
+labels: ["type:bug", "status:planning"]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Local, preview URL, or production; browser and device.
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria for the fix
+      description: Include the regression test that will prevent it returning.
