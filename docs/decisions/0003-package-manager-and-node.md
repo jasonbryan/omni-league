@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Gate:** `gate:technology`
 - **Issue:** #1
-- **Date:** 2026-10-07
+- **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 
 ## Context
 
@@ -51,7 +51,7 @@ Starting with Node 27, Node.js ships one major per year (April), and every major
 | #2 lint and format (PR #16) | ESLint 10, typescript-eslint 8, angular-eslint 22, `@convex-dev/eslint-plugin` 5, Prettier 3; TypeScript stays on 6.0.x. | All of these were installed in the test below. None has an install script, and all are compatible with npm's hoisted `node_modules`. |
 | #3 unit and Convex test runners | Vitest (Angular 22's default), `convex-test`, `@edge-runtime/vm`. | These were installed in the test and have no install scripts. Any other runner that has one needs an `allowScripts` entry (see the lifecycle-script policy). |
 | #4 e2e and accessibility | Possibly `@playwright/test` and `@axe-core/playwright`. | These were installed in the test and have no install scripts. Playwright browsers are installed by an explicit `npx playwright install` command, not by a lifecycle script, so the script policy does not affect them. |
-| #5 Angular baseline | CSR-only, so no server Node runtime in production. | If #5 picks SSR, the server runtime's Node version is #9's decision, but the build still runs on Node 26. |
+| #5 Angular baseline (PR #18, ADR 0006) | **Hybrid rendering** (`@angular/ssr`, `outputMode: "server"`): public Convex-backed routes render on the server per request, static pages are prerendered, and `/app/**` is client-only. This adds `@angular/ssr`, `@angular/platform-server`, and `express` (dependencies) and `@types/express` and `@types/node` (devDependencies). | **None of these has an install script, and none pulls one in** (tested below), so the `allowScripts` map stays at five entries. The build still runs on Node 26. The production server's Node major is #9's choice, within Angular 22's range `^22.22.3 \|\| ^24.15.0 \|\| ^26.0.0`. It does not have to match `devEngines`, because the server bundle needs no `node_modules` at runtime (see "Server runtime and `devEngines`"). If #5 went back to CSR only, these five packages would drop out and nothing else here would change. |
 | #6 UI and styling | Unknown packages. | The #6 ADR must list any of its packages that have install scripts (for example native CSS engines), with an allow or deny entry and a reason. Otherwise the first install fails under the strict policy below, which is intended. |
 | #8 CI | GitHub-hosted Ubuntu runners, `actions/setup-node`, Dependabot or Renovate for updates. | See Consequences, "Effects on other issues". |
 
@@ -164,6 +164,14 @@ The minimum `26.11.0` is chosen because it is the first Node 26 release that bun
 - **CI runners:** `actions/setup-node` with `node-version-file: package.json` reads `devEngines.runtime`, which is documented in setup-node's [advanced usage](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md). npm comes with that Node. If the setup-node version that #8 pins lacks `devEngines.runtime` support, point it at `.nvmrc` instead. A drift between the two files then fails the install through `devEngines`. No package-manager setup action is needed.
 - **Install commands:** `npm ci` in CI and on a fresh clone (frozen: it fails if `package.json` and `package-lock.json` disagree). `npm install <pkg>` when changing dependencies. Lockfile: `package-lock.json` (lockfileVersion 3), committed.
 
+### Server runtime and `devEngines`
+
+ADR 0006's hybrid rendering adds a production Node process: `node dist/<app>/server/server.mjs`. The pins above apply where `npm` runs (laptops, CI, and any host build step), not where the built server runs.
+
+- **The server bundle is self-contained.** The Angular build bundles Express, `@angular/ssr`, and the app into `dist/<app>/server/*.mjs`. Those files import only Node built-ins (`node:path`, `node:url`, `node:process`). A copy of `dist/` run on **Node 24.16.0**, with no `node_modules` anywhere above it, served the Server route with its data, `Cache-Control` header, and `ng-state`. Tested; see item 6.
+- **So the runtime Node major can differ from `devEngines`.** A host that deploys `dist/` and runs it on Node 22.22.3+, 24.15+, or 26 works, because nothing on the runtime runs `npm ci`. A host that **builds** on its own image must provide Node 26.11+ for the build, or the install fails on `devEngines`. That is the existing #9 constraint below.
+- **Typing server code.** `src/server.ts` and anything it imports run on the runtime's Node. If #9 picks a runtime major below 26, `@types/node` is set to **that** major, not 26, so that a Node 26-only API in server code fails `typecheck`. This follows the same rule as Convex `"use node"` actions. It narrows ADR 0006's "pin `@types/node` to the Node major from #1". Build-time scripts (`scripts/ng-convex.mjs`) use only APIs present in Node 24 (`util.parseEnv` is stable from 24.10.0), so one `@types/node` major covers both.
+
 ### Lifecycle-script policy: allow-list, fail closed
 
 - **`package.json` `allowScripts`:** an explicit map, with every entry denied unless a reason to allow it is recorded in the PR that adds it.
@@ -185,6 +193,8 @@ All four Linux-relevant packages publish `linux-x64` prebuilds (checked on the r
 With all five denied, the system ran `ng build`, `ng test` (Vitest), and an esbuild bundle through Convex's own copy of esbuild, on both Node 24.16.0 and Node 26.11.0. All passed.
 
 `@playwright/test`, `@axe-core/playwright`, `convex-test`, `@edge-runtime/vm`, the ESLint packages, and Prettier have no install scripts.
+
+**SSR packages (ADR 0006).** `@angular/ssr` 22.2.1, `@angular/platform-server` 22.2.1, `express` 5.2.1, `@types/express` 5.0.6, and `@types/node` 26.6.4 have no install scripts. The same is true of their transitive dependencies, including `beasties` 0.5.4 (Apache-2.0) and the Express middleware tree. A tree with them added installed under `strict-allow-scripts=true` with only the five entries above. Its lockfile marks `hasInstallScript` on exactly the same packages (`esbuild` twice, `lmdb`, `msgpackr-extract`, `@parcel/watcher`, `fsevents`). With all five denied, the SSR build and its Node server worked (Test evidence, item 6).
 
 The repository's own scripts (for example a root `prepare`) are not covered by `allowScripts`. ADR 0002 adds none.
 
@@ -244,9 +254,13 @@ The repository's own scripts (for example a root `prepare`) are not covered by `
   - The update tool must not propose versions younger than `min-release-age`, otherwise CI fails on resolution. If Dependabot is chosen, its `cooldown` setting must be at least 1 day.
   - `npm audit signatures` should be listed as a CI step.
   - Dependabot's supported-ecosystems table lists npm up to v11. npm 11 is covered; npm 12 and pnpm 11/12 are not listed.
-- **#9 (hosting):** any build image must run Node 26.11 or later, or the install fails on `devEngines`.
+- **#9 (hosting):**
+  - Any build image must run Node 26.11 or later, or the install fails on `devEngines`.
+  - The SSR server's runtime Node major is #9's choice within Angular 22's range. The ADR states it, and if it is below 26 it also states the matching `@types/node` major (see "Server runtime and `devEngines`").
+  - Deploying `dist/` needs no `npm ci` on the runtime.
 - **#10 (scaffold):**
-  - Follows the layout, pins, `.npmrc`, and the five-entry `allowScripts` map above.
+  - Follows the layout, pins, `.npmrc`, and the five-entry `allowScripts` map above. The SSR packages from ADR 0006 need no extra entry.
+  - The layout gains the SSR files ADR 0006 generates (`src/server.ts`, `src/main.server.ts`, `src/app/app.config.server.ts`, `src/app/app.routes.server.ts`), all in the same single root package.
   - Lowers the floor of any `ng new` range that resolves only to a version published less than a day earlier.
   - The install command is `npm ci`.
 - **#12 (CI pipeline):** `npm ci`; `setup-node` reads `package.json` (or `.nvmrc`). The lockfile-mismatch check in #12 is `npm ci`'s built-in behaviour.
@@ -271,11 +285,23 @@ Run on 2026-10-07 on macOS arm64, in a scratch directory outside the repository.
    - With `esbuild` removed from the map, npm 11 **ran** its postinstall with only a warning. With `strict-allow-scripts`, it failed with `ESTRICTALLOWSCRIPTS`.
    - Under Node 24.16.0, `devEngines` failed with `EBADDEVENGINES`.
    - `npm audit signatures` passed (204 packages with verified attestations).
+6. **SSR packages under the same policy (added 2026-10-07 for ADR 0006), npm 11.20.0 on Node 26.11.0.**
+   - Starting from an `ng new --ssr` dependency set plus `convex@1.46.0`, the system set `@types/node` to `^26.0.0` and copied the `.npmrc` and the five-entry `allowScripts` map unchanged.
+   - `npm install` passed: 359 packages, no `ESTRICTALLOWSCRIPTS`.
+     - Resolved versions: `@angular/ssr` 22.2.1, `@angular/platform-server` 22.2.1, `express` 5.2.1, `@types/express` 5.0.6, `@types/node` 26.6.4, `beasties` 0.5.4.
+     - `@angular/ssr` 22.2.2, published the same day, was held back by `min-release-age=1`, as intended.
+     - The lockfile's `hasInstallScript` entries were exactly the five denied packages.
+   - `ng build` (`outputMode: "server"`) passed: it prerendered 1 route and emitted `dist/<app>/server/server.mjs`, and esbuild's postinstall did not run.
+   - `node dist/<app>/server/server.mjs` returned:
+     - the prerendered `/`;
+     - a `RenderMode.Server` route with its data, `Cache-Control: public, max-age=0, s-maxage=30, stale-while-revalidate=60`, and the `ng-state` script;
+     - the empty client shell for a `RenderMode.Client` route.
+   - The same `dist/`, copied to a directory with no `node_modules` and run on **Node 24.16.0**, served the Server route identically. The server bundle imports only Node built-ins.
 
 ## Sources
 
 - Node.js: [release schedule (schedule.json)](https://raw.githubusercontent.com/nodejs/Release/main/schedule.json), [Release WG README](https://github.com/nodejs/Release/blob/main/README.md), [Evolving the Node.js Release Schedule](https://nodejs.org/en/blog/announcements/evolving-the-nodejs-release-schedule), [dist index (versions, bundled npm)](https://nodejs.org/dist/index.json), [Corepack docs (removal from v25)](https://nodejs.org/download/release/latest-v25.x/docs/api/corepack.html), [licence (MIT)](https://github.com/nodejs/node/blob/main/LICENSE)
-- Angular: [version compatibility](https://angular.dev/reference/versions), [releases](https://angular.dev/reference/releases); npm registry [`@angular/core`](https://www.npmjs.com/package/@angular/core), [`@angular/cli`](https://www.npmjs.com/package/@angular/cli)
+- Angular: [version compatibility](https://angular.dev/reference/versions), [releases](https://angular.dev/reference/releases); npm registry [`@angular/core`](https://www.npmjs.com/package/@angular/core), [`@angular/cli`](https://www.npmjs.com/package/@angular/cli), [`@angular/ssr`](https://www.npmjs.com/package/@angular/ssr), [`@angular/platform-server`](https://www.npmjs.com/package/@angular/platform-server), [`express`](https://www.npmjs.com/package/express), [`@types/express`](https://www.npmjs.com/package/@types/express); [server and hybrid rendering](https://angular.dev/guide/ssr)
 - Convex: [`convex` on npm](https://www.npmjs.com/package/convex), [runtimes](https://docs.convex.dev/functions/runtimes), [project configuration (`node.nodeVersion`)](https://docs.convex.dev/production/project-configuration)
 - npm: [npm on the registry (12.2.0, Artistic-2.0)](https://www.npmjs.com/package/npm), [v11 config (`allow-scripts`, `strict-allow-scripts`, `min-release-age`, `allow-git`)](https://docs.npmjs.com/cli/v11/using-npm/config), [v12 config](https://docs.npmjs.com/cli/v12/using-npm/config), [v12.0.0 release](https://github.com/npm/cli/releases/tag/v12.0.0)
 - pnpm: [pnpm on the registry (12.10.1, MIT)](https://www.npmjs.com/package/pnpm), [installation](https://pnpm.io/installation), [build settings](https://pnpm.io/settings/build), [dependency-resolution settings](https://pnpm.io/settings/dependency-resolution), [CLI settings (`pmOnFail`)](https://pnpm.io/settings/cli), [pnpm 12 release](https://pnpm.io/blog/releases/12.0), [pnpm/action-setup](https://github.com/pnpm/action-setup)
