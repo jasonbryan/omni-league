@@ -125,7 +125,7 @@ The full config lives in a single root `eslint.config.mjs`, which must be ESM (s
 1. **All `**/*.ts`:**
    - `@eslint/js` `recommended`, plus typescript-eslint `recommendedTypeChecked` and `stylisticTypeChecked`.
    - `parserOptions.projectService: true` and `tsconfigRootDir: import.meta.dirname`.
-   - The project service finds the Angular tsconfig references and `convex/tsconfig.json`. TS files outside every tsconfig, such as a root `vitest.config.ts`, are listed in `projectService.allowDefaultProject`.
+   - The project service finds the Angular tsconfig references and `convex/tsconfig.json`. TS files outside every tsconfig, such as the root `vitest.config.mts` (ADR 0004), are listed in `projectService.allowDefaultProject`.
    - Type-aware linting is required by Convex's `explicit-table-ids` and gives `no-floating-promises` and `no-misused-promises`.
    - Moving to the `strict*` presets later is a config change, not a gate.
 2. **`src/**/*.ts`:**
