@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Gate:** `gate:technology`
 - **Issue:** #2
-- **Date:** 2026-10-07
+- **Date:** 2026-10-07 (revised 2026-10-07: config-file patterns, ADR 0006 SSR files)
 
 ## Context
 
@@ -25,8 +25,9 @@ The dev cycle requires `lint` to be green before a PR is opened and CI (#12) run
 | #1 Node version | Node 24 LTS or Node 26. | The engine ranges below accept both. |
 | #1 repository layout | A single root package with `src/` (Angular) and `convex/` at the root, as in Convex's quickstarts. | If #1 picks a workspace, the globs below get the app's directory prefix (for example `apps/web/src/**`). The tools, rules, and scripts stay the same. |
 | #3 unit-test runner | Angular 22's default (Vitest through the Angular builder) or another runner that uses explicit imports. | Spec files use the same TypeScript config. typescript-eslint's `eslint-recommended` layer turns `no-undef` off for TS files, so runner globals need no `globals` package. |
-| #4 e2e runner | Possibly Playwright. | Its output directories are on the ignore list. If #4 picks another runner, the implementer adds that runner's output directories to the ignore list instead. |
+| #4 e2e runner | Playwright (ADR 0005, PR #17): `playwright.config.ts` at the root and specs in `e2e/`. Neither is in an Angular tsconfig. | Its output directories are on the ignore list, and its TS files are covered by `tsconfig.tooling.json` (rule set 1). If #4 picks another runner, the implementer adds that runner's output directories to the ignore list and its config and spec paths to `tsconfig.tooling.json`. |
 | #5 adapter folder | `src/app/core/data/convex/` (#11 places the adapter under the app's core/data folder). | Only the `ignores` glob of the restricted-imports block changes. |
+| #5 rendering (PR #18, ADR 0006) | **Hybrid rendering.** `ng new --ssr` adds `src/server.ts` (Express + `AngularNodeAppEngine`), `src/main.server.ts`, `src/app/app.config.server.ts`, and `src/app/app.routes.server.ts`. It also adds `"types": ["node"]` to `tsconfig.app.json`, whose `include` is `src/**/*.ts`. ADR 0006 adds `scripts/ng-convex.mjs`, a Node script. | The SSR files fall under `src/**/*.ts` (rule sets 1 and 2, and restricted imports). The script falls under rule set 5. If #5 went back to CSR only, the four files would not exist and nothing else would change. |
 | #6 styling | CSS or SCSS. | Prettier formats both natively. Any Prettier or ESLint plugin that #6 brings (for example a Tailwind class sorter) is a new package and goes through #6's own gate, not this one. |
 | #8 CI | CI runs `lint` and `format:check` as scripts. | Workflow linting (for example actionlint) and any PR-title check are #8's decisions. |
 
@@ -104,6 +105,7 @@ All versions and licences are checked against the npm registry on 2026-10-07.
 | `angular-eslint` | 22.5.0 | MIT | Meta-package that pulls in `@angular-eslint/{builder,eslint-plugin,eslint-plugin-template,template-parser,schematics}` 22.5.0. Peers: `eslint ^9 \|\| ^10`, `typescript-eslint ^8`. Depends on `@angular-devkit/* >=22 <23`. |
 | `@convex-dev/eslint-plugin` | 5.0.0 | Apache-2.0 | Peer `convex ^1.43.0` (current `convex` is 1.46.0). Bundles `@typescript-eslint/utils ~8.58`, which installs a second copy alongside 8.71. That is harmless: there is no peer conflict. |
 | `prettier` | 3.9.9 | MIT | Already added by `ng new` (Angular CLI 22.2.2 template: `^3.8.1`). This ADR accepts it. Engines `>=14`. |
+| `globals` | 17.13.0 | MIT | Node global names (`globals.node`) for rule set 5, as in ESLint's [language options docs](https://eslint.org/docs/latest/use/configure/language-options#predefined-global-variables). Without it, `@eslint/js` `recommended` reports `no-undef` on `process`, `console`, and `URL` in Node scripts such as `scripts/ng-convex.mjs`. No dependencies. Engines `>=18`. Its only lifecycle script is `prepare`, which npm does not run for registry installs. Not installed transitively by ESLint 10. |
 
 **Not added:**
 
@@ -122,10 +124,26 @@ All versions and licences are checked against the npm registry on 2026-10-07.
 
 The full config lives in a single root `eslint.config.mjs`, which must be ESM (see Option A, Cons). The paths below assume the single-root layout.
 
-1. **All `**/*.ts`:**
+1. **All TypeScript: `files: ['**/*.{ts,mts,cts}']`:**
    - `@eslint/js` `recommended`, plus typescript-eslint `recommendedTypeChecked` and `stylisticTypeChecked`.
    - `parserOptions.projectService: true` and `tsconfigRootDir: import.meta.dirname`.
-   - The project service finds the Angular tsconfig references and `convex/tsconfig.json`. TS files outside every tsconfig, such as the root `vitest.config.mts` (ADR 0004), are listed in `projectService.allowDefaultProject`.
+   - **Why the pattern includes `.mts` and `.cts`.**
+     - ESLint lints `**/*.{js,cjs,mjs}` by default, and other files only when a config object's `files` pattern matches them ([ESLint: configuration files](https://eslint.org/docs/latest/use/configure/configuration-files)).
+     - `**/*.ts` does not match `.mts`. With the earlier `**/*.ts` pattern, `eslint .` silently skipped the root `vitest.config.mts` (ADR 0004). Naming it explicitly reported "File ignored because no matching configuration was supplied". So listing it in `allowDefaultProject` had no effect.
+   - **Which tsconfig types each file.** The project service uses each file's nearest `tsconfig.json`, following its `references`:
+     - `src/**` comes from `tsconfig.app.json`/`tsconfig.spec.json`, and `convex/**` from `convex/tsconfig.json`.
+     - Root TS config files and `e2e/**` are in no tsconfig, so #10 adds **`tsconfig.tooling.json`** and references it from the root `tsconfig.json`:
+
+       ```json
+       {
+         "extends": "./tsconfig.json",
+         "compilerOptions": { "noEmit": true, "types": ["node"] },
+         "include": ["*.ts", "*.mts", "e2e/**/*.ts"]
+       }
+       ```
+
+     - This covers `vitest.config.mts`, `playwright.config.ts`, and the e2e specs with real type information. **`allowDefaultProject` is not used.**
+   - **Why not `allowDefaultProject`.** It takes no `**` globs (typescript-eslint docs), so it cannot cover `e2e/**`. In the test below, its default project also left `process` unresolved in `playwright.config.ts` (`no-unsafe-member-access` on "a type that cannot be resolved"). Files in `allowDefaultProject` must also not be in their nearest tsconfig, so the SSR files (which `tsconfig.app.json` includes) must never be listed there.
    - Type-aware linting is required by Convex's `explicit-table-ids` and gives `no-floating-promises` and `no-misused-promises`.
    - Moving to the `strict*` presets later is a config change, not a gate.
 2. **`src/**/*.ts`:**
@@ -142,7 +160,23 @@ The full config lives in a single root `eslint.config.mjs`, which must be ESM (s
    - Also turned on at `error`: **`@convex-dev/require-access-control`**, which is off in `recommended`. It flags exported public functions that make no call to a function named `require*`, `assert*`, `check*`, `ensure*`, `can*`, or `has*`. This enforces `convex.md`'s "every public function authenticates the caller". The shared helpers in `convex/lib/` are named to match. A deliberately public function, such as a published schedule, carries an `eslint-disable-next-line` comment with a reason, which the PR reviewer sees.
    - `no-collect-in-query` and the experimental `import-wrong-runtime` stay off.
    - Because `lint` runs with `--max-warnings=0`, the two warning rules fail the check too. A justified `.filter()` on an index-bounded result needs a disable comment with a reason.
-5. **Root `*.js`, `*.mjs`, `*.cjs`** (config files): `@eslint/js` `recommended` only, with no type information.
+5. **All JavaScript: `files: ['**/*.{js,mjs,cjs}']`** (config files such as `eslint.config.mjs`, and Node scripts such as ADR 0006's `scripts/ng-convex.mjs`):
+   - `@eslint/js` `recommended` with `languageOptions.globals: globals.node`, and no type information.
+   - The earlier root-only `*.js`/`*.mjs`/`*.cjs` pattern did not match `scripts/ng-convex.mjs`. ESLint still linted that file (default `**/*.mjs`), but with **no rules**: an unused variable passed.
+   - Without `globals.node`, the corrected pattern reports `no-undef` on `process`, `console`, and `URL`.
+   - Generated and output directories stay excluded by the global ignores.
+
+### Server-rendering files (ADR 0006)
+
+`src/server.ts`, `src/main.server.ts`, `src/app/app.config.server.ts`, and `src/app/app.routes.server.ts` match `src/**/*.ts`. They get:
+
+- **rule set 1**, with type information from `tsconfig.app.json`, which `ng new --ssr` sets to `include: ["src/**/*.ts"]` and `types: ["node"]`, so `process` and the Express types resolve;
+- **rule set 2** (angular-eslint TS rules);
+- **the restricted-imports block.** This also enforces ADR 0006's "`src/server.ts` must not import `convex/browser`".
+
+No separate block is needed, and none of these files may be listed in `allowDefaultProject`, because `tsconfig.app.json` already includes them.
+
+**Generated code fails one rule.** The CLI 22.2 `server.ts` template has `const port = process.env['PORT'] || 4000;`, which fails `@typescript-eslint/prefer-nullish-coalescing` (from `stylisticTypeChecked`). #10 changes it to `??`. An empty `PORT` then reaches `listen()` instead of falling back to 4000, which is acceptable because `PORT` is always either set to a number or unset. The other three generated files lint clean.
 
 ### Restricted-imports rule for #11
 
@@ -171,12 +205,13 @@ The full config lives in a single root `eslint.config.mjs`, which must be ESM (s
 
 | Files | ESLint | Prettier |
 | --- | --- | --- |
-| `src/**/*.ts` (app, specs) | Rule sets 1 and 2, plus restricted imports | Yes |
+| `src/**/*.ts` (app, specs, and the SSR files `src/server.ts`, `src/main.server.ts`, `src/app/app.config.server.ts`, `src/app/app.routes.server.ts`) | Rule sets 1 and 2, plus restricted imports | Yes |
 | `src/**/*.html` and inline templates | Rule set 3 | Yes, `angular` parser (override scoped to `src/**/*.html`) |
 | `src/**/*.{css,scss}` | No | Yes |
 | `convex/**/*.ts` (except `_generated/`) | Rule sets 1 and 4 | Yes |
-| e2e specs (directory per #4) | Rule set 1 | Yes |
-| Root config files (`*.{js,mjs,cjs,ts}`) | Rule set 1 or 5 | Yes |
+| e2e specs (`e2e/**/*.ts`, typed by `tsconfig.tooling.json`) | Rule set 1 | Yes |
+| Root TS config files (`*.ts`, `*.mts`, for example `vitest.config.mts`, `playwright.config.ts`, typed by `tsconfig.tooling.json`) | Rule set 1 | Yes |
+| JavaScript anywhere (`**/*.{js,mjs,cjs}`, for example `eslint.config.mjs`, `scripts/ng-convex.mjs`) | Rule set 5 | Yes |
 | `design/mockups/**/*.html` | No: these are static HTML, not Angular templates, and their accessibility is checked when the designer reviews the mockup | Yes, `html` parser |
 | Markdown: `docs/**/*.md`, `*.md`, `.claude/**/*.md`, `.github/**/*.md` | No | Yes, with `proseWrap: "preserve"` so existing line breaks stay |
 | YAML: `.github/workflows/*.yml`, `.github/ISSUE_TEMPLATE/*.yml` | No; workflow linting is #8's decision | Yes |
@@ -216,12 +251,15 @@ ESLint's flat config does not read `.gitignore`, so its ignores go in `globalIgn
 
 ## Consequences
 
-- **New devDependencies:** the six packages in the table. They all have permissive licences, cost nothing, and run no install lifecycle scripts.
+- **New devDependencies:** the seven packages in the table. They all have permissive licences, cost nothing, and run no install lifecycle scripts.
 - **Setup steps in #10:**
-  1. Run `ng new` (which brings Prettier), then `ng add angular-eslint`.
-  2. Rename or convert the generated `eslint.config.js` to ESM (`eslint.config.mjs`), add the Convex, restricted-imports, and extra-rule blocks, and add the global ignores.
-  3. Edit `.prettierrc` and add `.prettierignore`.
-  4. Run `prettier . --write` once.
+  1. Run `ng new --ssr` (which brings Prettier), then `ng add angular-eslint`.
+  2. Rename or convert the generated `eslint.config.js` to ESM (`eslint.config.mjs`). Set rule set 1's `files` to `**/*.{ts,mts,cts}` and rule set 5's to `**/*.{js,mjs,cjs}` with `globals.node`. Add the Convex, restricted-imports, and extra-rule blocks, and the global ignores.
+  3. Add `tsconfig.tooling.json` and reference it from the root `tsconfig.json`.
+  4. Change `||` to `??` for `PORT` in the generated `src/server.ts`.
+  5. Edit `.prettierrc` and add `.prettierignore`.
+  6. Run `prettier . --write` once.
+- **#10 acceptance check for coverage.** `eslint . --format json` lists every linted `filePath`, and a deliberate unused variable in each file is reported. Together they show that `vitest.config.mts`, `playwright.config.ts` (once #13 adds it), `scripts/*.mjs`, and `src/server.ts` are linted. A file that ESLint skips does not fail `lint`, so only a positive check catches a pattern gap.
 - **First-run diff:** that one-time `prettier . --write` reformats existing Markdown, YAML, and HTML in the repo (`AGENTS.md`, `docs/`, `.github/`, `.claude/`). The diff is formatting-only and excluded from #10's 400-line budget, the same way generated files are.
 - **Convex authors:**
   - Every public function needs a `require*`/`assert*`/`check*`/`ensure*`/`can*`/`has*` call, or a disable comment with a reason.
@@ -231,9 +269,29 @@ ESLint's flat config does not read `.gitignore`, so its ignores go in `globalIgn
 - **Harder later:** moving to TypeScript 7 waits on typescript-eslint support as well as Angular support. Replacing Prettier or ESLint later (for example with Biome once it supports Angular templates) needs a new ADR that supersedes this one.
 - **No local enforcement before push.** Contributors and agents run `lint` and `format:check` themselves, and CI catches anything missed.
 
+## Test evidence (config-file patterns and SSR files, 2026-10-07)
+
+**Setup.**
+
+- **App:** a scratch `ng new --ssr` app (`@angular/*` 22.2.1, `@angular/ssr` 22.2.1, TypeScript 6.0) on Node 26.11.0.
+- **Lint packages:** `eslint` 10.12.0, `@eslint/js` 10.0.1, `typescript-eslint` 8.71.1, `angular-eslint` 22.5.0, `@convex-dev/eslint-plugin` 5.0.0, and `globals` 17.13.0.
+- **Probe files:** `vitest.config.mts` with an unused variable and an unawaited `Promise.resolve()`, `playwright.config.ts`, two `e2e/*.spec.ts` files, and `scripts/ng-convex.mjs` with an unused variable plus `process`, `console`, and `URL`.
+
+| Config | `vitest.config.mts` | `scripts/ng-convex.mjs` | `playwright.config.ts`, `e2e/*.ts` | SSR files |
+| --- | --- | --- | --- | --- |
+| As first proposed (`**/*.ts`, `allowDefaultProject: ['vitest.config.mts']`, root-only `*.mjs`) | **Not linted** (skipped by `eslint .`; "no matching configuration" when named) | Linted with **no rules** (unused variable passed) | n/a (e2e ignored in this run) | Linted, typed; `server.ts` fails `prefer-nullish-coalescing` |
+| `**/*.{ts,mts,cts}` + `allowDefaultProject: ['vitest.config.mts', 'playwright.config.ts']`, `**/*.{js,mjs,cjs}` + `globals.node` | Linted, typed (`no-unused-vars`, `no-floating-promises` reported) | Linted (`no-unused-vars` reported; no `no-undef`) | `e2e/*.ts`: parsing error "was not found by the project service". `playwright.config.ts`: `process` unresolved (`no-unsafe-member-access`) | Same |
+| **Recommended:** the same patterns + `tsconfig.tooling.json` referenced from the root, `projectService: true` | Linted, typed (same two findings) | Linted (same) | Linted, typed (only genuine findings) | Same |
+| `**/*.{js,mjs,cjs}` without `globals.node` | n/a | `no-undef` on `process`, `URL`, `console` | n/a | n/a |
+
+With the recommended config, `ng build` still succeeded, and `tsc -p tsconfig.tooling.json` type-checked the tooling files.
+
 ## Sources
 
+- ESLint: [configuration files](https://eslint.org/docs/latest/use/configure/configuration-files) (default lint patterns; `files` needed for other extensions), [language options: predefined globals](https://eslint.org/docs/latest/use/configure/language-options#predefined-global-variables)
+- typescript-eslint: [parser options: `projectService`, `allowDefaultProject`, `defaultProject`](https://typescript-eslint.io/packages/parser#projectservice) (no `**` in `allowDefaultProject`; such files may not be in their nearest tsconfig)
 - npm registry, checked 2026-10-07 for versions, licences, peer dependencies, engines, and install scripts:
+  - [globals](https://www.npmjs.com/package/globals)
   - [eslint](https://www.npmjs.com/package/eslint)
   - [@eslint/js](https://www.npmjs.com/package/@eslint/js)
   - [typescript-eslint](https://www.npmjs.com/package/typescript-eslint)
