@@ -16,7 +16,7 @@ Sport-specific rules (scoring, team size, standings) must be configurable per sp
 
 ## Organizations and public registration
 
-Leagues belong to an organization, which an organizer runs.
+Leagues belong to an organization.
 
 - Public pages are needed at launch: visitors can view an organization's leagues and locations on public pages; users can register for those leagues from them (owner answer on #5: "users will need to be able to register to organizations leagues").
 - An organization can have multiple locations where its leagues are held (owner answer on #5).
