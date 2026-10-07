@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Gate:** `gate:technology`
 - **Issue:** #4
-- **Date:** 2026-10-07
+- **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 
 ## Context
 
@@ -17,13 +17,17 @@ Constraints from #4 and the issues that depend on it:
 - The repository is private. GitHub Free includes 2,000 Linux minutes and 500 MB of artifact storage per month for private repos ([GitHub billing docs](https://docs.github.com/en/billing/concepts/product-billing/github-actions)), so per-run minutes matter.
 - #13 (harness) is `status:ready` and already assumes 360px and 1280px viewports, `E2E_BASE_URL`, a console-error fixture, an axe helper, and a screenshot command. It starts no Convex backend; the first feature that reads live data in e2e wires the backend this ADR chooses.
 - E2E sign-in is decided by the auth ADR (#7), not here.
+- **Public pages are server-rendered (ADR 0006, PR #18).**
+  - Public pages that read Convex data use `RenderMode.Server` and static pages use `RenderMode.Prerender`. `/app/**` uses `RenderMode.Client`.
+  - Crawlers and link-preview bots read the raw server HTML without running JavaScript. Tests must therefore check that HTML directly, not only the hydrated page.
+  - The app under test is a Node server (`node dist/<app>/server/server.mjs`), not static files.
 
 ### Assumptions about undecided issues
 
 | Issue | Assumption made here | If the assumption is wrong |
 | --- | --- | --- |
 | #1 package manager, Node | Commands are written with `npx`; the equivalent runner (`pnpm exec`, `yarn`) applies. Node 24 or 26 LTS. Single root package with `e2e/` and `playwright.config.ts` at the repo root. | Playwright needs Node >= 20 (`engines` in `playwright@1.64.0`), so any LTS choice works. In a workspace, the config moves beside the Angular app; nothing else changes. |
-| #5 Angular baseline | CSR-only. The Convex URL reaches the app through the mechanism and variable name #5 fixes; this ADR calls it `<CONVEX_URL var>`. With no URL, no client is created (#11). | If #5 picks a runtime `config.json`, the e2e run serves a config file pointing at the local backend instead of building with the URL. If SSR is adopted, the same tests run; SSR hydration adds no new tool. |
+| #5 Angular baseline (PR #18, ADR 0006) | **Hybrid rendering** with `outputMode: "server"`. The build emits `dist/<app>/browser/` and `dist/<app>/server/server.mjs`, and the `serve:ssr` script runs the server (default `PORT` 4000). The Convex URL is a build-time `define` set by `scripts/ng-convex.mjs` from `CONVEX_URL`. It reaches both bundles, so the server needs no Convex variable at runtime. With no URL, neither platform creates a client (#11). | If #5 went back to CSR only, `webServer` would serve `dist/<app>/browser/` statically and the raw-HTML and hydration checks below would be dropped. Nothing else changes. |
 | #6 UI library, fonts | Unknown library. The axe tags and zero-violation rule apply unchanged. | A library with known axe false positives gets rule exclusions only per rule, with a comment and an issue link (see Recommendation). A hosted font CDN makes screenshots depend on network timing; self-hosted fonts avoid that. |
 | #8 CI | GitHub-hosted `ubuntu-latest` (24.04) 2-core runners; e2e is its own job; actions limited to `actions/checkout`, `actions/setup-node`, `actions/cache`, `actions/upload-artifact` (plus the package-manager setup from #1). No third-party e2e action is needed. | Self-hosted runners would remove the minute cost but not change the tooling. |
 
@@ -132,8 +136,8 @@ Rejected. It does not meet the angular.md rule that every user-facing acceptance
 - **Start in CI (no secrets):**
   1. `actions/cache` restores `~/.cache/convex`, keyed on the pinned backend version (on a miss the CLI downloads it from GitHub releases, 63.7 MB).
   2. `CONVEX_AGENT_MODE=anonymous npx convex dev --once --local-backend-version <pinned> --local-cloud-port 3210` pushes functions and runs codegen.
-  3. The Angular app is built with `<CONVEX_URL var>=http://127.0.0.1:3210` (#5 mechanism).
-  4. Playwright `webServer` starts two servers: `npx convex dev --tail-logs disable` with the same flags (ready when `http://127.0.0.1:3210/version` responds), and the built app. When `E2E_BASE_URL` is set, neither server starts (#13, #15).
+  3. The Angular app is built in the e2e build configuration (below) with `CONVEX_URL=http://127.0.0.1:3210` (ADR 0006 wrapper: `node scripts/ng-convex.mjs build --configuration development`). Server renders then fetch from the local backend over HTTP, and browsers subscribe to it over WebSocket.
+  4. Playwright `webServer` starts two servers. The first is `npx convex dev --tail-logs disable` with the same flags, ready when `http://127.0.0.1:3210/version` responds. The second is the Node SSR server (below). When `E2E_BASE_URL` is set, neither server starts (#13, #15).
   The pinned backend version lives in one place (an npm script or the Playwright config), and bumping it is a patch-level change with no gate. Locally, contributors run the same script. The e2e script always selects the anonymous local deployment and never targets a cloud dev deployment.
 - **Seeding and reset:**
   - Test-only functions live in `convex/testing.ts` as `internalMutation`s, so no client can call them. Each one starts with a shared guard that throws unless `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment (`npx convex env set IS_TEST true` in Playwright `globalSetup`) and never on cloud dev, preview, or production. Feature crons skip work when `IS_TEST` is set.
@@ -141,6 +145,54 @@ Rejected. It does not meet the angular.md rule that every user-facing acceptance
   - Per test: a Playwright fixture creates the test's own tenant (league, teams, users) with unique names through `npx convex run testing:seedLeague`, and tests assert only on their own tenant's data. Tenancy is the isolation boundary, so no full reset runs between tests (measured cost about 1 s per CLI call). This also exercises the cross-league authorisation rules in convex.md.
   - How a seeded user signs in is decided by #7.
 - **Fake client:** not used in e2e (reasons under Option 3).
+
+### Server-rendered pages (ADR 0006)
+
+**App server: the Node SSR server, built in development mode.**
+
+```ts
+// playwright.config.ts (app entry; the Convex entry is unchanged)
+webServer: {
+  name: 'app',
+  command: 'npm run serve:ssr',          // node dist/<app>/server/server.mjs
+  url: 'http://localhost:4000/',         // a Prerender route; must not read Convex data
+  env: { PORT: '4000', NG_ALLOWED_HOSTS: 'localhost,127.0.0.1' },
+  reuseExistingServer: !process.env.CI,
+  stdout: 'pipe',                        // server render errors appear in the job log
+  gracefulShutdown: { signal: 'SIGTERM', timeout: 2_000 },
+},
+use: { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:4000' },
+```
+
+- **The build happens before Playwright, not in `webServer.command`.** `webServer` starts an already-built `dist/` (the e2e script runs the build first), so a build failure shows as a build step, not a server-start timeout.
+- **Readiness accepts HTTP 400.** Playwright treats the `url` as ready on "a 2xx, 3xx, 400, 401, 402, or 403 status code" ([playwright.dev/docs/test-webserver](https://playwright.dev/docs/test-webserver)). The SSR engine answers **400** to a `Host` that is not allowed. A missing or wrong `NG_ALLOWED_HOSTS` therefore does not fail at startup: every test fails with 400, and the server log (`stdout: 'pipe'`) names the rejected host. Tested in the scratch run below.
+- **Why a development build.** Angular's hydration mismatch checks are dev-mode only. In `@angular/core` 22.2.1 the element and text node checks are written as `ngDevMode && validateMatchingNode(...)` (`fesm2022/_debug_node-chunk.mjs`). The sibling check (`validateSiblingNodeExists`) and the NG0505 and NG0506 warnings are also guarded by `ngDevMode`.
+  - Scratch run: the same deliberate mismatch, a `<table><tr>` with no `<tbody>`, logged `ERROR RuntimeError: NG0500: During hydration Angular expected <tr> but found <tbody>` in a development build and **nothing** in a production build.
+  - A fixture listening to a production build would therefore pass a page with a hydration mismatch.
+  - The e2e build uses `--configuration development`, which keeps `outputMode: "server"`, prerendering, and the same server entry. It also enables dev-mode change-detection checks such as NG0100.
+  - The shipped production build is still checked twice. #12's CI build job builds it, with budgets. #15 runs the smoke spec against each production preview.
+- **Raw server HTML.** Every public-page spec (Server or Prerender route) checks the HTML that crawlers and link-preview bots see, without running JavaScript, as well as the hydrated page:
+  - `request.get(url)` for the HTTP status (200, or 404 for an unknown slug through `RESPONSE_INIT`) and headers (`Cache-Control` with `s-maxage` on Server routes).
+  - A JavaScript-disabled page (`test.use({ javaScriptEnabled: false })`) for DOM assertions on that same HTML: `toHaveTitle`, `meta[property="og:title"]`/`og:description`/`og:url` `content`, `link[rel="canonical"]`, and the key content (for example the league name and "registration open"). This uses Playwright locators, so no HTML parser package is needed. Tested below.
+  - `/app/**` (Client routes) gets no raw-HTML assertions. Its server HTML is the empty shell by design.
+- **Console fixture (extends #13's).** A test fails on any of the following:
+  - any `pageerror`;
+  - any `console` message of type `error`, which includes NG0500 to NG0504 (thrown during hydration and logged by Angular's `ErrorHandler` as `ERROR RuntimeError: NG05…`);
+  - any `console` message of type `warning` matching `/\bNG05\d\d\b/`. NG0505 (no hydration data in the server response), NG0506 (app not stable within 10 s, so hydration never completes), and NG0508 are `console.warn`, not errors.
+  - It ignores `log` and `info`, which in dev mode include "Angular is running in development mode." and the hydration stats line.
+- **Hydration actually happened.** On public pages, the fixture also asserts that the dev-mode stats log `Angular hydrated <n> component(s)` appears. Without it, a page could silently fall back to a full client render, for example if `provideClientHydration()` were dropped from the server config.
+- **What these checks cannot catch.** Angular does not compare text or control-flow branches during hydration.
+  - In the scratch run, a binding that rendered `server text` on the server and `browser text` in the browser, and an `@if` that took a different branch on each platform, both hydrated with **no** error or warning, even in dev mode. Angular replaces the content after hydration.
+  - These cases show up only as content that changes after load, which the raw-HTML assertions catch: the raw HTML must already contain the content the hydrated page shows.
+  - A deliberate mismatch used to prove the fixture must therefore be **structural**, for example a `<table>` with `<tr>` and no `<tbody>` in a template, not a text difference.
+- **Scratch evidence (2026-10-07).** The scratch app is `ng new --ssr` on CLI 22.2 (`@angular/*` 22.2.1, `@angular/ssr` 22.2.1), with `@playwright/test` 1.64.0 and Chromium headless shell, on Node 26.11.0. Playwright started `node dist/spike/server/server.mjs` through `webServer` with the configuration above. These checks passed:
+  - the raw-HTML `request.get()` check (status, `<title>`, `og:title`, content, `ng-state`, `Cache-Control`);
+  - the JavaScript-disabled locator check;
+  - the empty Client-route shell;
+  - a clean hydration (only `log` messages);
+  - the NG0500 capture in a development build.
+
+  The production build produced no NG0500 for the same mismatch. The text and branch differences produced none in either mode. With `NG_ALLOWED_HOSTS=other.example`, `webServer` reported ready and the test failed with 400.
 
 **Screenshots: Option X, manual comparison.** Automated snapshots are not adopted, so #13 needs no baseline setup. The tester attaches the #13 screenshot PNGs (360 and 1280) and the mockup at the same widths to the PASS comment. Revisit when several stable screens exist and a visual regression slips through. Adopting snapshots then is a change to this ADR: baselines committed under `e2e/**/*-snapshots/`, generated and compared only in `mcr.microsoft.com/playwright:v<version>-noble`, Chromium projects only.
 
@@ -174,7 +226,7 @@ WCAG 2.2 has 55 success criteria at levels A and AA (4.1.1 Parsing is obsolete).
 | 2.2.2 | Pause, Stop, Hide | A | axe (`blink`, `marquee`); manual (auto-updating content such as live scores) |
 | 2.3.1 | Three Flashes | A | gap: no flashing content planned; manual if animation is added |
 | 2.4.1 | Bypass Blocks | A | axe (`bypass`) |
-| 2.4.2 | Page Titled | A | axe (`document-title`, presence); spec: `toHaveTitle` per route |
+| 2.4.2 | Page Titled | A | axe (`document-title`, presence); spec: `toHaveTitle` per route, and on public pages also in the raw server HTML (JavaScript disabled) |
 | 2.4.3 | Focus Order | A | spec: Tab walk order; manual (logical order) |
 | 2.4.4 | Link Purpose (In Context) | A | axe (`link-name`); manual |
 | 2.4.5 | Multiple Ways | AA | manual (site-level, checked when navigation changes) |
@@ -208,7 +260,13 @@ Further accepted gaps: no screen-reader testing with real assistive technology (
 ## Consequences
 
 - **New devDependencies:** `@playwright/test` and `@axe-core/playwright` (pulls in `axe-core`). Playwright downloads Chromium (and WebKit on `main`) at CI time. The `convex` CLI downloads the FSL-licensed local backend binary when the e2e backend is wired. No paid service.
-- **#13 (harness):** widths (360, 1280) and the Chromium projects match its scope. Additions it needs: the `webkit-mobile` project (run only on `main`), `workers: 1` and `retries: 1` in CI, the five axe tags, and the 320px reflow check plus Tab walk in the axe helper. No visual snapshot baselines. The manual WCAG checklist goes in `docs/process/` (or the README section #13 already writes) so the tester can copy it.
+- **#13 (harness):** widths (360, 1280) and the Chromium projects match its scope, and so does its Node SSR `webServer`. Additions it needs:
+  - the `webkit-mobile` project (run only on `main`), `workers: 1` and `retries: 1` in CI, the five axe tags, and the 320px reflow check plus Tab walk in the axe helper;
+  - the e2e build uses `--configuration development`, and the `webServer` entry above;
+  - the console fixture's rules above (`error`, `pageerror`, and `NG05xx` warnings), plus the "hydrated" log assertion for public pages;
+  - a raw-HTML helper with both halves: `request.get()` for status and headers, and a JavaScript-disabled page for title, meta, and content locators.
+
+  **#13's hydration criterion must change.** Its example ("text that differs between server and browser render") produces no error in any build mode (scratch evidence above), so the criterion as written cannot be met. The deliberate mismatch should be a `<table><tr>` with no `<tbody>` in the root template, caught as `NG0500` in the development build. No visual snapshot baselines. The manual WCAG checklist goes in `docs/process/` (or the README section #13 already writes) so the tester can copy it.
 - **First feature that reads Convex data in e2e:** its scope includes the local backend wiring above (pinned version, `actions/cache` of `~/.cache/convex`, two `webServer` entries, `globalSetup`, `convex/testing.ts` with the `IS_TEST` guard, the tenant fixture). Its criteria include a CI run link showing the anonymous local backend starting on `ubuntu-latest` with no secrets, and a Convex test that `testing:reset` throws without `IS_TEST`.
 - **#7 (auth):** the chosen provider must let e2e sign in a seeded user against the anonymous local backend with no secrets and no real inbox. A provider that needs a secret for e2e sign-in conflicts with this ADR and #8.
 - **#3 (unit runners, ADR 0004):** if Vitest browser mode is used, its provider is `@vitest/browser-playwright` at the matching `playwright` version.
@@ -217,14 +275,20 @@ Further accepted gaps: no screen-reader testing with real assistive technology (
   | Stage | Minutes |
   | --- | --- |
   | Checkout, Node setup, dependency install with cache | ~1.0 |
-  | Angular production build | 0.5 to 1.0 |
+  | Angular development build with SSR (browser and server bundles, prerender) | 0.5 to 1.0 |
   | `npx playwright install --with-deps chromium` | 0.5 to 1.0 |
-  | Smoke spec, two projects (#13) | < 0.5 |
+  | Smoke spec, two projects (#13), including SSR server start and the raw-HTML check | < 0.5 |
   | **Total per PR run, harness only** | **~3 (range 2.5 to 3.5)** |
   | Local Convex backend: cache restore or 64 MB download, push, start | +0.5 |
   | Feature specs, growing; estimate at about 40 specs x 2 projects | +2 to +4 |
   | **Total per PR run once features exist** | **~5 to 8** |
   | `webkit-mobile` on push to `main`: WebKit install with deps and the mobile specs | +1.5 to +2.5 |
+
+  **SSR effect on minutes: none measurable, so the totals are unchanged.**
+  - The e2e job already ran its own build, because it bakes in the local backend URL. It still runs one build: a development build, which skips optimisation, plus the server bundle and prerender.
+  - In the scratch app, the development SSR build took 2.1 s and the production SSR build 2.1 to 3.6 s. A full scaffold will be slower, but stays inside the existing row.
+  - The SSR server started in under a second.
+  - Raw-HTML checks are plain HTTP requests, or JavaScript-disabled loads, of a few milliseconds to a few hundred milliseconds each.
 
   GitHub bills each job rounded up to the whole minute. At 60 PRs a month with 3 pushes each, e2e alone is about 540 to 1,440 minutes, against the 2,000 included on GitHub Free for private repos. #8 should consider running e2e only on non-draft PRs, path filters that skip docs-only changes, or `concurrency` cancellation of superseded runs.
 - **Artifact storage (500 MB on Free):** screenshots, traces, and reports upload with a short `retention-days` (7 suggested); traces only on retry or failure.
