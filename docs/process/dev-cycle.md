@@ -32,7 +32,7 @@ Each role agent's frontmatter (`model:` and `effort:` in `.claude/agents/<agent>
 | `pr-reviewer`   | `opus`   | `high`   |
 | `deployer`      | `sonnet` | `medium` |
 
-The orchestrator may override both per dispatch: lighter for mechanical or docs-only tasks, at least `opus`/`high` for security, payments, auth, and server-rendering work, and `fable`/`xhigh` for escalation rounds. The rules are in the [dev-cycle skill, Model and effort](../../.claude/skills/dev-cycle/SKILL.md#model-and-effort), and every phase comment records the model and effort used.
+The orchestrator may override both per dispatch: lighter for mechanical or docs-only tasks, at least `opus`/`high` for security, payments, auth, and server-rendering work, and `fable`/`xhigh` only for escalations: the final fix or review round after earlier rounds found defects, and the hardest security, payments, auth, and SSR tasks. When several rules match, the highest model and the highest effort among them apply. The rules are in the [dev-cycle skill, Model and effort](../../.claude/skills/dev-cycle/SKILL.md#model-and-effort), and every phase comment records the model and effort used.
 
 ## Issue state machine
 

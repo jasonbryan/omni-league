@@ -43,6 +43,6 @@ Each agent's frontmatter sets its default `model` and `effort` (table in [dev cy
 - **Mechanical or docs-only tasks** (label edits, applying a reviewer's exact wording, glossary entries): `sonnet` or `haiku`, `low` or `medium`.
 - **Complex implementation or testing** (concurrency, SSR/hydration, cross-cutting infra): `implementer` and `tester` escalate to `opus`, `high`.
 - **Security, payments, auth, and server-rendering work:** at least `opus`, `high`, in every role; the hardest of these may use `fable`, `xhigh`.
-- **Escalation round:** the final fix round or final review round after earlier rounds found defects uses `fable`, `xhigh`. Fable is for escalations and final rounds only; `opus` stays the heavy default.
+- **Escalation round:** the final fix round or final review round after earlier rounds found defects uses `fable`, `xhigh`. `fable`/`xhigh` is for escalations only: this final round, and the hardest security, payments, auth, and SSR tasks. `opus` stays the heavy default.
 
-When rules conflict, use the stronger setting. Every phase comment the orchestrator posts records the model and effort used, for example `(model: opus, effort: high)`.
+When several rules match, use the highest model and the highest effort among them (model order `haiku` < `sonnet` < `opus` < `fable`; effort order `low` < `medium` < `high` < `xhigh` < `max`). Every phase comment the orchestrator posts records the model and effort used, for example `(model: opus, effort: high)`.
