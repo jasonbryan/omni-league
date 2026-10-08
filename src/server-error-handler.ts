@@ -7,9 +7,10 @@ import type { Request, Response } from 'express';
  * `NODE_ENV !== 'production'`, and `serve:ssr` does not set `NODE_ENV`. This handler always
  * answers with a generic plain-text body and logs the error on the server instead.
  *
- * - `URIError` (malformed percent-encoding in the request URL, thrown by the Angular engine):
- *   400 Bad Request.
- * - Anything else: 500 Internal Server Error.
+ * - `URIError` when the request URL itself has malformed percent-encoding (thrown by the Angular
+ *   engine): 400 Bad Request.
+ * - Anything else, including a `URIError` from app code decoding a well-formed URL or data:
+ *   500 Internal Server Error.
  * - If headers were already sent, Express must close the connection, so the error is passed on.
  */
 export function serverErrorHandler(
@@ -25,10 +26,20 @@ export function serverErrorHandler(
     return;
   }
 
-  if (err instanceof URIError) {
+  if (err instanceof URIError && isMalformedUrl(req.originalUrl)) {
     res.status(400).type('text/plain').send('Bad Request');
     return;
   }
 
   res.status(500).type('text/plain').send('Internal Server Error');
+}
+
+/** True when the request URL's percent-encoding cannot be decoded (a client error). */
+function isMalformedUrl(url: string): boolean {
+  try {
+    decodeURIComponent(url);
+    return false;
+  } catch {
+    return true;
+  }
 }

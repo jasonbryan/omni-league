@@ -145,7 +145,7 @@ describe('mutation and action helpers without a client', () => {
 });
 
 describe('mutation and action helpers on the server with a client present', () => {
-  // Defence in depth for the interim server rule: even if a client reached the server injector,
+  // Defence in depth for the server rule (no mutations or actions during a render): even if a client reached the server injector,
   // run() must not call it.
   for (const helper of helpers) {
     it(`${helper.kind} rejects with ConvexServerCallError and calls no client method`, async () => {

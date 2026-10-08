@@ -60,6 +60,40 @@ describe('serverErrorHandler', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it.each(['/o/acme', '/o/acme?q=%41', '/o/%E2%82%AC'])(
+    'answers a URIError with 500 when the request URL %s is well formed (an app decoding bug)',
+    (originalUrl) => {
+      const { res, state } = fakeResponse();
+      const next = vi.fn();
+
+      serverErrorHandler(
+        new URIError('URI malformed'),
+        { method: 'GET', originalUrl } as Request,
+        res,
+        next,
+      );
+
+      expect(state.statusCode).toBe(500);
+      expect(state.contentType).toBe('text/plain');
+      expect(state.body).toBe('Internal Server Error');
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
+
+  it('answers a malformed query string with 400', () => {
+    const { res, state } = fakeResponse();
+
+    serverErrorHandler(
+      new URIError('URI malformed'),
+      { method: 'GET', originalUrl: '/o/acme?q=%' } as Request,
+      res,
+      vi.fn(),
+    );
+
+    expect(state.statusCode).toBe(400);
+    expect(state.body).toBe('Bad Request');
+  });
+
   it('answers any other error with 500 and a plain body', () => {
     const { res, state } = fakeResponse();
     const next = vi.fn();
