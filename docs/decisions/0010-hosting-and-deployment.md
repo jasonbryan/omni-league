@@ -21,7 +21,7 @@ ADR 0001 leaves hosting for the Angular app and the deployment pipeline (CD) und
 **Owner answers on PR #33 (2026-10-07, relayed by the orchestrator from the chat session) to this ADR's four questions:**
 
 5. **Netlify plan:** Personal ($9 per month) from the first production release.
-6. **Previews:** public, `noindex`, and **taken offline as soon as the PR is merged or closed**. The owner's words: "public and hidden work but as the pr previews are reviewed, approved, denied i don't want them live anymore." This covers both halves of a preview: the Netlify deploy preview and its Convex preview backend.
+6. **Previews:** public and `noindex`, removed by each platform's documented expiry, with no cleanup job (Decision, item 6). The owner first asked for previews to go offline when their PR is merged or closed, then withdrew that request (Owner decisions).
 7. **Convex production region:** US East.
 8. **Google consent page:** accept `<prod-deployment>.convex.site` for now, and revisit Convex Professional when revenue allows.
 
@@ -68,33 +68,6 @@ ADR 0001 leaves hosting for the Angular app and the deployment pipeline (CD) und
   - Preview deployments are deleted automatically after **5 days** on Free and Starter ([multiple deployments](https://docs.convex.dev/production/multiple-deployments)).
   - `--preview-create` "can only be used with a preview deploy key" ([deploy CLI](https://docs.convex.dev/cli/reference/deploy)).
 
-### Facts for preview teardown (checked 2026-10-07)
-
-- **Netlify keeps previews until a deploy is deleted.**
-  - "The Deploy Preview remains available until the deploy is deleted either automatically or manually" ([deploy previews](https://docs.netlify.com/deploy/deploy-types/deploy-previews/)). No setting deletes or expires a preview when its PR closes. The only per-PR control is `[skip netlify]` in the PR title, which stops it being built at all.
-  - Every push builds a new deploy with its own permalink `<deploy-id>--<site>.netlify.app`, and each stays reachable until deleted.
-  - Automatic deletion happens after 30 days (Free) or 90 days (paid plans). The retention period can be changed only on Enterprise ([manage deploys](https://docs.netlify.com/deploy/manage-deploys/manage-deploys-overview/)).
-  - After deletion, "the deploy permalink for the deleted deploy will no longer work and will show a generic 404 error message instead". "If you delete a deploy and there are no other deploys in the context, the deploy context URL will return a generic 404 message." If only the newest deploy is deleted, the context URL "will point to the next most recent deploy in the same context". **Every deploy of the PR must therefore be deleted.**
-  - "You also cannot delete a deploy that is still in progress. You must either cancel the deploy or wait until the deploy is finished."
-  - **API** ([open-api `swagger.yml`](https://github.com/netlify/open-api/blob/master/swagger.yml)):
-    - `GET /api/v1/sites/{site_id}/deploys`, with query `deploy-previews`, `branch`, `state`, and paging. Each deploy object carries `review_id` (the PR number) and `context`.
-    - `POST /api/v1/deploys/{deploy_id}/cancel`.
-    - `DELETE /api/v1/deploys/{deploy_id}`, which answers 204.
-- **Netlify API tokens have no documented scope.**
-  - A personal access token (PAT) is created with a name, an **expiration date**, and an optional SAML-team grant ([get started with the API](https://docs.netlify.com/api-and-cli-guides/api-guides/get-started-with-api/)). The documentation describes no team, project, or permission scope.
-  - Netlify support (2023): "There's no way yet to set a read-only PAT, not on any plan", and "RBAC doesn't exist for PATs yet" ([forum](https://answers.netlify.com/t/read-only-personal-access-tokens/89041)).
-  - The system therefore treats a PAT as **acting as the owner's Netlify user on every team and project**. OAuth application tokens are no narrower.
-  - On Free and Personal, environment variables have every scope (Option A, Cons), so a token stored as a Netlify variable for preview contexts would be readable by preview builds, which run PR code.
-- **Convex: the preview deploy key can delete preview deployments, by deployment name.**
-  - The Management API's `POST https://api.convex.dev/v1/deployments/{deployment_name}/delete` accepts a "Preview Deploy Key ... Allowed only when operating on preview deployments in the key's project". `GET /v1/deployments/{deployment_name}` accepts it too, and returns `deploymentType` and `previewIdentifier` ([delete deployment](https://docs.convex.dev/management-api/delete-deployment), [OpenAPI spec](https://api.convex.dev/v1/openapi.json)).
-  - The preview key **cannot list deployments or look one up by preview name**: `list_deployments` and "get deployment by reference" accept only personal, team, or project tokens. Teardown therefore needs the deployment name, the `<name>` in `https://<name>.convex.cloud`.
-  - The `convex` CLI (1.46.0) has no delete command (its `cli/` has `deploymentCreate`, `deploymentSelect`, and the token commands only; feature request [get-convex/convex-backend#455](https://github.com/get-convex/convex-backend/issues/455) is open).
-  - Previews are deleted automatically 5 days after creation on Free and Starter. `expiresAt` can be changed but "must be at least 30 minutes in the future".
-- **GitHub events and environments** ([events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows), [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)):
-  - `pull_request` with `closed`: for a PR closed without merging, `GITHUB_REF` is `refs/pull/<n>/merge`, the PR's merge commit, so the workflow that runs includes the PR's own edits to it. For a merged PR, it is the base branch.
-  - `pull_request_target` "runs in the context of the default branch of the base repository, rather than in the context of the merge commit". `GITHUB_REF` is the default branch, and the workflow file comes from it.
-  - An environment's deployment branch rule "is matched against the `GITHUB_REF` of the workflow run". A rule for `main` alone therefore admits `push` to `main`, `pull_request_target`, and `workflow_dispatch` on `main`, and refuses every `pull_request` run that has not been merged.
-
 ## Options
 
 Every candidate must run SSR server routes, give each PR a preview with its own Convex backend, build on Node 26.11+, cache server responses by `Cache-Control` at a CDN, keep the production key away from PR builds, and fit the budget.
@@ -113,7 +86,7 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
   - **Metering:** production deploys cost 15 credits each; web requests (static and edge) cost 2 credits per 10k; bandwidth costs 20 credits per GB. Deploy previews, branch deploys, and failed deploys are **not metered** ([credit-based pricing](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/)).
 - **Commercial use: allowed.** Netlify's [Self-Serve Subscription Agreement](https://www.netlify.com/legal/self-serve-subscription-agreement/) grants use of the Services with no personal or non-commercial restriction. The Free Usage Tier "is made available ... to allow users to experience Netlify's Services" and may be changed or discontinued (§6).
 - **Pros.**
-  - **No deploy key enters GitHub, and PR code never reaches a production-capable credential.** The preview `CONVEX_DEPLOY_KEY` and the production key are Netlify environment variables, set per deploy context. Netlify injects the production value only into production-context builds. The one Netlify credential in GitHub is the preview-teardown token (Decision, item 6), which only a job on `main` can read.
+  - **Deploy keys never enter GitHub.** The preview `CONVEX_DEPLOY_KEY` and the production key are Netlify environment variables, set per deploy context. Netlify injects the production value only into production-context builds.
   - **The build runs on Node 26.** The build image reads `.nvmrc` (`26`).
   - **The SSR adapter is first-party and covers Angular 22.** Its test fixtures include `angular-22`.
   - **Allowed hosts are computed per deploy, as exact hostnames.** No wildcard is needed (Decision, item 5).
@@ -339,7 +312,7 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
     publish = "dist/<app>/browser"
 
   [context.deploy-preview]
-    command = "npm ci && npx convex deploy --cmd 'npm run build && node scripts/record-preview-backend.mjs' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\""
+    command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\""
 
   [context.branch-deploy]   # main: staging
     command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\""
@@ -353,7 +326,6 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
 
   - **`npm ci`.** Netlify itself runs `npm install`. The extra `npm ci` makes the installed tree exactly match the lockfile, as ADR 0003 requires.
   - **`npm run build`** is ADR 0006's `node scripts/ng-convex.mjs build`. It puts the preview's `CONVEX_URL` and its derived site URL into both bundles.
-  - **`scripts/record-preview-backend.mjs`** (deploy previews only, Node built-ins only) writes `dist/<app>/browser/preview-backend.json` as `{"deployment":"<name>"}`, with `<name>` taken from `CONVEX_URL`. Teardown reads it (below), because the preview key cannot look a deployment up by preview name. The file is public, but it reveals only the deployment name, which the bundle's `CONVEX_URL` already contains.
 - **One Convex preview deployment per PR.**
   - It is named `pr-<number>` (`REVIEW_ID`: "for example, `deploy-preview-12` is for PR #12"), rather than the branch name.
   - That way a release PR (`main` into `production`) does not recreate the staging backend `main`, and a reused branch name cannot collide.
@@ -366,52 +338,10 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
   - A `status`-triggered workflow runs from the default branch's workflow file, with `GITHUB_SHA` set to the default branch, so it checks out `github.event.sha` with read-only permissions ([events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#status)).
 - **Staging.** Every merge to `main` builds the branch deploy `https://main--<site>.netlify.app` with the Convex preview deployment `main`. The deployer smoke-tests it (dev cycle Phase 8, "Preview/staging").
   - If `main` gets no push for 5 days, Convex removes that backend and staging stops working until the next merge.
-  - Teardown never touches staging.
-
-#### Preview teardown on merge or close
-
-**Requirement (owner answer 6).** When a PR is merged or closed, its Netlify deploy preview (the `deploy-preview-<n>--` URL and every deploy permalink of that PR) and its Convex preview deployment `pr-<n>` stop serving. Documented expiry alone does not meet this: Convex takes 5 days and Netlify 30 or 90 (Context, "Facts for preview teardown").
-
-**Designs compared.**
-
-| Design | Covers | Credential and who can reach it | Verdict |
-| --- | --- | --- | --- |
-| **T1. `pull_request_target: closed` workflow; tokens in a GitHub environment limited to `main`** | Merge and close, both halves, about 1 to 2 minutes | Netlify PAT and a Convex preview key. Only jobs whose `GITHUB_REF` is `main` can read them, which means workflow files on `main`. PR runs cannot. | **Chosen** |
-| T2. `pull_request: closed` workflow | Merge only | A closed, unmerged PR runs at `refs/pull/<n>/merge`, from the PR's own workflow file. An environment limited to `main` refuses it. Allowing `refs/pull/*/merge` would hand the token to every PR run. | Rejected |
-| T3. `push` to `main` for merges, plus a `schedule` sweep for unmerged closes | Merge promptly; close only at the next cron run | Same as T1 | Rejected. An hourly cron means up to an hour plus GitHub's cron delay, and about 720 billed minutes a month (each run bills at least one minute) against ADR 0009's Pro budget. |
-| T4. Netlify-side: a GitHub webhook calls a Netlify Function that deletes deploys | Both | The PAT as a Netlify variable. On Free and Personal every variable has every scope, so a value for preview contexts is readable by PR builds. A Production-only value exists only after the first release and sits in the internet-facing runtime, run by agent-written function code. A webhook secret is also needed. | Rejected |
-| T5. Preview answers 404 or 410 after close, by checking the PR's state | Frontend only, and only deploys that contain the check | The repository is private, so the check needs a GitHub token inside the preview runtime, where PR code can read it. Old permalinks keep their old code. Convex is untouched. | Rejected |
-| T6. Backend-only teardown: delete the Convex preview, no Netlify token | Convex only | The Convex preview key, which preview builds already hold, so no new reach | Fallback (owner question 5). The Netlify preview keeps serving the prerendered `/`, the static assets, and the shell for 30 or 90 days, and only server routes fail. It does not meet "offline". |
-
-No narrower Netlify credential exists: PATs and OAuth tokens act as the user (Context). A separate Netlify user owning a previews-only project would confine the token to previews. That would need a second Netlify account linked to this repository, split previews and production across two projects with different hostnames (changing `PREVIEW_ORIGIN_PATTERN` and item 5's host list), and has not been verified as feasible. It is not adopted, and is listed as an owner option.
-
-**Design T1.**
-
-- **Workflow `.github/workflows/preview-teardown.yml`** (#15 writes it):
-  - **Triggers:** `pull_request_target` with `types: [closed]`, and `workflow_dispatch` with no inputs, which runs only the sweep below.
-  - **One job, `teardown`.** It sets `environment: preview-teardown`, `permissions: contents: read, pull-requests: write` (for the result comment), `concurrency: preview-teardown` without `cancel-in-progress`, `runs-on: ubuntu-24.04`, and `timeout-minutes: 10`.
-  - **It runs no PR code.** It has no checkout of the PR head (any checkout is of `main`, with `persist-credentials: false`), no `npm` install, and uses only `curl`, `jq`, and `gh` from the runner image.
-  - **No PR-controlled text is expanded into a script.** Only `github.event.pull_request.number`, an integer, is passed in, through `env:`. The branch name and title are never read.
-- **Steps for the closed PR `<n>`:**
-  1. List the site's deploys (`GET /api/v1/sites/{site_id}/deploys?deploy-previews=true`, every page), and keep those with `review_id == <n>`.
-  2. Cancel any that are still building (`POST /api/v1/deploys/{id}/cancel`), because a running deploy cannot be deleted.
-  3. Read `preview-backend.json` from the newest ready deploy's permalink. Confirm with `GET /v1/deployments/{name}` (preview key) that `deploymentType` is `preview` and `previewIdentifier` is `pr-<n>`. Then `POST /v1/deployments/{name}/delete`. A 404 means it is already gone. The check matters because PR code writes the file. Even so, the preview key cannot touch a non-preview deployment.
-  4. Delete every deploy of PR `<n>` (`DELETE /api/v1/deploys/{id}`), oldest first.
-  5. **Verify.** `https://deploy-preview-<n>--<site>.netlify.app/` and every deleted deploy's permalink must answer 404, and `GET /v1/deployments/{name}` must answer 404. The job retries for up to 5 minutes to allow for CDN propagation, then fails.
-  6. Comment on the PR: "Preview taken offline", with the deploy count and the Convex deployment name, or the failing step.
-- **Sweep, on every run.** After PR `<n>`, the job repeats steps 2 to 5 for every other `review_id` in step 1's list whose PR is closed (`gh api repos/{repo}/pulls/{id}`). Every run therefore also repairs earlier failures. `workflow_dispatch` runs the sweep alone.
-- **Release PRs** (`main` into `production`) are torn down the same way. `pull_request_target` always runs the default branch's workflow.
-- **Time from merge or close to offline.** GitHub normally starts the job within a minute of the event, and the API calls take seconds. Netlify documents the 404 but not its propagation time. **Target: offline within 10 minutes.** #15 measures the real figure.
-- **How failures are detected:**
-  - The job fails on any API error, or if any URL still serves after 5 minutes.
-  - It comments the failing step on the PR.
-  - GitHub's failed-run notification goes to the account that closed the PR, which is the owner's.
-  - The deployer checks the teardown run after each merge (dev cycle Phase 8).
-  - The next close, or a manual `workflow_dispatch`, sweeps whatever was missed.
-  - Expiry remains the backstop: Convex after 5 days, Netlify after 30 or 90.
-- **Known gap.** If the PR closes while a build is between `npx convex deploy` claiming `pr-<n>` and publishing, step 2 cancels the build, and that fresh backend's name is in no deploy. It holds only seeded test data, and Convex deletes it within 5 days. The Netlify half of such a PR still goes offline.
-- **PRs closed before this lands.** No Netlify project exists yet, so no preview exists. Previews start when the owner links the repository during #15, and the workflow reaches `main` only when #15 merges. #15 therefore runs `workflow_dispatch` once after merging, which sweeps every PR closed in between, #15's own included. Convex backends of those PRs whose `preview-backend.json` is missing expire within 5 days.
-- **Cost:** about 30 closes a month at about 1 billed minute each, so about 30 Actions minutes. Netlify and Convex charge nothing for deletion.
+- **Cleanup is by documented expiry. No cleanup job is needed** (owner decision 2).
+  - Convex deletes preview deployments 5 days after creation.
+  - Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans, Personal included ([manage deploys](https://docs.netlify.com/deploy/manage-deploys/manage-deploys-overview/)). Until then, a closed PR's `deploy-preview-<n>--` URL and its deploy permalinks stay reachable.
+  - Neither leaves a cost behind: previews are unmetered, and expired Convex previews free their deployment slot.
 - **`noindex`.** Netlify adds `X-Robots-Tag: noindex` to deploy previews and deploy permalinks, but this is not in its documentation: a Netlify support answer (2021) says so, and a 2026 forum report says the header went missing. #15 therefore checks the header on a static file, a server-route response, and a 404 from the preview, and on staging. If any lacks it, #15 adds it for the non-production contexts in the repository.
 
 ### 7. Cost
@@ -516,24 +446,9 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 | --- | --- | --- | --- |
 | Preview `CONVEX_DEPLOY_KEY` (Convex **preview** deploy key) | Netlify environment variable, values for the **Deploy Previews** and **Branch deploys** contexts | Deploy-preview and branch-deploy builds, which run code from PRs and `main` | The owner creates it once. Agents' code may see it in preview builds, which AGENTS.md allows, because it can only create and modify preview deployments. |
 | Production `CONVEX_DEPLOY_KEY` (Convex production key with `deployment:deploy`) | The same Netlify variable, **Production** context value | Production-context builds only, meaning builds of the `production` branch. On Free and Personal it is also readable by the production edge function at runtime, because scopes are Pro-only. | **Owner only:** creates, rotates, and enters it in the Netlify UI. |
-| `NETLIFY_AUTH_TOKEN` (Netlify PAT, named `omni-league preview teardown`, with an expiration date; recommended 90 days) | GitHub **environment secret** in `preview-teardown`, whose deployment branch rule is **`main` only** | Only the `teardown` job of `preview-teardown.yml`, which runs from `main` (`pull_request_target` or `workflow_dispatch`). No PR run, and no push to another branch, matches the rule. | **Owner only:** creates, rotates, and enters it. Agents never see the value. **Blast radius: everything the owner's Netlify user can do on every team** (below). |
-| `CONVEX_PREVIEW_DEPLOY_KEY` (a second Convex **preview** deploy key, named `github-preview-teardown`) | GitHub environment secret in `preview-teardown` | The same job | The owner creates it. It is separate from Netlify's copy so that each can be revoked alone. Its blast radius is the same as the existing preview key's: create, update, and delete preview deployments of this project. No new reach. |
-| `NETLIFY_SITE_ID`, `NETLIFY_SITE_NAME` | Environment **variables** (not secret) in `preview-teardown` | The same job | Owner |
-| `VERCEL_TOKEN`, or any deploy token in GitHub | **None** | n/a | n/a |
+| `VERCEL_TOKEN`, Netlify tokens, or any deploy token in GitHub | **None** | n/a | n/a |
 
-- **GitHub holds no key that builds or deploys the app.** Netlify builds with keys it holds itself, and #15's smoke workflow uses no secret. The teardown PAT **could** deploy (below), but the workflow uses it only to list, cancel, and delete preview deploys.
-- **The teardown token's blast radius.** Netlify documents no scope for a PAT. The system therefore assumes it can do everything the owner's user can, on every team:
-  - upload a deploy that publishes to the production URL;
-  - change project settings, build settings, and environment variables;
-  - read the values of variables not marked secret, including the production `CONVEX_DEPLOY_KEY`;
-  - delete deploys or the whole project.
-
-  **Who can reach it:** only a job on `main` that names `preview-teardown`. PR code cannot. **Residual risk:** a workflow change merged into `main` could use or exfiltrate it, and agents' non-gated PRs are merged by the orchestrator through the owner's account. Mitigations:
-  - **Owner-merged changes.** A PR that changes `preview-teardown.yml`, or adds `preview-teardown` to any other workflow, is merged only by the owner, as for a gate PR. The PR reviewer flags it.
-  - **CI tripwire.** ADR 0009's `checks` job fails if any workflow other than `preview-teardown.yml` contains `preview-teardown`.
-  - **Expiry.** An expired PAT makes the job fail with 401, which is detected (item 6), and the owner rotates it.
-  - **Optional.** Mark the production `CONVEX_DEPLOY_KEY` as a Netlify secret. Secret values are write-only: "Our UI, CLI, and API won't return unmasked values ... besides `dev`" ([Secrets Controller](https://docs.netlify.com/build/environment-variables/secrets-controller/)). The PAT then cannot read it. Netlify does not document which plans offer this, so the owner checks in the UI at the first release.
-  - **Owner question 5** asks the owner to accept this token or choose a narrower design.
+- **No deploy secret exists in GitHub.** #15's smoke workflow uses none, and no cleanup job exists (item 6).
 - **Netlify only builds for recognized authors.**
   - The repository is private.
   - Netlify's Deploy Request Policy builds only for recognized authors, so a fork or an outside contributor's PR gets no build, no key, and no preview until the owner approves a deploy request.
@@ -541,7 +456,7 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 - **A PR cannot read the production key.**
   - Netlify supplies variable values per context, so a PR that edits `netlify.toml` still gets the preview value.
   - A changed production command takes effect only after the owner merges a release PR into `production`.
-- **One GitHub environment, `preview-teardown`, used only for teardown.** GitHub Pro provides environment secrets and deployment branch rules for this private repository, but not required reviewers (Context). The branch rule, not an approval, is what keeps the token from PR code.
+- **No GitHub environment is used.** GitHub Pro's environment secrets and deployment branch policies are not needed, because no deploy credential lives in GitHub.
 - **Residual risk: agents act through the owner's GitHub account.** A push or merge to `production` by that account builds production.
   - **GitHub Pro narrows this.** The owner adds a `production` ruleset that blocks deletion and force-push, requires a pull request, and requires ADR 0009's `checks` and `e2e`. A stray direct push then fails.
   - **It does not close it.** The ruleset cannot tell an agent from the owner, and required approvals would block the owner too (Context, GitHub plan).
@@ -551,7 +466,7 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
   - On credit-based plans, new projects and their previews can start private, depending on the team's default visibility setting. Private projects are enforced by Netlify login, and on Free and Personal only the Team Owner can see them ([project visibility](https://docs.netlify.com/manage/security/secure-access-to-sites/project-visibility/)).
   - Password protection is a Pro feature.
   - **Previews are public** (owner answer 6), so #15's `E2E_BASE_URL` smoke run needs no bypass secret.
-  - Previews hold only seeded test data and have no production keys. They are `noindex` (item 6, which #15 verifies), and they go offline when their PR is merged or closed (item 6, teardown).
+  - Previews hold only seeded test data and have no production keys. They are `noindex` (item 6, which #15 verifies), and they expire on the platforms' schedules (item 6).
   - The production site is made public at the first production release.
 
 ### 9. Production flow and rollback
@@ -613,7 +528,7 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 
 Pro lets a GitHub Actions pipeline keep the production key in a branch-limited environment. That removes Option B's production-key objection. It does not help with previews: Vercel cannot build on Node 26, so previews would be built in Actions from PR code with a Vercel token that can also deploy and configure production. Previews are where agents' code runs.
 
-Netlify keeps every build and deploy key out of GitHub, preview and production alike. The one Netlify credential in GitHub is the preview-teardown token that the owner's "offline on merge or close" answer requires, and only a job on `main` can read it, never PR code. Netlify builds on Node 26 as ADR 0003 requires, spends no Actions minutes on builds, maintains its own Angular 22 SSR adapter, honours ADR 0006's `Cache-Control`, and costs $0 until the first production release and about $9 after, against Vercel's $20.
+Netlify keeps every deploy credential out of GitHub, preview and production alike. It builds on Node 26 as ADR 0003 requires, spends no Actions minutes on builds, maintains its own Angular 22 SSR adapter, honours ADR 0006's `Cache-Control`, and costs $0 until the first production release and about $9 after, against Vercel's $20.
 
 The trade-off is a Deno edge runtime with a 50 ms CPU limit per request. Netlify's documentation counts "all time spent running your scripts", and a cold first render measured 78 to 86 ms. This is a real risk, but it does not justify Vercel. #15 tests it before any production traffic, and the fallback, Netlify Functions on Node with the same handler (Decision, item 1), removes the CPU limit without changing host, secrets, or cost.
 
@@ -628,13 +543,7 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request. Netlify
   - Production branch `production`; branch deploys for `main` only; Deploy Previews on.
   - Preview visibility public; the production site stays private until the first release.
   - Create the Convex preview deploy key and set `CONVEX_DEPLOY_KEY` for the Deploy Previews and Branch deploys contexts.
-  - **Teardown (item 6):**
-    - Create the GitHub environment `preview-teardown`, with deployment branches set to "Selected branches and tags" and the single rule `main`.
-    - Create a Netlify PAT named `omni-league preview teardown`, with an expiration date (recommended 90 days), and store it as the environment secret `NETLIFY_AUTH_TOKEN`. While creating it, confirm whether the form offers any scope; if it does, use the narrowest that can list, cancel, and delete deploys.
-    - Create a second Convex preview deploy key, `github-preview-teardown`, and store it as `CONVEX_PREVIEW_DEPLOY_KEY`.
-    - Set the variables `NETLIFY_SITE_ID` and `NETLIFY_SITE_NAME`.
-    - Rotate the PAT before it expires.
-  - At the first release, create the production deploy key and set the Production context value. If the plan offers it, mark that value secret (item 8).
+  - At the first release, create the production deploy key and set the Production context value.
   - Set Convex's default preview environment variables (ADR 0008).
   - Create the production Convex deployment in US East (owner answer 7).
 - **#10 (scaffold) is not changed by this ADR.** PR #30 keeps Express, as ADR 0006 requires, and adds an Express error handler. It merges as planned.
@@ -649,33 +558,24 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request. Netlify
   - Adds `netlify.toml` (build contexts, plugin, and the item 3 headers) and the `app/**` `Cache-Control` from item 4.
   - It blocks #15, which needs the Netlify entry before its first real deploy.
 - **GitHub (Pro):**
-  - No deploy secret is created for hosting. The one environment, `preview-teardown`, holds the teardown token and a second preview key (item 8).
+  - No GitHub environment or deploy secret is created for hosting.
   - The owner adds the `production` ruleset described in Decision, item 8, when the `production` branch is created. It is applied together with ADR 0009's `main` ruleset.
 - **#13 / ADR 0005 (e2e):** `webServer` still runs `npm run serve:ssr`. `NG_ALLOWED_HOSTS` is no longer read; `angular.json`'s `localhost` and `127.0.0.1` cover e2e.
 - **#12 (CI):** unchanged. CI builds with no Convex URL and deploys nothing.
 - **#15 (previews):** re-planned against this ADR. Its checks include:
-  - no deploy job or deploy secret in GitHub, since Netlify builds and comments. The only GitHub-held credentials are the teardown pair in `preview-teardown`;
+  - no deploy job or deploy secret in GitHub, since Netlify builds and comments;
   - the smoke run against `deploy-preview-<n>--<site>.netlify.app` through `E2E_BASE_URL`;
   - the Convex preview name `pr-<n>` instead of the branch name;
-  - **teardown on merge or close** (item 6) replaces "cleanup by documented expiry". #15 adds `preview-teardown.yml`, `scripts/record-preview-backend.mjs`, and the CI tripwire (item 8). It adds these acceptance criteria:
-    - **Merge.** Given a test PR with at least two pushes, so at least two deploys, when it is merged, then within 10 minutes `https://deploy-preview-<n>--<site>.netlify.app/` and **every** deploy permalink recorded before the merge answer 404 (`curl -i` output, recorded before and after, in the PR). The Convex deployment named in its `preview-backend.json` answers 404 to `GET /v1/deployments/{name}`, and its `https://<name>.convex.cloud` no longer serves queries. The teardown run is green, and the PR carries its comment.
-    - **Close.** The same holds for a second test PR that is closed without merging.
-    - **Elapsed time.** The time from the merge or close event to the first 404 is recorded for both PRs.
-    - **Failure.** The owner temporarily replaces `NETLIFY_AUTH_TOKEN` with an invalid value, and a `workflow_dispatch` run then fails, naming the failing step (the run link is in the PR). The owner then restores the token.
-    - **Sweep.** After #15 merges, a `workflow_dispatch` run leaves no deploy-preview deploy whose PR is closed (the API listing is in the PR).
-    - **Static checks.** `preview-teardown.yml` uses `pull_request_target` only with `types: [closed]`, checks out no PR-head ref, expands no PR-controlled field other than the number into `run:`, and is the only workflow that names `preview-teardown`.
-    - **`noindex`.** A static file, a server-route response, and a 404 on the preview and on staging each carry `X-Robots-Tag: noindex`.
+  - cleanup by documented expiry (item 6), with no cleanup job;
+  - **`noindex`.** A static file, a server-route response, and a 404 on the preview and on staging each carry `X-Robots-Tag: noindex`. Netlify's automatic header is undocumented (item 6), so if any response lacks it, #15 adds it for the non-production contexts;
   - the `PREVIEW_ORIGIN_PATTERN` above;
   - the 404 `Cache-Status` observation;
   - a **cold-start check**: right after a fresh deploy, the first request to a Server route and to an unknown URL return 200 and 404, not 5xx, and Netlify's function log shows no CPU-limit error. It is repeated on at least three fresh deploys and from at least two edge locations (for example, a GitHub-hosted runner and the owner's browser).
   - **If the cold-start check fails**, #15 stops and the orchestrator opens a `gate:technology` issue for the Netlify Functions fallback in Decision, item 1. Production is not released on edge SSR.
-- **#8 / ADR 0009 (CI):** no deploy Action, no deploy secret, and no build minutes for hosting. Two rules there need to allow #15's workflows:
-  - **A `status`-triggered smoke workflow**, if #15 uses one: read-only token, no secrets, explicit checkout of `github.event.sha`.
-  - **One exception to ADR 0009's rule 1 ("No `pull_request_target`")** for `preview-teardown.yml`. It is allowed only with `types: [closed]`, no checkout or execution of PR code, and no PR-controlled expression in `run:`. This matches #15's existing condition "if a later design needs it, it never checks out or runs PR-head code in a job that has deploy secrets". ADR 0009 (PR #31) is still open, so the exception goes into ADR 0009 before either merges, or into a later amendment (owner question 6).
-  - ADR 0009's rule 3 already places deploy-related secrets in a GitHub environment that only one job references.
+- **#8 / ADR 0009 (CI):** no deploy Action, no deploy secret, and no build minutes for hosting. ADR 0009's `pull_request_target` ban is unaffected. If #15 uses a `status`-triggered workflow, ADR 0009's rules should allow it: read-only token, no secrets, explicit checkout of `github.event.sha`.
 - **ADR 0006** is amended by this ADR, taking effect with the follow-up issue above: Express is no longer the server entry, `NG_ALLOWED_HOSTS` is no longer used, and `serve:ssr` runs the local runner.
 - **ADR 0008:** the preview origin pattern and the region (US East) are fixed above; the consent-page domain stays `*.convex.site` (owner answer 8).
-- **Dev cycle Phase 8:** previews go offline on merge or close, and after each merge the deployer checks that the teardown run is green.
+- **Dev cycle Phase 8:** describes this flow. Previews are public and `noindex`, and expire on the platforms' schedules.
 - **Ongoing cost:** $0 now, about $9 per month from the first production release at the stated traffic, and about $25 at roughly 6.5 times that traffic.
 - **Harder later:**
   - Moving off Netlify means rewriting `src/server.ts`, `netlify.toml`, and the secrets setup.
@@ -684,24 +584,17 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request. Netlify
 
 ## Owner decisions (PR #33, 2026-10-07)
 
-The owner answered the four earlier questions (Context, owner answers 5 to 8):
+The owner answered this ADR's four questions (Context, owner answers 5 to 8), relayed by the orchestrator from the chat session:
 
 1. **Netlify plan from the first production release: Personal, $9.** The production key is therefore also visible to the SSR runtime, and the lint rule on `src/server.ts` stays (Consequences). Pro's Builds-only scope, team members, and password protection are not bought.
-2. **Previews: public and `noindex`, and offline as soon as the PR is merged or closed.** This led to the teardown design in Decision, item 6, and the new questions 5 and 6 below.
+2. **Previews: public and `noindex`, cleaned up by documented expiry.**
+   - The owner first added: "as the pr previews are reviewed, approved, denied i don't want them live anymore". A teardown workflow on merge or close was drafted in commit 83597e4.
+   - The owner then withdrew it: "Don't worry about the teardown. Just have whatever process you originally planned for post preview approval." That draft is removed. No Netlify token, cleanup job, GitHub environment, or ADR 0009 exception is added.
+   - **Known consequence:** a merged or closed PR's preview URLs keep serving test-data pages until Netlify deletes the deploys (30 days on Free, 90 on Personal), and its Convex-backed pages fail once Convex deletes the preview backend (5 days).
 3. **Convex production region: US East (N. Virginia).** This also suits the Functions fallback, whose default region is US East (Ohio).
 4. **Google consent page: accept `<prod-deployment>.convex.site` for now.** Convex Professional with a custom domain is revisited when revenue allows.
 
-## Owner questions
-
-5. **Teardown credential.** Owner answer 6 needs a Netlify credential, and Netlify offers none narrower than a PAT acting as the owner's user (Context).
-   - Options:
-     - **(a) Design T1 as written.** The PAT is a GitHub environment secret limited to `main`, readable by no PR code. The residual risk is a workflow change merged into `main`, mitigated by owner-only merges of those changes, a CI tripwire, and expiry (Decision, item 8).
-     - **(b) Backend-only teardown (T6).** No Netlify token. The Convex backend goes offline at once, but the Netlify preview's prerendered page, assets, and shell keep serving for 30 days (90 on Personal).
-     - **(c) A separate Netlify user and project for previews**, so that the PAT reaches only previews. It needs a second Netlify account, different preview hostnames, and verification that one repository can be linked to both projects.
-   - **Recommendation: (a).** It is the only option that meets "offline" for both halves without new accounts. The token is unreachable from the code agents write in PRs, and only owner-merged workflow changes can use it.
-6. **ADR 0009 exception for `pull_request_target`.** T1 needs ADR 0009's rule 1 to allow `pull_request_target` for `types: [closed]` with no PR code (Consequences, #8 / ADR 0009).
-   - Options: (a) amend ADR 0009 on PR #31 before it merges; (b) merge ADR 0009 unchanged and amend it in #15.
-   - **Recommendation: (a).** Then neither accepted ADR contradicts the other at any point.
+No owner questions remain open.
 
 ## Test evidence (2026-10-07)
 
@@ -770,15 +663,15 @@ The owner answered the four earlier questions (Context, owner answers 5 to 8):
   - Caching and headers: [caching overview](https://docs.netlify.com/build/caching/caching-overview/), [custom headers](https://docs.netlify.com/manage/routing/headers/).
   - Functions (fallback): [functions configuration (Node runtime, region, limits)](https://docs.netlify.com/build/functions/optional-configuration/); the Angular runtime now lives in [netlify/framework-adapters](https://github.com/netlify/framework-adapters/tree/main/packages/angular-runtime) and generates an edge function only.
   - Build and environment: [build software](https://docs.netlify.com/build/configure-builds/available-software-at-build-time/), [dependency management](https://docs.netlify.com/build/configure-builds/manage-dependencies/), [build environment variables](https://docs.netlify.com/build/configure-builds/environment-variables/), [environment variables](https://docs.netlify.com/build/environment-variables/overview/), [get started / sensitive variable policy](https://docs.netlify.com/build/environment-variables/get-started/), [Secrets Controller](https://docs.netlify.com/build/environment-variables/secrets-controller/).
-  - Teardown: [open-api `swagger.yml`](https://github.com/netlify/open-api/blob/master/swagger.yml) (`listSiteDeploys`, `cancelSiteDeploy`, `deleteDeploy`), [get started with the API (PATs)](https://docs.netlify.com/api-and-cli-guides/api-guides/get-started-with-api/), [user settings](https://docs.netlify.com/manage/accounts-and-billing/user-settings/), [read-only PATs (support forum, 2023)](https://answers.netlify.com/t/read-only-personal-access-tokens/89041), [preview noindex override (support forum, 2021)](https://answers.netlify.com/t/override-x-robots-tag-noindex-header-in-deploy-preview/38980), [preview missing noindex (forum, 2026)](https://answers.netlify.com/t/preview-site-is-missing-x-robots-noindex-suddenly/163545).
+  - Preview `noindex`: [preview noindex override (support forum, 2021)](https://answers.netlify.com/t/override-x-robots-tag-noindex-header-in-deploy-preview/38980), [preview missing noindex (forum, 2026)](https://answers.netlify.com/t/preview-site-is-missing-x-robots-noindex-suddenly/163545).
   - Deploys and access: [deploy overview / contexts / permissions](https://docs.netlify.com/deploy/deploy-overview/), [deploy previews](https://docs.netlify.com/deploy/deploy-types/deploy-previews/), [manage deploys / rollbacks](https://docs.netlify.com/deploy/manage-deploys/manage-deploys-overview/), [ignore builds](https://docs.netlify.com/build/configure-builds/ignore-builds/), [deploy notifications](https://docs.netlify.com/deploy/deploy-notifications/), [project visibility](https://docs.netlify.com/manage/security/secure-access-to-sites/project-visibility/), [password protection](https://docs.netlify.com/manage/security/secure-access-to-sites/password-protection/), [proxies / signed proxy redirects](https://docs.netlify.com/manage/routing/redirects/rewrites-proxies/).
-- **Convex:** [pricing](https://www.convex.dev/pricing), [Terms of Service](https://www.convex.dev/legal/tos), [limits](https://docs.convex.dev/production/state/limits), [multiple and preview deployments](https://docs.convex.dev/production/multiple-deployments), [deploy CLI](https://docs.convex.dev/cli/reference/deploy), [Netlify hosting](https://docs.convex.dev/production/hosting/netlify), [custom domains](https://docs.convex.dev/production/custom-domains), [backup and restore](https://docs.convex.dev/database/backup-restore), [Management API: delete deployment](https://docs.convex.dev/management-api/delete-deployment), [Management API OpenAPI spec](https://api.convex.dev/v1/openapi.json) (security schemes per endpoint), [deploy key types](https://docs.convex.dev/cli/deploy-key-types), `convex` 1.46.0 package (`dist/cjs/cli/`, no delete command), [get-convex/convex-backend#455](https://github.com/get-convex/convex-backend/issues/455).
+- **Convex:** [pricing](https://www.convex.dev/pricing), [Terms of Service](https://www.convex.dev/legal/tos), [limits](https://docs.convex.dev/production/state/limits), [multiple and preview deployments](https://docs.convex.dev/production/multiple-deployments), [deploy CLI](https://docs.convex.dev/cli/reference/deploy), [Netlify hosting](https://docs.convex.dev/production/hosting/netlify), [custom domains](https://docs.convex.dev/production/custom-domains), [backup and restore](https://docs.convex.dev/database/backup-restore).
 - **Vercel:** [pricing](https://vercel.com/pricing), [Hobby plan](https://vercel.com/docs/plans/hobby), [Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [access tokens](https://vercel.com/docs/accounts/access-tokens), [project-scoped tokens changelog (2026-07-30)](https://vercel.com/changelog/project-scoped-tokens), [Node.js 26 on Sandbox changelog](https://vercel.com/changelog/node-js-26-x-now-available-on-vercel-sandboxes), [CDN cache](https://vercel.com/docs/caching/cdn-cache), [supported frameworks](https://vercel.com/docs/frameworks/more-frameworks), `vercel/vercel` `packages/frameworks/src/frameworks.ts` (Angular preset).
 - **Cloudflare:** [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Workers Cache](https://developers.cloudflare.com/workers/cache/), [Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/), [Version and preview URLs](https://developers.cloudflare.com/workers/configuration/previews/), [Previews configuration](https://developers.cloudflare.com/workers/previews/configuration/), [Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), [Angular guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/more-web-frameworks/angular/).
 - **Google Cloud:** [Cloud Run rollouts and tags](https://docs.cloud.google.com/run/docs/rollouts-rollbacks-traffic-migration), [Cloud CDN overview](https://docs.cloud.google.com/cdn/docs/overview), [network pricing](https://cloud.google.com/vpc/network-pricing).
 - **Render:** [service previews](https://render.com/docs/service-previews), [web service edge caching](https://render.com/docs/web-service-caching), [Blueprint `previewValue`](https://render.com/docs/blueprint-spec).
 - **Firebase:** [App Hosting docs index](https://firebase.google.com/docs/app-hosting), [Hosting GitHub integration](https://firebase.google.com/docs/hosting/github-integration).
-- **GitHub:** [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans), [about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [managing environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [events that trigger workflows (`status`, `pull_request`, `pull_request_target`)](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+- **GitHub:** [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans), [about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [managing environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [events that trigger workflows (`status`)](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#status).
 - **Angular:** [SSR guide](https://angular.dev/guide/ssr), [security: allowed hosts](https://angular.dev/best-practices/security), [deployment](https://angular.dev/tools/cli/deployment), `@angular/ssr@22.2.2` `fesm2022/ssr.mjs` (`AngularAppEngine.getAllowedHosts`) and `fesm2022/_validation-chunk.mjs`.
 - **npm registry (2026-10-07):** `@netlify/angular-runtime` 4.0.0, `@netlify/edge-functions` 3.0.8, `@netlify/types` 2.8.0, `netlify-cli` 27.11.2, `vercel` 62.7.0, `wrangler` 4.148.0, `firebase-tools` 15.32.1, `@angular/ssr` 22.2.2, `@angular/cli` 22.2.2, `express` 5.2.1.
 - **[Public Suffix List](https://publicsuffix.org/list/public_suffix_list.dat):** `netlify.app`, `convex.site`, `vercel.app`, `workers.dev`, `onrender.com`.
