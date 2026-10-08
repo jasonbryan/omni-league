@@ -6,7 +6,12 @@ import eslint from '@eslint/js';
 import angular from 'angular-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import globals from 'globals';
+import { builtinModules } from 'node:module';
 import tseslint from 'typescript-eslint';
+
+// A selector regex matching a Node built-in module name: `node:` anything, or an exact un-prefixed
+// built-in. Selector regexes cannot contain `/`, so the `/` in names like `fs/promises` is `.`.
+const BUILTIN_SOURCE = `/^(?:node:.*|${builtinModules.map((name) => name.replaceAll('/', '.')).join('|')})$/`;
 
 export default defineConfig([
   globalIgnores([
@@ -83,6 +88,107 @@ export default defineConfig([
                 'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
             },
           ],
+        },
+      ],
+    },
+  },
+
+  // Server-entry files (src/server.ts and its error module) are bundled into the Netlify edge
+  // function: Web APIs only, and no environment reads, because the production edge function can
+  // read the production deploy key (ADR 0010, #37). This block replaces the options of the
+  // no-restricted-imports block above for these files, so it repeats convex/browser.
+  {
+    files: ['src/server*.ts'],
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        {
+          name: 'Netlify',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        {
+          name: 'Deno',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        // The global object reaches the environment through casts and aliases
+        // (`(globalThis as T).process`) that no-restricted-properties cannot see.
+        ...['globalThis', 'self', 'window', 'global'].map((name) => ({
+          name,
+          message:
+            'Server-entry files must not use the global object: it reaches the environment (ADR 0010).',
+        })),
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        {
+          object: 'Netlify',
+          property: 'env',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        {
+          object: 'Deno',
+          property: 'env',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        // The edge function runs on Deno, where the plugin's polyfill assigns globalThis.process.
+        ...['process', 'Netlify', 'Deno'].map((property) => ({
+          object: 'globalThis',
+          property,
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        })),
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'convex/browser',
+              message:
+                'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
+            },
+            // Un-prefixed built-ins (`fs`, `fs/promises`, ...), as exact names: a pattern like
+            // `path` would also match a relative `./path` module.
+            ...builtinModules.map((name) => ({
+              name,
+              message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+            })),
+          ],
+          patterns: [
+            {
+              group: ['node:*'],
+              message: 'Server-entry files are Web-API-only: no node: imports (ADR 0010).',
+            },
+          ],
+        },
+      ],
+      // no-restricted-imports sees only static imports. A dynamic import() of a built-in is
+      // refused by name, and one whose source is computed is refused outright, since its
+      // module cannot be checked.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: `ImportExpression[source.type='Literal'][source.value=${BUILTIN_SOURCE}]`,
+          message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+        },
+        {
+          selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=${BUILTIN_SOURCE}]`,
+          message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+        },
+        {
+          selector:
+            "ImportExpression:not([source.type='Literal']):not(:has(> TemplateLiteral[expressions.length=0]))",
+          message:
+            'Server-entry files must import from a fixed module name, so the module can be checked (ADR 0010).',
         },
       ],
     },
