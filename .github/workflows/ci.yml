@@ -58,11 +58,6 @@ jobs:
       - name: install
         id: install
         run: npm ci
-      # TEMPORARY (#12 CI evidence): `steps.nope` is undefined; GitHub starts the run, actionlint
-      # reports it. Reverted before merge.
-      - name: temporary actionlint probe
-        if: ${{ steps.nope.outcome == 'success' }}
-        run: echo "never runs"
       # Every check below runs even when an earlier one failed, so one run reports them all.
       - name: format:check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}

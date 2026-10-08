@@ -12,11 +12,4 @@ describe('Placeholder', () => {
     expect(headings[0].textContent).toBe('Omni League');
     expect(host.children).toHaveLength(1);
   });
-
-  // TEMPORARY (#12 CI evidence): `let` never reassigned is a lint error (prefer-const), and the
-  // assertion is deliberately false. Reverted before merge.
-  it('TEMPORARY: deliberately broken for CI evidence', () => {
-    let ciEvidence = 1;
-    expect(ciEvidence).toBe(2);
-  });
 });
