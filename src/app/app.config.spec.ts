@@ -26,9 +26,7 @@ describe('appConfig with no Convex URL', () => {
 
     expect(TestBed.inject(CONVEX_CLIENT)).toBeNull();
     expect(factory).not.toHaveBeenCalled();
-    expect((fixture.nativeElement as HTMLElement).querySelector('h1')?.textContent).toBe(
-      'Omni League',
-    );
+    expect((fixture.nativeElement as HTMLElement).querySelector('h1')?.textContent).toBe('Omni');
     for (const spy of consoleSpies) {
       expect(spy.mock.calls.filter((args) => !isTestOnlyHydrationWarning(args))).toEqual([]);
       spy.mockRestore();

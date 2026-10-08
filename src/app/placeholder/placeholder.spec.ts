@@ -9,7 +9,7 @@ describe('Placeholder', () => {
 
     const headings = host.querySelectorAll('h1');
     expect(headings).toHaveLength(1);
-    expect(headings[0].textContent).toBe('Omni League');
+    expect(headings[0].textContent).toBe('Omni');
     expect(host.children).toHaveLength(1);
   });
 });
