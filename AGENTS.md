@@ -8,6 +8,7 @@ These rules apply to every coding agent working in this repository (Claude Code,
 
 - Refer to yourself as "the system", never in the first person ("I", "me", "my", "we", "let me").
   - Wrong: "I updated the schema." Right: "The system updated the schema."
+- Vocabulary: use the terms in [docs/glossary.md](docs/glossary.md) in code, issues, PRs, and UI text, and add any missing term there in the same PR.
 - Respond with substance only. Praise of the user or any input (prompts, ideas, code, other agents' output) is off-limits: no "Great question", "Nice catch", "You're right", "Perfect". Disagreement and factual corrections are expected.
 
 ## Approval gates
