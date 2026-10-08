@@ -88,9 +88,11 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Match an approved mockup exactly; any deviation goes back through `gate:ui-design`.
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
-- Open a draft PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
+- Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 
-**Done when:** all local checks are **green** (lint, typecheck, unit tests, Convex tests, build) and the draft PR is open.
+The PR stays draft through Phases 4 to 6. CI does not run on drafts ([ADR 0009](../decisions/0009-ci-pipeline.md)), so every agent runs the full check suite locally.
+
+**Done when:** all local checks are **green** (format, lint, typecheck, unit tests, Convex tests, build) and the draft PR is open.
 
 ### 5. Test
 
@@ -110,11 +112,21 @@ The PR reviewer reads the full diff against the issue and the conventions files,
 
 On `CHANGES`, the implementer fixes it, then the tester re-runs, then the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
 
-**Done when:** `APPROVE` is recorded as a PR review comment and CI is green.
+**Done when:** `APPROVE` is recorded as a PR review comment.
 
 ### 7. Merge
 
-The orchestrator marks the PR ready and squash-merges it when all of these hold: CI is green, tester `PASS` and reviewer `APPROVE` are on the latest commit, the PR has no `gate:*` label, and every gate on the linked issue is approved. The branch is deleted and the issue closes through `Closes #n`.
+A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commit, it has no `gate:*` label, and every gate on the linked issue is approved. The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
+
+1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS` and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
+2. **Mark ready.** `gh pr ready <n>` starts the `ci` run.
+3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then `gh pr checks <n> --watch` until `ci` passes. `skipping` is not a pass.
+4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
+5. **On failure.** If `ci` fails, `gh pr ready <n> --undo` and send the PR back to the implementer.
+
+The branch is deleted and the issue closes through `Closes #n`.
+
+Until #12 adds the `ci` workflow, the orchestrator merges on `PASS` and `APPROVE` alone, with a merge note on the PR saying CI was waived (as on PR #30).
 
 ### 8. Deploy
 
