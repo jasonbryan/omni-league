@@ -53,6 +53,7 @@ Starting with Node 27, Node.js ships one major per year (April), and every major
 | #4 e2e and accessibility | Possibly `@playwright/test` and `@axe-core/playwright`. | These were installed in the test and have no install scripts. Playwright browsers are installed by an explicit `npx playwright install` command, not by a lifecycle script, so the script policy does not affect them. |
 | #5 Angular baseline (PR #18, ADR 0006) | **Hybrid rendering** (`@angular/ssr`, `outputMode: "server"`): public Convex-backed routes render on the server per request, static pages are prerendered, and `/app/**` is client-only. This adds `@angular/ssr`, `@angular/platform-server`, and `express` (dependencies) and `@types/express` and `@types/node` (devDependencies). | **None of these has an install script, and none pulls one in** (tested below), so the `allowScripts` map stays at five entries. The build still runs on Node 26. The production server's Node major is #9's choice, within Angular 22's range `^22.22.3 \|\| ^24.15.0 \|\| ^26.0.0`. It does not have to match `devEngines`, because the server bundle needs no `node_modules` at runtime (see "Server runtime and `devEngines`"). If #5 went back to CSR only, these five packages would drop out and nothing else here would change. |
 | #6 UI and styling | Unknown packages. | The #6 ADR must list any of its packages that have install scripts (for example native CSS engines), with an allow or deny entry and a reason. Otherwise the first install fails under the strict policy below, which is intended. |
+| #7 auth provider (PR #25, ADR 0008) | `@convex-dev/better-auth` 0.12.x and `better-auth` 1.6.x (dependencies), plus one npm `overrides` entry for a `vitest` peer conflict. | **No install scripts in the tree**, so the `allowScripts` map stays at five entries. The `overrides` entry is recorded below ("npm `overrides`"). If #7 chose another provider, the entry and this row drop out. |
 | #8 CI | GitHub-hosted Ubuntu runners, `actions/setup-node`, Dependabot or Renovate for updates. | See Consequences, "Effects on other issues". |
 
 ## Options
@@ -196,6 +197,18 @@ With all five denied, the system ran `ng build`, `ng test` (Vitest), and an esbu
 
 **SSR packages (ADR 0006).** `@angular/ssr` 22.2.1, `@angular/platform-server` 22.2.1, `express` 5.2.1, `@types/express` 5.0.6, and `@types/node` 26.6.4 have no install scripts. The same is true of their transitive dependencies, including `beasties` 0.5.4 (Apache-2.0) and the Express middleware tree. A tree with them added installed under `strict-allow-scripts=true` with only the five entries above. Its lockfile marks `hasInstallScript` on exactly the same packages (`esbuild` twice, `lmdb`, `msgpackr-extract`, `@parcel/watcher`, `fsevents`). With all five denied, the SSR build and its Node server worked (Test evidence, item 6).
 
+**Auth packages (ADR 0008, PR #25).** `@convex-dev/better-auth` 0.12.5, `better-auth` 1.6.33, and their transitive dependencies (`convex-helpers`, `jose`, `zod`, `kysely`, `nanostores`, `better-call`, `@noble/*`, `@better-auth/*`) have no install scripts. ADR 0008's scratch install found `hasInstallScript` only on `esbuild`. The system re-checked on 2026-10-07 by resolving `@convex-dev/better-auth@0.12.5`, `better-auth@1.6.33`, `convex@1.46.0`, and `vitest@5.0.3` with the override below (`npm install --package-lock-only --ignore-scripts`, npm 11.13.0 on Node 24.16.0): the lockfile marks `hasInstallScript` only on `esbuild` (from `convex` and `vite`) and `fsevents` (from `vite`), both already denied in the map. **No new `allowScripts` entry is needed.**
+
+### npm `overrides`
+
+- **Policy:** an `overrides` entry in `package.json` is allowed only when it is recorded in the ADR that needs it, with the conflict it resolves and the condition for removing it. No other overrides.
+- **Current entry (ADR 0008):** `"overrides": { "better-auth": { "vitest": "$vitest" } }`.
+  - **Conflict:** `better-auth` 1.6.x declares an optional peer `vitest ^2 || ^3 || ^4`, and ADR 0004 uses `vitest` 5.0.3, so `npm install` fails with `ERESOLVE` (`peerOptional vitest@"^2.0.0 || ^3.0.0 || ^4.0.0" from better-auth@1.6.33`). Reproduced on 2026-10-07 without the entry; with it, resolution succeeds and the lockfile has a single `vitest@5.0.3`.
+  - **Effect:** `$vitest` points the peer at the root `vitest` devDependency, so no second Vitest is installed and the version stays under ADR 0004's control.
+  - **Added by:** the first PR that installs `better-auth` (the sign-in feature), not #10.
+  - **Removed when:** `@convex-dev/better-auth` accepts `better-auth` 1.7, which accepts Vitest 5. That bump is a minor one and needs no gate (ADR 0008).
+- `npm ci` honours `overrides` from `package.json` and the lockfile, so CI (#12) needs no flag. `--legacy-peer-deps` and `--force` are not used.
+
 The repository's own scripts (for example a root `prepare`) are not covered by `allowScripts`. ADR 0002 adds none.
 
 ### Minimum release age and audit
@@ -260,6 +273,7 @@ The repository's own scripts (for example a root `prepare`) are not covered by `
   - Deploying `dist/` needs no `npm ci` on the runtime.
 - **#10 (scaffold):**
   - Follows the layout, pins, `.npmrc`, and the five-entry `allowScripts` map above. The SSR packages from ADR 0006 need no extra entry.
+  - Adds no `overrides` entry; the `better-auth` entry arrives with the sign-in feature (ADR 0008).
   - The layout gains the SSR files ADR 0006 generates (`src/server.ts`, `src/main.server.ts`, `src/app/app.config.server.ts`, `src/app/app.routes.server.ts`), all in the same single root package.
   - Lowers the floor of any `ng new` range that resolves only to a version published less than a day earlier.
   - The install command is `npm ci`.
