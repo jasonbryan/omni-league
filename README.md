@@ -40,10 +40,10 @@ npm start              # ng serve on http://localhost:4200
 
 ```sh
 npm run build          # browser bundle, server bundle, and prerendered routes in dist/omni-league/
-npm run serve:ssr      # node dist/omni-league/server/server.mjs on http://localhost:4000 (set PORT to change)
+npm run serve:ssr      # local SSR runner (scripts/serve-ssr.mjs) on http://localhost:4000 (set PORT to change)
 ```
 
-The server only answers requests whose `Host` is `localhost` or `127.0.0.1` (`security.allowedHosts` in `angular.json`); any other host gets HTTP 400.
+The local SSR runner serves the build the way Netlify does (ADR 0010): static files from `dist/omni-league/browser/` with Netlify's cache headers, and every other request through `netlifyAppEngineHandler`, the same handler the Netlify edge function runs. It only answers requests whose `Host` is `localhost` or `127.0.0.1` (`security.allowedHosts` in `angular.json`); any other host gets HTTP 400.
 
 ### Checks
 
