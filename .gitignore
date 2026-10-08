@@ -44,6 +44,8 @@ __screenshots__/
 .env.*
 .env*.local
 !.env.example
+# Anonymous local Convex backend state (database, admin key)
+/.convex/
 
 # System files
 .DS_Store
