@@ -14,7 +14,7 @@ Applies to everything under `convex/`. Once the project is scaffolded, read `con
 
 - `convex/schema.ts` defines every table with validators.
 - Queries read through indexes (`withIndex`); `.filter()` on large tables is a bug.
-- Changes that affect existing data ship with a migration plan in the PR description. Schema changes run one PR at a time (see the dev cycle).
+- Changes that affect existing data ship with the PR template's Migration section filled in. Schema changes run one PR at a time (see the dev cycle).
 
 ## Environments
 

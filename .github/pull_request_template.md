@@ -8,7 +8,15 @@ What changed and why, in one to three sentences.
 
 - Criterion: `path/to/test.spec.ts`
 
-Schema / migration: none (or a one-line plan with a link to details)
+## Migration
+
+`none` if `convex/schema.ts` and existing data are unchanged. Otherwise short bullets:
+
+- Data change:
+- Backfill or transform steps:
+- Deploy order (schema vs code):
+- Rollback:
+- Risk to existing records:
 
 ## Gates
 
@@ -18,6 +26,6 @@ Schema / migration: none (or a one-line plan with a link to details)
 
 <details><summary>Evidence</summary>
 
-Check output, screenshots at 375px and 1280px for UI changes, and migration notes for schema changes.
+Check output, screenshots at 375px and 1280px for UI changes.
 
 </details>

@@ -20,7 +20,7 @@ Record the PID and port of any local process the system starts (dev server, SSR 
 
 ## Production release (gate:production)
 
-1. List the PRs merged since the last release tag, every Convex schema change and its migration plan, and every Stripe configuration change.
+1. List the PRs merged since the last release tag, every Convex schema change and its migration plan, and every Stripe configuration change. Copy each PR's Migration section into the release request and follow its deploy order.
 2. Open a release PR or deploy request issue (see `AGENTS.md`, Writing on GitHub) with that list and labels `gate:production`, `area:infra`. Stop; the owner approves by merging or commenting approval.
 3. After approval, deploy, run the smoke tests against production, and tag the release (`vX.Y.Z`).
 4. If smoke tests fail, roll back with the method in the hosting ADR, confirm the rollback, and open a `type:bug` issue with the failure output.
