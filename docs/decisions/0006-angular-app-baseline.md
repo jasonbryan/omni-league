@@ -3,11 +3,11 @@
 - **Status:** Proposed
 - **Gate:** `gate:technology`
 - **Issue:** #5
-- **Date:** 2026-10-07 (revised 2026-10-07 after the owner's answer on public pages; revised again for dev-only hydration checks, the `@types/node` pin, and the indexing assumption)
+- **Date:** 2026-10-07 (revised 2026-10-07 after the owner's answer on public pages; revised again for dev-only hydration checks, the `@types/node` pin, and the indexing assumption; revised a third time to record the owner's indexing answer and the #11 / #24 adapter split)
 
 ## Context
 
-ADR 0001 fixes Angular (latest stable major) and Convex but leaves four baseline choices open. The scaffold (#10), the Convex adapter (#11), hosting (#9), and previews (#15) all depend on them:
+ADR 0001 fixes Angular (latest stable major) and Convex but leaves four baseline choices open. The scaffold (#10), the Convex adapter (#11 browser half, #24 server path), hosting (#9), and previews (#15) all depend on them:
 
 1. **Rendering mode:** client-side only, server-side rendering, prerendering, or a per-route mix.
 2. **Forms API:** `docs/conventions/angular.md` says to use signal-based forms when the installed version has them, and typed reactive forms otherwise.
@@ -18,30 +18,13 @@ ADR 0001 fixes Angular (latest stable major) and Convex but leaves four baseline
 
 Public pages are required at launch. The owner's words on #5 were "users will need to be able to register to organizations leagues": visitors can view an organization's leagues and locations on public pages, and users can register for those leagues from them. An organization can hold leagues at several locations. Their data changes while the site is live: the list of leagues, whether registration is open or closed, and the number of spots left.
 
-**Assumption, not an owner answer:** this ADR treats those pages as **indexable by search engines and producing link previews** (Open Graph tags) when shared in messaging apps. The owner has not said either. The orchestrator has asked the owner on #5. Rationale that rests on this assumption is marked **[indexing assumption]** below, and the next section says what changes if the answer is no.
+**Owner answer on indexing and link previews (#5):** public league pages **should be indexed by search engines and show rich link previews** (Open Graph tags) when shared. The owner confirmed this on #5, relayed by the orchestrator. Rationale that rests on it is marked **(owner answer, #5)** below.
 
-PR #22 records public pages and locations in `docs/product/requirements.md`. It deliberately leaves search indexing out because that is still an open question.
+PR #22 records public pages and locations in `docs/product/requirements.md`. It was written before this answer and leaves search indexing out; adding the indexing and link-preview requirement there is the owner's call.
 
-### If public pages need not be indexed or previewed
+### Rejected alternative: client-side rendering for public routes
 
-The answer has two parts, and they lead to different outcomes:
-
-| Owner answer | Effect on this ADR |
-| --- | --- |
-| Indexing **and** link previews wanted | The recommendation stands as written. |
-| No indexing, but link previews wanted when a league link is shared | The recommendation still stands. Preview bots (messaging apps, social sites) read the raw HTML and do not run JavaScript, so per-page `og:*` tags still need a server render. Only the 404-for-indexing argument becomes weaker. |
-| Neither indexing nor link previews | **CSR for public routes is enough, and Option 1A becomes the recommendation.** Visitors and registrants get the same features from a client render and the live subscription. Requirements alone do not justify a server render. Details follow the table. |
-
-If the answer is "neither", these parts change:
-
-- **Rendering:** Option 1A, with all routes on `RenderMode.Client`. The only other option is `outputMode: "static"` with prerendered no-data pages, which still needs `@angular/ssr` but no server runtime. Per-page `<title>` is still set with `Title` for browser tabs and history.
-- **Packages:** `@angular/platform-server` and `express`, plus `@types/express`, are no longer needed. `@angular/ssr` is needed only if the no-data pages are prerendered.
-- **Hosting (#9):** static hosting qualifies again, and the $0 static path returns. The host's SPA fallback serves `index.html` for every path.
-- **Adapter (#11):** the server path is dropped: `ConvexHttpClient`, `TransferState`, hydration seeding, `ConvexServerQueryError`, and `CONVEX_HTTP_CLIENT_FACTORY`. That saves an estimated 150 to 200 lines plus specs. The rest of the adapter specification is unchanged.
-- **E2E (#13):** Playwright serves static files again. The raw-HTML checks and the NG05xx part of the console fixture are dropped. The development-configuration e2e build is no longer needed for hydration checks.
-- **Unknown URLs:** a static host answers 200 with the SPA shell, and the app shows its not-found view client-side, which is a soft 404. That is acceptable only when pages are not indexed. A host-specific 404 rule is optional.
-- **Unchanged:** forms (Option 2A), the in-repo adapter (Option 3A), and Convex URL configuration (Option 4A). Only 4A's note that "the same `define` reaches the server bundle" no longer applies.
-- **Not a deciding factor:** server rendering would still give a faster first paint on slow mobile connections. This ADR does not treat that as enough to justify a server runtime without an owner requirement.
+Had the owner wanted neither indexing nor link previews, CSR for every route (Option 1A) would have been enough: static hosting, no server path in the adapter, and no raw-HTML or hydration checks in e2e. The owner's answer rules it out. Crawlers and preview bots read the raw HTML without running JavaScript, so per-page titles, `og:*` tags, and real 404 statuses need a server render.
 
 ### Verified platform facts (2026-10-07)
 
@@ -82,7 +65,7 @@ The system generated `ng new spike --ssr` with CLI 22.2.2 on Node 26.11.0 (zonel
   - `GET /` returned the prerendered page.
   - `GET /o/acme` with `Host: evil.example` returned 400 and logged `Header "host" with value "evil.example" is not allowed.`
 - `ng build --define=__SPIKE_URL__='https://happy-otter-123.convex.cloud'` put the URL into both `browser/main-*.js` and `server/main.server.mjs`.
-- Not exercised in the spike: the browser half (hydration seeding from `TransferState`), which needs a real browser. #11's unit tests cover it (see the adapter specification).
+- Not exercised in the spike: the browser half (hydration seeding from `TransferState`), which needs a real browser. #24's unit tests and its `renderApplication` spec cover it (see the adapter specification).
 
 ### Assumptions about decisions still open
 
@@ -93,26 +76,26 @@ The system generated `ng new spike --ssr` with CLI 22.2.2 on Node 26.11.0 (zonel
 | #3 unit runner | Vitest through the Angular unit-test builder (CLI 22 default), `TestBed` with zoneless change detection. | Adapter specs are runner-agnostic. Server-platform specs provide `{ provide: PLATFORM_ID, useValue: 'server' }`; no extra package. |
 | #4 e2e (PR #17, ADR 0005) | Playwright starts the built app with `webServer`. | The built app is now a Node server (`node dist/<app>/server/server.mjs`), not static files. See Consequences. |
 | #6 UI library (PR #20, ADR 0007) | spartan brain + helm on Tailwind 4, ng-icons. Form controls bind with signal forms' `[formField]`. | spartan's changelog states it is "server-side-rendering compatible out of the box"; `@ng-icons/core` 36.1.0 has an explicit server path (`isPlatformServer` → `innerHTML`, reused on hydration). Still unverified in this repo: see Consequences. `FormField` also accepts a `ControlValueAccessor` "for backwards compatibility". |
-| #7 auth | Undecided. The adapter exposes an auth extension point (`CONVEX_AUTH`), and #11 ships it unused. | **Server renders are anonymous** (below), so #7 needs no cookie or server-side token at launch. Authenticated SSR would need a new ADR. |
+| #7 auth | Undecided. The adapter exposes an auth extension point (`CONVEX_AUTH`), and #11 declares it unused (`provideConvexAuth` lands with the #7 follow-up). | **Server renders are anonymous** (below), so #7 needs no cookie or server-side token at launch. Authenticated SSR would need a new ADR. |
 | #9 hosting | Must run a Node server for Server routes (below). | Static-only hosts (GitHub Pages, Firebase Hosting or Cloudflare Pages without functions/workers) no longer qualify on their own. |
 
 ## Options
 
 ### 1. Rendering mode
 
-**[indexing assumption]** The public pages need real HTML at the first response: link-preview crawlers read the raw HTML and its `<meta property="og:*">` tags, and the title and description must be per organization, location, and league. Their content changes with every registration.
+**(owner answer, #5)** The public pages need real HTML at the first response: link-preview crawlers read the raw HTML and its `<meta property="og:*">` tags, and the title and description must be per organization, location, and league. Their content changes with every registration.
 
 #### Option 1A: Client-side rendering only (previous baseline)
 
 - **Pros:** No server runtime; any static host works. No hydration, no `TransferState`, no server path in the adapter.
-- **Cons:** Crawlers and preview bots get an empty `<app-root>`, the same title for every page, and no per-page Open Graph tags. **[indexing assumption]** Rejected because it fails the indexing and link-preview assumption, not because of anything the owner stated. Visitors with a browser can still view and register. If the owner says neither is needed, this option becomes the recommendation (see "If public pages need not be indexed or previewed").
+- **Cons:** Crawlers and preview bots get an empty `<app-root>`, the same title for every page, and no per-page Open Graph tags. **(owner answer, #5)** Rejected because the owner requires indexing and link previews. Visitors with a browser could still view and register (see "Rejected alternative: client-side rendering for public routes").
 
 #### Option 1B: Prerender only (`outputMode: "static"`, `RenderMode.Prerender` with `getPrerenderParams`)
 
 - **What it is:** every public URL is rendered to HTML during `ng build`; `getPrerenderParams` lists organizations, locations, and leagues by querying Convex at build time. Static hosting still works.
 - **Pros:** No server runtime, so the cheapest hosting. Fast, CDN-cacheable HTML.
 - **Cons:**
-  - **Content is frozen at build time.** Angular has no on-demand or time-based regeneration. "Registration open", "3 spots left", and new leagues are wrong until the next full build and deploy. The live Convex subscription corrects the numbers after hydration, but crawlers and link previews keep the stale or missing content. **[indexing assumption]**
+  - **Content is frozen at build time.** Angular has no on-demand or time-based regeneration. "Registration open", "3 spots left", and new leagues are wrong until the next full build and deploy. The live Convex subscription corrects the numbers after hydration, but crawlers and link previews keep the stale or missing content. **(owner answer, #5)**
   - **New pages do not exist until a rebuild.** With `outputMode: "static"` there is no server fallback, so a league or organization created after the build has no HTML. `PrerenderFallback.Client` gives it an empty shell with no meta tags, which is exactly the CSR failure above.
   - **Keeping it fresh means rebuilding on data changes:** a Convex action calling a deploy hook on every league or registration change. Each rebuild queries every organization at build time, its duration grows with the number of pages, and the deploy hook ties Convex to the host. It also needs the production Convex URL and read access at build time, and a failed build silently leaves stale public pages.
   - Not viable for the league and registration pages. It remains the right mode for pages with **no Convex data** (landing, about, pricing, help).
@@ -121,10 +104,10 @@ The system generated `ng new spike --ssr` with CLI 22.2.2 on Node 26.11.0 (zonel
 
 - **What it is:** one `serverRoutes` table assigns each route a mode. Public pages with Convex data are `RenderMode.Server`; static pages are `RenderMode.Prerender`; signed-in app routes are `RenderMode.Client`.
 - **Pros:**
-  - Public pages always reflect current Convex data at request time, including pages created minutes ago, so link previews and crawlers see current titles, descriptions, and registration status. **[indexing assumption]**
+  - Public pages always reflect current Convex data at request time, including pages created minutes ago, so link previews and crawlers see current titles, descriptions, and registration status. **(owner answer, #5)**
   - Per-route `headers` allow CDN caching of public HTML (`s-maxage`), which bounds both staleness and server invocations. After hydration, the live Convex subscription keeps the page current in the browser.
   - Signed-in routes stay CSR: no server cost, no auth on the server, and no hydration concerns for the bulk of the app.
-  - Proper HTTP status for unknown organizations or leagues (404 through `RESPONSE_INIT`), which matters for indexing. **[indexing assumption]**
+  - Proper HTTP status for unknown organizations or leagues (404 through `RESPONSE_INIT`), which matters for indexing. **(owner answer, #5)**
 - **Cons:**
   - **Needs a server runtime (Node, or a Web `Request`/`Response` runtime) for every non-asset request**, including Client routes, which the engine serves as `index.csr.html` unless the host routes them statically. This removes the $0 static-only hosting path and constrains #9.
   - Adds packages: `@angular/ssr`, `@angular/platform-server`, and, for the CLI's default Node entry, `express` (+ `@types/express`, `@types/node`).
@@ -210,10 +193,10 @@ Adopt `@angular/ssr` with `outputMode: "server"` and this route policy:
 
 | Route kind | Examples (paths are fixed by feature issues, not here) | Mode | Why |
 | --- | --- | --- | --- |
-| Public pages that read Convex data | organization page, location page, league page, league registration page | `RenderMode.Server` | **[indexing assumption]** Current data and per-page meta tags at request time; prerendering cannot keep registration status or new leagues current |
+| Public pages that read Convex data | organization page, location page, league page, league registration page | `RenderMode.Server` | **(owner answer, #5)** Current data and per-page meta tags at request time; prerendering cannot keep registration status or new leagues current |
 | Public pages with no Convex data | landing, about, pricing, help | `RenderMode.Prerender` (no `getPrerenderParams`) | Same for every visitor and changes only with a deploy |
 | Signed-in app | everything under one prefix, `/app/**` | `RenderMode.Client` | Per-user data, no auth on the server, no SEO need |
-| Anything else (`**`) | unknown URLs | `RenderMode.Server` | **[indexing assumption]** Renders the not-found page with status 404 through `RESPONSE_INIT`, so unknown URLs are not indexed as soft 200s |
+| Anything else (`**`) | unknown URLs | `RenderMode.Server` | **(owner answer, #5)** Renders the not-found page with status 404 through `RESPONSE_INIT`, so unknown URLs are not indexed as soft 200s |
 
 **Rules for Server routes:**
 
@@ -221,7 +204,7 @@ Adopt `@angular/ssr` with `outputMode: "server"` and this route policy:
 - **Cacheable.** Because responses are anonymous, Server routes for public pages set `headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' }`. The browser always revalidates; a shared CDN may serve the page for up to 60 s and refresh in the background. The live subscription corrects counts within a second of hydration, and capacity is enforced by the registration mutation, never by the rendered number. #9 may tune the values.
 - **Query args derive only from the route and URL** (params, query string), so server and browser compute the same args and the same `TransferState` keys.
 - **SSR-safe code.** No `window`, `document`, `localStorage`, or `navigator` outside `afterNextRender`/`afterEveryRender`; no `isPlatformBrowser` branches in templates; no direct DOM manipulation. Browser-only widgets get `ngSkipHydration` on their host only with a code comment and an issue link.
-- **Meta tags** **[indexing assumption]** are set with `Title` and `Meta` (`og:title`, `og:description`, `og:url`, `og:type`, `og:image` when one exists, `<link rel="canonical">`) from the same query results, during the server render.
+- **Meta tags** **(owner answer, #5)** are set with `Title` and `Meta` (`og:title`, `og:description`, `og:url`, `og:type`, `og:image` when one exists, `<link rel="canonical">`) from the same query results, during the server render.
 - **Status codes:** a public page whose primary query returns `null` (unknown slug) sets `RESPONSE_INIT` status 404 and renders the not-found view.
 
 **Rules for Prerender routes:** they must not read Convex data, because they render during `ng build`, which in CI has no Convex URL.
@@ -246,9 +229,9 @@ Use signal forms, because they are stable in Angular 22. This follows angular.md
 
 ### Adapter: Option 3A, in-repo, with server rendering support
 
-The in-repo adapter stays the recommendation, with the server path specified below. `convex-angular`'s SSR support narrows the gap: it would save the 150 to 200 server-path lines and already handles pagination and auth wiring. It does not change the outcome, because the deciding risks are unchanged: one maintainer, no upstream testing on Angular 22 or `convex` 1.46, and a different API that would rewrite #11. The SSR design here follows the same proven pattern (Convex's own `preloadQuery`/`usePreloadedQuery`, and `convex-angular`'s loader), and adds a transferred error state to keep the first browser render identical to the server's.
+The in-repo adapter stays the recommendation, with the server path specified below. `convex-angular`'s SSR support narrows the gap: it would save the 150 to 200 server-path lines and already handles pagination and auth wiring. It does not change the outcome, because the deciding risks are unchanged: one maintainer, no upstream testing on Angular 22 or `convex` 1.46, and a different API that would rewrite #11 and #24. The SSR design here follows the same proven pattern (Convex's own `preloadQuery`/`usePreloadedQuery`, and `convex-angular`'s loader), and adds a transferred error state to keep the first browser render identical to the server's.
 
-**Owner trade-off:** if the owner prefers to own less code, adopting `convex-angular` instead is a reasonable alternative. In that case #11 is rewritten to its API (`data()`, `isRefetching()`), ADR 0002 gains a lint exemption, and the package is pinned exactly until its upstream tests cover Angular 22.
+**Owner trade-off:** if the owner prefers to own less code, adopting `convex-angular` instead is a reasonable alternative. In that case #11 and #24 are rewritten to its API (`data()`, `isRefetching()`), ADR 0002 gains a lint exemption, and the package is pinned exactly until its upstream tests cover Angular 22.
 
 ### Convex URL: Option 4A, build-time `define`, variable `CONVEX_URL`
 
@@ -268,12 +251,14 @@ The variable name `CONVEX_URL` is the one Convex infers for this project today. 
   ```
 
   Feature issues add explicit entries for their public routes (with the `Cache-Control` header above) ahead of `**`.
+
+  At scaffold time the client router (`app.routes.ts`) has only the `''` route. In `@angular/ssr` 22.2.2, build-time route extraction emits only routes in the router config, and `/**` server entries are exempt from the "does not match any routes" error, so `app/**` and `**` build cleanly but stay inactive: the SSR server answers `/app/x` and unknown URLs with Express's 404 until client routes exist. The first `/app` feature makes `app/**` serve the client shell, and #23 (router `**` route, not-found page) makes `**` render the 404 page. (The spike's `/app/dashboard` shell came from its own client routes.)
 - **`app.config.ts`** includes `provideClientHydration()`. The server config merges `provideServerRendering(withRoutes(serverRoutes))`.
 - **Allowed hosts:** `angular.json` `security.allowedHosts` lists `localhost` and `127.0.0.1`. Preview and production hostnames are added by #9, either at build time in `angular.json` or through `NG_ALLOWED_HOSTS` (Node engine only). `*` is not used.
 - **Scripts:** `serve:ssr` = `node dist/<app>/server/server.mjs` (the CLI's `serve:ssr:<project>` renamed). `PORT` defaults to 4000.
 - **`docs/conventions/angular.md`** gains a short "Rendering" section in #10 that restates the route policy and the Server-route rules above.
 
-## Adapter specification (fixes #11)
+## Adapter specification (fixes #11 and #24)
 
 ### Location and public surface
 
@@ -282,7 +267,7 @@ The adapter lives in `src/app/core/data/convex/`. Code outside the folder import
 ```ts
 // src/app/core/data/convex/index.ts
 export function provideConvex(): EnvironmentProviders;               // registered once in app.config.ts
-export function provideConvexAuth(source: ConvexAuthSource): EnvironmentProviders; // used by the #7 follow-up
+export function provideConvexAuth(source: ConvexAuthSource): EnvironmentProviders; // implemented and used by the #7 follow-up
 
 export const CONVEX_URL: InjectionToken<string | null>;               // default factory: build-time __CONVEX_URL__
 export const CONVEX_CLIENT_FACTORY: InjectionToken<(url: string) => ConvexClientLike>; // default: wraps new ConvexClient(url)
@@ -354,7 +339,9 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
   - In the browser, if the URL is `null`, it returns `null`.
   - Otherwise it calls `CONVEX_CLIENT_FACTORY(url)`, applies auth (below), and registers `inject(DestroyRef).onDestroy(() => void client.close())`.
   - **Effect:** exactly one client per browser app, and `close()` is called exactly once when the application (root environment injector) is destroyed.
-- **Server query loader** (internal, root-provided): on the server with a URL, it creates one `ConvexHttpClientLike` per render through `CONVEX_HTTP_CLIENT_FACTORY(url)`. The default factory passes `logger: false` and a `fetch` wrapper that adds `AbortSignal.timeout(CONVEX_SERVER_QUERY_TIMEOUT_MS)`. It never calls `setAuth`. In the browser, it is never created.
+- **Server query loader** (internal, root-provided, #24): on the server with a URL, it creates one `ConvexHttpClientLike` per render through `CONVEX_HTTP_CLIENT_FACTORY(url)`. It never calls `setAuth`. In the browser, it is never created.
+  - **Timeout:** the loader enforces `CONVEX_SERVER_QUERY_TIMEOUT_MS` itself by racing each `query()` against a timer (cleared on settle), so the limit holds for any client, including test fakes, and is testable with fake timers.
+  - The default factory passes `logger: false` and a `fetch` wrapper that adds `AbortSignal.timeout(CONVEX_SERVER_QUERY_TIMEOUT_MS)`, so a hung request is also cancelled at the network level.
 - **Test seams.** Provider specs override `CONVEX_CLIENT_FACTORY` and `CONVEX_HTTP_CLIENT_FACTORY` with fakes and set `PLATFORM_ID` to `'server'` or `'browser'`. Helper specs override `CONVEX_CLIENT` with a fake directly.
 
 ### Query helper (`injectQuery`)
@@ -365,7 +352,7 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 - **Subscribing (browser).** The subscription is opened in an `effect()` owned by that injector, a side effect that leaves Angular, as angular.md allows.
   - The effect runs on the next change-detection pass, so specs call `TestBed.tick()` before asserting on subscriptions.
   - It calls `client.onUpdate(query, args, onValue, onError)`, always with `onError` supplied, and the effect's cleanup calls the returned `unsubscribe()`.
-- **Fetching (server).** The same `effect()` instead calls the loader:
+- **Fetching (server, #24).** The same `effect()` instead calls the loader (until #24 lands, #11's interim server behaviour applies: no fetch, `isLoading()` true):
   - `PendingTasks.add()` before the request and the returned remover in `finally`, so the zoneless server render does not serialise until every query has settled.
   - One `query(fn, args)` per distinct function and args within a render; helpers asking for the same pair share the promise.
   - On success: `value()` is the result, `isLoading()` false, and the result is written to `TransferState` as `{ v: convexToJson(result) }` (`{ u: true }` for `undefined`). `convexToJson` keeps `bigint`, `ArrayBuffer`, and Convex IDs intact through the JSON transfer.
@@ -416,8 +403,8 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 
 ### Auth extension point (for #7)
 
-- **No auth in #11.** `CONVEX_AUTH` is declared in #11 and nothing provides it.
-- **When `CONVEX_AUTH` is provided** (the #7 follow-up calls `provideConvexAuth(source)`), the browser `CONVEX_CLIENT` factory, right after creating the client:
+- **No auth in #11.** #11 declares `CONVEX_AUTH`, `ConvexAuthSource`, and `setAuth`/`clearAuth` on `ConvexClientLike` only, and nothing provides the token. `provideConvexAuth()` and the browser wiring below are implemented in the #7 follow-up, so no untested code ships before then.
+- **When `CONVEX_AUTH` is provided** (the #7 follow-up implements and calls `provideConvexAuth(source)`), the browser `CONVEX_CLIENT` factory, right after creating the client:
   - calls `client.setAuth(source.fetchToken, source.onChange)`;
   - creates an `effect` on `source.signedIn`. A `true` → `false` transition calls `client.clearAuth()`, and `false` → `true` calls `client.setAuth(...)` again.
 - **On the server, `CONVEX_AUTH` is ignored.** Server renders are anonymous by design (Rendering rules), so a token can never reach a cacheable response or the `TransferState` blob.
@@ -453,7 +440,11 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 - **New dependencies:** `@angular/ssr`, `@angular/platform-server`, `express` (dependencies); `@types/express`, `@types/node` (devDependencies). Versions and licences are in the Recommendation table; all MIT, with `beasties` (Apache-2.0) transitive. Signal forms are part of `@angular/forms`, and the adapter uses `convex` (ADR 0001).
 - **Hosting (#9): a server runtime is now required.** Server routes render per request, so the host must run `dist/<app>/server/server.mjs` (Node, through `reqHandler` or the Express listener) or a Web `Request`/`Response` handler built on `AngularAppEngine`. Pure static hosting (GitHub Pages, or Firebase Hosting / Cloudflare Pages without functions or workers) no longer qualifies on its own. #9 must also satisfy the existing constraints: budget up to about $25/month **including Convex**, per-PR previews each with its own Convex backend, and commercial use allowed. The full list is in the PR description.
 - **#10 (scaffold):** scaffolds with SSR (Rendering specification): the server files, `outputMode: "server"`, `provideClientHydration()`, the three-entry `serverRoutes`, `security.allowedHosts` for local hosts, the `serve:ssr` script, `@types/node` pinned to the Node major from #1 (26), lowered to #9's server-runtime major if that is below 26, and the angular.md "Rendering" section. Zoneless stays the default. The `build` script stays `ng build` until #11 replaces it.
-- **#11 (adapter):** implements the specification above, now including the server path, hydration seeding, the three error classes, and `CONVEX_HTTP_CLIENT_FACTORY`. Its server-side criteria are in the PR description.
+- **#10 route note:** the scaffold's client router has only `''`, so `/app/x` and unknown URLs return Express's 404 until the first `/app` feature and #23 add client routes (Rendering specification).
+- **The adapter is split across two issues** (plan review of #11, hybrid-rendering round 1):
+  - **#11 (browser adapter and URL configuration):** the provider, `CONVEX_URL`, `CONVEX_CLIENT_FACTORY`, `CONVEX_CLIENT`, the helpers, `skipToken`, `ConvexNotConfiguredError`, `ConvexServerCallError`, the `CONVEX_AUTH` declarations (no wiring), `scripts/ng-convex.mjs`, `.env.example`, the `build`/`start` scripts, and the lint rule. Until #24 lands, a query helper on the server platform creates no client, makes no network call, and reports the browser's pre-emission state (`isLoading()` true), so hydration matches.
+  - **#24 (server query path and hydration seeding):** `CONVEX_HTTP_CLIENT_FACTORY`, `CONVEX_SERVER_QUERY_TIMEOUT_MS`, the server query loader with its own timeout, the `TransferState` encoding, `ConvexServerQueryError`, and hydration seeding, verified with a `renderApplication` spec. Blocked by #11.
+  - Client-route (`/app/**`) features and #15 need only #11. Every feature with a `RenderMode.Server` route that reads Convex data is blocked by #24.
 - **#15 (previews):** deploys a server build, not static files; adds each preview hostname to the allowed hosts; checks the URL in both bundles.
 - **#4 / ADR 0005 (e2e) and #13:** Playwright's `webServer` for the app runs `node dist/<app>/server/server.mjs` with `PORT` and `NG_ALLOWED_HOSTS=localhost,127.0.0.1`. Public-page tests add a raw-HTML check (`request.get()`, no JavaScript) for content, `<title>`, and `og:*` tags. **The console-error fixture catches hydration mismatch errors (NG05xx) only if the e2e build uses `--configuration development`.** Angular runs these checks only in dev mode (see "Hydration" in the Recommendation; PR #17 found this). A production e2e build would let mismatches through silently. The shipped production build is still covered by #12's build job and #15's preview smoke. #13's deliberate-mismatch check must be structural, for example `<table><tr>` with no `<tbody>`, not a text difference. No new tool.
 - **#6 / ADR 0007 (UI library):** must state how its form controls bind to signal forms, and must show its components render on a Server route and hydrate without hydration errors.
