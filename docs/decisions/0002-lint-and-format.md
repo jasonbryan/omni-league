@@ -1,6 +1,6 @@
 # 0002: Lint and format tooling
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-08 (owner merged PR #16)
 - **Gate:** `gate:technology`
 - **Issue:** #2
 - **Date:** 2026-10-07 (revised 2026-10-07: config-file patterns, ADR 0006 SSR files)
