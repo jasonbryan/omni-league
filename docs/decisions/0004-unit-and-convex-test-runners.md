@@ -184,8 +184,8 @@ Illustrative schema and function (smoke test only):
 // convex/schema.ts (illustrative)
 export default defineSchema({
   groups: defineTable({ name: v.string() }),
-  memberships: defineTable({ groupId: v.id("groups"), tokenIdentifier: v.string() })
-    .index("by_group_and_token", ["groupId", "tokenIdentifier"]),
+  memberships: defineTable({ groupId: v.id("groups"), authUserId: v.string() })
+    .index("by_group_and_user", ["groupId", "authUserId"]),
   notes: defineTable({ groupId: v.id("groups"), body: v.string() }).index("by_group", ["groupId"]),
 });
 
@@ -195,8 +195,8 @@ export async function requireGroupMember(ctx: QueryCtx, groupId: Id<"groups">) {
   if (identity === null) throw new ConvexError("UNAUTHENTICATED");
   const membership = await ctx.db
     .query("memberships")
-    .withIndex("by_group_and_token", (q) =>
-      q.eq("groupId", groupId).eq("tokenIdentifier", identity.tokenIdentifier))
+    .withIndex("by_group_and_user", (q) =>
+      q.eq("groupId", groupId).eq("authUserId", identity.subject))
     .unique();
   if (membership === null) throw new ConvexError("FORBIDDEN");
   return identity;
@@ -220,9 +220,9 @@ async function seed() {
   const ids = await t.run(async (ctx) => {
     const groupA = await ctx.db.insert("groups", { name: "A" });
     const groupB = await ctx.db.insert("groups", { name: "B" });
-    // convex-test builds tokenIdentifier as `${issuer}|${subject}`, default issuer https://convex.test
-    await ctx.db.insert("memberships", { groupId: groupA, tokenIdentifier: "https://convex.test|alice" });
-    await ctx.db.insert("memberships", { groupId: groupB, tokenIdentifier: "https://convex.test|bob" });
+    // authUserId equals the subject faked by withIdentity (ADR 0008: helpers key on identity.subject)
+    await ctx.db.insert("memberships", { groupId: groupA, authUserId: "alice" });
+    await ctx.db.insert("memberships", { groupId: groupB, authUserId: "bob" });
     await ctx.db.insert("notes", { groupId: groupA, body: "A only" });
     return { groupA, groupB };
   });
@@ -252,7 +252,8 @@ describe("notes.listForGroup", () => {
 
 Notes on the pattern:
 
-- **Identity.** `withIdentity` sets `ctx.auth.getUserIdentity()`. When `issuer` and `subject` are given, `tokenIdentifier` is `${issuer}|${subject}`. The issuer defaults to `https://convex.test`. Tests key memberships on `tokenIdentifier`, the stable per-user value Convex recommends. How real identities map to users is decided with auth (#7). The test shape does not change.
+- **Identity.** `withIdentity` sets `ctx.auth.getUserIdentity()`. When `issuer` and `subject` are given, `tokenIdentifier` is `${issuer}|${subject}`. The issuer defaults to `https://convex.test`.
+- **Helpers key users on `identity.subject`, not `tokenIdentifier`** (ADR 0008, auth provider, PR #25). With Better Auth, `subject` is the Better Auth user id, stable across sessions, and `auth.config.ts` lists exactly one issuer, so `subject` alone cannot collide. `tokenIdentifier` is `${CONVEX_SITE_URL}|${subject}`: its issuer part is the deployment's HTTP-action URL, which changes if production later moves HTTP actions to a custom domain, and every stored key would then stop matching. If a second issuer is ever added, the key changes to `tokenIdentifier` through a migration in that ADR. The app stores the value as `users.authUserId` with an index; the illustrative `memberships.authUserId` above stands in for it. Tests fake the claims the real token carries (`subject`, `issuer`, `email`, `emailVerified`, `name`, `sessionId`; ADR 0008 "Convex function tests with faked identities"). The three-case test shape does not change.
 - **Assert on error codes, not messages.** Assertions match a stable code carried by `ConvexError`. Convex warns that error message text can differ between `convex-test` and the real backend.
 - **Internal functions** (for example #10's `convex/health.ts` `internalQuery`) are called the same way with `internal.*` from `./_generated/api`.
 
@@ -261,6 +262,7 @@ Notes on the pattern:
 Run in a throwaway directory outside the repo:
 
 1. **Convex suite, no deployment.** Versions: `convex` 1.46.0, `convex-test` 0.0.60, `vitest` 5.0.3, `vite` 8.3.0, `@edge-runtime/vm` 5.0.0, `typescript` 6.0.3. With `.env.local` removed and no `CONVEX_*` variables set, `npx vitest run` passed **3/3** (the three tests above). A probe test showed that the docs' extglob pattern matches 0 files on Vite 8.3.0 and 8.3.3 but works on Vite 7.3.7, while the array pattern matches the expected 5 modules.
+   - **Identity key changed after this run.** This run keyed memberships on `tokenIdentifier`. The pattern above now keys on `identity.subject` (ADR 0008). The same three cases keyed on `subject`, with the claim shape of a real Better Auth token, passed 4/4 on `convex-test` 0.0.60 and `vitest` 5.0.3 in ADR 0008's scratch run (the fourth test checks the faked identity's shape against the real token).
 2. **Both suites in one Angular 22 workspace, one Vitest.**
    - Setup: `npx @angular/cli@22.2.2 new web --defaults --ssr=false`, reinstalled with npm, then `convex`, `convex-test`, and `@edge-runtime/vm` added. The `npm ls` output shows a single `vitest@5.0.3` (`@angular/build`'s copy is `deduped`) and `jsdom@30.1.2`.
    - Results:
@@ -295,6 +297,7 @@ All versions and licences were checked against the npm registry on 2026-10-07.
 - Minor and patch bumps need no gate (AGENTS.md). For `convex-test` (0.0.x), any bump is effectively a minor one, so the Convex suite must pass before merging it.
 - A future `vitest` major requires the new major to be inside `@angular/build`'s peer range.
 - The `vite` major follows `@angular/build`'s pinned `vite`.
+- **Peer conflict with `better-auth` 1.6 (ADR 0008, PR #25).** `better-auth` 1.6.x declares an optional peer `vitest ^2 || ^3 || ^4`, so `npm install` next to `vitest` 5.0.3 fails with `ERESOLVE` (`peerOptional vitest@"^2.0.0 || ^3.0.0 || ^4.0.0" from better-auth@1.6.33`). ADR 0008 adds an npm `overrides` entry, `"overrides": { "better-auth": { "vitest": "$vitest" } }`, which points that peer at the project's own `vitest`. Verified in ADR 0008's scratch run: the install succeeded and `npm ls` showed a single `vitest@5.0.3`. `better-auth` 1.7 accepts Vitest 5, so the entry is removed once `@convex-dev/better-auth` supports 1.7. It is recorded in ADR 0003 (#1). Before any future `vitest` major, check that every package with a `vitest` peer (currently `@angular/build` and `better-auth`) accepts it, or that an override is recorded.
 
 ### Setup for #10
 
