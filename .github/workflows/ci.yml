@@ -55,6 +55,38 @@ jobs:
           else
             echo "app=true" >> "$GITHUB_OUTPUT"
           fi
+      # Every npm Dependabot cooldown window must equal .npmrc min-release-age (ADR 0003, ADR 0009 amendment, #47).
+      # Reads only the package-ecosystem: npm block. POSIX sh, grep, awk, sed; needs no install.
+      - name: release age
+        shell: sh
+        run: |
+          status=0
+          count="$(grep -cE '^[[:space:]]*min-release-age[[:space:]]*=' .npmrc || true)"
+          if [ "$count" -ne 1 ]; then
+            echo "::error file=.npmrc::expected exactly one min-release-age line, found ${count}"
+            exit 1
+          fi
+          age="$(sed -nE 's/^[[:space:]]*min-release-age[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' .npmrc)"
+          if [ -z "$age" ]; then
+            echo "::error file=.npmrc::min-release-age is not a whole number of days"
+            exit 1
+          fi
+          npm_block="$(awk '/^[[:space:]]*-[[:space:]]*package-ecosystem:/ { in_npm = ($NF == "npm") } in_npm' .github/dependabot.yml)"
+          for key in default-days semver-patch-days semver-minor-days semver-major-days; do
+            n="$(printf '%s\n' "$npm_block" | grep -cE "^[[:space:]]*${key}:" || true)"
+            value="$(printf '%s\n' "$npm_block" | sed -nE "s/^[[:space:]]*${key}:[[:space:]]*([0-9]+)[[:space:]]*(#.*)?$/\1/p")"
+            if [ "$n" -ne 1 ]; then
+              echo "::error file=.github/dependabot.yml::npm cooldown ${key}: expected exactly one, found ${n}"
+              status=1
+            elif [ "$value" != "$age" ]; then
+              echo "::error file=.github/dependabot.yml::npm cooldown ${key} is '${value}', .npmrc min-release-age is ${age}"
+              status=1
+            fi
+          done
+          if [ "$status" -eq 0 ]; then
+            echo "Every npm cooldown window equals min-release-age=${age}."
+          fi
+          exit "$status"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: package.json

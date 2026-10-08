@@ -7,8 +7,15 @@ updates:
     schedule:
       interval: monthly
     cooldown:
-      default-days: 3 # >= ADR 0003 min-release-age (1 day)
-      semver-major-days: 7
+      # Every window must equal .npmrc min-release-age (ADR 0003, ADR 0009 amendment, #47).
+      default-days: 3
+      semver-patch-days: 3
+      semver-minor-days: 3
+      semver-major-days: 3
+    ignore:
+      # Angular 22 supports TypeScript >=6.0 <6.1. Remove with the Angular major that supports TypeScript 7.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     groups:
       npm-minor-patch:
         applies-to: version-updates
