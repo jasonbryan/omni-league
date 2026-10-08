@@ -73,12 +73,12 @@ Agents never push to `main` directly.
 
 ## Minutes
 
-| Figure                                 | Value                                                                                   | Source                      |
-| -------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------- |
-| App-PR run, measured (#12's green run) | pending (#12 run (e))                                                                   | summed job durations        |
-| Docs-only run                          | 1 to 2 minutes (ADR 0009 estimate; replaced by a later docs PR with the measured value) | ADR 0009 "Minutes and cost" |
-| Draft push                             | 0                                                                                       | job skipped, no runner      |
-| Monthly estimate                       | about 340 to 410 minutes now; 510 to 680 once feature e2e exists (Pro includes 3,000)   | ADR 0009 "Minutes and cost" |
+| Figure                                 | Value                                                                                                                                                                                            | Source                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| App-PR run, measured (#12's green run) | **2 minutes**: `ci` 69 s (rounded up to 2), `warm-cache` skipped (0); no npm cache yet on `main` ([run 37790626661](https://github.com/jasonbryan/omni-league/actions/runs/37790626661), PR #39) | summed job durations; `timing` returned `billable` 0 (not populated) |
+| Docs-only run                          | 1 to 2 minutes (ADR 0009 estimate; replaced by a later docs PR with the measured value)                                                                                                          | ADR 0009 "Minutes and cost"                                          |
+| Draft push                             | 0                                                                                                                                                                                                | job skipped, no runner                                               |
+| Monthly estimate                       | about 340 to 410 minutes now; 510 to 680 once feature e2e exists (Pro includes 3,000)                                                                                                            | ADR 0009 "Minutes and cost"                                          |
 
 **How each figure is read:**
 
