@@ -17,6 +17,7 @@ import {
   CONVEX_URL,
   injectQuery,
   provideConvex,
+  skipToken,
 } from './index';
 import { FakeConvexClient } from './testing/fake-convex-client';
 import { FakeConvexHttpClient } from './testing/fake-convex-http-client';
@@ -148,4 +149,78 @@ describe('injectQuery with args from component inputs (server render)', () => {
       });
     },
   );
+});
+
+/** The README "Queries" pattern: an optional input, and args that are skipToken until it is set. */
+@Component({
+  selector: 'app-optional-input-probe',
+  template: `{{ teams.isLoading() ? 'loading' : (teams.value() ?? 'idle') }}`,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class OptionalInputProbe {
+  readonly leagueId = input<string>();
+  readonly teams = injectQuery(listTeams, () => {
+    const leagueId = this.leagueId();
+    return leagueId ? { leagueId } : skipToken;
+  });
+}
+
+/** A parent that binds the child's optional input in its template, as a Server-route page would. */
+@Component({
+  selector: 'app-optional-input-host',
+  imports: [OptionalInputProbe],
+  template: `<app-optional-input-probe [leagueId]="'a'" />`,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class OptionalInputHost {}
+
+describe('injectQuery with the README skipToken-until-input-set pattern (browser, during hydration)', () => {
+  let client: FakeConvexClient;
+
+  beforeEach(() => {
+    client = new FakeConvexClient();
+    TestBed.configureTestingModule({
+      providers: [
+        provideConvex(),
+        { provide: PLATFORM_ID, useValue: 'browser' },
+        { provide: CONVEX_URL, useValue: DEPLOYMENT_URL },
+        { provide: CONVEX_CLIENT_FACTORY, useValue: () => client },
+      ],
+    });
+  });
+
+  // Set synchronously in each test, for the same reason as `transfer()` above.
+  const transfer = () =>
+    TestBed.inject(TransferState).set(makeStateKey<unknown>(KEY), { v: convexToJson('Sharks') });
+
+  it('seeds when a parent binds the input: the first render shows the server value, not loading', () => {
+    transfer();
+    const fixture = TestBed.createComponent(OptionalInputHost);
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('Sharks');
+    expect(client.activeSubscriptions).toHaveLength(1);
+    expect(client.subscriptions[0]).toMatchObject({ name: 'teams:list', args: { leagueId: 'a' } });
+
+    client.subscriptions[0].emit('Live Sharks');
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('Live Sharks');
+  });
+
+  it('seeds when the input is set with setInput before the first render', () => {
+    transfer();
+    const fixture = TestBed.createComponent(OptionalInputProbe);
+    fixture.componentRef.setInput('leagueId', 'a');
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('Sharks');
+  });
+
+  it('does not seed when the first render reads skipToken and the input is set later (an args change)', () => {
+    transfer();
+    const fixture = TestBed.createComponent(OptionalInputProbe);
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('idle');
+    fixture.componentRef.setInput('leagueId', 'a');
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('loading');
+  });
 });
