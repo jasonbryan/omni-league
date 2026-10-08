@@ -132,6 +132,45 @@ test.describe('console fixture rules', () => {
       ]);
       await close();
     });
+
+    // The WebKit fallback (latest main-frame 404 response) must not outlive the 404 document.
+    test('still fails on a 404 for the old document URL after leaving the 404 page', async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await guardedPage(browser, { expectedDocumentStatus: 404 });
+      await page.goto('/does-not-exist');
+      await page.goto('/');
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate(() => fetch('/does-not-exist').then(() => undefined)),
+      ]);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(
+          /^console\.error: Failed to load resource: the server responded with a status of 404 .*\(at http:\/\/[^)]+\/does-not-exist\)$/,
+        ),
+      ]);
+      await close();
+    });
+
+    test('still fails on a 404 iframe document on /', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, { expectedDocumentStatus: 404 });
+      await page.goto('/');
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate(() => {
+          const frame = document.createElement('iframe');
+          frame.title = 'probe';
+          frame.src = '/iframe-missing';
+          document.body.append(frame);
+        }),
+      ]);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(
+          /^console\.error: Failed to load resource: the server responded with a status of 404 .*\(at http:\/\/[^)]+\/iframe-missing\)$/,
+        ),
+      ]);
+      await close();
+    });
   });
 
   test.describe("expectedConvexErrors: ['probe:add']", () => {
