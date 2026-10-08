@@ -166,6 +166,18 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     expect((await get('http://evil.example/favicon.ico')).status).toBe(400);
   });
 
+  // Without a port in Host, `http://localhost` + `http://evil.example/...` still parses (host
+  // `localhosthttp`, path `//evil.example/...`), so only the "target starts with /" check gives 400.
+  it.each(['http://evil.example/favicon.ico', 'http://evil.example/x'])(
+    'answers the absolute-form target %s with 400 when Host has no port',
+    async (path) => {
+      const reply = await get(path, { headers: { Host: 'localhost' } });
+
+      expect(reply.status).toBe(400);
+      expect(reply.body).toBe('Bad Request');
+    },
+  );
+
   it.skipIf(isRoot)('answers an unreadable file with a plain 500 and keeps serving', async () => {
     const reply = await get('/locked.txt?ott=SECRET');
 
