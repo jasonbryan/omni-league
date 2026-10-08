@@ -131,6 +131,74 @@ describe('injectQuery hydration seeding (browser)', () => {
     expect(teams.value()).toEqual(['Live Jets']);
   });
 
+  it('does not seed when skipToken args become ready after the application is stable', async () => {
+    transfer({ v: convexToJson(['STALE server']) });
+    const leagueId = signal<string | null>(null);
+    const teams = create(() => {
+      const id = leagueId();
+      return id ? { leagueId: id } : skipToken;
+    });
+    TestBed.tick();
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    leagueId.set('a');
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+
+    TestBed.tick();
+    expect(client.activeSubscriptions).toHaveLength(1);
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+    client.subscriptions[0].emit(['Live Sharks']);
+    expect(teams.value()).toEqual(['Live Sharks']);
+    expect(teams.isLoading()).toBe(false);
+  });
+
+  it('does not seed when skipToken args become ready before the application is stable (an args change)', () => {
+    transfer({ v: convexToJson(['STALE server']) });
+    const leagueId = signal<string | null>(null);
+    const teams = create(() => {
+      const id = leagueId();
+      return id ? { leagueId: id } : skipToken;
+    });
+    expect(teams.isLoading()).toBe(false);
+
+    leagueId.set('a');
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+
+    TestBed.tick();
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+    client.subscriptions[0].emit(['Live Sharks']);
+    expect(teams.value()).toEqual(['Live Sharks']);
+  });
+
+  it('does not seed when skipToken args become ready before stable but value() is first read after stable', async () => {
+    transfer({ v: convexToJson(['STALE server']) });
+    const leagueId = signal<string | null>(null);
+    const teams = create(() => {
+      const id = leagueId();
+      return id ? { leagueId: id } : skipToken;
+    });
+    leagueId.set('a');
+    await TestBed.inject(ApplicationRef).whenStable();
+
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+  });
+
+  it('keeps the seed decided at creation when value() is first read after stable', async () => {
+    transfer({ v: convexToJson(['Sharks']) });
+    const teams = create(); // ready args at creation, inside the hydration window
+    await TestBed.inject(ApplicationRef).whenStable();
+    // Removing the entry proves the seed was read at creation, not at the first (lazy) read.
+    TestBed.inject(TransferState).remove(makeStateKey(KEY));
+
+    expect(teams.value()).toEqual(['Sharks']);
+    expect(teams.isLoading()).toBe(false);
+  });
+
   it('seeds nothing and stays idle for skipToken args', () => {
     transfer({ v: convexToJson(['Sharks']) });
     const teams = create(() => skipToken);

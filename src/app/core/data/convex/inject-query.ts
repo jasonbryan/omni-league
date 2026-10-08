@@ -84,24 +84,20 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       };
     }
 
-    // Hydration seed: only for a helper created before the app first became stable, and only for
-    // the first request it sees (never for an args change).
-    const seedAllowed = !server && inject(ConvexHydrationWindow).isOpen;
+    // Hydration seed: decided once, now, for the request ready at creation, and only inside the
+    // hydration window. Args that become ready later (before or after stable) are an args change and
+    // never seed, and a lazy first read after stable cannot claim one.
     const transferState = inject(TransferState);
-    let seedRequest: Request | undefined;
+    const initial = untracked(request);
     let seed: Result | undefined;
-    const seedFor = (req: Request): Result | undefined => {
-      if (seedAllowed && !seedRequest) {
-        seedRequest = req;
-        const entry = transferState.get<TransferredQuery | null>(
-          makeStateKey(transferKey(query, req.key)),
-          null,
-        );
-        if (entry)
-          seed = { request: req, ...(decodeTransferred(entry) as Omit<Result, 'request'>) };
-      }
-      return seed?.request === req ? seed : undefined;
-    };
+    if (!server && initial !== skipToken && inject(ConvexHydrationWindow).isOpen) {
+      const entry = transferState.get<TransferredQuery | null>(
+        makeStateKey(transferKey(query, initial.key)),
+        null,
+      );
+      if (entry)
+        seed = { request: initial, ...(decodeTransferred(entry) as Omit<Result, 'request'>) };
+    }
 
     // A result counts only for the request that produced it, so an args change reads as loading.
     const result = signal<Result | undefined>(undefined);
@@ -109,7 +105,8 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       const req = request();
       if (req === skipToken) return undefined;
       const latest = result();
-      return latest?.request === req ? latest : seedFor(req);
+      if (latest?.request === req) return latest;
+      return seed?.request === req ? seed : undefined;
     });
 
     effect((onCleanup) => {
