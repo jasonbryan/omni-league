@@ -44,8 +44,10 @@ Entries marked **Working definition — not yet specified by the owner** describ
   - **Superseded by NNNN:** the status edited onto an Accepted ADR on `main` when a later ADR replaces it.
 - **Anonymous local Convex backend:** the Convex backend run on the developer's machine with `CONVEX_AGENT_MODE=anonymous npx convex dev`, with no Convex account; used for development and e2e. See [README](../README.md#run-the-convex-backend) and [ADR 0005](decisions/0005-e2e-and-accessibility-testing.md).
 - **`AUTH_EMAIL_DISABLED`:** the Convex environment variable that, when `true`, turns off verification and reset email on developer dev and preview deployments. Unset means fully on; it must never be set on production. See [ADR 0011](decisions/0011-transactional-email.md).
+- **Billed minutes:** a job's duration rounded up to a whole minute, the unit GitHub bills Actions in; the project's figures and their sources are in [CI, Minutes](process/ci.md#minutes).
 - **Blocked by:** a `Blocked by: #n` line in an issue naming a dependency; the issue is not picked up while `#n` is open. See [dev cycle, Plan](process/dev-cycle.md#1-plan).
 - **Chat approval:** the owner telling the orchestrator in chat to merge a specific gate PR. The orchestrator merges it and comments the owner's words, quoted exactly; this is the only case in which an agent merges a gate PR. See [dev cycle, Gates](process/dev-cycle.md#3-gates).
+- **CI (the `ci` check):** the one GitHub Actions workflow, `CI`, and its job `ci`, which runs once per mergeable tree and only on PRs that are ready for review. See [CI](process/ci.md) and [ADR 0009](decisions/0009-ci-pipeline.md).
 - **Client route:** a route rendered only in the browser (`RenderMode.Client`); the signed-in app under `/app/**`. See [Angular conventions, Rendering](conventions/angular.md#rendering).
 - **Conventional Commits:** the commit-message format `type(scope): summary`, for example `feat(roster): add player to team`. See [dev cycle, Implement](process/dev-cycle.md#4-implement).
 - **Conventions files:** the per-layer coding rules in `docs/conventions/` ([Angular](conventions/angular.md), [Convex](conventions/convex.md), [Stripe](conventions/stripe.md)), read before writing or reviewing code in that layer. See [AGENTS.md, Technology](../AGENTS.md#technology).
@@ -54,6 +56,7 @@ Entries marked **Working definition — not yet specified by the owner** describ
 - **Deploy request / release PR:** the `gate:production` proposal listing the changes, schema migrations, and Stripe configuration changes since the last release. See [dev cycle, Deploy](process/dev-cycle.md#8-deploy).
 - **Deployment (Convex):** one Convex backend instance. The kinds are the local e2e backend, a developer dev deployment (one per developer or agent), a per-PR preview, and production. See [ADR 0008](decisions/0008-auth-provider.md) and [ADR 0011](decisions/0011-transactional-email.md).
 - **Design tokens:** the shared CSS custom properties (colours, radius, font) in `src/styles/tokens.css` per ADR 0007, whose values are approved through `gate:ui-design`. Changes to them run one issue at a time. See [ADR 0007](decisions/0007-ui-library-and-styling.md) and [dev cycle, Parallel work](process/dev-cycle.md#parallel-work).
+- **Docs-only PR / app change:** a docs-only PR changes only documentation and process files, so its `ci` runs install and `format:check` only; any other PR is an app change and gets every check. The exact path and file-type rules are in [CI, What runs when](process/ci.md#what-runs-when).
 - **Draft PR:** the implementer's PR while it is being tested and reviewed. The orchestrator marks it ready only when the merge conditions hold. See [dev cycle, Implement](process/dev-cycle.md#4-implement) and [Merge](process/dev-cycle.md#7-merge).
 - **E2E tests:** Playwright tests of user flows in a real browser against the anonymous local Convex backend, with an axe accessibility scan. See [ADR 0005](decisions/0005-e2e-and-accessibility-testing.md).
 - **Escalation:** moving an issue to `status:blocked` with the question, the options, and a recommendation, for the orchestrator to relay to the owner. See [dev cycle, Escalation](process/dev-cycle.md#escalation).
@@ -73,7 +76,7 @@ Entries marked **Working definition — not yet specified by the owner** describ
   - **Area labels:** `area:frontend`, `area:backend`, `area:payments`, `area:infra`, naming the layers a change touches.
   - **Type labels:** `type:feature`, `type:bug`, `type:chore` (no user-visible behaviour), `type:decision` (ADR), `type:design` (mockup).
 - **Loop cap (round):** one round is one pass of revise-and-recheck. Plan review is capped at two rounds and implement → test → review at three; on reaching the cap the issue goes to `status:blocked`. See [dev cycle, Plan review](process/dev-cycle.md#2-plan-review) and [PR review](process/dev-cycle.md#6-pr-review).
-- **Merge conditions:** CI green, tester `PASS` and reviewer `APPROVE` on the latest commit, no `gate:*` label on the PR, and every gate on the issue approved; then the orchestrator squash-merges. See [dev cycle, Merge](process/dev-cycle.md#7-merge).
+- **Merge conditions:** CI green (see **CI**), tester `PASS` and reviewer `APPROVE` on the latest commit, no `gate:*` label on the PR, and every gate on the issue approved; then the orchestrator squash-merges. See [dev cycle, Merge](process/dev-cycle.md#7-merge).
 - **Migration plan:** the PR description section explaining how a change affecting existing Convex data is applied. Schema changes run one PR at a time. See [Convex conventions, Data](conventions/convex.md#data).
 - **Mockup:** the self-contained static HTML page in `design/mockups/` that proposes a screen for `gate:ui-design`, showing every state at mobile and desktop widths. See [designer](../.claude/agents/designer.md).
 - **Owner:** the human project owner. The owner approves gates, answers blocked questions, sets product requirements, and holds production secrets. See [AGENTS.md](../AGENTS.md#approval-gates) and [dev cycle, Roles](process/dev-cycle.md#roles).
@@ -81,6 +84,7 @@ Entries marked **Working definition — not yet specified by the owner** describ
 - **Prerender route:** a route rendered to static HTML at build time (`RenderMode.Prerender`); it must not read Convex data. See [Angular conventions, Rendering](conventions/angular.md#rendering).
 - **Preview deployment:** the per-PR deployment of the app with its own Convex backend. See [requirements, Constraints](product/requirements.md#constraints) and [dev cycle, Deploy](process/dev-cycle.md#8-deploy).
 - **Production:** the live environment used by real users. Every deploy to it, and its secrets, belong to the owner through `gate:production`. See [AGENTS.md, Secrets](../AGENTS.md#secrets).
+- **Required check:** a status check the `main` ruleset requires to pass before a merge; the only one is `ci`. A skipped `ci` satisfies the ruleset but is not a pass. See [CI, Required check](process/ci.md#required-check).
 - **Requirement:** a statement of what the product must do, from the owner and recorded in [docs/product/requirements.md](product/requirements.md). Agents do not invent requirements. See [dev cycle, Escalation](process/dev-cycle.md#escalation).
 - **Role agents:** the subagents in `.claude/agents/`, each owning one phase. See [dev cycle, Roles](process/dev-cycle.md#roles).
   - **Deployer:** ships merged work to preview or production and verifies it with smoke tests ([deployer](../.claude/agents/deployer.md)).
@@ -91,6 +95,8 @@ Entries marked **Working definition — not yet specified by the owner** describ
   - **Planner:** turns a requirement into slice issues and writes ADRs ([planner](../.claude/agents/planner.md)).
   - **PR reviewer:** reviews the diff and returns `Review: APPROVE` or `Review: CHANGES` as a comment ([pr-reviewer](../.claude/agents/pr-reviewer.md)).
   - **Tester:** verifies the PR independently against the acceptance criteria and returns `Test: PASS` or `Test: FAIL` ([tester](../.claude/agents/tester.md)).
+- **Ruleset (strict / up-to-date rule):** the `main` branch ruleset that requires `ci` and requires the PR head to contain `main`'s tip, so the tree `ci` tested is the tree that merges. See [CI, Owner settings checklist](process/ci.md#owner-settings-checklist).
+- **`scope` step:** the `ci` step that classifies a PR as docs-only (`app=false`) or an app change (`app=true`). See [CI, What runs when](process/ci.md#what-runs-when).
 - **Server route:** a route rendered on the server at request time (`RenderMode.Server`): public pages that read Convex data, and the not-found page. Server renders are anonymous only. See [Angular conventions, Rendering](conventions/angular.md#rendering).
 - **Signed-in app:** everything under `/app/**`, rendered as Client routes. See [Angular conventions, Rendering](conventions/angular.md#rendering).
 - **Slice:** one issue covering one user-visible behaviour end to end through Convex and Angular, small enough for one PR (aim under about 400 changed lines). Infrastructure work with no user-visible behaviour is a `type:chore` slice. See [dev cycle, Plan](process/dev-cycle.md#1-plan).
@@ -108,6 +114,7 @@ Entries marked **Working definition — not yet specified by the owner** describ
 - **Tenant (tenancy):** **Working definition — not yet specified by the owner.** A seeded group of data (a league, its teams, and users) used as the isolation boundary in tests: each e2e test seeds its own tenant and asserts only on its data. Whether the organization is the access boundary for organizers is open (question 8). See [ADR 0005](decisions/0005-e2e-and-accessibility-testing.md).
 - **Test plan:** the issue section naming the unit, Convex, and e2e tests that prove each acceptance criterion. See [dev cycle, Plan](process/dev-cycle.md#1-plan).
 - **Unit tests:** Angular component and service tests run with Vitest through `ng test` (`npm test`). See [ADR 0004](decisions/0004-unit-and-convex-test-runners.md).
+- **`warm-cache`:** the `CI` job that runs only on `main` pushes changing `package-lock.json` or `ci.yml`, filling the npm cache that PR runs restore. It is not a required check. See [CI, What runs when](process/ci.md#what-runs-when).
 - **Worktree:** an isolated git checkout per agent and branch, so parallel work does not collide; branches are named `<type>/<issue>-<slug>`. See [dev cycle, Implement](process/dev-cycle.md#4-implement).
 
 ## Open questions for the owner
