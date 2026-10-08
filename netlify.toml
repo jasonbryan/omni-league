@@ -1,0 +1,49 @@
+# Netlify build and deploy settings (ADR 0010 items 3 and 6). Inert until the owner links the
+# Netlify site in #15, which verifies it on a real deploy and adds the deploy environment check.
+# SSR runs as the edge function the plugin generates from src/server.ts (netlifyAppEngineHandler).
+
+[build]
+  publish = "dist/omni-league/browser"
+
+# Deploy previews: one Convex preview deployment per PR, named pr-<number>.
+[context.deploy-preview]
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\""
+
+# Branch deploys: main only, the staging deploy, with the Convex preview deployment named main.
+[context.branch-deploy]
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\""
+
+# Production is not enabled until the production deploy issue adds `node scripts/check-deploy-env.mjs production` before `npx convex deploy` (#15, ADR 0010).
+[context.production]
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL"
+
+[[plugins]]
+  package = "@netlify/angular-runtime"
+
+# Long-lived browser caching only for content-hashed build outputs. Nothing in public/ may use
+# these names (src/public-assets.spec.ts). Every other file keeps Netlify's default
+# `public, max-age=0, must-revalidate`.
+[[headers]]
+  for = "/media/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/main-*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/chunk-*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/polyfills-*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/styles-*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

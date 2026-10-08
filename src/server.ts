@@ -1,73 +1,62 @@
+import { AngularAppEngine, createRequestHandler } from '@angular/ssr';
 import {
-  AngularNodeAppEngine,
-  createNodeRequestHandler,
-  isMainModule,
-  writeResponseToNodeResponse,
-} from '@angular/ssr/node';
-import express from 'express';
-import { join } from 'node:path';
-import { serverErrorHandler } from './server-error-handler';
+  getAllowedHosts,
+  getContext,
+  getTrustProxyHeaders,
+} from '@netlify/angular-runtime/app-engine.js';
+import {
+  badRequestResponse,
+  internalServerErrorResponse,
+  isMalformedPath,
+  notFoundResponse,
+} from './server-error-response';
 
-const browserDistFolder = join(import.meta.dirname, '../browser');
+// SSR entry per ADR 0010 item 2. Netlify runs the exported `netlifyAppEngineHandler` in an edge
+// function (the plugin finds it by that name); `scripts/serve-ssr.mjs` runs it locally.
+// Web-API-only: no `node:` imports and no environment reads (ESLint enforces both).
 
-const app = express();
-const angularApp = new AngularNodeAppEngine();
+type AppEngine = Pick<AngularAppEngine, 'handle'>;
 
-/**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
- */
+let appEngine: AppEngine | undefined;
 
 /**
- * Serve static files from /browser
+ * Test seam: replaces the engine used by `netlifyAppEngineHandler`. `undefined` restores the real
+ * engine, which is created on first use.
  */
-app.use(
-  express.static(browserDistFolder, {
-    maxAge: '1y',
-    index: false,
-    redirect: false,
-  }),
-);
+export function setAppEngineForTesting(engine: AppEngine | undefined): void {
+  appEngine = engine;
+}
 
-/**
- * Handle all other requests by rendering the Angular application.
- */
-app.use((req, res, next) => {
-  angularApp
-    .handle(req)
-    .then((response) => (response ? writeResponseToNodeResponse(response, res) : next()))
-    .catch(next);
-});
-
-/**
- * Final error handler: generic plain-text 400 (malformed URI) or 500, never a stack trace.
- * Must stay the last middleware registered.
- */
-app.use(serverErrorHandler);
-
-/**
- * Start the server if this module is the main entry point, or it is ran via PM2.
- * The server listens on the port defined by the `PORT` environment variable, or defaults to 4000.
- */
-if (isMainModule(import.meta.url) || process.env['pm_id']) {
-  const port = process.env['PORT'] ?? 4000;
-  app.listen(port, (error) => {
-    if (error) {
-      throw error;
-    }
-
-    console.log(`Node Express server listening on http://localhost:${port}`);
+function getAppEngine(): AppEngine {
+  appEngine ??= new AngularAppEngine({
+    allowedHosts: getAllowedHosts(),
+    trustProxyHeaders: getTrustProxyHeaders(),
   });
+  return appEngine;
 }
 
 /**
- * Request handler used by the Angular CLI (for dev-server and during build) or Firebase Cloud Functions.
+ * Renders the request with Angular. The error mapping lives here, not in a wrapper, because this
+ * is the function the Netlify edge function exports:
+ * - a path that cannot be percent-decoded: plain 400, without calling the engine;
+ * - no matching route (`null`): plain 404;
+ * - anything thrown or rejected: plain 500, logged with the method and pathname only (never the
+ *   query string, which can carry a one-time token, ADR 0008).
  */
-export const reqHandler = createNodeRequestHandler(app);
+export async function netlifyAppEngineHandler(request: Request): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (isMalformedPath(pathname)) {
+    return badRequestResponse();
+  }
+
+  try {
+    const result = await getAppEngine().handle(request, getContext());
+    return result ?? notFoundResponse();
+  } catch (error) {
+    console.error(`Error handling ${request.method} ${pathname}:`, error);
+    return internalServerErrorResponse();
+  }
+}
+
+/** Request handler used by the Angular CLI (dev server and build). */
+export const reqHandler = createRequestHandler(netlifyAppEngineHandler);

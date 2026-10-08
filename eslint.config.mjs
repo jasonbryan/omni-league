@@ -88,6 +88,59 @@ export default defineConfig([
     },
   },
 
+  // Server-entry files (src/server.ts and its error module) are bundled into the Netlify edge
+  // function: Web APIs only, and no environment reads, because the production edge function can
+  // read the production deploy key (ADR 0010, #37). This block replaces the options of the
+  // no-restricted-imports block above for these files, so it repeats convex/browser.
+  {
+    files: ['src/server*.ts'],
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        {
+          name: 'Netlify',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        {
+          object: 'Netlify',
+          property: 'env',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'convex/browser',
+              message:
+                'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
+            },
+          ],
+          patterns: [
+            {
+              group: ['node:*'],
+              message: 'Server-entry files are Web-API-only: no node: imports (ADR 0010).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Rule set 3: Angular templates (external and inline), with accessibility rules.
   {
     files: ['src/**/*.html'],
