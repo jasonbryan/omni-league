@@ -21,11 +21,11 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 
 6. **Test, then review.** Dispatch `tester` with the PR number. On `FAIL`, dispatch `implementer` to fix, then `tester` again. On `PASS`, dispatch `pr-reviewer`. On `CHANGES`, run `implementer` → `tester` → `pr-reviewer` again. After three rounds, label `status:blocked` and report.
 
-7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, follow its five steps, one PR at a time: update the branch from `main` while still draft; `gh pr ready <n>`; `gh pr checks <n> --watch` until `ci` passes; `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If `ci` fails, run `gh pr ready <n> --undo` and send it back to `implementer`. Until #12 adds `ci`, merge on `PASS` and `APPROVE` with a merge note. The orchestrator never merges a PR carrying any `gate:*` label unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging.
+7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, follow its five steps, one PR at a time: update the branch from `main` while still draft; `gh pr ready <n>`; `gh pr checks <n> --watch` until `ci` passes; `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If `ci` fails, run `gh pr ready <n> --undo` and send it back to `implementer`. Until #12 adds `ci`, merge on `PASS` and `APPROVE` with a one-line merge note (`Merged; CI waived until #12`). The orchestrator never merges a PR carrying any `gate:*` label unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging.
 
 8. **Deploy.** After merges, dispatch `deployer` for preview/staging. Production goes through the deployer's `gate:production` release request.
 
-9. **Report.** Finish with a short owner report:
+9. **Report.** Finish with a short owner report, one line per item, following `AGENTS.md` (Writing on GitHub):
    - **Needs the owner:** gate PRs awaiting approval (with links) and `status:blocked` questions, each with the recommended answer.
    - **Done:** merged PRs and deployments.
    - **In flight:** issues still moving, and their phase.
@@ -45,4 +45,4 @@ Each agent's frontmatter sets its default `model` and `effort` (table in [dev cy
 - **Security, payments, auth, and server-rendering work:** at least `opus`, `high`, in every role; the hardest of these may use `fable`, `xhigh`.
 - **Escalation round:** the final fix round or final review round after earlier rounds found defects uses `fable`, `xhigh`. `fable`/`xhigh` is for escalations only: this final round, and the hardest security, payments, auth, and SSR tasks. `opus` stays the heavy default.
 
-When several rules match, use the highest model and the highest effort among them (model order `haiku` < `sonnet` < `opus` < `fable`; effort order `low` < `medium` < `high` < `xhigh` < `max`). Every phase comment the orchestrator posts records the model and effort used, for example `(model: opus, effort: high)`.
+When several rules match, use the highest model and the highest effort among them (model order `haiku` < `sonnet` < `opus` < `fable`; effort order `low` < `medium` < `high` < `xhigh` < `max`). Every phase comment the orchestrator posts is one or two lines following `AGENTS.md` (Writing on GitHub) and records the model and effort used, for example `Plan review: APPROVE (model: opus, effort: high)`.

@@ -18,8 +18,8 @@ Check every changed file for:
 - **Scope:** changes beyond the issue, and any new package or service without an Accepted ADR (a missed `gate:technology`).
 - **UI:** any visible change without an approved mockup (a missed `gate:ui-design`).
 
-Post a PR review comment beginning with `Review: APPROVE` or `Review: CHANGES`. List findings ranked most severe first, each with `path:line`, the problem, a concrete failure scenario, and the fix. Style preferences not backed by a conventions file are optional notes and do not block approval. The review is a comment; the system never merges or formally approves the PR on GitHub.
+Post a PR review comment (see `AGENTS.md`, Writing on GitHub): `Review: APPROVE` or `Review: CHANGES (<n> blocking)` first, then one line per finding, `path:line`: problem and the failure it causes, then fix, most severe first. Style preferences not backed by a conventions file are labelled `optional` and do not block approval. The review is a comment; the system never merges or formally approves the PR on GitHub.
 
 ## Report
 
-Return the verdict and the ranked findings.
+Return the verdict first, then the blocking findings, one line each.

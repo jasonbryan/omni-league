@@ -2,26 +2,20 @@ Closes #
 
 ## Summary
 
-What changed and why, in a few sentences.
+What changed and why, in one to three sentences.
 
-## Acceptance criteria → tests
+## Criteria → tests
 
-| Criterion | Test |
-| --------- | ---- |
-|           |      |
+- Criterion: `path/to/test.spec.ts`
 
 ## Gates
 
-- [ ] No gate needed, or every gate PR for the linked issue is merged: <links>
+- [ ] Every gate on the linked issue is approved, or none applies
 - [ ] Uses only technology in Accepted ADRs
-- [ ] UI matches the approved mockup (if UI changed): <mockup path>
+- [ ] UI matches the approved mockup, or no UI changed
 
-## Checks
+<details><summary>Evidence</summary>
 
-- [ ] Lint, typecheck, unit tests, Convex tests, and build pass locally
-- [ ] Schema changes include a migration plan (below), or there are none
-- [ ] Screenshots at 375px and 1280px attached (if UI changed)
+Check output, screenshots at 375px and 1280px for UI changes, and migration notes for schema changes.
 
-## Migration / rollout notes
-
-None.
+</details>

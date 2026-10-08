@@ -45,7 +45,7 @@ status:ready ─► status:in-progress ─► status:in-review ─► (merged, i
 any state ─► status:blocked  (question for the owner; returns to the prior state once answered)
 ```
 
-The orchestrator owns every transition. It updates the label and leaves a one-line issue comment naming the phase result, so the history reads top to bottom.
+The orchestrator owns every transition. It updates the label and leaves a one- or two-line issue comment naming the phase result, so the history reads top to bottom. All issue, PR, and comment text follows [AGENTS.md, Writing on GitHub](../../AGENTS.md#writing-on-github).
 
 ## Labels
 
@@ -124,7 +124,7 @@ The tester checks out the PR branch in its own worktree and verifies it without 
 
 Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fixes it and the tester re-runs.
 
-**Done when:** `PASS` is recorded as a PR comment, with the test evidence, and no process the tester started is still running.
+**Done when:** `PASS` is recorded as a PR comment, with the test evidence collapsed, and no process the tester started is still running.
 
 ### 6. PR review
 
@@ -146,7 +146,7 @@ A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commi
 
 The branch is deleted and the issue closes through `Closes #n`.
 
-Until #12 adds the `ci` workflow, the orchestrator merges on `PASS` and `APPROVE` alone, with a merge note on the PR saying CI was waived (as on PR #30).
+Until #12 adds the `ci` workflow, the orchestrator merges on `PASS` and `APPROVE` alone, with a one-line merge note on the PR saying CI was waived (as on PR #30).
 
 ### 8. Deploy
 
@@ -157,7 +157,7 @@ The deployer runs after merges to `main`:
 
 Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub.
 
-- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and pastes the output in the PR; no GitHub Actions workflow runs it. No cleanup job runs: Convex deletes preview backends after 5 days, and Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans).
+- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. No cleanup job runs: Convex deletes preview backends after 5 days, and Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans).
 - **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app`. The deployer smoke-tests it and reports the URL.
 - **Production.** The deployer opens a release PR from `main` into the `production` branch. The owner's merge approves and ships it: Netlify builds with the owner-held production key, then the deployer smoke-tests the production URL.
 - **Rollback.** If the production smoke tests fail, the deployer opens a `type:bug` issue with the rollback steps, and the owner runs them: Netlify **Publish deploy** of the previous build, then merging a revert on `production` to redeploy the previous Convex functions.
