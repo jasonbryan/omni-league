@@ -15,7 +15,7 @@ League management for recreational sports. Angular (hybrid rendering) on the fro
 npm ci
 ```
 
-`.npmrc` enforces the install policy: dependency install scripts fail unless listed in `allowScripts`, and versions published less than a day ago are not resolved.
+`.npmrc` enforces the install policy: dependency install scripts fail unless listed in `allowScripts`, and versions published less than 3 days ago are not resolved (ADR 0003).
 
 ### Run the Convex backend
 
