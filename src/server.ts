@@ -6,6 +6,7 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import { serverErrorHandler } from './server-error-handler';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -44,6 +45,12 @@ app.use((req, res, next) => {
     .then((response) => (response ? writeResponseToNodeResponse(response, res) : next()))
     .catch(next);
 });
+
+/**
+ * Final error handler: generic plain-text 400 (malformed URI) or 500, never a stack trace.
+ * Must stay the last middleware registered.
+ */
+app.use(serverErrorHandler);
 
 /**
  * Start the server if this module is the main entry point, or it is ran via PM2.
