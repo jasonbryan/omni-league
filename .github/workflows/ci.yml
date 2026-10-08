@@ -35,6 +35,10 @@ jobs:
     if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      # 1 on release PRs into production and on workflow_dispatch with webkit: true (ADR 0009);
+      # the Playwright config adds the webkit-mobile project only then.
+      E2E_WEBKIT: ${{ (github.base_ref == 'production' || inputs.webkit == true) && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -137,7 +141,31 @@ jobs:
           echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check --strict
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint -color
-      # e2e steps (#13) are added here and run only when every check above passed.
+      # e2e (#13, ADR 0005): only when every check above passed and the PR changes app code.
+      # Headless shell only (the Playwright config sets no channel); no browser cache.
+      - name: e2e browsers
+        if: ${{ success() && steps.scope.outputs.app == 'true' }}
+        run: |
+          npx playwright install --with-deps --only-shell chromium
+          if [ "$E2E_WEBKIT" = "1" ]; then
+            npx playwright install --with-deps webkit
+          fi
+      # Development build, then the specs against `npm run serve:ssr`; no Convex URL, no secrets.
+      - name: e2e
+        id: e2e
+        if: ${{ success() && steps.scope.outputs.app == 'true' }}
+        run: npm run e2e
+      - name: e2e report
+        if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-report
+          path: |
+            playwright-report/
+            test-results/
+            e2e/screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
 
   warm-cache:
     name: warm-cache

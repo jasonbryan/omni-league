@@ -23,6 +23,7 @@ export default defineConfig([
     'playwright-report/',
     'test-results/',
     'blob-report/',
+    'e2e/screenshots/',
     'package-lock.json',
     'pnpm-lock.yaml',
     'yarn.lock',
