@@ -1,6 +1,6 @@
 # 0005: E2E and accessibility testing
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-08 (owner merged PR #17)
 - **Gate:** `gate:technology`
 - **Issue:** #4
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
