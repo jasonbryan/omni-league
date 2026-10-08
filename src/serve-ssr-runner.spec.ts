@@ -22,6 +22,14 @@ export async function netlifyAppEngineHandler(request) {
   const { pathname } = new URL(request.url);
   if (pathname === '/throw-null') throw Object.create(null);
   if (pathname === '/throw-tostring') throw { toString() { throw new Error('toString failed'); } };
+  // JSON.stringify throws for a BigInt field, so only the runner's fallback can print this.
+  if (pathname === '/throw-bigint') throw { value: 1n };
+  if (pathname === '/slow') {
+    // Rendering that notices the client has gone, as the engine can through the request signal.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    request.signal.throwIfAborted();
+    return new Response('slow done', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+  }
   if (pathname === '/throw-cause') {
     throw new Error('fetch failed', { cause: new Error('refused ' + request.url) });
   }
@@ -81,6 +89,32 @@ function raw(text: string, { close }: { close?: 'half' | 'reset' } = {}) {
   });
 }
 
+const BIG_FILE_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Sends a raw request and disconnects (`reset` or `destroy`) once `afterBytes` of the reply have
+ * arrived, or after `afterMs` when no byte count is given. Resolves with the bytes received.
+ */
+function disconnect(
+  text: string,
+  how: 'reset' | 'destroy',
+  { afterBytes, afterMs }: { afterBytes?: number; afterMs?: number },
+) {
+  return new Promise<number>((resolve) => {
+    const socket = connect(port, '127.0.0.1');
+    let received = 0;
+    const drop = () => (how === 'reset' ? socket.resetAndDestroy() : socket.destroy());
+    socket.on('data', (chunk: Buffer) => {
+      received += chunk.length;
+      if (afterBytes !== undefined && received >= afterBytes && !socket.destroyed) drop();
+    });
+    socket.on('close', () => resolve(received));
+    socket.on('error', () => resolve(received));
+    socket.write(text);
+    if (afterMs !== undefined) setTimeout(drop, afterMs);
+  });
+}
+
 /** The log arrives on the runner's stderr, which is not ordered with the HTTP reply: poll for it. */
 async function waitForOutput(text: string, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
@@ -105,6 +139,8 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     writeFileSync(join(root, 'dist', 'omni-league', 'server', 'server.mjs'), FAKE_SERVER);
     writeFileSync(join(root, 'secret', 'key.txt'), 'TOPSECRET');
     writeFileSync(join(browser, 'favicon.ico'), 'icon');
+    // Larger than the loopback socket buffers, so a client can disconnect mid-transfer.
+    writeFileSync(join(browser, 'big.bin'), Buffer.alloc(BIG_FILE_BYTES));
     writeFileSync(join(browser, 'data.xyz'), 'unknown type');
     writeFileSync(join(browser, 'locked.txt'), 'locked');
     chmodSync(join(browser, 'locked.txt'), 0o000);
@@ -243,7 +279,7 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     expect(output).not.toContain('SECRET');
   });
 
-  it.each(['/throw-null', '/throw-tostring'])(
+  it.each(['/throw-null', '/throw-tostring', '/throw-bigint'])(
     'answers a handler that throws an unprintable value (%s) with a plain 500 and a log line',
     async (path) => {
       const reply = await get(`${path}?ott=SECRET`);
@@ -300,6 +336,47 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
       expect(output).not.toContain('FileHandle');
     },
   );
+
+  it.each(['reset', 'destroy'] as const)(
+    'keeps serving, and logs no server error, when the client disconnects (%s) mid-transfer of a static file',
+    async (how) => {
+      for (let i = 0; i < 5; i++) {
+        const received = await disconnect(
+          'GET /big.bin?ott=SECRET HTTP/1.1\r\nHost: localhost\r\n\r\n',
+          how,
+          { afterBytes: 64 * 1024 * (i + 1) },
+        );
+        expect(received).toBeLessThan(BIG_FILE_BYTES); // the transfer really was cut short
+      }
+      // Long enough for the runner's garbage collection (every 25 ms) to find a leaked handle.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await get(`/throw-after-${how}-mid-transfer`);
+      await waitForOutput(`error handling GET /throw-after-${how}-mid-transfer:`);
+
+      expect(runner.exitCode).toBeNull();
+      expect(output).not.toContain('/big.bin');
+      expect(output).not.toContain('ERR_STREAM_PREMATURE_CLOSE');
+      expect(output).not.toContain('FileHandle');
+      expect((await get('/big.bin')).body).toHaveLength(BIG_FILE_BYTES);
+    },
+  );
+
+  it('keeps serving, and logs no server error, when the client disconnects while the handler renders', async () => {
+    for (let i = 0; i < 3; i++) {
+      await disconnect('GET /slow?ott=SECRET HTTP/1.1\r\nHost: localhost\r\n\r\n', 'destroy', {
+        afterMs: 20,
+      });
+    }
+    // The handler notices the abort after its 200 ms render.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await get('/throw-after-render-disconnect');
+    await waitForOutput('error handling GET /throw-after-render-disconnect:');
+
+    expect(runner.exitCode).toBeNull();
+    expect(output).not.toContain('GET /slow');
+    expect(output).not.toContain('AbortError');
+    expect((await get('/slow')).body).toBe('slow done');
+  });
 
   it('listens on IPv4 loopback', async () => {
     expect((await get('/favicon.ico', { host: '127.0.0.1' })).status).toBe(200);
