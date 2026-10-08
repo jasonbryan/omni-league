@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Gate:** `gate:technology`
 - **Issue:** #7
-- **Date:** 2026-10-07 (revised the same day for the owner's email + password answer)
+- **Date:** 2026-10-07 (revised the same day for the owner's email + password answer, and again to re-run Option A, Convex Auth, at the owner's request)
 
 ## Context
 
@@ -55,25 +55,48 @@ The three hosted services also send verification and reset email themselves, and
 ### Option A: Convex Auth (`@convex-dev/auth`)
 
 - **What it is:** Convex's own auth library. It runs inside the Convex deployment (tables in the app schema, HTTP actions for OAuth) and issues RS256 JWTs signed with a key held in the deployment's environment. It is built on Auth.js provider definitions (`@auth/core`).
-- **Version and licence:** `@convex-dev/auth` 0.0.96 (2026-09-30, Apache-2.0), peer `@auth/core` ^0.41.1 (0.41.3, ISC), `convex` ^1.17.0. No install scripts in its tree.
-- **Status:** **beta.** Convex's docs say it "is currently a beta feature" and "may change in backward-incompatible ways" ([docs.convex.dev/auth](https://docs.convex.dev/auth)). The repository README says v1 is the current stable line and points to a WIP v2 rewrite on the `reboot` branch, published as `2.0.0-alpha.2` (2026-09-16). v1 depends on `lucia` 3 and `@oslojs/crypto`, both marked deprecated on npm.
+- **Version and licence:** `@convex-dev/auth` 0.0.96 (2026-09-30, Apache-2.0, still `latest` on 2026-10-07), peer `@auth/core` ^0.41.1 (0.41.3, ISC), `convex` ^1.17.0, and `react` ^18.2 || ^19 marked **optional** (`peerDependenciesMeta`). No install scripts in its tree.
+- **Status:** **beta, and React-only by Convex's own statement.**
+  - Convex's docs say it "is currently a beta feature", "may change in backward-incompatible ways", and "currently supports client-side React web apps served from a CDN and React Native mobile apps" ([docs.convex.dev/auth](https://docs.convex.dev/auth), [Convex Auth page](https://docs.convex.dev/auth/convex-auth)). Angular is not a supported client.
+  - The repository README (main) says v1 is the current stable line and points to a WIP v2 rewrite on the `reboot` branch (`2.0.0-alpha.2`, 2026-09-16; its README's "Getting Started" is still "TODO"). v2 is under daily development (commits 2026-10-05 and 2026-10-06), is built as Convex components, adds a framework-agnostic `./browser` export, and has `convex-auth-v2-migration` branches, so moving from v1 to v2 is a planned migration. v1 still gets fix releases (0.0.95 on 2026-08-11, 0.0.96 on 2026-09-30).
+  - v1 depends on `lucia` 3 and `@oslojs/crypto`, `@oslojs/binary`, and `@oslojs/asn1`, all marked deprecated on npm. Every fresh `npm install` prints the four deprecation warnings.
 - **Sign-in methods:** the `Password` provider and Google (`@auth/core/providers/google`).
-- **Password handling (from source, `dist/providers/Password.js`, `lucia/dist/crypto.js`):**
-  - Hashing uses `Scrypt` from the deprecated `lucia` package (N=2^14, r=16, p=1), which can be replaced through `crypto.hashSecret`.
-  - The default policy is length 8 or more only. There is no breached-password check.
-  - It allows **10 failed sign-ins per hour per account** (`signIn.maxFailedAttempsPerHour`).
+- **Password handling (from source, `dist/providers/Password.js`, `dist/server/implementation/mutations/*.js`, `lucia/dist/crypto.js`; measured on the anonymous local backend, Test evidence item 14):**
+  - **Default hash:** `Scrypt` from the deprecated `lucia` package (pure-JS scrypt, N=2^14, r=16, p=1, 64-byte key, NFKC input), the same work factor as Better Auth's default. About 97 ms per sign-in attempt.
+  - **Hashing runs inside a mutation.** Both hash (sign-up) and verify (sign-in) run in the library's `auth:store` internal mutation, which has Convex's **1-second user-code limit** and the same 64 MB memory limit. Mutations cannot call `fetch`.
+  - **The OWASP 32 MiB setting fits.** A project `crypto: { hashSecret, verifySecret }` with `@noble/hashes` at N=2^15, r=8, p=3 worked end to end: sign-up 388 ms, sign-in 382 ms. N=2^16 (64 MiB) and N=2^17 (128 MiB) ran out of memory inside the mutation, as they do in an action. The 1-second limit leaves less margin on a slower cloud host than Better Auth's HTTP action, which has no 1-second limit.
+  - **Policy:** length 8 or more by default, replaceable through `validatePasswordRequirements`. That hook is called synchronously and not awaited, and the hash runs in a mutation that cannot `fetch`, so **a breached-password check needs a project-owned copy of the `Password` provider** (an async `authorize` built on `ConvexCredentials`). None is built in.
+  - **Per-account limit (verified):** 10 failed sign-ins per hour per account (`signIn.maxFailedAttempsPerHour`, refilling at 10 per hour). The 11th attempt, and then the **correct** password, both failed with `TooManyFailedAttempts`. There is no hard limit (about 240 guesses a day at the default) and no per-IP limit.
+  - **Enumeration (verified):** an unknown address fails with `InvalidAccountId` in about 14 ms, without hashing, and a wrong password fails with `InvalidSecret` in about 97 ms. Sign-up for an existing address with another password fails with `Account <email> already exists`. Production deployments redact these non-`ConvexError` messages to "Server Error", which hides the message but also hides "too many attempts" from the UI. The timing difference remains unless the project's own provider hashes a dummy password for unknown addresses.
   - Reset and verification run through an `Email` provider (codes), whose sender the project supplies.
 - **Who sends the email:** the project, through a separate sender (verification and reset only).
-- **Angular:** the v1 client is React-only (`@convex-dev/auth/react`, 376 lines in `dist/react/client.js`). An Angular port would have to handle token and refresh-token storage, refresh, the OAuth `?code=` exchange, and cross-tab sync. The v2 alpha adds a framework-agnostic `./browser` export, but that cannot be used while it is alpha.
-- **Identity shape:** `sub` is `<userId>|<sessionId>` and `iss` is `CONVEX_SITE_URL` (`dist/server/implementation/tokens.js`). **`subject` and `tokenIdentifier` change on every new session**, so helpers must use the library's `getAuthUserId(ctx)`, which splits the user id from `sub`.
-- **Account linking (`dist/server/implementation/users.js`):** an OAuth sign-in links only to an existing user whose email is **verified**. A password user whose email is unverified is not found, so a Google sign-in with the same address creates a **second user with the same email**. That is not a takeover, but it leaves duplicate accounts. Google's default profile does not map `email_verified`, so the project would also need a custom `profile()`.
-- **Defaults (from source):** JWT 1 hour; session 30 days in total and 30 days inactive.
-- **Pros:** first-party, with no component boundary; a per-account failure limit is built in; low function-call count (1-hour JWT).
+- **Angular (verified at the protocol level, Test evidence item 14):** the published client is React-only (`@convex-dev/auth/react`, 376 lines in `dist/react/client.js`). Underneath, the protocol is two public actions:
+  - `auth:signIn` with `{ provider, params }` for password sign-in, `{ refreshToken }` for refresh, and `{ params: { code }, verifier }` for the OAuth return; `auth:signOut` to end the session.
+  - With `convex/browser` only (no React), a seeded user signed in, `ConvexClient.setAuth(fetchToken, onChange)` authenticated a live query (`onChange(true)`), `fetchToken({ forceRefreshToken: true })` refreshed through `{ refreshToken }`, sign-out returned `{ tokens: null }` for the old refresh token, and `client.client.clearAuth()` cleared the client. This fits ADR 0006's `ConvexAuthSource` with no adapter change.
+  - **The project would write and own that client**, about 150 to 200 lines of security-relevant code: JWT and refresh-token storage in `localStorage`, the refresh mutex across tabs (`navigator.locks`), cross-tab sync through `storage` events, the OAuth verifier and `?code=` exchange, and retries. The action argument shapes are undocumented internals of a beta library, so any `@convex-dev/auth` patch can change them, and v2 replaces them.
+  - Not built: an `ng new --ssr` app with this client. The client would be created only in the browser, as `AUTH_CLIENT` is for Option B.
+- **Identity shape (verified):** `sub` is `<userId>|<sessionId>`, `iss` is `CONVEX_SITE_URL`, `aud` is `convex`, and there are no other claims. **`subject` and `tokenIdentifier` change on every new session** (verified: a second sign-in gave a different `sub` with the same user part), so helpers must use the library's `getAuthUserId(ctx)`. `convex-test` `withIdentity({ subject: "<userId>|<sessionId>" })` with `getAuthUserId` passed on `vitest` 5.0.3.
+- **Account linking (from source, `dist/server/implementation/users.js`, `dist/server/provider_utils.js`, `@auth/core/providers/google.js`):**
+  - Google's default profile maps no `emailVerified`, and the library then treats every OAuth email as verified (`provider.allowDangerousEmailAccountLinking !== false`). Google's `email_verified` is ignored unless the project writes a `profile()`.
+  - An OAuth sign-in links only to an existing user whose email is **verified** (`emailVerificationTime` set). A password user whose email is unverified (every password user before #26) is not found, so a Google sign-in with the same address **creates a second user with the same email**. The reverse also holds: a password sign-up for an address that already has a Google user creates a second user. That is not a takeover, but it leaves duplicate accounts.
+  - Both are fixable with project code: `callbacks.createOrUpdateUser` can refuse when any user already has that email, which matches Option B's default refusal.
+- **Defaults (from source, verified):** JWT 1 hour (TTL 3,600 s observed); session 30 days in total and 30 days inactive. The OAuth return carries an 8-digit code that is valid for 2 minutes and is bound to a verifier the starting browser keeps in `localStorage`.
+- **E2E (verified, Test evidence item 14):** an `IS_TEST`-guarded `internalAction` seeded a password user through the library's own `createAccount`, and the user then signed in through `auth:signIn`. With `IS_TEST` removed, seeding failed with `testing functions are disabled: IS_TEST is not set`. The signing keys (`JWT_PRIVATE_KEY`, `JWKS`) are environment variables generated per run, and the auth tables are in the app schema, so ADR 0005's "delete every schema table" reset already clears them and no `jwks` step is needed.
+- **Install (verified):** `@convex-dev/auth` 0.0.96 and `@auth/core` 0.41.3 resolve next to `convex` 1.46.0, `vitest` 5.0.3, `typescript` 6.0.3, and Angular 22.2 **with no `overrides` entry and no `react` install**. The scratch `convex/` code type-checked under TypeScript 6.0.3 with `skipLibCheck: true` (the Convex and Angular default); with `skipLibCheck: false`, the declaration files of `@auth/core` 0.41.3 and `@convex-dev/auth` 0.0.96 fail to compile.
+- **Pros:**
+  - First-party, with no component boundary; its tables are in the app schema.
+  - A per-account failure limit is built in, and it refuses the correct password while locked.
+  - No `overrides` entry and no stray `react` package.
+  - The OAuth return is bound to the browser that started it.
+  - Lower function-call count (1-hour JWT).
+  - Convex is actively building its successor (v2), which adds a framework-agnostic browser client.
 - **Cons and risks:**
-  - It is beta with a rewrite in progress, so adopting v1 now means a migration to v2 later.
-  - Its hashing and dependencies are deprecated.
-  - The project writes and maintains the Angular client.
-  - Linking with unverified password accounts produces duplicates.
+  - Beta, with a v2 rewrite in progress, so adopting v1 now means a migration to v2 later. Convex documents it for React and React Native only.
+  - The project writes and maintains the Angular client against undocumented action shapes.
+  - Linking duplicates users by default, and Google's `email_verified` is ignored by default. The project adds `createOrUpdateUser` and `profile()`.
+  - Unknown addresses are distinguishable by timing, and a breached-password check needs a project copy of the `Password` provider.
+  - Its default hash and four of its dependencies are deprecated.
+  - Hashing runs inside a mutation under a 1-second limit.
 
 ### Option B: Better Auth through the Convex component (`@convex-dev/better-auth`)
 
@@ -114,7 +137,8 @@ The three hosted services also send verification and reset email themselves, and
   - Account deletion is built in (`deleteUser`).
   - The component is maintained by Convex, and Better Auth itself is widely used and MIT.
 - **Cons and risks:**
-  - **The component lags upstream.** It is pinned below `better-auth` 1.7 and its last release was 2026-06-27. Security fixes reach 1.6.x only while upstream patches that line (the last 1.6 patch was 2026-09-14).
+  - **The component lags upstream.** It is pinned below `better-auth` 1.7 and its last release was 2026-06-27; its last code commit was 2026-08-11. The 1.7 migration is open as [get-convex/better-auth#430](https://github.com/get-convex/better-auth/issues/430) (since 2026-08-21), with [#433](https://github.com/get-convex/better-auth/issues/433) reporting that the `convex()` plugin fails to bundle on 1.7. Security fixes reach 1.6.x only while upstream patches that line (the last 1.6 patch was 2026-09-14).
+  - **It installs React.** `@convex-dev/better-auth` 0.12.5 declares `react` ^18.3.1 || ^19 as a **required** peer (no `peerDependenciesMeta`), so npm installs `react` 19.3.0 into the Angular project (lockfile resolution, 2026-10-07). It is never imported by the app and adds nothing to the bundle, but it sits in `node_modules` and in Dependabot's view.
   - **Default scrypt cost is below OWASP's minimum** (see "Passwords"). It is raised with a project hash function.
   - **No per-account throttle.** The project adds one (see "Rate limits and lockout").
   - **Peer conflict with ADR 0004's Vitest 5.** `better-auth` 1.6.33 declares an optional peer `vitest ^2 || ^3 || ^4`, so `npm install` fails with `ERESOLVE` next to `vitest` 5.0.3. An npm `overrides` entry fixes it (`"better-auth": { "vitest": "$vitest" }`, verified). `better-auth` 1.7 accepts Vitest 5, so the override goes away once the component supports 1.7.
@@ -127,18 +151,21 @@ The three hosted services also send verification and reset email themselves, and
 
 | | A: Convex Auth | B: Better Auth component |
 | --- | --- | --- |
-| Status | Beta; v2 rewrite in alpha | Component 0.12.x, pinned to `better-auth` 1.6 |
+| Status | Beta; React and React Native only (Convex docs); v2 rewrite in alpha, actively developed | Component 0.12.x, pinned to `better-auth` 1.6; no release since 2026-06-27 |
 | Email + password and Google | Yes | Yes |
-| Default password hash | scrypt N=2^14 r=16 (deprecated `lucia`) | scrypt N=2^14 r=16; replaceable, raised here |
-| Breached-password check | None built in | `haveIBeenPwned` plugin (k-anonymity, no key) |
-| Per-account failure limit | 10 per hour, built in | None; project hook (verified) |
+| Default password hash | scrypt N=2^14 r=16 (deprecated `lucia`); replaceable | scrypt N=2^14 r=16; replaceable |
+| OWASP 32 MiB scrypt (N=2^15 r=8 p=3) | Fits; about 385 ms, **inside a mutation** (1 s limit), verified | Fits; about 385 ms in an HTTP action, verified |
+| Breached-password check | None; needs a project copy of the `Password` provider | `haveIBeenPwned` plugin (k-anonymity, no key) |
+| Per-account failure limit | 10 per hour, built in (verified) | None; project hook (verified) |
+| Unknown address vs wrong password | Distinguishable (14 ms vs 97 ms, different errors) | Identical (dummy hash, same 401) |
 | Sends its own email | No | No |
-| Angular client | Project ports the React client | `better-auth/client`, verified |
-| Stable user id in `sub` | No (`user\|session`) | Yes |
-| Google sign-in, same email as an unverified password account | Creates a duplicate user | Refused (`account not linked`) |
+| Angular client | Project writes it (about 150 to 200 lines) on undocumented action shapes; protocol verified without React | `better-auth/client`, documented; verified in an `ng new --ssr` app |
+| Stable user id in `sub` | No (`user\|session`); use `getAuthUserId` | Yes |
+| Google sign-in, same email as an unverified password account | Creates a duplicate user (source), unless the project adds `createOrUpdateUser` | Refused (`account not linked`) |
 | Account deletion API | None; the project deletes its auth tables | `deleteUser`, verified |
-| E2E with no secrets | Feasible, not run | **Run locally, passes** |
-| Main risk | v1 to v2 migration | Lag behind upstream; per-IP limiting needs a client IP |
+| E2E with no secrets | **Run locally: seed, sign in, refresh, sign out** (protocol level, no browser) | **Run locally, passes** (Playwright, 3/3) |
+| npm `overrides` / extra packages | None / none | One `vitest` override / `react` 19 installed as a required peer |
+| Main risk | v1 to v2 migration; a hand-written client on a beta protocol | Component lag behind upstream; per-IP limiting needs a client IP |
 
 ## Cost
 
@@ -205,7 +232,13 @@ Other usage:
 - It has a free breached-password check that needs no key.
 - Its password hash and per-account throttle can be configured to the levels below, and both were verified.
 
-Convex Auth would meet the same answers. It would mean porting a React client now and migrating it again when the v2 rewrite lands, and its default linking leaves duplicate accounts.
+**Convex Auth, re-examined at the owner's request (2026-10-07).** It also meets every owner answer, and the scratch run confirmed the parts that matter: password sign-in, refresh, and sign-out from `convex/browser` with no React; the OWASP 32 MiB hash; `IS_TEST`-guarded seeding; and an install with no `overrides` entry. Being "already on Convex" does not separate the two, because Option B also runs entirely inside the project's Convex deployment and is also maintained by Convex. It is not chosen because, against this project's constraints, it moves more security-relevant code into this repository:
+
+- the Angular client (token and refresh-token storage, cross-tab refresh lock, OAuth code exchange) on action shapes that Convex does not document, for a library Convex documents only for React and React Native;
+- a `createOrUpdateUser` callback and a Google `profile()` to stop duplicate users and to honour `email_verified`;
+- a project copy of the `Password` provider for the breached-password check and for equal handling of unknown addresses.
+
+Option B's project code is the hash function and the per-address throttle, both verified. Option A's real advantages are the built-in per-account limit, no `overrides` entry, no `react` install, and Convex's active v2 work. **What would switch this to Convex Auth:** v2 reaching a stable release with its framework-agnostic `./browser` client, or `@convex-dev/better-auth` staying without a release that supports `better-auth` 1.7 while 1.6 stops receiving patches (see "What would reverse this").
 
 ### Packages
 
@@ -218,6 +251,7 @@ Convex Auth would meet the same answers. It would mean porting a React client no
 - `convex` is already accepted (ADR 0001).
 - Transitive packages include `convex-helpers`, `jose`, `zod`, `kysely`, `nanostores`, `better-call`, `@noble/*`, and `@better-auth/*`. All have permissive licences and none has an install script, so ADR 0003's `allowScripts` map is unchanged.
 - `package.json` gains `"overrides": { "better-auth": { "vitest": "$vitest" } }` until the component accepts `better-auth` 1.7.
+- npm also installs `react` 19.x, because the component declares it as a required peer. No app code imports it, and it is not an approved framework for this project. The sign-in feature adds `react`, `react-dom`, and `@convex-dev/better-auth/react` to ESLint's core `no-restricted-imports` rule (ADR 0002 already uses that rule), so an accidental import fails lint.
 - Moving to `better-auth` 1.7 or the component to 0.13 is a minor bump and needs no gate, but it must pass the e2e sign-in spec.
 
 ### Server configuration (summary for the sign-in feature)
@@ -472,7 +506,7 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
 
 ## Consequences
 
-- **New dependencies:** `@convex-dev/better-auth` 0.12.x, `better-auth` 1.6.x, and `@noble/hashes` 2.x (already transitive), plus one `overrides` entry. None has an install script, so ADR 0003's `allowScripts` map is unchanged. No paid service before the first production release.
+- **New dependencies:** `@convex-dev/better-auth` 0.12.x, `better-auth` 1.6.x, and `@noble/hashes` 2.x (already transitive), plus one `overrides` entry, and `react` 19.x installed as the component's required peer (never imported). None has an install script, so ADR 0003's `allowScripts` map is unchanged. No paid service before the first production release.
 - **External call:** the Pwned Passwords API (`api.pwnedpasswords.com`) is called from Convex on sign-up and on password change. It is free, keyless, and sends only a 5-character hash prefix.
 - **No prebuilt or hosted sign-in UI.** Better Auth is headless.
   - The sign-in and sign-up screens are built in Angular with the #6 components and design tokens, and they go through **`gate:ui-design`** in the sign-in feature issue. That includes the password rules text, error states (wrong password, throttled, breached password, existing account, `account not linked`), and the show-password control.
@@ -548,6 +582,22 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
     - `deleteUser` removed the user and its sessions.
     - Regenerating `BETTER_AUTH_SECRET` without clearing `jwks` made `/api/auth/convex/token` return 500 (`Failed to decrypt private key`). Clearing `jwks` fixed it.
 13. **Not run:** Google sign-in and the `account not linked` refusal, because there was no Google OAuth client. The behaviour is taken from `dist/oauth2/link-account.mjs` in `better-auth` 1.6.33, and the Google slice verifies it on a dev deployment.
+14. **Option A, Convex Auth (added at the owner's request, 2026-10-07; Node 24.16.0, npm 11.13.0, local backend `precompiled-2026-10-06-a3538c6`):**
+    - **Install resolution** (`npm install --package-lock-only --ignore-scripts`) next to `convex` 1.46.0, `vitest` 5.0.3, `typescript` 6.0.3, `@angular/core` and `@angular/build` 22.2.1, `convex-test` 0.0.60:
+      - `@convex-dev/auth` 0.0.96 + `@auth/core` 0.41.3: resolved with **no override**; no `react` in the lockfile; `hasInstallScript` only on the five packages ADR 0003 already denies (`esbuild` appears twice, including `convex`'s nested copy); deprecated: `lucia`, `@oslojs/crypto`, `@oslojs/binary`, `@oslojs/asn1`.
+      - `@convex-dev/better-auth` 0.12.5 + `better-auth` 1.6.33, same tree: `ERESOLVE` without the override; with it, resolved, and the lockfile contains `react` 19.3.0 marked as a peer.
+    - **Anonymous local backend** (`CONVEX_AGENT_MODE=anonymous npx convex dev`), `authTables` in the app schema, `Password` plus a second `Password({ id: "password-strong", crypto })` with `@noble/hashes` N=2^15 r=8 p=3. `JWT_PRIVATE_KEY` and `JWKS` were generated per run with `jose` and set with `npx convex env set`, with `SITE_URL` and `IS_TEST`.
+    - **Client round trip with `convex/browser` only:**
+      - `testing:seedUser` (`internalAction`, `createAccount`): user created.
+      - `auth:signIn` `{ provider: "password", params: { email, password, flow: "signIn" } }`: tokens returned in 126 ms. JWT claims: `sub` `<userId>|<sessionId>`, `iss` `http://127.0.0.1:3211`, `aud` `convex`, TTL 3,600 s.
+      - `ConvexClient.setAuth(fetchToken, onChange)` + `onUpdate(me.whoami)`: identity returned, `getAuthUserId` equal to the seeded id, `onChange` called with `true`.
+      - `auth:signIn` `{ refreshToken }`: new JWT, same session. `auth:signOut`, then the old refresh token: `{ tokens: null }`.
+      - A second sign-in: different `sub`, same user part.
+    - **Errors and limits:** unknown address `InvalidAccountId` (14 ms); wrong password `InvalidSecret` ×10 (about 97 ms each); 11th attempt `TooManyFailedAttempts` (11 ms); then the correct password `TooManyFailedAttempts`; sign-up for the existing address with another password `Account <email> already exists`.
+    - **Hash cost:** `password-strong` sign-up 388 ms and sign-in 382 ms end to end. Inside an internal mutation, N=2^16 r=8 p=2 and N=2^17 r=8 p=1 both failed three times out of three with `JavaScript execution ran out of memory (maximum memory usage: 64 MB)`.
+    - **Guard:** with `IS_TEST` removed, `testing:seedUser` failed with `testing functions are disabled: IS_TEST is not set`.
+    - **Types and tests:** `tsc -p convex` (TypeScript 6.0.3, `skipLibCheck: true`) passed; `convex-test` 0.0.60 on `vitest` 5.0.3 with `withIdentity({ subject: "<userId>|session1" })` and `getAuthUserId`: 1/1 passed.
+    - **Not run for Option A:** an Angular build with the hand-written client, Playwright, and Google.
 
 ## Sources
 
@@ -556,7 +606,7 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
   - Source of `better-auth` 1.6.33: `dist/context/create-context.mjs`, `dist/crypto/password.mjs`, `dist/api/routes/{sign-in,sign-up,password,update-user}.mjs`, `dist/api/rate-limiter/index.mjs`, `dist/api/dispatch.mjs`, `dist/plugins/haveibeenpwned/index.mjs`, `dist/oauth2/link-account.mjs`, `dist/auth/trusted-origins.mjs`, `dist/client/session-refresh.mjs`.
   - Source of `@better-auth/utils` 0.4.2: `dist/password.mjs`, `dist/password.node.mjs`.
   - Source of `@convex-dev/better-auth` 0.12.5: `dist/plugins/convex/index.js`, `dist/plugins/cross-domain/*`, `dist/client/create-client.js`, `dist/component/schema.js`.
-- **Convex Auth:** source of `@convex-dev/auth` 0.0.96 (`dist/providers/Password.js`, `dist/server/implementation/{tokens,sessions,refreshTokens,rateLimit,redirects,signIn,users}.js`, `dist/react/client.js`), `lucia` 3 (`dist/crypto.js`), and the [repository README](https://github.com/get-convex/convex-auth).
+- **Convex Auth:** source of `@convex-dev/auth` 0.0.96 (`dist/providers/Password.js`, `dist/server/implementation/{tokens,sessions,refreshTokens,rateLimit,redirects,signIn,users,index}.js`, `dist/server/implementation/mutations/{retrieveAccountWithCredentials,createAccountFromCredentials,userOAuth}.js`, `dist/server/provider_utils.js`, `dist/react/client.js`), `@convex-dev/auth` 2.0.0-alpha.2 (`package.json` exports), `@auth/core` 0.41.3 (`providers/google.js`), `lucia` 3.2.2 (`dist/crypto.js`), the [repository README](https://github.com/get-convex/convex-auth) on `main` and on [`reboot`](https://github.com/get-convex/convex-auth/tree/reboot), the [Convex Auth docs page](https://docs.convex.dev/auth/convex-auth), and [Convex limits](https://docs.convex.dev/production/state/limits) (1-second mutation limit).
 - **Password guidance:** [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html), [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [Have I Been Pwned API v3 (Pwned Passwords)](https://haveibeenpwned.com/API/v3).
 - **GitHub issues:** [get-convex/better-auth#247](https://github.com/get-convex/better-auth/issues/247), [#312](https://github.com/get-convex/better-auth/issues/312), [#432](https://github.com/get-convex/better-auth/issues/432), [#446](https://github.com/get-convex/better-auth/issues/446).
 - **Hosted providers:** [Clerk pricing](https://clerk.com/pricing), [Clerk testing](https://clerk.com/docs/guides/development/testing/overview), [Clerk Playwright](https://clerk.com/docs/guides/development/testing/playwright/overview), [WorkOS pricing](https://workos.com/pricing), [Auth0 pricing](https://auth0.com/pricing).
