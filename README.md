@@ -19,19 +19,22 @@ npm ci
 
 ### Run the Convex backend
 
+Before the first run, copy the committed example so the CLI keeps the variable name `CONVEX_URL`. Without it, the CLI sees `vite` in `package.json` and writes `VITE_CONVEX_URL`, which the app does not read.
+
 ```sh
+cp .env.example .env.local
 CONVEX_AGENT_MODE=anonymous npx convex dev
 ```
 
-The first run downloads the local backend binary, starts it on `http://127.0.0.1:3210`, and writes the deployment name and URLs to `.env.local` (gitignored). Its state lives in `.convex/` (gitignored). It keeps watching `convex/` and pushes changes. Add `--once` to push once and exit. Anonymous mode is in beta in the Convex CLI.
-
-The app does not read the Convex URL yet; that arrives with the Convex adapter (#11).
+The first run downloads the local backend binary, starts it on `http://127.0.0.1:3210`, and writes the deployment name and `CONVEX_URL` to `.env.local` (gitignored). Its state lives in `.convex/` (gitignored). It keeps watching `convex/` and pushes changes. Add `--once` to push once and exit. Anonymous mode is in beta in the Convex CLI.
 
 ### Run the app
 
 ```sh
 npm start              # ng serve on http://localhost:4200
 ```
+
+`npm start` and `npm run build` run through `scripts/ng-convex.mjs`. It takes the Convex URL from `CONVEX_URL` in the environment or else from `.env.local`, checks it, and compiles it in. It prints `Convex URL: <url> (from <source>), site: <site-url>`, or `Convex URL: none`, in which case the app runs with no Convex client (see [the adapter README](src/app/core/data/convex/README.md)). Extra arguments go to `ng`: `npm run build -- --configuration development`.
 
 ### Build and run the SSR server
 

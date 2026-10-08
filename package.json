@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
+    "start": "node scripts/ng-convex.mjs serve",
+    "build": "node scripts/ng-convex.mjs build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false",
     "test:convex": "vitest run --config vitest.config.mts",

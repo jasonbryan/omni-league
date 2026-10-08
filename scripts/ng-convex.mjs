@@ -1,0 +1,69 @@
+// Runs `ng <build|serve> [extra ng args]` with the Convex URL compiled in (ADR 0006 "URL configuration
+// specification"). Node built-ins only. Usage: node scripts/ng-convex.mjs <build|serve> [args...]
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const [command, ...extraArgs] = process.argv.slice(2);
+if (command !== 'build' && command !== 'serve')
+  fail('usage: ng-convex.mjs <build|serve> [ng args]');
+
+function fail(message) {
+  console.error(`ng-convex: ${message}`);
+  process.exit(1);
+}
+
+// 1. Resolve: environment first, then .env.local (written by `npx convex dev`).
+let url = process.env.CONVEX_URL || null;
+let source = 'environment';
+const envFile = join(root, '.env.local');
+if (!url && existsSync(envFile)) {
+  url = parseEnv(readFileSync(envFile, 'utf8')).CONVEX_URL || null;
+  source = '.env.local';
+}
+
+const defines = [];
+if (url) {
+  // 2. Validate. The value is compiled in as a JS string literal, so quotes, backslashes, and
+  //    whitespace are rejected outright (code-injection guard).
+  if (/['"`\\\s]/.test(url)) fail('CONVEX_URL must not contain quotes, backslashes, or whitespace');
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    fail(`CONVEX_URL is not a valid URL: ${url}`);
+  }
+  const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) {
+    fail(`CONVEX_URL must use https:, or http: on localhost/127.0.0.1; got ${url}`);
+  }
+
+  // 4. Derive the HTTP-action (site) URL (ADR 0008).
+  let siteUrl;
+  if (parsed.protocol === 'https:' && parsed.hostname.endsWith('.convex.cloud') && !parsed.port) {
+    siteUrl = `https://${parsed.hostname.replace(/\.convex\.cloud$/, '.convex.site')}`;
+  } else if (parsed.protocol === 'http:' && local && parsed.port === '3210') {
+    siteUrl = `http://${parsed.hostname}:3211`;
+  } else {
+    fail(
+      `cannot derive the Convex site URL from ${url}; supported forms are ` +
+        `https://<name>.convex.cloud and http://localhost:3210 (or http://127.0.0.1:3210)`,
+    );
+  }
+
+  // 3. Log (the deployment URL is public: it ships to every browser).
+  console.log(`Convex URL: ${url} (from ${source}), site: ${siteUrl}`);
+  defines.push(`--define=__CONVEX_URL__='${url}'`, `--define=__CONVEX_SITE_URL__='${siteUrl}'`);
+} else {
+  console.log('Convex URL: none');
+}
+
+// 5. Spawn the CLI through Node with an argv array: no shell, same quoting on every OS.
+const ngArgs = [command, ...defines, ...extraArgs];
+console.log(`Running: ng ${ngArgs.join(' ')}`);
+const ng = join(root, 'node_modules', '@angular', 'cli', 'bin', 'ng.js');
+const child = spawn(process.execPath, [ng, ...ngArgs], { stdio: 'inherit' });
+child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
