@@ -9,6 +9,7 @@ import {
   internalServerErrorResponse,
   isMalformedPath,
   notFoundResponse,
+  redactedErrorText,
 } from './server-error-response';
 
 // SSR entry per ADR 0010 item 2. Netlify runs the exported `netlifyAppEngineHandler` in an edge
@@ -40,8 +41,8 @@ function getAppEngine(): AppEngine {
  * is the function the Netlify edge function exports:
  * - a path that cannot be percent-decoded: plain 400, without calling the engine;
  * - no matching route (`null`): plain 404;
- * - anything thrown or rejected: plain 500, logged with the method and pathname only (never the
- *   query string, which can carry a one-time token, ADR 0008).
+ * - anything thrown or rejected: plain 500, logged with the method, the pathname, and the error
+ *   text with every query string redacted (a query string can carry a one-time token, ADR 0008).
  */
 export async function netlifyAppEngineHandler(request: Request): Promise<Response> {
   const { pathname } = new URL(request.url);
@@ -53,7 +54,7 @@ export async function netlifyAppEngineHandler(request: Request): Promise<Respons
     const result = await getAppEngine().handle(request, getContext());
     return result ?? notFoundResponse();
   } catch (error) {
-    console.error(`Error handling ${request.method} ${pathname}:`, error);
+    console.error(`Error handling ${request.method} ${pathname}:`, redactedErrorText(error));
     return internalServerErrorResponse();
   }
 }

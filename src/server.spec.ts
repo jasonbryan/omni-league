@@ -83,6 +83,23 @@ describe('netlifyAppEngineHandler', () => {
     expect(logged).not.toContain('ott=');
   });
 
+  it.each([
+    ['an Error whose message and stack hold the URL', (url: string) => new Error(`failed: ${url}`)],
+    ['a non-Error value holding the URL', (url: string) => `failed: ${url}`],
+  ])('keeps the query string out of the log when the engine throws %s', async (_, makeError) => {
+    // A non-Error rejection is deliberate: app code can reject with anything.
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    useEngine((req) => Promise.reject(makeError(req.url)));
+
+    const response = await netlifyAppEngineHandler(request('/x?ott=SECRET'));
+
+    expect(response.status).toBe(500);
+    const logged = loggedText();
+    expect(logged).toContain('/x');
+    expect(logged).not.toContain('SECRET');
+    expect(logged).not.toContain('ott=');
+  });
+
   it('answers a synchronous throw from the engine with a plain 500', async () => {
     useEngine(() => {
       throw new Error('sync');

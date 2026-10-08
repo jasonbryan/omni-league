@@ -40,3 +40,13 @@ export function isMalformedPath(pathname: string): boolean {
     return true;
   }
 }
+
+/**
+ * Error text for the log with every query string replaced by `?<redacted>`: a query string can
+ * carry a one-time token (ADR 0008), and error messages and stacks can embed the request URL.
+ */
+export function redactedErrorText(error: unknown): string {
+  const text =
+    error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
+  return text.replace(/\?\S+/g, '?<redacted>');
+}
