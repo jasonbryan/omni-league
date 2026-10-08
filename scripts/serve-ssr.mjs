@@ -69,9 +69,14 @@ async function staticFile(pathname) {
 const UNPRINTABLE = '<unprintable thrown value>';
 const MAX_CAUSES = 5;
 
+/** Text of one thrown value, always a string. */
 function describeOrFallback(value) {
   try {
-    if (value instanceof Error) return value.stack ?? `${value.name}: ${value.message}`;
+    if (value instanceof Error) {
+      // `stack` is an ordinary writable property, so it can hold anything (a number, a Symbol).
+      const stack = value.stack;
+      return typeof stack === 'string' ? stack : `${value.name}: ${value.message}`;
+    }
     if (typeof value === 'object' && value !== null) {
       return JSON.stringify(value) ?? Object.prototype.toString.call(value);
     }
@@ -155,10 +160,12 @@ function sendFile(found, req, res, pathname) {
   res.writeHead(200, staticHeaders(found, pathname));
   pipeline(found.handle.createReadStream({ autoClose: false }), res, (error) => {
     close();
-    // A client that disconnected is not a server error.
-    if (!error || res.destroyed || error.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+    // A client that disconnected is not a server error. Every other error (a failed read) is
+    // logged. `res.destroyed` cannot tell them apart: `pipeline` destroys `res` before this callback
+    // in both cases. No 500 is possible here: the 200 headers are already written, and destroying
+    // the response cuts the body short, so the client sees an incomplete transfer.
+    if (!error || error.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
     logError(req, pathname, error);
-    plainError(res, 500, 'Internal Server Error');
   });
 }
 

@@ -12,6 +12,7 @@ import { request as httpRequest } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // The local SSR runner (`scripts/serve-ssr.mjs`, #37) against a temporary copy of the build layout:
 // the real runner script, a small `browser/` folder, and a fake `server/server.mjs` handler. The
@@ -24,6 +25,12 @@ export async function netlifyAppEngineHandler(request) {
   if (pathname === '/throw-tostring') throw { toString() { throw new Error('toString failed'); } };
   // JSON.stringify throws for a BigInt field, so only the runner's fallback can print this.
   if (pathname === '/throw-bigint') throw { value: 1n };
+  if (pathname === '/throw-badstack') {
+    // \`stack\` is an ordinary writable property: a number here, so only name: message is left.
+    const error = new RangeError('bad stack');
+    Object.defineProperty(error, 'stack', { value: 42 });
+    throw error;
+  }
   if (pathname === '/slow') {
     // Rendering that notices the client has gone, as the engine can through the request signal.
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -90,6 +97,67 @@ function raw(text: string, { close }: { close?: 'half' | 'reset' } = {}) {
 }
 
 const BIG_FILE_BYTES = 32 * 1024 * 1024;
+// Sizes no other fixture uses: the read-failure preload picks its files by size (#44).
+// eio-mid.bin is larger than one read chunk (64 KiB), so the first chunk is sent before the failure.
+const EIO_MID_BYTES = 8 * 1024 * 1024 + 1;
+const EIO_FIRST_BYTES = 65_537;
+
+/**
+ * Preload that makes `FileHandle.prototype.read` reject with `EIO` for the two eio fixtures: on
+ * every read after the first for eio-mid.bin, on the first read for eio-first.bin. Any other file
+ * is read unchanged. `FileHandle` is not exported, so its prototype comes from a probe handle,
+ * which is closed: the GC preload ends the runner when it collects an open one. The file name must
+ * not contain either fixture's name, since the error's stack names it.
+ */
+const READ_FAILURE_PRELOAD = `
+import { open } from 'node:fs/promises';
+const probe = await open(new URL(import.meta.url));
+const proto = Object.getPrototypeOf(probe);
+await probe.close();
+const read = proto.read;
+const calls = new WeakMap();
+proto.read = async function (...args) {
+  const { size } = await this.stat();
+  if (size !== ${EIO_MID_BYTES} && size !== ${EIO_FIRST_BYTES}) return read.apply(this, args);
+  const call = (calls.get(this) ?? 0) + 1;
+  calls.set(this, call);
+  if (size === ${EIO_MID_BYTES} && call === 1) return read.apply(this, args);
+  throw Object.assign(new Error('EIO: i/o error, read'), { code: 'EIO', errno: -5, syscall: 'read' });
+};
+`;
+
+interface Outcome {
+  status?: number;
+  bytes: number;
+  /** The response ended normally (its 'end' event), so the body arrived in full. */
+  complete: boolean;
+  error?: string;
+}
+
+/** A GET that resolves (never rejects) with how far the response got. */
+function fetchOutcome(path: string) {
+  return new Promise<Outcome>((resolve) => {
+    const outcome: Outcome = { bytes: 0, complete: false };
+    const fail = (error: NodeJS.ErrnoException) => (outcome.error ??= error.code ?? error.message);
+    const req = httpRequest({ host: '127.0.0.1', port, path }, (res) => {
+      outcome.status = res.statusCode;
+      res.on('data', (chunk: Buffer) => (outcome.bytes += chunk.length));
+      res.on('end', () => (outcome.complete = true));
+      res.on('error', fail);
+      res.on('close', () => resolve(outcome));
+    });
+    req.on('error', (error) => {
+      fail(error);
+      resolve(outcome);
+    });
+    req.end();
+  });
+}
+
+/** The lines of the runner output so far that contain `text`. */
+function outputLines(text: string) {
+  return output.split('\n').filter((line) => line.includes(text));
+}
 
 /**
  * Sends a raw request and disconnects (`reset` or `destroy`) once `afterBytes` of the reply have
@@ -142,6 +210,10 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     // Larger than the loopback socket buffers, so a client can disconnect mid-transfer.
     writeFileSync(join(browser, 'big.bin'), Buffer.alloc(BIG_FILE_BYTES));
     writeFileSync(join(browser, 'data.xyz'), 'unknown type');
+    writeFileSync(join(browser, 'eio-mid.bin'), Buffer.alloc(EIO_MID_BYTES));
+    writeFileSync(join(browser, 'eio-first.bin'), Buffer.alloc(EIO_FIRST_BYTES));
+    const readFailurePreload = join(root, 'read-failure-preload.mjs');
+    writeFileSync(readFailurePreload, READ_FAILURE_PRELOAD);
     writeFileSync(join(browser, 'locked.txt'), 'locked');
     chmodSync(join(browser, 'locked.txt'), 0o000);
     symlinkSync(join('..', '..', '..', 'secret', 'key.txt'), join(browser, 'link.txt'));
@@ -156,10 +228,18 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     // still open, so a leaked static-file handle fails the specs instead of passing silently.
     const gcEvery25ms = 'data:text/javascript,setInterval(globalThis.gc,25).unref()';
     const script = join(root, 'scripts', 'serve-ssr.mjs');
-    runner = spawn(process.execPath, ['--expose-gc', '--import', gcEvery25ms, script], {
-      env: { ...process.env, PORT: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    runner = spawn(
+      process.execPath,
+      [
+        '--expose-gc',
+        '--import',
+        gcEvery25ms,
+        '--import',
+        pathToFileURL(readFailurePreload).href,
+        script,
+      ],
+      { env: { ...process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
     port = await new Promise<number>((resolve, reject) => {
       const onData = (chunk: Buffer) => {
         output += chunk.toString();
@@ -277,6 +357,8 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     expect(reply.body).toBe('Internal Server Error');
     await waitForOutput('error handling GET /throw:');
     expect(output).not.toContain('SECRET');
+    // A string stack is still logged, frames included, with the query redacted.
+    expect(output).toMatch(/GET \/throw: Error: engine failed for \S+\?<redacted>\n\s+at /);
   });
 
   it.each(['/throw-null', '/throw-tostring', '/throw-bigint'])(
@@ -291,6 +373,60 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
       expect(runner.exitCode).toBeNull();
     },
   );
+
+  it('logs the fallback text for a thrown value that cannot be printed (/throw-bigint)', async () => {
+    await get('/throw-bigint');
+
+    await waitForOutput('error handling GET /throw-bigint:');
+    expect(outputLines('error handling GET /throw-bigint:').join('\n')).toContain(
+      '<unprintable thrown value>',
+    );
+  });
+
+  it('answers a handler Error with a non-string stack with a plain 500 and its name: message', async () => {
+    const reply = await get('/throw-badstack?ott=SECRET');
+
+    expect(reply.status).toBe(500);
+    expect(reply.body).toBe('Internal Server Error');
+    await waitForOutput('error handling GET /throw-badstack:');
+    const lines = outputLines('/throw-badstack');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('RangeError: bad stack');
+    expect(output).not.toContain('SECRET');
+    expect(runner.exitCode).toBeNull();
+    expect((await get('/')).status).toBe(200);
+  });
+
+  it('logs a read error after the headers are sent, once and without the query', async () => {
+    const outcome = await fetchOutcome('/eio-mid.bin?ott=SECRET');
+
+    expect(outcome.complete).toBe(false);
+    expect(outcome.bytes).toBeLessThan(EIO_MID_BYTES);
+    await waitForOutput('error handling GET /eio-mid.bin:');
+    const lines = outputLines('/eio-mid.bin');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('GET');
+    expect(lines[0]).toContain('EIO');
+    expect(output).not.toContain('SECRET');
+    // Long enough for the runner's garbage collection (every 25 ms) to find a leaked handle.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runner.exitCode).toBeNull();
+    expect((await get('/')).status).toBe(200);
+  }, 15_000);
+
+  it('resets the connection and logs once when the first read of a static file fails', async () => {
+    const outcome = await fetchOutcome('/eio-first.bin');
+
+    expect(outcome.complete).toBe(false);
+    expect(outcome.error).toMatch(/ECONNRESET|aborted/);
+    await waitForOutput('error handling GET /eio-first.bin:');
+    const lines = outputLines('/eio-first.bin');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('EIO');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runner.exitCode).toBeNull();
+    expect((await get('/')).status).toBe(200);
+  }, 15_000);
 
   it('logs the redacted cause of a handler error', async () => {
     await get('/throw-cause?ott=SECRET');
