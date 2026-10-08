@@ -22,7 +22,7 @@ The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 000
 
 ### Repository state, checked on 2026-10-07
 
-- **Visibility and plan.** `gh api repos/jasonbryan/omni-league` reports `"private": true`, owned by a user account. `gh api repos/jasonbryan/omni-league/branches/main/protection` and `.../rulesets` both return HTTP 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." So the owner is on **GitHub Free** for personal accounts. (`gh api user` returns `"plan": null` because the CLI token lacks the `user` scope; the 403 message is the evidence.)
+- **Visibility and plan.** `gh api repos/jasonbryan/omni-league` reports `"private": true`, owned by a user account. `gh api repos/jasonbryan/omni-league/branches/main/protection` and `.../rulesets` both return HTTP 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." So the owner was on **GitHub Free** for personal accounts when this ADR was written; the owner has since chosen to upgrade to Pro (see "Owner decision"). (`gh api user` returns `"plan": null` because the CLI token lacks the `user` scope; the 403 message is the evidence.)
 - **Actions settings** (`gh api .../actions/permissions`, `.../actions/permissions/workflow`, `.../actions/permissions/fork-pr-workflows-private-repos`):
   - default `GITHUB_TOKEN` permission is already `read`, and workflows cannot approve PRs;
   - all actions are allowed, and `sha_pinning_required` is `false`;
@@ -32,7 +32,7 @@ The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 000
 
 ### GitHub plan facts (from the docs, 2026-10-07)
 
-| Item | GitHub Free (current) | GitHub Pro | Public repository |
+| Item | GitHub Free (plan when written) | GitHub Pro | Public repository |
 | --- | --- | --- | --- |
 | Protected branches and rulesets on this repo | **No.** "Protected branches are available in public repositories with GitHub Free … also available in public and private repositories with GitHub Pro, GitHub Team …"; rulesets have the same wording | Yes | Yes |
 | Hosted-runner minutes included per month (private repos) | 2,000 | 3,000 | Standard runners are free and unlimited |
@@ -148,7 +148,7 @@ The orchestrator or owner runs `npm outdated` and checks action releases on a sc
 
 ## Recommendation
 
-**GitHub-hosted `ubuntu-24.04` runners; one workflow with two jobs, `checks` and `e2e`; Dependabot for actions and npm; actionlint adopted; only GitHub-owned actions, pinned by full commit SHA. For enforcement, the system recommends GitHub Pro with a ruleset on `main` (E1). The orchestrator's merge check (E3) applies on every plan, so the pipeline works unchanged whichever plan the owner chooses.**
+**GitHub-hosted `ubuntu-24.04` runners; one workflow with two jobs, `checks` and `e2e`; Dependabot for actions and npm; actionlint adopted; only GitHub-owned actions, pinned by full commit SHA. For enforcement, the owner chose GitHub Pro with a ruleset on `main` (E1). The orchestrator's merge check stays in the process as defence in depth.**
 
 ### Workflow, triggers, and jobs
 
@@ -156,7 +156,7 @@ One file, `.github/workflows/ci.yml`, named `CI`:
 
 - **Triggers:** `pull_request` (default types: opened, synchronize, reopened) and `push` to `main`. No `pull_request_target`, no `workflow_run`, no `schedule`. No workflow-level `paths` filters, because a path-filtered workflow leaves its required checks pending forever under a ruleset.
 - **Concurrency:** `group: ci-${{ github.head_ref || github.run_id }}`, `cancel-in-progress: true`. A new push to a PR cancels that PR's previous run. Each `main` push has its own `run_id` and is never cancelled, so the post-merge run that #12 checks always finishes.
-- **Timeouts:** `timeout-minutes: 15` on `checks` and `20` on `e2e`. The default is 360 minutes, which would let a hung run use a sixth of Free's monthly quota.
+- **Timeouts:** `timeout-minutes: 15` on `checks` and `20` on `e2e`. The default is 360 minutes, which would let a hung run use about an eighth of Pro's monthly quota.
 
 | Job (check name) | Runs on | Steps | Added by |
 | --- | --- | --- | --- |
@@ -173,15 +173,15 @@ The scope step never skips on `push` to `main`. An empty diff counts as an app c
 
 **Required checks: `checks` and `e2e`** (exact check-run names, which equal the job `name:`). `docs/process/ci.md` (#12, #13) lists them.
 
-**Orchestrator merge check (all plans).** Before merging any PR, the merger:
+**Orchestrator merge check (defence in depth).** Before merging any PR, the merger:
 
 1. reads the PR head SHA (`gh pr view <n> --json headRefOid`);
 2. runs `gh pr checks <n> --json name,bucket,workflow` and requires that `checks` and `e2e` from workflow `CI` are present with `bucket` `pass`, and that no check has `bucket` `fail` or `pending`;
 3. merges with `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`, so that a push after step 2 makes the merge fail instead of merging unchecked code.
 
-On Free this is the only enforcement. Gate PRs merged by the owner follow the same rule. Agents never push to `main` directly.
+It stays in the process after the Pro upgrade and the ruleset: it covers the period before the ruleset exists (until #12 and #13 have produced the `checks` and `e2e` check runs), any lapse in the plan or ruleset, and `--match-head-commit` closes the race between the check and the merge. Gate PRs merged by the owner follow the same rule. Agents never push to `main` directly.
 
-**Ruleset on `main` (E1 Pro or E2 public), created by the owner:**
+**Ruleset on `main` (E1, GitHub Pro), created by the owner once #12's required checks exist:**
 
 - target: the default branch; enforcement: active; **bypass list: empty**, so admins, and agents using the owner's token, are bound too;
 - require a pull request before merging, with 0 required approvals (agents cannot approve a PR opened with the owner's identity, and the tester and reviewer record their verdicts as comments);
@@ -221,16 +221,15 @@ On Free this is the only enforcement. Gate PRs merged by the owner follow the sa
 | Shape S1 instead of S2 (`checks` at ~10) | ~3,370 | ~3,760 to 4,360 |
 | Without the docs-only skip | ~1,940 | ~2,450 to 3,230 |
 
-- **Free (2,000):** fits during the harness phase with about 10% margin, and runs out once feature e2e grows. Then either CI stops for the rest of the month, or, with a payment method and an Actions budget, overage costs about $1.30 to $4.90 a month (210 to 810 minutes at $0.006).
-- **Pro (3,000):** covers the estimate with 190 to 790 minutes to spare. #15's preview deploys (below) would use most of that margin.
-- **Public:** no minute cost.
+- **Pro (3,000, the chosen plan):** covers the estimate with about 1,180 minutes to spare in the harness phase and 190 to 790 once feature e2e exists. #15's preview deploys (below) would use most of that margin.
+- For comparison, Free's 2,000 would have run out once feature e2e grew, and a public repository would have had no minute cost.
 - **Not included:** #15's preview deploy and smoke job. If it builds and deploys on the Actions runner, it adds roughly 3 to 5 minutes per app-changing PR push (about 400 to 650 a month at this volume). This is #9's decision. A host that builds previews on its own infrastructure uses no Actions minutes.
 - **Concurrency cancellation** lowers these numbers, because a superseded run is billed only up to the moment it is cancelled. They are not reduced here.
-- **Measured numbers replace estimates.** #12 and #13 record the billed job durations of their green runs. If a later month passes 80% of the quota, the orchestrator reports it to the owner. GitHub's "included usage alerts" also notify the owner by email.
+- **Measured numbers replace estimates.** #12 and #13 record the billed job durations of their green runs. If a later month passes 80% of the 3,000-minute quota (2,400 minutes), the orchestrator reports it to the owner. GitHub's "included usage alerts" also notify the owner by email.
 
 **Artifacts and caches:**
 
-- e2e artifacts (screenshots, plus Playwright report and traces on failure) at `retention-days: 7` stay well inside 500 MB.
+- e2e artifacts (screenshots, plus Playwright report and traces on failure) at `retention-days: 7` stay well inside Pro's 1 GB.
 - Caches: setup-node's npm cache (`~/.npm`, keyed on `package-lock.json`) and, later, the Convex backend (`~/.cache/convex`, 164 MB, keyed on the pinned backend version) fit easily in 10 GB per repository.
 - Playwright browsers are not cached (ADR 0005).
 
@@ -433,28 +432,35 @@ jobs:
 
 Moving from `ubuntu-24.04` to `ubuntu-26.04` is a one-line PR whose own green run is the evidence. It needs no gate: it is the same accepted platform. Make the move after #13 is green on 24.04, and before GitHub announces 24.04's retirement.
 
-## Owner question
+## Owner decision
 
-**How should required checks be enforced on this private repository?**
+**Question:** how should required checks be enforced on this private repository?
 
 | Option | Cost | Enforcement | Minutes |
 | --- | --- | --- | --- |
-| **(a) Upgrade to GitHub Pro (recommended)** | Pro price as shown on the upgrade page (listed elsewhere at $4/month) | GitHub refuses non-green merges for everyone, agents included | 3,000 a month, enough for the estimate |
+| **(a) Upgrade to GitHub Pro (chosen)** | Pro price as shown on the upgrade page (listed elsewhere at $4/month) | GitHub refuses non-green merges for everyone, agents included | 3,000 a month, enough for the estimate |
 | (b) Make the repository public | $0 | Same as (a) | Unlimited on standard runners |
 | (c) Stay on Free | $0, plus about $1 to $5 a month of overage once feature e2e grows, if a payment method and Actions budget are set; otherwise CI stops when the quota runs out | Orchestrator check only (`gh pr checks` plus `--match-head-commit`) | 2,000 a month, enough only for the harness phase |
 
-The system recommends (a). It is the cheapest option that both enforces the merge rule and fits the minute estimate, and it keeps the code private. (b) is cheaper, but making the source public is a business decision the system does not make. Under every option the orchestrator check stays in the process, so the pipeline in this ADR is the same; only the ruleset and the minute headroom change.
+**Decision (owner, 2026-10-07): (a), upgrade to GitHub Pro.**
+
+- **The owner performs the upgrade.** The system cannot make purchases.
+- **After the upgrade, the owner applies the `main` ruleset** described under "Required checks and enforcement", once #12 (and #13) have produced the `checks` and `e2e` check runs.
+- **The orchestrator merge check stays** (`gh pr checks` requiring `checks` and `e2e` to pass, then `gh pr merge --squash --delete-branch --match-head-commit <sha>`) as defence in depth, before and after the ruleset exists.
+- **The minute budget is Pro's 3,000 a month** (see "Minutes and cost").
+- Options (b) and (c) are not taken. The code stays private.
 
 ## Consequences
 
-- **New tools and services:** GitHub Actions on GitHub-hosted `ubuntu-24.04` runners; the actions in the inventory above; Dependabot version and security updates; actionlint 1.7.12 (MIT), downloaded and verified at run time, never installed as an npm dependency. No third-party app. Cost depends on the owner question.
+- **New tools and services:** GitHub Actions on GitHub-hosted `ubuntu-24.04` runners; the actions in the inventory above; Dependabot version and security updates; actionlint 1.7.12 (MIT), downloaded and verified at run time, never installed as an npm dependency. No third-party app. Cost: the GitHub Pro subscription (owner decision); Actions minutes fit within Pro's 3,000 included minutes.
 - **Owner setup (one time):**
-  - answer the owner question; for (a) or (b), create the `main` ruleset above after #12 and #13 have produced the `checks` and `e2e` check runs (GitHub suggests check names it has recently seen; a name typed before its first run also works, but a typo then blocks every merge);
+  - upgrade the personal account to GitHub Pro (Settings, Billing and licensing, Licensing, Upgrade);
+  - create the `main` ruleset above after #12 and #13 have produced the `checks` and `e2e` check runs (GitHub suggests check names it has recently seen; a name typed before its first run also works, but a typo then blocks every merge);
   - repository settings: squash merging only, auto-delete branches, Dependabot alerts and security updates on. Actions allowed-actions and SHA pinning, for example:
     - `gh api -X PUT repos/jasonbryan/omni-league/actions/permissions -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true`
     - `gh api -X PUT repos/jasonbryan/omni-league/actions/permissions/selected-actions -F github_owned_allowed=true -F verified_allowed=false`
   - set these **after** #12 merges, so the first workflow is already compliant;
-  - under (c), optionally add a payment method and an Actions budget.
+  - optionally set an Actions budget so that usage beyond the 3,000 included minutes is capped.
 - **Process follow-up (separate PR for the owner to merge):**
   - define "CI is green" in dev cycle Phase 7 as the orchestrator merge check above;
   - add the Dependabot PR route (minor and patch: reviewer `APPROVE` plus green CI; npm majors: `gate:technology`);
@@ -462,7 +468,7 @@ The system recommends (a). It is the cheapest option that both enforces the merg
 - **Harder later:**
   - Separate per-check status lines are traded for minutes. The failing step is read from the job log.
   - SHA pins make reading workflow diffs slightly harder; the `# vX.Y.Z` comments compensate.
-  - Without Pro or a public repo, a determined merger can still bypass CI.
+  - Until the Pro upgrade and the ruleset are in place, only the orchestrator merge check enforces CI, and a determined merger could still bypass it.
 
 ### Effects on other issues
 
@@ -497,7 +503,7 @@ The system recommends (a). It is the cheapest option that both enforces the merg
 Run on 2026-10-07, macOS arm64, in a scratch directory outside the repository.
 
 1. **Plan and settings.**
-   - `gh api` on `branches/main/protection` and `rulesets` returned 403 "Upgrade to GitHub Pro or make this repository public to enable this feature."
+   - `gh api` on `branches/main/protection` and `rulesets` returned 403 (before the owner's Pro upgrade) "Upgrade to GitHub Pro or make this repository public to enable this feature."
    - `actions/permissions` returned `{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}`.
    - `actions/permissions/workflow` returned `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`.
    - Fork PR workflows for private repos: all four options `false`.
