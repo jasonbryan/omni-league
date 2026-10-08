@@ -8,6 +8,8 @@ What changed and why, in one to three sentences.
 
 - Criterion: `path/to/test.spec.ts`
 
+Schema / migration: none (or a one-line plan with a link to details)
+
 ## Gates
 
 - [ ] Every gate on the linked issue is approved, or none applies
