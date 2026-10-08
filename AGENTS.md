@@ -11,6 +11,16 @@ These rules apply to every coding agent working in this repository (Claude Code,
 - Vocabulary: use the terms in [docs/glossary.md](docs/glossary.md) in code, issues, PRs, and UI text, and add any missing term there in the same PR.
 - Respond with substance only. Praise of the user or any input (prompts, ideas, code, other agents' output) is off-limits: no "Great question", "Nice catch", "You're right", "Perfect". Disagreement and factual corrections are expected.
 
+## Writing on GitHub
+
+Issues, PR bodies, and comments from every agent follow this standard:
+
+- The first line states the outcome or the ask: `Test: PASS`, `Review: CHANGES (1 blocking)`, `Merged`, `Needs owner: <question>`.
+- Keep it to one screen, containing only what the reader needs to act or verify.
+- Write plain, short sentences. Link to the issue, ADR, or earlier comment rather than restating it, and report results rather than the steps taken.
+- Put evidence (command output, long tables, probe logs, reproduction scripts) in a collapsed `<details><summary>Evidence</summary>…</details>` block, or link to the run.
+- Write each finding on one line as `path:line`: problem, then fix. List blocking findings first and label the rest `optional`.
+
 ## Approval gates
 
 The project owner is the final approver for the gates below. Agents prepare the proposal, then stop and wait. Agents never merge, approve, or self-approve a gate PR on their own judgement. Only the owner approves, either by merging the gate PR or by telling the orchestrator in chat to merge it; in that case the orchestrator merges the PR and comments the owner's words on it, quoted exactly, as the record of approval.

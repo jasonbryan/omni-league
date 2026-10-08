@@ -18,8 +18,8 @@ Fetch the issue with `gh issue view <n> --comments`, then check every item:
 - **Payments:** for any money flow, the webhook events, idempotency, and failure handling are named.
 - **Dependencies:** `Blocked by` lines are correct and complete; the issue does not contradict an Accepted ADR.
 
-Post the verdict as an issue comment beginning with `Plan review: APPROVE` or `Plan review: CHANGES`, followed by numbered, specific edits for each failed check.
+Post the verdict as an issue comment (see `AGENTS.md`, Writing on GitHub): `Plan review: APPROVE` or `Plan review: CHANGES` first, then one numbered line per required edit.
 
 ## Report
 
-Return the verdict and the numbered list of required edits.
+Return the verdict first, then the numbered required edits.

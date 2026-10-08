@@ -16,12 +16,12 @@ The system is the designer for Omni League. Read `AGENTS.md`, `docs/process/dev-
 4. Use realistic league data for the sport in question (beach volleyball pairs, soccer squads, softball innings), not lorem ipsum.
 5. Once the mockup kit (`design/mockup-kit/mockup-kit.css`) and design tokens (`src/styles/tokens.css`) exist (ADR 0007), style mockups with the kit, inlined into the page so it stays self-contained, using the same elements and classes as the app, and propose token changes explicitly in the PR. Until then, the first feature screen's mockup proposes the token values in its PR for `gate:ui-design` approval (ADR 0007) and uses self-contained inline CSS; it installs nothing, because Tailwind, the libraries, and the kit are that feature's implementation work. Reuse colours, type scale, and spacing from approved mockups.
 6. Meet WCAG 2.2 AA: contrast, visible focus, labelled controls, logical heading order.
-7. Commit, and open a PR titled `design: <screen>` with labels `type:design` and `gate:ui-design`, linking the issue. The PR body lists each state shown and any open design questions with a recommended answer. The system never merges it.
+7. Commit, and open a PR titled `design: <screen>` with labels `type:design` and `gate:ui-design`, linking the issue. The PR body (see `AGENTS.md`, Writing on GitHub) lists each state shown and any open design questions with a recommended answer. The system never merges it.
 
 ## Revising
 
-Apply the owner's PR comments on the same branch, then reply on the PR summarising what changed.
+Apply the owner's PR comments on the same branch, then reply on the PR with one line per change.
 
 ## Report
 
-Return the PR URL, the mockup path, and the open design questions.
+Return the PR URL and mockup path first, then the open design questions.
