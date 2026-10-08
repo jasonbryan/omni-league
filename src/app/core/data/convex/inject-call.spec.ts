@@ -143,3 +143,29 @@ describe('mutation and action helpers without a client', () => {
     }
   }
 });
+
+describe('mutation and action helpers on the server with a client present', () => {
+  // Defence in depth for the interim server rule: even if a client reached the server injector,
+  // run() must not call it.
+  for (const helper of helpers) {
+    it(`${helper.kind} rejects with ConvexServerCallError and calls no client method`, async () => {
+      const client = new FakeConvexClient();
+      TestBed.configureTestingModule({
+        providers: [
+          { provide: PLATFORM_ID, useValue: 'server' },
+          { provide: CONVEX_CLIENT, useValue: client },
+        ],
+      });
+      const ref = TestBed.runInInjectionContext(helper.create);
+
+      const result = ref.run({ name: 'Sharks' });
+      expect(ref.pending()).toBe(false);
+
+      await expect(result).rejects.toBeInstanceOf(ConvexServerCallError);
+      expect(ref.error()).toBeInstanceOf(ConvexServerCallError);
+      expect(client.calls).toEqual([]);
+      expect(client.subscriptions).toEqual([]);
+      expect(client.lifecycle).toEqual([]);
+    });
+  }
+});

@@ -126,6 +126,20 @@ describe('injectQuery (browser, fake client)', () => {
     expect(teams.error()).toBeUndefined();
   });
 
+  it('unsubscribes and reports idle when ready args change to skipToken', () => {
+    const { teams } = createHost();
+    client.subscriptions[0].emit(['Sharks']);
+
+    leagueId.set(skipToken);
+    TestBed.tick();
+
+    expect(client.activeSubscriptions).toHaveLength(0);
+    expect(client.subscriptions).toHaveLength(1);
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(false);
+    expect(teams.error()).toBeUndefined();
+  });
+
   it('unsubscribes every subscription when the owning component is destroyed', () => {
     const { fixture } = createHost();
     leagueId.set({ leagueId: 'b' });
