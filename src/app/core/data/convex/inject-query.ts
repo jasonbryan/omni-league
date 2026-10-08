@@ -84,25 +84,34 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       };
     }
 
-    // Hydration seed: decided once, now, for the request ready at creation, and only inside the
-    // hydration window. Args that become ready later (before or after stable) are an args change and
-    // never seed, and a lazy first read after stable cannot claim one.
+    // Hydration seed: decided once, on the first read of the args (inputs are bound after
+    // construction, so the args function must not run here). The seed is taken only if that first
+    // read is ready and the hydration window is still open. A first read of skipToken, or a first
+    // read after stable, never seeds, and later args changes never use transferred entries.
     const transferState = inject(TransferState);
-    const initial = untracked(request);
+    const hydrationWindow = server ? null : inject(ConvexHydrationWindow);
+    let seedDecided = false;
     let seed: Result | undefined;
-    if (!server && initial !== skipToken && inject(ConvexHydrationWindow).isOpen) {
-      const entry = transferState.get<TransferredQuery | null>(
-        makeStateKey(transferKey(query, initial.key)),
-        null,
-      );
-      if (entry)
-        seed = { request: initial, ...(decodeTransferred(entry) as Omit<Result, 'request'>) };
-    }
+    const readRequest = (): Request | SkipToken => {
+      const req = request();
+      if (!seedDecided) {
+        seedDecided = true;
+        if (req !== skipToken && hydrationWindow?.isOpen) {
+          const entry = transferState.get<TransferredQuery | null>(
+            makeStateKey(transferKey(query, req.key)),
+            null,
+          );
+          if (entry)
+            seed = { request: req, ...(decodeTransferred(entry) as Omit<Result, 'request'>) };
+        }
+      }
+      return req;
+    };
 
     // A result counts only for the request that produced it, so an args change reads as loading.
     const result = signal<Result | undefined>(undefined);
     const current = computed(() => {
-      const req = request();
+      const req = readRequest();
       if (req === skipToken) return undefined;
       const latest = result();
       if (latest?.request === req) return latest;
@@ -110,7 +119,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
     });
 
     effect((onCleanup) => {
-      const req = request();
+      const req = readRequest();
       if (req === skipToken) return;
       if (loader) {
         void loader.load(query, req.args, req.key).then((settled) => {
@@ -131,7 +140,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
 
     return {
       value: computed(() => current()?.value),
-      isLoading: computed(() => request() !== skipToken && !current()),
+      isLoading: computed(() => readRequest() !== skipToken && !current()),
       error: computed(() => current()?.error),
     };
   });
