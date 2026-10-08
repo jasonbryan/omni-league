@@ -63,4 +63,4 @@ On `RenderMode.Server` routes, query helpers fetch once over HTTP during the ren
 
 Provide a fake through `CONVEX_CLIENT` (helpers) or `CONVEX_CLIENT_FACTORY` (the provider). `testing/fake-convex-client.ts` implements only the `ConvexClientLike` surface. Call `TestBed.tick()` before asserting on subscriptions: they open in an effect.
 
-For the server path, set `PLATFORM_ID` to `'server'`, provide `CONVEX_URL`, and provide `CONVEX_HTTP_CLIENT_FACTORY` returning `testing/fake-convex-http-client.ts`. `server-render.spec.ts` shows a full `renderApplication` render.
+For the server path, set `PLATFORM_ID` to `'server'`, provide `CONVEX_URL`, and provide `CONVEX_HTTP_CLIENT_FACTORY` returning `testing/fake-convex-http-client.ts`. `server-render.spec.ts` shows a full `renderApplication` render. A spec that calls `renderApplication` must restore the global DOM classes after each test with `testing/dom-globals.ts`: the render swaps jsdom's `Event`, `Node` and the rest for domino's, and spec files share one global (`isolate: false`).

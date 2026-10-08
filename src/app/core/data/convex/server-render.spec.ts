@@ -14,6 +14,21 @@ import {
   type ConvexHttpClientLike,
 } from './index';
 
+import { snapshotDomGlobals } from './testing/dom-globals';
+
+// Captured before any render in this file runs.
+const JSDOM_EVENT = Event;
+const JSDOM_NODE = Node;
+
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
+let restoreDomGlobals: () => void;
+beforeEach(() => {
+  restoreDomGlobals = snapshotDomGlobals();
+});
+afterEach(() => {
+  restoreDomGlobals();
+});
+
 const listTeams = makeFunctionReference<'query', { leagueId: string }, string[]>('teams:list');
 const KEY = 'cvx:teams:list:{"leagueId":"a"}';
 
@@ -172,5 +187,15 @@ describe('server render with renderApplication', () => {
     expect(ngState(html)[KEY]).toEqual({
       e: { name: 'Error', message: 'Convex query failed during server render' },
     });
+  });
+});
+
+// Runs last in this file, after every render above. Angular's unit-test builder runs spec files
+// with `isolate: false`, so whatever this file leaves on the global is what the next file sees.
+describe('after the server renders in this file', () => {
+  it("leaves jsdom's DOM classes on the global, so later spec files can dispatch events", () => {
+    expect(Event).toBe(JSDOM_EVENT);
+    expect(Node).toBe(JSDOM_NODE);
+    expect(() => document.createElement('div').dispatchEvent(new Event('probe'))).not.toThrow();
   });
 });
