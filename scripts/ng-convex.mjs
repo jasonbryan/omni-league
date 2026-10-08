@@ -36,6 +36,18 @@ if (url) {
   } catch {
     fail(`CONVEX_URL is not a valid URL: ${url}`);
   }
+  // Only a bare origin: no credentials (they would ship in the public bundle), path, query, or fragment.
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== '/' ||
+    parsed.search ||
+    parsed.hash ||
+    url.includes('?') ||
+    url.includes('#')
+  ) {
+    fail('CONVEX_URL must be a bare origin, with no credentials, path, query, or fragment');
+  }
   const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) {
     fail(`CONVEX_URL must use https:, or http: on localhost/127.0.0.1; got ${url}`);
@@ -55,8 +67,9 @@ if (url) {
   }
 
   // 3. Log (the deployment URL is public: it ships to every browser).
-  console.log(`Convex URL: ${url} (from ${source}), site: ${siteUrl}`);
-  defines.push(`--define=__CONVEX_URL__='${url}'`, `--define=__CONVEX_SITE_URL__='${siteUrl}'`);
+  const origin = parsed.origin;
+  console.log(`Convex URL: ${origin} (from ${source}), site: ${siteUrl}`);
+  defines.push(`--define=__CONVEX_URL__='${origin}'`, `--define=__CONVEX_SITE_URL__='${siteUrl}'`);
 } else {
   console.log('Convex URL: none');
 }
@@ -66,4 +79,7 @@ const ngArgs = [command, ...defines, ...extraArgs];
 console.log(`Running: ng ${ngArgs.join(' ')}`);
 const ng = join(root, 'node_modules', '@angular', 'cli', 'bin', 'ng.js');
 const child = spawn(process.execPath, [ng, ...ngArgs], { stdio: 'inherit' });
+// Forward termination signals so a SIGTERM to the wrapper alone (CI timeout, process manager) does
+// not orphan `ng serve`/`ng build`.
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));

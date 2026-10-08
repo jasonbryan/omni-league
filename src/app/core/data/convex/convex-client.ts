@@ -11,8 +11,6 @@ import { isPlatformServer } from '@angular/common';
 import { ConvexClient } from 'convex/browser';
 import { CONVEX_URL } from './convex-url';
 
-export { normalizeConvexUrl } from './convex-url';
-
 /** The part of `ConvexClient` the adapter uses; tests substitute a fake. */
 export interface ConvexClientLike {
   onUpdate: ConvexClient['onUpdate'];
@@ -58,7 +56,8 @@ function createConvexClient(): ConvexClientLike | null {
   const url = inject(CONVEX_URL);
   if (url === null) return null;
   const client = inject(CONVEX_CLIENT_FACTORY)(url);
-  inject(DestroyRef).onDestroy(() => void client.close());
+  // A rejected close() at teardown must not surface as an unhandled rejection.
+  inject(DestroyRef).onDestroy(() => void client.close().catch(() => undefined));
   return client;
 }
 

@@ -2,7 +2,8 @@ import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ConvexClient } from 'convex/browser';
 import { CONVEX_CLIENT, CONVEX_CLIENT_FACTORY, CONVEX_URL, provideConvex } from './index';
-import { normalizeConvexUrl, wrapConvexClient } from './convex-client';
+import { wrapConvexClient } from './convex-client';
+import { normalizeConvexUrl } from './convex-url';
 import { FakeConvexClient } from './testing/fake-convex-client';
 
 describe('provideConvex', () => {
@@ -47,6 +48,31 @@ describe('provideConvex', () => {
     TestBed.resetTestingModule(); // destroys the application's root injector
 
     expect(created[0].lifecycle).toEqual(['close']);
+  });
+
+  it('swallows a rejected close() so teardown raises no unhandled rejection', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    window.addEventListener('unhandledrejection', unhandled);
+    try {
+      configure('browser', 'https://happy-otter-123.convex.cloud');
+      TestBed.inject(CONVEX_CLIENT);
+      // A plain function, not vi.fn: a Vitest spy records settled results and so handles the rejection itself.
+      let closeCalls = 0;
+      created[0].close = () => {
+        closeCalls++;
+        return Promise.reject(new Error('socket gone'));
+      };
+
+      TestBed.resetTestingModule();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(closeCalls).toBe(1);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+      window.removeEventListener('unhandledrejection', unhandled);
+    }
   });
 
   it('creates no client in the browser when no URL is configured', () => {
