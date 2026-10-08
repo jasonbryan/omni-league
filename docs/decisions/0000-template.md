@@ -1,6 +1,6 @@
 # NNNN: <Decision title>
 
-- **Status:** Proposed | Accepted | Superseded by NNNN | Rejected
+- **Status:** Accepted <!-- Write Accepted in the gate PR: the open PR is the proposal and the owner's merge is the acceptance. A rejected PR is closed unmerged. Later edits on main: Superseded by NNNN. -->
 - **Gate:** `gate:technology`
 - **Issue:** #<n>
 - **Date:** YYYY-MM-DD
