@@ -6,6 +6,7 @@ import eslint from '@eslint/js';
 import angular from 'angular-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import globals from 'globals';
+import { builtinModules } from 'node:module';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
@@ -106,6 +107,17 @@ export default defineConfig([
           name: 'Netlify',
           message: 'Server-entry files must not read the environment (ADR 0010).',
         },
+        {
+          name: 'Deno',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        // The global object reaches the environment through casts and aliases
+        // (`(globalThis as T).process`) that no-restricted-properties cannot see.
+        ...['globalThis', 'self', 'window', 'global'].map((name) => ({
+          name,
+          message:
+            'Server-entry files must not use the global object: it reaches the environment (ADR 0010).',
+        })),
       ],
       'no-restricted-properties': [
         'error',
@@ -119,6 +131,17 @@ export default defineConfig([
           property: 'env',
           message: 'Server-entry files must not read the environment (ADR 0010).',
         },
+        {
+          object: 'Deno',
+          property: 'env',
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        },
+        // The edge function runs on Deno, where the plugin's polyfill assigns globalThis.process.
+        ...['process', 'Netlify', 'Deno'].map((property) => ({
+          object: 'globalThis',
+          property,
+          message: 'Server-entry files must not read the environment (ADR 0010).',
+        })),
       ],
       'no-restricted-imports': [
         'error',
@@ -129,6 +152,12 @@ export default defineConfig([
               message:
                 'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
             },
+            // Un-prefixed built-ins (`fs`, `fs/promises`, ...), as exact names: a pattern like
+            // `path` would also match a relative `./path` module.
+            ...builtinModules.map((name) => ({
+              name,
+              message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+            })),
           ],
           patterns: [
             {
