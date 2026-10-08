@@ -33,6 +33,30 @@ Use Angular's signal-based forms API when present in the installed version; fall
 
 Lazy-load every feature route with `loadComponent` / `loadChildren`. Guards and resolvers are functions.
 
+## Rendering
+
+Hybrid rendering per ADR 0006: every route has a render mode in `src/app/app.routes.server.ts`.
+
+| Route kind                                                                        | Mode                                                      |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Public pages that read Convex data (organization, location, league, registration) | `RenderMode.Server`, with an explicit entry ahead of `**` |
+| Public pages with no Convex data (landing, about, help)                           | `RenderMode.Prerender`                                    |
+| Signed-in app, everything under `/app/**`                                         | `RenderMode.Client`                                       |
+| Anything else (`**`)                                                              | `RenderMode.Server`: the not-found page with status 404   |
+
+Server routes:
+
+- **Anonymous only.** Server renders never read cookies, the `Authorization` header, or any per-user state, and never call `setAuth`. Personalised content loads after hydration (`@defer` or a Client route).
+- **Cacheable.** Public Server routes set `headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' }`.
+- **Query args derive only from the route and URL** (params, query string), so server and browser compute the same args.
+- **SSR-safe code.** No `window`, `document`, `localStorage`, or `navigator` outside `afterNextRender`/`afterEveryRender`; no `isPlatformBrowser` branches in templates; no direct DOM manipulation. `ngSkipHydration` only on a browser-only widget's host, with a code comment and an issue link.
+- **Meta tags** are set with `Title` and `Meta` (`og:title`, `og:description`, `og:url`, `og:type`, `og:image` when one exists, `<link rel="canonical">`) from the same query results, during the server render.
+- **Status codes.** A public page whose primary query returns `null` sets status 404 through `RESPONSE_INIT` and renders the not-found view.
+
+Prerender routes must not read Convex data: they render during `ng build`, which has no Convex URL in CI.
+
+Hydration uses `provideClientHydration()` with the v22 defaults. Hydration mismatch checks run only in development builds; a production build logs nothing. Text differences and an `@if` that takes a different branch on server and browser are replaced silently in both modes, so a test that deliberately causes a mismatch must use a structural one (for example `<table><tr>` with no `<tbody>`).
+
 ## Accessibility
 
 Every screen passes automated axe checks and meets WCAG 2.2 AA: keyboard reachable, visible focus, labelled controls, sufficient contrast. Players use phones, so layouts work from 360px wide.

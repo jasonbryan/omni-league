@@ -29,15 +29,15 @@ Other constraints:
 
 ADRs 0002 to 0007 are accepted and merged on `main`. Each row below was checked against the merged text. #9 is still open, so its row remains an assumption: **if #9 decides differently, this ADR is revised to match.**
 
-| Source | Assumption used here | Where it matters |
-| --- | --- | --- |
-| ADR 0005, e2e (`docs/decisions/0005-e2e-and-accessibility-testing.md`, #4; accepted, merged in #17) | Playwright runs against the **anonymous local backend** started by `CONVEX_AGENT_MODE=anonymous npx convex dev`, with no Convex login. Test-only functions live in `convex/testing.ts` as internal functions (`internalAction` where seeding must call the auth component), each guarded by `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment, in Playwright `globalSetup`. `globalSetup` runs `testing:reset` and `testing:seedBase`, and a per-test fixture seeds each test's tenant with `testing:seedLeague`. ADR 0005 already records this ADR's e2e additions: seeding through `auth.api.signUpEmail`, `BETTER_AUTH_SECRET` and `SITE_URL` set per run, `testing:reset` clearing the component's tables (including `jwks`) and `signInFailures`, and the breached-password check and per-IP limiter off under `IS_TEST`. The e2e app build is a development build. Session-timeout checks for WCAG 2.2.1 are deferred to this ADR. | E2E sign-in path, guard, reset, rate limits |
-| ADR 0006, Angular baseline (`docs/decisions/0006-angular-app-baseline.md`, #5; accepted, merged in #18) | Hybrid rendering: Convex-backed public routes use `RenderMode.Server`, static pages use `RenderMode.Prerender`, and signed-in routes (`/app/**`) use `RenderMode.Client`. **Server renders are anonymous** and never call `setAuth`; `CONVEX_AUTH` is ignored on the server. The adapter declares `provideConvexAuth(source: ConvexAuthSource)` with `fetchToken`, `signedIn: Signal<boolean>`, and an optional `onChange`; the #7 follow-up implements it. When `CONVEX_AUTH` is provided, the browser client calls `setAuth` on creation, `clearAuth()` when `signedIn` goes from true to false, and `setAuth` again when it goes from false to true. `CONVEX_URL` and `CONVEX_SITE_URL` reach both bundles through build-time `define`s (`__CONVEX_URL__`, `__CONVEX_SITE_URL__`) set by `scripts/ng-convex.mjs`, which derives the site URL from the Convex URL. | Angular wiring, SSR coexistence, URL configuration |
-| ADR 0004, test runners (`docs/decisions/0004-unit-and-convex-test-runners.md`, #3; accepted, merged in #19) | `convex-test` 0.0.60 on `vitest` 5.0.3, with the `edge-runtime` environment and a root `vitest.config.mts`. `t.withIdentity({...})` fakes the caller, and `tokenIdentifier` is `${issuer}\|${subject}`. ADR 0004's test pattern keys users on `identity.subject`, as this ADR decides, and it records the `better-auth` `vitest` peer conflict this ADR resolves. | Identity key, Convex tests |
-| ADR 0003, npm and Node (`docs/decisions/0003-package-manager-and-node.md`, #1; accepted, merged in #21) | npm 11 on Node 26.11, `strict-allow-scripts=true` with a five-entry `allowScripts` map, `min-release-age=1`. An `overrides` entry is allowed only when recorded in the ADR that needs it; ADR 0003 already lists this ADR's `better-auth` entry, added by the sign-in feature rather than #10. | Install-script check, `overrides` entry |
-| ADR 0002, lint and format (`docs/decisions/0002-lint-and-format.md`, #2; accepted, merged in #16) | ESLint's core `no-restricted-imports` rule is already in use (for `convex/browser` outside the adapter), so restricting `react` imports needs no new package. | `react` import ban |
-| ADR 0007, UI library and styling (`docs/decisions/0007-ui-library-and-styling.md`, #6; accepted, merged in #20) | spartan/ui (brain + copied helm) on Tailwind CSS 4 provides the components and design tokens. It adds no auth-related package. | Sign-in and sign-up screens |
-| #9, hosting (open issue), and owner answer 6 | Each PR gets a preview with its own Convex preview deployment, built by `npx convex deploy --preview-create`. The web app uses the host's default domain until the first production release. A project domain is bought before that release, for verification and password-reset email. No host is chosen yet, so preview hostnames are unknown. | Callback URLs, allowed origins, email sender domain |
+| Source                                                                                                          | Assumption used here                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Where it matters                                    |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| ADR 0005, e2e (`docs/decisions/0005-e2e-and-accessibility-testing.md`, #4; accepted, merged in #17)             | Playwright runs against the **anonymous local backend** started by `CONVEX_AGENT_MODE=anonymous npx convex dev`, with no Convex login. Test-only functions live in `convex/testing.ts` as internal functions (`internalAction` where seeding must call the auth component), each guarded by `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment, in Playwright `globalSetup`. `globalSetup` runs `testing:reset` and `testing:seedBase`, and a per-test fixture seeds each test's tenant with `testing:seedLeague`. ADR 0005 already records this ADR's e2e additions: seeding through `auth.api.signUpEmail`, `BETTER_AUTH_SECRET` and `SITE_URL` set per run, `testing:reset` clearing the component's tables (including `jwks`) and `signInFailures`, and the breached-password check and per-IP limiter off under `IS_TEST`. The e2e app build is a development build. Session-timeout checks for WCAG 2.2.1 are deferred to this ADR. | E2E sign-in path, guard, reset, rate limits         |
+| ADR 0006, Angular baseline (`docs/decisions/0006-angular-app-baseline.md`, #5; accepted, merged in #18)         | Hybrid rendering: Convex-backed public routes use `RenderMode.Server`, static pages use `RenderMode.Prerender`, and signed-in routes (`/app/**`) use `RenderMode.Client`. **Server renders are anonymous** and never call `setAuth`; `CONVEX_AUTH` is ignored on the server. The adapter declares `provideConvexAuth(source: ConvexAuthSource)` with `fetchToken`, `signedIn: Signal<boolean>`, and an optional `onChange`; the #7 follow-up implements it. When `CONVEX_AUTH` is provided, the browser client calls `setAuth` on creation, `clearAuth()` when `signedIn` goes from true to false, and `setAuth` again when it goes from false to true. `CONVEX_URL` and `CONVEX_SITE_URL` reach both bundles through build-time `define`s (`__CONVEX_URL__`, `__CONVEX_SITE_URL__`) set by `scripts/ng-convex.mjs`, which derives the site URL from the Convex URL.                                                                                                       | Angular wiring, SSR coexistence, URL configuration  |
+| ADR 0004, test runners (`docs/decisions/0004-unit-and-convex-test-runners.md`, #3; accepted, merged in #19)     | `convex-test` 0.0.60 on `vitest` 5.0.3, with the `edge-runtime` environment and a root `vitest.config.mts`. `t.withIdentity({...})` fakes the caller, and `tokenIdentifier` is `${issuer}\|${subject}`. ADR 0004's test pattern keys users on `identity.subject`, as this ADR decides, and it records the `better-auth` `vitest` peer conflict this ADR resolves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Identity key, Convex tests                          |
+| ADR 0003, npm and Node (`docs/decisions/0003-package-manager-and-node.md`, #1; accepted, merged in #21)         | npm 11 on Node 26.11, `strict-allow-scripts=true` with a five-entry `allowScripts` map, `min-release-age=1`. An `overrides` entry is allowed only when recorded in the ADR that needs it; ADR 0003 already lists this ADR's `better-auth` entry, added by the sign-in feature rather than #10.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Install-script check, `overrides` entry             |
+| ADR 0002, lint and format (`docs/decisions/0002-lint-and-format.md`, #2; accepted, merged in #16)               | ESLint's core `no-restricted-imports` rule is already in use (for `convex/browser` outside the adapter), so restricting `react` imports needs no new package.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `react` import ban                                  |
+| ADR 0007, UI library and styling (`docs/decisions/0007-ui-library-and-styling.md`, #6; accepted, merged in #20) | spartan/ui (brain + copied helm) on Tailwind CSS 4 provides the components and design tokens. It adds no auth-related package.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Sign-in and sign-up screens                         |
+| #9, hosting (open issue), and owner answer 6                                                                    | Each PR gets a preview with its own Convex preview deployment, built by `npx convex deploy --preview-create`. The web app uses the host's default domain until the first production release. A project domain is bought before that release, for verification and password-reset email. No host is chosen yet, so preview hostnames are unknown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Callback URLs, allowed origins, email sender domain |
 
 ## Options
 
@@ -45,12 +45,12 @@ ADRs 0002 to 0007 are accepted and merged on `main`. Each row below was checked 
 
 ### Ruled out
 
-| Candidate | Reason (owner answer) |
-| --- | --- |
+| Candidate                                                                                   | Reason (owner answer)                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Clerk** (`@clerk/clerk-js` 6.38.1, MIT; Hobby plan free to 50,000 monthly retained users) | **Answer 4.** Clerk's Playwright helpers need `CLERK_SECRET_KEY` to mint testing tokens through the Backend API ([Clerk testing docs](https://clerk.com/docs/guides/development/testing/playwright/overview)). Seeding a user also needs the Backend API, and every e2e sign-in runs against Clerk's cloud instead of the local backend. |
-| **WorkOS AuthKit** (`@workos-inc/authkit-js` 0.20.4, MIT; free to 1M MAU) | **Answer 4.** Sign-in happens on WorkOS-hosted AuthKit pages. Creating or signing in a test user without the hosted UI needs the WorkOS API key. |
-| **Auth0** (`@auth0/auth0-spa-js` 2.28.2, MIT; Free plan to 25,000 MAU) | **Answer 4.** Sign-in runs on Auth0's hosted Universal Login, and seeding users needs a Management API client secret. |
-| **Custom OIDC/JWT provider** | **Answer 1.** Password hashing, breached-password checks, attempt throttling, Google OAuth, sessions, and key rotation would all be written and security-reviewed in this repository. The two libraries below already provide these, and a custom provider gains nothing on any other answer. |
+| **WorkOS AuthKit** (`@workos-inc/authkit-js` 0.20.4, MIT; free to 1M MAU)                   | **Answer 4.** Sign-in happens on WorkOS-hosted AuthKit pages. Creating or signing in a test user without the hosted UI needs the WorkOS API key.                                                                                                                                                                                         |
+| **Auth0** (`@auth0/auth0-spa-js` 2.28.2, MIT; Free plan to 25,000 MAU)                      | **Answer 4.** Sign-in runs on Auth0's hosted Universal Login, and seeding users needs a Management API client secret.                                                                                                                                                                                                                    |
+| **Custom OIDC/JWT provider**                                                                | **Answer 1.** Password hashing, breached-password checks, attempt throttling, Google OAuth, sessions, and key rotation would all be written and security-reviewed in this repository. The two libraries below already provide these, and a custom provider gains nothing on any other answer.                                            |
 
 The three hosted services also send verification and reset email themselves, and would cost $0 at both 1,000 and 10,000 MAU. They fail only answer 4. If the owner relaxes answer 4 (for example, by allowing a CI secret and accepting that fork PRs skip e2e sign-in), Clerk becomes the hosted candidate to compare.
 
@@ -131,6 +131,7 @@ The three hosted services also send verification and reset email themselves, and
   - the existing user's email is verified (`requireLocalEmailVerified`, default true).
 
   Otherwise the sign-in is **refused** with `account not linked`. It is neither merged nor duplicated. See "Identity key and account linking" for what users see.
+
 - **Pros:**
   - One library covers both methods, with a framework-agnostic client.
   - `sub` is a stable user id.
@@ -151,23 +152,23 @@ The three hosted services also send verification and reset email themselves, and
 
 ### Summary
 
-| | A: Convex Auth | B: Better Auth component |
-| --- | --- | --- |
-| Status | Beta; React and React Native only (Convex docs); v2 rewrite in alpha, actively developed | Component 0.12.x, pinned to `better-auth` 1.6; no release since 2026-06-27 |
-| Email + password and Google | Yes | Yes |
-| Default password hash | scrypt N=2^14 r=16 (deprecated `lucia`); replaceable | scrypt N=2^14 r=16; replaceable |
-| OWASP 32 MiB scrypt (N=2^15 r=8 p=3) | Fits; about 385 ms, **inside a mutation** (1 s limit), verified | Fits; about 385 ms in an HTTP action, verified |
-| Breached-password check | None; needs a project copy of the `Password` provider | `haveIBeenPwned` plugin (k-anonymity, no key) |
-| Per-account failure limit | 10 per hour, built in (verified) | None; project hook (verified) |
-| Unknown address vs wrong password | Distinguishable (14 ms vs 97 ms, different errors) | Identical (dummy hash, same 401) |
-| Sends its own email | No | No |
-| Angular client | Project writes it (about 150 to 200 lines) on undocumented action shapes; protocol verified without React | `better-auth/client`, documented; verified in an `ng new --ssr` app |
-| Stable user id in `sub` | No (`user\|session`); use `getAuthUserId` | Yes |
-| Google sign-in, same email as an unverified password account | Creates a duplicate user (source), unless the project adds `createOrUpdateUser` | Refused (`account not linked`) |
-| Account deletion API | None; the project deletes its auth tables | `deleteUser`, verified |
-| E2E with no secrets | **Run locally: seed, sign in, refresh, sign out** (protocol level, no browser) | **Run locally, passes** (Playwright, 3/3) |
-| npm `overrides` / extra packages | None / none | One `vitest` override / `react` 19 installed as a required peer |
-| Main risk | v1 to v2 migration; a hand-written client on a beta protocol | Component lag behind upstream; per-IP limiting needs a client IP |
+|                                                              | A: Convex Auth                                                                                            | B: Better Auth component                                                   |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Status                                                       | Beta; React and React Native only (Convex docs); v2 rewrite in alpha, actively developed                  | Component 0.12.x, pinned to `better-auth` 1.6; no release since 2026-06-27 |
+| Email + password and Google                                  | Yes                                                                                                       | Yes                                                                        |
+| Default password hash                                        | scrypt N=2^14 r=16 (deprecated `lucia`); replaceable                                                      | scrypt N=2^14 r=16; replaceable                                            |
+| OWASP 32 MiB scrypt (N=2^15 r=8 p=3)                         | Fits; about 385 ms, **inside a mutation** (1 s limit), verified                                           | Fits; about 385 ms in an HTTP action, verified                             |
+| Breached-password check                                      | None; needs a project copy of the `Password` provider                                                     | `haveIBeenPwned` plugin (k-anonymity, no key)                              |
+| Per-account failure limit                                    | 10 per hour, built in (verified)                                                                          | None; project hook (verified)                                              |
+| Unknown address vs wrong password                            | Distinguishable (14 ms vs 97 ms, different errors)                                                        | Identical (dummy hash, same 401)                                           |
+| Sends its own email                                          | No                                                                                                        | No                                                                         |
+| Angular client                                               | Project writes it (about 150 to 200 lines) on undocumented action shapes; protocol verified without React | `better-auth/client`, documented; verified in an `ng new --ssr` app        |
+| Stable user id in `sub`                                      | No (`user\|session`); use `getAuthUserId`                                                                 | Yes                                                                        |
+| Google sign-in, same email as an unverified password account | Creates a duplicate user (source), unless the project adds `createOrUpdateUser`                           | Refused (`account not linked`)                                             |
+| Account deletion API                                         | None; the project deletes its auth tables                                                                 | `deleteUser`, verified                                                     |
+| E2E with no secrets                                          | **Run locally: seed, sign in, refresh, sign out** (protocol level, no browser)                            | **Run locally, passes** (Playwright, 3/3)                                  |
+| npm `overrides` / extra packages                             | None / none                                                                                               | One `vitest` override / `react` 19 installed as a required peer            |
+| Main risk                                                    | v1 to v2 migration; a hand-written client on a beta protocol                                              | Component lag behind upstream; per-IP limiting needs a client IP           |
 
 ## Cost
 
@@ -180,13 +181,13 @@ Whether the Convex plan's terms allow commercial use is #9's check, because the 
 
 **Convex usage measured for Option B.** These are scratch-app counts on the local backend, logging nested `runQuery`/`runMutation` calls per HTTP request, with rate limiting on. Each count includes the HTTP action itself.
 
-| Request | Function calls |
-| --- | --- |
-| Sign up (email + password) | 8 |
-| Sign in (email + password), including the per-address throttle | 8 |
-| Get session | 5 |
-| Convex token | 5 to 6 |
-| Sign out | 4 |
+| Request                                                        | Function calls |
+| -------------------------------------------------------------- | -------------- |
+| Sign up (email + password)                                     | 8              |
+| Sign in (email + password), including the per-address throttle | 8              |
+| Get session                                                    | 5              |
+| Convex token                                                   | 5 to 6         |
+| Sign out                                                       | 4              |
 
 **Usage assumptions per MAU per month:**
 
@@ -208,15 +209,15 @@ Other usage:
 - **Reference price:** Resend ([resend.com/pricing](https://resend.com/pricing)). Free gives 3,000 emails/month **and at most 100/day**; Pro costs $20/month for 50,000.
 - #26 chooses the actual sender.
 
-| Monthly cost | 1,000 MAU | 10,000 MAU |
-| --- | --- | --- |
-| **B: Better Auth.** Convex usage | 0.25M calls and about 0.5 GB I/O, within the included amounts: **$0**. That is a quarter of the included calls and half the included I/O, which the app also uses. | 2.5M calls and about 5 GB I/O: **about $4.20** on Starter ($3.30 calls + $0.88 I/O), **up to $6.60** if the app alone already uses the included amounts |
-| **B.** Email, before the first production release | **$0** (none sent) | **$0** (none sent) |
-| **B.** Email, from the first production release (500 / 5,000 emails) | **$0** (Resend Free, within 3,000/month; the 100/day cap allows about 100 new password accounts a day) | **$20** (Resend Pro; 5,000/month exceeds the free tier) |
-| **B: total** | **$0** | **about $4 to $7** before release; **about $24 to $27** after |
-| **A: Convex Auth.** Convex usage | 0.15M calls: **$0** | 1.5M calls: **about $1.10 to $3.30**, plus I/O |
-| **A.** Email | Same as B | Same as B |
-| **A: total** | **$0** | **about $2 to $4** before release; **about $22 to $24** after |
+| Monthly cost                                                         | 1,000 MAU                                                                                                                                                          | 10,000 MAU                                                                                                                                              |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **B: Better Auth.** Convex usage                                     | 0.25M calls and about 0.5 GB I/O, within the included amounts: **$0**. That is a quarter of the included calls and half the included I/O, which the app also uses. | 2.5M calls and about 5 GB I/O: **about $4.20** on Starter ($3.30 calls + $0.88 I/O), **up to $6.60** if the app alone already uses the included amounts |
+| **B.** Email, before the first production release                    | **$0** (none sent)                                                                                                                                                 | **$0** (none sent)                                                                                                                                      |
+| **B.** Email, from the first production release (500 / 5,000 emails) | **$0** (Resend Free, within 3,000/month; the 100/day cap allows about 100 new password accounts a day)                                                             | **$20** (Resend Pro; 5,000/month exceeds the free tier)                                                                                                 |
+| **B: total**                                                         | **$0**                                                                                                                                                             | **about $4 to $7** before release; **about $24 to $27** after                                                                                           |
+| **A: Convex Auth.** Convex usage                                     | 0.15M calls: **$0**                                                                                                                                                | 1.5M calls: **about $1.10 to $3.30**, plus I/O                                                                                                          |
+| **A.** Email                                                         | Same as B                                                                                                                                                          | Same as B                                                                                                                                               |
+| **A: total**                                                         | **$0**                                                                                                                                                             | **about $2 to $4** before release; **about $22 to $24** after                                                                                           |
 
 **Against the shared hosting-plus-Convex cap (about $25/month, #9):**
 
@@ -246,11 +247,11 @@ Option B's project code is the hash function and the per-address throttle, both 
 
 ### Packages
 
-| Package | Version | Type | Licence |
-| --- | --- | --- | --- |
-| `@convex-dev/better-auth` | 0.12.x | dependency | Apache-2.0 |
-| `better-auth` | 1.6.x (pinned below 1.7 by the component's peer range) | dependency | MIT |
-| `@noble/hashes` | 2.x (2.4.0 in the scratch run; already in `better-auth`'s tree, now imported directly for the scrypt settings) | dependency | MIT |
+| Package                   | Version                                                                                                        | Type       | Licence    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| `@convex-dev/better-auth` | 0.12.x                                                                                                         | dependency | Apache-2.0 |
+| `better-auth`             | 1.6.x (pinned below 1.7 by the component's peer range)                                                         | dependency | MIT        |
+| `@noble/hashes`           | 2.x (2.4.0 in the scratch run; already in `better-auth`'s tree, now imported directly for the scrypt settings) | dependency | MIT        |
 
 - `convex` is already accepted (ADR 0001).
 - Transitive packages include `convex-helpers`, `jose`, `zod`, `kysely`, `nanostores`, `better-call`, `@noble/*`, and `@better-auth/*`. All have permissive licences and none has an install script, so ADR 0003's `allowScripts` map is unchanged.
@@ -310,13 +311,13 @@ Option B's project code is the hash function and the per-address throttle, both 
 - **Email verification state:** password users have `emailVerified: false` until verification email exists (#26). Google users get Google's `email_verified` (true for Google accounts).
 - **Exact behaviour when one address uses both methods:**
 
-| Case | What happens | What the user sees |
-| --- | --- | --- |
-| Google sign-in; a **verified** account with that email exists (created by Google, or a password account after verification) | Linked to that account | Signed in |
-| Google sign-in; an **unverified password account** with that email exists (**every password account before #26**) | **Refused** (`account not linked`). No link, no new account. Better Auth redirects to the error URL with `error=account_not_linked` | The sign-in page reads: "This email already has a password account. Sign in with your password." Google stays unusable for that address until the email is verified (after #26). |
-| Password sign-up; an account with that email exists (Google or password) | `422 USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL` | "An account with this email already exists. Sign in instead, or use Google if you signed up with Google." |
-| Password sign-in for a Google-only account | `401 INVALID_EMAIL_OR_PASSWORD` (dummy hash, same timing) | The generic "Email or password is incorrect" message, with a hint that the address may use Google |
-| Google sign-in for a new email | New account, email verified | Signed in |
+| Case                                                                                                                        | What happens                                                                                                                        | What the user sees                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Google sign-in; a **verified** account with that email exists (created by Google, or a password account after verification) | Linked to that account                                                                                                              | Signed in                                                                                                                                                                        |
+| Google sign-in; an **unverified password account** with that email exists (**every password account before #26**)           | **Refused** (`account not linked`). No link, no new account. Better Auth redirects to the error URL with `error=account_not_linked` | The sign-in page reads: "This email already has a password account. Sign in with your password." Google stays unusable for that address until the email is verified (after #26). |
+| Password sign-up; an account with that email exists (Google or password)                                                    | `422 USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`                                                                                         | "An account with this email already exists. Sign in instead, or use Google if you signed up with Google."                                                                        |
+| Password sign-in for a Google-only account                                                                                  | `401 INVALID_EMAIL_OR_PASSWORD` (dummy hash, same timing)                                                                           | The generic "Email or password is incorrect" message, with a hint that the address may use Google                                                                                |
+| Google sign-in for a new email                                                                                              | New account, email verified                                                                                                         | Signed in                                                                                                                                                                        |
 
 No account is ever linked on an unverified email, so no account takeover through linking is possible.
 
@@ -361,7 +362,8 @@ The `ConvexAuthSource` passed to `provideConvexAuth()` is a root service. This i
 export const AUTH_CLIENT = new InjectionToken<AuthClient | null>('AUTH_CLIENT', {
   providedIn: 'root',
   // Browser only: no Better Auth client exists during a server render.
-  factory: () => (isPlatformBrowser(inject(PLATFORM_ID)) && __CONVEX_SITE_URL__ ? makeClient() : null),
+  factory: () =>
+    isPlatformBrowser(inject(PLATFORM_ID)) && __CONVEX_SITE_URL__ ? makeClient() : null,
 });
 
 @Injectable({ providedIn: 'root' })
@@ -371,7 +373,8 @@ export class AuthService implements ConvexAuthSource {
   readonly signedIn = this._signedIn.asReadonly();
   private cached: string | null = null;
   constructor() {
-    this.client?.useSession.subscribe((s) => {          // Better Auth session store
+    this.client?.useSession.subscribe((s) => {
+      // Better Auth session store
       if (!s.data?.session) this.cached = null;
       this._signedIn.set(!!s.data?.session);
     });
@@ -383,7 +386,8 @@ export class AuthService implements ConvexAuthSource {
     const { data } = await this.client.convex.token({ fetchOptions: { throw: false } });
     return (this.cached = data?.token ?? null);
   };
-  signInWithPassword = (email: string, password: string) => this.client!.signIn.email({ email, password });
+  signInWithPassword = (email: string, password: string) =>
+    this.client!.signIn.email({ email, password });
 }
 // app.config.ts: provideConvexAuth(...) with the AuthService instance
 ```
@@ -411,12 +415,12 @@ The Google redirect URI for every deployment is `<CONVEX_SITE_URL>/api/auth/call
 
 Email + password needs **no email sender on any deployment** until #26.
 
-| Deployment | Email + password | Verification and reset email | Google | Callback / allowed origins | Environment and secrets (where) |
-| --- | --- | --- | --- | --- | --- |
-| **Local e2e** (anonymous local backend, ADR 0005) | Yes | None | **No** (no Google variables set, button hidden) | `SITE_URL=http://localhost:4000`. No callback | Set by Playwright `globalSetup` with `npx convex env set`: `BETTER_AUTH_SECRET` (random, generated per run, never stored), `SITE_URL`, `IS_TEST=true`. **No stored secret**, so fork PRs work. |
-| **Developer dev deployment** (`npx convex dev`, cloud, one per developer) | Yes | None until #26. After #26, as #26 decides (owner-only sandbox or none) | Optional: the owner adds `https://<dev-name>.convex.site/api/auth/callback/google` to a **non-production** Google OAuth client (consent screen in Testing mode, listed test users only) | `SITE_URL=http://localhost:4200` (or the local SSR port) | Set by the developer on their own dev deployment with `npx convex env set`: `BETTER_AUTH_SECRET`, `SITE_URL`, and optionally `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (dev client). No email key before #26. |
-| **Per-PR preview** (#9, #15) | Yes | None until #26. After #26, as #26 decides | **No.** Every preview gets a new random `*.convex.site` callback that cannot be registered in advance, and wildcards are refused. A proxy through a fixed deployment (Better Auth's `oAuthProxy`) is rejected for launch: it is not on the component's supported list, and it shares an identity-asserting secret with previews. | `SITE_URL` cannot be set per preview through default env vars. `trustedOrigins` therefore also accepts a request `Origin` that matches `PREVIEW_ORIGIN_PATTERN`. That is the host's **project-specific** preview hostname pattern, fixed by #15 once #9 names the host (never a bare `*.<host-domain>`). | **Convex default preview environment variables** (dashboard, set once): `BETTER_AUTH_SECRET` (a preview-only value, never the production one), `SITE_URL`, `PREVIEW_ORIGIN_PATTERN`. **Not** `IS_TEST`, **not** Google, no email key before #26. |
-| **Production** | Yes | **Required before the first production release**, through #26's sender on the project's verified sending domain | Yes. The owner registers `https://<prod-name>.convex.site/api/auth/callback/google` on the **production** Google OAuth client | `SITE_URL` is the production app URL: the host's default domain until the first release, then the custom domain | **Owner-held**, set by the owner in the production deployment's environment: `BETTER_AUTH_SECRET`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and #26's email API key. The Angular host needs **no** auth secret, only the public `CONVEX_URL` and `CONVEX_SITE_URL` at build time. |
+| Deployment                                                                | Email + password | Verification and reset email                                                                                    | Google                                                                                                                                                                                                                                                                                                                           | Callback / allowed origins                                                                                                                                                                                                                                                                               | Environment and secrets (where)                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Local e2e** (anonymous local backend, ADR 0005)                         | Yes              | None                                                                                                            | **No** (no Google variables set, button hidden)                                                                                                                                                                                                                                                                                  | `SITE_URL=http://localhost:4000`. No callback                                                                                                                                                                                                                                                            | Set by Playwright `globalSetup` with `npx convex env set`: `BETTER_AUTH_SECRET` (random, generated per run, never stored), `SITE_URL`, `IS_TEST=true`. **No stored secret**, so fork PRs work.                                                                                                   |
+| **Developer dev deployment** (`npx convex dev`, cloud, one per developer) | Yes              | None until #26. After #26, as #26 decides (owner-only sandbox or none)                                          | Optional: the owner adds `https://<dev-name>.convex.site/api/auth/callback/google` to a **non-production** Google OAuth client (consent screen in Testing mode, listed test users only)                                                                                                                                          | `SITE_URL=http://localhost:4200` (or the local SSR port)                                                                                                                                                                                                                                                 | Set by the developer on their own dev deployment with `npx convex env set`: `BETTER_AUTH_SECRET`, `SITE_URL`, and optionally `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (dev client). No email key before #26.                                                                                    |
+| **Per-PR preview** (#9, #15)                                              | Yes              | None until #26. After #26, as #26 decides                                                                       | **No.** Every preview gets a new random `*.convex.site` callback that cannot be registered in advance, and wildcards are refused. A proxy through a fixed deployment (Better Auth's `oAuthProxy`) is rejected for launch: it is not on the component's supported list, and it shares an identity-asserting secret with previews. | `SITE_URL` cannot be set per preview through default env vars. `trustedOrigins` therefore also accepts a request `Origin` that matches `PREVIEW_ORIGIN_PATTERN`. That is the host's **project-specific** preview hostname pattern, fixed by #15 once #9 names the host (never a bare `*.<host-domain>`). | **Convex default preview environment variables** (dashboard, set once): `BETTER_AUTH_SECRET` (a preview-only value, never the production one), `SITE_URL`, `PREVIEW_ORIGIN_PATTERN`. **Not** `IS_TEST`, **not** Google, no email key before #26.                                                 |
+| **Production**                                                            | Yes              | **Required before the first production release**, through #26's sender on the project's verified sending domain | Yes. The owner registers `https://<prod-name>.convex.site/api/auth/callback/google` on the **production** Google OAuth client                                                                                                                                                                                                    | `SITE_URL` is the production app URL: the host's default domain until the first release, then the custom domain                                                                                                                                                                                          | **Owner-held**, set by the owner in the production deployment's environment: `BETTER_AUTH_SECRET`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and #26's email API key. The Angular host needs **no** auth secret, only the public `CONVEX_URL` and `CONVEX_SITE_URL` at build time. |
 
 ## Deferred until #26 (verification and password reset)
 
@@ -464,12 +468,24 @@ Email + password needs **no email sender on any deployment** until #26.
 
 ```ts
 const asUser = (authUserId: string, email: string, emailVerified = false) => ({
-  subject: authUserId, issuer: "http://127.0.0.1:3211", email, emailVerified, name: email, sessionId: "s1",
+  subject: authUserId,
+  issuer: 'http://127.0.0.1:3211',
+  email,
+  emailVerified,
+  name: email,
+  sessionId: 's1',
 });
-await t.withIdentity(asUser("auth-alice", "alice@example.test")).query(api.leagues.getForMember, { leagueId: leagueA }); // seeded member: ok
-await expect(t.query(api.leagues.getForMember, { leagueId: leagueA })).rejects.toThrow(/UNAUTHENTICATED/);           // unauthenticated
-await expect(t.withIdentity(asUser("auth-bob", "bob@example.test"))                                                  // other league
-  .query(api.leagues.getForMember, { leagueId: leagueA })).rejects.toThrow(/FORBIDDEN/);
+await t
+  .withIdentity(asUser('auth-alice', 'alice@example.test'))
+  .query(api.leagues.getForMember, { leagueId: leagueA }); // seeded member: ok
+await expect(t.query(api.leagues.getForMember, { leagueId: leagueA })).rejects.toThrow(
+  /UNAUTHENTICATED/,
+); // unauthenticated
+await expect(
+  t
+    .withIdentity(asUser('auth-bob', 'bob@example.test')) // other league
+    .query(api.leagues.getForMember, { leagueId: leagueA }),
+).rejects.toThrow(/FORBIDDEN/);
 ```
 
 - Seeding inserts `users` rows with `authUserId` equal to the faked `subject`.
@@ -480,12 +496,12 @@ await expect(t.withIdentity(asUser("auth-bob", "bob@example.test"))             
 
 ## Data, ages, and deletion
 
-| | A: Convex Auth | B: Better Auth component |
-| --- | --- | --- |
-| Where identity data is stored | The project's Convex deployment (app-schema tables), including password hashes | The project's Convex deployment (component tables), including password hashes on the `account` row |
-| Region | The deployment's region: US East (N. Virginia) or EU West (Ireland), chosen when the deployment is created and not changeable afterwards ([Convex regions](https://docs.convex.dev/production/regions)). #9 picks it. #26 covers the email sender's region. Google holds the Google account. | Same |
-| Deleting an account at the provider | No API. A project mutation deletes the user's `authAccounts`, `authSessions`, `authRefreshTokens`, and `authVerificationCodes` rows and the user. | `deleteUser`: from the client it needs a session younger than `freshAge` (or the current password); on the server it is `auth.api.deleteUser`. Verified: afterwards the user row and its sessions were gone. |
-| Deleting in Convex app data | Same mutation | The component's `onDelete` user trigger deletes or anonymises the app's `users` row and dependent records (feature work). Convex backups keep data until they rotate out. The user revokes Google access in their Google account. The app stores no Google refresh token beyond the deleted account row. |
+|                                     | A: Convex Auth                                                                                                                                                                                                                                                                               | B: Better Auth component                                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where identity data is stored       | The project's Convex deployment (app-schema tables), including password hashes                                                                                                                                                                                                               | The project's Convex deployment (component tables), including password hashes on the `account` row                                                                                                                                                                                                       |
+| Region                              | The deployment's region: US East (N. Virginia) or EU West (Ireland), chosen when the deployment is created and not changeable afterwards ([Convex regions](https://docs.convex.dev/production/regions)). #9 picks it. #26 covers the email sender's region. Google holds the Google account. | Same                                                                                                                                                                                                                                                                                                     |
+| Deleting an account at the provider | No API. A project mutation deletes the user's `authAccounts`, `authSessions`, `authRefreshTokens`, and `authVerificationCodes` rows and the user.                                                                                                                                            | `deleteUser`: from the client it needs a session younger than `freshAge` (or the current password); on the server it is `auth.api.deleteUser`. Verified: afterwards the user row and its sessions were gone.                                                                                             |
+| Deleting in Convex app data         | Same mutation                                                                                                                                                                                                                                                                                | The component's `onDelete` user trigger deletes or anonymises the app's `users` row and dependent records (feature work). Convex backups keep data until they rotate out. The user revokes Google access in their Google account. The app stores no Google refresh token beyond the deleted account row. |
 
 **Ages:** accounts are **adults only** at launch.
 
@@ -538,6 +554,7 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
   - The component stays pinned to an unpatched `better-auth` line.
 
   If any of these happens, revisit Convex Auth v2 once it leaves alpha (it then offers a framework-agnostic client), or a hosted provider if the owner relaxes answer 4.
+
 - **Acceptance:** accepted by the owner on 2026-10-08, after the re-analysis of Convex Auth, choosing Better Auth.
 
 ## Test evidence

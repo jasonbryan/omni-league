@@ -1,6 +1,6 @@
 name: Bug
 description: Something behaves differently from what was specified.
-labels: ["type:bug", "status:planning"]
+labels: ['type:bug', 'status:planning']
 body:
   - type: textarea
     id: steps
