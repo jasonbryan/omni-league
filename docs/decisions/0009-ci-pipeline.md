@@ -5,6 +5,7 @@
 - **Issue:** #8
 - **Date:** 2026-10-07 (revised 2026-10-07 for the owner's "minimize CI usage" direction)
 - **Amends:** ADR 0005 (WebKit trigger and the Convex backend cache; see "Amendment" at the end of ADR 0005)
+- **Amended:** 2026-10-08, wording only: the `scope` step's rename handling and code-extension rule, as shipped in #12 (PR #39). See "Amendment: scope step (2026-10-08)" at the end.
 
 ## Context
 
@@ -264,7 +265,7 @@ One file, `.github/workflows/ci.yml`, named `CI`:
 | `ci`             | PR is not a draft (opened ready, marked ready, or a push to a ready PR), and `workflow_dispatch`. Skipped (0 minutes) for drafts and for the `main` push. | checkout (depth 2, `persist-credentials: false`); **scope**; setup-node (npm cache automatic); `npm ci`; `format:check`; then, on app changes only: `npm audit signatures`, `lint`, `typecheck`, `test`, `test:convex`, `build`, actionlint (each runs even if an earlier one failed); then, only if all of those passed: Playwright browser install (`chromium`, plus `webkit` when `E2E_WEBKIT=1`), `npm run e2e`, artifact upload (`retention-days: 7`) | docs-only 1 to 2; app ~5 (harness), ~8 to 10 (feature e2e); +1.5 to 2.5 with WebKit |
 | `warm-cache`     | push to `main` that changes `package-lock.json` or `ci.yml` (about 6 a month)                                                                             | checkout; setup-node; `npm ci --ignore-scripts` (fills `~/.npm`, which setup-node saves under `main`)                                                                                                                                                                                                                                                                                                                                                      | 1 to 2                                                                              |
 
-- **Scope step:** on `pull_request`, if every changed file is under `docs/`, `design/`, `.claude/`, or is a root `*.md`, the output is `app=false`. An empty diff, `workflow_dispatch`, and anything else (including `.github/` and `package-lock.json`) give `app=true`. It reads `git diff --name-only HEAD^1 HEAD` on the `refs/pull/<n>/merge` commit, whose first parent is the base branch. It avoids `grep -q` in a pipe (SIGPIPE under `pipefail`).
+- **Scope step:** on `pull_request`, if every changed file is under `docs/`, `design/`, `.claude/`, or is a root `*.md`, and none is a `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, or `.cts` file, the output is `app=false`. A file with one of those extensions (the ones ESLint lints) is app code wherever it lives. An empty diff, `workflow_dispatch`, and anything else (including `.github/` and `package-lock.json`) give `app=true`. It reads `git diff --no-renames --name-only HEAD^1 HEAD` on the `refs/pull/<n>/merge` commit, whose first parent is the base branch; `--no-renames` lists both paths of a rename, so moving an app file into `docs/` is an app change. It avoids `grep -q` in a pipe (SIGPIPE under `pipefail`). See "Amendment: scope step (2026-10-08)" at the end.
 - **`E2E_WEBKIT`** is `1` when `github.base_ref == 'production'` (a release PR) or the dispatch input `webkit` is true, else `0`. The Playwright config (#13) includes the `webkit-mobile` project only when it is `1`.
 - **Convex `_generated/` drift check (ADR 0004):** added by the first feature that wires the local backend into e2e. Right after `npx convex dev --once`, a step runs `git diff --exit-code convex/_generated`. It costs no extra job.
 - **No production `build` duplication is removed yet.** Netlify's deploy-preview build also builds production, but only after #15, and making a third-party status a required check couples merges to Netlify's availability. The `build` step costs about 0.5 to 1 minute; revisit once #15 has run for a month.
@@ -464,9 +465,10 @@ jobs:
       - name: scope
         id: scope
         run: |
-          changed="$(git diff --name-only HEAD^1 HEAD)"
+          changed="$(git diff --no-renames --name-only HEAD^1 HEAD)"
           app_files="$(printf '%s\n' "$changed" | grep -vE '^(docs/|design/|\.claude/|[^/]+\.md$)' || true)"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$changed" ] && [ -z "$app_files" ]; then
+          code_files="$(printf '%s\n' "$changed" | grep -E '\.[cm]?[jt]s$' || true)"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$changed" ] && [ -z "$app_files" ] && [ -z "$code_files" ]; then
             echo "app=false" >> "$GITHUB_OUTPUT"
           else
             echo "app=true" >> "$GITHUB_OUTPUT"
@@ -691,3 +693,16 @@ Not testable before #12 exists, and therefore #12's criteria: a draft push bills
 - Workflow linting: [actionlint v1.7.12 release](https://github.com/rhysd/actionlint/releases/tag/v1.7.12), [zizmor](https://github.com/zizmorcore/zizmor)
 - Node.js: [dist index](https://nodejs.org/dist/index.json)
 - GitHub CLI: `gh pr checks --help`, `gh pr ready --help`, `gh pr update-branch --help`, `gh pr merge --help`
+
+## Amendment: scope step (2026-10-08)
+
+A wording clarification that matches the shipped workflow (#12, PR #39) and `docs/process/ci.md` ("What counts as docs-only"). The decision is unchanged: the scope step lives inside `ci`, a docs-only PR runs only install and `format:check`, and the job always reports a real result. Both changes only turn some `app=false` results into `app=true`, so more checks run, never fewer.
+
+| Rule in this ADR        | Was                                                              | Now                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| How files are listed    | `git diff --name-only HEAD^1 HEAD`                               | `git diff --no-renames --name-only HEAD^1 HEAD`, so a rename lists both its old and its new path                                     |
+| What counts as app code | Any file outside `docs/`, `design/`, `.claude/`, and root `*.md` | The same, plus any `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, or `.cts` file wherever it lives (the extensions `eslint.config.mjs` lints) |
+
+**Why.** With rename detection on (git's default), moving an app file into `docs/` listed only the new path, so the PR was classified docs-only and lint, typecheck, test, and build were skipped while the app lost a file. The ADR's rule is "every changed file is under `docs/` ...", and a rename's old path is a changed file, so the literal command did not implement the rule. Separately, ESLint lints `.js`/`.ts`-family files everywhere, so a docs-only PR adding, for example, `.claude/skills/<x>/helper.mjs` with a lint error would pass `ci` and then fail `lint` on every later app PR.
+
+**Sources.** [PR #39, Review](https://github.com/jasonbryan/omni-league/pull/39#issuecomment-6061926396) (findings 1 and 2), [PR #39, Test](https://github.com/jasonbryan/omni-league/pull/39#issuecomment-6061978925) (rename reproduction), [PR #39, Review (round 2)](https://github.com/jasonbryan/omni-league/pull/39#issuecomment-6062066945) ("ADR 0009 deviation: no amendment required", optional wording note for the owner).
