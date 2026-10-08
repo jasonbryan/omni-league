@@ -34,13 +34,26 @@ ADR 0001 leaves hosting for the Angular app and the deployment pipeline (CD) und
 
 ### Facts that shaped the decision (checked 2026-10-07)
 
-- **GitHub plan.** This repository is private on a GitHub Free account.
-  - `gh api repos/jasonbryan/omni-league/rulesets` answers 403, "Upgrade to GitHub Pro or make this repository public".
-  - GitHub documents that on Free, environment secrets are only available in public repositories. Required reviewers and wait timers need a public repository on Free, Pro, and Team.
-  - So a **GitHub Actions-built pipeline could keep deploy keys only in repository secrets.** Any workflow on any branch can read those, including workflows that agents write.
+- **GitHub plan: Pro.** The repository is private on a personal account. The owner chose to upgrade to GitHub Pro (owner answer on #8, recorded in ADR 0009). `gh api repos/jasonbryan/omni-league/rulesets` now answers 200 (it answered 403 "Upgrade to GitHub Pro or make this repository public" on Free). For a private personal repository on Pro, GitHub documents ([deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans)):
+
+  | Feature | Private repo on Pro |
+  | --- | --- |
+  | Environments, **environment secrets**, environment variables | **Yes** ("you must use GitHub Pro, GitHub Team, or GitHub Enterprise") |
+  | **Deployment branches and tags** (limit an environment to e.g. the `production` branch) | **Yes** ("For users on GitHub Pro or GitHub Team plans ... also available for private repositories") |
+  | **Required reviewers** on an environment | **No.** "On GitHub Free, Pro, or Team, required reviewers are only available for public repositories." |
+  | Wait timers, custom deployment protection rules, the admin-bypass setting | **No** (public repositories only on Free, Pro, and Team) |
+  | Protected branches and branch/tag rulesets | **Yes** (plans page; the rulesets API now answers 200 on this repository) |
+  | Actions minutes | 3,000 per month |
+
+  - **What this changes:** a GitHub Actions-built pipeline can now keep a **production** deploy credential in a `production` environment limited to the `production` branch. A workflow run from a PR branch or `main` cannot read it.
+  - **What it does not change:**
+    - A **preview** deploy credential must be readable by workflows that run PR code, and agents write those workflows.
+    - No environment can require an approval, because required reviewers are not available on Pro for private repositories.
+    - Agents act through the owner's account, which is the repository admin. Neither rulesets nor environment branch policies can tell an agent from the owner. A ruleset requiring an approving review would block the owner's own merges as well, because GitHub does not let a PR author approve their own PR.
 - **Build image Node versions.**
   - Netlify installs "any version that `nvm` can install", in order of precedence from `.nvmrc`.
-  - Vercel builds and runs functions on Node 24.x, 22.x, or 20.x only. A Vercel-hosted build therefore fails `devEngines` (`^26.11.0`), and on Vercel the build would have to run in GitHub Actions.
+  - Vercel builds and runs functions on **Node 24.x (default), 22.x, or 20.x only** ([Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), rechecked 2026-10-07). The only Node 26 entry in Vercel's changelog is for Vercel Sandbox, not Builds or Functions. A Vercel-hosted build therefore fails `devEngines` (`^26.11.0`), and on Vercel the build would have to run in GitHub Actions.
+- **Vercel token scope.** Since 2026-07-30 a Vercel access token can be **project-scoped**. It "can only read and write resources belonging to that one project" ([access tokens](https://vercel.com/docs/accounts/access-tokens), [changelog](https://vercel.com/changelog/project-scoped-tokens)). No narrower scope is documented: a project token can still create production deployments, promote deployments, and read and change the project's environment variables for every environment.
 - **Convex plans** ([pricing](https://www.convex.dev/pricing), [limits](https://docs.convex.dev/production/state/limits)):
   - **Free & Starter** cost $0 per month. Starter is pay-as-you-go above the included amounts, and Free has hard caps. Both include 1M function calls, 1 GB database I/O, 0.5 GB storage, and 20 GB-hours of action compute. Overage on Starter is $2.20 per 1M calls and $0.22 per GB of I/O.
   - Free & Starter have a 40-deployment team limit, **include preview deployments**, and **do not include custom domains**.
@@ -78,11 +91,12 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
     - Netlify Edge Functions run "in a secure runtime based on Deno" and support Node built-ins through `node:` imports.
     - `src/server.ts` changes to the `AngularAppEngine` entry. Express and `NG_ALLOWED_HOSTS` go away.
     - `node dist/<app>/server/server.mjs` no longer starts a server, so a small local runner replaces it for e2e (Decision, item 2).
-  - **50 ms CPU limit per request** ([edge function limits](https://docs.netlify.com/build/edge-functions/limits/)).
+  - **50 ms CPU limit per request** ([edge function limits](https://docs.netlify.com/build/edge-functions/limits/)). The limit "tracks all time spent running your scripts. Execution time does not include time spent waiting for resources or responses."
     - The spike measured 2.8 ms (median) and 10 ms (p95) of CPU for a warm render of a 60-row page.
     - The first render in a fresh process took 78 ms on Node 26.11 and 86 ms on Node 24.16, because it lazily loads and compiles `main.server.mjs`.
-    - Netlify does not document whether isolate start-up counts toward the 50 ms. If it does, the first request on a cold edge isolate could fail.
-    - This is the main risk of this option. #15 checks it on a real deploy (Consequences), and a fallback is named.
+    - "All time spent running your scripts" reads as including that first-render work. Netlify does not say whether a single over-limit request on a cold isolate is terminated or tolerated. If it is terminated, the first request on each cold edge isolate fails, and at low traffic a large share of requests reach a cold isolate.
+    - This is the main risk of this option. Waiting on Convex does not count, but render CPU does.
+    - **Mitigation:** #15 checks it on a real deploy before any production traffic exists (Consequences). If the check fails, the fallback stays on Netlify and moves SSR to Netlify Functions on Node (Decision, item 1). That keeps the secrets model, the builds, and the cost, and needs no move to Option B.
   - **Environment-variable scopes are Pro-only.** On Free and Personal, a variable has every scope, including Functions, so the production deploy key is also readable through `Netlify.env` inside the production edge function. Server code never reads it (rule in Consequences). The Pro plan ($20) can limit it to Builds.
   - **The Free plan pauses all sites at 300 credits.** Production traffic needs Personal or higher.
 
@@ -96,16 +110,21 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
   - **Pro:** $20 per month per developer seat, with $20 of included usage. Beyond that: function invocations $0.60 per 1M, active CPU $0.128 per hour, 10M CDN requests and 1 TB of transfer included.
   - **Hobby is excluded:** "Our Hobby plan is for personal, non-commercial use" ([pricing](https://vercel.com/pricing), [Hobby plan](https://vercel.com/docs/plans/hobby)).
 - **Pros.**
-  - **Node runtime:** the CLI's Express `src/server.ts`, `NG_ALLOWED_HOSTS`, and the local `serve:ssr` stay unchanged. Functions have no 50 ms CPU cap.
+  - **Node runtime:** the CLI's Express `src/server.ts` (including PR #30's error handler), `NG_ALLOWED_HOSTS`, and the local `serve:ssr` stay unchanged. Functions have no 50 ms CPU cap, so the edge cold-start risk of Option A does not exist here.
   - **The CDN honours `s-maxage` and `stale-while-revalidate`** ([CDN cache](https://vercel.com/docs/caching/cdn-cache)).
-- **Cons and risks.**
-  - **Secrets.** On this GitHub Free private repository, `VERCEL_TOKEN`, the preview Convex key, and the production Convex key could only be repository secrets.
-    - Any workflow on any branch, including agent-written ones, could read them.
-    - A Vercel token cannot be limited to previews: it can read production environment variables and promote deployments.
-    - This conflicts with AGENTS.md "Secrets", and a GitHub Pro upgrade would not fix the token scope.
+  - **GitHub Pro now fixes the production half of the secrets problem.** The production Convex key and a production Vercel token can be environment secrets in a `production` environment limited to the `production` branch, so PR and `main` workflows cannot read them.
+- **Cons and risks, re-checked under GitHub Pro.**
+  - **The preview half of the secrets problem remains.**
+    - Previews must be built in GitHub Actions from PR code, because Vercel cannot build on Node 26. The preview job therefore needs a Vercel token in an environment open to PR branches, and agents write those workflows.
+    - Even the new project-scoped token "can only read and write resources belonging to that one project". In that project it can create a production deployment, promote any deployment, and read or change production environment variables. Vercel documents no token limited to previews.
+    - An agent-written workflow could therefore act on production with that token. This still conflicts with AGENTS.md "Secrets".
+    - The usual workaround builds the PR without secrets and deploys from a trusted `workflow_run` job. ADR 0009 forbids `workflow_run` on PR code.
+  - **No Node 26 build on Vercel.** The Git integration builds on Node 24 at most, so `npm ci` fails `devEngines`. Downloading a Node 26 toolchain inside Vercel's install command would work around it, but Vercel does not support that, and it would add an unverified binary download to every build. It is not adopted.
+  - **GitHub Actions minutes (ADR 0009).** About 128 builds a month (90 previews, about 30 staging, 8 production), at about 3 to 4 minutes each with no package cache (ADR 0009 requires `package-manager-cache: false` in a job that holds deploy secrets), add about **400 to 500 minutes**. ADR 0009 estimates 1,820 minutes now and 2,210 to 2,810 once feature e2e grows, against Pro's 3,000. The total would be about 2,300 to 3,300, which goes over 3,000 at the upper end. Netlify builds on its own image, which costs no Actions minutes.
   - **Previews are protected by default.** Vercel Authentication is on for previews, so #15's smoke test would need a "Protection Bypass for Automation" secret in GitHub.
-  - **Custom code:** the repository would own a Build Output API script, with no Vercel framework support for Angular SSR.
+  - **Custom code:** Vercel's Angular preset is still static-only (`defaultRoutes` fall back to `/index.html`, rechecked 2026-10-07), so the repository would own a Build Output API script. No first-party adapter exists.
   - **Cost:** $20 of the $25 budget, which leaves $5 for Convex.
+- **Verdict under GitHub Pro.** Pro removes one of this option's three blockers: the production key can now be kept from PR workflows. The preview token scope, the Node 26 build, and the minutes remain. Option B's real advantage, a Node runtime with no CPU cap, is also available on Netlify itself (Netlify Functions, Decision item 1). It does not need a move to Vercel.
 
 ### Option C: Cloudflare Workers (Workers Paid, with Workers Builds)
 
@@ -117,6 +136,7 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
   - **Build secrets.** Workers Builds has one set of "Build variables and secrets", and the documentation shows no per-branch values ([builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)). Preview builds, which run PR code, would therefore see the production Convex deploy key. Preview-specific settings exist only for runtime variables.
   - **No first-party Angular SSR adapter.** Cloudflare's Angular guide covers static assets only.
   - **Not Node.** The runtime is workerd.
+  - **GitHub Pro does not rescue it.** Building in GitHub Actions instead of Workers Builds would put a Cloudflare API token in an environment that PR workflows can read. A token with Workers edit permission can also deploy the production Worker, which is the same preview-token problem as Option B. It would also spend Actions minutes.
 
 ### Option D (baseline): a plain Node service, Google Cloud Run
 
@@ -125,7 +145,8 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
   - Previews are revision tags deployed with `--no-traffic`, at `https://<tag>---<service>-<hash>.a.run.app` ([rollouts](https://docs.cloud.google.com/run/docs/rollouts-rollbacks-traffic-migration)).
 - **Rejected.**
   - **No CDN on `run.app`.** Cloud CDN needs a global external Application Load Balancer ([Cloud CDN overview](https://docs.cloud.google.com/cdn/docs/overview)). Its forwarding rule is billed hourly (about $18 per month at list price), which takes most of the budget, so requirement 4 is not met.
-  - **Keys in GitHub.** Previews would deploy from GitHub Actions, which needs Google credentials in GitHub, with the same repository-secret problem as Option B.
+  - **Keys in GitHub.** Previews would deploy from GitHub Actions. Under GitHub Pro, Workload Identity Federation can bind a production deployer to the `production` environment's OIDC claim, so no long-lived key is stored. The preview deployer is still usable by PR workflows, though, and Cloud Run IAM has no permission that allows only `--no-traffic` revisions. Previews would also need their own service or project, and every build would spend Actions minutes.
+  - The CDN cost alone still rules this option out.
 
 ### Also considered
 
@@ -156,9 +177,14 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
   - `devEngines` fails the install if Node is older than that.
 - **`@types/node` stays at 26** (ADR 0003's default). The rule "follow the runtime major if below 26" has no Node major to follow.
   - `src/server.ts` is Web-API-only code with no `node:` imports. The runtime helper's own `node:process` import is the one exception, because it lives inside the package.
-- **Fallback if the 50 ms CPU limit bites.** #15 checks the first request after a fresh deploy (Consequences). If edge cold starts fail it, a superseding ADR moves SSR to one of these:
-  - Netlify Functions on Node, with the same handler and the same secrets model;
-  - Option B, together with a GitHub plan or secret-storage change.
+- **Fallback if the 50 ms CPU limit bites: Netlify Functions on Node.** #15 checks the first request after a fresh deploy, before any production traffic (Consequences). If edge cold starts fail it, a superseding ADR moves SSR to a Netlify Function (AWS Lambda), and everything else stays the same:
+  - **Handler:** the same `netlifyAppEngineHandler`. Netlify Functions take a Web `Request` and return a `Response`, so `src/server.ts` does not change. A function file (`netlify/functions/ssr.mts`) wraps the handler, and the plugin's edge function is turned off. `@netlify/angular-runtime` generates only an edge function, so this wiring is repository-owned.
+  - **Runtime:** Node, with no per-request CPU cap. The synchronous limit is 60 s. The functions runtime follows the build's Node version only if that version is a valid AWS Lambda runtime. Otherwise it falls back to Node 24 ([functions configuration](https://docs.netlify.com/build/functions/optional-configuration/)), which is within Angular's range. In that case `@types/node` follows 24, as ADR 0003 requires.
+  - **Region:** `cmh` (US East, Ohio) by default for new sites. Changing it needs Netlify Pro.
+  - **Cost:** "Functions compute" is 10 credits per GB-hour. At the stated traffic, 80,000 uncached invocations at 1 GB and about 0.1 s each come to about 2.2 GB-hours, or about 22 credits. The plan stays Personal.
+  - **Unchanged:** secrets, builds, previews, and Actions minutes.
+  - **To verify in that ADR:** CDN caching of function responses by `Cache-Control`, and the static, prerendered, and 404 routing.
+  - Option B is no longer the fallback. Under GitHub Pro it still loses on the preview token scope, the Node 26 build, and the minutes (Options).
 
 ### 2. Server entry and added packages
 
@@ -377,6 +403,7 @@ This is above Free's 300, so production needs **Personal ($9, 1,000 credits)**.
 | Item | Cost |
 | --- | --- |
 | Host build minutes | $0: deploy previews are non-metered, and builds are not credit-metered |
+| GitHub Actions minutes for builds | 0: Netlify builds on its own image. Only #15's no-secret smoke run uses Actions minutes, and it would on any host. A host built in Actions (Options B to D) would add about 400 to 500 minutes a month against ADR 0009's Pro budget of 3,000. |
 | Preview invocations and requests | about 8 credits, about $0.05 |
 | Convex preview usage | 27,000 calls, within the included amount: $0 |
 
@@ -421,9 +448,12 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 - **A PR cannot read the production key.**
   - Netlify supplies variable values per context, so a PR that edits `netlify.toml` still gets the preview value.
   - A changed production command takes effect only after the owner merges a release PR into `production`.
-- **Residual risk: agents act through the owner's GitHub account**, and GitHub Free gives no branch protection on this private repository. A push to `production` by anyone with write access therefore builds production.
+- **No GitHub environment is used.** GitHub Pro's environment secrets and deployment branch policies are not needed, because no deploy credential lives in GitHub.
+- **Residual risk: agents act through the owner's GitHub account.** A push or merge to `production` by that account builds production.
+  - **GitHub Pro narrows this.** The owner adds a `production` ruleset that blocks deletion and force-push, requires a pull request, and requires ADR 0009's `checks` and `e2e`. A stray direct push then fails.
+  - **It does not close it.** The ruleset cannot tell an agent from the owner, and required approvals would block the owner too (Context, GitHub plan).
   - **Process rule:** only the owner merges into `production` (AGENTS.md gates).
-  - **Optional hardening:** set `[context.production] ignore = "exit 0"` and deploy through an owner-held Netlify build hook. "The `ignore` command won't cancel a build triggered by a build hook." The cost is a second owner step per release.
+  - **Optional hardening:** set `[context.production] ignore = "exit 0"` and deploy through an owner-held Netlify build hook. "The `ignore` command won't cancel a build triggered by a build hook." This makes a production deploy need a credential that is not in GitHub, at the cost of a second owner step per release.
 - **Preview access.**
   - On credit-based plans, new projects and their previews can start private, depending on the team's default visibility setting. Private projects are enforced by Netlify login, and on Free and Personal only the Team Owner can see them ([project visibility](https://docs.netlify.com/manage/security/secure-access-to-sites/project-visibility/)).
   - Password protection is a Pro feature.
@@ -486,9 +516,13 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 
 ## Recommendation
 
-Netlify is the only qualifying host where the production Convex key never enters GitHub or a PR build. That matters on this private GitHub Free repository, where agents push through the owner's account. It builds on Node 26 as ADR 0003 requires, and Netlify maintains its Angular 22 SSR adapter. Its CDN honours ADR 0006's `Cache-Control`, and it costs $0 until the first production release and about $9 after.
+**Netlify still wins after the move to GitHub Pro; the recommendation is unchanged.**
 
-The trade-off is a Deno edge runtime with a 50 ms CPU limit per request instead of Node. That replaces Express with the App Engine entry and a small local runner. #15 checks the edge cold-start risk on its first real deploy, and the fallback is named in Decision, item 1.
+Pro lets a GitHub Actions pipeline keep the production key in a branch-limited environment. That removes Option B's production-key objection. It does not help with previews: Vercel cannot build on Node 26, so previews would be built in Actions from PR code with a Vercel token that can also deploy and configure production. Previews are where agents' code runs.
+
+Netlify keeps every deploy credential out of GitHub, preview and production alike. It builds on Node 26 as ADR 0003 requires, spends no Actions minutes on builds, maintains its own Angular 22 SSR adapter, honours ADR 0006's `Cache-Control`, and costs $0 until the first production release and about $9 after, against Vercel's $20.
+
+The trade-off is a Deno edge runtime with a 50 ms CPU limit per request. Netlify's documentation counts "all time spent running your scripts", and a cold first render measured 78 to 86 ms. This is a real risk, but it does not justify Vercel. #15 tests it before any production traffic, and the fallback, Netlify Functions on Node with the same handler (Decision, item 1), removes the CPU limit without changing host, secrets, or cost.
 
 ## Consequences
 
@@ -504,14 +538,20 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request instead 
   - At the first release, create the production deploy key and set the Production context value.
   - Set Convex's default preview environment variables (ADR 0008).
   - Create the production Convex deployment in US East.
-- **#10 (scaffold):**
+- **#10 (scaffold) is not changed by this ADR.** PR #30 keeps Express, as ADR 0006 requires, and adds an Express error handler. It merges as planned.
+- **Follow-up issue, created after #30 merges** (`type:chore`, `area:` hosting and SSR; it needs no new gate, because this ADR approves the packages). It:
   - Replaces `src/server.ts` with the entry in Decision, item 2, and adds `@netlify/angular-runtime` 4.0.0 pinned exactly.
   - Drops `express` and `@types/express`.
+  - Carries over the behaviour of #30's Express error handler. `netlifyAppEngineHandler` catches render errors and returns a plain 500 with no stack trace. An acceptance criterion forces a render error and checks the body.
   - Adds `scripts/serve-ssr.mjs`, and sets `serve:ssr` to `node scripts/serve-ssr.mjs`.
   - Keeps `@types/node` at 26.
   - `src/server.ts` must not read `Netlify.env` or `process.env`. ESLint core `no-restricted-globals` and `no-restricted-properties` on `src/server.ts` enforce this, with no new package; it guards the production key exposure noted under Option A.
-  - #10's "`/app/x` and unknown URLs return Express's 404" becomes "the engine's plain 404".
+  - Changes the scaffold's "`/app/x` and unknown URLs return Express's 404" to "the engine's plain 404" (#23's page once it lands).
   - Adds `netlify.toml` (build contexts, plugin, and the item 3 headers) and the `app/**` `Cache-Control` from item 4.
+  - It blocks #15, which needs the Netlify entry before its first real deploy.
+- **GitHub (Pro):**
+  - No GitHub environment or deploy secret is created for hosting.
+  - The owner adds the `production` ruleset described in Decision, item 8, when the `production` branch is created. It is applied together with ADR 0009's `main` ruleset.
 - **#13 / ADR 0005 (e2e):** `webServer` still runs `npm run serve:ssr`. `NG_ALLOWED_HOSTS` is no longer read; `angular.json`'s `localhost` and `127.0.0.1` cover e2e.
 - **#12 (CI):** unchanged. CI builds with no Convex URL and deploys nothing.
 - **#15 (previews):** re-planned against this ADR. Its checks include:
@@ -521,9 +561,10 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request instead 
   - cleanup by documented expiry;
   - the `PREVIEW_ORIGIN_PATTERN` above;
   - the 404 `Cache-Status` observation;
-  - a **cold-start check**: right after a fresh deploy, the first request to a Server route and to an unknown URL return 200 and 404, not 5xx, and Netlify's function log shows no CPU-limit error.
-- **#8 (CI decision):** no deploy Action and no deploy secret. If #15 uses a `status`-triggered workflow, #8's rules should allow it: read-only token, no secrets, explicit checkout of `github.event.sha`.
-- **ADR 0006** is amended by this ADR: Express is no longer the server entry, `NG_ALLOWED_HOSTS` is no longer used, and `serve:ssr` runs the local runner.
+  - a **cold-start check**: right after a fresh deploy, the first request to a Server route and to an unknown URL return 200 and 404, not 5xx, and Netlify's function log shows no CPU-limit error. It is repeated on at least three fresh deploys and from at least two edge locations (for example, a GitHub-hosted runner and the owner's browser).
+  - **If the cold-start check fails**, #15 stops and the orchestrator opens a `gate:technology` issue for the Netlify Functions fallback in Decision, item 1. Production is not released on edge SSR.
+- **#8 / ADR 0009 (CI):** no deploy Action, no deploy secret, and no build minutes for hosting. If #15 uses a `status`-triggered workflow, ADR 0009's rules should allow it: read-only token, no secrets, explicit checkout of `github.event.sha`.
+- **ADR 0006** is amended by this ADR, taking effect with the follow-up issue above: Express is no longer the server entry, `NG_ALLOWED_HOSTS` is no longer used, and `serve:ssr` runs the local runner.
 - **ADR 0008:** the preview origin pattern and the region are fixed above; the consent-page domain stays `*.convex.site`.
 - **Ongoing cost:** $0 now, about $9 per month from the first production release at the stated traffic, and about $25 at roughly 6.5 times that traffic.
 - **Harder later:**
@@ -533,18 +574,24 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request instead 
 
 ## Owner questions
 
+All four questions were re-checked after the GitHub Pro change. The host is unchanged, so each keeps its recommendation. The notes say what Pro or the Functions fallback changes.
+
 1. **Netlify plan from the first production release.**
-   - Options: (a) Personal, $9: 1,000 credits, auto-recharge, but the production key is also visible to the edge runtime; (b) Pro, $20: Builds-only scope for the key, team members, and password-protected previews.
+   - Options: (a) Personal, $9: 1,000 credits, auto-recharge, but the production key is also visible to the SSR runtime; (b) Pro, $20: Builds-only scope for the key, team members, password-protected previews, and a choice of functions region.
    - **Recommendation: (a).** Server code never reads the environment (lint rule), and (b) leaves only about $5 for Convex.
+   - GitHub Pro does not affect this. The same reasoning applies under the Functions fallback, where the key would be readable by the function instead of the edge function.
 2. **Preview visibility.**
    - Options: (a) public previews, holding test data only and marked `noindex`; (b) private previews, Netlify login and owner only, which blocks #15's automated smoke run unless it is dropped.
    - **Recommendation: (a).**
+   - GitHub Pro does not affect this. Private previews would need a bypass credential in GitHub. Pro could hold it as an environment secret, but PR workflows would still read it, so (a) stays the option that puts no credential in GitHub.
 3. **Convex production region.**
    - Options: (a) US East (N. Virginia); (b) EU West (Ireland). The region cannot be changed after the deployment is created.
    - **Recommendation: (a)**, unless the leagues are mainly in Europe.
+   - (a) also suits the fallback: Netlify Functions default to US East (Ohio), and the region can be changed only on Netlify Pro. That puts the SSR-to-Convex round trip within the US East region.
 4. **Google consent page domain after the first production release.**
-   - Options: (a) accept `<prod-deployment>.convex.site`; (b) Convex Professional with a custom domain, $25, making the total about $34 and over budget; (c) a first-party `/api/auth/*` proxy in the edge function, with the callback, session, and client-IP changes listed above.
+   - Options: (a) accept `<prod-deployment>.convex.site`; (b) Convex Professional with a custom domain, $25, making the total about $34 and over budget; (c) a first-party `/api/auth/*` proxy in the SSR function, with the callback, session, and client-IP changes listed above.
    - **Recommendation: (a)**, and revisit (b) when revenue allows.
+   - This is unchanged: neither GitHub Pro nor the Functions fallback changes Convex's custom-domain plan requirement.
 
 ## Test evidence (2026-10-07)
 
@@ -611,15 +658,16 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request instead 
   - Pricing and terms: [pricing](https://www.netlify.com/pricing/), [credit-based pricing](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/), [billing FAQ](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/billing-faq-for-credit-based-plans/), [Self-Serve Subscription Agreement](https://www.netlify.com/legal/self-serve-subscription-agreement/), [Terms of Use](https://www.netlify.com/legal/terms-of-use/).
   - Angular and edge functions: [Angular on Netlify](https://docs.netlify.com/build/frameworks/framework-setup-guides/angular/), [angular-runtime README](https://github.com/netlify/angular-runtime), [edge functions overview](https://docs.netlify.com/build/edge-functions/overview/), [limits](https://docs.netlify.com/build/edge-functions/limits/), [configuration](https://docs.netlify.com/build/edge-functions/optional-configuration/), [API](https://docs.netlify.com/build/edge-functions/api/).
   - Caching and headers: [caching overview](https://docs.netlify.com/build/caching/caching-overview/), [custom headers](https://docs.netlify.com/manage/routing/headers/).
+  - Functions (fallback): [functions configuration (Node runtime, region, limits)](https://docs.netlify.com/build/functions/optional-configuration/); the Angular runtime now lives in [netlify/framework-adapters](https://github.com/netlify/framework-adapters/tree/main/packages/angular-runtime) and generates an edge function only.
   - Build and environment: [build software](https://docs.netlify.com/build/configure-builds/available-software-at-build-time/), [dependency management](https://docs.netlify.com/build/configure-builds/manage-dependencies/), [build environment variables](https://docs.netlify.com/build/configure-builds/environment-variables/), [environment variables](https://docs.netlify.com/build/environment-variables/overview/), [get started / sensitive variable policy](https://docs.netlify.com/build/environment-variables/get-started/), [Secrets Controller](https://docs.netlify.com/build/environment-variables/secrets-controller/).
   - Deploys and access: [deploy overview / contexts / permissions](https://docs.netlify.com/deploy/deploy-overview/), [deploy previews](https://docs.netlify.com/deploy/deploy-types/deploy-previews/), [manage deploys / rollbacks](https://docs.netlify.com/deploy/manage-deploys/manage-deploys-overview/), [ignore builds](https://docs.netlify.com/build/configure-builds/ignore-builds/), [deploy notifications](https://docs.netlify.com/deploy/deploy-notifications/), [project visibility](https://docs.netlify.com/manage/security/secure-access-to-sites/project-visibility/), [password protection](https://docs.netlify.com/manage/security/secure-access-to-sites/password-protection/), [proxies / signed proxy redirects](https://docs.netlify.com/manage/routing/redirects/rewrites-proxies/).
 - **Convex:** [pricing](https://www.convex.dev/pricing), [Terms of Service](https://www.convex.dev/legal/tos), [limits](https://docs.convex.dev/production/state/limits), [multiple and preview deployments](https://docs.convex.dev/production/multiple-deployments), [deploy CLI](https://docs.convex.dev/cli/reference/deploy), [Netlify hosting](https://docs.convex.dev/production/hosting/netlify), [custom domains](https://docs.convex.dev/production/custom-domains), [backup and restore](https://docs.convex.dev/database/backup-restore).
-- **Vercel:** [pricing](https://vercel.com/pricing), [Hobby plan](https://vercel.com/docs/plans/hobby), [Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [CDN cache](https://vercel.com/docs/caching/cdn-cache), [supported frameworks](https://vercel.com/docs/frameworks/more-frameworks), `vercel/vercel` `packages/frameworks/src/frameworks.ts` (Angular preset).
+- **Vercel:** [pricing](https://vercel.com/pricing), [Hobby plan](https://vercel.com/docs/plans/hobby), [Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [access tokens](https://vercel.com/docs/accounts/access-tokens), [project-scoped tokens changelog (2026-07-30)](https://vercel.com/changelog/project-scoped-tokens), [Node.js 26 on Sandbox changelog](https://vercel.com/changelog/node-js-26-x-now-available-on-vercel-sandboxes), [CDN cache](https://vercel.com/docs/caching/cdn-cache), [supported frameworks](https://vercel.com/docs/frameworks/more-frameworks), `vercel/vercel` `packages/frameworks/src/frameworks.ts` (Angular preset).
 - **Cloudflare:** [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Workers Cache](https://developers.cloudflare.com/workers/cache/), [Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/), [Version and preview URLs](https://developers.cloudflare.com/workers/configuration/previews/), [Previews configuration](https://developers.cloudflare.com/workers/previews/configuration/), [Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), [Angular guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/more-web-frameworks/angular/).
 - **Google Cloud:** [Cloud Run rollouts and tags](https://docs.cloud.google.com/run/docs/rollouts-rollbacks-traffic-migration), [Cloud CDN overview](https://docs.cloud.google.com/cdn/docs/overview), [network pricing](https://cloud.google.com/vpc/network-pricing).
 - **Render:** [service previews](https://render.com/docs/service-previews), [web service edge caching](https://render.com/docs/web-service-caching), [Blueprint `previewValue`](https://render.com/docs/blueprint-spec).
 - **Firebase:** [App Hosting docs index](https://firebase.google.com/docs/app-hosting), [Hosting GitHub integration](https://firebase.google.com/docs/hosting/github-integration).
-- **GitHub:** [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [managing environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [events that trigger workflows (`status`)](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#status).
+- **GitHub:** [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans), [about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [managing environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [events that trigger workflows (`status`)](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#status).
 - **Angular:** [SSR guide](https://angular.dev/guide/ssr), [security: allowed hosts](https://angular.dev/best-practices/security), [deployment](https://angular.dev/tools/cli/deployment), `@angular/ssr@22.2.2` `fesm2022/ssr.mjs` (`AngularAppEngine.getAllowedHosts`) and `fesm2022/_validation-chunk.mjs`.
 - **npm registry (2026-10-07):** `@netlify/angular-runtime` 4.0.0, `@netlify/edge-functions` 3.0.8, `@netlify/types` 2.8.0, `netlify-cli` 27.11.2, `vercel` 62.7.0, `wrangler` 4.148.0, `firebase-tools` 15.32.1, `@angular/ssr` 22.2.2, `@angular/cli` 22.2.2, `express` 5.2.1.
 - **[Public Suffix List](https://publicsuffix.org/list/public_suffix_list.dat):** `netlify.app`, `convex.site`, `vercel.app`, `workers.dev`, `onrender.com`.
