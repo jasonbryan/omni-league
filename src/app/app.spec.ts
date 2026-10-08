@@ -18,6 +18,6 @@ describe('App routing', () => {
     expect(outlet).not.toBeNull();
     const routed = outlet?.nextElementSibling;
     expect(routed?.tagName.toLowerCase()).toBe('app-placeholder');
-    expect(routed?.querySelector('h1')?.textContent).toBe('Omni');
+    expect(routed?.querySelector('h1')?.textContent).toBe('Omni League');
   });
 });
