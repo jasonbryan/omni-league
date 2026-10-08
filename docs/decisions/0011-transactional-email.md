@@ -124,7 +124,7 @@ Prices, limits, and terms were read from the official pages on 2026-10-07 (Sourc
 **Option A: Resend, called through `@convex-dev/resend` 0.2.x, on the Free plan at launch, sending from `mail.<domain>` in us-east-1. Dev and preview deployments send nothing.**
 
 - It is the only option that costs $0 at launch and comes with a durable queue, retries, per-send status, and signed-webhook handling already written. The project's own code is limited to limits, the outbox, and status bookkeeping.
-- Amazon SES is much cheaper at 10,000 MAU, but needs an AWS account, a production-access review, SigV4 signing, and SNS signature verification written in this repository. It is the documented exit if the owner does not approve Resend Pro (owner question 1).
+- Amazon SES is much cheaper at 10,000 MAU, but needs an AWS account, a production-access review, SigV4 signing, and SNS signature verification written in this repository. It remains the documented exit if Resend stops fitting; the owner approved Resend Pro when needed (owner decision 1).
 - Postmark costs $15/month from day one and has no signed webhooks. Plain `fetch` (Option B) saves one package but moves security-relevant webhook code into the repository.
 
 ### How Convex calls the sender
@@ -143,7 +143,7 @@ Resend → POST <CONVEX_SITE_URL>/resend-webhook (Svix-signed) → component →
 - **No email for duplicate sign-ups:** `onExistingUserSignUp` is not set.
 - **Component options:** `testMode: false`, `onEmailEvent: internal.authEmail.onEmailEvent`, defaults for retries. `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` are read from the environment.
 - **Token lifetime:** Better Auth's defaults are kept: verification token 1 hour (`emailVerification.expiresIn` 3600 s), reset token 1 hour (`resetPasswordTokenExpiresIn`). A link that cannot be sent within the hour is useless, so a refused send is dropped rather than queued for the next day.
-- **Sender address:** `EMAIL_FROM` (for example `Omni League <no-reply@mail.<domain>>`) and `EMAIL_REPLY_TO` (the support contact, owner question 3) are environment variables, so the switch-over needs no code change.
+- **Sender address:** `EMAIL_FROM` (for example `Omni League <no-reply@mail.<domain>>`) and `EMAIL_REPLY_TO` (the support contact `support@<domain>`, owner decision 3) are environment variables, so the switch-over needs no code change.
 
 ### Packages
 
@@ -262,7 +262,7 @@ The only path that exposes a token to anyone other than an admin of the sending 
 
 - **With per-IP limits working, one IP:** 10 + 5 + 5 = 20 email-triggering requests an hour, **480 a day**. Sign-ups with fresh addresses are not stopped by the per-address limit, so one IP can **use up the 95-send budget in under 5 hours**. A few IPs can do it in under an hour. Resets aimed at real users are capped at 5 a day per victim.
 - **Without per-IP limits:** the budget goes in **95 requests**, which takes seconds.
-- **Compared with Resend Free's 100/day cap, no per-IP or per-address limit protects the cap from a determined attacker.** The limits stop casual abuse, cap harassment of any one address, and keep Resend's quota from being hit first. Protecting the cap itself needs either a bot challenge on these three forms (a new external service, owner question 2) or a plan with no daily cap (owner question 1).
+- **Compared with Resend Free's 100/day cap, no per-IP or per-address limit protects the cap from a determined attacker.** The limits stop casual abuse, cap harassment of any one address, and keep Resend's quota from being hit first. Protecting the cap itself needs either a bot challenge on these three forms (a new external service; not at launch, owner decision 2) or a plan with no daily cap (Resend Pro, owner decision 1).
 
 ### Daily cap: what happens when it is hit
 
@@ -292,7 +292,7 @@ Better Auth reports success whatever the callback does, so the project records o
 
 A total Resend outage would stop the digest too. The Resend dashboard shows the same failures, and the owner's switch-over check (below) is repeated after any change to the email code.
 
-**What the user sees** on the verification and reset screens: "We sent a link to <the address they typed>. It can take a minute; check spam. Didn't get it? Resend (available after 60 s)." No per-user delivery status is shown to an unauthenticated user, because it would reveal whether an account exists. The screen also shows the support contact (owner question 3).
+**What the user sees** on the verification and reset screens: "We sent a link to <the address they typed>. It can take a minute; check spam. Didn't get it? Resend (available after 60 s)." No per-user delivery status is shown to an unauthenticated user, because it would reveal whether an account exists. The screen also shows the support contact, `support@<domain>` (owner decision 3).
 
 ### Bounces and complaints
 
@@ -322,7 +322,7 @@ A total Resend outage would stop the digest too. The Resend dashboard shows the 
 | --- | --- | --- | --- | --- |
 | `RESEND_API_KEY` | not set | not set | **not set** (deploy check fails if set) | Resend key with `sending_access`, **restricted to `mail.<domain>`** |
 | `RESEND_WEBHOOK_SECRET` | not set | not set | not set | the webhook's signing secret |
-| `EMAIL_FROM`, `EMAIL_REPLY_TO` | not set | not set | not set | the sender and support addresses |
+| `EMAIL_FROM`, `EMAIL_REPLY_TO` | not set | not set | not set | the sender address and `support@<domain>` |
 | `OWNER_ALERT_EMAIL` | not set | not set | not set | the owner's address |
 | `EMAIL_DAILY_LIMIT` | not set | not set | not set | optional; default 95 |
 | `AUTH_EMAIL_DISABLED` | **unset** | `true` | `true` | **unset** (deploy check fails if set) |
@@ -349,20 +349,21 @@ A total Resend outage would stop the digest too. The Resend dashboard shows the 
 
 - **Monthly limit:** at 0.5 emails per MAU, Free's 3,000/month lasts to about **6,000 MAU**.
 - **Daily limit:** Free allows about 50 to 95 new password accounts per UTC day (above). A league opening registration to more than that in one day needs Pro, **at any MAU**.
-- **Which owner constraint it falls under:** **neither.** It is not the auth provider (#7's "free tier at launch"; ADR 0008's library is free) and not hosting or Convex (#9's "about $25/month"). Email is a separate service with no budget yet, so the paid step is owner question 1.
+- **Which owner constraint it falls under:** **neither.** It is not the auth provider (#7's "free tier at launch"; ADR 0008's library is free) and not hosting or Convex (#9's "about $25/month"). Email is a separate service with its own approval: the owner approved Resend Pro ($20/month) when needed (owner decision 1).
 
 ## Switch-over when the domain is bought (no code change)
 
 **The first production release (`gate:production`) is blocked until a sending domain is verified in Resend and the verification and reset slice is merged.** The production deploy request lists both, plus the deploy check above, as prerequisites.
 
 1. The owner buys the domain (registrar and DNS host are the owner's choice; #9 decides whether the web app moves to it).
-2. The owner creates the Resend account (Free) and adds `mail.<domain>` in us-east-1 (or the region matching #9).
+2. The owner creates the Resend account (Free, or Pro from launch if a league expects about 95 or more new password sign-ups in one day; owner decision 1) and adds `mail.<domain>` in us-east-1 (or the region matching #9).
 3. The owner adds the DKIM, SPF, MX, and DMARC (`p=none`) records from the table above and clicks Verify in Resend.
+   - **Support mailbox (owner decision 3):** the owner sets up `support@<domain>` as a mailbox or as forwarding to the owner (the registrar's or DNS host's email forwarding, or a mail provider), with the root domain's own MX records. These are separate from Resend's records on `mail.<domain>`. The owner sends a test message to `support@<domain>` and confirms it arrives.
 4. The owner creates the production API key (`sending_access`, restricted to `mail.<domain>`) and sets `RESEND_API_KEY` on the production Convex deployment.
 5. The owner creates a Resend webhook to `https://<prod-deployment>.convex.site/resend-webhook` for `email.sent`, `delivered`, `delivery_delayed`, `bounced`, `complained`, `failed`, and `suppressed`, and sets `RESEND_WEBHOOK_SECRET`.
-6. The owner sets `EMAIL_FROM`, `EMAIL_REPLY_TO`, `OWNER_ALERT_EMAIL`, and optionally `EMAIL_DAILY_LIMIT` on production, and confirms that `AUTH_EMAIL_DISABLED` and `IS_TEST` are unset.
+6. The owner sets `EMAIL_FROM`, `EMAIL_REPLY_TO` (`support@<domain>`), `OWNER_ALERT_EMAIL`, and optionally `EMAIL_DAILY_LIMIT` on production, and confirms that `AUTH_EMAIL_DISABLED` and `IS_TEST` are unset.
 7. The production deploy runs the extended deploy check (it fails on any missing or forbidden variable).
-8. **Owner check before opening to users:** sign up with an owner-controlled address and receive the verification email within a minute (not in spam); verify; request a reset and complete it; confirm the `authEmailSends` rows reach `delivered`; confirm that the message headers show SPF, DKIM, and DMARC `pass`; send a test webhook from Resend and see it accepted; and post an unsigned request to `/resend-webhook` and see 401.
+8. **Owner check before opening to users:** sign up with an owner-controlled address and receive the verification email within a minute (not in spam); reply to it and confirm the reply reaches `support@<domain>`; verify; request a reset and complete it; confirm the `authEmailSends` rows reach `delivered`; confirm that the message headers show SPF, DKIM, and DMARC `pass`; send a test webhook from Resend and see it accepted; and post an unsigned request to `/resend-webhook` and see 401.
 9. After 2 to 4 weeks of clean DMARC reports, the owner moves DMARC to `p=quarantine`, then `p=reject`.
 
 Dev and preview change nothing at switch-over.
@@ -370,7 +371,7 @@ Dev and preview change nothing at switch-over.
 ## Consequences
 
 - **New dependency:** `@convex-dev/resend` 0.2.x and its tree (Packages). No install scripts, no `overrides`, and ADR 0003's `allowScripts` map is unchanged.
-- **New external service:** Resend, Free plan at launch; Pro ($20/month) at about 6,000 MAU or for registration days with more than about 95 new password accounts, subject to owner question 1.
+- **New external service:** Resend, Free plan at launch; Pro ($20/month), approved by the owner, when usage nears Free's caps (about 6,000 MAU, or registration days with about 95 or more new password accounts), or from launch if a league expects that many in one day.
 - **No cost and no sender key before the first production release.**
 - **Verification and reset slice (`Blocked by: #26`, #7; blocks the first production release)** implements:
   - the callbacks, `authEmail.*` functions and crons, `/resend-webhook`, the outbox, the limits, the budget, suppression, and the digest;
@@ -379,19 +380,28 @@ Dev and preview change nothing at switch-over.
   - Convex tests for every row of the access table and every limit; e2e specs for sign-up → verify and reset through the outbox;
   - the owner steps for `AUTH_EMAIL_DISABLED=true` on previews and dev before merge.
 - **#15:** the reusable deploy step gains the `AUTH_EMAIL_DISABLED` and email-variable checks above, and the owner setup doc lists `AUTH_EMAIL_DISABLED=true` among the preview variables. Previews never get an email key.
-- **Production deploy request:** lists #26's switch-over steps 1 to 8 as prerequisites.
-- **What becomes harder:** a determined attacker can block new password sign-ups for a UTC day while on Free (owner question 2). Moving to SES later means a superseding ADR and rewriting the send and webhook path; `authEmailSends`, the limits, the outbox, and `AUTH_EMAIL_DISABLED` stay.
+- **Production deploy request:** lists #26's switch-over steps 1 to 8 as prerequisites, including the `support@<domain>` mailbox or forwarding.
+- **What becomes harder:** a determined attacker can block new password sign-ups for a UTC day while on Free; the owner accepted this at launch (owner decision 2). Moving to SES later means a superseding ADR and rewriting the send and webhook path; `authEmailSends`, the limits, the outbox, and `AUTH_EMAIL_DISABLED` stay.
 - **What would change this:**
-  - The owner declines Resend Pro: re-compare Amazon SES (about $0.50/month at 10,000 MAU) and MailerSend Hobby ($7/month).
+  - Resend Pro stops being acceptable (price or terms change): re-compare Amazon SES (about $0.50/month at 10,000 MAU) and MailerSend Hobby ($7/month).
   - #9 chooses Cloudflare Workers Paid as the host: re-compare Cloudflare Email Service once it leaves beta (3,000/month included, then $0.35 per 1,000).
   - #9 chooses EU West for Convex: the domain region changes to eu-west-1 (no code change), and the US storage of Resend data is noted in the privacy notice.
+  - Abuse appears (the digest shows `skipped_capped` or `skipped_limited` spikes not explained by real sign-ups): open a `gate:technology` issue for a bot challenge such as Cloudflare Turnstile through Better Auth's `captcha` plugin (owner decision 2).
   - `@convex-dev/resend` stops being maintained or diverges from Convex releases: move to Option B (plain `fetch`) behind the same `enqueue` mutation.
 
-## Owner questions
+## Owner decisions
 
-1. **Paid email at or below 10,000 MAU.** Resend Free runs out at about 6,000 MAU (monthly) or on the first day with more than about 95 new password accounts (daily). Pro is $20/month and falls under no existing budget. Approve Pro when either happens (recommended), or have the system prepare a superseding ADR to move to Amazon SES (about $0.50/month at 10,000 MAU) before then? If a league is expected to open registration to more than about 95 new password users in one day at launch, Pro is needed from the first release.
-2. **Bot challenge on sign-up, resend, and reset.** On Free, one attacker can use up the daily budget in hours, blocking new password users until 00:00 UTC (Google is unaffected). Options: (a) accept that risk at launch and watch the digest (recommended for launch, because Pro removes the daily cap); (b) add a free bot challenge such as Cloudflare Turnstile through Better Auth's `captcha` plugin, which is a new external service and needs its own `gate:technology` issue.
-3. **Support contact.** Users whose mail bounces need a way to reach the project. Which address goes in `EMAIL_REPLY_TO` and on the verification and reset screens? Recommended: an address on the purchased domain, forwarded to the owner.
+Answered by the owner on 2026-10-07 (relayed on PR #32).
+
+1. **Paid email at or below 10,000 MAU: Resend Pro when needed.**
+   - Question: Resend Free runs out at about 6,000 MAU (monthly) or on the first day with more than about 95 new password accounts (daily), and Pro ($20/month) falls under no existing budget. Approve Pro when needed, or move to Amazon SES before then?
+   - **Decision:** start on Resend Free. Move to Pro ($20/month) when usage nears Free's caps (the digest or the Resend dashboard shows the monthly count approaching 3,000, or the daily budget being reached), or **from launch** if a league expects about 95 or more new password sign-ups in one day. On Pro the owner raises `EMAIL_DAILY_LIMIT` as a cost guard (for example to 2,000). No SES ADR is prepared now.
+2. **Bot challenge on sign-up, resend, and reset: none at launch.**
+   - Question: on Free, one attacker can use up the daily budget in hours, blocking new password users until 00:00 UTC (Google is unaffected). Accept the risk, or add a bot challenge (a new external service)?
+   - **Decision:** accept the risk at launch. The per-IP and per-address limits and the global daily budget above still apply, and the owner digest reports cap hits. **Revisit if abuse appears:** a bot challenge such as Cloudflare Turnstile through Better Auth's `captcha` plugin then gets its own `gate:technology` issue.
+3. **Support contact: `support@<domain>`.**
+   - Question: which address goes in `EMAIL_REPLY_TO` and on the verification and reset screens?
+   - **Decision:** `support@<domain>` on the project domain bought before the first production release. It is the value of `EMAIL_REPLY_TO` on production and is shown on the verification and reset screens. It needs a mailbox or forwarding to the owner, set up in switch-over step 3 and checked in step 8. The verification and reset slice shows it on those screens.
 
 ## Test evidence
 
