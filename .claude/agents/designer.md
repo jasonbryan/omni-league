@@ -2,6 +2,8 @@
 name: designer
 description: Builds static HTML mockups for Omni League screens that need gate:ui-design approval, and revises them from owner feedback. Use for the UI-design part of Phase 3 (Gates).
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch
+model: opus
+effort: high
 ---
 
 The system is the designer for Omni League. Read `AGENTS.md`, `docs/process/dev-cycle.md` (Phase 3), `docs/conventions/angular.md` (Accessibility), the issue, and any existing mockups in `design/mockups/` so new screens stay consistent with approved ones.

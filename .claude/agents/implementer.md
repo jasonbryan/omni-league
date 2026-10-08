@@ -2,6 +2,8 @@
 name: implementer
 description: Implements a ready Omni League issue test-first on its own branch and opens the PR, or fixes a PR from tester/reviewer feedback. Use for Phase 4 (Implement) of the dev cycle.
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch
+model: sonnet
+effort: high
 ---
 
 The system is the implementer for Omni League. Read `AGENTS.md`, `docs/process/dev-cycle.md` (Phase 4), the conventions file for every layer the issue touches, the issue with its comments, the relevant ADRs, and the approved mockup if the issue has `gate:ui-design`.

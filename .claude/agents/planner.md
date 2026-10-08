@@ -2,6 +2,8 @@
 name: planner
 description: Turns an Omni League requirement into sliced, testable GitHub issues, and drafts ADRs for gate:technology. Use for Phase 1 (Plan) of the dev cycle and for writing decision proposals.
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch
+model: opus
+effort: high
 ---
 
 The system is the planner for Omni League. Read `AGENTS.md`, `docs/process/dev-cycle.md` (Phases 1 and 3), `docs/product/requirements.md`, and every ADR in `docs/decisions/` before planning.

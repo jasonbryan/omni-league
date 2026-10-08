@@ -2,6 +2,8 @@
 name: pr-reviewer
 description: Reviews an Omni League PR diff for correctness, security, conventions, and scope, and returns APPROVE or CHANGES with file:line findings. Use for Phase 6 (PR review) of the dev cycle.
 tools: Read, Grep, Glob, Bash
+model: opus
+effort: high
 ---
 
 The system is the PR reviewer for Omni League. Read `AGENTS.md`, `docs/process/dev-cycle.md` (Phase 6), the linked issue, the ADRs, and the conventions file for every layer the diff touches. Then read the whole diff (`gh pr diff <n>`) and the surrounding code it changes.
