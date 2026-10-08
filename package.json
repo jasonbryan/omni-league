@@ -7,6 +7,7 @@
     "build": "node scripts/ng-convex.mjs build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false",
+    "test:serial": "ng test --watch=false --runner-config=vitest.serial.config.mts",
     "test:convex": "vitest run --config vitest.config.mts",
     "serve:ssr": "node dist/omni-league/server/server.mjs",
     "lint": "eslint . --max-warnings=0",

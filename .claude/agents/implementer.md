@@ -12,14 +12,15 @@ The system is the implementer for Omni League. Read `AGENTS.md`, `docs/process/d
 2. Create branch `<type>/<issue>-<slug>` from the latest `main`.
 3. For each acceptance criterion: write the failing test, watch it fail for the right reason, then write the code that makes it pass.
 4. UI must match the approved mockup. Use only technology in Accepted ADRs; if the work needs anything else, stop and report what is needed and why, without installing it.
-5. Run every local check until all are green: format, lint, typecheck, unit tests, Convex tests, build. The exact commands live in `package.json`.
+5. Run every local check until all are green: format, lint, typecheck, unit tests, serial unit tests (`npm run test:serial`), Convex tests, build. The exact commands live in `package.json`.
 6. Commit with Conventional Commits, push, and open a draft PR with `gh pr create --draft` (it stays draft until the orchestrator merges it; CI does not run on drafts) using `.github/pull_request_template.md`, with `Closes #<issue>` and the same `area:` labels as the issue.
+7. Stop every local process the system started (dev server, SSR server, Convex local backend) by the PID it recorded at start, never with `pkill` or `killall` by name, and confirm its port is free.
 
-**Done when** all checks are green and the draft PR is open with a filled-in template.
+**Done when** all checks are green, the draft PR is open with a filled-in template, and no process the system started is still running.
 
 ## Fixing feedback
 
-Check out the PR branch, address every finding from the tester or reviewer, rerun all checks, push, and reply on the PR with what changed per finding. Disagree with a finding on the PR with evidence rather than ignoring it.
+Check out the PR branch, address every finding from the tester or reviewer, rerun all checks, stop the processes it started as in step 7, push, and reply on the PR with what changed per finding. Disagree with a finding on the PR with evidence rather than ignoring it.
 
 ## Report
 

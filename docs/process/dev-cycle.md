@@ -89,18 +89,22 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
+- Stop local processes as in [Local processes](#local-processes).
 
 The PR stays draft through Phases 4 to 6. CI does not run on drafts ([ADR 0009](../decisions/0009-ci-pipeline.md)), so every agent runs the full check suite locally.
 
-**Done when:** all local checks are **green** (format, lint, typecheck, unit tests, Convex tests, build) and the draft PR is open.
+**Done when:** all local checks are **green** (format, lint, typecheck, unit tests, serial unit tests, Convex tests, build) and the draft PR is open.
+
+The serial run (`npm run test:serial`) runs the Angular specs in one worker, as on the CI runner, so a cross-file leak that a many-core machine hides by spreading files across workers fails locally too.
 
 ### 5. Test
 
 The tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The full suite and e2e tests run; UI work gets screenshots at mobile and desktop widths compared with the approved mockup, plus an automated accessibility check.
+- The full suite, including the serial unit tests, and e2e tests run; UI work gets screenshots at mobile and desktop widths compared with the approved mockup, plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
+- Stop local processes as in [Local processes](#local-processes).
 
 Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fixes it and the tester re-runs.
 
@@ -145,6 +149,10 @@ Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deploymen
 ## Parallel work
 
 The orchestrator may run several issues at once when none of them blocks another. Issues that change the Convex schema (`convex/schema.ts`) or shared design tokens run one at a time to avoid conflicting migrations and merges. Each implementer gets its own worktree.
+
+### Local processes
+
+Sessions share one machine. An agent that starts a local process (dev server, SSR server, Convex local backend) records its PID, stops it by that PID before reporting, and confirms the port is free (`lsof -i :<port>` prints nothing). It never uses `pkill` or `killall` by name, which can stop other sessions' servers.
 
 ## Escalation
 

@@ -8,12 +8,14 @@ The system is the tester for Omni League. It verifies independently: the impleme
 
 1. Check out the PR branch (`gh pr checkout <n>`).
 2. Map every acceptance criterion to a test that exercises it. Write any missing test, commit it with `test(<scope>): …`, and push to the branch.
-3. Run the full suite: lint, typecheck, unit tests, Convex tests, build, and e2e tests where they exist.
+3. Run the full suite: lint, typecheck, unit tests, serial unit tests (`npm run test:serial`), Convex tests, build, and e2e tests where they exist.
 4. Probe edge cases the criteria imply: empty data, an unauthenticated caller, a caller from another league or team, invalid input, concurrent edits. For payments: failed payment, duplicate webhook delivery, invalid webhook signature.
 5. For UI changes: capture screenshots at 375px and 1280px, compare them with the approved mockup, and run an automated accessibility check. Deviations from the mockup are failures.
 6. Post a PR comment beginning with `Test: PASS` or `Test: FAIL`. Include a criterion → test table, the command output summary, and for each failure the exact reproduction steps and the expected versus actual result.
 
-**Done when** every criterion has a passing or failing test on record and the verdict comment is posted.
+7. Stop every local process the system started (dev server, SSR server, Convex local backend) by the PID it recorded at start, never with `pkill` or `killall` by name, and confirm its port is free.
+
+**Done when** every criterion has a passing or failing test on record, the verdict comment is posted, and no process the system started is still running.
 
 ## Report
 
