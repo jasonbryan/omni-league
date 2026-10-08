@@ -18,11 +18,14 @@ export function snapshotDomGlobals(): () => void {
   return () => {
     for (const key of Object.getOwnPropertyNames(global)) {
       const current = global[key];
-      if (typeof current !== 'function') continue; // DOM classes only; leave other globals alone
+      const previous = before.get(key);
+      // DOM classes only; leave other globals alone. Check both values: domino's `NodeFilter` is a
+      // plain object replacing jsdom's function, and it must be restored too.
+      if (typeof current !== 'function' && typeof previous !== 'function') continue;
       if (!before.has(key)) {
         delete global[key]; // a domino-only class such as HTMLParser
-      } else if (current !== before.get(key)) {
-        global[key] = before.get(key); // vitest's jsdom globals are accessors; assignment restores them
+      } else if (current !== previous) {
+        global[key] = previous; // vitest's jsdom globals are accessors; assignment restores them
       }
     }
   };

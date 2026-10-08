@@ -19,6 +19,7 @@ import { snapshotDomGlobals } from './testing/dom-globals';
 // Captured before any render in this file runs.
 const JSDOM_EVENT = Event;
 const JSDOM_NODE = Node;
+const JSDOM_NODE_FILTER = NodeFilter; // a function in jsdom; domino's is a plain object
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -196,6 +197,8 @@ describe('after the server renders in this file', () => {
   it("leaves jsdom's DOM classes on the global, so later spec files can dispatch events", () => {
     expect(Event).toBe(JSDOM_EVENT);
     expect(Node).toBe(JSDOM_NODE);
+    expect(NodeFilter).toBe(JSDOM_NODE_FILTER);
+    expect('HTMLParser' in globalThis).toBe(false); // domino-only class added by the render
     expect(() => document.createElement('div').dispatchEvent(new Event('probe'))).not.toThrow();
   });
 });
