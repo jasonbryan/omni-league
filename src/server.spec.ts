@@ -123,6 +123,27 @@ describe('netlifyAppEngineHandler', () => {
     expect(loggedText()).not.toContain('SECRET');
   });
 
+  it.each([
+    ['a number', 42],
+    ['an object', { a: 1 }],
+    ['a Symbol', Symbol('stack')],
+  ])(
+    'answers an engine Error whose stack is %s with a plain 500 and one log line',
+    async (_, stack) => {
+      const error = new Error('render failed');
+      Object.defineProperty(error, 'stack', { value: stack });
+      useEngine(() => Promise.reject(error));
+
+      const response = await netlifyAppEngineHandler(request('/x?ott=SECRET'));
+
+      expect(response.status).toBe(500);
+      expect(await response.text()).toBe('Internal Server Error');
+      expect(console.error).toHaveBeenCalledTimes(1);
+      expect(loggedText()).toContain('Error: render failed');
+      expect(loggedText()).not.toContain('SECRET');
+    },
+  );
+
   it('logs the redacted cause of an engine error', async () => {
     useEngine(() =>
       Promise.reject(

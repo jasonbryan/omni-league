@@ -47,10 +47,15 @@ const UNPRINTABLE = '<unprintable thrown value>';
 /** Causes logged after the error itself; also ends a cyclic `cause` chain. */
 const MAX_CAUSES = 5;
 
-/** Text of one thrown value. Throws for values that cannot be printed; the caller catches. */
+/**
+ * Text of one thrown value, always a string. Throws for values that cannot be printed; the caller
+ * catches.
+ */
 function describeThrown(value: unknown): string {
   if (value instanceof Error) {
-    return value.stack ?? `${value.name}: ${value.message}`;
+    // `stack` is an ordinary writable property, so it can hold anything (a number, a Symbol).
+    const stack: unknown = value.stack;
+    return typeof stack === 'string' ? stack : `${value.name}: ${value.message}`;
   }
   if (typeof value === 'object' && value !== null) {
     // JSON keeps a plain object's fields; a null-prototype object or one without own fields
