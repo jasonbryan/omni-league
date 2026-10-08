@@ -127,7 +127,7 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
     - An agent-written workflow could therefore act on production with that token. This still conflicts with AGENTS.md "Secrets".
     - The usual workaround builds the PR without secrets and deploys from a trusted `workflow_run` job. ADR 0009 forbids `workflow_run` on PR code.
   - **No Node 26 build on Vercel.** The Git integration builds on Node 24 at most, so `npm ci` fails `devEngines`. Downloading a Node 26 toolchain inside Vercel's install command would work around it, but Vercel does not support that, and it would add an unverified binary download to every build. It is not adopted.
-  - **GitHub Actions minutes (ADR 0009).** About 128 builds a month (90 previews, about 30 staging, 8 production), at about 3 to 4 minutes each with no package cache (ADR 0009 requires `package-manager-cache: false` in a job that holds deploy secrets), add about **400 to 500 minutes**. ADR 0009 estimates 1,820 minutes now and 2,210 to 2,810 once feature e2e grows, against Pro's 3,000. The total would be about 2,300 to 3,300, which goes over 3,000 at the upper end. Netlify builds on its own image, which costs no Actions minutes.
+  - **GitHub Actions minutes (ADR 0009).** About 128 builds a month (90 previews, about 30 staging, 8 production), at about 3 to 4 minutes each with no package cache (ADR 0009 requires `package-manager-cache: false` in a job that holds deploy secrets), add about **400 to 500 minutes**. ADR 0009, revised for the owner's "minimize CI usage" direction, estimates about 340 to 410 minutes now and 510 to 680 once feature e2e grows. Builds in Actions would roughly double or more than double that, which contradicts the owner's direction. Netlify builds on its own image, which costs no Actions minutes.
   - **Previews are protected by default.** Vercel Authentication is on for previews, so #15's smoke test would need a "Protection Bypass for Automation" secret in GitHub.
   - **Custom code:** Vercel's Angular preset is still static-only (`defaultRoutes` fall back to `/index.html`, rechecked 2026-10-07), so the repository would own a Build Output API script. No first-party adapter exists.
   - **Cost:** $20 of the $25 budget, which leaves $5 for Convex.
@@ -238,7 +238,7 @@ It must not import `@angular/ssr/node` from `node_modules`. In the spike that lo
 | `@netlify/types` | 2.8.0 | MIT | transitive | No install scripts. |
 | Netlify GitHub App | n/a | Netlify terms | GitHub App on this repository only | Builds on push and PR, and posts commit statuses, checks, and the preview link comment. |
 | Netlify CLI (`netlify-cli` 27.11.2, MIT) | n/a | n/a | **Not added** | Used only in this ADR's scratch test. It has a `postinstall` script, and the pipeline does not need it. |
-| GitHub Actions | none | n/a | n/a | Netlify builds and deploys, so no deploy Action is added. #15's smoke workflow uses only Actions accepted under #8's pinning and permission rules. |
+| GitHub Actions | none | n/a | n/a | Netlify builds and deploys, so no deploy Action is added. #15's smoke test runs locally (ADR 0009), so no smoke workflow is added either. |
 
 None of these needs an `allowScripts` entry (ADR 0003). `semver`, the runtime's other dependency, is already in the tree.
 
@@ -333,10 +333,10 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
 - **It is a server deployment.** Each preview is an atomic Netlify deploy with its own copy of the edge function and the static files. It does not share a function with production.
 - **URL reporting.** Netlify's GitHub App posts the preview link as a PR comment and as a commit status, both on by default ([deploy notifications](https://docs.netlify.com/deploy/deploy-notifications/)).
   - The URL is predictable: `https://deploy-preview-<n>--<site>.netlify.app`.
-  - #15 runs the smoke spec with `E2E_BASE_URL` set to it. The run is triggered by the `status` event from Netlify's commit status, or by polling that URL.
-  - The smoke job needs **no secrets**.
-  - A `status`-triggered workflow runs from the default branch's workflow file, with `GITHUB_SHA` set to the default branch, so it checks out `github.event.sha` with read-only permissions ([events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#status)).
-- **Staging.** Every merge to `main` builds the branch deploy `https://main--<site>.netlify.app` with the Convex preview deployment `main`. The deployer smoke-tests it (dev cycle Phase 8, "Preview/staging").
+  - **The preview smoke test runs locally, not in GitHub Actions** (ADR 0009). In dev cycle Phase 5 the tester runs `E2E_BASE_URL=https://deploy-preview-<n>--<site>.netlify.app npm run e2e -- <smoke spec>` from its own machine and pastes the output in the PR.
+  - The smoke run needs **no secrets**, because previews are public (owner answer 6).
+  - No workflow is triggered by Netlify's commit `status`. ADR 0009 rejects one: it would fire for every Netlify deploy, drafts included, at roughly the cost of all of CI.
+- **Staging.** Every merge to `main` builds the branch deploy `https://main--<site>.netlify.app` with the Convex preview deployment `main`. The deployer smoke-tests it with the same local run against that URL (dev cycle Phase 8, "Preview/staging").
   - If `main` gets no push for 5 days, Convex removes that backend and staging stops working until the next merge.
 - **Cleanup is by documented expiry. No cleanup job is needed** (owner decision 2).
   - Convex deletes preview deployments 5 days after creation.
@@ -411,7 +411,7 @@ This is above Free's 300, so production needs **Personal ($9, 1,000 credits)**, 
 | Item | Cost |
 | --- | --- |
 | Host build minutes | $0: deploy previews are non-metered, and builds are not credit-metered |
-| GitHub Actions minutes for builds | 0: Netlify builds on its own image. Only #15's no-secret smoke run uses Actions minutes, and it would on any host. A host built in Actions (Options B to D) would add about 400 to 500 minutes a month against ADR 0009's Pro budget of 3,000. |
+| GitHub Actions minutes for builds | 0: Netlify builds on its own image, and #15's smoke run is a local run by the tester and deployer (ADR 0009). A host built in Actions (Options B to D) would add about 400 to 500 minutes a month against ADR 0009's Pro budget of 3,000. |
 | Preview invocations and requests | about 8 credits, about $0.05 |
 | Convex preview usage | 27,000 calls, within the included amount: $0 |
 
@@ -448,7 +448,7 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 | Production `CONVEX_DEPLOY_KEY` (Convex production key with `deployment:deploy`) | The same Netlify variable, **Production** context value | Production-context builds only, meaning builds of the `production` branch. On Free and Personal it is also readable by the production edge function at runtime, because scopes are Pro-only. | **Owner only:** creates, rotates, and enters it in the Netlify UI. |
 | `VERCEL_TOKEN`, Netlify tokens, or any deploy token in GitHub | **None** | n/a | n/a |
 
-- **No deploy secret exists in GitHub.** #15's smoke workflow uses none, and no cleanup job exists (item 6).
+- **No deploy secret exists in GitHub.** #15's smoke test runs locally and needs none, and no cleanup job exists (item 6).
 - **Netlify only builds for recognized authors.**
   - The repository is private.
   - Netlify's Deploy Request Policy builds only for recognized authors, so a fork or an outside contributor's PR gets no build, no key, and no preview until the owner approves a deploy request.
@@ -458,7 +458,7 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
   - A changed production command takes effect only after the owner merges a release PR into `production`.
 - **No GitHub environment is used.** GitHub Pro's environment secrets and deployment branch policies are not needed, because no deploy credential lives in GitHub.
 - **Residual risk: agents act through the owner's GitHub account.** A push or merge to `production` by that account builds production.
-  - **GitHub Pro narrows this.** The owner adds a `production` ruleset that blocks deletion and force-push, requires a pull request, and requires ADR 0009's `checks` and `e2e`. A stray direct push then fails.
+  - **GitHub Pro narrows this.** The owner adds a `production` ruleset that blocks deletion and force-push, requires a pull request, and requires ADR 0009's single status check `ci` (source "GitHub Actions"), with "Require branches to be up to date before merging" on, as on `main`. On a release PR into `production`, `ci` also runs the `webkit-mobile` e2e project (ADR 0009), so a WebKit failure blocks the release. A stray direct push then fails.
   - **It does not close it.** The ruleset cannot tell an agent from the owner, and required approvals would block the owner too (Context, GitHub plan).
   - **Process rule:** only the owner merges into `production` (AGENTS.md gates).
   - **Optional hardening:** set `[context.production] ignore = "exit 0"` and deploy through an owner-held Netlify build hook. "The `ignore` command won't cancel a build triggered by a build hook." This makes a production deploy need a credential that is not in GitHub, at the cost of a second owner step per release.
@@ -564,15 +564,15 @@ The trade-off is a Deno edge runtime with a 50 ms CPU limit per request. Netlify
 - **#12 (CI):** unchanged. CI builds with no Convex URL and deploys nothing.
 - **#15 (previews):** re-planned against this ADR. Its checks include:
   - no deploy job or deploy secret in GitHub, since Netlify builds and comments;
-  - the smoke run against `deploy-preview-<n>--<site>.netlify.app` through `E2E_BASE_URL`;
+  - the smoke run against `deploy-preview-<n>--<site>.netlify.app` through `E2E_BASE_URL`, **run locally** by the tester (and against staging by the deployer), with the output pasted in the PR. It is the #13 smoke spec only, Chromium only, at both widths. #15 adds **no GitHub Actions workflow** for it, `status`-triggered or otherwise (ADR 0009); an Actions smoke run would need an amendment to ADR 0009 with its minutes;
   - the Convex preview name `pr-<n>` instead of the branch name;
   - cleanup by documented expiry (item 6), with no cleanup job;
   - **`noindex`.** A static file, a server-route response, and a 404 on the preview and on staging each carry `X-Robots-Tag: noindex`. Netlify's automatic header is undocumented (item 6), so if any response lacks it, #15 adds it for the non-production contexts;
   - the `PREVIEW_ORIGIN_PATTERN` above;
   - the 404 `Cache-Status` observation;
-  - a **cold-start check**: right after a fresh deploy, the first request to a Server route and to an unknown URL return 200 and 404, not 5xx, and Netlify's function log shows no CPU-limit error. It is repeated on at least three fresh deploys and from at least two edge locations (for example, a GitHub-hosted runner and the owner's browser).
+  - a **cold-start check**: right after a fresh deploy, the first request to a Server route and to an unknown URL return 200 and 404, not 5xx, and Netlify's function log shows no CPU-limit error. It is repeated on at least three fresh deploys and from at least two edge locations (for example, the tester's machine and the owner's phone on mobile data).
   - **If the cold-start check fails**, #15 stops and the orchestrator opens a `gate:technology` issue for the Netlify Functions fallback in Decision, item 1. Production is not released on edge SSR.
-- **#8 / ADR 0009 (CI):** no deploy Action, no deploy secret, and no build minutes for hosting. ADR 0009's `pull_request_target` ban is unaffected. If #15 uses a `status`-triggered workflow, ADR 0009's rules should allow it: read-only token, no secrets, explicit checkout of `github.event.sha`.
+- **#8 / ADR 0009 (CI):** no deploy Action, no deploy secret, and no build minutes for hosting. ADR 0009's `pull_request_target` ban is unaffected. The `production` ruleset requires the same single check `ci` as `main` (item 8). No workflow runs after a merge to `main` or on Netlify's commit `status`; preview and staging smoke tests are local runs (item 6).
 - **ADR 0006** is amended by this ADR, taking effect with the follow-up issue above: Express is no longer the server entry, `NG_ALLOWED_HOSTS` is no longer used, and `serve:ssr` runs the local runner.
 - **ADR 0008:** the preview origin pattern and the region (US East) are fixed above; the consent-page domain stays `*.convex.site` (owner answer 8).
 - **Dev cycle Phase 8:** describes this flow. Previews are public and `noindex`, and expire on the platforms' schedules.
@@ -671,7 +671,7 @@ No owner questions remain open.
 - **Google Cloud:** [Cloud Run rollouts and tags](https://docs.cloud.google.com/run/docs/rollouts-rollbacks-traffic-migration), [Cloud CDN overview](https://docs.cloud.google.com/cdn/docs/overview), [network pricing](https://cloud.google.com/vpc/network-pricing).
 - **Render:** [service previews](https://render.com/docs/service-previews), [web service edge caching](https://render.com/docs/web-service-caching), [Blueprint `previewValue`](https://render.com/docs/blueprint-spec).
 - **Firebase:** [App Hosting docs index](https://firebase.google.com/docs/app-hosting), [Hosting GitHub integration](https://firebase.google.com/docs/hosting/github-integration).
-- **GitHub:** [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans), [about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [managing environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [events that trigger workflows (`status`)](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#status).
+- **GitHub:** [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans), [about rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [managing environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 - **Angular:** [SSR guide](https://angular.dev/guide/ssr), [security: allowed hosts](https://angular.dev/best-practices/security), [deployment](https://angular.dev/tools/cli/deployment), `@angular/ssr@22.2.2` `fesm2022/ssr.mjs` (`AngularAppEngine.getAllowedHosts`) and `fesm2022/_validation-chunk.mjs`.
 - **npm registry (2026-10-07):** `@netlify/angular-runtime` 4.0.0, `@netlify/edge-functions` 3.0.8, `@netlify/types` 2.8.0, `netlify-cli` 27.11.2, `vercel` 62.7.0, `wrangler` 4.148.0, `firebase-tools` 15.32.1, `@angular/ssr` 22.2.2, `@angular/cli` 22.2.2, `express` 5.2.1.
 - **[Public Suffix List](https://publicsuffix.org/list/public_suffix_list.dat):** `netlify.app`, `convex.site`, `vercel.app`, `workers.dev`, `onrender.com`.
