@@ -33,12 +33,13 @@ Leagues belong to an organization.
 
 Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted` ADRs in `docs/decisions/` are decided.
 
-- **Sign-in (#7):** email one-time code or magic link, plus Google, at launch.
+- **Sign-in (#7):** email + password, plus Google, at launch. Email one-time codes are dropped for now. Email verification and password-reset emails are added before the first production release ([owner decision, relayed on #7](https://github.com/jasonbryan/omni-league/issues/7#issuecomment-6049577799)).
 - **Auth budget (#7):** the auth provider's free tier at launch.
 - **Accounts (#7):** adults only at launch. Minors appear as roster entries managed by a guardian or organizer.
 - **Hosting budget (#9):** up to about $25/month for hosting and Convex combined; the terms of both the host and the Convex plan must allow commercial use.
 - **Previews (#9):** every PR gets a preview deployment with its own Convex backend.
 - **Domain (#9):** the host's default domain until the first production release.
+- **Domain (#7):** bought before the first production release; needed for verification and password-reset emails. No project-owned sending domain is needed during development.
 
 ## Open
 
