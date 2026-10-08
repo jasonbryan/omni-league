@@ -24,13 +24,13 @@ From `docs/product/requirements.md` (PR #27, merged) and the owner's answers on 
 
 **If any row below changes before this ADR is merged, or if #9 or #15 decide differently, this ADR is revised to match.**
 
-| Source | Assumption used here | Where it matters |
-| --- | --- | --- |
-| ADR 0008, auth (`docs/decisions/0008-auth-provider.md`, #7; Accepted on `main`; PR #25) | `better-auth` 1.6.x through `@convex-dev/better-auth` 0.12.x. The verification and reset slice turns on `requireEmailVerification: true` (unverified password users get `403 EMAIL_NOT_VERIFIED`), `sendOnSignUp: true`, `sendResetPassword`, `revokeSessionsOnPasswordReset: true`, and a scheduled deletion of password accounts still unverified 7 days after sign-up. Per-IP limiting is `rateLimit: { enabled: !IS_TEST, storage: "database" }` and depends on a trustworthy `cf-connecting-ip` header, which the first sign-in feature verifies. If it cannot, the per-IP limiter is turned off. Volume is 0.5 emails per MAU per month. Google sign-in for an address that has an **unverified** password account is refused (`account not linked`). | Callbacks, limits, cap behaviour, cost |
-| ADR 0005, e2e (`docs/decisions/0005-e2e-and-accessibility-testing.md`, #4; merged in PR #17) | E2E runs on the anonymous local backend with no secrets. Test-only functions are internal and guarded by `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment, never on cloud dev, preview, or production. Feature crons skip work under `IS_TEST`. If the verification and reset slice needs the emailed link or code in e2e, it adds an `IS_TEST`-only outbox. | E2E outbox, guard |
-| #15, previews (open, `status:blocked`) | Each same-repo PR gets a Convex preview deployment configured through **Convex default preview environment variables**. The preview deploy job runs a **reusable** step that fails if `IS_TEST` has a value; the production deploy request runs the same step against production. Fork PRs get no secrets and no preview. | Deploy check, preview variables |
-| #9, hosting (open, `gate:technology`; ADR 0009 or 0010 in parallel drafting) | **No host is chosen yet.** The web app uses the host's default domain until the first production release. #9 also fixes the **Convex deployment region**: Convex offers US East (N. Virginia) or EU West (Ireland), fixed when the deployment is created ([Convex regions](https://docs.convex.dev/production/regions)). This ADR assumes **US East**. | Sender region, sending domain |
-| #8, CI (open) | CI runs lint, tests, and e2e with no repository secrets, so fork PRs work. | No sender key in CI |
+| Source                                                                                       | Assumption used here                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Where it matters                       |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| ADR 0008, auth (`docs/decisions/0008-auth-provider.md`, #7; Accepted on `main`; PR #25)      | `better-auth` 1.6.x through `@convex-dev/better-auth` 0.12.x. The verification and reset slice turns on `requireEmailVerification: true` (unverified password users get `403 EMAIL_NOT_VERIFIED`), `sendOnSignUp: true`, `sendResetPassword`, `revokeSessionsOnPasswordReset: true`, and a scheduled deletion of password accounts still unverified 7 days after sign-up. Per-IP limiting is `rateLimit: { enabled: !IS_TEST, storage: "database" }` and depends on a trustworthy `cf-connecting-ip` header, which the first sign-in feature verifies. If it cannot, the per-IP limiter is turned off. Volume is 0.5 emails per MAU per month. Google sign-in for an address that has an **unverified** password account is refused (`account not linked`). | Callbacks, limits, cap behaviour, cost |
+| ADR 0005, e2e (`docs/decisions/0005-e2e-and-accessibility-testing.md`, #4; merged in PR #17) | E2E runs on the anonymous local backend with no secrets. Test-only functions are internal and guarded by `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment, never on cloud dev, preview, or production. Feature crons skip work under `IS_TEST`. If the verification and reset slice needs the emailed link or code in e2e, it adds an `IS_TEST`-only outbox.                                                                                                                                                                                                                                                                                                                                                             | E2E outbox, guard                      |
+| #15, previews (open, `status:blocked`)                                                       | Each same-repo PR gets a Convex preview deployment configured through **Convex default preview environment variables**. The preview deploy job runs a **reusable** step that fails if `IS_TEST` has a value; the production deploy request runs the same step against production. Fork PRs get no secrets and no preview.                                                                                                                                                                                                                                                                                                                                                                                                                                   | Deploy check, preview variables        |
+| #9, hosting (open, `gate:technology`; ADR 0009 or 0010 in parallel drafting)                 | **No host is chosen yet.** The web app uses the host's default domain until the first production release. #9 also fixes the **Convex deployment region**: Convex offers US East (N. Virginia) or EU West (Ireland), fixed when the deployment is created ([Convex regions](https://docs.convex.dev/production/regions)). This ADR assumes **US East**.                                                                                                                                                                                                                                                                                                                                                                                                      | Sender region, sending domain          |
+| #8, CI (open)                                                                                | CI runs lint, tests, and e2e with no repository secrets, so fork PRs work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | No sender key in CI                    |
 
 ## Options
 
@@ -38,13 +38,13 @@ Prices, limits, and terms were read from the official pages on 2026-10-07 (Sourc
 
 ### Ruled out or not compared in full
 
-| Candidate | Finding (official page) | Why not compared in full |
-| --- | --- | --- |
-| **Twilio SendGrid** | The Free Email API plan was retired from 2025-05-27; new accounts get a 60-day trial ([Twilio changelog](https://www.twilio.com/en-us/changelog/sendgrid-free-plan)). | Free tier withdrawn. Excluded, as #26 requires. |
-| **Mailgun** | Free: 100 emails/day, 1 custom domain, **1-day log retention**. Basic: $15/month for 10,000. US or EU region. ([pricing](https://www.mailgun.com/pricing/)) | Same 100/day cap as Resend Free and the same $15 step as Postmark, with no Convex component. It offers nothing that changes the outcome. |
-| **MailerSend** | Free: 500 emails/month, **100 API requests/day**, 1 domain, 1-day activity retention. Hobby: $7/month for 5,000. ([pricing](https://www.mailersend.com/pricing)) | Free tier is exactly the 1,000-MAU volume, with no headroom. Hobby ($7) is the cheapest paid plan that covers 10,000 MAU and is noted under "What would change this". |
+| Candidate                    | Finding (official page)                                                                                                                                                                                                                                                                                                                                                                          | Why not compared in full                                                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Twilio SendGrid**          | The Free Email API plan was retired from 2025-05-27; new accounts get a 60-day trial ([Twilio changelog](https://www.twilio.com/en-us/changelog/sendgrid-free-plan)).                                                                                                                                                                                                                            | Free tier withdrawn. Excluded, as #26 requires.                                                                                                                                              |
+| **Mailgun**                  | Free: 100 emails/day, 1 custom domain, **1-day log retention**. Basic: $15/month for 10,000. US or EU region. ([pricing](https://www.mailgun.com/pricing/))                                                                                                                                                                                                                                      | Same 100/day cap as Resend Free and the same $15 step as Postmark, with no Convex component. It offers nothing that changes the outcome.                                                     |
+| **MailerSend**               | Free: 500 emails/month, **100 API requests/day**, 1 domain, 1-day activity retention. Hobby: $7/month for 5,000. ([pricing](https://www.mailersend.com/pricing))                                                                                                                                                                                                                                 | Free tier is exactly the 1,000-MAU volume, with no headroom. Hobby ($7) is the cheapest paid plan that covers 10,000 MAU and is noted under "What would change this".                        |
 | **Cloudflare Email Service** | Sending is **beta**. Not available on Workers Free; Workers Paid (from $5/month per account) includes 3,000 emails/month, then $0.35 per 1,000. REST API available. ([overview](https://developers.cloudflare.com/email-service/), [pricing](https://developers.cloudflare.com/email-service/platform/pricing/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)) | Beta, and a $5/month floor from the first email. If #9 chooses Cloudflare Workers Paid as the host, the floor is already paid and this should be re-compared (see "What would change this"). |
-| **Brevo** | The official pricing page did not render its plan details on 2026-10-07. Third-party pages report 300 emails/day free. | Not verified from a primary source, so not evaluated. |
+| **Brevo**                    | The official pricing page did not render its plan details on 2026-10-07. Third-party pages report 300 emails/day free.                                                                                                                                                                                                                                                                           | Not verified from a primary source, so not evaluated.                                                                                                                                        |
 
 ### Option A: Resend through the Convex component `@convex-dev/resend` (recommended)
 
@@ -107,17 +107,17 @@ Prices, limits, and terms were read from the official pages on 2026-10-07 (Sourc
 
 ### Summary
 
-| | A: Resend + component | B: Resend + `fetch` | C: Amazon SES | D: Postmark |
-| --- | --- | --- | --- | --- |
-| Monthly cost at 1,000 MAU (500 emails) | **$0** (Free) | $0 | about $0.05 (or $0 within AWS credits) | $15 |
-| Monthly cost at 10,000 MAU (5,000 emails) | **$20** (Pro) | $20 | about $0.50 | $15 |
-| Free-tier daily cap | 100/day | 100/day | 200/day only in sandbox; production quota per review | none on paid |
-| Signed webhooks | Svix HMAC, verified by the component | Svix HMAC, project code | SNS X.509 signatures, project code | none (basic auth / IP list) |
-| Queue, retries, status | Component | Project code | Project code | Project code |
-| New packages | 1 direct, 10 transitive, no install scripts | none | `aws4fetch` or own SigV4 | none |
-| Sending region / storage | per domain (us-east-1 available) / US | same | per AWS region | US |
-| Body retention at sender | 30 days; off only with a $50/month add-on (eligibility rules) | same | not documented on the pages checked | 45 days (Basic) |
-| Set-up before release | Resend account, DNS, key, webhook | same | AWS account, IAM, DNS, production-access review, SNS | account, DNS, key, webhook |
+|                                           | A: Resend + component                                         | B: Resend + `fetch`     | C: Amazon SES                                        | D: Postmark                 |
+| ----------------------------------------- | ------------------------------------------------------------- | ----------------------- | ---------------------------------------------------- | --------------------------- |
+| Monthly cost at 1,000 MAU (500 emails)    | **$0** (Free)                                                 | $0                      | about $0.05 (or $0 within AWS credits)               | $15                         |
+| Monthly cost at 10,000 MAU (5,000 emails) | **$20** (Pro)                                                 | $20                     | about $0.50                                          | $15                         |
+| Free-tier daily cap                       | 100/day                                                       | 100/day                 | 200/day only in sandbox; production quota per review | none on paid                |
+| Signed webhooks                           | Svix HMAC, verified by the component                          | Svix HMAC, project code | SNS X.509 signatures, project code                   | none (basic auth / IP list) |
+| Queue, retries, status                    | Component                                                     | Project code            | Project code                                         | Project code                |
+| New packages                              | 1 direct, 10 transitive, no install scripts                   | none                    | `aws4fetch` or own SigV4                             | none                        |
+| Sending region / storage                  | per domain (us-east-1 available) / US                         | same                    | per AWS region                                       | US                          |
+| Body retention at sender                  | 30 days; off only with a $50/month add-on (eligibility rules) | same                    | not documented on the pages checked                  | 45 days (Basic)             |
+| Set-up before release                     | Resend account, DNS, key, webhook                             | same                    | AWS account, IAM, DNS, production-access review, SNS | account, DNS, key, webhook  |
 
 ## Recommendation
 
@@ -149,19 +149,19 @@ Resend → POST <CONVEX_SITE_URL>/resend-webhook (Svix-signed) → component →
 
 Resolved on 2026-10-07 with `npm install --package-lock-only --ignore-scripts` next to `convex` 1.46.0, `@convex-dev/better-auth` 0.12.5, `better-auth` 1.6.33, `vitest` 5.0.3 (with ADR 0008's override), and `typescript` 6.0.3 (npm 11.13.0, Node 24.16.0).
 
-| Package | Version | Type | Licence | Install script |
-| --- | --- | --- | --- | --- |
-| `@convex-dev/resend` | 0.2.x (0.2.8) | dependency | Apache-2.0 | none |
-| `resend` | 6.32.1 (transitive) | | MIT | none |
-| `svix` | 1.99.1 (transitive) | | MIT | none |
-| `standardwebhooks` | 1.1.1 and 1.0.0 (transitive) | | MIT | none |
-| `@stablelib/base64` | 1.0.1 (transitive) | | MIT | none |
-| `fast-sha256` | 1.3.0 (transitive) | | Unlicense | none |
-| `postal-mime` | 2.7.6 (transitive) | | MIT-0 | none |
-| `remeda` | 2.51.0 (transitive) | | MIT | none |
-| `@convex-dev/workpool` | 0.4.13 (transitive) | | Apache-2.0 | none |
-| `@convex-dev/rate-limiter` | 0.3.2 (transitive) | | Apache-2.0 | none |
-| `@convex-dev/batch-worker` | 0.2.2 (transitive) | | Apache-2.0 | none |
+| Package                    | Version                      | Type       | Licence    | Install script |
+| -------------------------- | ---------------------------- | ---------- | ---------- | -------------- |
+| `@convex-dev/resend`       | 0.2.x (0.2.8)                | dependency | Apache-2.0 | none           |
+| `resend`                   | 6.32.1 (transitive)          |            | MIT        | none           |
+| `svix`                     | 1.99.1 (transitive)          |            | MIT        | none           |
+| `standardwebhooks`         | 1.1.1 and 1.0.0 (transitive) |            | MIT        | none           |
+| `@stablelib/base64`        | 1.0.1 (transitive)           |            | MIT        | none           |
+| `fast-sha256`              | 1.3.0 (transitive)           |            | Unlicense  | none           |
+| `postal-mime`              | 2.7.6 (transitive)           |            | MIT-0      | none           |
+| `remeda`                   | 2.51.0 (transitive)          |            | MIT        | none           |
+| `@convex-dev/workpool`     | 0.4.13 (transitive)          |            | Apache-2.0 | none           |
+| `@convex-dev/rate-limiter` | 0.3.2 (transitive)           |            | Apache-2.0 | none           |
+| `@convex-dev/batch-worker` | 0.2.2 (transitive)           |            | Apache-2.0 | none           |
 
 - `convex-helpers` (peer, 0.1.127) is already in the tree through `@convex-dev/better-auth`.
 - `resend` declares `@react-email/render` as an optional peer; it is not installed, and the project does not use React Email.
@@ -175,31 +175,31 @@ Resolved on 2026-10-07 with `npm install --package-lock-only --ignore-scripts` n
 - **No separate dev or preview subdomain.** Dev and preview never send (below), so only production sends from the domain. This keeps production's reputation and DMARC reports to production traffic alone.
 - **Records the owner adds** (exact values are shown in the Resend dashboard and depend on the region):
 
-| Record | Type | Host | Purpose |
-| --- | --- | --- | --- |
-| DKIM | TXT | `resend._domainkey.mail` | Resend's DKIM public key |
-| SPF (return path) | TXT | `send.mail` (default return-path subdomain) | Authorises Resend's sending servers for the bounce domain |
-| Return path / feedback | MX | `send.mail` | Receives bounces and complaints for the return-path domain |
-| DMARC | TXT | `_dmarc` (the organisational domain, so it also covers `mail.`) | Start with `v=DMARC1; p=none; rua=mailto:<owner reports address>`. Move to `p=quarantine` after about 2 to 4 weeks of clean aggregate reports, then to `p=reject` ([Resend DMARC guide](https://resend.com/docs/dashboard/domains/dmarc)). |
+| Record                 | Type | Host                                                            | Purpose                                                                                                                                                                                                                                    |
+| ---------------------- | ---- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DKIM                   | TXT  | `resend._domainkey.mail`                                        | Resend's DKIM public key                                                                                                                                                                                                                   |
+| SPF (return path)      | TXT  | `send.mail` (default return-path subdomain)                     | Authorises Resend's sending servers for the bounce domain                                                                                                                                                                                  |
+| Return path / feedback | MX   | `send.mail`                                                     | Receives bounces and complaints for the return-path domain                                                                                                                                                                                 |
+| DMARC                  | TXT  | `_dmarc` (the organisational domain, so it also covers `mail.`) | Start with `v=DMARC1; p=none; rua=mailto:<owner reports address>`. Move to `p=quarantine` after about 2 to 4 weeks of clean aggregate reports, then to `p=reject` ([Resend DMARC guide](https://resend.com/docs/dashboard/domains/dmarc)). |
 
-  - DKIM is signed for `mail.<domain>` and the From address is on `mail.<domain>`, so DKIM aligns. The return path `send.mail.<domain>` shares the organisational domain, so SPF aligns under relaxed alignment. DMARC needs only one of them.
-  - If the `send` subdomain clashes with another service, Resend's custom return path option changes its name ([custom return path](https://resend.com/docs/dashboard/domains/custom-return-path)).
+- DKIM is signed for `mail.<domain>` and the From address is on `mail.<domain>`, so DKIM aligns. The return path `send.mail.<domain>` shares the organisational domain, so SPF aligns under relaxed alignment. DMARC needs only one of them.
+- If the `send` subdomain clashes with another service, Resend's custom return path option changes its name ([custom return path](https://resend.com/docs/dashboard/domains/custom-return-path)).
 - **Who verifies:** the owner, in the Resend dashboard (Domains → Verify). Agents never hold the Resend account or a production key.
 
 ### Deployments and periods
 
 Periods: **P1** before the verification and reset slice merges (today); **P2** after it merges, before the domain exists; **P3** after the domain exists and is verified.
 
-| Deployment | Period | Real email sent? | From | To | API key | Email settings |
-| --- | --- | --- | --- | --- | --- | --- |
-| **Local e2e** (anonymous local backend; CI) | P1 | No | none | none | **none** | ADR 0008: no callbacks |
-| | P2, P3 | **No.** Sends go to `testEmailOutbox` under `IS_TEST` | none | outbox row only | **none** | `IS_TEST=true`, `AUTH_EMAIL_DISABLED` unset: verification required, outbox used |
-| **Developer dev** (one per developer or agent) | P1 | No | none | none | none | ADR 0008 |
-| | P2, P3 | **No** | none | none | **none** | `AUTH_EMAIL_DISABLED=true` |
-| **Per-PR preview** | P1 | No | none | none | none | ADR 0008 |
-| | P2, P3 | **No** | none | none | **none** (the deploy check fails if one is set) | `AUTH_EMAIL_DISABLED=true` in the Convex default preview variables |
-| **Production** | P1, P2 | Not released: the first production release is blocked (below) | none | none | none | |
-| | P3 | **Yes** | `EMAIL_FROM` on `mail.<domain>` | the user's own address only | production key: `sending_access`, restricted to `mail.<domain>` | `AUTH_EMAIL_DISABLED` and `IS_TEST` unset |
+| Deployment                                     | Period | Real email sent?                                              | From                            | To                          | API key                                                         | Email settings                                                                  |
+| ---------------------------------------------- | ------ | ------------------------------------------------------------- | ------------------------------- | --------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Local e2e** (anonymous local backend; CI)    | P1     | No                                                            | none                            | none                        | **none**                                                        | ADR 0008: no callbacks                                                          |
+|                                                | P2, P3 | **No.** Sends go to `testEmailOutbox` under `IS_TEST`         | none                            | outbox row only             | **none**                                                        | `IS_TEST=true`, `AUTH_EMAIL_DISABLED` unset: verification required, outbox used |
+| **Developer dev** (one per developer or agent) | P1     | No                                                            | none                            | none                        | none                                                            | ADR 0008                                                                        |
+|                                                | P2, P3 | **No**                                                        | none                            | none                        | **none**                                                        | `AUTH_EMAIL_DISABLED=true`                                                      |
+| **Per-PR preview**                             | P1     | No                                                            | none                            | none                        | none                                                            | ADR 0008                                                                        |
+|                                                | P2, P3 | **No**                                                        | none                            | none                        | **none** (the deploy check fails if one is set)                 | `AUTH_EMAIL_DISABLED=true` in the Convex default preview variables              |
+| **Production**                                 | P1, P2 | Not released: the first production release is blocked (below) | none                            | none                        | none                                                            |                                                                                 |
+|                                                | P3     | **Yes**                                                       | `EMAIL_FROM` on `mail.<domain>` | the user's own address only | production key: `sending_access`, restricted to `mail.<domain>` | `AUTH_EMAIL_DISABLED` and `IS_TEST` unset                                       |
 
 **Recommended for dev and preview before (and after) the domain exists: no sending.** The owner-only sandbox (Resend's `onboarding@resend.dev` sender, which only delivers to the Resend account owner, [403 on resend.dev](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)) was considered and not chosen:
 
@@ -211,14 +211,14 @@ Periods: **P1** before the verification and reset slice merges (today); **P2** a
 
 One environment variable controls every per-deployment difference. **Default: unset, which means verification and reset are fully on.** Forgetting it on production therefore gives the strict behaviour.
 
-| | `AUTH_EMAIL_DISABLED` unset (production, local e2e) | `AUTH_EMAIL_DISABLED=true` (developer dev, previews) |
-| --- | --- | --- |
-| Password sign-up | Account created, verification email queued, "Check your email" screen. No session until verified. | Account created and signed in at once (as today). No email. |
-| Password sign-in | `403 EMAIL_NOT_VERIFIED` until verified; the screen offers "Resend email". | Works without verification. |
-| Verification | Link (or code) from the email | Not offered; the verification prompt is hidden. `/send-verification-email` returns `400 VERIFICATION_EMAIL_NOT_ENABLED`. |
-| Reset | "Forgot password?" link shown; reset email queued | Link hidden. `/request-password-reset` returns `400 RESET_PASSWORD_DISABLED`. A tester who forgets a password signs up again or asks the owner to delete the account (ADR 0008). |
-| 7-day deletion of unverified accounts | Runs (skipped under `IS_TEST`, ADR 0005) | **Off**, because nobody can verify there |
-| Google linking to a password account | Allowed once the password account is verified | Never (password emails stay unverified), as ADR 0008 describes |
+|                                       | `AUTH_EMAIL_DISABLED` unset (production, local e2e)                                               | `AUTH_EMAIL_DISABLED=true` (developer dev, previews)                                                                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Password sign-up                      | Account created, verification email queued, "Check your email" screen. No session until verified. | Account created and signed in at once (as today). No email.                                                                                                                      |
+| Password sign-in                      | `403 EMAIL_NOT_VERIFIED` until verified; the screen offers "Resend email".                        | Works without verification.                                                                                                                                                      |
+| Verification                          | Link (or code) from the email                                                                     | Not offered; the verification prompt is hidden. `/send-verification-email` returns `400 VERIFICATION_EMAIL_NOT_ENABLED`.                                                         |
+| Reset                                 | "Forgot password?" link shown; reset email queued                                                 | Link hidden. `/request-password-reset` returns `400 RESET_PASSWORD_DISABLED`. A tester who forgets a password signs up again or asks the owner to delete the account (ADR 0008). |
+| 7-day deletion of unverified accounts | Runs (skipped under `IS_TEST`, ADR 0005)                                                          | **Off**, because nobody can verify there                                                                                                                                         |
+| Google linking to a password account  | Allowed once the password account is verified                                                     | Never (password emails stay unverified), as ADR 0008 describes                                                                                                                   |
 
 - **Only the value `true` is accepted.** Any other value makes `createAuth` throw a configuration error, so every auth request fails visibly and a typo cannot silently pick a mode.
 - **The Angular app learns the mode** from the public query `authEmail.sendingStatus` (below), not from a build flag, so the same build works on every deployment.
@@ -236,23 +236,23 @@ One environment variable controls every per-deployment difference. **Default: un
 
 ### Token exposure outside email
 
-| Path | Who can see it | Guard |
-| --- | --- | --- |
-| `testEmailOutbox` (link in plain text) | Local e2e only | `IS_TEST`, the same guard as ADR 0005. #15's existing `IS_TEST` check proves it is off on previews and production. |
+| Path                                                           | Who can see it                                                                                                                                                           | Guard                                                                                                                                                                                                                             |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `testEmailOutbox` (link in plain text)                         | Local e2e only                                                                                                                                                           | `IS_TEST`, the same guard as ADR 0005. #15's existing `IS_TEST` check proves it is off on previews and production.                                                                                                                |
 | Component tables (`emails`, `content`: the body with the link) | Internal functions only, plus anyone with **admin access to that deployment's dashboard**. No client can call component functions, and no project function returns them. | On production, only the owner has dashboard access. Rows are deleted by the cleanup cron: finalized emails after 24 hours, others after 7 days. Links expire after 1 hour. Dev and preview have no rows, because they never send. |
-| Better Auth's `verification` table | Same as above | Already present in ADR 0008: reset tokens are stored as `reset-password:<token>`. The component copy adds no new reader. |
-| Resend's email log (30 days) | The Resend account (owner) | Not avoidable on Free or Pro (see "Data handling"). |
-| Logs | Deployment admins | Project code never logs the URL, token, or address. It logs `kind`, status, and the component's email id. |
+| Better Auth's `verification` table                             | Same as above                                                                                                                                                            | Already present in ADR 0008: reset tokens are stored as `reset-password:<token>`. The component copy adds no new reader.                                                                                                          |
+| Resend's email log (30 days)                                   | The Resend account (owner)                                                                                                                                               | Not avoidable on Free or Pro (see "Data handling").                                                                                                                                                                               |
+| Logs                                                           | Deployment admins                                                                                                                                                        | Project code never logs the URL, token, or address. It logs `kind`, status, and the component's email id.                                                                                                                         |
 
 The only path that exposes a token to anyone other than an admin of the sending deployment is the outbox, and it is behind `IS_TEST`.
 
 ### Limits on every endpoint that sends email
 
-| Endpoint | Better Auth per-IP default | Project per-IP rule (`rateLimit.customRules`) | Project per-address limit (in `authEmail.enqueue`) |
-| --- | --- | --- | --- |
-| `POST /sign-up/email` (with `sendOnSignUp`) | 3 per 10 s | **10 per hour** | 1 per 60 s and **5 per 24 h per recipient**, across all kinds |
-| `POST /send-verification-email` | 3 per 60 s | **5 per hour** | same |
-| `POST /request-password-reset` | 3 per 60 s | **5 per hour** | same |
+| Endpoint                                    | Better Auth per-IP default | Project per-IP rule (`rateLimit.customRules`) | Project per-address limit (in `authEmail.enqueue`)            |
+| ------------------------------------------- | -------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
+| `POST /sign-up/email` (with `sendOnSignUp`) | 3 per 10 s                 | **10 per hour**                               | 1 per 60 s and **5 per 24 h per recipient**, across all kinds |
+| `POST /send-verification-email`             | 3 per 60 s                 | **5 per hour**                                | same                                                          |
+| `POST /request-password-reset`              | 3 per 60 s                 | **5 per hour**                                | same                                                          |
 
 - **Per-address:** keyed on the SHA-256 of the lower-cased, trimmed address, counted from `authEmailSends`. A refused send is recorded as `skipped_limited` and nothing is sent. The response is unchanged, so the limit reveals nothing about which accounts exist.
 - **Global daily budget:** `enqueue` stops at **`EMAIL_DAILY_LIMIT` sends per UTC day (default 95 when unset)**, 5 below Resend Free's 100/day, so the project hits its own budget before Resend's quota and can tell users. On Pro the owner raises it (for example to 2,000) as a cost guard.
@@ -303,30 +303,30 @@ A total Resend outage would stop the digest too. The Resend dashboard shows the 
 
 ### New Convex functions and routes: who may call them
 
-| Function or route | Kind | Who may call or read it |
-| --- | --- | --- |
-| `authEmail.enqueue` | `internalMutation` | Only server code: Better Auth's callbacks inside `createAuth`. Not callable by any client. |
-| `authEmail.onEmailEvent` | `internalMutation` | Only the component, on a verified webhook event |
-| `authEmail.reconcile`, `authEmail.cleanup`, `authEmail.dailyDigest` | internal, crons | Only the scheduler. All skip work under `IS_TEST`. `cleanup` calls the component's `cleanupOldEmails` (24 h) and `cleanupAbandonedEmails` (7 days) and deletes `authEmailSends` rows older than 30 days. |
-| `authEmail.health` | `internalQuery` | The owner, through the dashboard function runner; internal functions |
-| `authEmail.sendingStatus` | public `query`, **deliberately unauthenticated** (`docs/conventions/convex.md`) | Anyone. Takes no arguments and returns only `{ enabled, paused, resumesAt }`, which is global state with no address, user id, or count. Tests cover the unauthenticated caller and a signed-in caller from another league getting the same answer. |
-| `POST /resend-webhook` | HTTP route in `convex/http.ts` | Resend only. It returns **404 if `RESEND_WEBHOOK_SECRET` is unset** (dev, preview, local), and otherwise calls `handleResendEventWebhook`. A missing, wrong, or older-than-5-minutes **Svix signature (HMAC-SHA256)** gets **401**, with nothing logged from the request. The secret is stored like the API key. |
-| `testing:readOutbox` | `internalQuery` | Playwright via `npx convex run`, and only when `IS_TEST` is set |
-| Component functions (`components.resend.*`) | component | Only the app's own functions. Clients cannot call component functions. |
+| Function or route                                                   | Kind                                                                            | Who may call or read it                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authEmail.enqueue`                                                 | `internalMutation`                                                              | Only server code: Better Auth's callbacks inside `createAuth`. Not callable by any client.                                                                                                                                                                                                                       |
+| `authEmail.onEmailEvent`                                            | `internalMutation`                                                              | Only the component, on a verified webhook event                                                                                                                                                                                                                                                                  |
+| `authEmail.reconcile`, `authEmail.cleanup`, `authEmail.dailyDigest` | internal, crons                                                                 | Only the scheduler. All skip work under `IS_TEST`. `cleanup` calls the component's `cleanupOldEmails` (24 h) and `cleanupAbandonedEmails` (7 days) and deletes `authEmailSends` rows older than 30 days.                                                                                                         |
+| `authEmail.health`                                                  | `internalQuery`                                                                 | The owner, through the dashboard function runner; internal functions                                                                                                                                                                                                                                             |
+| `authEmail.sendingStatus`                                           | public `query`, **deliberately unauthenticated** (`docs/conventions/convex.md`) | Anyone. Takes no arguments and returns only `{ enabled, paused, resumesAt }`, which is global state with no address, user id, or count. Tests cover the unauthenticated caller and a signed-in caller from another league getting the same answer.                                                               |
+| `POST /resend-webhook`                                              | HTTP route in `convex/http.ts`                                                  | Resend only. It returns **404 if `RESEND_WEBHOOK_SECRET` is unset** (dev, preview, local), and otherwise calls `handleResendEventWebhook`. A missing, wrong, or older-than-5-minutes **Svix signature (HMAC-SHA256)** gets **401**, with nothing logged from the request. The secret is stored like the API key. |
+| `testing:readOutbox`                                                | `internalQuery`                                                                 | Playwright via `npx convex run`, and only when `IS_TEST` is set                                                                                                                                                                                                                                                  |
+| Component functions (`components.resend.*`)                         | component                                                                       | Only the app's own functions. Clients cannot call component functions.                                                                                                                                                                                                                                           |
 
 - `authEmailSends`, `authEmailSuppressions`, the daily counter, and the component tables hold addresses or their hashes. **No public query or mutation reads them**, so league organizers and other users can never see another user's address or send status.
 
 ### Secrets and environment variables
 
-| Variable | Local e2e | Developer dev | Preview (Convex default preview variables) | Production (set by the owner) |
-| --- | --- | --- | --- | --- |
-| `RESEND_API_KEY` | not set | not set | **not set** (deploy check fails if set) | Resend key with `sending_access`, **restricted to `mail.<domain>`** |
-| `RESEND_WEBHOOK_SECRET` | not set | not set | not set | the webhook's signing secret |
-| `EMAIL_FROM`, `EMAIL_REPLY_TO` | not set | not set | not set | the sender address and `support@<domain>` |
-| `OWNER_ALERT_EMAIL` | not set | not set | not set | the owner's address |
-| `EMAIL_DAILY_LIMIT` | not set | not set | not set | optional; default 95 |
-| `AUTH_EMAIL_DISABLED` | **unset** | `true` | `true` | **unset** (deploy check fails if set) |
-| `IS_TEST` | `true` (Playwright `globalSetup`) | unset | unset (check) | unset (check) |
+| Variable                       | Local e2e                         | Developer dev | Preview (Convex default preview variables) | Production (set by the owner)                                       |
+| ------------------------------ | --------------------------------- | ------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| `RESEND_API_KEY`               | not set                           | not set       | **not set** (deploy check fails if set)    | Resend key with `sending_access`, **restricted to `mail.<domain>`** |
+| `RESEND_WEBHOOK_SECRET`        | not set                           | not set       | not set                                    | the webhook's signing secret                                        |
+| `EMAIL_FROM`, `EMAIL_REPLY_TO` | not set                           | not set       | not set                                    | the sender address and `support@<domain>`                           |
+| `OWNER_ALERT_EMAIL`            | not set                           | not set       | not set                                    | the owner's address                                                 |
+| `EMAIL_DAILY_LIMIT`            | not set                           | not set       | not set                                    | optional; default 95                                                |
+| `AUTH_EMAIL_DISABLED`          | **unset**                         | `true`        | `true`                                     | **unset** (deploy check fails if set)                               |
+| `IS_TEST`                      | `true` (Playwright `globalSetup`) | unset         | unset (check)                              | unset (check)                                                       |
 
 - The production key **can be scoped**: Resend API keys are `full_access` or `sending_access`, and a `sending_access` key can be limited to one domain ([API keys](https://resend.com/docs/api-reference/api-keys/create-api-key)). Only the owner holds the Resend account and creates keys.
 - **No key exists in P1 or P2**, and no key is ever held by an agent, CI, or a preview.
@@ -341,11 +341,11 @@ A total Resend outage would stop the digest too. The Resend dashboard shows the 
 
 ## Cost
 
-| Monthly cost | 1,000 MAU (about 500 emails) | 10,000 MAU (about 5,000 emails) |
-| --- | --- | --- |
-| Before the first production release | **$0** (nothing is sent) | **$0** |
-| Resend, from the first production release | **$0** on Free (3,000/month, **100/day**) | **$20** on Pro (50,000/month, no daily cap) |
-| Extra Convex usage (component, crons) | within included amounts: $0 | under 0.1M calls: at most about $0.22 on Starter |
+| Monthly cost                              | 1,000 MAU (about 500 emails)              | 10,000 MAU (about 5,000 emails)                  |
+| ----------------------------------------- | ----------------------------------------- | ------------------------------------------------ |
+| Before the first production release       | **$0** (nothing is sent)                  | **$0**                                           |
+| Resend, from the first production release | **$0** on Free (3,000/month, **100/day**) | **$20** on Pro (50,000/month, no daily cap)      |
+| Extra Convex usage (component, crons)     | within included amounts: $0               | under 0.1M calls: at most about $0.22 on Starter |
 
 - **Monthly limit:** at 0.5 emails per MAU, Free's 3,000/month lasts to about **6,000 MAU**.
 - **Daily limit:** Free allows about 50 to 95 new password accounts per UTC day (above). A league opening registration to more than that in one day needs Pro, **at any MAU**.

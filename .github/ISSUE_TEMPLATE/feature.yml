@@ -1,6 +1,6 @@
 name: Feature slice
 description: One user-visible behaviour, end to end, sized for one PR.
-labels: ["type:feature", "status:planning"]
+labels: ['type:feature', 'status:planning']
 body:
   - type: textarea
     id: story
@@ -31,11 +31,11 @@ body:
       label: Gates
       description: Gates this issue needs before implementation. Give reasons in the notes below.
       options:
-        - label: "gate:ui-design (new screen or visible change)"
-        - label: "gate:technology (new package, service, or tool)"
-        - label: "gate:production (production deploy or Stripe live-mode change)"
+        - label: 'gate:ui-design (new screen or visible change)'
+        - label: 'gate:technology (new package, service, or tool)'
+        - label: 'gate:production (production deploy or Stripe live-mode change)'
   - type: textarea
     id: notes
     attributes:
       label: Notes, gate reasons, dependencies
-      description: "Use one `Blocked by: #n` line per dependency."
+      description: 'Use one `Blocked by: #n` line per dependency.'
