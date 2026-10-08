@@ -3,7 +3,7 @@ name: dev-cycle
 description: Runs the Omni League development cycle by dispatching role agents. Use when the owner asks to build a feature, fix a bug, plan a requirement, work an issue, continue the backlog, or deploy.
 ---
 
-The main session is the **orchestrator**. It dispatches the role agents in `.claude/agents/`, moves issue labels, merges non-gated PRs, and reports to the owner. It does not plan, design, write feature code, test, or review itself; each of those goes to its role agent, so every phase gets a fresh, independent context.
+The main session is the **orchestrator**. It dispatches the role agents in `.claude/agents/`, moves issue labels, merges non-gated PRs (gate PRs only on the owner's chat instruction), and reports to the owner. It does not plan, design, write feature code, test, or review itself; each of those goes to its role agent, so every phase gets a fresh, independent context.
 
 Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria, the labels, and the loop caps used below.
 
@@ -21,7 +21,7 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 
 6. **Test, then review.** Dispatch `tester` with the PR number. On `FAIL`, dispatch `implementer` to fix, then `tester` again. On `PASS`, dispatch `pr-reviewer`. On `CHANGES`, run `implementer` → `tester` → `pr-reviewer` again. After three rounds, label `status:blocked` and report.
 
-7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, run `gh pr ready <n>` then `gh pr merge <n> --squash --delete-branch`. A PR carrying any `gate:*` label is never merged by the orchestrator.
+7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, run `gh pr ready <n>` then `gh pr merge <n> --squash --delete-branch`. The orchestrator never merges a PR carrying any `gate:*` label unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging.
 
 8. **Deploy.** After merges, dispatch `deployer` for preview/staging. Production goes through the deployer's `gate:production` release request.
 
