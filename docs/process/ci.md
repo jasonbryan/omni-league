@@ -25,7 +25,9 @@ Nothing else is required. The workflow's second job, `warm-cache`, appears on ev
 
 PRs run against base branches `main` and `production` (release PRs, ADR 0010).
 
-**Steps of `ci`, in order:** checkout (depth 2, `persist-credentials: false`); `scope`; setup-node (Node from `package.json` `devEngines.runtime`, npm cache automatic); `install` (`npm ci`); `format:check`; then, on app changes only, `audit signatures`, `lint`, `typecheck`, `test`, `test:convex`, `build`, `actionlint`. Each check runs even when an earlier one failed, so one run reports every failure; the failing step is named in the job log and in `gh run view <id> --log-failed`. If `install` fails, the steps after it are skipped and `ci` fails. The e2e steps (#13) are added at the end and run only when every check passed.
+**What counts as docs-only.** `scope` lists changed files with `git diff --no-renames`, so a rename counts both its old and new path: moving an app file into `docs/` is an app change. A file ESLint lints (`.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`) is an app file wherever it lives, so a helper script under `.claude/` gets the full checks.
+
+**Steps of `ci`, in order:** checkout (depth 2, `persist-credentials: false`); `scope`; setup-node (Node from `package.json` `devEngines.runtime`, npm cache automatic); `install` (`npm ci`); `format:check`; then, on app changes only, `audit signatures`, `lint`, `typecheck`, `test`, `test:convex`, `build`, `actionlint`. Each check runs even when an earlier one failed, so one run reports every failure; the failing step is named in the job log and in `gh run view <id> --log-failed`. If `install` fails, every step that needs `node_modules` is skipped, `actionlint` still runs, and `ci` fails. The e2e steps (#13) are added at the end and run only when every check passed.
 
 ## Owner settings checklist
 
@@ -38,6 +40,7 @@ Applied by the owner **after** the PR that adds `ci.yml` (#12) merges, so the fi
   - `gh api -X PUT repos/jasonbryan/omni-league/actions/permissions -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true`
   - `gh api -X PUT repos/jasonbryan/omni-league/actions/permissions/selected-actions -F github_owned_allowed=true -F verified_allowed=false`
 - [ ] **Workflow permissions** stay read-only ("Read repository contents and packages permissions"), with PR approval by Actions off; **fork PR workflows** stay disabled. Both are already so; listed for completeness.
+- [ ] **Merge only after a completed green `ci` run.** A ready PR must not be merged until the real `ci` run on its head has passed. A skipped `ci` (the draft-time skip) satisfies the ruleset but is not a pass.
 - [ ] Optional: an Actions budget of $0 beyond the included minutes, so usage can never be billed.
 
 Later: when the `production` branch is created (ADR 0010), add a `production` ruleset with the same required check `ci`, strict.
@@ -46,7 +49,7 @@ Later: when the `production` branch is created (ADR 0010), add a `production` ru
 
 The orchestrator merges one PR at a time (dev cycle Phase 7):
 
-1. If the PR branch is behind `main`, update it **while it is still a draft**: `gh pr update-branch <n>`. No CI runs. A clean update does not reset the tester's `PASS` or the reviewer's `APPROVE`, because the run in step 2 checks the combined tree. A conflict sends the PR back to the implementer.
+1. If the PR branch is behind `main`, update it **while it is still a draft**: `gh pr update-branch <n>`. No CI runs. A clean update (no conflicts, none of the PR's own files changed) keeps the tester's `PASS` and the reviewer's `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again. If this page and [dev-cycle.md](dev-cycle.md) Phase 7 differ, dev-cycle.md governs.
 2. Mark it ready: `gh pr ready <n>`. This starts the one `ci` run.
 3. Read the head SHA (`gh pr view <n> --json headRefOid`), then wait until `gh pr checks <n> --json name,bucket,workflow` shows `ci` from workflow `CI` with `bucket` `pass`. **`skipping` is not a pass:** it is the draft-time skip.
 4. Merge: `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If another PR merged meanwhile, GitHub refuses the merge (strict rule); go back to step 1.

@@ -42,12 +42,15 @@ jobs:
           fetch-depth: 2
       # Docs-only PRs (docs/, design/, .claude/, root *.md) run only install and format:check.
       # HEAD is the PR merge commit; its first parent is the base branch.
+      # --no-renames lists both paths of a rename, so moving an app file into docs/ is an app change.
+      # Any file ESLint lints (.js .mjs .cjs .ts .mts .cts) is an app file wherever it lives.
       - name: scope
         id: scope
         run: |
-          changed="$(git diff --name-only HEAD^1 HEAD)"
+          changed="$(git diff --no-renames --name-only HEAD^1 HEAD)"
           app_files="$(printf '%s\n' "$changed" | grep -vE '^(docs/|design/|\.claude/|[^/]+\.md$)' || true)"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$changed" ] && [ -z "$app_files" ]; then
+          code_files="$(printf '%s\n' "$changed" | grep -E '\.[cm]?[jt]s$' || true)"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$changed" ] && [ -z "$app_files" ] && [ -z "$code_files" ]; then
             echo "app=false" >> "$GITHUB_OUTPUT"
           else
             echo "app=true" >> "$GITHUB_OUTPUT"
