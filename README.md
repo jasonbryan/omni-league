@@ -54,7 +54,7 @@ npm run lint           # ESLint
 npm run format:check   # Prettier (npm run format to fix)
 npm run typecheck      # tsc over the app, specs, tooling files, and convex/
 npm test               # Angular unit tests (Vitest through ng test)
-npm run test:serial    # the same specs in one worker, as on the CI runner
+npm run test:serial    # the same specs in one worker, like the 2-vCPU CI runner
 npm run test:convex    # Convex function tests (convex-test on Vitest)
 npm run build
 ```

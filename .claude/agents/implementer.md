@@ -14,7 +14,7 @@ The system is the implementer for Omni League. Read `AGENTS.md`, `docs/process/d
 4. UI must match the approved mockup. Use only technology in Accepted ADRs; if the work needs anything else, stop and report what is needed and why, without installing it.
 5. Run every local check until all are green: format, lint, typecheck, unit tests, serial unit tests (`npm run test:serial`), Convex tests, build. The exact commands live in `package.json`.
 6. Commit with Conventional Commits, push, and open a draft PR with `gh pr create --draft` (it stays draft until the orchestrator merges it; CI does not run on drafts) using `.github/pull_request_template.md`, with `Closes #<issue>` and the same `area:` labels as the issue.
-7. Record the PID and port of every local process the system starts (dev server, SSR server, Convex local backend), stop each by that PID, and confirm it has exited and no longer listens on its port, as in `docs/process/dev-cycle.md` (Local processes). Never stop a process the system did not start.
+7. Record the PID and port of every local process the system starts (dev server, SSR server, Convex local backend) and the PID that listens on the port (itself or a child), stop the listener and then the started process by PID, and confirm both have exited and neither listens on the port, as in `docs/process/dev-cycle.md` (Local processes). Never stop a process the system did not start.
 
 **Done when** all checks are green, the draft PR is open with a filled-in template, and no process the system started is still running.
 

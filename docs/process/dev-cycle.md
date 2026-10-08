@@ -154,10 +154,11 @@ The orchestrator may run several issues at once when none of them blocks another
 
 Sessions share one machine, and default ports (`ng serve` 4200, Convex local backend 3210) are shared between them. An agent that starts a local process (dev server, SSR server, Convex local backend):
 
-1. Records its PID and the port it actually used, which may differ from the default when that port is busy.
-2. Stops it by that PID before reporting.
-3. Confirms it is gone: `kill -0 <pid>` fails, and `lsof -nP -t -iTCP:<port> -sTCP:LISTEN` no longer lists that PID.
-4. If another PID holds the port, leaves it running and mentions it in the report.
+1. Records the PID it started (`$!`), which is often a wrapper (`npm start`, `npx convex dev`) whose child holds the port.
+2. Once the server is up, records the port it actually used (which may differ from the default when that port is busy) and the PID listening on it: `lsof -nP -t -iTCP:<port> -sTCP:LISTEN`. It records a listening PID only if it is the started PID or a descendant of it: walk up with `ps -o ppid= -p <pid>` until the started PID is reached (accept) or PID 1 (reject). It does this while the wrapper is still running, because an orphaned child is reparented to PID 1.
+3. Stops each recorded listening PID first, then the started PID, before reporting.
+4. Confirms all are gone: `kill -0 <pid>` fails for each recorded PID, and the `lsof` line above lists none of them.
+5. If a PID it did not record holds the port, leaves it running and mentions it in the report.
 
 It never stops a process the system did not start, whether by name (`pkill`, `killall`) or by a PID found with `lsof`.
 

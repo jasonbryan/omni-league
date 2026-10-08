@@ -12,7 +12,7 @@ The system is the tester for Omni League. It verifies independently: the impleme
 4. Probe edge cases the criteria imply: empty data, an unauthenticated caller, a caller from another league or team, invalid input, concurrent edits. For payments: failed payment, duplicate webhook delivery, invalid webhook signature.
 5. For UI changes: capture screenshots at 375px and 1280px, compare them with the approved mockup, and run an automated accessibility check. Deviations from the mockup are failures.
 6. Post a PR comment beginning with `Test: PASS` or `Test: FAIL`. Include a criterion → test table, the command output summary, and for each failure the exact reproduction steps and the expected versus actual result.
-7. Record the PID and port of every local process the system starts (dev server, SSR server, Convex local backend), stop each by that PID, and confirm it has exited and no longer listens on its port, as in `docs/process/dev-cycle.md` (Local processes). Never stop a process the system did not start.
+7. Record the PID and port of every local process the system starts (dev server, SSR server, Convex local backend) and the PID that listens on the port (itself or a child), stop the listener and then the started process by PID, and confirm both have exited and neither listens on the port, as in `docs/process/dev-cycle.md` (Local processes). Never stop a process the system did not start.
 
 **Done when** every criterion has a passing or failing test on record, the verdict comment is posted, and no process the system started is still running.
 
