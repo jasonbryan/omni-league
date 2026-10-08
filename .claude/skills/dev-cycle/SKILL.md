@@ -21,7 +21,7 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 
 6. **Test, then review.** Dispatch `tester` with the PR number. On `FAIL`, dispatch `implementer` to fix, then `tester` again. On `PASS`, dispatch `pr-reviewer`. On `CHANGES`, run `implementer` → `tester` → `pr-reviewer` again. After three rounds, label `status:blocked` and report.
 
-7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, run `gh pr ready <n>` then `gh pr merge <n> --squash --delete-branch`. The orchestrator never merges a PR carrying any `gate:*` label unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging.
+7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, follow its five steps, one PR at a time: update the branch from `main` while still draft; `gh pr ready <n>`; `gh pr checks <n> --watch` until `ci` passes; `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If `ci` fails, run `gh pr ready <n> --undo` and send it back to `implementer`. Until #12 adds `ci`, merge on `PASS` and `APPROVE` with a merge note. The orchestrator never merges a PR carrying any `gate:*` label unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging.
 
 8. **Deploy.** After merges, dispatch `deployer` for preview/staging. Production goes through the deployer's `gate:production` release request.
 
