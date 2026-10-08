@@ -1,5 +1,5 @@
 # Generated, build, and test output (ADR 0002)
-convex/_generated/
+**/convex/_generated/
 dist/
 .angular/
 out-tsc/
@@ -23,3 +23,6 @@ node_modules/
 # Environment files and local Convex backend state
 .env*
 .convex/
+
+# Agent worktrees created inside the checkout (dev cycle)
+.claude/worktrees/

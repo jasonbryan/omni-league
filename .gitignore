@@ -47,6 +47,9 @@ __screenshots__/
 # Anonymous local Convex backend state (database, admin key)
 /.convex/
 
+# Agent worktrees created inside the checkout (dev cycle)
+/.claude/worktrees/
+
 # System files
 .DS_Store
 Thumbs.db

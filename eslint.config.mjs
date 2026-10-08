@@ -27,6 +27,8 @@ export default defineConfig([
     '.pnpm-store/',
     '**/.env*',
     '.convex/',
+    // Agent worktrees inside the checkout; flat config does not read .gitignore.
+    '.claude/worktrees/',
   ]),
 
   // Rule set 1: all TypeScript, type-aware. Root tooling files are typed by tsconfig.tooling.json.
