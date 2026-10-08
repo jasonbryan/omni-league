@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, InjectionToken, inject } from '@angular/core';
 import {
   bootstrapApplication,
   provideClientHydration,
@@ -76,6 +76,80 @@ function ngState(html: string): Record<string, unknown> {
   expect(match).not.toBeNull();
   return JSON.parse(match?.[1] ?? '{}') as Record<string, unknown>;
 }
+
+const LEAGUE_ID = new InjectionToken<string>('LEAGUE_ID');
+
+/** Spec-only component whose args differ per render (as route params would). */
+@Component({
+  selector: 'app-render-probe',
+  template: `<p class="teams">{{ teams.value()?.join(', ') ?? 'Loading teams' }}</p>`,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class LeagueProbe {
+  readonly teams = injectQuery(listTeams, { leagueId: inject(LEAGUE_ID) });
+}
+
+describe('concurrent server renders', () => {
+  it('keep their own data: no client, cache entry, or TransferState is shared across overlapping renders', async () => {
+    const queriesPerClient: unknown[][] = [];
+    // One factory shared by both renders, as the default factory is; it must still be called per render.
+    const factory = vi.fn(() => {
+      const seen: unknown[] = [];
+      queriesPerClient.push(seen);
+      const client: ConvexHttpClientLike = {
+        query: ((_fn: unknown, args: { leagueId: string }) => {
+          seen.push(args);
+          // The first render's query settles last, so the two renders overlap completely.
+          const delay = args.leagueId === 'a' ? 40 : 5;
+          return new Promise((resolve) =>
+            setTimeout(() => resolve([`team of ${args.leagueId}`]), delay),
+          );
+        }) as ConvexHttpClientLike['query'],
+      };
+      return client;
+    });
+
+    const renderLeague = (leagueId: string) =>
+      renderApplication(
+        (context: BootstrapContext) =>
+          bootstrapApplication(
+            LeagueProbe,
+            {
+              providers: [
+                provideServerRendering(),
+                provideClientHydration(),
+                provideConvex(),
+                { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+                { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: factory },
+                { provide: LEAGUE_ID, useValue: leagueId },
+              ],
+            },
+            context,
+          ),
+        {
+          document:
+            '<!doctype html><html><head></head><body><app-render-probe></app-render-probe></body></html>',
+          url: 'http://localhost/',
+          allowedHosts: ['localhost'],
+        },
+      );
+
+    const [a, b] = await Promise.all([renderLeague('a'), renderLeague('b')]);
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(queriesPerClient).toHaveLength(2);
+    expect(queriesPerClient.every((seen) => seen.length === 1)).toBe(true);
+    expect(a).toContain('<p class="teams">team of a</p>');
+    expect(b).toContain('<p class="teams">team of b</p>');
+    expect(a).not.toContain('team of b');
+    expect(b).not.toContain('team of a');
+    expect(ngState(a)).toMatchObject({ [KEY]: { v: ['team of a'] } });
+    expect(Object.keys(ngState(a)).filter((k) => k.startsWith('cvx:'))).toEqual([KEY]);
+    expect(Object.keys(ngState(b)).filter((k) => k.startsWith('cvx:'))).toEqual([
+      'cvx:teams:list:{"leagueId":"b"}',
+    ]);
+  });
+});
 
 describe('server render with renderApplication', () => {
   it('waits for the delayed query: the HTML holds the value and ng-state holds the cvx: key', async () => {
