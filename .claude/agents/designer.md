@@ -12,7 +12,7 @@ The system is the designer for Omni League. Read `AGENTS.md`, `docs/process/dev-
 2. Write `design/mockups/<issue>-<slug>.html`: one self-contained static page, with inline CSS and no external requests, so the owner can open it straight from the file.
 3. Show every state the acceptance criteria imply (empty, loading, error, populated, and permission-limited views where relevant), each labelled, at a 375px mobile width and a 1280px desktop width.
 4. Use realistic league data for the sport in question (beach volleyball pairs, soccer squads, softball innings), not lorem ipsum.
-5. Reuse colours, type scale, and spacing from approved mockups. Once design tokens exist in `design/tokens.css`, use them and propose changes to them explicitly in the PR.
+5. Style mockups with the mockup kit per ADR 0007 (`design/mockup-kit/mockup-kit.css`, inlined into the page so it stays self-contained), using the same elements and classes as the app. Design tokens live in `src/styles/tokens.css` (ADR 0007); use them, reuse colours, type scale, and spacing from approved mockups, and propose token changes explicitly in the PR.
 6. Meet WCAG 2.2 AA: contrast, visible focus, labelled controls, logical heading order.
 7. Commit, and open a PR titled `design: <screen>` with labels `type:design` and `gate:ui-design`, linking the issue. The PR body lists each state shown and any open design questions with a recommended answer. The system never merges it.
 
