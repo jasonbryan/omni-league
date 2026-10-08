@@ -104,6 +104,20 @@ describe('injectQuery (browser, fake client)', () => {
     expect(teams.isLoading()).toBe(false);
   });
 
+  it('ignores an emission from the old subscription after the args change', () => {
+    const { teams } = createHost();
+    client.subscriptions[0].emit(['Sharks']);
+
+    leagueId.set({ leagueId: 'b' });
+    client.subscriptions[0].emit(['Sharks-late']); // old subscription still active until the next tick
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+
+    TestBed.tick();
+    expect(teams.value()).toBeUndefined();
+    expect(teams.isLoading()).toBe(true);
+  });
+
   it('does not resubscribe when the args change to a new object with equal content', () => {
     const { teams } = createHost();
     client.subscriptions[0].emit(['Sharks']);
