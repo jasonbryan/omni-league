@@ -39,6 +39,12 @@ testem.log
 /typings
 __screenshots__/
 
+# Playwright e2e output (ADR 0005)
+/playwright-report/
+/test-results/
+/blob-report/
+/e2e/screenshots/
+
 # Environment files and Convex deployment settings (never committed)
 .env
 .env.*

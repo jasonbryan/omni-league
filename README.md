@@ -57,7 +57,33 @@ npm test               # Angular unit tests (Vitest through ng test)
 npm run test:serial    # the same specs in one worker, like the 2-vCPU CI runner
 npm run test:convex    # Convex function tests (convex-test on Vitest)
 npm run build
+npm run e2e            # e2e and accessibility tests (see "E2E tests")
 ```
+
+### E2E tests
+
+Playwright with `@axe-core/playwright` ([ADR 0005](docs/decisions/0005-e2e-and-accessibility-testing.md)). Install the browser once (and again after a Playwright upgrade):
+
+```sh
+npx playwright install --only-shell chromium   # add: npx playwright install webkit, for E2E_WEBKIT=1
+```
+
+**Local run.** `npm run e2e` builds with `npm run build -- --configuration development` (so hydration mismatch checks run), starts `npm run serve:ssr` with `PORT=4000`, and runs every spec in `e2e/` in the `chromium-mobile` (360 x 800) and `chromium-desktop` (1280 x 720) projects. Port 4000 must be free: an already running server is never reused. Arguments go to `playwright test`, for example `npm run e2e -- e2e/smoke.spec.ts`. The HTML report is in `playwright-report/` (`npx playwright show-report`); failure screenshots and traces are in `test-results/`.
+
+**Against a URL.** `E2E_BASE_URL=<url> npm run e2e -- e2e/smoke.spec.ts` targets an already running app (for example a Netlify preview) and starts no local server. A preview is a production build, so the hydration checks cannot run: the `Angular hydrated <n> component(s)` assertion and the `/%E0%A4%A` 400 check are reported as skipped, and the run prints so.
+
+**WebKit.** `E2E_WEBKIT=1 npm run e2e` adds the `webkit-mobile` project (360 x 800, touch), the iOS Safari proxy. CI runs it only on release PRs into `production` and on `workflow_dispatch` with `webkit: true`; on macOS it is a closer Safari proxy than CI's Linux WebKit.
+
+**Screenshots (tester).** `npm run e2e:screenshots` saves a full-page PNG of `/` at each Chromium width to `e2e/screenshots/<route-slug>-<width>.png` (gitignored), for example `home-360.png` and `home-1280.png`. Other routes: `E2E_SCREENSHOT_ROUTES=/,/some/route npm run e2e:screenshots` (`/some/route` is saved as `some-route-<width>.png`). CI uploads the folder in the `e2e-report` artifact.
+
+**Writing specs.** Import `test` and `expect` from `e2e/support/fixtures.ts`, not `@playwright/test`:
+
+- The **console fixture** fails a test on any page error, any `console.error`, and any `console.warn` with an `NG05xx` code. Opt-ins, per test: `test.use({ expectedDocumentStatus: 404 })` for a page that is a 404 document, and `test.use({ expectedConvexErrors: ['module:function'] })` for an expected rejected Convex mutation or action (an unused entry fails the test).
+- The **axe helper**, `expectAccessible(page)` in `e2e/support/a11y.ts`, runs axe with the ADR tags, the Tab walk (2.1.2, 2.4.3, 2.4.7, 2.4.11; pass `expectedOrder` when the focus order deliberately differs from DOM order), and the 320px reflow check.
+- **Raw server HTML:** `fetchRawHtml(request, path)` in `e2e/support/raw-html.ts` for status, headers, and the HTML string, and `test.use({ javaScriptEnabled: false })` for locator assertions on the same HTML. Public pages assert their content both ways, and a non-empty `toHaveTitle` on the JavaScript-disabled page.
+- Wait with web-first assertions and `expect.poll`, never `page.waitForTimeout`.
+
+The tester's manual accessibility checks are in [docs/process/wcag-checklist.md](docs/process/wcag-checklist.md).
 
 ### Regenerating `convex/_generated/`
 
