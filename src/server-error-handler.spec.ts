@@ -80,19 +80,39 @@ describe('serverErrorHandler', () => {
     },
   );
 
-  it('answers a malformed query string with 400', () => {
-    const { res, state } = fakeResponse();
+  it.each(['/o/acme?q=%', '/o/acme?q=%E0%A4%A', '/?%'])(
+    'answers a URIError with 500 when only the query string of %s is malformed (an app bug)',
+    (originalUrl) => {
+      const { res, state } = fakeResponse();
 
-    serverErrorHandler(
-      new URIError('URI malformed'),
-      { method: 'GET', originalUrl: '/o/acme?q=%' } as Request,
-      res,
-      vi.fn(),
-    );
+      serverErrorHandler(
+        new URIError('URI malformed'),
+        { method: 'GET', originalUrl } as Request,
+        res,
+        vi.fn(),
+      );
 
-    expect(state.statusCode).toBe(400);
-    expect(state.body).toBe('Bad Request');
-  });
+      expect(state.statusCode).toBe(500);
+      expect(state.body).toBe('Internal Server Error');
+    },
+  );
+
+  it.each(['/%E0%A4%A?q=ok', '/o/%?x=1', '/o/%E0%A4%A'])(
+    'answers a URIError with 400 when the path of %s is malformed',
+    (originalUrl) => {
+      const { res, state } = fakeResponse();
+
+      serverErrorHandler(
+        new URIError('URI malformed'),
+        { method: 'GET', originalUrl } as Request,
+        res,
+        vi.fn(),
+      );
+
+      expect(state.statusCode).toBe(400);
+      expect(state.body).toBe('Bad Request');
+    },
+  );
 
   it('answers any other error with 500 and a plain body', () => {
     const { res, state } = fakeResponse();

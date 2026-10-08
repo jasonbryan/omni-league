@@ -7,10 +7,10 @@ import type { Request, Response } from 'express';
  * `NODE_ENV !== 'production'`, and `serve:ssr` does not set `NODE_ENV`. This handler always
  * answers with a generic plain-text body and logs the error on the server instead.
  *
- * - `URIError` when the request URL itself has malformed percent-encoding (thrown by the Angular
+ * - `URIError` when the request path itself has malformed percent-encoding (thrown by the Angular
  *   engine): 400 Bad Request.
- * - Anything else, including a `URIError` from app code decoding a well-formed URL or data:
- *   500 Internal Server Error.
+ * - Anything else, including a `URIError` from app code decoding a well-formed path, a malformed
+ *   query string, or data: 500 Internal Server Error.
  * - If headers were already sent, Express must close the connection, so the error is passed on.
  */
 export function serverErrorHandler(
@@ -26,7 +26,7 @@ export function serverErrorHandler(
     return;
   }
 
-  if (err instanceof URIError && isMalformedUrl(req.originalUrl)) {
+  if (err instanceof URIError && isMalformedPath(req.originalUrl)) {
     res.status(400).type('text/plain').send('Bad Request');
     return;
   }
@@ -34,10 +34,16 @@ export function serverErrorHandler(
   res.status(500).type('text/plain').send('Internal Server Error');
 }
 
-/** True when the request URL's percent-encoding cannot be decoded (a client error). */
-function isMalformedUrl(url: string): boolean {
+/**
+ * True when the request path's percent-encoding cannot be decoded (a client error). Only the path
+ * counts: the engine does not decode the query string, so a malformed query with a `URIError` means
+ * app code threw, which is a 500.
+ */
+function isMalformedPath(url: string): boolean {
+  const queryStart = url.indexOf('?');
+  const path = queryStart === -1 ? url : url.slice(0, queryStart);
   try {
-    decodeURIComponent(url);
+    decodeURIComponent(path);
     return false;
   } catch {
     return true;
