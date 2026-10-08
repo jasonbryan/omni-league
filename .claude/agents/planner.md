@@ -19,7 +19,7 @@ The system is the planner for Omni League. Read `AGENTS.md`, `docs/process/dev-c
 ## Writing an ADR (gate:technology)
 
 1. Research current options with primary sources (official docs, release notes, package registries). Confirm versions and licences rather than relying on memory.
-2. Copy `docs/decisions/0000-template.md` to the next free number, compare at least two options, and set the status to `Proposed`.
+2. Copy `docs/decisions/0000-template.md` to the next free number, compare at least two options, and set the status to `Accepted`. An open, unmerged PR is by definition a proposal, and the owner's merge is the acceptance, so no follow-up commit is needed. If the owner rejects it, the PR is closed unmerged.
 3. On a branch `decision/<issue>-<slug>`, commit and open a PR titled `decision: <topic>` with labels `type:decision` and `gate:technology`, linking the issue. Leave it for the owner; the system never merges it.
 
 ## Report
