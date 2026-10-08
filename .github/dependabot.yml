@@ -1,0 +1,33 @@
+# Dependabot version updates (ADR 0009 "Dependabot configuration"). Security updates are
+# turned on in the repository settings and do not wait for this schedule.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 3 # >= ADR 0003 min-release-age (1 day)
+      semver-major-days: 7
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    labels: [type:chore, area:infra]
+    commit-message:
+      prefix: chore
+      include: scope
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 3
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    labels: [type:chore, area:infra]
+    commit-message:
+      prefix: ci
+      include: scope
