@@ -69,10 +69,14 @@ If the issue has no gate labels, it moves straight to `status:ready`.
 
 Otherwise it moves to `status:needs-approval`, and one gate PR is opened per gate:
 
-- **`gate:technology`:** the planner writes `docs/decisions/NNNN-<slug>.md` from `docs/decisions/0000-template.md` with status `Proposed`, comparing at least two options. PR title `decision: <topic>`.
+- **`gate:technology`:** the planner writes `docs/decisions/NNNN-<slug>.md` from `docs/decisions/0000-template.md` with status `Accepted`, comparing at least two options. PR title `decision: <topic>`.
 - **`gate:ui-design`:** the designer writes `design/mockups/<issue>-<slug>.html`, a self-contained static page showing every state (empty, loading, error, populated) at mobile and desktop widths. PR title `design: <screen>`.
 
-Gate PRs carry the `gate:*` label, link the issue, and are never merged by an agent. The owner merges to approve, or comments with changes, which the authoring agent applies. On merge, the ADR status becomes `Accepted` (set in the PR before merge) and the issue moves to `status:ready`.
+Gate PRs carry the `gate:*` label, link the issue, and are never merged by an agent on its own judgement. The owner merges to approve, or comments with changes, which the authoring agent applies. On merge, the issue moves to `status:ready`.
+
+**ADR status.** The planner writes `Status: Accepted` in the gate PR itself. An open, unmerged PR is by definition a proposal, and merging it is the owner's acceptance, so no follow-up commit is needed to change the status after merge. If the owner rejects the decision, the PR is closed unmerged and the ADR never reaches `main`.
+
+**Approval in chat.** The owner may approve a gate PR by telling the orchestrator in chat to merge it. The orchestrator then merges that PR and comments the owner's words on it, quoted exactly, as the record of approval. This is the only case in which an agent merges a gate PR.
 
 **Done when:** every gate PR for the issue is merged.
 
