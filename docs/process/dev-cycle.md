@@ -123,9 +123,11 @@ The deployer runs after merges to `main`:
 - **Preview/staging:** deploy, run smoke tests against it, report the URL on the issue.
 - **Production:** behind `gate:production`. The deployer opens a release PR or deploy request listing the merged changes since the last release, any Convex schema migrations, and any Stripe configuration changes. After the owner approves, the deployer ships, runs smoke tests, and on failure rolls back and opens a `type:bug` issue.
 
-Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub.
+Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git with keys it holds itself, so GitHub holds no key that builds or deploys the app. The one Netlify credential in GitHub is the preview-teardown token. It could deploy, but it is used only to delete previews, and only a job on `main` can read it (the `preview-teardown` environment).
 
-- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`.
+- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`.
+- **Preview teardown.** When a PR is merged or closed, `preview-teardown.yml` deletes its Netlify deploys and its Convex preview deployment. After each merge the deployer checks that the teardown run is green. A failed run is retried with `workflow_dispatch`, which sweeps every closed PR.
+- **Workflow changes.** A PR that changes `preview-teardown.yml`, or references the `preview-teardown` environment, is merged only by the owner.
 - **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app`. The deployer smoke-tests it and reports the URL.
 - **Production.** The deployer opens a release PR from `main` into the `production` branch. The owner's merge approves and ships it: Netlify builds with the owner-held production key, then the deployer smoke-tests the production URL.
 - **Rollback.** If the production smoke tests fail, the deployer opens a `type:bug` issue with the rollback steps, and the owner runs them: Netlify **Publish deploy** of the previous build, then merging a revert on `production` to redeploy the previous Convex functions.
