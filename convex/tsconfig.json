@@ -13,6 +13,9 @@
     "allowSyntheticDefaultImports": true,
     /* TypeScript 6 includes no @types/* by default; `process` needs Node's types (ADR 0006). */
     "types": ["node"],
+    /* Matches the app tsconfig, which reaches convex/ through _generated/api.d.ts: env reads use
+     * bracket access, and @typescript-eslint/dot-notation then leaves them alone (ADR 0006). */
+    "noPropertyAccessFromIndexSignature": true,
 
     /* These compiler options are required by Convex */
     "target": "ESNext",
