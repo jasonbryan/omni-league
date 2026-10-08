@@ -1,6 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import type { AxeResults, Result } from 'axe-core';
+
+/** Derived from `@axe-core/playwright` so `axe-core` need not be a direct dependency. */
+type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>;
+type Result = AxeResults['violations'][number];
 
 /** axe rule tags enforced by ADR 0005; a scan passes only with zero violations. */
 export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];

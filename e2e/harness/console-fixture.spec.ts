@@ -8,6 +8,10 @@ import { ConsoleGuard, type ConsoleGuardOptions } from '../support/console-guard
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
 
+// The expected-failure probes would otherwise write a failure screenshot into the report. Playwright
+// allows `screenshot` only at file level (a describe-level `use` would force a new worker).
+test.use({ screenshot: 'off' });
+
 async function guardedPage(
   browser: Browser,
   options: ConsoleGuardOptions = {},
