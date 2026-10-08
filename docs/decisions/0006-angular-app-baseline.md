@@ -1,6 +1,6 @@
 # 0006: Angular app baseline
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-08 (owner merged PR #18)
 - **Gate:** `gate:technology`
 - **Issue:** #5
 - **Date:** 2026-10-07 (revised 2026-10-07 after the owner's answer on public pages; revised again for dev-only hydration checks, the `@types/node` pin, and the indexing assumption; revised a third time to record the owner's indexing answer and the #11 / #24 adapter split)
