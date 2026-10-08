@@ -4,6 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #4
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
+- **Amended:** by ADR 0009 (PR #31, CI pipeline): CI run conditions, the `webkit-mobile` trigger, and the Convex backend cache. See "Amendment: CI usage (ADR 0009)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -302,3 +303,25 @@ Further accepted gaps: no screen-reader testing with real assistive technology (
 - **Artifact storage (500 MB on Free):** screenshots, traces, and reports upload with a short `retention-days` (7 suggested); traces only on retry or failure.
 - **Ongoing risk:** anonymous local deployments and the hidden pinning flags are beta. A CLI upgrade that breaks them fails the e2e job visibly. The fallback is to download the pinned binary from GitHub releases in CI and point the CLI at it with `--url` and `--admin-key`, which would amend this ADR.
 - **Harder:** time-dependent behaviour (deadlines, scheduled reminders) cannot be controlled in e2e and is covered by Convex function tests (#3). True iOS Safari and screen-reader behaviour remain manual or untested.
+
+## Amendment: CI usage (ADR 0009, 2026-10-07)
+
+The owner asked for minimal GitHub Actions usage (PR #31). ADR 0009 runs CI as one `ci` job, only for PRs that are ready for review, with no run on pushes to `main`; the ruleset requires an up-to-date branch instead. Three rules of this ADR change accordingly. Nothing else here changes: the runner, the axe tags, the local backend, the viewports, the fixtures, and the tester's local runs stay as accepted.
+
+| Rule in this ADR | Was | Now |
+| --- | --- | --- |
+| Where `chromium-mobile` and `chromium-desktop` run | Every PR and every push to `main` | Every CI run of a PR that is ready for review (not drafts), in the `ci` job after the static checks, unit tests, and build have passed. Docs-only PRs skip e2e. Locally, unchanged. |
+| Where `webkit-mobile` runs | Push to `main` only; a failure opens a `type:bug` issue | **Release PRs into `production`, and manual `workflow_dispatch` with `webkit: true`.** The workflow sets `E2E_WEBKIT=1` there, and the Playwright config includes the project only then. A failure fails the release PR's `ci` check, which blocks the release; the deployer opens the `type:bug` issue. Locally, anyone may run it (on macOS it is a closer Safari proxy than Linux WebKit). |
+| Convex local backend in CI | `actions/cache` restores `~/.cache/convex` (164 MB), keyed on the pinned version | **No cache.** The CLI downloads the pinned binary (63.7 MB) on each run. With no CI run on `main`, a cache could only be saved per PR and never restored by another PR, and restoring 164 MB is not faster than downloading 63.7 MB. |
+
+**Why moving WebKit off `main` is acceptable.** WebKit was chosen as the iOS Safari proxy for a phone-first product, and that reason stands. What changes is when it is paid for:
+
+- On `main` it cost about 100 to 165 minutes a month (66 pushes at 1.5 to 2.5) and reported after the merge, with a bug issue for code that was not shipping yet.
+- On release PRs it costs 0 before launch and about 15 to 25 minutes a month after. It checks exactly the tree that ships, and it blocks that release instead of reporting afterwards.
+- The cost is that a Safari-only regression is found at the release, with a release's worth of changes to bisect, unless someone runs the project on demand.
+
+**Effects on #13:** `webkit-mobile` is conditioned on `E2E_WEBKIT=1`, not on `push` to `main`. Its evidence is a `workflow_dispatch` run with `webkit: true` showing the project executing, and a normal PR run not running it. The e2e steps join #12's `ci` job instead of a separate `e2e` job. ADR 0009 "Effects on other issues" lists the reworded criteria.
+
+**Effects on the first feature with live Convex data in e2e:** no `actions/cache` step; the rest of the backend wiring above stands.
+
+**Minutes (replaces "#8 (CI) minute estimate" totals for monthly planning):** per run, the e2e part of `ci` costs about 2 minutes for the harness and 4 to 7 once feature specs exist, because it shares the install with the static checks. ADR 0009 "Minutes and cost" has the monthly totals: about 340 to 410 minutes now and 510 to 680 with feature e2e, against Pro's 3,000.

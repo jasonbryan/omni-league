@@ -3,26 +3,36 @@
 - **Status:** Accepted
 - **Gate:** `gate:technology`
 - **Issue:** #8
-- **Date:** 2026-10-07
+- **Date:** 2026-10-07 (revised 2026-10-07 for the owner's "minimize CI usage" direction)
+- **Amends:** ADR 0005 (WebKit trigger and the Convex backend cache; see "Amendment" at the end of ADR 0005)
 
 ## Context
 
 The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 0001 fixes GitHub as the CI host. This ADR decides the runner type, the pipeline shape (jobs, triggers, caching), the required checks and how they are enforced on this private repository, the policy for actions, how actions and npm dependencies get update PRs, and the workflow-security rules. Deployment (CD) belongs to #9.
 
+### Owner direction: minimal Actions usage is a primary design goal
+
+On PR #31 the owner wrote: "I upgraded to pro but I would like to minimize CI/CD usage time as much as possible. Don't have too much redundant process and try to minimize usage in general." This revision therefore judges every option first by billed minutes, then by whether it repeats work that something else already does:
+
+- **The tester already runs the full suite locally** (dev cycle Phase 5), and the implementer runs every check before handing over (Phase 4). CI is the objective, final check of the exact tree that merges, not an iteration loop.
+- **Netlify builds every preview and the `main` staging site on its own infrastructure** (ADR 0010, PR #33). Those builds cost no Actions minutes, so CI does not deploy anything.
+- **A check that runs twice on the same tree is redundant.** CI runs once per tree that can merge, not once per push and again after the merge.
+
 ### Inputs from accepted ADRs
 
 | ADR | What CI must do |
 | --- | --- |
-| 0002 lint and format | Run `lint` (`eslint . --max-warnings=0`) and `format:check` (`prettier . --check`) as separate scripts. Prettier also formats `.github/**/*.yml`. Workflow linting is left to this ADR. |
+| 0002 lint and format | Run `lint` (`eslint . --max-warnings=0`) and `format:check` (`prettier . --check`) as separate scripts. Prettier also formats Markdown, mockup HTML, and `.github/**/*.yml`, and CI is the only enforcement point (no git hooks). Workflow linting is left to this ADR. |
 | 0003 package manager and Node | npm 11 bundled with Node 26.11+, pinned in `package.json` `devEngines` (`onFail: "error"`) and `.nvmrc`. Install with `npm ci`. No Corepack and no package-manager setup action. `npm audit signatures` is a CI step. `.npmrc` sets `min-release-age=1`, so the update tool's cooldown must be at least 1 day. Advisories arrive through Dependabot alerts and security updates. |
 | 0004 unit and Convex tests | Two scripts, `test` (`ng test --watch=false`) and `test:convex` (`vitest run --config vitest.config.mts`). No secrets, no browser, no deployment. `convex/_generated/` is committed; a drift check needs the local backend and is left to this ADR. |
-| 0005 e2e and accessibility | Playwright plus `@axe-core/playwright`. `npx playwright install --with-deps chromium` on every run (no browser cache), plus `webkit` on push to `main` only. `workers: 1`, `retries: 1` in CI. The local Convex backend's cache (`~/.cache/convex`, 164 MB) is restored with `actions/cache` once the first data feature wires it. Artifacts use `retention-days: 7`. Minutes estimate per e2e run: about 3 for the harness, 5 to 8 once features exist, plus 1.5 to 2.5 for WebKit on `main`. |
+| 0005 e2e and accessibility | Playwright plus `@axe-core/playwright`. `npx playwright install --with-deps chromium` on every run (no browser cache). `workers: 1`, `retries: 1` in CI. Artifacts use `retention-days: 7`. Minutes per e2e run: about 3 for the harness, 5 to 8 once features exist, plus 1.5 to 2.5 for WebKit. As accepted it ran `webkit-mobile` on every push to `main` and cached the Convex backend; **this ADR amends both** (see "WebKit" and "Caching" below, and the amendment in ADR 0005). |
 | 0006 Angular baseline | `build` produces the browser bundle, the SSR server bundle, and prerendered routes. CI has no Convex URL, and Prerender routes read no Convex data, so the build needs no secret. |
 | 0008 auth | E2E sign-in runs against the anonymous local backend with no stored secret, so fork PRs and Dependabot PRs work. |
+| 0010 hosting (PR #33, proposed) | Netlify builds deploy previews and the `main` branch deploy itself, with no Actions minutes. Release PRs go from `main` into a `production` branch, created at the first production release. |
 
 ### Repository state, checked on 2026-10-07
 
-- **Visibility and plan.** `gh api repos/jasonbryan/omni-league` reports `"private": true`, owned by a user account. `gh api repos/jasonbryan/omni-league/branches/main/protection` and `.../rulesets` both return HTTP 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." So the owner was on **GitHub Free** for personal accounts when this ADR was written; the owner has since chosen to upgrade to Pro (see "Owner decision"). (`gh api user` returns `"plan": null` because the CLI token lacks the `user` scope; the 403 message is the evidence.)
+- **Visibility and plan.** `gh api repos/jasonbryan/omni-league` reports `"private": true`, owned by a user account. `gh api repos/jasonbryan/omni-league/branches/main/protection` and `.../rulesets` both returned HTTP 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." So the owner was on **GitHub Free** for personal accounts when this ADR was first written. The owner has since upgraded to **GitHub Pro** (see "Owner decision"); ADR 0010 records that `.../rulesets` now answers 200.
 - **Actions settings** (`gh api .../actions/permissions`, `.../actions/permissions/workflow`, `.../actions/permissions/fork-pr-workflows-private-repos`):
   - default `GITHUB_TOKEN` permission is already `read`, and workflows cannot approve PRs;
   - all actions are allowed, and `sha_pinning_required` is `false`;
@@ -32,7 +42,7 @@ The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 000
 
 ### GitHub plan facts (from the docs, 2026-10-07)
 
-| Item | GitHub Free (plan when written) | GitHub Pro | Public repository |
+| Item | GitHub Free (plan when first written) | GitHub Pro (current plan) | Public repository |
 | --- | --- | --- | --- |
 | Protected branches and rulesets on this repo | **No.** "Protected branches are available in public repositories with GitHub Free … also available in public and private repositories with GitHub Pro, GitHub Team …"; rulesets have the same wording | Yes | Yes |
 | Hosted-runner minutes included per month (private repos) | 2,000 | 3,000 | Standard runners are free and unlimited |
@@ -41,10 +51,25 @@ The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 000
 | Standard Linux x64 runner | 2 CPU, 8 GB RAM | same | 4 CPU, 16 GB RAM |
 | Price beyond the included minutes | Linux 2-core x64: $0.006 per minute | same | — |
 | When included minutes run out | "If your account does not have a valid payment method on file, usage is blocked once you use up your quota." With a payment method, spending is capped by any budgets. Minutes reset each billing cycle. | same | — |
+| Merge queue | No | No (merge queues are for organization-owned repositories) | Only if owned by an organization |
 
-- GitHub rounds each job up to the whole minute ("GitHub rounds the minutes and partial minutes each job uses up to the nearest whole minute").
-- GitHub's public pricing page no longer lists Pro. Third-party listings give $4 per month. The owner sees the exact price on the account's Compare plans page (Settings, Billing and licensing, Licensing, Upgrade).
-- A $0.002-per-minute platform charge for self-hosted runners, announced for 2026-03-01, was postponed with no new date ("We're postponing the announced billing change for self-hosted GitHub Actions to take time to re-evaluate our approach").
+Billing and check behaviour that drive this design:
+
+- **Rounding.** "GitHub rounds the minutes and partial minutes each job uses up to the nearest whole minute." Every job costs at least 1 minute, so fewer jobs cost less.
+- **Skipped jobs cost nothing and pass required checks.** "A job that is skipped will report its status as "Success". It will not prevent a pull request from merging, even if it is a required check." A job skipped by its `if:` is never assigned a runner, so it bills 0 minutes.
+- **Path-filtered workflows do not.** A workflow that never starts because of `paths`/`paths-ignore` reports no check at all, so a required check stays "Expected" (pending) and blocks the merge. Workflow-level path filters are therefore unusable for a required check.
+- **Cache scope.** "Workflow runs can restore caches created in either the current branch or the default branch." A cache created by a PR run "is created for the merge ref (`refs/pull/.../merge`)" and "cannot be restored by the base branch or other pull requests targeting that base branch." Caches unused for 7 days are removed. **So a cache is only shared across PRs if a run on `main` saves it.**
+- **Draft PRs cannot be merged**, by anyone, until marked ready for review.
+- GitHub's public pricing page no longer lists Pro. Third-party listings give $4 per month. The owner sees the exact price on the account's Compare plans page.
+- A $0.002-per-minute platform charge for self-hosted runners, announced for 2026-03-01, was postponed with no new date.
+
+### Volume assumptions (unchanged from the first version, so before and after compare)
+
+- 60 PRs a month (the rate ADR 0005 used; this repository had 11 PRs in its first two days): **40 change app code**, **20 are docs-only** (gate ADRs, mockups, process docs).
+- Each PR gets **3 pushes** while it is worked on.
+- About **6 Dependabot PRs** a month on a weekly schedule.
+- 60 merges a month into `main`.
+- No production releases before launch. ADR 0010 assumes about 8 production deploys a month after launch.
 
 ## Options
 
@@ -57,7 +82,7 @@ The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 000
   - Clean, ephemeral machine on every run, so nothing persists between agent-written PRs.
   - No machine to maintain.
   - Has everything ADR 0005 assumed: `sudo` for `playwright install --with-deps`, `shellcheck` 0.9.0, `gh` 2.101, `jq`.
-  - Playwright 1.64 supports Ubuntu 22.04, 24.04, and 26.04, x86-64 and arm64 (Playwright system requirements).
+  - Playwright 1.64 supports Ubuntu 22.04, 24.04, and 26.04, x86-64 and arm64.
 - **Cons and risks.**
   - Minutes are capped (see "Minutes and cost").
   - **`ubuntu-latest` moves to Ubuntu 26.04 between 2026-10-19 and 2026-11-19** (actions/runner-images#14748), which overlaps the #12 and #13 implementation. Pinning `ubuntu-24.04` avoids a silent image change mid-build.
@@ -70,31 +95,99 @@ The dev cycle merges a PR only when "CI is green", but no CI exists yet. ADR 000
   - GitHub's secure-use guide warns that self-hosted runners "can be persistently compromised by untrusted code in a workflow". On a private repo it says to "be cautious … as anyone who can fork the repository and open a pull request … are able to compromise the self-hosted runner environment". Here every PR is code written by agents, run on the owner's machine.
   - The machine must be online, patched, and provisioned with Node 26, Playwright system libraries, and WebKit dependencies. A laptop that sleeps blocks merges.
   - The postponed per-minute platform charge may return.
-- **Not recommended.**
+- **Not recommended.** With the measures below, hosted usage is a small fraction of Pro's quota, so the minute saving no longer justifies the risk.
 
-GitHub-hosted arm64 runners (`ubuntu-24.04-arm`) were also considered. They draw from the same included minutes, so they save nothing within the quota. No ADR has verified the local Convex backend binary on Linux arm64.
+GitHub-hosted arm64 runners (`ubuntu-24.04-arm`) draw from the same included minutes, so they save nothing within the quota. No ADR has verified the local Convex backend binary on Linux arm64.
+
+### When CI runs (triggers)
+
+Billed runs per month at the volume above, before per-run cost:
+
+| Option | What triggers a full run | App-PR runs | Docs-only runs | `main` runs | Notes |
+| --- | --- | --- | --- | --- | --- |
+| **T1: every push, plus every push to `main`** (first version) | `pull_request` opened/synchronize/reopened; `push: main` | 120 | 60 | 60 merges + 6 Dependabot = 66 | Runs on every draft iteration the tester already ran locally, and again on `main` for a tree that was just tested. |
+| **T2: ready PRs only, plus `main`** | `pull_request` incl. `ready_for_review`, job skipped while draft; `push: main` | ~50 | 60 | 66 | Removes the draft iterations; keeps the post-merge duplicate. |
+| **T3: ready PRs only; nothing on `main`; ruleset requires the branch to be up to date** (recommended) | as T2, no full run on `main` | ~50 | 60 | 0 (plus a 1-to-2-minute cache warm only when the lockfile changes, ~6 a month) | Exactly one full run per mergeable tree. |
+
+- **"App-PR runs ~50"**: 40 app PRs, each marked ready once, plus an allowance of 25% for a second run (a CI failure fixed after ready, or another merge landing in the few minutes between "ready" and "merge").
+- **Docs-only PRs stay at 3 runs each.** Gate PRs are opened ready because the owner reads and merges them, and each owner revision is a push. They are cheap (below).
+- **Draft pushes are free.** The run is created, but its only full job has `if: !github.event.pull_request.draft`, so it is skipped and bills 0 minutes. A skipped job reports "Success", which is harmless here because GitHub refuses to merge a draft, and the merge check below requires a real `pass`.
+
+#### Why nothing needs to run on `main` (T3)
+
+The first version ran the whole suite on every push to `main` "to catch post-merge breakage". That breakage can only come from **the merged tree differing from the tested tree**. Three ways to close that gap:
+
+| Option | Extra minutes a month | Merged tree equals tested tree? |
+| --- | --- | --- |
+| **M1: full run on every `main` push** (first version) | 594 now; 726 to 924 with feature e2e | No, checked after the fact; a failure is already on `main`. |
+| **M2: ruleset "Require branches to be up to date before merging" (strict), no `main` run** (recommended) | ~0 to 50 (the 25% re-run allowance above already counts it) | **Yes.** The head must contain `main`'s tip, so the squash commit's tree is the head's tree, which is what the `pull_request` run tested (its merge ref equals the head tree). `--match-head-commit` pins the head. |
+| **M3: no `main` run, no strict rule** | 0 | No. Two PRs that each passed against an older `main` can combine into a broken `main`. The next PR's run or Netlify's staging build finds it later. |
+
+The first version rejected the strict rule because it "would re-run CI on every open PR after each merge". **That was wrong:** the rule does not re-run anything by itself; it only refuses a merge until the head contains `main`. Under T3 the orchestrator updates a PR's branch **while it is still a draft** (free), then marks it ready, so one run covers both. A second run happens only if another PR merges in the minutes between "ready" and "merge", which the orchestrator avoids by finishing one merge at a time. GitHub's merge queue, which would automate this, is not available for repositories owned by a personal account.
+
+What still runs on `main`: **no checks.** Netlify builds the `main` staging site on its own infrastructure (ADR 0010), which re-proves the production build at no Actions cost, and the deployer smoke-tests staging from its own machine. The only Actions job on `main` is the cache warm below.
 
 ### Pipeline shape
 
 Minutes are per job, rounded up, and every job pays about 1 minute for checkout, Node setup, and `npm ci`.
 
-| Option | Jobs | Billed per run (non-e2e checks) | Wall clock | Status checks |
+| Option | Jobs | Billed per app-PR run, harness / with feature e2e | Wall clock | Status checks |
 | --- | --- | --- | --- | --- |
-| **S1: one job per check** | 7 (`format:check`, `lint`, `typecheck`, `test`, `test:convex`, `build`, workflow lint) | ~10 (7 jobs, 1 to 2 each) | ~1.5 to 2 min | One per check |
-| **S2: one `checks` job, one step per check** (plus `e2e` as its own job) | 1 | ~4 (range 3 to 5) | ~3 to 4.5 min | One (`checks`); the failing step is named in the job log and in `gh run view --log-failed` |
-| **S3: three grouped jobs** (static, tests, build) | 3 | ~6 | ~2 to 2.5 min | Three |
+| S1: one job per check, plus e2e | 8 | ~13 / ~15 to 18 | ~3 to 8 min | One per check |
+| S2: `checks` + `e2e` (first version) | 2 | ~7 / ~9 to 12 | ~3 to 8 min (parallel) | Two |
+| **S4: one job `ci`, checks then e2e** (recommended) | 1 | **~5 / ~8 to 10** | ~5 / ~8 to 10 min (sequential) | **One (`ci`)**; the failing step is named in the job log and in `gh run view --log-failed` |
 
-- S1's checks alone cost about 2,580 minutes a month at the volume below, before any e2e minutes, which is more than Free's 2,000.
-- **The wall-clock gain of S1 and S3 is not visible.** The `e2e` job runs in parallel and takes 3 to 8 minutes, longer than S2's `checks` job, so a PR's checks finish when e2e finishes under every shape.
-- S2 loses the "stop at the first failure" behaviour of sequential steps unless each check step runs after earlier failures. The recommendation does this with `if: ${{ !cancelled() && steps.install.outcome == 'success' }}`, so one run reports every failing check, as separate jobs would.
+- **S4 installs dependencies once instead of twice and rounds once instead of twice**, saving about 2 minutes per run against S2.
+- **The extra wall clock does not matter here.** Under T3, CI runs once per PR, at merge time, after the tester's local run. A 3-to-5-minute longer wait on one run a PR is cheaper for the owner than paying twice for setup.
+- **Step order gives most of S1's signal at S4's cost:**
+  - every cheap check (format, audit, lint, typecheck, unit tests, Convex tests, build, actionlint) runs even after an earlier one fails, so one run reports all of them;
+  - the e2e steps run only if every check passed. A run that is going to fail anyway does not also spend 2 to 6 minutes on browsers and specs.
+- **One required check, `ci`.** The ruleset and the merge check name one check instead of two.
+
+### Docs-only PRs
+
+A third of PRs change only `docs/`, `design/`, `.claude/`, or root `*.md`. ADR 0002 makes CI the only formatting check, and Prettier formats Markdown and mockup HTML, so these PRs still need `format:check`, and nothing else.
+
+| Option | Billed per docs-only run | Required check safe? |
+| --- | --- | --- |
+| Full run (first version's `checks`, plus a 1-minute `e2e` skip) | 5 | Yes |
+| Workflow-level `paths-ignore` | 0 | **No:** the required check never reports and blocks the merge forever. |
+| A second "stub" workflow with the same check name and inverse paths | 1 | Yes, but two workflows must be kept in step. |
+| Skip by label or title (`type:decision`) in the job `if:` | 0 | **No:** a mislabeled app PR would merge with a skipped, "successful" check. |
+| **Scope step inside `ci`: on a docs-only PR, run only install and `format:check`** (recommended) | **1 to 2** | Yes: the job runs and reports a real result. |
+
+### Caching
+
+| Item | Options | Choice |
+| --- | --- | --- |
+| npm (`~/.npm`) | setup-node's automatic cache, keyed on `package-lock.json`; or none | **setup-node's cache, plus a warm job on `main`.** Without a `main` run, no PR could ever restore another's cache (see "Cache scope"), so every run would miss and also spend 10 to 20 seconds uploading a cache nobody reads. A warm job (`npm ci --ignore-scripts` on `main`, about 1 to 2 minutes) runs only when `package-lock.json` or `ci.yml` changes, about 6 times a month: 6 to 12 minutes. A warm cache saves about 20 to 35 seconds per run (~15 to 30 minutes a month), and, more importantly, keeps a docs-only run near the 1-minute rounding line instead of over it (up to 60 minutes a month). |
+| Playwright browsers | `actions/cache` keyed on the Playwright version; or download each run | **Download each run** (ADR 0005). Playwright's CI guide: "Caching browser binaries is not recommended", because restoring takes about as long as downloading, and the Linux system dependencies are not cacheable. |
+| Convex local backend (`~/.cache/convex`) | `actions/cache` keyed on the pinned backend version (ADR 0005); or download each run | **Download each run (amends ADR 0005).** The cache is 164 MB, the download 63.7 MB, so restoring the cache is not faster. Under T3 there is no `main` run to save it, so each PR run would miss and then upload 164 MB. |
+
+`actions/cache` is therefore no longer needed and leaves the inventory.
+
+### WebKit e2e (`webkit-mobile`)
+
+ADR 0005 runs `webkit-mobile` (WebKit at 360 x 800, a proxy for iOS Safari) on every push to `main`, at +1.5 to +2.5 minutes, and a failure there opens a `type:bug` issue. With no full run on `main` (T3), it needs a new trigger.
+
+| Option | Minutes a month | What it protects |
+| --- | --- | --- |
+| Every app-PR run | ~75 to 125 | Every change, before merge. Most of the cost buys nothing before launch, when no user runs Safari against this app. |
+| Every `main` push (ADR 0005 as accepted) | ~100 to 165 (66 runs) | Nothing before merge; a post-merge `type:bug` that nobody ships yet. Needs the full `main` run that T3 drops. |
+| **Release PRs into `production` only, plus manual `workflow_dispatch`** (recommended) | **0 before launch**; ~15 to 25 after (8 release PRs, 1.25 runs each, +1.5 to 2.5) | The exact tree that ships, and **it blocks the release**, which is stronger than ADR 0005's after-the-fact bug issue. |
+| Not at all | 0 | Nothing. ADR 0005 chose WebKit because the product is phone-first. |
+
+- Before launch, a Safari-only regression costs nothing, because nothing ships. At launch every release PR is checked, so no Safari regression reaches users unchecked.
+- The cost of finding it late is bisecting a release's worth of changes instead of one. Anyone with write access can trigger `workflow_dispatch` with `webkit: true` on any branch (about 6 to 12 minutes) when a change is Safari-sensitive. The tester can also run `webkit-mobile` locally on macOS for free, which is a closer Safari proxy than Linux WebKit.
+- This changes an Accepted ADR, so ADR 0005 gets an amendment section in this PR.
 
 ### Enforcing required checks on this private repo
 
 | Option | What it takes | Pros | Cons |
 | --- | --- | --- | --- |
-| **E1: upgrade to GitHub Pro, ruleset on `main`** | Owner upgrades the personal account (price on the upgrade page; listed elsewhere at $4/month), then creates the ruleset below | Merges without green `checks` and `e2e` are refused by GitHub for everyone, including agents acting with the owner's token, if the ruleset has no bypass list. 3,000 minutes and 1 GB of artifacts cover the estimate below. Code stays private. | Monthly cost. |
-| **E2: make the repository public, ruleset on `main`** | Owner changes visibility | Free rulesets and unlimited standard-runner minutes on 4-CPU runners. | Source, ADRs, issues, and PR discussion become public. This is a business decision for the owner. The no-secrets CI design already makes fork PRs safe. |
-| **E3: stay on Free; orchestrator check before merge** | A process rule in `docs/process/ci.md` and the dev cycle (below) | No cost and no visibility change. | **Not enforced by GitHub.** It relies on every merger (orchestrator and owner) running the check. Direct pushes to `main` are not blocked. Minutes run out once feature e2e grows (see the estimate), and CI then stops until the month resets unless a payment method and budget are set. |
+| **E1: upgrade to GitHub Pro, ruleset on `main` (chosen)** | Owner upgrades the personal account, then creates the ruleset below | Merges without a green `ci` on an up-to-date head are refused by GitHub for everyone, including agents acting with the owner's token, if the ruleset has no bypass list. Code stays private. | Monthly cost. |
+| E2: make the repository public, ruleset on `main` | Owner changes visibility | Free rulesets and unlimited standard-runner minutes. | Source, ADRs, issues, and PR discussion become public. |
+| E3: stay on Free; orchestrator check before merge | A process rule | No cost and no visibility change. | Not enforced by GitHub. |
 
 ### Update tool for actions and npm dependencies
 
@@ -106,132 +199,138 @@ Minutes are per job, rounded up, and every job pays about 1 minute for checkout,
   - **Supported for both ecosystems.**
     - npm v7 to v11 is on the supported list (ADR 0003).
     - GitHub Actions, including SHA pins: Dependabot "updates the version documentation … when the comment is on the same line, such as `actions/checkout@<commit> #<tag>`."
-  - **`cooldown`.**
-    - `default-days` applies to both ecosystems, and npm also accepts per-semver days.
-    - If `cooldown` is unset, Dependabot now applies a 3-day default to version updates.
-    - Cooldown never delays security updates.
+  - **Schedule** accepts `daily`, `weekly`, `monthly`, `quarterly`, `semiannually`, `yearly`, or `cron`. **Security updates do not wait for the schedule**, and cooldown "does not apply to security updates".
+  - **`cooldown`.** `default-days` applies to both ecosystems, and npm also accepts per-semver days. If unset, Dependabot applies a 3-day default to version updates.
   - **`groups`** batch updates, which cuts PR count and CI minutes.
-  - **Alerts and security updates use the same dependency graph.**
   - **ADR 0003's pins do not block it.**
     - Dependabot's npm updater image runs Node 24 and npm 11.17.0 (`npm_and_yarn/Dockerfile`), which is below `devEngines` (`^26.11.0`, `^11.20.0`).
     - Its lockfile updater runs `npm install --force --ignore-scripts --package-lock-only` (`npm_lockfile_updater.rb`).
     - The system checked that `--force` bypasses `devEngines`: on Node 24.16.0 with npm 11.13.0, a `package.json` with ADR 0003's `devEngines` fails `npm install --package-lock-only --ignore-scripts` with `EBADDEVENGINES`, and passes with `--force` added.
-    - Dependabot picks the npm version from the `devEngines.packageManager` range through Corepack in its own container (a `dev_engines` fixture in its test suite). That does not affect the repository's no-Corepack rule.
 - **Cons and risks.**
-  - **No Dependabot alerts for actions pinned to a SHA.** The secure-use docs say Dependabot "will not create alerts for actions pinned to SHA values". Weekly version updates and the GitHub-owned-only action policy (below) limit the exposure.
-  - **Security updates skip cooldown.** A fix published less than a day earlier can fail under `.npmrc` `min-release-age=1` until a day has passed. This is not tested; the risk is a delay of at most one day.
+  - **No Dependabot alerts for actions pinned to a SHA.** The secure-use docs say Dependabot "will not create alerts for actions pinned to SHA values". Monthly version updates and the GitHub-owned-only action policy (below) limit the exposure.
+  - **Security updates skip cooldown.** A fix published less than a day earlier can fail under `.npmrc` `min-release-age=1` until a day has passed. The risk is a delay of at most one day.
   - **A new transitive install script makes the PR's `npm ci` fail** with `ESTRICTALLOWSCRIPTS` (ADR 0003). The PR then needs an `allowScripts` entry. This is intended.
-  - It has fewer grouping presets and no dependency dashboard, compared with Renovate.
+
+**Schedule and grouping, by minutes:**
+
+| Option | PRs a month | Runs (about 1.5 each) | Minutes, harness / feature e2e |
+| --- | --- | --- | --- |
+| Weekly, grouped per ecosystem (first version) | ~6 | ~12 (2 each, non-draft) | 84 / 108 to 144 |
+| **Monthly, grouped per ecosystem** (recommended) | ~3 (one npm group, one actions group, occasionally a major or security fix) | ~5 | **25 / 40 to 50** |
+| Monthly, one multi-ecosystem group | ~2 | ~3 | 15 / 25 to 30 |
+
+- **Multi-ecosystem groups** (generally available since 2025-07-01) would merge npm and actions bumps into one PR. They are not adopted: each ecosystem must list `patterns`, the documentation does not say how they treat semver-major updates, and an npm major must stay a separate PR because it needs `gate:technology` (AGENTS.md). The saving is about 10 to 20 minutes a month.
+- Monthly is safe because security updates arrive whenever an advisory is published, regardless of the schedule.
 
 #### Option U2: Renovate (Mend-hosted GitHub App)
 
 - **What it is.** Renovate 44.145.1 (AGPL-3.0). The Mend app is "free to install for both public and private repositories."
-- **Pros.**
-  - Richer configuration: `minimumReleaseAge`, `pinDigests` for actions, monorepo presets (all `@angular/*` together), and a dependency dashboard issue.
-  - Supports pnpm 12, which would reopen ADR 0003's pnpm option.
+- **Pros.** Richer configuration (`minimumReleaseAge`, `pinDigests`, monorepo presets, a dependency dashboard).
 - **Cons and risks.**
-  - **A third-party service gets write access** to this private repository's contents, PRs, and workflow files, and processes its code on Mend's infrastructure. That is a new external service under `gate:technology` and a wider trust boundary than GitHub itself.
-  - A second update channel: GitHub's security alerts would still come from Dependabot alerts.
-  - More configuration to review.
+  - **A third-party service gets write access** to this private repository's contents, PRs, and workflow files. That is a new external service under `gate:technology` and a wider trust boundary than GitHub itself.
+  - A second update channel: security alerts would still come from Dependabot.
+- **Not recommended.**
 
 #### Option U3: manual updates
 
-The orchestrator or owner runs `npm outdated` and checks action releases on a schedule. Nothing proposes SHA bumps, and the work is forgotten under load. Rejected.
+Nothing proposes SHA bumps, and the work is forgotten under load. Rejected.
 
 ### Workflow linting
 
 | Option | What it is | Assessment |
 | --- | --- | --- |
-| **actionlint 1.7.12** (MIT, released 2026-03-30) | Static checker for workflow syntax, `${{ }}` expressions and contexts, `needs`/`steps` references, runner labels, and shell scripts (through `shellcheck`, preinstalled on the runner) | A single Go binary from the GitHub release. It needs no action: download it, check the SHA-256, and run it. The release has a GitHub build attestation (`gh attestation verify` passed, signed by `rhysd/actionlint/.github/workflows/release.yaml@refs/tags/v1.7.12`). It takes a few seconds. It caught a misspelled `steps.` reference and a non-numeric `timeout-minutes` in the test below. |
-| zizmor 1.30.1 (MIT) | Security linter for workflows (dangerous triggers, unpinned `uses:`, excessive permissions, credential persistence, cache poisoning) | Overlaps with the rules below, most of which GitHub settings or review already enforce (SHA pinning policy, read-only default token). A second tool to install and pin. Not adopted now; revisit if workflows multiply (for example with #15's deploy workflow). |
+| **actionlint 1.7.12** (MIT, released 2026-03-30) | Static checker for workflow syntax, `${{ }}` expressions and contexts, `needs`/`steps`/`inputs` references, runner labels, and shell scripts (through `shellcheck`, preinstalled on the runner) | A single Go binary from the GitHub release, checked by SHA-256, no action needed. It takes a few seconds inside the existing job, so it adds no billed minute. The release has a GitHub build attestation (`gh attestation verify` passed). |
+| zizmor 1.30.1 (MIT) | Security linter for workflows | Overlaps with the rules below, most of which GitHub settings or review already enforce. Not adopted; revisit if workflows multiply. |
 | None | Review only | Expression and reference mistakes then show up as failed or silently skipped steps on GitHub. |
 
 ## Recommendation
 
-**GitHub-hosted `ubuntu-24.04` runners; one workflow with two jobs, `checks` and `e2e`; Dependabot for actions and npm; actionlint adopted; only GitHub-owned actions, pinned by full commit SHA. For enforcement, the owner chose GitHub Pro with a ruleset on `main` (E1). The orchestrator's merge check stays in the process as defence in depth.**
+**One workflow, one job (`ci`) on GitHub-hosted `ubuntu-24.04`, run only for PRs that are ready for review, once per mergeable tree. Nothing re-runs on `main`: the ruleset requires an up-to-date branch instead. Docs-only PRs run only `format:check`. WebKit runs only on release PRs and on demand. Dependabot monthly and grouped. Only GitHub-owned actions, pinned by full SHA. Estimated usage: about 340 to 410 minutes a month now and 510 to 680 once feature e2e exists, down about 76 to 81% from the first version's 1,820 and 2,210 to 2,810, against Pro's 3,000.**
 
 ### Workflow, triggers, and jobs
 
 One file, `.github/workflows/ci.yml`, named `CI`:
 
-- **Triggers:** `pull_request` (default types: opened, synchronize, reopened) and `push` to `main`. No `pull_request_target`, no `workflow_run`, no `schedule`. No workflow-level `paths` filters, because a path-filtered workflow leaves its required checks pending forever under a ruleset.
-- **Concurrency:** `group: ci-${{ github.head_ref || github.run_id }}`, `cancel-in-progress: true`. A new push to a PR cancels that PR's previous run. Each `main` push has its own `run_id` and is never cancelled, so the post-merge run that #12 checks always finishes.
-- **Timeouts:** `timeout-minutes: 15` on `checks` and `20` on `e2e`. The default is 360 minutes, which would let a hung run use about an eighth of Pro's monthly quota.
+- **Triggers:**
+  - `pull_request`, types `opened`, `reopened`, `synchronize`, `ready_for_review`, branches `main` and `production` (release PRs);
+  - `push` to `main`, **only** with `paths: [package-lock.json, .github/workflows/ci.yml]`, for the cache warm (not a required check, so a path filter is safe there);
+  - `workflow_dispatch` with a boolean input `webkit`.
+  - No `pull_request_target`, no `workflow_run`, no `schedule`. No workflow-level path filter on `pull_request`.
+- **Concurrency:** `group: ci-${{ github.event.pull_request.number || github.run_id }}`, `cancel-in-progress: true`. A new push to a ready PR cancels its previous run, and converting it back to draft and pushing cancels it too.
+- **Timeouts:** `timeout-minutes: 25` on `ci` and `10` on `warm-cache`. The default is 360 minutes.
 
-| Job (check name) | Runs on | Steps | Added by |
+| Job (check name) | Runs when | Steps | Billed |
 | --- | --- | --- | --- |
-| `checks` | every PR push and every `main` push | checkout; setup-node (Node from `package.json` `devEngines.runtime`, npm cache automatic); `npm ci`; then, each as its own named step that runs if install succeeded even when an earlier check failed: `npm audit signatures`, `format:check`, `lint`, `typecheck`, `test`, `test:convex`, `build`; then `actionlint` | #12 |
-| `e2e` | every PR push and every `main` push, in parallel with `checks` | checkout (depth 2); **scope step**: on `pull_request`, if every changed file is under `docs/`, `design/`, `.claude/`, or is a root `*.md`, the remaining steps are skipped and the job passes in about 1 billed minute; otherwise setup-node, `npm ci`, `npx playwright install --with-deps chromium` (plus `webkit` on `push`), the e2e script, and an artifact upload with `retention-days: 7` | #13 |
+| `ci` | PR is not a draft (opened ready, marked ready, or a push to a ready PR), and `workflow_dispatch`. Skipped (0 minutes) for drafts and for the `main` push. | checkout (depth 2, `persist-credentials: false`); **scope**; setup-node (npm cache automatic); `npm ci`; `format:check`; then, on app changes only: `npm audit signatures`, `lint`, `typecheck`, `test`, `test:convex`, `build`, actionlint (each runs even if an earlier one failed); then, only if all of those passed: Playwright browser install (`chromium`, plus `webkit` when `E2E_WEBKIT=1`), `npm run e2e`, artifact upload (`retention-days: 7`) | docs-only 1 to 2; app ~5 (harness), ~8 to 10 (feature e2e); +1.5 to 2.5 with WebKit |
+| `warm-cache` | push to `main` that changes `package-lock.json` or `ci.yml` (about 6 a month) | checkout; setup-node; `npm ci --ignore-scripts` (fills `~/.npm`, which setup-node saves under `main`) | 1 to 2 |
 
-The scope step never skips on `push` to `main`. An empty diff counts as an app change. It reads the PR's changes as `git diff --name-only HEAD^1 HEAD` on the `refs/pull/<n>/merge` commit that `pull_request` checks out, whose first parent is the base branch. It avoids `grep -q` in a pipe, because under `pipefail` an early `grep -q` exit makes the producer fail with SIGPIPE; the system hit this while testing the filter.
-
-`e2e` does not wait for `checks`. Agents run every check locally before opening a PR (dev cycle Phase 4), so failures in `checks` are rare, and waiting would add 3 to 4 minutes to every PR.
-
-**Convex `_generated/` drift check (ADR 0004):** added by the first feature that wires the local backend into `e2e` (ADR 0005). Right after `npx convex dev --once`, which already regenerates the folder, a step runs `git diff --exit-code convex/_generated`. It costs no extra job.
+- **Scope step:** on `pull_request`, if every changed file is under `docs/`, `design/`, `.claude/`, or is a root `*.md`, the output is `app=false`. An empty diff, `workflow_dispatch`, and anything else (including `.github/` and `package-lock.json`) give `app=true`. It reads `git diff --name-only HEAD^1 HEAD` on the `refs/pull/<n>/merge` commit, whose first parent is the base branch. It avoids `grep -q` in a pipe (SIGPIPE under `pipefail`).
+- **`E2E_WEBKIT`** is `1` when `github.base_ref == 'production'` (a release PR) or the dispatch input `webkit` is true, else `0`. The Playwright config (#13) includes the `webkit-mobile` project only when it is `1`.
+- **Convex `_generated/` drift check (ADR 0004):** added by the first feature that wires the local backend into e2e. Right after `npx convex dev --once`, a step runs `git diff --exit-code convex/_generated`. It costs no extra job.
+- **No production `build` duplication is removed yet.** Netlify's deploy-preview build also builds production, but only after #15, and making a third-party status a required check couples merges to Netlify's availability. The `build` step costs about 0.5 to 1 minute; revisit once #15 has run for a month.
 
 ### Required checks and enforcement
 
-**Required checks: `checks` and `e2e`** (exact check-run names, which equal the job `name:`). `docs/process/ci.md` (#12, #13) lists them.
+**Required check: `ci`** (the job `name:`). `docs/process/ci.md` (#12) lists it.
 
-**Orchestrator merge check (defence in depth).** Before merging any PR, the merger:
-
-1. reads the PR head SHA (`gh pr view <n> --json headRefOid`);
-2. runs `gh pr checks <n> --json name,bucket,workflow` and requires that `checks` and `e2e` from workflow `CI` are present with `bucket` `pass`, and that no check has `bucket` `fail` or `pending`;
-3. merges with `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`, so that a push after step 2 makes the merge fail instead of merging unchecked code.
-
-It stays in the process after the Pro upgrade and the ruleset: it covers the period before the ruleset exists (until #12 and #13 have produced the `checks` and `e2e` check runs), any lapse in the plan or ruleset, and `--match-head-commit` closes the race between the check and the merge. Gate PRs merged by the owner follow the same rule. Agents never push to `main` directly.
-
-**Ruleset on `main` (E1, GitHub Pro), created by the owner once #12's required checks exist:**
+**Ruleset on `main` (E1, GitHub Pro), created by the owner once #12 has produced a `ci` check run:**
 
 - target: the default branch; enforcement: active; **bypass list: empty**, so admins, and agents using the owner's token, are bound too;
 - require a pull request before merging, with 0 required approvals (agents cannot approve a PR opened with the owner's identity, and the tester and reviewer record their verdicts as comments);
-- require status checks `checks` and `e2e`, source "GitHub Actions"; **not** "require branches to be up to date", which would re-run CI on every open PR after each merge and multiply minutes, because the `main` push run catches post-merge breakage;
+- require status check `ci`, source "GitHub Actions", **with "Require branches to be up to date before merging" on** (M2). This is what lets `main` run no checks;
 - block force pushes and deletion of `main`.
 
-**Repository settings (owner, any plan):**
+ADR 0010's `production` ruleset requires the same `ci` check.
+
+**Orchestrator merge procedure (dev cycle Phase 7), one PR at a time:**
+
+1. If the PR branch is behind `main`, update it while it is still a draft: `gh pr update-branch <n>`. No CI runs. A clean update does not reset the tester's `PASS` or the reviewer's `APPROVE`, because the CI run in step 2 checks the combined tree. A conflict sends the PR back to the implementer.
+2. Mark it ready: `gh pr ready <n>`. This starts the one `ci` run.
+3. Read the head SHA (`gh pr view <n> --json headRefOid`), then wait until `gh pr checks <n> --json name,bucket,workflow` shows `ci` from workflow `CI` with `bucket` `pass`. **`skipping` is not a pass:** it is the draft-time skip.
+4. Merge: `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If another PR merged meanwhile, GitHub refuses the merge (strict rule); go back to step 1.
+5. If `ci` fails, convert the PR back to draft (`gh pr ready <n> --undo`) and return it to the implementer, so the fix iterations cost nothing.
+
+Gate PRs (ADRs, mockups) are opened ready, because the owner reads and merges them. They are docs-only, so each push costs 1 to 2 minutes. If one is behind `main`, the owner presses "Update branch" (or the orchestrator runs step 1) before merging. Dependabot PRs are opened ready by Dependabot and follow steps 1, 3, and 4. Agents never push to `main` directly.
+
+**Repository settings (owner):**
 
 - allow squash merging only, and turn on automatic branch deletion;
-- Actions permissions: "Allow jasonbryan, and select non-jasonbryan, actions and reusable workflows", with **"Allow actions created by GitHub"** checked, no other patterns, and **"Require actions to be pinned to a full-length commit SHA"** checked. The repository's Actions permissions API already exposes `sha_pinning_required` (currently `false`). The `gh api` equivalent is in Consequences.
-- Workflow permissions stay "Read repository contents and packages permissions", with PR approval by Actions off (already so).
-- Fork PR workflows stay disabled (already so).
-- Turn on Dependabot alerts and Dependabot security updates.
+- Actions permissions: "Allow jasonbryan, and select non-jasonbryan, actions and reusable workflows", with **"Allow actions created by GitHub"** checked, no other patterns, and **"Require actions to be pinned to a full-length commit SHA"** checked;
+- Workflow permissions stay "Read repository contents and packages permissions", with PR approval by Actions off (already so);
+- fork PR workflows stay disabled (already so);
+- turn on Dependabot alerts and Dependabot security updates.
 
 ### Minutes and cost
 
-**Stated volume:** 60 PRs a month (the rate ADR 0005 used; this repository had 11 PRs in its first two days). Each PR gets 3 pushes, so 180 PR runs: 120 change app code and 60 are docs-only (gate ADRs, mockups, process docs). There are 66 `main` pushes (60 merges plus 6 Dependabot merges) and 12 Dependabot PR runs (about 6 grouped PRs, 2 runs each).
+**Per run (billed minutes, after rounding):**
 
-**Per run (billed minutes, after rounding up per job):**
-
-| Job | Harness phase (#12, #13) | Once feature e2e exists |
+| Run | Harness phase (#12, #13) | Once feature e2e exists |
 | --- | --- | --- |
-| `checks` (install about 1; lint 0.3 to 1; typecheck 0.2 to 0.5; `test` 0.3 to 0.5; `test:convex` 0.1 to 0.2; production SSR build 0.5 to 1; audit, format, actionlint under 0.2 in total) | 4 (range 3 to 5) | 4 |
-| `e2e` on a PR with app changes (ADR 0005) | 3 | 5 to 8 |
-| `e2e` on a docs-only PR (scope step skips) | 1 | 1 |
-| `e2e` on `main` (adds WebKit) | 5 | 7 to 10 |
+| Draft push | 0 (job skipped) | 0 |
+| Docs-only PR (install, `format:check`) | 1 to 2 | 1 to 2 |
+| App PR: install ~1; format, audit, lint, typecheck 0.6 to 1.5; `test` + `test:convex` 0.4 to 0.7; production build 0.5 to 1; actionlint under 0.1; e2e development build 0.5 to 1; Chromium install 0.5 to 1; specs under 0.5 (harness) or 2 to 4 plus 0.5 for the Convex backend (features) | ~5 (range 4 to 7) | ~8 to 10 |
+| Release PR (app run plus WebKit) | — | ~10 to 12 |
+| `warm-cache` on `main` | 1 to 2 | 1 to 2 |
 
-**Per month:**
+**Per month, before and after:**
 
-| | Harness phase | Once feature e2e exists |
-| --- | --- | --- |
-| `checks`: 258 runs x 4 | 1,032 | 1,032 |
-| `e2e`, PRs with app changes and Dependabot: 132 runs | 396 | 660 to 1,056 |
-| `e2e`, docs-only PRs: 60 runs x 1 | 60 | 60 |
-| `e2e`, `main`: 66 runs | 330 | 462 to 660 |
-| **Total** | **~1,820** | **~2,210 to 2,810** |
-| Shape S1 instead of S2 (`checks` at ~10) | ~3,370 | ~3,760 to 4,360 |
-| Without the docs-only skip | ~1,940 | ~2,450 to 3,230 |
+| Category | First version: runs | First version: minutes, harness / features | This version: runs | This version: minutes, harness / features | Main lever |
+| --- | --- | --- | --- | --- | --- |
+| App-code PRs (40) | 120 (3 pushes) | 840 / 1,080 to 1,440 | ~50 (ready only) | 250 / 400 to 500 | Ready-only trigger; one job |
+| Docs-only PRs (20) | 60 | 300 / 300 | 60 | 60 to 120 / 60 to 120 | `format:check` only; one job |
+| Pushes to `main` | 66 | 594 / 726 to 924 | ~6 `warm-cache` | 6 to 12 / 6 to 12 | Strict up-to-date rule instead of re-running |
+| Dependabot PRs | ~12 (weekly) | 84 / 108 to 144 | ~5 (monthly) | 25 / 40 to 50 | Monthly schedule |
+| **Total** | | **~1,820 / ~2,210 to 2,810** | | **~340 to 410 / ~510 to 680** | |
+| **Share of Pro's 3,000** | | 61% / 74 to 94% | | **11 to 14% / 17 to 23%** | |
+| **Reduction** | | | | **~77 to 81% / ~76 to 77%** (about 1,410 to 1,480 / 1,700 to 2,130 fewer minutes) | |
 
-- **Pro (3,000, the chosen plan):** covers the estimate with about 1,180 minutes to spare in the harness phase and 190 to 790 once feature e2e exists. #15's preview deploys (below) would use most of that margin.
-- For comparison, Free's 2,000 would have run out once feature e2e grew, and a public repository would have had no minute cost.
-- **Not included:** #15's preview deploy and smoke job. If it builds and deploys on the Actions runner, it adds roughly 3 to 5 minutes per app-changing PR push (about 400 to 650 a month at this volume). This is #9's decision. A host that builds previews on its own infrastructure uses no Actions minutes.
-- **Concurrency cancellation** lowers these numbers, because a superseded run is billed only up to the moment it is cancelled. They are not reduced here.
-- **Measured numbers replace estimates.** #12 and #13 record the billed job durations of their green runs. If a later month passes 80% of the 3,000-minute quota (2,400 minutes), the orchestrator reports it to the owner. GitHub's "included usage alerts" also notify the owner by email.
+- **After launch,** about 8 release PRs a month add about 100 to 120 minutes (10 runs at 10 to 12, WebKit included): about 610 to 800 in total, 20 to 27% of Pro.
+- **Sensitivity:** if every app PR needed two ready runs instead of 1.25, app PRs would cost 400 / 640 to 800 and the total about 490 to 560 / 750 to 980, still under a third of the quota.
+- **Previews cost 0 Actions minutes.** Netlify builds every preview and the staging site (ADR 0010). #15's preview smoke test runs from the tester's machine (below), so it adds nothing here.
+- **Concurrency cancellation** lowers these numbers further. It is not counted.
+- **Measured numbers replace estimates.** #12 and #13 record the billed duration of their green runs. If a month passes 50% of the quota (1,500 minutes), well above this estimate, the orchestrator reports it to the owner with the top workflows from the usage report. GitHub's "included usage alerts" also notify the owner by email.
 
-**Artifacts and caches:**
-
-- e2e artifacts (screenshots, plus Playwright report and traces on failure) at `retention-days: 7` stay well inside Pro's 1 GB.
-- Caches: setup-node's npm cache (`~/.npm`, keyed on `package-lock.json`) and, later, the Convex backend (`~/.cache/convex`, 164 MB, keyed on the pinned backend version) fit easily in 10 GB per repository.
-- Playwright browsers are not cached (ADR 0005).
+**Artifacts:** e2e artifacts (screenshots, plus the Playwright report and traces on failure) at `retention-days: 7`, uploaded only by runs that reached the e2e step, stay well inside Pro's 1 GB.
 
 ### Actions inventory and pinning policy
 
@@ -240,37 +339,38 @@ It stays in the process after the Pro upgrade and the ruleset: it covers the per
 1. **Only GitHub-owned actions** (`actions/*`, `github/*`), enforced by the repository's allowed-actions setting.
 2. **Every `uses:` is pinned to a full 40-character commit SHA, followed on the same line by `# vX.Y.Z`**, enforced by the repository's SHA-pinning setting. Dependabot updates the comment with the SHA.
    - Tags are mutable: the GitHub releases listed below report `"immutable": false`. GitHub's guide says a full SHA "is currently the only way to use an action as an immutable release".
-   - SHAs are resolved from the action's own repository (`git ls-remote https://github.com/actions/<name>`), never from a fork, as GitHub advises.
+   - SHAs are resolved from the action's own repository (`git ls-remote https://github.com/actions/<name>`), never from a fork.
 3. **Version age:** a pinned version must have been published at least 1 day earlier, matching ADR 0003's `min-release-age`. Dependabot's cooldown applies this from now on.
-4. **Adding actions later.** A new GitHub-owned action may be added by the issue that needs it, without a gate: GitHub is the CI platform accepted in ADR 0001. It must still be pinned and listed in `docs/process/ci.md`. **Any action from another owner needs a `gate:technology` amendment to this ADR.** Prefer an npm CLI that an accepted ADR already covers (for example `npx convex`) or a checksum-verified binary (as for actionlint) over a third-party action.
+4. **Adding actions later.** A new GitHub-owned action may be added by the issue that needs it, without a gate, if it is pinned and listed in `docs/process/ci.md`, and the issue states its minute cost. **Any action from another owner needs a `gate:technology` amendment to this ADR.** Prefer an npm CLI that an accepted ADR already covers (for example `npx convex`) or a checksum-verified binary (as for actionlint).
 5. **Major versions of actions** arrive as separate Dependabot PRs. The PR reviewer reads the release notes. GitHub-owned action majors need no gate.
+6. **New workflows or jobs** must state their trigger and monthly minutes in the PR and follow this ADR's rules: no full runs on draft PRs, no duplicate run on `main`, no job that a step in `ci` could do.
 
 **Inventory for #12 and #13** (SHAs resolved on 2026-10-07; all run on `node24`):
 
 | Action | Version | Commit SHA | Released | Used by | Purpose |
 | --- | --- | --- | --- | --- | --- |
-| `actions/checkout` | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` | 2026-07-20 | #12, #13 | Checkout. Always `persist-credentials: false`; `fetch-depth: 2` in `e2e` for the scope step. v7.0.0 also refuses to check out fork PR code under `pull_request_target` and `workflow_run`. |
-| `actions/setup-node` | v7.0.0 | `820762786026740c76f36085b0efc47a31fe5020` | 2026-07-14 | #12, #13 | Node from `node-version-file: package.json`, which reads `devEngines.runtime` (setup-node advanced usage). npm caching is automatic because `devEngines.packageManager` names npm. `actions/node-versions` lists 26.10.0 as its newest 26.x, so for `^26.11.0` the action falls back to downloading from nodejs.org, as its code documents. |
-| `actions/upload-artifact` | v7.0.1 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | 2026-04-10 | #13 | e2e screenshots and reports, `retention-days: 7`. **Not v7.0.2**: it was released 2026-10-07 at 10:08 UTC, less than a day before this ADR, and Dependabot proposes it after the cooldown. |
-| `actions/cache` | v6.1.0 | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | 2026-06-26 | first data feature (ADR 0005), not #12 or #13 | Restores `~/.cache/convex` for the local backend. Listed now so that the first data feature needs no gate. |
+| `actions/checkout` | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` | 2026-07-20 | #12 | Checkout. Always `persist-credentials: false`; `fetch-depth: 2` in `ci` for the scope step. |
+| `actions/setup-node` | v7.0.0 | `820762786026740c76f36085b0efc47a31fe5020` | 2026-07-14 | #12 | Node from `node-version-file: package.json`, which reads `devEngines.runtime`. npm caching is automatic because `devEngines.packageManager` names npm. `actions/node-versions` lists 26.10.0 as its newest 26.x, so for `^26.11.0` the action falls back to downloading from nodejs.org, as its code documents. |
+| `actions/upload-artifact` | v7.0.1 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | 2026-04-10 | #13 | e2e screenshots and reports, `retention-days: 7`. **Not v7.0.2**: it was released 2026-10-07, less than a day before this ADR; Dependabot proposes it after the cooldown. |
 
+- `actions/cache` is **removed** from the first version's inventory (see "Caching").
 - **No package-manager setup action** (ADR 0003: npm comes with Node).
 - **No Playwright action:** `npx playwright install --with-deps`.
 - **No actionlint action:** the workflow downloads `actionlint_1.7.12_linux_amd64.tar.gz` from the GitHub release and checks it with `sha256sum --check` against `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8` (equal to the release's `checksums.txt` and to a local download, whose attestation verified).
-  - The version and hash are bumped by hand, because Dependabot does not track a binary downloaded with `curl`. The PR reviewer checks the actionlint release about quarterly.
-  - Changing the actionlint version is a patch or minor bump of an accepted tool and needs no gate.
+  - The version and hash are bumped by hand, because Dependabot does not track a binary downloaded with `curl`. The PR reviewer checks the actionlint release about quarterly. That is a patch or minor bump of an accepted tool and needs no gate.
 
 ### Workflow-security rules
 
 1. **No `pull_request_target`.** No `workflow_run` that checks out or executes PR code, or that uses artifacts from a PR run.
-2. **Top-level `permissions: contents: read`** in every workflow. Any elevation is granted per job, in the issue that needs it (for example `pull-requests: write` for #15's preview comment), never at the top level. The repository default is already read-only, and that stays.
-3. **No secrets in `checks` or `e2e`.** No `secrets.` reference appears in them. Secrets for deploys (#15) live in a GitHub environment that only the deploy job references.
+2. **Top-level `permissions: contents: read`** in every workflow. Any elevation is granted per job, in the issue that needs it, never at the top level. The repository default is already read-only, and that stays.
+3. **No secrets in `ci` or `warm-cache`.** No `secrets.` reference appears in them. ADR 0010 keeps deploy keys in Netlify, so GitHub holds no deploy secret.
 4. **`persist-credentials: false`** on every checkout, so the token is not left in `.git/config` for npm scripts or test code to read.
 5. **Untrusted input in `run:`.** Event fields such as PR titles, branch names, and commit messages are passed through `env:` and quoted, never interpolated with `${{ }}` inside a script.
 6. **Pinned, GitHub-owned actions only** (policy above).
-7. **Fork PRs:** workflows stay disabled for forks of this private repo. If the repo becomes public, set "Require approval for all external contributors" for fork PR workflows. The jobs above need no secrets, so a fork run can read nothing sensitive.
-8. **Caches:** `checks` and `e2e` run with read-only tokens and no secrets, so their caches are safe. GitHub scopes caches written by a PR run to that PR's merge ref, so a PR cannot write `main`'s cache. A job that holds deploy secrets sets `package-manager-cache: false` on setup-node, as setup-node's README recommends for "workflows with elevated privileges or access to sensitive information".
+7. **Fork PRs:** workflows stay disabled for forks of this private repo. If the repo becomes public, set "Require approval for all external contributors". The jobs need no secrets, so a fork run can read nothing sensitive.
+8. **Caches:** only `warm-cache` on `main` writes the cache that PRs read, and it runs trusted `main` code with `npm ci --ignore-scripts`, a read-only token, and no secrets. A PR's own cache writes are scoped to its merge ref and cannot reach `main` or other PRs. A job that ever holds deploy secrets sets `package-manager-cache: false`, as setup-node's README recommends.
 9. **`timeout-minutes`** is set on every job.
+10. **`workflow_dispatch`** can only be started by users with write access, and runs the same read-only, secret-free job.
 
 ### Dependabot configuration
 
@@ -282,8 +382,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 3 # >= ADR 0003 min-release-age (1 day)
       semver-major-days: 7
@@ -298,8 +397,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 3
     groups:
@@ -315,25 +413,34 @@ updates:
 - **Majors are not grouped and not ignored.** `ignore` also suppresses security updates, so ignoring majors could hide a fix that exists only in a new major.
   - An **npm major** PR gets `gate:technology` from the orchestrator and waits for the owner (AGENTS.md exempts only minor and patch bumps).
   - An **action major** follows rule 5 above.
-- **Minor and patch PRs** follow the normal merge rule: `checks` and `e2e` green, then PR reviewer `APPROVE` (release notes read, `allowScripts` changes justified), then the orchestrator merges. There is no linked issue and no tester phase. The dev-cycle text for this is a follow-up process PR (Consequences).
+- **Minor and patch PRs** follow the merge procedure above: `ci` green on an up-to-date head, then PR reviewer `APPROVE` (release notes read, `allowScripts` changes justified), then the orchestrator merges. There is no linked issue and no tester phase.
 
 ### Illustrative `ci.yml`
 
-#12 and #13 implement this. It passes actionlint 1.7.12. The `e2e` steps after the scope step are #13's.
+#12 implements the `ci` job up to actionlint and the `warm-cache` job; #13 adds the e2e steps. This file passes actionlint 1.7.12.
 
 ```yaml
 name: CI
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main, production]
   push:
     branches: [main]
+    paths: [package-lock.json, .github/workflows/ci.yml]
+  workflow_dispatch:
+    inputs:
+      webkit:
+        description: Also run the webkit-mobile e2e project
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.head_ref || github.run_id }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -341,54 +448,14 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
-  checks:
-    name: checks
+  ci:
+    name: ci
+    # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes.
+    if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: package.json
-      - name: install
-        id: install
-        run: npm ci
-      - name: audit signatures
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm audit signatures
-      - name: format:check
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run format:check
-      - name: lint
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run lint
-      - name: typecheck
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run typecheck
-      - name: test
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm test
-      - name: test:convex
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run test:convex
-      - name: build
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run build
-      - name: actionlint
-        if: ${{ !cancelled() }}
-        run: |
-          curl -fsSL -o actionlint.tar.gz \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check --strict
-          tar -xzf actionlint.tar.gz actionlint
-          ./actionlint -color
-
-  e2e:
-    name: e2e
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      E2E_WEBKIT: ${{ (github.base_ref == 'production' || inputs.webkit == true) && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -405,19 +472,55 @@ jobs:
             echo "app=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ steps.scope.outputs.app == 'true' }}
         with:
           node-version-file: package.json
-      - if: ${{ steps.scope.outputs.app == 'true' }}
+      - name: install
+        id: install
         run: npm ci
-      - if: ${{ steps.scope.outputs.app == 'true' }}
-        run: npx playwright install --with-deps chromium
-      - if: ${{ steps.scope.outputs.app == 'true' && github.event_name == 'push' }}
-        run: npx playwright install --with-deps webkit
-      - if: ${{ steps.scope.outputs.app == 'true' }}
+      - name: format:check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run format:check
+      - name: audit signatures
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm audit signatures
+      - name: lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run lint
+      - name: typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run typecheck
+      - name: test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm test
+      - name: test:convex
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run test:convex
+      - name: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run build
+      - name: actionlint
+        if: ${{ !cancelled() && steps.scope.outputs.app == 'true' }}
+        run: |
+          curl -fsSL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+      # e2e steps (#13) run only when every check above passed.
+      - name: e2e browsers
+        if: ${{ success() && steps.scope.outputs.app == 'true' }}
+        run: |
+          if [ "$E2E_WEBKIT" = "1" ]; then
+            npx playwright install --with-deps chromium webkit
+          else
+            npx playwright install --with-deps chromium
+          fi
+      - name: e2e
+        id: e2e
+        if: ${{ success() && steps.scope.outputs.app == 'true' }}
         run: npm run e2e
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && steps.scope.outputs.app == 'true' }}
+        if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
         with:
           name: e2e-report
           path: |
@@ -426,11 +529,28 @@ jobs:
             e2e/screenshots/
           retention-days: 7
           if-no-files-found: ignore
+
+  warm-cache:
+    name: warm-cache
+    # Runs on main only when the lockfile or this workflow changes, so that PR
+    # runs restore main's npm cache (a PR run cannot restore another PR's cache).
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: install (fills the npm cache that setup-node saves)
+        run: npm ci --ignore-scripts
 ```
 
 ### Runner image upgrades
 
-Moving from `ubuntu-24.04` to `ubuntu-26.04` is a one-line PR whose own green run is the evidence. It needs no gate: it is the same accepted platform. Make the move after #13 is green on 24.04, and before GitHub announces 24.04's retirement.
+Moving from `ubuntu-24.04` to `ubuntu-26.04` is a one-line PR whose own green run is the evidence. It needs no gate. Make the move after #13 is green on 24.04, and before GitHub announces 24.04's retirement.
 
 ## Owner decision
 
@@ -438,65 +558,70 @@ Moving from `ubuntu-24.04` to `ubuntu-26.04` is a one-line PR whose own green ru
 
 | Option | Cost | Enforcement | Minutes |
 | --- | --- | --- | --- |
-| **(a) Upgrade to GitHub Pro (chosen)** | Pro price as shown on the upgrade page (listed elsewhere at $4/month) | GitHub refuses non-green merges for everyone, agents included | 3,000 a month, enough for the estimate |
+| **(a) Upgrade to GitHub Pro (chosen)** | Pro price as shown on the upgrade page (listed elsewhere at $4/month) | GitHub refuses non-green or out-of-date merges for everyone, agents included | 3,000 a month; this design uses about 11 to 23% |
 | (b) Make the repository public | $0 | Same as (a) | Unlimited on standard runners |
-| (c) Stay on Free | $0, plus about $1 to $5 a month of overage once feature e2e grows, if a payment method and Actions budget are set; otherwise CI stops when the quota runs out | Orchestrator check only (`gh pr checks` plus `--match-head-commit`) | 2,000 a month, enough only for the harness phase |
+| (c) Stay on Free | $0 | Orchestrator check only | 2,000 a month |
 
-**Decision (owner, 2026-10-07): (a), upgrade to GitHub Pro.**
+**Decision (owner, 2026-10-07): (a), upgrade to GitHub Pro.** The owner has upgraded.
 
-- **The owner performs the upgrade.** The system cannot make purchases.
-- **After the upgrade, the owner applies the `main` ruleset** described under "Required checks and enforcement", once #12 (and #13) have produced the `checks` and `e2e` check runs.
-- **The orchestrator merge check stays** (`gh pr checks` requiring `checks` and `e2e` to pass, then `gh pr merge --squash --delete-branch --match-head-commit <sha>`) as defence in depth, before and after the ruleset exists.
-- **The minute budget is Pro's 3,000 a month** (see "Minutes and cost").
-- Options (b) and (c) are not taken. The code stays private.
+- **The owner applies the `main` ruleset** described under "Required checks and enforcement", once #12 has produced the `ci` check run.
+- **The orchestrator merge procedure stays** as defence in depth, before and after the ruleset exists.
+
+**Direction (owner, 2026-10-07, PR #31):** "I upgraded to pro but I would like to minimize CI/CD usage time as much as possible. Don't have too much redundant process and try to minimize usage in general." Applied throughout this revision: ready-only runs, no re-run on `main`, one job, docs-only runs reduced to `format:check`, WebKit only on releases, monthly Dependabot, no Actions-based preview smoke.
 
 ## Consequences
 
-- **New tools and services:** GitHub Actions on GitHub-hosted `ubuntu-24.04` runners; the actions in the inventory above; Dependabot version and security updates; actionlint 1.7.12 (MIT), downloaded and verified at run time, never installed as an npm dependency. No third-party app. Cost: the GitHub Pro subscription (owner decision); Actions minutes fit within Pro's 3,000 included minutes.
+- **New tools and services:** GitHub Actions on GitHub-hosted `ubuntu-24.04` runners; the actions in the inventory above; Dependabot version and security updates; actionlint 1.7.12 (MIT), downloaded and verified at run time. No third-party app. Cost: the GitHub Pro subscription; Actions minutes well within Pro's 3,000.
 - **Owner setup (one time):**
-  - upgrade the personal account to GitHub Pro (Settings, Billing and licensing, Licensing, Upgrade);
-  - create the `main` ruleset above after #12 and #13 have produced the `checks` and `e2e` check runs (GitHub suggests check names it has recently seen; a name typed before its first run also works, but a typo then blocks every merge);
+  - create the `main` ruleset above after #12 has produced the `ci` check run (GitHub suggests check names it has recently seen; a typo in a name typed earlier would block every merge);
   - repository settings: squash merging only, auto-delete branches, Dependabot alerts and security updates on. Actions allowed-actions and SHA pinning, for example:
     - `gh api -X PUT repos/jasonbryan/omni-league/actions/permissions -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true`
     - `gh api -X PUT repos/jasonbryan/omni-league/actions/permissions/selected-actions -F github_owned_allowed=true -F verified_allowed=false`
   - set these **after** #12 merges, so the first workflow is already compliant;
-  - optionally set an Actions budget so that usage beyond the 3,000 included minutes is capped.
-- **Process follow-up (separate PR for the owner to merge):**
-  - define "CI is green" in dev cycle Phase 7 as the orchestrator merge check above;
-  - add the Dependabot PR route (minor and patch: reviewer `APPROVE` plus green CI; npm majors: `gate:technology`);
-  - record that agents never push to `main`.
+  - optionally set an Actions budget of $0 beyond the included minutes, so usage can never be billed.
+- **Process follow-up (a separate PR for the owner to merge; `docs/process/dev-cycle.md`):**
+  - PRs stay **draft** through implement, test, and review (Phases 4 to 6). Phase 6 is done at `APPROVE`; "CI is green" moves to Phase 7.
+  - Phase 7 becomes the five-step merge procedure above, one PR at a time, including "a clean update from `main` does not reset `PASS` or `APPROVE`" and "a failing `ci` sends the PR back to draft".
+  - Phase 5: when #15 has landed, the tester also runs the smoke spec against the PR's Netlify preview (`E2E_BASE_URL=https://deploy-preview-<n>--<site>.netlify.app`); Phase 8: the deployer does the same against staging. Both are local runs.
+  - Gate PRs open ready; the Dependabot route (minor and patch: reviewer `APPROVE` plus green `ci`; npm majors: `gate:technology`); agents never push to `main`.
 - **Harder later:**
-  - Separate per-check status lines are traded for minutes. The failing step is read from the job log.
-  - SHA pins make reading workflow diffs slightly harder; the `# vX.Y.Z` comments compensate.
-  - Until the Pro upgrade and the ruleset are in place, only the orchestrator merge check enforces CI, and a determined merger could still bypass it.
+  - CI feedback arrives only at merge time. A problem the tester's local run missed (an environment difference) is found then, and costs one more implement/test loop. The tester's local run of the same scripts makes this rare.
+  - One check line instead of several; the failing step is read from the job log.
+  - A PR must be up to date with `main` to merge, so concurrent merges are serialized by the orchestrator.
+  - Safari regressions are found at the release PR, not at merge, unless someone runs WebKit on demand or locally.
+  - SHA pins make workflow diffs slightly harder to read; the `# vX.Y.Z` comments compensate.
 
 ### Effects on other issues
 
-- **#12 (CI pipeline):** implements the `checks` job.
-  - **Its criteria assume separate jobs per check. They need rewording to steps of one `checks` job:**
-    - "the unit-test job fails" becomes "the `checks` job fails at its `test` step";
-    - the same applies to lint;
-    - "the format-check job is listed" becomes "the `format:check` step exists".
-  - Its required-check list in `docs/process/ci.md` is `checks` (and `e2e` from #13).
-  - **Scope additions:**
-    - the `npm audit signatures` and actionlint steps;
-    - `timeout-minutes`, `persist-credentials: false`, and runner `ubuntu-24.04`;
-    - `.github/dependabot.yml` as above;
-    - the orchestrator merge check and the ruleset/settings checklist in `docs/process/ci.md`;
-    - billed durations of its green run recorded on the PR.
-  - Its concurrency key matches its own optional note.
-- **#13 (e2e harness):** adds the `e2e` job to the same `ci.yml` with check name `e2e`.
-  - **Scope additions:** the docs-only scope step (with a criterion: a docs-only PR's `e2e` passes in about 1 minute without installing browsers, and a PR that changes `src/` runs the full job), `fetch-depth: 2`, `persist-credentials: false`, `timeout-minutes: 20`, and `actions/upload-artifact` pinned at v7.0.1 by SHA.
-  - It records the billed e2e duration so that the estimate here can be checked.
-- **#15 (previews) and #9 (hosting):**
-  - the deploy job keeps the workflow's top-level read-only `permissions:` and gets `pull-requests: write` per job;
-  - secrets come only through a GitHub environment;
-  - it sets `package-manager-cache: false` and `persist-credentials: false`, and includes the same docs-only skip;
-  - **any deploy action not owned by GitHub needs approval in #9's ADR or an amendment to this one**, so prefer the host's CLI through `npx`;
-  - **#9 must count the preview job's Actions minutes**, about 400 to 650 a month if built on the runner; a host that builds previews itself avoids them;
-  - since `run_workflows_from_fork_pull_requests` is `false`, fork PRs never run.
-- **First feature with live Convex data in e2e:** uses `actions/cache` v6.1.0 (SHA above) for `~/.cache/convex`, and adds the `git diff --exit-code convex/_generated` drift check after `npx convex dev --once`.
+- **#12 (CI pipeline):** implements `ci.yml` with the `ci` job (through actionlint) and the `warm-cache` job, plus `.github/dependabot.yml`.
+  - **Criteria that must be reworded:**
+    - "every job passes" becomes "the `ci` check passes";
+    - "triggers on `pull_request` and on `push` to `main`" becomes "triggers on `pull_request` (`opened`, `reopened`, `synchronize`, `ready_for_review`; branches `main` and `production`) with `ci` skipped for drafts, on `push` to `main` only for `package-lock.json` and `ci.yml` (`warm-cache`), and on `workflow_dispatch`";
+    - "the first workflow run on `main` is green" becomes "the `warm-cache` run on `main` after merge is green (this PR changes `ci.yml`), and a following PR run restores the npm cache (`Cache restored from key` in its log)";
+    - "the unit-test job fails" becomes "`ci` fails at its `test` step"; the same for lint;
+    - "the format-check job is listed" becomes "`ci` is the only required check listed".
+  - **New criteria:**
+    - a push to a draft PR creates a run in which `ci` is skipped (0 billed minutes; run link);
+    - marking the PR ready starts a `ci` run (run link);
+    - a docs-only PR runs only install and `format:check`, and an unformatted Markdown file fails it (run links);
+    - when lint and a unit test both fail, both steps are reported failed in one run.
+  - **Scope additions:** the scope step (moved here from #13), `npm audit signatures` and actionlint steps, `timeout-minutes`, `persist-credentials: false`, runner `ubuntu-24.04`, the monthly `dependabot.yml`, and `docs/process/ci.md` with the required check `ci`, the ruleset (strict), and the five-step merge procedure; billed durations of its green runs recorded on the PR.
+  - Its existing concurrency criterion stays.
+- **#13 (e2e harness):** adds the e2e steps to the existing `ci` job (no separate job, no new check name).
+  - The e2e steps run only when every earlier step passed, and are skipped on docs-only PRs.
+  - **`webkit-mobile` is included only when `E2E_WEBKIT=1`** (release PRs into `production`, or `workflow_dispatch` with `webkit: true`), not on `push` to `main`. Its criterion "the first `main` run after merge shows the `webkit-mobile` project executing" becomes "a `workflow_dispatch` run with `webkit: true` shows `webkit-mobile` executing, and a normal PR run does not (run links)".
+  - "When the main-only WebKit job fails, the orchestrator opens a `type:bug`" becomes "a WebKit failure fails the release PR's `ci`; the deployer opens the `type:bug` issue". Permissions stay read-only.
+  - "The e2e job runs alongside the jobs from #12" becomes "the e2e steps run in the same `ci` job, after #12's checks".
+  - `actions/upload-artifact` pinned at v7.0.1 by SHA, uploading only when the e2e step ran. It records the billed duration of a harness run.
+- **#15 (previews) and #9 (hosting, ADR 0010):**
+  - Netlify builds and deploys previews and staging, so there is **no Actions deploy job and no deploy secret in GitHub**.
+  - **No Actions workflow for the preview smoke test.** A workflow triggered by Netlify's commit `status` would fire for every Netlify deploy, drafts included (about 150 a month at 2 to 3 minutes: 300 to 450 minutes, roughly as much as all of CI), and filtering out drafts needs an API call inside a billed job. Instead, the tester runs `E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>` locally and pastes the output in the PR, and the deployer does the same for staging. #15's criterion "when the e2e smoke spec runs with `E2E_BASE_URL` set to its URL, then it passes" is met by that local run.
+  - **The smoke spec stays minimal:** the #13 smoke spec only, Chromium only, both widths.
+  - If an Actions smoke run is wanted later, it needs an amendment to this ADR with its minutes, and must skip drafts.
+  - **ADR 0010 (PR #33) text to align:** its `production` ruleset should require `ci` (not `checks` and `e2e`), and its "#15 runs the smoke spec … triggered by the `status` event" should read "run locally by the tester and deployer".
+- **First feature with live Convex data in e2e:** the CLI downloads the pinned backend binary on each run (no `actions/cache`), and the step `git diff --exit-code convex/_generated` follows `npx convex dev --once`.
 - **ADR 0003:** confirmed. No package-manager setup action, `npm ci`, `npm audit signatures` in CI, and a Dependabot cooldown of 3 days, which is at least 1.
+- **ADR 0005:** amended in this PR (WebKit trigger, no Convex backend cache, CI run conditions). See its "Amendment" section.
 
 ## Test evidence
 
@@ -509,67 +634,60 @@ Run on 2026-10-07, macOS arm64, in a scratch directory outside the repository.
    - Fork PR workflows for private repos: all four options `false`.
    - `vulnerability-alerts`: 404 (off). `automated-security-fixes`: `{"enabled":false}`.
 2. **Action SHAs.**
-   - `git ls-remote --tags` on each `actions/*` repository resolved the tags in the inventory to the listed commits. They are lightweight tags with no `^{}` peel.
+   - `git ls-remote --tags` on each `actions/*` repository resolved the tags in the inventory to the listed commits.
    - `gh api repos/actions/<name>/commits/<sha>` confirmed each commit exists in the canonical repository.
    - Release `immutable` flags are `false`.
 3. **actionlint.**
-   - The SHA-256 of the downloaded `linux_amd64` tarball matched `actionlint_1.7.12_checksums.txt`.
-   - `gh attestation verify -R rhysd/actionlint` passed for the tarball.
-   - The darwin build linted the illustrative `ci.yml` with no findings (exit 0).
-   - A copy with `steps.instal.outcome` and `timeout-minutes: fifteen` produced `[expression]` and `[syntax-check]` errors.
-4. **Scope step.**
-   - Changed-file lists `docs/a.md`, `design/mockups/x.html`, `README.md` gave `app=false` on `pull_request`.
-   - `docs/a.md` plus `src/app/x.ts` gave `app=true`; an empty list gave `app=true`; `docs/a.md` on `push` gave `app=true`; `.github/workflows/ci.yml` gave `app=true`; `e2e/README.md` gave `app=true`.
-   - The first version, written with `grep -q` in a pipe, gave wrong results under `pipefail` and was replaced.
-5. **Dependabot and `devEngines`.** On Node 24.16.0 with npm 11.13.0, a `package.json` with ADR 0003's `devEngines`:
-   - `npm install --package-lock-only --ignore-scripts` failed with `EBADDEVENGINES` ("Invalid semver version "^26.11.0" does not match "v24.16.0"");
-   - with `--force` added, the same command passed and wrote the lockfile.
+   - The SHA-256 of the downloaded `linux_amd64` tarball matched `actionlint_1.7.12_checksums.txt`; `gh attestation verify -R rhysd/actionlint` passed.
+   - The darwin build (`actionlint -version`: 1.7.12) linted the revised illustrative `ci.yml` above with no findings (exit 0).
+   - A copy with `inputs.webkt` and `steps.e2.outcome` produced two `[expression]` errors naming the defined `{webkit: bool}` input and the `e2e` step.
+4. **Scope step** (same script as the workflow, run with the event name and a changed-file list):
+   - `docs/a.md`, `design/mockups/x.html`, `README.md` on `pull_request`: `app=false`.
+   - `docs/a.md` plus `src/app/x.ts`: `app=true`; empty list: `app=true`; `docs/a.md` on `workflow_dispatch`: `app=true`; `.github/workflows/ci.yml`: `app=true`; `package-lock.json`: `app=true`.
+   - An earlier version written with `grep -q` in a pipe gave wrong results under `pipefail` and was replaced.
+5. **Dependabot and `devEngines`.** On Node 24.16.0 with npm 11.13.0, a `package.json` with ADR 0003's `devEngines`: `npm install --package-lock-only --ignore-scripts` failed with `EBADDEVENGINES`; with `--force` added, the same command passed. Dependabot's lockfile updater passes `--force`. The first Dependabot npm PR after #12 confirms it end to end.
+6. **Node 26.11 on runners.** nodejs.org `index.json` lists v26.11.0 and v26.11.1 (npm 11.20.0). `actions/node-versions` lists up to 26.10.0, so setup-node v7.0.0 takes its documented fallback to nodejs.org.
+7. **gh CLI.** `gh pr checks --help`: the `bucket` field is one of `pass`, `fail`, `pending`, `skipping`, or `cancel`. `gh pr ready --undo` converts a PR back to draft. `gh pr update-branch` merges the base branch into the PR branch.
 
-   Dependabot's lockfile updater passes `--force` (source cited below). The first Dependabot npm PR after #12 confirms it end to end.
-6. **Node 26.11 on runners.** nodejs.org `index.json` lists v26.11.0 and v26.11.1 (both 2026-10-07, npm 11.20.0). `actions/node-versions` lists up to 26.10.0, so setup-node v7.0.0 takes its documented fallback to nodejs.org (`official_builds.ts`: "Not found in manifest. Falling back to download directly from Node").
+Not testable before #12 exists, and therefore #12's criteria: a draft push bills 0 minutes, `ready_for_review` starts the run, `warm-cache` saves a cache that a PR run restores, and the strict rule refuses an out-of-date merge.
 
 ## Sources
 
 - GitHub plans and billing:
   - [About GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans)
-  - [GitHub pricing](https://github.com/pricing)
   - [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
   - [Actions runner pricing](https://docs.github.com/en/billing/reference/actions-runner-pricing)
   - [Budgets and alerts](https://docs.github.com/en/billing/concepts/budgets-and-alerts)
-  - [Upgrade your plan](https://docs.github.com/en/billing/how-tos/manage-plan-and-licenses/upgrade-plan)
   - [2026 pricing changes for GitHub Actions](https://github.com/resources/insights/2026-pricing-changes-for-github-actions)
+- Workflow behaviour:
+  - [Control jobs with conditions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions) ("A job that is skipped will report its status as "Success"")
+  - [Dependency caching reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) (access restrictions, 7-day eviction)
+  - [Events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows) (`pull_request` activity types, `ready_for_review`)
+  - [Path filters are not a CI gate (Mergify, 2026)](https://mergify.com/blog/path-filters-are-not-a-ci-gate) (path-filtered required checks stay pending)
+  - [Merge queue general availability](https://github.blog/changelog/2023-07-12-pull-request-merge-queue-is-now-generally-available/) (organization-owned repositories only)
 - Protection and rulesets:
   - [About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
   - [About rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)
-  - availability text in github/docs `data/reusables/gated-features/protected-branches.md` and `repo-rules.md`
 - Runners:
   - [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
-  - [actions/runner-images README](https://github.com/actions/runner-images)
-  - [Ubuntu 24.04 image readme](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
   - [`ubuntu-latest` to 26.04 announcement (#14748)](https://github.com/actions/runner-images/issues/14748)
   - [Playwright system requirements](https://playwright.dev/docs/intro#system-requirements)
+  - [Playwright CI guide, "Caching browsers"](https://playwright.dev/docs/ci)
 - Security:
   - [Secure use reference](https://docs.github.com/en/actions/reference/security/secure-use)
   - [Managing GitHub Actions settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository)
   - [Preventing pwn requests (GitHub Security Lab)](https://securitylab.github.com/research/github-actions-preventing-pwn-requests/)
 - Actions:
   - [actions/checkout releases](https://github.com/actions/checkout/releases)
-  - [actions/setup-node](https://github.com/actions/setup-node), its [advanced usage](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md), and its v7.0.0 `src/distributions/official_builds/official_builds.ts`
+  - [actions/setup-node](https://github.com/actions/setup-node) and its [advanced usage](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md)
   - [actions/node-versions manifest](https://github.com/actions/node-versions/blob/main/versions-manifest.json)
-  - [actions/cache releases](https://github.com/actions/cache/releases)
   - [actions/upload-artifact releases](https://github.com/actions/upload-artifact/releases)
 - Dependabot:
-  - [options reference (`cooldown`, `groups`, `ignore`)](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)
+  - [options reference (`schedule`, `cooldown`, `groups`, `ignore`)](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)
+  - [Configuring multi-ecosystem updates](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configuring-multi-ecosystem-updates) and [changelog, 2025-07-01](https://github.blog/changelog/2025-07-01-single-pull-request-for-dependabot-multi-ecosystem-support/)
   - [Keeping your actions up to date with Dependabot](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/auto-update-actions)
-  - github/docs `data/reusables/actions/dependabot-version-updates-actions-caveats.md`
   - dependabot-core [`npm_and_yarn/Dockerfile`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/Dockerfile) and [`npm_lockfile_updater.rb`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater/npm_lockfile_updater.rb)
-- Renovate:
-  - [Renovate on GitHub (AGPL-3.0)](https://github.com/renovatebot/renovate)
-  - [Mend Renovate app](https://github.com/apps/renovate)
-  - [configuration options](https://docs.renovatebot.com/configuration-options/)
-- Workflow linting:
-  - [actionlint v1.7.12 release](https://github.com/rhysd/actionlint/releases/tag/v1.7.12)
-  - [actionlint install](https://github.com/rhysd/actionlint/blob/main/docs/install.md) and [usage](https://github.com/rhysd/actionlint/blob/main/docs/usage.md)
-  - [zizmor](https://github.com/zizmorcore/zizmor)
+- Renovate: [Renovate (AGPL-3.0)](https://github.com/renovatebot/renovate), [Mend Renovate app](https://github.com/apps/renovate)
+- Workflow linting: [actionlint v1.7.12 release](https://github.com/rhysd/actionlint/releases/tag/v1.7.12), [zizmor](https://github.com/zizmorcore/zizmor)
 - Node.js: [dist index](https://nodejs.org/dist/index.json)
-- GitHub CLI: `gh pr checks --help` and `gh pr merge --help` (gh 2.92.0; `--json bucket`, `--match-head-commit`)
+- GitHub CLI: `gh pr checks --help`, `gh pr ready --help`, `gh pr update-branch --help`, `gh pr merge --help`
