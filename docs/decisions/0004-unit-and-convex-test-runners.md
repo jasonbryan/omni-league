@@ -27,16 +27,16 @@ Facts verified on 2026-10-07:
 
 ### Assumptions about decisions still open
 
-| Open decision | What this ADR assumes | What happens if the decision goes the other way |
-| --- | --- | --- |
-| #1 package manager | npm, pnpm, Yarn (node-modules linker), or Bun. | **Every** case lists `vite` as a direct devDependency (see "Packages to add"). Vitest 5 no longer depends on Vite directly. Yarn does not install peers automatically. pnpm installs the peer, but `convex/test.setup.ts` references `vite/client` types, and pnpm only links direct dependencies at the root. Yarn PnP is not assumed. The smoke test below used npm. **Note for #10:** `ng new` picks a package manager by detection. On the test machine it chose Bun because Bun was installed, so the scaffold must pass `--package-manager` explicitly. |
-| #1 Node version | Node 24 LTS or Node 26. | The intersection of the engine ranges below is Node `^22.22.3 \|\| ^24.15.0 \|\| >=26.0.0` (Angular is the narrowest), which accepts both. |
-| #1 repository layout | A single root package with `src/` (Angular) and `convex/` at the root, as in Convex's quickstarts and ADR 0002. | In a workspace, the Convex Vitest config moves into the package that owns `convex/`, and the commands get the package-manager filter prefix. The runners and versions stay the same. |
-| #2 lint (ADR 0002, PR #16) | TypeScript stays on 6.0.x, and the ESLint config is ESM. | The smoke test used TypeScript 6.0.3. `vitest.config.mts` is ESM. ADR 0002 already lists a root `vitest.config.ts` under `allowDefaultProject`. It needs updating to the `.mts` name. |
-| #4 e2e runner (ADR 0005, drafted in parallel) | Possibly Playwright. | This ADR does **not** adopt Vitest browser mode, so it adds no browser-automation tool and has no provider to align. If browser mode is adopted later, the provider must be the one #4 chose (`@vitest/browser-playwright` if #4 picks Playwright, `@vitest/browser-webdriverio` if WebdriverIO). Otherwise that ADR must justify a second tool. |
-| #5 Angular baseline | CSR, zoneless, and whichever forms API #5 picks. | The builder sets up zoneless TestBed when `zone.js` is absent. Rendering mode and the forms API do not change the runner. |
-| #6 styling | CSS, SCSS, or Tailwind. | The builder compiles styles through the same build pipeline as `ng build`. Nothing changes here. |
-| #8 CI | CI calls the two package scripts below on a GitHub-hosted Ubuntu runner, with no secrets. | Neither suite reads a secret, opens a network connection to Convex, or needs a browser. |
+| Open decision                                 | What this ADR assumes                                                                                           | What happens if the decision goes the other way                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #1 package manager                            | npm, pnpm, Yarn (node-modules linker), or Bun.                                                                  | **Every** case lists `vite` as a direct devDependency (see "Packages to add"). Vitest 5 no longer depends on Vite directly. Yarn does not install peers automatically. pnpm installs the peer, but `convex/test.setup.ts` references `vite/client` types, and pnpm only links direct dependencies at the root. Yarn PnP is not assumed. The smoke test below used npm. **Note for #10:** `ng new` picks a package manager by detection. On the test machine it chose Bun because Bun was installed, so the scaffold must pass `--package-manager` explicitly. |
+| #1 Node version                               | Node 24 LTS or Node 26.                                                                                         | The intersection of the engine ranges below is Node `^22.22.3 \|\| ^24.15.0 \|\| >=26.0.0` (Angular is the narrowest), which accepts both.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| #1 repository layout                          | A single root package with `src/` (Angular) and `convex/` at the root, as in Convex's quickstarts and ADR 0002. | In a workspace, the Convex Vitest config moves into the package that owns `convex/`, and the commands get the package-manager filter prefix. The runners and versions stay the same.                                                                                                                                                                                                                                                                                                                                                                          |
+| #2 lint (ADR 0002, PR #16)                    | TypeScript stays on 6.0.x, and the ESLint config is ESM.                                                        | The smoke test used TypeScript 6.0.3. `vitest.config.mts` is ESM. ADR 0002 already lists a root `vitest.config.ts` under `allowDefaultProject`. It needs updating to the `.mts` name.                                                                                                                                                                                                                                                                                                                                                                         |
+| #4 e2e runner (ADR 0005, drafted in parallel) | Possibly Playwright.                                                                                            | This ADR does **not** adopt Vitest browser mode, so it adds no browser-automation tool and has no provider to align. If browser mode is adopted later, the provider must be the one #4 chose (`@vitest/browser-playwright` if #4 picks Playwright, `@vitest/browser-webdriverio` if WebdriverIO). Otherwise that ADR must justify a second tool.                                                                                                                                                                                                              |
+| #5 Angular baseline                           | CSR, zoneless, and whichever forms API #5 picks.                                                                | The builder sets up zoneless TestBed when `zone.js` is absent. Rendering mode and the forms API do not change the runner.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| #6 styling                                    | CSS, SCSS, or Tailwind.                                                                                         | The builder compiles styles through the same build pipeline as `ng build`. Nothing changes here.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| #8 CI                                         | CI calls the two package scripts below on a GitHub-hosted Ubuntu runner, with no secrets.                       | Neither suite reads a secret, opens a network connection to Convex, or needs a browser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ## Options: Angular unit tests
 
@@ -109,11 +109,11 @@ Facts verified on 2026-10-07:
 
 ## Decision 3: `convex/_generated/`
 
-| Option | Assessment |
-| --- | --- |
-| **Commit it** | Convex's recommendation. The CLI's `codegen --help` says the folder "should be committed to the repo (your code won't typecheck without it!)", and the CLI's error text links to the "Check generated code into version control" best practice. The output contains no deployment-specific values: the only match for "deployment" is a doc comment in `server.js`, and regenerating gave byte-identical files. Tests, typecheck, and build need no Convex CLI at all. |
-| Generate in CI with `npx convex codegen` | **Fails without a deployment.** In `convex` 1.46.0, `codegen` loads deployment credentials and runs against a backend. With no `.env.local` it exits 1 with `✖ No CONVEX_DEPLOYMENT set, run \`npx convex dev\` to configure a Convex project`. With a preview deploy key in `CONVEX_DEPLOY_KEY`, it refuses: "Codegen requires an existing deployment so doesn't support CONVEX_DEPLOY_KEY. Generate code in dev and commit it to the repo instead." Any other deploy key is a secret, which #8 rules out. |
-| Generate in CI with an anonymous local backend | Works without an account (`CONVEX_AGENT_MODE=anonymous npx convex dev --once`, then `npx convex codegen`). It carries all of C2's cons: network downloads, beta status, and no verification on a GitHub runner. |
+| Option                                         | Assessment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Commit it**                                  | Convex's recommendation. The CLI's `codegen --help` says the folder "should be committed to the repo (your code won't typecheck without it!)", and the CLI's error text links to the "Check generated code into version control" best practice. The output contains no deployment-specific values: the only match for "deployment" is a doc comment in `server.js`, and regenerating gave byte-identical files. Tests, typecheck, and build need no Convex CLI at all.                                      |
+| Generate in CI with `npx convex codegen`       | **Fails without a deployment.** In `convex` 1.46.0, `codegen` loads deployment credentials and runs against a backend. With no `.env.local` it exits 1 with `✖ No CONVEX_DEPLOYMENT set, run \`npx convex dev\` to configure a Convex project`. With a preview deploy key in `CONVEX_DEPLOY_KEY`, it refuses: "Codegen requires an existing deployment so doesn't support CONVEX_DEPLOY_KEY. Generate code in dev and commit it to the repo instead." Any other deploy key is a secret, which #8 rules out. |
+| Generate in CI with an anonymous local backend | Works without an account (`CONVEX_AGENT_MODE=anonymous npx convex dev --once`, then `npx convex codegen`). It carries all of C2's cons: network downloads, beta status, and no verification on a GitHub runner.                                                                                                                                                                                                                                                                                             |
 
 **Commit `convex/_generated/`.** Whoever changes `convex/` regenerates it with `npx convex dev` (against their own dev deployment or an anonymous local one) and commits the result. Drift is caught by `typecheck`, because new functions referenced from tests or the app fail to typecheck against a stale `api.d.ts`, and by PR review. A CI drift check (regenerate, then `git diff --exit-code convex/_generated`) is possible only with a local backend. It is left to #8 or #12 once #4 has verified the local backend on a runner.
 
@@ -139,23 +139,23 @@ Facts verified on 2026-10-07:
   - The root config only includes `convex/**/*.test.ts`, so `vitest run` never picks up the Angular specs under `src/`.
 - **DOM environment:** `jsdom` (Angular suite). The Convex suite uses `edge-runtime`.
 
-| Suite | Config | Environment | Command (script) |
-| --- | --- | --- | --- |
-| Angular unit | `angular.json` `test` target (`@angular/build:unit-test`, no `runnerConfig`) | jsdom | `ng test --watch=false` (`test`) |
-| Convex functions | root `vitest.config.mts` | edge-runtime | `vitest run --config vitest.config.mts` (`test:convex`) |
+| Suite            | Config                                                                       | Environment  | Command (script)                                        |
+| ---------------- | ---------------------------------------------------------------------------- | ------------ | ------------------------------------------------------- |
+| Angular unit     | `angular.json` `test` target (`@angular/build:unit-test`, no `runnerConfig`) | jsdom        | `ng test --watch=false` (`test`)                        |
+| Convex functions | root `vitest.config.mts`                                                     | edge-runtime | `vitest run --config vitest.config.mts` (`test:convex`) |
 
 For local watch mode, use `ng test` and `vitest --config vitest.config.mts`. The `ng test` watch default is "true in TTY environments and false otherwise", so CI runs once either way. `--watch=false` makes the script explicit.
 
 `vitest.config.mts`:
 
 ```ts
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    name: "convex",
-    include: ["convex/**/*.test.ts"],
-    environment: "edge-runtime",
+    name: 'convex',
+    include: ['convex/**/*.test.ts'],
+    environment: 'edge-runtime',
   },
 });
 ```
@@ -166,10 +166,7 @@ export default defineConfig({
 /// <reference types="vite/client" />
 // Every Convex module except multi-dot files (*.d.ts, *.test.ts, test.setup.ts).
 // Do not use the docs' "./**/!(*.*.*)*.*s" pattern: it matches nothing on Vite 8.
-export const modules = import.meta.glob([
-  "./**/*.{js,ts}",
-  "!./**/*.*.{js,ts}",
-]);
+export const modules = import.meta.glob(['./**/*.{js,ts}', '!./**/*.*.{js,ts}']);
 ```
 
 `convex/tsconfig.json` (created by the Convex CLI) includes `./**/*`, so the `typecheck` script from #10 also type-checks Convex tests.
@@ -184,21 +181,24 @@ Illustrative schema and function (smoke test only):
 // convex/schema.ts (illustrative)
 export default defineSchema({
   groups: defineTable({ name: v.string() }),
-  memberships: defineTable({ groupId: v.id("groups"), authUserId: v.string() })
-    .index("by_group_and_user", ["groupId", "authUserId"]),
-  notes: defineTable({ groupId: v.id("groups"), body: v.string() }).index("by_group", ["groupId"]),
+  memberships: defineTable({ groupId: v.id('groups'), authUserId: v.string() }).index(
+    'by_group_and_user',
+    ['groupId', 'authUserId'],
+  ),
+  notes: defineTable({ groupId: v.id('groups'), body: v.string() }).index('by_group', ['groupId']),
 });
 
 // convex/lib/auth.ts (shared authorization helper, per convex.md)
-export async function requireGroupMember(ctx: QueryCtx, groupId: Id<"groups">) {
+export async function requireGroupMember(ctx: QueryCtx, groupId: Id<'groups'>) {
   const identity = await ctx.auth.getUserIdentity();
-  if (identity === null) throw new ConvexError("UNAUTHENTICATED");
+  if (identity === null) throw new ConvexError('UNAUTHENTICATED');
   const membership = await ctx.db
-    .query("memberships")
-    .withIndex("by_group_and_user", (q) =>
-      q.eq("groupId", groupId).eq("authUserId", identity.subject))
+    .query('memberships')
+    .withIndex('by_group_and_user', (q) =>
+      q.eq('groupId', groupId).eq('authUserId', identity.subject),
+    )
     .unique();
-  if (membership === null) throw new ConvexError("FORBIDDEN");
+  if (membership === null) throw new ConvexError('FORBIDDEN');
   return identity;
 }
 
@@ -209,43 +209,50 @@ The test:
 
 ```ts
 // convex/notes.test.ts
-import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
-import { api } from "./_generated/api";
-import schema from "./schema";
-import { modules } from "./test.setup";
+import { convexTest } from 'convex-test';
+import { describe, expect, test } from 'vitest';
+import { api } from './_generated/api';
+import schema from './schema';
+import { modules } from './test.setup';
 
 async function seed() {
   const t = convexTest({ schema, modules });
   const ids = await t.run(async (ctx) => {
-    const groupA = await ctx.db.insert("groups", { name: "A" });
-    const groupB = await ctx.db.insert("groups", { name: "B" });
+    const groupA = await ctx.db.insert('groups', { name: 'A' });
+    const groupB = await ctx.db.insert('groups', { name: 'B' });
     // authUserId equals the subject faked by withIdentity (ADR 0008: helpers key on identity.subject)
-    await ctx.db.insert("memberships", { groupId: groupA, authUserId: "alice" });
-    await ctx.db.insert("memberships", { groupId: groupB, authUserId: "bob" });
-    await ctx.db.insert("notes", { groupId: groupA, body: "A only" });
+    await ctx.db.insert('memberships', { groupId: groupA, authUserId: 'alice' });
+    await ctx.db.insert('memberships', { groupId: groupB, authUserId: 'bob' });
+    await ctx.db.insert('notes', { groupId: groupA, body: 'A only' });
     return { groupA, groupB };
   });
   return { t, ...ids };
 }
 
-describe("notes.listForGroup", () => {
-  test("member of the group reads its notes", async () => {          // 1. authenticated happy path
+describe('notes.listForGroup', () => {
+  test('member of the group reads its notes', async () => {
+    // 1. authenticated happy path
     const { t, groupA } = await seed();
-    const alice = t.withIdentity({ subject: "alice" });
+    const alice = t.withIdentity({ subject: 'alice' });
     const notes = await alice.query(api.notes.listForGroup, { groupId: groupA });
-    expect(notes.map((n) => n.body)).toEqual(["A only"]);
+    expect(notes.map((n) => n.body)).toEqual(['A only']);
   });
 
-  test("unauthenticated caller is rejected", async () => {           // 2. no identity
+  test('unauthenticated caller is rejected', async () => {
+    // 2. no identity
     const { t, groupA } = await seed();
-    await expect(t.query(api.notes.listForGroup, { groupId: groupA })).rejects.toThrow(/UNAUTHENTICATED/);
+    await expect(t.query(api.notes.listForGroup, { groupId: groupA })).rejects.toThrow(
+      /UNAUTHENTICATED/,
+    );
   });
 
-  test("caller from a different group is rejected", async () => {    // 3. cross-tenant
+  test('caller from a different group is rejected', async () => {
+    // 3. cross-tenant
     const { t, groupA } = await seed();
-    const bob = t.withIdentity({ subject: "bob" });                   // member of group B only
-    await expect(bob.query(api.notes.listForGroup, { groupId: groupA })).rejects.toThrow(/FORBIDDEN/);
+    const bob = t.withIdentity({ subject: 'bob' }); // member of group B only
+    await expect(bob.query(api.notes.listForGroup, { groupId: groupA })).rejects.toThrow(
+      /FORBIDDEN/,
+    );
   });
 });
 ```
@@ -280,13 +287,13 @@ Run in a throwaway directory outside the repo:
 
 All versions and licences were checked against the npm registry on 2026-10-07.
 
-| Package | Version | Licence | Notes |
-| --- | --- | --- | --- |
-| `vitest` | 5.0.3 | MIT | Added by `ng new` (`^5.0.0`). Engines `^22.12.0 \|\| ^24.0.0 \|\| >=26.0.0`. Requires `vite ^6.4 \|\| ^7 \|\| ^8`. |
-| `jsdom` | 30.1.2 | MIT | Added by `ng new` (`^30.0.0`). Engines `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`. |
-| `vite` | 8.3.3 (range `^8.3.0`) | MIT | Required peer of `vitest` 5 and source of the `vite/client` types. Kept on Vite 8, the major `@angular/build` 22.2.2 pins (8.3.0). Engines `^20.19.0 \|\| >=22.12.0`. |
-| `convex-test` | 0.0.60 | Apache-2.0 | Peer `convex ^1.43.0`. No lifecycle scripts. |
-| `@edge-runtime/vm` | 5.0.0 | MIT | Provides Vitest's `edge-runtime` environment. Depends on `@edge-runtime/primitives` 6.0.0. Engines `>=18`. |
+| Package            | Version                | Licence    | Notes                                                                                                                                                                 |
+| ------------------ | ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vitest`           | 5.0.3                  | MIT        | Added by `ng new` (`^5.0.0`). Engines `^22.12.0 \|\| ^24.0.0 \|\| >=26.0.0`. Requires `vite ^6.4 \|\| ^7 \|\| ^8`.                                                    |
+| `jsdom`            | 30.1.2                 | MIT        | Added by `ng new` (`^30.0.0`). Engines `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`.                                                                                        |
+| `vite`             | 8.3.3 (range `^8.3.0`) | MIT        | Required peer of `vitest` 5 and source of the `vite/client` types. Kept on Vite 8, the major `@angular/build` 22.2.2 pins (8.3.0). Engines `^20.19.0 \|\| >=22.12.0`. |
+| `convex-test`      | 0.0.60                 | Apache-2.0 | Peer `convex ^1.43.0`. No lifecycle scripts.                                                                                                                          |
+| `@edge-runtime/vm` | 5.0.0                  | MIT        | Provides Vitest's `edge-runtime` environment. Depends on `@edge-runtime/primitives` 6.0.0. Engines `>=18`.                                                            |
 
 `@angular/build` (MIT) and `convex` (Apache-2.0) are already covered by ADR 0001. **Optional, accepted with this ADR but not installed by #10:** `@vitest/coverage-v8` 5.0.3 (MIT, peer `vitest 5.0.3`) for coverage reports, if wanted later.
 

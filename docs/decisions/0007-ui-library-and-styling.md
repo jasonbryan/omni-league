@@ -32,12 +32,12 @@ The decision is about tooling. The visual theme (palette, type scale, radius, sp
 
 ### Assumptions about decisions still open
 
-| Open decision | What this ADR assumes | What happens if it goes the other way |
-| --- | --- | --- |
-| #1 package manager, Node, layout | **Package manager:** any of npm, pnpm, Yarn (node-modules linker), or Bun.<br>**Node:** 24 LTS or 26.<br>**Layout:** a single root package with `src/` and `design/` at the root. | **Package manager:** no change. None of the recommended packages has an install lifecycle script (checked on the npm registry). In a scratch install, the only blocked script was `@parcel/watcher`'s, which `@angular/build` already brings. Under ADR 0003's proposed policy (npm 11.20, `strict-allow-scripts=true`, the five-entry `allowScripts` map), all twelve packages installed into an SSR app with no new entry.<br>**Layout:** if #1 picks a workspace, the paths below gain the app's directory prefix. |
-| #3 unit-test runner | Vitest through the Angular builder. | Helm directives and icon components are ordinary Angular code, so any runner can test them. |
-| #4 e2e and accessibility | Playwright with axe. Screenshots at 360px and 1280px. | The self-hosted font chosen below makes rendering the same on macOS and on Linux CI runners, whichever runner is chosen. |
-| #5 rendering mode (PR #18, ADR 0006) | **Hybrid rendering.** Public pages are `RenderMode.Server` and hydrate in the browser, static pages are prerendered, and `/app/**` is client-only. Public pages include the registration form, so form controls, buttons, icons, and the font all render on the server. | **Tested for the recommended stack** in a scratch Angular 22.2 SSR app; see "Server rendering and hydration". If #5 went back to CSR only, nothing here would change. |
+| Open decision                        | What this ADR assumes                                                                                                                                                                                                                                                   | What happens if it goes the other way                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #1 package manager, Node, layout     | **Package manager:** any of npm, pnpm, Yarn (node-modules linker), or Bun.<br>**Node:** 24 LTS or 26.<br>**Layout:** a single root package with `src/` and `design/` at the root.                                                                                       | **Package manager:** no change. None of the recommended packages has an install lifecycle script (checked on the npm registry). In a scratch install, the only blocked script was `@parcel/watcher`'s, which `@angular/build` already brings. Under ADR 0003's proposed policy (npm 11.20, `strict-allow-scripts=true`, the five-entry `allowScripts` map), all twelve packages installed into an SSR app with no new entry.<br>**Layout:** if #1 picks a workspace, the paths below gain the app's directory prefix. |
+| #3 unit-test runner                  | Vitest through the Angular builder.                                                                                                                                                                                                                                     | Helm directives and icon components are ordinary Angular code, so any runner can test them.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| #4 e2e and accessibility             | Playwright with axe. Screenshots at 360px and 1280px.                                                                                                                                                                                                                   | The self-hosted font chosen below makes rendering the same on macOS and on Linux CI runners, whichever runner is chosen.                                                                                                                                                                                                                                                                                                                                                                                              |
+| #5 rendering mode (PR #18, ADR 0006) | **Hybrid rendering.** Public pages are `RenderMode.Server` and hydrate in the browser, static pages are prerendered, and `/app/**` is client-only. Public pages include the registration form, so form controls, buttons, icons, and the font all render on the server. | **Tested for the recommended stack** in a scratch Angular 22.2 SSR app; see "Server rendering and hydration". If #5 went back to CSR only, nothing here would change.                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Options
 
@@ -45,12 +45,12 @@ All versions, licences, peer ranges, and install scripts below were checked on t
 
 **Bundle sizes were measured, not estimated.** The system built the same small screen with each stack using Angular CLI 22.2.2 (`ng build`, production, zoneless). The screen had a heading, a text input with a label, a single-choice list, a button, and a dialog.
 
-| Build | Initial raw | Estimated transfer |
-| --- | --- | --- |
-| Baseline (`<h1>` only, no UI packages) | 189.88 kB | 51.76 kB |
-| Option A: Angular Material form field + input, select, button, dialog | 554.90 kB | 122.34 kB |
-| Option C: Angular Aria listbox, CDK dialog, Tailwind utilities | 298.44 kB | 77.77 kB |
-| Option B, approximated: Option C plus spartan's helm runtime helpers (`clsx`, `class-variance-authority`, `tailwind-merge`) on one helm-style button | 333.94 kB | 87.66 kB |
+| Build                                                                                                                                                | Initial raw | Estimated transfer |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------ |
+| Baseline (`<h1>` only, no UI packages)                                                                                                               | 189.88 kB   | 51.76 kB           |
+| Option A: Angular Material form field + input, select, button, dialog                                                                                | 554.90 kB   | 122.34 kB          |
+| Option C: Angular Aria listbox, CDK dialog, Tailwind utilities                                                                                       | 298.44 kB   | 77.77 kB           |
+| Option B, approximated: Option C plus spartan's helm runtime helpers (`clsx`, `class-variance-authority`, `tailwind-merge`) on one helm-style button | 333.94 kB   | 87.66 kB           |
 
 These numbers are indicative only:
 
@@ -93,8 +93,9 @@ These numbers are indicative only:
   - filled or outlined text fields with floating labels;
   - Roboto type;
   - state layers on press.
-  
+
   Colour, typography, density, and shape are themeable, but the component anatomy stays Material. Demo: [material.angular.dev/components](https://material.angular.dev/components/categories).
+
 - **Pros.**
   - First-party, with same-day support for each Angular major.
   - Broadest ready-made component set, including a datepicker and data table, both useful for schedules and standings.
@@ -127,7 +128,7 @@ These numbers are indicative only:
     - Tailwind's CSS compiler pulls in `lightningcss` 1.33 (MPL-2.0). It runs only at build time and is not shipped.
   - **Version support:** spartan "supports the two latest major Angular versions" ([version support](https://www.spartan.ng/documentation/version-support)).
   - **Lag behind Angular majors:** Angular 22.0.0 was published on 2026-06-03, and the first stable brain release allowing it (1.0.0) on 2026-06-24, 21 days later.
-- **Zoneless and SSR support.** The spartan 1.0 changelog says: "spartan is zoneless-ready and server-side-rendering compatible out of the box" ([changelog source](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(documentation)/documentation/changelog.page.ts)). brain's directives use signals and OnPush. The system tested this claim on an Angular 22.2 Server route; see "Server rendering and hydration" under Recommendation.
+- **Zoneless and SSR support.** The spartan 1.0 changelog says: "spartan is zoneless-ready and server-side-rendering compatible out of the box" ([changelog source](<https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(documentation)/documentation/changelog.page.ts>)). brain's directives use signals and OnPush. The system tested this claim on an Angular 22.2 Server route; see "Server rendering and hydration" under Recommendation.
 - **Styling and tokens.**
   - The tokens are CSS custom properties in OKLCH, defined in `:root` with a `.dark` override: `--background`, `--foreground`, `--primary`, `--primary-foreground`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--ring`, `--radius`, and others.
   - Tailwind maps them to utilities, for example `bg-primary`.
@@ -156,8 +157,9 @@ These numbers are indicative only:
   - subtle shadows;
   - compact controls;
   - focus rings in the `--ring` colour.
-  
+
   The helm component pages offer several style presets (Nova, Vega, Lyra, Maia, Mira, Luma) that change the class strings. Every colour, radius, and spacing value is a token or class the project owns. Demo: [spartan.ng/components](https://www.spartan.ng/components/button).
+
 - **Pros.**
   - Mockups can match the app exactly.
   - The visual language is owned by the project and can be set at the first mockup.
@@ -235,19 +237,19 @@ These numbers are indicative only:
 
 ### Icon set
 
-| Option | Package and licence | Delivery | Notes |
-| --- | --- | --- | --- |
-| **Lucide via ng-icons** | `@ng-icons/core` 36.1.0 (MIT; peers `@angular/core >=22`) + `@ng-icons/lucide` 36.1.0 (registry: ISC). Lucide upstream: ISC, with the Feather-derived icons under MIT ([licence](https://github.com/lucide-icons/lucide/blob/main/LICENSE)). | Per-icon SVG strings bundled with the app; only registered icons ship. | spartan's helm source imports `NgIcon` from `@ng-icons/core` and Lucide icons from `@ng-icons/lucide`. The `NgIcon` component is OnPush with signal inputs (source); the ng-icons docs make no explicit zoneless statement. |
-| Lucide via `@lucide/angular` | `@lucide/angular` 1.52.0 (ISC; peers `@angular/core >=17`). | SVG components bundled with the app. | Lucide's official Angular package; its README calls it "standalone, signal based, zoneless". It replaces `lucide-angular`, which is deprecated and whose last version (1.0.0) caps peers at Angular 21. A second icon wrapper is redundant if helm uses ng-icons. |
-| Material Symbols | Font: `material-symbols` 0.47.6 (Apache-2.0), or SVGs: `@material-symbols/svg-400` 0.47.6 (Apache-2.0). Both are community packaging of Google's Apache-2.0 icons. | Self-hosted variable font (Outlined WOFF2 is 4.0 MB in full), or SVGs registered with `MatIconRegistry`, or the Google Fonts CDN (subsettable with `icon_names`). | Native to Option A. Ligature fonts render the icon name as text until the font loads. |
+| Option                       | Package and licence                                                                                                                                                                                                                          | Delivery                                                                                                                                                          | Notes                                                                                                                                                                                                                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lucide via ng-icons**      | `@ng-icons/core` 36.1.0 (MIT; peers `@angular/core >=22`) + `@ng-icons/lucide` 36.1.0 (registry: ISC). Lucide upstream: ISC, with the Feather-derived icons under MIT ([licence](https://github.com/lucide-icons/lucide/blob/main/LICENSE)). | Per-icon SVG strings bundled with the app; only registered icons ship.                                                                                            | spartan's helm source imports `NgIcon` from `@ng-icons/core` and Lucide icons from `@ng-icons/lucide`. The `NgIcon` component is OnPush with signal inputs (source); the ng-icons docs make no explicit zoneless statement.                                       |
+| Lucide via `@lucide/angular` | `@lucide/angular` 1.52.0 (ISC; peers `@angular/core >=17`).                                                                                                                                                                                  | SVG components bundled with the app.                                                                                                                              | Lucide's official Angular package; its README calls it "standalone, signal based, zoneless". It replaces `lucide-angular`, which is deprecated and whose last version (1.0.0) caps peers at Angular 21. A second icon wrapper is redundant if helm uses ng-icons. |
+| Material Symbols             | Font: `material-symbols` 0.47.6 (Apache-2.0), or SVGs: `@material-symbols/svg-400` 0.47.6 (Apache-2.0). Both are community packaging of Google's Apache-2.0 icons.                                                                           | Self-hosted variable font (Outlined WOFF2 is 4.0 MB in full), or SVGs registered with `MatIconRegistry`, or the Google Fonts CDN (subsettable with `icon_names`). | Native to Option A. Ligature fonts render the icon name as text until the font loads.                                                                                                                                                                             |
 
 ### Font source
 
-| Option | Licence | Privacy and availability | Notes |
-| --- | --- | --- | --- |
-| **Self-hosted Inter via Fontsource** | `@fontsource-variable/inter` 5.3.0, OFL-1.1 (licence file in the package). | Font files are served from the app's own origin. No third-party request and no extra outage dependency. | The variable weight axis is 48 KB WOFF2 for the Latin subset and 85 KB for Latin Extended; the browser downloads a subset only when the page uses its characters. Inter has tabular figures (`font-variant-numeric: tabular-nums`) for scores and standings. The same file renders identically on macOS and Linux CI, so screenshot comparisons are stable. |
-| Google Fonts CDN | Font licences vary; Inter and Roboto are OFL. | Every page view sends the visitor's IP address, User-Agent, and Referer to `fonts.gstatic.com` (Angular CLI's fonts optimisation inlines only the CSS; the font files still load from Google: [workspace config](https://angular.dev/reference/configs/workspace-config)). LG München I (3 O 17493/20, 20 Jan 2022) found that dynamically embedding Google Fonts without consent breached the GDPR and awarded damages ([summary](https://www.uni-regensburg.de/universitaet/aktuelles/nachrichten/nachricht/04-04-2022_dynamische-einbindung-von-google-fonts-ohne-einwilligung-verstoesst-gegen-dsgvo)). It adds a runtime dependency on Google's availability. | No package. A mockup that links the CDN is not self-contained. |
-| System font stack | None needed. | No requests. | Zero bytes, but the typeface differs across operating systems, so the mockup on the designer's macOS and the tester's Linux screenshots render differently. |
+| Option                               | Licence                                                                    | Privacy and availability                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Notes                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Self-hosted Inter via Fontsource** | `@fontsource-variable/inter` 5.3.0, OFL-1.1 (licence file in the package). | Font files are served from the app's own origin. No third-party request and no extra outage dependency.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | The variable weight axis is 48 KB WOFF2 for the Latin subset and 85 KB for Latin Extended; the browser downloads a subset only when the page uses its characters. Inter has tabular figures (`font-variant-numeric: tabular-nums`) for scores and standings. The same file renders identically on macOS and Linux CI, so screenshot comparisons are stable. |
+| Google Fonts CDN                     | Font licences vary; Inter and Roboto are OFL.                              | Every page view sends the visitor's IP address, User-Agent, and Referer to `fonts.gstatic.com` (Angular CLI's fonts optimisation inlines only the CSS; the font files still load from Google: [workspace config](https://angular.dev/reference/configs/workspace-config)). LG München I (3 O 17493/20, 20 Jan 2022) found that dynamically embedding Google Fonts without consent breached the GDPR and awarded damages ([summary](https://www.uni-regensburg.de/universitaet/aktuelles/nachrichten/nachricht/04-04-2022_dynamische-einbindung-von-google-fonts-ohne-einwilligung-verstoesst-gegen-dsgvo)). It adds a runtime dependency on Google's availability. | No package. A mockup that links the CDN is not self-contained.                                                                                                                                                                                                                                                                                              |
+| System font stack                    | None needed.                                                               | No requests.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Zero bytes, but the typeface differs across operating systems, so the mockup on the designer's macOS and the tester's Linux screenshots render differently.                                                                                                                                                                                                 |
 
 ## Recommendation
 
@@ -264,20 +266,20 @@ Option A is the runner-up. It is the better choice if the owner wants a first-pa
 
 The scaffold (#10) adds none of these; they arrive with the UI foundation work (see Consequences).
 
-| Package | Version | Licence | Type |
-| --- | --- | --- | --- |
-| `@angular/cdk` | 22.2.2 | MIT | dependency |
-| `@spartan-ng/brain` | 1.6.1 | MIT | dependency |
-| `clsx` | 2.1.1 | MIT | dependency (helm) |
-| `class-variance-authority` | 0.7.1 | Apache-2.0 | dependency (helm) |
-| `tailwind-merge` | 3.7.0 | MIT | dependency (helm) |
-| `@ng-icons/core` | 36.1.0 | MIT | dependency |
-| `@ng-icons/lucide` | 36.1.0 | ISC (Lucide; Feather-derived icons MIT) | dependency |
-| `@fontsource-variable/inter` | 5.3.0 | OFL-1.1 | dependency |
-| `tailwindcss` | 4.3.3 | MIT | devDependency |
-| `@tailwindcss/postcss` | 4.3.3 | MIT | devDependency |
-| `postcss` | 8.5.29 | MIT | devDependency |
-| `tw-animate-css` | 1.4.0 | MIT | devDependency (CSS imported at build time) |
+| Package                      | Version | Licence                                 | Type                                       |
+| ---------------------------- | ------- | --------------------------------------- | ------------------------------------------ |
+| `@angular/cdk`               | 22.2.2  | MIT                                     | dependency                                 |
+| `@spartan-ng/brain`          | 1.6.1   | MIT                                     | dependency                                 |
+| `clsx`                       | 2.1.1   | MIT                                     | dependency (helm)                          |
+| `class-variance-authority`   | 0.7.1   | Apache-2.0                              | dependency (helm)                          |
+| `tailwind-merge`             | 3.7.0   | MIT                                     | dependency (helm)                          |
+| `@ng-icons/core`             | 36.1.0  | MIT                                     | dependency                                 |
+| `@ng-icons/lucide`           | 36.1.0  | ISC (Lucide; Feather-derived icons MIT) | dependency                                 |
+| `@fontsource-variable/inter` | 5.3.0   | OFL-1.1                                 | dependency                                 |
+| `tailwindcss`                | 4.3.3   | MIT                                     | devDependency                              |
+| `@tailwindcss/postcss`       | 4.3.3   | MIT                                     | devDependency                              |
+| `postcss`                    | 8.5.29  | MIT                                     | devDependency                              |
+| `tw-animate-css`             | 1.4.0   | MIT                                     | devDependency (CSS imported at build time) |
 
 **Not added:**
 
@@ -357,12 +359,12 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
   - a `hlm-dialog` whose trigger is a `hlmBtn` with an icon.
 - **Tests:** Playwright 1.64.0 (Chromium) against `node dist/<app>/server/server.mjs`, on both a development build and a production build.
 
-| Check | Development build | Production build |
-| --- | --- | --- |
-| Raw server HTML, JavaScript disabled: helm classes present (`spartan-button`, `spartan-input`, `spartan-label`, `spartan-select-trigger`), `<ng-icon>` contains an inline `<svg>`, select trigger has `role="combobox"` and `aria-expanded="false"`, input has `value`, `name`, and `required` from the signal form | pass | pass |
-| Hydration: no `console.error`, no `pageerror`, no `NG0…` warning. Dev mode logged "Angular hydrated 7 component(s) and 42 node(s), 0 component(s) were skipped". Hydration mismatch checks run only in development builds (ADR 0005). | pass | pass (no console output at all) |
-| After hydration: typing into the input updates the signal model. Opening the select and choosing an option updates the model. Opening the dialog shows the model values, and Cancel closes it. | pass | pass |
-| Inter: the `.woff2` is requested from the app's own origin (`/media/…`), returns 200 `font/woff2`, and `document.fonts.check('16px "Inter Variable"')` is true. The computed `font-family` is Inter. | pass | pass |
+| Check                                                                                                                                                                                                                                                                                                               | Development build | Production build                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------- |
+| Raw server HTML, JavaScript disabled: helm classes present (`spartan-button`, `spartan-input`, `spartan-label`, `spartan-select-trigger`), `<ng-icon>` contains an inline `<svg>`, select trigger has `role="combobox"` and `aria-expanded="false"`, input has `value`, `name`, and `required` from the signal form | pass              | pass                            |
+| Hydration: no `console.error`, no `pageerror`, no `NG0…` warning. Dev mode logged "Angular hydrated 7 component(s) and 42 node(s), 0 component(s) were skipped". Hydration mismatch checks run only in development builds (ADR 0005).                                                                               | pass              | pass (no console output at all) |
+| After hydration: typing into the input updates the signal model. Opening the select and choosing an option updates the model. Opening the dialog shows the model values, and Cancel closes it.                                                                                                                      | pass              | pass                            |
+| Inter: the `.woff2` is requested from the app's own origin (`/media/…`), returns 200 `font/woff2`, and `document.fonts.check('16px "Inter Variable"')` is true. The computed `font-family` is Inter.                                                                                                                | pass              | pass                            |
 
 **What the source shows (`@spartan-ng/brain` 1.6.1 `fesm2022`, helm templates, `@ng-icons/core` 36.1.0):**
 
@@ -388,6 +390,7 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
    - no direct DOM manipulation other than through helm's `classes()`.
 
    The PR that re-copies helm from upstream reviews the diff against those rules.
+
 4. **`provideSpartanHlm()`** (helm `utils`) goes in `app.config.ts`. It sets the CDK overlay `usePopover: false` default, and the server config inherits it through `mergeApplicationConfig`.
 5. **Fonts under SSR.**
    - Fontsource's `@font-face` rules compile into `styles.css`, and the font files are emitted to `dist/<app>/browser/media/`. The generated `src/server.ts` serves them with `express.static` (`maxAge: '1y'`). Production file names are content-hashed (`inter-latin-wght-normal-<hash>.woff2`), so the year-long cache is safe.
@@ -403,7 +406,8 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
   - helm: the `hlm-native-select` component, which wraps a `<select>`.
 
   They bind with `[formField]` through `FormField`'s `ControlValueAccessor` compatibility path.
-- spartan's own docs show this pattern: the select "form" example uses `form()`, `FormRoot`, and `[formField]` on `hlm-select` ([`select--form.preview.ts`](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(select)/select--form.preview.ts)). The scratch test bound `hlm-select` the same way and got model updates both ways.
+
+- spartan's own docs show this pattern: the select "form" example uses `form()`, `FormRoot`, and `[formField]` on `hlm-select` ([`select--form.preview.ts`](<https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(select)/select--form.preview.ts>)). The scratch test bound `hlm-select` the same way and got model updates both ways.
 - This is ADR 0006's "a `ControlValueAccessor` is used only when a #6 library requires it" case. Custom controls written in the repo implement `FormValueControl`/`FormCheckboxControl` instead.
 
 ### Accessibility responsibilities under this option
@@ -427,13 +431,14 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
   4. **Helm:** the first copied helm components.
   5. **Mockup kit:** the `mockup-kit` configuration and the inline script.
   6. **Mockup:** the first mockup, built with the kit and approved through `gate:ui-design`.
-  
+
   Copied helm files are vendored code. The PR should list them separately so reviewers can tell them from hand-written code.
 
   Because of ADR 0006, the same work also:
   - adds `provideSpartanHlm()` to `app.config.ts`;
   - for each public page that uses helm components, includes the ADR 0005 raw-HTML assertion (helm classes and icon `<svg>` present without JavaScript) and the hydration check;
   - keeps indexable content out of overlays (caveat 1 under "Server rendering and hydration").
+
 - **Ongoing maintenance:**
   - Helm code is the project's to maintain. Upstream helm fixes are applied by re-copying from the spartan docs and reviewing the diff.
   - Angular major upgrades depend on a brain release.
@@ -470,7 +475,7 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
   - [Installation](https://www.spartan.ng/documentation/installation)
   - [Theming](https://www.spartan.ng/documentation/theming)
   - [Version support](https://www.spartan.ng/documentation/version-support)
-  - [Changelog source](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(documentation)/documentation/changelog.page.ts)
+  - [Changelog source](<https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(documentation)/documentation/changelog.page.ts>)
   - [Button / demo](https://www.spartan.ng/components/button)
   - `@spartan-ng/cli` 1.6.1 `generators/base/versions.js`
   - `@spartan-ng/brain` 1.6.1 `hlm-tailwind-preset.css`
@@ -493,8 +498,8 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
 - **Server rendering (added for ADR 0006):**
   - [Angular: server and hybrid rendering](https://angular.dev/guide/ssr)
   - [Angular: hydration](https://angular.dev/guide/hydration)
-  - [spartan select with signal forms (`select--form.preview.ts`)](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(select)/select--form.preview.ts)
-  - [spartan dialog example (`dialog.preview.ts`)](https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(dialog)/dialog.preview.ts)
+  - [spartan select with signal forms (`select--form.preview.ts`)](<https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(select)/select--form.preview.ts>)
+  - [spartan dialog example (`dialog.preview.ts`)](<https://github.com/spartan-ng/spartan/blob/main/apps/app/src/app/pages/(components)/components/(dialog)/dialog.preview.ts>)
   - Package contents: `@spartan-ng/cli` 1.6.1 `src/generators/ui/libs/{utils,button,input,label,dialog,select,native-select,textarea}/files/**` and `src/generators/ui/style-vega.css`; `@spartan-ng/brain` 1.6.1 `fesm2022/*.mjs`; `@ng-icons/core` 36.1.0 `fesm2022/ng-icons-core.mjs`.
   - Scratch SSR app, 2026-10-07: Node 26.11.0, npm 11.20.0 under ADR 0003's policy, `@angular/*` and `@angular/ssr` 22.2.1, Playwright 1.64.0 (Chromium). Results are in "Server rendering and hydration".
 - **Measurements:** scratch builds with Angular CLI 22.2.2 on Node 24.16.0, 2026-10-07. They covered the bundle sizes in the Options table and the `mockup-kit` configuration test (mockup-only class present in `mockup-kit.css`, absent from `styles.css`, kit not injected into `index.html`).
