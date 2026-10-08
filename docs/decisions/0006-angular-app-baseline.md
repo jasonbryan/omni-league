@@ -356,11 +356,16 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
   - `PendingTasks.add()` before the request and the returned remover in `finally`, so the zoneless server render does not serialise until every query has settled.
   - One `query(fn, args)` per distinct function and args within a render; helpers asking for the same pair share the promise.
   - On success: `value()` is the result, `isLoading()` false, and the result is written to `TransferState` as `{ v: convexToJson(result) }` (`{ u: true }` for `undefined`). `convexToJson` keeps `bigint`, `ArrayBuffer`, and Convex IDs intact through the JSON transfer.
-  - On failure or timeout: `error()` is the error, `value()` `undefined`, `isLoading()` false, and `{ e: { name, message } }` is written to `TransferState`. Nothing is logged by the adapter; the route decides whether to set a status.
+  - On failure or timeout: `error()` is the error, `value()` `undefined`, `isLoading()` false, and an `{ e: { name, message } }` marker is written to `TransferState`. Nothing is logged by the adapter; the route decides whether to set a status.
+  - **The transferred marker carries fixed text, never the real error** (it lands in public, CDN-cacheable HTML, and a dev or preview error or a fetch error can carry internal detail such as a hostname):
+    - timeout: `{ e: { name: 'TimeoutError', message: 'Convex query timed out after <n> ms' } }`, where `<n>` is `CONVEX_SERVER_QUERY_TIMEOUT_MS`;
+    - any other failure: `{ e: { name: 'Error', message: 'Convex query failed during server render' } }`.
+    - The real error stays only in the server-side `error()`. Templates on Server routes branch on the error type and show their own wording; they never render `error().message`, which would put the internal message into the HTML and differ from the browser's seeded message.
   - No subscription, no WebSocket, no retries.
 - **Hydration seeding (browser).** When a helper is created **before the application first becomes stable** (`ApplicationRef.whenStable()`), and `TransferState` holds its key:
   - `{ v }`: `value()` is `jsonToConvex(v)` and `isLoading()` false **synchronously at creation**, so the first browser render matches the server HTML.
-  - `{ e }`: `error()` is a `ConvexServerQueryError` with the transferred message, `isLoading()` false.
+  - `{ u: true }` (the query resolved to `undefined`, which `convexToJson` cannot encode): `value()` is `undefined` and `isLoading()` false **synchronously at creation**, matching the server's settled state.
+  - `{ e }`: `error()` is a `ConvexServerQueryError` with the transferred fixed message (above), `isLoading()` false.
   - The live subscription still opens on the first effect run. Its first emission replaces the seeded value (or clears the seeded error), as in the "Emission" row below.
   - After the application is stable, transferred entries are ignored, mirroring Angular's `HttpClient` transfer cache, so later navigations never show server-render data.
 - **States:**
@@ -369,6 +374,7 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 | --- | --- | --- | --- | --- |
 | Browser, created with ready args, no transferred entry, before the first emission | `undefined` | `true` (set synchronously at creation) | `undefined` | Subscription opened on the first effect run |
 | Browser, created with ready args during hydration, transferred value `v` | `v` | `false` | `undefined` | Subscription opened on the first effect run; its first emission replaces `v` |
+| Browser, created with ready args during hydration, transferred `{ u: true }` | `undefined` | `false` | `undefined` | Subscription opened on the first effect run; its first emission sets `value()` |
 | Browser, created with ready args during hydration, transferred error | `undefined` | `false` | `ConvexServerQueryError` | Subscription opened; its first successful emission clears `error()` |
 | Emission `v` | `v` | `false` | `undefined` | Same subscription; later emissions replace `value()` and open no new subscription |
 | Error emission `e` | `undefined` | `false` | `e` | Same subscription; a later successful emission clears `error()` |
@@ -376,8 +382,8 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 | Args are `skipToken` (at creation or after a change) | `undefined` | `false` | `undefined` | None (any previous one is unsubscribed); nothing fetched on the server |
 | Owning injector destroyed | unchanged | unchanged | unchanged | Unsubscribed (effect cleanup) |
 | Server, ready args, before the fetch settles | `undefined` | `true` | `undefined` | One HTTP `query()`, pending task held |
-| Server, fetch resolved with `v` | `v` | `false` | `undefined` | Pending task released; `{ v }` transferred |
-| Server, fetch rejected or timed out | `undefined` | `false` | the error | Pending task released; `{ e }` transferred |
+| Server, fetch resolved with `v` | `v` | `false` | `undefined` | Pending task released; `{ v }` transferred (`{ u: true }` if `v` is `undefined`) |
+| Server, fetch rejected or timed out | `undefined` | `false` | the error | Pending task released; the fixed `{ e }` marker transferred (not the real error) |
 | No Convex URL (either platform) | `undefined` | `false` | `ConvexNotConfiguredError` | None; nothing is logged |
 
 - **Why the value is cleared on args change.** The previous value belongs to different args, for example another team's roster under the new team's header, so `value()` returns to `undefined` with `isLoading()` true. A component that deliberately wants to keep showing old content can do so with `linkedSignal()`.
@@ -414,12 +420,14 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 ## URL configuration specification
 
 - **`angular.json`.** The build target's `options` includes `"define": { "__CONVEX_URL__": "null" }`, so a bare `ng build`/`ng serve` produces the no-URL app. The define applies to both the browser and server bundles.
-- **Global declaration.** `src/app/core/data/convex/convex-url.ts` declares `declare const __CONVEX_URL__: string | null;` and the `CONVEX_URL` token.
+- **`angular.json` (site URL).** The same `define` also holds `"__CONVEX_SITE_URL__": "null"`. It is the deployment's HTTP-action URL (`*.convex.site`), which the auth client needs (ADR 0008, PR #25). Like `CONVEX_URL`, it is public.
+- **Global declaration.** `src/app/core/data/convex/convex-url.ts` declares `declare const __CONVEX_URL__: string | null;`, `declare const __CONVEX_SITE_URL__: string | null;`, and the `CONVEX_URL` token. No token is added for the site URL in #11; the auth follow-up reads it.
 - **`scripts/ng-convex.mjs <build|serve> [extra ng args]`** (about 40 lines, Node built-ins only):
   1. Resolves the URL from `process.env.CONVEX_URL`. If that is unset or empty, it reads `CONVEX_URL` from `.env.local` with `node:util` `parseEnv`. If neither exists, the URL is none.
   2. If a URL is found, validates it with `new URL()`. It must be `https:`, or `http:` on `localhost`/`127.0.0.1` for a local Convex backend, with no quote characters. If the URL is invalid, the script exits 1 with a message, so a broken URL fails the build instead of shipping.
   3. Prints one line, `Convex URL: <url> (from <source>)` or `Convex URL: none`. The deployment URL is public, because it ships to every browser, so logging it is safe. It is not a secret.
-  4. Spawns `ng <command> --define=__CONVEX_URL__='<url>'` (no shell, argv array, so quoting works the same on every OS). With no URL, it adds no flag and keeps the `null` default.
+  4. **Derives the site URL from the validated URL** (ADR 0008): a host ending in `.convex.cloud` becomes the same host ending in `.convex.site` (cloud deployments); `http://localhost:3210` or `http://127.0.0.1:3210` becomes the same host on port `3211` (local backend). Any other URL (for example a custom domain) exits 1 with a message naming the two supported forms, so a wrong site URL never ships. The printed line gains `, site: <site-url>`.
+  5. Spawns `ng <command> --define=__CONVEX_URL__='<url>' --define=__CONVEX_SITE_URL__='<site-url>'` (no shell, argv array, so quoting works the same on every OS). With no URL, it adds neither flag and keeps both `null` defaults.
 - **Scripts.** #11 changes the scaffold's (#10) scripts to `"build": "node scripts/ng-convex.mjs build"` and `"start": "node scripts/ng-convex.mjs serve"`. `typecheck`, `lint`, and `test` do not use the wrapper, because they need no URL. `serve:ssr` runs the already-built server and needs no URL.
 - **`.env.example`** (committed, empty) contains `CONVEX_URL=`. The README says to copy it to `.env.local` before the first `npx convex dev`. `resolveEnvVarName` then keeps the existing `CONVEX_URL` name instead of inferring one.
 
@@ -428,7 +436,7 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 | Environment | How the URL arrives | Result |
 | --- | --- | --- |
 | Local dev | `npx convex dev` writes `CONVEX_URL` to `.env.local`, and `start` reads it | `ng serve` renders Server routes through the dev server and the browser connects to the developer's dev deployment |
-| CI (#12) and e2e build (#13) | No env var and no `.env.local` | `Convex URL: none`, `__CONVEX_URL__` is `null` in both bundles, no client, clean console and clean server log |
+| CI (#12) and e2e build (#13) | No env var and no `.env.local` | `Convex URL: none`, `__CONVEX_URL__` and `__CONVEX_SITE_URL__` are `null` in both bundles, no client, clean console and clean server log |
 | e2e with the local backend (ADR 0005) | `CONVEX_URL=http://127.0.0.1:3210` for the build | Server renders fetch from the local backend over HTTP; browsers subscribe to it |
 | Preview (#15) | `npx convex deploy --cmd "<runner> run build" --cmd-url-env-var-name CONVEX_URL` (plus `--preview-create <branch>`) | Convex sets `CONVEX_URL` (the canonical cloud URL) in the command's environment. The wrapper uses it. The log line and a `grep` of `dist/<app>/browser/*.js` **and** `dist/<app>/server/*.mjs` show the same URL that `npx convex deploy` reported. |
 | Production (later, `gate:production`) | Same command with the production deploy key | Same mechanism |
@@ -440,6 +448,7 @@ export class ConvexServerQueryError extends Error {}    // name: 'ConvexServerQu
 - **New dependencies:** `@angular/ssr`, `@angular/platform-server`, `express` (dependencies); `@types/express`, `@types/node` (devDependencies). Versions and licences are in the Recommendation table; all MIT, with `beasties` (Apache-2.0) transitive. Signal forms are part of `@angular/forms`, and the adapter uses `convex` (ADR 0001).
 - **Hosting (#9): a server runtime is now required.** Server routes render per request, so the host must run `dist/<app>/server/server.mjs` (Node, through `reqHandler` or the Express listener) or a Web `Request`/`Response` handler built on `AngularAppEngine`. Pure static hosting (GitHub Pages, or Firebase Hosting / Cloudflare Pages without functions or workers) no longer qualifies on its own. #9 must also satisfy the existing constraints: budget up to about $25/month **including Convex**, per-PR previews each with its own Convex backend, and commercial use allowed. The full list is in the PR description.
 - **#10 (scaffold):** scaffolds with SSR (Rendering specification): the server files, `outputMode: "server"`, `provideClientHydration()`, the three-entry `serverRoutes`, `security.allowedHosts` for local hosts, the `serve:ssr` script, `@types/node` pinned to the Node major from #1 (26), lowered to #9's server-runtime major if that is below 26, and the angular.md "Rendering" section. Zoneless stays the default. The `build` script stays `ng build` until #11 replaces it.
+- **`convex/` code is also compiled by the Angular app's TypeScript** (through `convex/_generated/api.d.ts`), so the app's `noPropertyAccessFromIndexSignature` applies to it: environment reads in `convex/` use bracket access, `process.env["NAME"]`, not `process.env.NAME`. `convex/tsconfig.json` sets `"types": ["node"]`, because TypeScript 6 no longer includes every `@types/*` package by default and `process` is otherwise undeclared. Found in ADR 0008's scratch build; #10 applies both.
 - **#10 route note:** the scaffold's client router has only `''`, so `/app/x` and unknown URLs return Express's 404 until the first `/app` feature and #23 add client routes (Rendering specification).
 - **The adapter is split across two issues** (plan review of #11, hybrid-rendering round 1):
   - **#11 (browser adapter and URL configuration):** the provider, `CONVEX_URL`, `CONVEX_CLIENT_FACTORY`, `CONVEX_CLIENT`, the helpers, `skipToken`, `ConvexNotConfiguredError`, `ConvexServerCallError`, the `CONVEX_AUTH` declarations (no wiring), `scripts/ng-convex.mjs`, `.env.example`, the `build`/`start` scripts, and the lint rule. Until #24 lands, a query helper on the server platform creates no client, makes no network call, and reports the browser's pre-emission state (`isLoading()` true), so hydration matches.
