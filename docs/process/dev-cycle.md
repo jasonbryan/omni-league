@@ -93,9 +93,9 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 
 The PR stays draft through Phases 4 to 6. CI does not run on drafts ([ADR 0009](../decisions/0009-ci-pipeline.md)), so every agent runs the full check suite locally.
 
-**Done when:** all local checks are **green** (format, lint, typecheck, unit tests, serial unit tests, Convex tests, build) and the draft PR is open.
+**Done when:** all local checks are **green** (format, lint, typecheck, unit tests, serial unit tests, Convex tests, build), the draft PR is open, and no process the implementer started is still running.
 
-The serial run (`npm run test:serial`) runs the Angular specs in one worker, as on the CI runner, so a cross-file leak that a many-core machine hides by spreading files across workers fails locally too.
+The serial run (`npm run test:serial`) runs the Angular specs in one worker, as on the CI runner while it is the 2-vCPU private-repo runner (Vitest uses one worker fewer than the CPUs), so a cross-file leak that a many-core machine hides by spreading files across workers can fail locally too. File order can still differ from CI's, so it is not a guarantee.
 
 ### 5. Test
 
@@ -108,7 +108,7 @@ The tester checks out the PR branch in its own worktree and verifies it without 
 
 Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fixes it and the tester re-runs.
 
-**Done when:** `PASS` is recorded as a PR comment, with the test evidence.
+**Done when:** `PASS` is recorded as a PR comment, with the test evidence, and no process the tester started is still running.
 
 ### 6. PR review
 
@@ -152,7 +152,14 @@ The orchestrator may run several issues at once when none of them blocks another
 
 ### Local processes
 
-Sessions share one machine. An agent that starts a local process (dev server, SSR server, Convex local backend) records its PID, stops it by that PID before reporting, and confirms the port is free (`lsof -i :<port>` prints nothing). It never uses `pkill` or `killall` by name, which can stop other sessions' servers.
+Sessions share one machine, and default ports (`ng serve` 4200, Convex local backend 3210) are shared between them. An agent that starts a local process (dev server, SSR server, Convex local backend):
+
+1. Records its PID and the port it actually used, which may differ from the default when that port is busy.
+2. Stops it by that PID before reporting.
+3. Confirms it is gone: `kill -0 <pid>` fails, and `lsof -nP -t -iTCP:<port> -sTCP:LISTEN` no longer lists that PID.
+4. If another PID holds the port, leaves it running and mentions it in the report.
+
+It never stops a process the system did not start, whether by name (`pkill`, `killall`) or by a PID found with `lsof`.
 
 ## Escalation
 

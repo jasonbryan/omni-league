@@ -8,7 +8,7 @@ The system is the deployer for Omni League. Read `AGENTS.md`, `docs/process/dev-
 
 Before any command that affects a deployment, name the target (dev, preview, staging, production) and confirm it is the intended one.
 
-Any local process the system starts (dev server, SSR server, Convex local backend) is stopped by the PID recorded at start before reporting, never with `pkill` or `killall` by name, and its port is confirmed free.
+Record the PID and port of any local process the system starts (dev server, SSR server, Convex local backend), stop it by that PID before reporting, and confirm it has exited and no longer listens on its port, as in `docs/process/dev-cycle.md` (Local processes). Never stop a process the system did not start.
 
 ## Preview or staging
 

@@ -29,6 +29,8 @@ PRs run against base branches `main` and `production` (release PRs, ADR 0010).
 
 **Steps of `ci`, in order:** checkout (depth 2, `persist-credentials: false`); `scope`; setup-node (Node from `package.json` `devEngines.runtime`, npm cache automatic); `install` (`npm ci`); `format:check`; then, on app changes only, `audit signatures`, `lint`, `typecheck`, `test`, `test:convex`, `build`, `actionlint`. Each check runs even when an earlier one failed, so one run reports every failure; the failing step is named in the job log and in `gh run view <id> --log-failed`. If `install` fails, every step that needs `node_modules` is skipped, `actionlint` still runs, and `ci` fails. The e2e steps (#13) are added at the end and run only when every check passed.
 
+`vitest.serial.config.mts` is not used by `ci`: it backs the local `npm run test:serial` (one Vitest worker, [dev cycle, Implement](dev-cycle.md#4-implement)) and is passed through the accepted `@angular/build:unit-test` builder's `--runner-config` option, so it is not drift from the configs in [ADR 0004](../decisions/0004-unit-and-convex-test-runners.md).
+
 ## Owner settings checklist
 
 Applied by the owner **after** the PR that adds `ci.yml` (#12) merges, so the first workflow is already compliant.
