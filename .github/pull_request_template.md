@@ -7,8 +7,8 @@ What changed and why, in a few sentences.
 ## Acceptance criteria → tests
 
 | Criterion | Test |
-| --- | --- |
-|  |  |
+| --------- | ---- |
+|           |      |
 
 ## Gates
 

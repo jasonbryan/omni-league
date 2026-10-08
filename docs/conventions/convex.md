@@ -20,6 +20,10 @@ Applies to everything under `convex/`. Once the project is scaffolded, read `con
 
 Agents work against their own dev deployment or a preview deployment. Production deploys go through `gate:production`.
 
+Environment variable reads under `convex/` use bracket access, `process.env["NAME"]`, never `process.env.NAME`: the Angular app's compiler also checks `convex/` code (through `convex/_generated/api.d.ts`) with `noPropertyAccessFromIndexSignature` (ADR 0006). `lint` also runs `@convex-dev/no-process-env` (ADR 0002), which points to the typed `env` exported by `./_generated/server`.
+
+`convex/_generated/` is committed. After any change under `convex/`, regenerate it with `npx convex dev` (or `CONVEX_AGENT_MODE=anonymous npx convex dev --once` with no Convex account) and commit the result.
+
 ## Tests
 
 Every public function has tests covering the happy path, the unauthenticated caller, and a caller from a different league or team. The test library is chosen via `gate:technology`.

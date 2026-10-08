@@ -1,0 +1,24 @@
+{
+  "printWidth": 100,
+  "singleQuote": true,
+  "overrides": [
+    {
+      "files": "src/**/*.html",
+      "options": {
+        "parser": "angular"
+      }
+    },
+    {
+      "files": "design/mockups/**/*.html",
+      "options": {
+        "parser": "html"
+      }
+    },
+    {
+      "files": "**/*.md",
+      "options": {
+        "proseWrap": "preserve"
+      }
+    }
+  ]
+}

@@ -14,11 +14,11 @@ These rules apply to every coding agent working in this repository (Claude Code,
 
 The project owner is the final approver for the gates below. Agents prepare the proposal, then stop and wait. Agents never merge, approve, or self-approve a gate PR on their own judgement. Only the owner approves, either by merging the gate PR or by telling the orchestrator in chat to merge it; in that case the orchestrator merges the PR and comments the owner's words on it, quoted exactly, as the record of approval.
 
-| Gate | Triggers | Proposal artifact |
-| --- | --- | --- |
-| `gate:ui-design` | Any new screen, or a visible change to layout, navigation, or visual style | Static HTML mockup in `design/mockups/`, opened as a PR |
+| Gate              | Triggers                                                                                                                                | Proposal artifact                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `gate:ui-design`  | Any new screen, or a visible change to layout, navigation, or visual style                                                              | Static HTML mockup in `design/mockups/`, opened as a PR                                                                    |
 | `gate:technology` | Adding or replacing a framework, library, package (dependency or devDependency), external service, hosting provider, or build/test tool | ADR in `docs/decisions/` with status `Accepted`, opened as a PR (the open PR is the proposal; the merge is the acceptance) |
-| `gate:production` | Any deploy to the production environment, and any change to Stripe live-mode configuration | Release PR or deploy request issue listing the changes |
+| `gate:production` | Any deploy to the production environment, and any change to Stripe live-mode configuration                                              | Release PR or deploy request issue listing the changes                                                                     |
 
 Bumping the minor or patch version of an already-accepted package does not need a gate. Code built against an unapproved gate stays on its branch until the gate PR is merged.
 
