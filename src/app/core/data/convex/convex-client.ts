@@ -4,12 +4,14 @@ import {
   PLATFORM_ID,
   inject,
   makeEnvironmentProviders,
+  provideAppInitializer,
   type EnvironmentProviders,
   type Signal,
 } from '@angular/core';
 import { isPlatformServer } from '@angular/common';
 import { ConvexClient } from 'convex/browser';
 import { CONVEX_URL } from './convex-url';
+import { ConvexHydrationWindow } from './transfer';
 
 /** The part of `ConvexClient` the adapter uses; tests substitute a fake. */
 export interface ConvexClientLike {
@@ -63,5 +65,10 @@ function createConvexClient(): ConvexClientLike | null {
 
 /** Registers the Convex client once, at the application root (`app.config.ts`). */
 export function provideConvex(): EnvironmentProviders {
-  return makeEnvironmentProviders([{ provide: CONVEX_CLIENT, useFactory: createConvexClient }]);
+  return makeEnvironmentProviders([
+    { provide: CONVEX_CLIENT, useFactory: createConvexClient },
+    provideAppInitializer(() => {
+      if (!isPlatformServer(inject(PLATFORM_ID))) inject(ConvexHydrationWindow).closeWhenStable();
+    }),
+  ]);
 }

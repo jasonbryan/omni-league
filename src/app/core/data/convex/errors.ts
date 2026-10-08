@@ -13,3 +13,11 @@ export class ConvexServerCallError extends Error {
     super('Convex mutations and actions cannot run during a server render');
   }
 }
+
+/**
+ * Browser-side stand-in for a query that failed during the server render. Its message is the fixed
+ * text from the transferred marker, never the server's real error.
+ */
+export class ConvexServerQueryError extends Error {
+  override readonly name = 'ConvexServerQueryError';
+}

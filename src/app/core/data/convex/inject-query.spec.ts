@@ -218,32 +218,5 @@ describe('injectQuery without a client', () => {
       );
     });
   }
-
-  it('on the server with a URL: no client, no network, and the browser pre-emission state', () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    const webSocket = vi.fn();
-    vi.stubGlobal('WebSocket', webSocket);
-    try {
-      configure('server', 'https://happy-otter-123.convex.cloud');
-      const teams = TestBed.runInInjectionContext(() => injectQuery(listTeams, { leagueId: 'a' }));
-      TestBed.tick();
-
-      expect(factory).not.toHaveBeenCalled();
-      expect(TestBed.inject(CONVEX_CLIENT)).toBeNull();
-      expect(fetchSpy).not.toHaveBeenCalled();
-      expect(webSocket).not.toHaveBeenCalled();
-      expect(teams.value()).toBeUndefined();
-      expect(teams.isLoading()).toBe(true);
-      expect(teams.error()).toBeUndefined();
-    } finally {
-      fetchSpy.mockRestore();
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('on the server with a URL and skipToken args: not loading', () => {
-    configure('server', 'https://happy-otter-123.convex.cloud');
-    const teams = TestBed.runInInjectionContext(() => injectQuery(listTeams, () => skipToken));
-    expect(teams.isLoading()).toBe(false);
-  });
+  // The server platform with a URL is covered by server-query.spec.ts (#24).
 });
