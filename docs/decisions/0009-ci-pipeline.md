@@ -6,6 +6,7 @@
 - **Date:** 2026-10-07 (revised 2026-10-07 for the owner's "minimize CI usage" direction)
 - **Amends:** ADR 0005 (WebKit trigger and the Convex backend cache; see "Amendment" at the end of ADR 0005)
 - **Amended:** 2026-10-08, wording only: the `scope` step's rename handling and code-extension rule, as shipped in #12 (PR #39). See "Amendment: scope step (2026-10-08)" at the end.
+- **Amended:** 2026-10-08 (#47): the npm cooldown equals ADR 0003's `min-release-age`, TypeScript majors are ignored, and two statements about security updates are corrected. See "Amendment: release age and Dependabot cooldown (2026-10-08)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -706,3 +707,54 @@ A wording clarification that matches the shipped workflow (#12, PR #39) and `doc
 **Why.** With rename detection on (git's default), moving an app file into `docs/` listed only the new path, so the PR was classified docs-only and lint, typecheck, test, and build were skipped while the app lost a file. The ADR's rule is "every changed file is under `docs/` ...", and a rename's old path is a changed file, so the literal command did not implement the rule. Separately, ESLint lints `.js`/`.ts`-family files everywhere, so a docs-only PR adding, for example, `.claude/skills/<x>/helper.mjs` with a lint error would pass `ci` and then fail `lint` on every later app PR.
 
 **Sources.** [PR #39, Review](https://github.com/jasonbryan/omni-league/pull/39#issuecomment-6061926396) (findings 1 and 2), [PR #39, Test](https://github.com/jasonbryan/omni-league/pull/39#issuecomment-6061978925) (rename reproduction), [PR #39, Review (round 2)](https://github.com/jasonbryan/omni-league/pull/39#issuecomment-6062066945) ("ADR 0009 deviation: no amendment required", optional wording note for the owner).
+
+## Amendment: release age and Dependabot cooldown (2026-10-08)
+
+Issue #47. The first Dependabot npm version-update run after #12 failed with `ETARGET` ([run 37793380907](https://github.com/jasonbryan/omni-league/actions/runs/37793380907)): Dependabot's 3-day cooldown, applied to the whole dependency tree, rejected a locked version that ADR 0003's 1-day `min-release-age` had accepted. The owner chose options A and D on #47. ADR 0003's amendment raises `min-release-age` to 3; this section records the Dependabot side.
+
+| Rule in this ADR                                                     | Was                                                                                                                               | Now                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| npm cooldown vs `min-release-age` (Inputs, Dependabot configuration) | `cooldown.default-days` must be **at least** `.npmrc` `min-release-age` (`default-days: 3 # >= ADR 0003 min-release-age (1 day)`) | `cooldown.default-days` must **equal** `.npmrc` `min-release-age`: both are `3`. `semver-major-days: 7` stays. A `ci` step fails when the two values differ                                                                                                                                                                     |
+| TypeScript majors                                                    | "Majors are not grouped and not ignored"                                                                                          | The npm entry ignores `typescript` `version-update:semver-major` until the repository moves to an Angular major whose TypeScript range includes TypeScript 7. Every other major is still neither grouped nor ignored                                                                                                            |
+| `ignore` and security updates                                        | "`ignore` also suppresses security updates, so ignoring majors could hide a fix that exists only in a new major"                  | True for `versions` conditions only. An `update-types` condition "only applies to version updates"; security updates still raise the dependency to the minimum patched version ([GitHub changelog, 2021-05-21](https://github.blog/changelog/2021-05-21-dependabot-version-updates-can-now-ignore-major-minor-patch-releases/)) |
+| Security updates and `min-release-age` (Option U1, cons)             | "A fix published less than a day earlier can fail under `.npmrc` `min-release-age=1` until a day has passed"                      | Does not apply. Dependabot passes `--min-release-age=0` on security updates, which overrides the `.npmrc` gate, so a fresh fix is not held back                                                                                                                                                                                 |
+| Updater image (Option U1, pros; Test evidence 5)                     | Node 24, npm 11.17.0                                                                                                              | Node 24.21.0, npm 11.19.0 (run 37793380907, log lines 199 and 719). `--force` still turns `EBADDEVENGINES` into a warning                                                                                                                                                                                                       |
+| Action version age (Actions inventory, rule 3)                       | At least 1 day, matching ADR 0003's `min-release-age`                                                                             | At least 3 days, matching the amended `min-release-age` and the actions `cooldown.default-days: 3`                                                                                                                                                                                                                              |
+
+**Why the cooldown must equal `min-release-age`.**
+
+- Since dependabot-core [PR #15485](https://github.com/dependabot/dependabot-core/pull/15485) (merged 2026-08-17, "Apply cooldown to transitive npm/pnpm/yarn deps via native release-age gates"), the npm lockfile updater passes `--min-release-age=<cooldown days>` on version updates. That gates every version npm resolves, not only the direct dependency being updated ([`npm_lockfile_updater.rb`, `effective_min_release_age_arg`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater/npm_lockfile_updater.rb)).
+- The cooldown is passed only when it exceeds `.npmrc`'s `min-release-age`; otherwise the `.npmrc` value applies.
+- If the cooldown is **longer**, a locked or range-floor version that is older than `min-release-age` but younger than the cooldown fails with `ETARGET` whenever an update re-resolves its subtree. That is what #47 recorded: `@typescript-eslint/eslint-plugin@8.71.1` was 2.9 days old against a 3-day gate.
+- If the cooldown is **shorter**, Dependabot could propose a version that local installs and `ci` cannot resolve.
+- Equal values mean Dependabot injects nothing and one rule applies everywhere, without depending on how dependabot-core derives the injected value from the per-semver days.
+
+**Why TypeScript majors are ignored.** Angular 22 declares TypeScript `>=6.0 <6.1` (`@angular/build` peer, `@angular/compiler-cli` optional peer), and `typescript-eslint` 8.71 declares `<6.1.0`. Dependabot's `npm install --force` overrides those peer conflicts, so without the rule it opens a `typescript` 7 PR every month that cannot pass `ci` and cannot be accepted while the repository is on Angular 22. Because the rule uses `update-types` only, TypeScript security updates are not suppressed. The rule is removed in the PR that moves the repository to an Angular major that supports TypeScript 7 (Angular 23 is planned for about June 2027, ADR 0003).
+
+**Configuration.** The npm entry of `.github/dependabot.yml` becomes (the `github-actions` entry is unchanged):
+
+```yaml
+- package-ecosystem: npm
+  directory: /
+  schedule:
+    interval: monthly
+  cooldown:
+    default-days: 3 # must equal .npmrc min-release-age (ADR 0003, ADR 0009 amendment, #47)
+    semver-major-days: 7
+  ignore:
+    # Angular 22 supports TypeScript >=6.0 <6.1. Remove with the Angular major that supports TypeScript 7.
+    - dependency-name: typescript
+      update-types: [version-update:semver-major]
+  groups:
+    npm-minor-patch:
+      applies-to: version-updates
+      update-types: [minor, patch]
+  labels: [type:chore, area:infra]
+  commit-message:
+    prefix: chore
+    include: scope
+```
+
+**Implementation.** A separate PR for #47, after this amendment is merged, changes `.npmrc`, `.github/dependabot.yml`, `ci.yml` (the equality check, a shell step with no new package), and the Dependabot paragraph of `docs/process/ci.md`. Test evidence 5 (a Dependabot lockfile accepted by `npm ci` on Node 26 in `ci`) stays open until the first Dependabot npm PR after that fix; #47 records the run.
+
+**Sources.** [#47](https://github.com/jasonbryan/omni-league/issues/47) (run log, local reproduction, owner decision), [dependabot-core PR #15485](https://github.com/dependabot/dependabot-core/pull/15485), [`npm_lockfile_updater.rb`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater/npm_lockfile_updater.rb), [GitHub changelog, 2021-05-21: ignore major, minor, patch](https://github.blog/changelog/2021-05-21-dependabot-version-updates-can-now-ignore-major-minor-patch-releases/), [Dependabot options reference (`cooldown`, `ignore`)](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).

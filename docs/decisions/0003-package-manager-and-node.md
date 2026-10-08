@@ -4,6 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #1
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
+- **Amended:** 2026-10-08 (#47): minimum release age is 3 days (was 1), equal to the Dependabot cooldown. See "Amendment: minimum release age (2026-10-08)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -323,3 +324,31 @@ Run on 2026-10-07 on macOS arm64, in a scratch directory outside the repository.
 - Bun: [`bun` on the registry (1.4.2, MIT)](https://www.npmjs.com/package/bun), [install](https://bun.com/docs/pm/cli/install), [lifecycle scripts](https://bun.com/docs/pm/lifecycle)
 - esbuild: [getting started (install script)](https://esbuild.github.io/getting-started/)
 - GitHub: [Dependabot supported ecosystems](https://docs.github.com/en/code-security/dependabot/ecosystems-supported-by-dependabot/supported-ecosystems-and-repositories), [actions/setup-node](https://github.com/actions/setup-node), [setup-node advanced usage](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md)
+
+## Amendment: minimum release age (2026-10-08)
+
+Issue #47. The first Dependabot npm version-update run after #12 failed with `ETARGET` ([run 37793380907](https://github.com/jasonbryan/omni-league/actions/runs/37793380907)). The owner chose options A and D on #47; this section records A. ADR 0009's amendment records the Dependabot side.
+
+| Rule in this ADR                                    | Was                                                          | Now                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `.npmrc` `min-release-age`                          | `1` (a version must be at least 1 day old)                   | `3` (at least 3 days old)                                                                                           |
+| Dependabot `cooldown` (Effects on other issues, #8) | "must be at least 1 day"                                     | npm `cooldown.default-days` **equals** `min-release-age` (3). ADR 0009's amendment states the rule and its CI check |
+| Range too new to resolve                            | Lower the range floor to the previous release, or wait a day | Lower the range floor to the previous release, or wait until the version is 3 days old                              |
+
+Unchanged: no standing `min-release-age-exclude[]` entries, `npm ci` installs from the lockfile and is not affected by the gate, and the signature and vulnerability audit policy.
+
+**Why.**
+
+- Since dependabot-core [PR #15485](https://github.com/dependabot/dependabot-core/pull/15485) (merged 2026-08-17, "Apply cooldown to transitive npm/pnpm/yarn deps via native release-age gates"), Dependabot no longer applies its cooldown only to the direct version it proposes. Its npm lockfile updater passes `--min-release-age=<cooldown days>` to npm, which gates **every** version npm resolves, including transitive ones ([`npm_lockfile_updater.rb`, `effective_min_release_age_arg`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater/npm_lockfile_updater.rb)).
+- When `.npmrc` also sets `min-release-age`, the longer of the two wins: the cooldown is passed on the command line only when it exceeds the `.npmrc` value.
+- With `.npmrc` at 1 day and the cooldown at 3, Dependabot ran `npm install typescript@7.0.2 ... --min-release-age=3`. Re-resolving the `typescript-eslint` subtree hit `@typescript-eslint/eslint-plugin@8.71.1`, which was already in `package-lock.json` (installed under the 1-day rule) but only 2.9 days old. npm failed with `ETARGET`.
+- So a cooldown longer than `min-release-age` rejects versions this ADR's own policy has already accepted. With the two values equal, Dependabot injects nothing, and the same 3-day rule applies on laptops, in agents' installs, and in Dependabot. Every locked version then satisfies the gate Dependabot uses, independent of how dependabot-core computes its value.
+- 3 days rather than 1 also widens the window in which the registry can pull a compromised release, and matches the delay ADR 0009 already chose for direct updates.
+
+**Cost.** A contributor or agent cannot install a release until it is 3 days old instead of 1. A feature that needs a fix published in the last 3 days either lowers the range floor or waits. Security fixes are not delayed by this rule: Dependabot security updates pass `--min-release-age=0` (ADR 0009's amendment).
+
+**Option not taken.** Lowering `cooldown.default-days` to 1 (option B on #47) also removes the failure but relies on dependabot-core capping the injected gate at `default-days`, which is code rather than documented behaviour. Removing `min-release-age` (option F) would drop the protection for local and agent installs.
+
+**Implementation.** A separate PR for #47, after this amendment is merged, sets `.npmrc` `min-release-age=3`. Until then, `.npmrc` stays at `1`.
+
+**Sources.** [#47](https://github.com/jasonbryan/omni-league/issues/47) (root-cause analysis, local reproduction, owner decision), [dependabot-core PR #15485](https://github.com/dependabot/dependabot-core/pull/15485), [`npm_lockfile_updater.rb`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater/npm_lockfile_updater.rb), [npm v11 config (`min-release-age`)](https://docs.npmjs.com/cli/v11/using-npm/config).
