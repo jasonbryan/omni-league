@@ -43,20 +43,20 @@ ADR 0001 leaves hosting for the Angular app and the deployment pipeline (CD) und
 
 - **GitHub plan: Pro.** The repository is private on a personal account. The owner chose to upgrade to GitHub Pro (owner answer on #8, recorded in ADR 0009). `gh api repos/jasonbryan/omni-league/rulesets` now answers 200 (it answered 403 "Upgrade to GitHub Pro or make this repository public" on Free). For a private personal repository on Pro, GitHub documents ([deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments), [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans)):
 
-  | Feature | Private repo on Pro |
-  | --- | --- |
-  | Environments, **environment secrets**, environment variables | **Yes** ("you must use GitHub Pro, GitHub Team, or GitHub Enterprise") |
-  | **Deployment branches and tags** (limit an environment to e.g. the `production` branch) | **Yes** ("For users on GitHub Pro or GitHub Team plans ... also available for private repositories") |
-  | **Required reviewers** on an environment | **No.** "On GitHub Free, Pro, or Team, required reviewers are only available for public repositories." |
-  | Wait timers, custom deployment protection rules, the admin-bypass setting | **No** (public repositories only on Free, Pro, and Team) |
-  | Protected branches and branch/tag rulesets | **Yes** (plans page; the rulesets API now answers 200 on this repository) |
-  | Actions minutes | 3,000 per month |
-
+  | Feature                                                                                 | Private repo on Pro                                                                                    |
+  | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+  | Environments, **environment secrets**, environment variables                            | **Yes** ("you must use GitHub Pro, GitHub Team, or GitHub Enterprise")                                 |
+  | **Deployment branches and tags** (limit an environment to e.g. the `production` branch) | **Yes** ("For users on GitHub Pro or GitHub Team plans ... also available for private repositories")   |
+  | **Required reviewers** on an environment                                                | **No.** "On GitHub Free, Pro, or Team, required reviewers are only available for public repositories." |
+  | Wait timers, custom deployment protection rules, the admin-bypass setting               | **No** (public repositories only on Free, Pro, and Team)                                               |
+  | Protected branches and branch/tag rulesets                                              | **Yes** (plans page; the rulesets API now answers 200 on this repository)                              |
+  | Actions minutes                                                                         | 3,000 per month                                                                                        |
   - **What this changes:** a GitHub Actions-built pipeline can now keep a **production** deploy credential in a `production` environment limited to the `production` branch. A workflow run from a PR branch or `main` cannot read it.
   - **What it does not change:**
     - A **preview** deploy credential must be readable by workflows that run PR code, and agents write those workflows.
     - No environment can require an approval, because required reviewers are not available on Pro for private repositories.
     - Agents act through the owner's account, which is the repository admin. Neither rulesets nor environment branch policies can tell an agent from the owner. A ruleset requiring an approving review would block the owner's own merges as well, because GitHub does not let a PR author approve their own PR.
+
 - **Build image Node versions.**
   - Netlify installs "any version that `nvm` can install", in order of precedence from `.nvmrc`.
   - Vercel builds and runs functions on **Node 24.x (default), 22.x, or 20.x only** ([Node.js versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), rechecked 2026-10-07). The only Node 26 entry in Vercel's changelog is for Vercel Sandbox, not Builds or Functions. A Vercel-hosted build therefore fails `devEngines` (`^26.11.0`), and on Vercel the build would have to run in GitHub Actions.
@@ -199,7 +199,11 @@ Every candidate must run SSR server routes, give each PR a preview with its own 
 
 ```ts
 import { AngularAppEngine, createRequestHandler } from '@angular/ssr';
-import { getAllowedHosts, getContext, getTrustProxyHeaders } from '@netlify/angular-runtime/app-engine.js';
+import {
+  getAllowedHosts,
+  getContext,
+  getTrustProxyHeaders,
+} from '@netlify/angular-runtime/app-engine.js';
 
 const angularAppEngine = new AngularAppEngine({
   allowedHosts: getAllowedHosts(),
@@ -231,14 +235,14 @@ It must not import `@angular/ssr/node` from `node_modules`. In the spike that lo
 
 **Packages, CLIs, Actions, and apps that this ADR adds:**
 
-| Item | Version | Licence | Type | Notes |
-| --- | --- | --- | --- | --- |
-| `@netlify/angular-runtime` | 4.0.0 (pinned exactly) | MIT | devDependency | Netlify build plugin, and the `app-engine.js` helpers that `server.ts` imports. The README says it must be installed in the project for Angular 19+ SSR. Declared in `netlify.toml` `[[plugins]]` (the spike's `netlify serve` only loaded it once declared). No install scripts. |
-| `@netlify/edge-functions` | 3.0.8 | MIT | transitive | Types and helpers. No install scripts. |
-| `@netlify/types` | 2.8.0 | MIT | transitive | No install scripts. |
-| Netlify GitHub App | n/a | Netlify terms | GitHub App on this repository only | Builds on push and PR, and posts commit statuses, checks, and the preview link comment. |
-| Netlify CLI (`netlify-cli` 27.11.2, MIT) | n/a | n/a | **Not added** | Used only in this ADR's scratch test. It has a `postinstall` script, and the pipeline does not need it. |
-| GitHub Actions | none | n/a | n/a | Netlify builds and deploys, so no deploy Action is added. #15's smoke test runs locally (ADR 0009), so no smoke workflow is added either. |
+| Item                                     | Version                | Licence       | Type                               | Notes                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | ---------------------- | ------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@netlify/angular-runtime`               | 4.0.0 (pinned exactly) | MIT           | devDependency                      | Netlify build plugin, and the `app-engine.js` helpers that `server.ts` imports. The README says it must be installed in the project for Angular 19+ SSR. Declared in `netlify.toml` `[[plugins]]` (the spike's `netlify serve` only loaded it once declared). No install scripts. |
+| `@netlify/edge-functions`                | 3.0.8                  | MIT           | transitive                         | Types and helpers. No install scripts.                                                                                                                                                                                                                                            |
+| `@netlify/types`                         | 2.8.0                  | MIT           | transitive                         | No install scripts.                                                                                                                                                                                                                                                               |
+| Netlify GitHub App                       | n/a                    | Netlify terms | GitHub App on this repository only | Builds on push and PR, and posts commit statuses, checks, and the preview link comment.                                                                                                                                                                                           |
+| Netlify CLI (`netlify-cli` 27.11.2, MIT) | n/a                    | n/a           | **Not added**                      | Used only in this ADR's scratch test. It has a `postinstall` script, and the pipeline does not need it.                                                                                                                                                                           |
+| GitHub Actions                           | none                   | n/a           | n/a                                | Netlify builds and deploys, so no deploy Action is added. #15's smoke test runs locally (ADR 0009), so no smoke workflow is added either.                                                                                                                                         |
 
 None of these needs an `allowScripts` entry (ADR 0003). `semver`, the runtime's other dependency, is already in the tree.
 
@@ -249,12 +253,13 @@ None of these needs an `allowScripts` entry (ADR 0003). `semver`, the runtime's 
   - By default it sends browsers `Cache-Control: public, max-age=0, must-revalidate`, as seen in the spike ([caching overview](https://docs.netlify.com/build/caching/caching-overview/)).
 - **Long-lived browser caching, only for content-hashed files.** `netlify.toml` `[[headers]]` sets `Cache-Control: public, max-age=31536000, immutable` on these paths. Netlify header paths allow `*` "at any place inside of a path segment" ([custom headers](https://docs.netlify.com/manage/routing/headers/)).
 
-  | Path | Contents |
-  | --- | --- |
-  | `/media/*` | `dist/<app>/browser/media/`, the content-hashed Inter `.woff2` files from ADR 0007 that the server HTML preloads |
-  | `/main-*.js`, `/chunk-*.js`, `/polyfills-*.js`, `/styles-*.css` | the hashed bundles, named `<name>-<8-char hash>.<ext>` |
+  | Path                                                            | Contents                                                                                                         |
+  | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+  | `/media/*`                                                      | `dist/<app>/browser/media/`, the content-hashed Inter `.woff2` files from ADR 0007 that the server HTML preloads |
+  | `/main-*.js`, `/chunk-*.js`, `/polyfills-*.js`, `/styles-*.css` | the hashed bundles, named `<name>-<8-char hash>.<ext>`                                                           |
 
   **Rule:** nothing in `public/` may use those names. The PR reviewer checks this.
+
 - **Unhashed files are revalidated on every use.** These are the prerendered `index.html` for `/`, `index.csr.html`, `favicon.ico`, and anything else copied from `public/`.
   - They keep Netlify's default `public, max-age=0, must-revalidate` for browsers.
   - Their CDN copy is replaced atomically on each deploy, so a deploy never leaves stale HTML or icons.
@@ -326,6 +331,7 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
 
   - **`npm ci`.** Netlify itself runs `npm install`. The extra `npm ci` makes the installed tree exactly match the lockfile, as ADR 0003 requires.
   - **`npm run build`** is ADR 0006's `node scripts/ng-convex.mjs build`. It puts the preview's `CONVEX_URL` and its derived site URL into both bundles.
+
 - **One Convex preview deployment per PR.**
   - It is named `pr-<number>` (`REVIEW_ID`: "for example, `deploy-preview-12` is for PR #12"), rather than the branch name.
   - That way a release PR (`main` into `production`) does not recreate the staging backend `main`, and a reused branch name cannot collide.
@@ -350,16 +356,16 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
 
 This is the first months after the first production release.
 
-| Traffic | Per month |
-| --- | --- |
-| Public Server-route page views (organization, location, league, registration) | 30,000 |
-| `/app/**` Client-route loads (HTML shell) | 20,000 |
-| Prerendered page views | 5,000 |
-| Crawler and bot requests to unknown URLs (404) | 30,000 |
-| Monthly active users | 1,000 (ADR 0008's basis) |
-| Static asset requests | 165,000 (3 per human page load, after browser caching) |
-| Production deploys | 8 |
-| PRs | 30, at about 3 pushes each, so 90 preview builds |
+| Traffic                                                                       | Per month                                              |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Public Server-route page views (organization, location, league, registration) | 30,000                                                 |
+| `/app/**` Client-route loads (HTML shell)                                     | 20,000                                                 |
+| Prerendered page views                                                        | 5,000                                                  |
+| Crawler and bot requests to unknown URLs (404)                                | 30,000                                                 |
+| Monthly active users                                                          | 1,000 (ADR 0008's basis)                               |
+| Static asset requests                                                         | 165,000 (3 per human page load, after browser caching) |
+| Production deploys                                                            | 8                                                      |
+| PRs                                                                           | 30, at about 3 pushes each, so 90 preview builds       |
 
 #### Uncached server invocations (worst case: no CDN hits)
 
@@ -372,28 +378,28 @@ This is the first months after the first production release.
 
 #### Netlify (credits)
 
-| Item | Credits |
-| --- | --- |
-| Web requests: 85,000 HTML and 165,000 asset requests | 50 |
-| Bandwidth: about 7.4 GB (20 KB per HTML page, about 40 KB per asset request, 5 KB per 404) | 148 |
-| Production deploys: 8 × 15 | 120 |
-| Previews and staging: 90 preview builds and about 30 staging builds; builds are unmetered, and about 10,000 review and smoke requests plus 0.3 GB add about 8 credits | 8 |
-| **Total** | **about 326** |
+| Item                                                                                                                                                                  | Credits       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Web requests: 85,000 HTML and 165,000 asset requests                                                                                                                  | 50            |
+| Bandwidth: about 7.4 GB (20 KB per HTML page, about 40 KB per asset request, 5 KB per 404)                                                                            | 148           |
+| Production deploys: 8 × 15                                                                                                                                            | 120           |
+| Previews and staging: 90 preview builds and about 30 staging builds; builds are unmetered, and about 10,000 review and smoke requests plus 0.3 GB add about 8 credits | 8             |
+| **Total**                                                                                                                                                             | **about 326** |
 
 This is above Free's 300, so production needs **Personal ($9, 1,000 credits)**, which the owner chose (owner answer 5).
 
 #### Convex (Starter)
 
-| Source | Function calls |
-| --- | --- |
-| Server renders: 30,000 × 2 queries | 60,000 |
-| Bot 404s that hit slug routes: about 10,000 × 1 | 10,000 |
-| Hydrated public pages: 30,000 × 3 (live subscription and updates) | 90,000 |
-| App: 20,000 loads × 20 calls | 400,000 |
-| Auth: 250 × 1,000 MAU (ADR 0008) | 250,000 |
-| Previews: 90 × 300 | 27,000 |
-| Staging: 30 × 300 | 9,000 |
-| **Total** | **about 0.85M** (included: 1M) |
+| Source                                                            | Function calls                 |
+| ----------------------------------------------------------------- | ------------------------------ |
+| Server renders: 30,000 × 2 queries                                | 60,000                         |
+| Bot 404s that hit slug routes: about 10,000 × 1                   | 10,000                         |
+| Hydrated public pages: 30,000 × 3 (live subscription and updates) | 90,000                         |
+| App: 20,000 loads × 20 calls                                      | 400,000                        |
+| Auth: 250 × 1,000 MAU (ADR 0008)                                  | 250,000                        |
+| Previews: 90 × 300                                                | 27,000                         |
+| Staging: 30 × 300                                                 | 9,000                          |
+| **Total**                                                         | **about 0.85M** (included: 1M) |
 
 - Database I/O is about 1 GB, at roughly 1 KB per call, against 1 GB included, so at most about $0.22.
 - Storage stays well under 0.5 GB.
@@ -401,32 +407,32 @@ This is above Free's 300, so production needs **Personal ($9, 1,000 credits)**, 
 
 #### Monthly total
 
-| Period | Netlify | Convex | Total |
-| --- | --- | --- | --- |
-| Before the first production release (previews and staging only; about 20 credits) | Free, $0 | Free, $0 | **$0** |
-| At the assumed traffic | Personal, $9 | Starter, about $0.20 | **about $9** |
+| Period                                                                            | Netlify      | Convex               | Total        |
+| --------------------------------------------------------------------------------- | ------------ | -------------------- | ------------ |
+| Before the first production release (previews and staging only; about 20 credits) | Free, $0     | Free, $0             | **$0**       |
+| At the assumed traffic                                                            | Personal, $9 | Starter, about $0.20 | **about $9** |
 
 **Per-PR preview cost at 30 PRs per month:**
 
-| Item | Cost |
-| --- | --- |
-| Host build minutes | $0: deploy previews are non-metered, and builds are not credit-metered |
+| Item                              | Cost                                                                                                                                                                                                                                      |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host build minutes                | $0: deploy previews are non-metered, and builds are not credit-metered                                                                                                                                                                    |
 | GitHub Actions minutes for builds | 0: Netlify builds on its own image, and #15's smoke run is a local run by the tester and deployer (ADR 0009). A host built in Actions (Options B to D) would add about 400 to 500 minutes a month against ADR 0009's Pro budget of 3,000. |
-| Preview invocations and requests | about 8 credits, about $0.05 |
-| Convex preview usage | 27,000 calls, within the included amount: $0 |
+| Preview invocations and requests  | about 8 credits, about $0.05                                                                                                                                                                                                              |
+| Convex preview usage              | 27,000 calls, within the included amount: $0                                                                                                                                                                                              |
 
 #### When the total passes about $25 per month
 
-Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
+Scale the traffic by a factor _k_. Previews and production deploys stay fixed.
 
-| *k* | Netlify | Convex | Total |
-| --- | --- | --- | --- |
-| 1 | $9 | ~$0.2 | ~$9 |
-| 2 | $9 (about 524 credits) | ~$1.7 | ~$11 |
-| 4 | $9 (about 920 credits) | ~$5.7 | ~$15 |
-| 5 | $14 (one 500-credit pack, $5) | ~$7.7 | ~$22 |
-| 6.5 | $14 | ~$10.7 | **~$25** |
-| 7 | $19 (two packs) | ~$11.7 | ~$31 |
+| _k_ | Netlify                       | Convex | Total    |
+| --- | ----------------------------- | ------ | -------- |
+| 1   | $9                            | ~$0.2  | ~$9      |
+| 2   | $9 (about 524 credits)        | ~$1.7  | ~$11     |
+| 4   | $9 (about 920 credits)        | ~$5.7  | ~$15     |
+| 5   | $14 (one 500-credit pack, $5) | ~$7.7  | ~$22     |
+| 6.5 | $14                           | ~$10.7 | **~$25** |
+| 7   | $19 (two packs)               | ~$11.7 | ~$31     |
 
 - **The total passes about $25 per month at about 6.5× the assumption.** That is roughly 195,000 public page views, 130,000 app loads, and 195,000 bot 404s per month, or about 6,500 MAU.
 - Convex calls are the first cost to grow: they pass the included 1M at about 1.2×.
@@ -442,11 +448,11 @@ Scale the traffic by a factor *k*. Previews and production deploys stay fixed.
 
 ### 8. Secrets, fork PRs, and preview access
 
-| Secret | Where it is stored | What can read it | Who handles it |
-| --- | --- | --- | --- |
-| Preview `CONVEX_DEPLOY_KEY` (Convex **preview** deploy key) | Netlify environment variable, values for the **Deploy Previews** and **Branch deploys** contexts | Deploy-preview and branch-deploy builds, which run code from PRs and `main` | The owner creates it once. Agents' code may see it in preview builds, which AGENTS.md allows, because it can only create and modify preview deployments. |
-| Production `CONVEX_DEPLOY_KEY` (Convex production key with `deployment:deploy`) | The same Netlify variable, **Production** context value | Production-context builds only, meaning builds of the `production` branch. On Free and Personal it is also readable by the production edge function at runtime, because scopes are Pro-only. | **Owner only:** creates, rotates, and enters it in the Netlify UI. |
-| `VERCEL_TOKEN`, Netlify tokens, or any deploy token in GitHub | **None** | n/a | n/a |
+| Secret                                                                          | Where it is stored                                                                               | What can read it                                                                                                                                                                             | Who handles it                                                                                                                                           |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preview `CONVEX_DEPLOY_KEY` (Convex **preview** deploy key)                     | Netlify environment variable, values for the **Deploy Previews** and **Branch deploys** contexts | Deploy-preview and branch-deploy builds, which run code from PRs and `main`                                                                                                                  | The owner creates it once. Agents' code may see it in preview builds, which AGENTS.md allows, because it can only create and modify preview deployments. |
+| Production `CONVEX_DEPLOY_KEY` (Convex production key with `deployment:deploy`) | The same Netlify variable, **Production** context value                                          | Production-context builds only, meaning builds of the `production` branch. On Free and Personal it is also readable by the production edge function at runtime, because scopes are Pro-only. | **Owner only:** creates, rotates, and enters it in the Netlify UI.                                                                                       |
+| `VERCEL_TOKEN`, Netlify tokens, or any deploy token in GitHub                   | **None**                                                                                         | n/a                                                                                                                                                                                          | n/a                                                                                                                                                      |
 
 - **No deploy secret exists in GitHub.** #15's smoke test runs locally and needs none, and no cleanup job exists (item 6).
 - **Netlify only builds for recognized authors.**
@@ -619,37 +625,38 @@ No owner questions remain open.
    - The generated config was `path: "/*"`, with `excludedPath: ["/.netlify/*","/favicon.ico","/index.csr.html","/index.html","/main-X7YJTBTG.js","/media/inter-TF7PRQ4B.woff2","/styles-DPDXGSLM.css","/"]` and `cache: "manual"`.
 4. **`netlify serve --offline`, with the edge function running on Deno.** With the plugin declared in `netlify.toml`, the log showed "Loaded edge function angular-ssr".
 
-   | Request | Result |
-   | --- | --- |
-   | `GET /` | 200, the prerendered page, served static |
-   | `GET /o/acme` | 200, `cache-control: public, max-age=0, s-maxage=60, stale-while-revalidate=300`, `<title>Org page</title>`, `og:title`, the list |
-   | `GET /app/x` | 200, empty `<app-root>` shell |
-   | `GET /does-not-exist` | **404** with the not-found view and the same `cache-control` |
-   | `/media/*.woff2` and `/favicon.ico` | 200, served static |
-   | `Host: evil.example` | 400, logged "Header "host" with value "evil.example" is not allowed" |
-   | `X-Forwarded-Host: evil.example` | 400 |
-   | Five warm Server-route requests | 7.6 to 17.5 ms wall time, through the local proxy |
+   | Request                             | Result                                                                                                                            |
+   | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+   | `GET /`                             | 200, the prerendered page, served static                                                                                          |
+   | `GET /o/acme`                       | 200, `cache-control: public, max-age=0, s-maxage=60, stale-while-revalidate=300`, `<title>Org page</title>`, `og:title`, the list |
+   | `GET /app/x`                        | 200, empty `<app-root>` shell                                                                                                     |
+   | `GET /does-not-exist`               | **404** with the not-found view and the same `cache-control`                                                                      |
+   | `/media/*.woff2` and `/favicon.ico` | 200, served static                                                                                                                |
+   | `Host: evil.example`                | 400, logged "Header "host" with value "evil.example" is not allowed"                                                              |
+   | `X-Forwarded-Host: evil.example`    | 400                                                                                                                               |
+   | Five warm Server-route requests     | 7.6 to 17.5 ms wall time, through the local proxy                                                                                 |
 
    `netlify serve` did not apply the `[[headers]]` rule for `/media/*` to static files. #15 checks the item 3 headers on a real deploy.
+
 5. **CPU per render.** The script imported `server.mjs` and called `netlifyAppEngineHandler` directly.
 
-   | Node | Module load | First render | Warm median (50 renders) | Warm p95 |
-   | --- | --- | --- | --- | --- |
-   | 26.11.0 | 5.2 ms | **78.1 ms** | 2.8 ms | 10.2 ms |
-   | 24.16.0 | 7.2 ms | **86.3 ms** | 3.1 ms | 8.1 ms |
+   | Node    | Module load | First render | Warm median (50 renders) | Warm p95 |
+   | ------- | ----------- | ------------ | ------------------------ | -------- |
+   | 26.11.0 | 5.2 ms      | **78.1 ms**  | 2.8 ms                   | 10.2 ms  |
+   | 24.16.0 | 7.2 ms      | **86.3 ms**  | 3.1 ms                   | 8.1 ms   |
 
 6. **Local runner `scripts/serve-ssr.mjs` on Node 24.16.0.**
 
-   | Request | Result |
-   | --- | --- |
-   | `/` | 200 |
-   | `/o/acme` | 200 with `Cache-Control` and SSR content |
-   | `/app/x` | 200 |
-   | `/does-not-exist` | 404 |
-   | `/media/inter-*.woff2` and `/main-*.js` | `public, max-age=31536000, immutable` |
-   | `/favicon.ico` and `/index.csr.html` | `public, max-age=0, must-revalidate` |
+   | Request                                       | Result                                                   |
+   | --------------------------------------------- | -------------------------------------------------------- |
+   | `/`                                           | 200                                                      |
+   | `/o/acme`                                     | 200 with `Cache-Control` and SSR content                 |
+   | `/app/x`                                      | 200                                                      |
+   | `/does-not-exist`                             | 404                                                      |
+   | `/media/inter-*.woff2` and `/main-*.js`       | `public, max-age=31536000, immutable`                    |
+   | `/favicon.ico` and `/index.csr.html`          | `public, max-age=0, must-revalidate`                     |
    | `/../package.json` and `/%2e%2e/package.json` | 404 from the engine; nothing was read outside `browser/` |
-   | `Host: evil.example` | 400 |
+   | `Host: evil.example`                          | 400                                                      |
 
    A first version that imported `@angular/ssr/node` from `node_modules` failed with "JIT compilation failed for injectable [class PlatformLocation]". The final version uses Node built-ins only.
 
