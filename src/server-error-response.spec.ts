@@ -83,6 +83,21 @@ describe('server error responses', () => {
     expect(redactedErrorText(value)).toMatch(/\S/);
   });
 
+  it.each([
+    ['a number', 42],
+    ['an object', { a: 1 }],
+    ['a Symbol', Symbol('stack')],
+  ])('uses name: message, and never throws, for an Error whose stack is %s', (_, stack) => {
+    const error = new TypeError('render failed for /x?ott=SECRET');
+    Object.defineProperty(error, 'stack', { value: stack });
+
+    expect(() => redactedErrorText(error)).not.toThrow();
+    const text = redactedErrorText(error);
+    expect(typeof text).toBe('string');
+    expect(text).toContain('TypeError: render failed for /x?<redacted>');
+    expect(text).not.toContain('SECRET');
+  });
+
   it('keeps the detail of a plain-object rejection, redacted', () => {
     expect(redactedErrorText({ code: 'E_FETCH', url: '/x?ott=SECRET' })).toBe(
       '{"code":"E_FETCH","url":"/x?<redacted>',
