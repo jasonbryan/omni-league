@@ -40,7 +40,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
-      # Docs-only PRs (docs/, design/, .claude/, root *.md) run only install and format:check.
+      # Docs-only PRs (docs/, design/, .claude/, root *.md) run only release age, install and format:check.
       # HEAD is the PR merge commit; its first parent is the base branch.
       # --no-renames lists both paths of a rename, so moving an app file into docs/ is an app change.
       # Any file ESLint lints (.js .mjs .cjs .ts .mts .cts) is an app file wherever it lives.
@@ -61,6 +61,10 @@ jobs:
         shell: sh
         run: |
           status=0
+          if [ ! -f .npmrc ]; then
+            echo "::error file=.npmrc::.npmrc not found"
+            exit 1
+          fi
           count="$(grep -cE '^[[:space:]]*min-release-age[[:space:]]*=' .npmrc || true)"
           if [ "$count" -ne 1 ]; then
             echo "::error file=.npmrc::expected exactly one min-release-age line, found ${count}"
@@ -71,7 +75,12 @@ jobs:
             echo "::error file=.npmrc::min-release-age is not a whole number of days"
             exit 1
           fi
-          npm_block="$(awk '/^[[:space:]]*-[[:space:]]*package-ecosystem:/ { in_npm = ($NF == "npm") } in_npm' .github/dependabot.yml)"
+          # The header value may be quoted, carry a trailing comment, or end in CR.
+          npm_block="$(awk '/^[[:space:]]*-[[:space:]]*package-ecosystem:/ { v = $0; sub(/^[^:]*:/, "", v); sub(/#.*/, "", v); gsub(/[^A-Za-z0-9_-]/, "", v); in_npm = (v == "npm") } in_npm' .github/dependabot.yml)"
+          if [ -z "$npm_block" ]; then
+            echo "::error file=.github/dependabot.yml::no package-ecosystem: npm entry found"
+            exit 1
+          fi
           for key in default-days semver-patch-days semver-minor-days semver-major-days; do
             n="$(printf '%s\n' "$npm_block" | grep -cE "^[[:space:]]*${key}:" || true)"
             value="$(printf '%s\n' "$npm_block" | sed -nE "s/^[[:space:]]*${key}:[[:space:]]*([0-9]+)[[:space:]]*(#.*)?$/\1/p")"
@@ -87,11 +96,15 @@ jobs:
             echo "Every npm cooldown window equals min-release-age=${age}."
           fi
           exit "$status"
+      # !cancelled() lets setup-node and install run after a release age failure (ADR 0009: one run reports all).
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        id: setup-node
+        if: ${{ !cancelled() }}
         with:
           node-version-file: package.json
       - name: install
         id: install
+        if: ${{ !cancelled() && steps.setup-node.outcome == 'success' }}
         run: npm ci
       # Every check below runs even when an earlier one failed, so one run reports them all.
       - name: format:check
