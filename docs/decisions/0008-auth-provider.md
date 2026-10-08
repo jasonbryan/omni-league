@@ -1,9 +1,9 @@
 # 0008: Authentication provider
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Gate:** `gate:technology`
 - **Issue:** #7
-- **Date:** 2026-10-07 (revised the same day for the owner's email + password answer, and again to re-run Option A, Convex Auth, at the owner's request)
+- **Date:** 2026-10-08 (accepted by the owner, who chose Better Auth after asking for Convex Auth to be re-analysed. Proposed 2026-10-07, revised the same day for the owner's email + password answer, and again to re-run Option A, Convex Auth, at the owner's request)
 
 ## Context
 
@@ -25,16 +25,18 @@ Other constraints:
 - Production secrets are owner-held (AGENTS.md).
 - Hosting plus Convex share a budget of about $25/month (`docs/product/requirements.md`).
 
-### Assumptions taken from decisions that are still open
+### Assumptions taken from other decisions
 
-These come from PRs that are not merged yet. **If any of them changes before this ADR is accepted, this ADR is revised to match.**
+ADRs 0002 to 0007 are accepted and merged on `main`. Each row below was checked against the merged text. #9 is still open, so its row remains an assumption: **if #9 decides differently, this ADR is revised to match.**
 
 | Source | Assumption used here | Where it matters |
 | --- | --- | --- |
-| ADR 0005, e2e (PR #17, #4) | Playwright runs against the **anonymous local backend** started by `CONVEX_AGENT_MODE=anonymous npx convex dev`, with no Convex login. Test-only functions live in `convex/testing.ts`. They are internal functions, each guarded by `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment, in Playwright `globalSetup`. `globalSetup` runs `testing:reset` and seeds each test tenant. The e2e app build is a development build. Session-timeout checks for WCAG 2.2.1 are deferred to this ADR. | E2E sign-in path, guard, reset, rate limits |
-| ADR 0006, Angular baseline (PR #18, #5) | Hybrid rendering: Convex-backed public routes use `RenderMode.Server`, static pages use `RenderMode.Prerender`, and signed-in routes use `RenderMode.Client`. **Server renders are anonymous** and never call `setAuth`. The adapter exposes `provideConvexAuth(source: ConvexAuthSource)` with `fetchToken`, `signedIn: Signal<boolean>`, and an optional `onChange`. The browser client calls `setAuth` on creation and `clearAuth()` when `signedIn` goes from true to false. `CONVEX_URL` reaches both bundles through a build-time `define` set by `scripts/ng-convex.mjs`. | Angular wiring, SSR coexistence, URL configuration |
-| ADR 0004, test runners (PR #19, #3) | `convex-test` 0.0.60 on `vitest` 5.0.3, with the `edge-runtime` environment and a root `vitest.config.mts`. `t.withIdentity({...})` fakes the caller, and `tokenIdentifier` is `${issuer}\|${subject}`. ADR 0004 left "how real identities map to users" to this ADR. | Identity key, Convex tests |
-| ADR 0003, npm and Node (PR #21, #1) | npm 11 on Node 26.11, `strict-allow-scripts=true` with an `allowScripts` map, `min-release-age=1`. | Install-script check, `overrides` entry |
+| ADR 0005, e2e (`docs/decisions/0005-e2e-and-accessibility-testing.md`, #4; accepted, merged in #17) | Playwright runs against the **anonymous local backend** started by `CONVEX_AGENT_MODE=anonymous npx convex dev`, with no Convex login. Test-only functions live in `convex/testing.ts` as internal functions (`internalAction` where seeding must call the auth component), each guarded by `process.env.IS_TEST === "true"`. `IS_TEST` is set only on the local e2e deployment, in Playwright `globalSetup`. `globalSetup` runs `testing:reset` and `testing:seedBase`, and a per-test fixture seeds each test's tenant with `testing:seedLeague`. ADR 0005 already records this ADR's e2e additions: seeding through `auth.api.signUpEmail`, `BETTER_AUTH_SECRET` and `SITE_URL` set per run, `testing:reset` clearing the component's tables (including `jwks`) and `signInFailures`, and the breached-password check and per-IP limiter off under `IS_TEST`. The e2e app build is a development build. Session-timeout checks for WCAG 2.2.1 are deferred to this ADR. | E2E sign-in path, guard, reset, rate limits |
+| ADR 0006, Angular baseline (`docs/decisions/0006-angular-app-baseline.md`, #5; accepted, merged in #18) | Hybrid rendering: Convex-backed public routes use `RenderMode.Server`, static pages use `RenderMode.Prerender`, and signed-in routes (`/app/**`) use `RenderMode.Client`. **Server renders are anonymous** and never call `setAuth`; `CONVEX_AUTH` is ignored on the server. The adapter declares `provideConvexAuth(source: ConvexAuthSource)` with `fetchToken`, `signedIn: Signal<boolean>`, and an optional `onChange`; the #7 follow-up implements it. When `CONVEX_AUTH` is provided, the browser client calls `setAuth` on creation, `clearAuth()` when `signedIn` goes from true to false, and `setAuth` again when it goes from false to true. `CONVEX_URL` and `CONVEX_SITE_URL` reach both bundles through build-time `define`s (`__CONVEX_URL__`, `__CONVEX_SITE_URL__`) set by `scripts/ng-convex.mjs`, which derives the site URL from the Convex URL. | Angular wiring, SSR coexistence, URL configuration |
+| ADR 0004, test runners (`docs/decisions/0004-unit-and-convex-test-runners.md`, #3; accepted, merged in #19) | `convex-test` 0.0.60 on `vitest` 5.0.3, with the `edge-runtime` environment and a root `vitest.config.mts`. `t.withIdentity({...})` fakes the caller, and `tokenIdentifier` is `${issuer}\|${subject}`. ADR 0004's test pattern keys users on `identity.subject`, as this ADR decides, and it records the `better-auth` `vitest` peer conflict this ADR resolves. | Identity key, Convex tests |
+| ADR 0003, npm and Node (`docs/decisions/0003-package-manager-and-node.md`, #1; accepted, merged in #21) | npm 11 on Node 26.11, `strict-allow-scripts=true` with a five-entry `allowScripts` map, `min-release-age=1`. An `overrides` entry is allowed only when recorded in the ADR that needs it; ADR 0003 already lists this ADR's `better-auth` entry, added by the sign-in feature rather than #10. | Install-script check, `overrides` entry |
+| ADR 0002, lint and format (`docs/decisions/0002-lint-and-format.md`, #2; accepted, merged in #16) | ESLint's core `no-restricted-imports` rule is already in use (for `convex/browser` outside the adapter), so restricting `react` imports needs no new package. | `react` import ban |
+| ADR 0007, UI library and styling (`docs/decisions/0007-ui-library-and-styling.md`, #6; accepted, merged in #20) | spartan/ui (brain + copied helm) on Tailwind CSS 4 provides the components and design tokens. It adds no auth-related package. | Sign-in and sign-up screens |
 | #9, hosting (open issue), and owner answer 6 | Each PR gets a preview with its own Convex preview deployment, built by `npx convex deploy --preview-create`. The web app uses the host's default domain until the first production release. A project domain is bought before that release, for verification and password-reset email. No host is chosen yet, so preview hostnames are unknown. | Callback URLs, allowed origins, email sender domain |
 
 ## Options
@@ -226,6 +228,8 @@ Other usage:
 
 **Option B: Better Auth through the Convex component, with email + password and Google.**
 
+**Owner decision (2026-10-08):** at the owner's request, Convex Auth (Option A) was re-analysed in full, including a scratch run (below and Test evidence item 14). With that analysis in hand, the owner chose Better Auth and approved this ADR.
+
 - It is the only candidate whose whole e2e sign-in path ran locally with no secrets and no inbox.
 - Its client works from Angular without a port, and its `sub` is a stable user id.
 - It refuses to link Google to an unverified password account instead of creating a duplicate.
@@ -386,7 +390,7 @@ export class AuthService implements ConvexAuthSource {
 
 - **`fetchToken`, `signedIn`, and `onChange`** match ADR 0006's interface exactly. `onChange` is not needed.
 - **Sign-out** calls `authClient.signOut()`. That deletes the session row and the stored cookie. The session store then emits no session, `signedIn` turns false, and the adapter's effect calls `clearAuth()`. Live queries rerun as anonymous (verified).
-- **One addition outside the adapter API:** the client needs the deployment's HTTP-action URL. `scripts/ng-convex.mjs` (ADR 0006) also defines `__CONVEX_SITE_URL__`, derived from `CONVEX_URL`: `.convex.cloud` becomes `.convex.site` for cloud deployments, and port 3210 becomes 3211 for the local backend. Like `CONVEX_URL`, it is public.
+- **One addition outside the adapter API, already in ADR 0006:** the client needs the deployment's HTTP-action URL. `scripts/ng-convex.mjs` (ADR 0006) also defines `__CONVEX_SITE_URL__`, derived from `CONVEX_URL`: `.convex.cloud` becomes `.convex.site` for cloud deployments, and port 3210 becomes 3211 for the local backend. Like `CONVEX_URL`, it is public.
 - **Google redirect return:** after Google, the `crossDomain` plugin redirects to `SITE_URL + returnTo + ?ott=<one-time token>`. `AuthService` exchanges `ott` for a session on start-up and removes it from the URL, mirroring the component's React provider. This was **not exercised** in the scratch run, which had no Google client, so the Google slice verifies it on a dev deployment.
 
 ### Server-rendered public pages
@@ -442,7 +446,7 @@ Email + password needs **no email sender on any deployment** until #26.
 - **Seeding:** `testing:seedLeague` is an `internalAction` behind the `IS_TEST` guard.
   - It calls Better Auth's own `auth.api.signUpEmail` with an email and a password that the test generates per run (random, never stored). That creates the user and a `credential` account with a real scrypt hash.
   - It then calls an internal mutation that writes the app's `users` row (keyed on the Better Auth id) and the tenant's leagues.
-  - It is an action because the sign-up runs through the component's adapter (`ctx.runMutation`). ADR 0005's list of test-only function kinds gains `internalAction`.
+  - It is an action because the sign-up runs through the component's adapter (`ctx.runMutation`). ADR 0005's list of test-only function kinds already includes `internalAction` for this.
 - **Reset:** `testing:reset` (ADR 0005) also clears the component's tables, **including `jwks`**, and the `signInFailures` table. Otherwise a new per-run `BETTER_AUTH_SECRET` cannot decrypt the old key, and every token request returns HTTP 500.
 - **Guard, and why the path cannot be used elsewhere:**
   - The only test-only piece is seeding. Sign-in itself is the production code path, so there is no test sign-in backdoor at all.
@@ -509,7 +513,7 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
 - **New dependencies:** `@convex-dev/better-auth` 0.12.x, `better-auth` 1.6.x, and `@noble/hashes` 2.x (already transitive), plus one `overrides` entry, and `react` 19.x installed as the component's required peer (never imported). None has an install script, so ADR 0003's `allowScripts` map is unchanged. No paid service before the first production release.
 - **External call:** the Pwned Passwords API (`api.pwnedpasswords.com`) is called from Convex on sign-up and on password change. It is free, keyless, and sends only a 5-character hash prefix.
 - **No prebuilt or hosted sign-in UI.** Better Auth is headless.
-  - The sign-in and sign-up screens are built in Angular with the #6 components and design tokens, and they go through **`gate:ui-design`** in the sign-in feature issue. That includes the password rules text, error states (wrong password, throttled, breached password, existing account, `account not linked`), and the show-password control.
+  - The sign-in and sign-up screens are built in Angular with ADR 0007's spartan/ui components and design tokens, and they go through **`gate:ui-design`** in the sign-in feature issue. That includes the password rules text, error states (wrong password, throttled, breached password, existing account, `account not linked`), and the show-password control.
   - The one hosted screen is **Google's account chooser and consent page**, which cannot be styled. It shows the app name from the Google consent configuration, and the redirect domain `<prod-name>.convex.site` until production moves HTTP actions to a custom domain.
   - Convex custom domains need the Convex Pro plan ($25 per developer per month), which is beyond the #9 budget at launch. The other route is a host-level rewrite of `/api/auth/*`, which would be #9's decision or a later ADR's.
 - **Sign-in feature slices:**
@@ -534,7 +538,7 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
   - The component stays pinned to an unpatched `better-auth` line.
 
   If any of these happens, revisit Convex Auth v2 once it leaves alpha (it then offers a framework-agnostic client), or a hosted provider if the owner relaxes answer 4.
-- **Acceptance:** when the owner merges this PR, the status becomes `Accepted`.
+- **Acceptance:** accepted by the owner on 2026-10-08, after the re-analysis of Convex Auth, choosing Better Auth.
 
 ## Test evidence
 
