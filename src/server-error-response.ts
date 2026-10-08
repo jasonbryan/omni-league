@@ -41,12 +41,51 @@ export function isMalformedPath(pathname: string): boolean {
   }
 }
 
+/** Logged when a thrown value cannot be turned into text at all. */
+const UNPRINTABLE = '<unprintable thrown value>';
+
+/** Causes logged after the error itself; also ends a cyclic `cause` chain. */
+const MAX_CAUSES = 5;
+
+/** Text of one thrown value. Throws for values that cannot be printed; the caller catches. */
+function describeThrown(value: unknown): string {
+  if (value instanceof Error) {
+    return value.stack ?? `${value.name}: ${value.message}`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    // JSON keeps a plain object's fields; a null-prototype object or one without own fields
+    // would otherwise give `[object Object]` or throw in String().
+    return JSON.stringify(value) ?? Object.prototype.toString.call(value);
+  }
+  return String(value);
+}
+
+function describeOrFallback(value: unknown): string {
+  try {
+    return describeThrown(value);
+  } catch {
+    return UNPRINTABLE;
+  }
+}
+
 /**
  * Error text for the log with every query string replaced by `?<redacted>`: a query string can
  * carry a one-time token (ADR 0008), and error messages and stacks can embed the request URL.
+ * The `cause` chain follows, up to {@link MAX_CAUSES} deep (a failed fetch keeps its reason
+ * there). Never throws, whatever was thrown.
  */
 export function redactedErrorText(error: unknown): string {
-  const text =
-    error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
+  let text = describeOrFallback(error);
+  try {
+    let current = error;
+    for (let depth = 0; depth < MAX_CAUSES && current instanceof Error; depth++) {
+      const cause: unknown = current.cause;
+      if (cause === undefined) break;
+      text += `\nCaused by: ${describeOrFallback(cause)}`;
+      current = cause;
+    }
+  } catch {
+    // A `cause` getter or an `instanceof` check threw: keep the text collected so far.
+  }
   return text.replace(/\?\S+/g, '?<redacted>');
 }

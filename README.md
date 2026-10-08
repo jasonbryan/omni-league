@@ -43,7 +43,7 @@ npm run build          # browser bundle, server bundle, and prerendered routes i
 npm run serve:ssr      # local SSR runner (scripts/serve-ssr.mjs) on http://localhost:4000 (set PORT to change)
 ```
 
-The local SSR runner serves the build the way Netlify does (ADR 0010): static files from `dist/omni-league/browser/` with Netlify's cache headers, and every other request through `netlifyAppEngineHandler`, the same handler the Netlify edge function runs. It listens on loopback only (`127.0.0.1` and `::1`), so `http://localhost:<port>` works whichever address `localhost` resolves to first. Server-rendered responses (any request not answered by a file in `browser/`) need a `Host` of `localhost` or `127.0.0.1` (`security.allowedHosts` in `angular.json`); any other host gets HTTP 400. Static files from `browser/` are served whatever the `Host`, as on Netlify, where the CDN serves them without the server entry.
+The local SSR runner serves the build the way Netlify does (ADR 0010): static files from `dist/omni-league/browser/` with Netlify's cache headers, and every other request through `netlifyAppEngineHandler`, the same handler the Netlify edge function runs. It listens on loopback only (`127.0.0.1` and `::1`), so `http://localhost:<port>` works whichever address `localhost` resolves to first. Server-rendered responses (any request not answered by a file in `browser/`) need a `Host` of `localhost` or `127.0.0.1` (`security.allowedHosts` in `angular.json`); any other host gets HTTP 400. Static files from `browser/` are served whatever the `Host`, as on Netlify, where the CDN serves them without the server entry. A request with an empty or missing `Host` gets HTTP 400.
 
 ### Checks
 

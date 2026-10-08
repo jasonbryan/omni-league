@@ -9,6 +9,10 @@ import globals from 'globals';
 import { builtinModules } from 'node:module';
 import tseslint from 'typescript-eslint';
 
+// A selector regex matching a Node built-in module name: `node:` anything, or an exact un-prefixed
+// built-in. Selector regexes cannot contain `/`, so the `/` in names like `fs/promises` is `.`.
+const BUILTIN_SOURCE = `/^(?:node:.*|${builtinModules.map((name) => name.replaceAll('/', '.')).join('|')})$/`;
+
 export default defineConfig([
   globalIgnores([
     'convex/_generated/',
@@ -165,6 +169,26 @@ export default defineConfig([
               message: 'Server-entry files are Web-API-only: no node: imports (ADR 0010).',
             },
           ],
+        },
+      ],
+      // no-restricted-imports sees only static imports. A dynamic import() of a built-in is
+      // refused by name, and one whose source is computed is refused outright, since its
+      // module cannot be checked.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: `ImportExpression[source.type='Literal'][source.value=${BUILTIN_SOURCE}]`,
+          message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+        },
+        {
+          selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=${BUILTIN_SOURCE}]`,
+          message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+        },
+        {
+          selector:
+            "ImportExpression:not([source.type='Literal']):not(:has(> TemplateLiteral[expressions.length=0]))",
+          message:
+            'Server-entry files must import from a fixed module name, so the module can be checked (ADR 0010).',
         },
       ],
     },

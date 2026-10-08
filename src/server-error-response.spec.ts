@@ -47,4 +47,83 @@ describe('server error responses', () => {
   it('redacts a thrown non-Error value', () => {
     expect(redactedErrorText('failed /x?ott=SECRET')).toBe('failed /x?<redacted>');
   });
+
+  it.each([
+    ['a null-prototype object', () => Object.create(null) as unknown],
+    [
+      'an object whose toString throws',
+      () => ({
+        toString() {
+          throw new Error('toString failed');
+        },
+      }),
+    ],
+    [
+      'a Proxy that throws on every operation',
+      () =>
+        new Proxy(
+          {},
+          {
+            get() {
+              throw new Error('get');
+            },
+            getPrototypeOf() {
+              throw new Error('getPrototypeOf');
+            },
+            ownKeys() {
+              throw new Error('ownKeys');
+            },
+          },
+        ),
+    ],
+  ])('never throws for %s', (_, makeValue) => {
+    const value = makeValue();
+
+    expect(() => redactedErrorText(value)).not.toThrow();
+    expect(redactedErrorText(value)).toMatch(/\S/);
+  });
+
+  it('keeps the detail of a plain-object rejection, redacted', () => {
+    expect(redactedErrorText({ code: 'E_FETCH', url: '/x?ott=SECRET' })).toBe(
+      '{"code":"E_FETCH","url":"/x?<redacted>',
+    );
+  });
+
+  it('appends the redacted cause chain', () => {
+    const inner = new Error('connect ECONNREFUSED for /api?ott=SECRET');
+    const outer = new TypeError('fetch failed', { cause: inner });
+
+    const text = redactedErrorText(outer);
+
+    expect(text).toMatch(/^TypeError: fetch failed/);
+    expect(text).toContain('\nCaused by: Error: connect ECONNREFUSED for /api?<redacted>');
+    expect(text).not.toContain('SECRET');
+  });
+
+  it('logs a non-Error cause', () => {
+    expect(redactedErrorText(new Error('outer', { cause: 'inner /x?t=SECRET' }))).toContain(
+      '\nCaused by: inner /x?<redacted>',
+    );
+  });
+
+  it('bounds the cause chain, so a cycle ends', () => {
+    const error = new Error('loop');
+    error.cause = error;
+
+    const causes = redactedErrorText(error).match(/Caused by:/g) ?? [];
+
+    expect(causes.length).toBeGreaterThan(0);
+    expect(causes.length).toBeLessThanOrEqual(5);
+  });
+
+  it('keeps the error text when reading its cause throws', () => {
+    const error = new Error('outer');
+    Object.defineProperty(error, 'cause', {
+      get() {
+        throw new Error('cause getter');
+      },
+    });
+
+    expect(redactedErrorText(error)).toMatch(/^Error: outer/);
+  });
 });

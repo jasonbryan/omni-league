@@ -64,10 +64,40 @@ async function staticFile(pathname) {
   return { file: real, size: info.size, handle: await open(real) };
 }
 
-/** Error text for the log with every query string removed: it can carry a one-time token (ADR 0008). */
+// Kept in step with redactedErrorText in src/server-error-response.ts, which the runner cannot
+// import (it is bundled into server.mjs and not exported).
+const UNPRINTABLE = '<unprintable thrown value>';
+const MAX_CAUSES = 5;
+
+function describeOrFallback(value) {
+  try {
+    if (value instanceof Error) return value.stack ?? `${value.name}: ${value.message}`;
+    if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value) ?? Object.prototype.toString.call(value);
+    }
+    return String(value);
+  } catch {
+    return UNPRINTABLE;
+  }
+}
+
+/**
+ * Error text for the log, with its `cause` chain (bounded), and every query string removed: it
+ * can carry a one-time token (ADR 0008). Never throws, whatever was thrown.
+ */
 function redactQuery(error) {
-  const text =
-    error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : `${error}`;
+  let text = describeOrFallback(error);
+  try {
+    let current = error;
+    for (let depth = 0; depth < MAX_CAUSES && current instanceof Error; depth++) {
+      const cause = current.cause;
+      if (cause === undefined) break;
+      text += `\nCaused by: ${describeOrFallback(cause)}`;
+      current = cause;
+    }
+  } catch {
+    // A `cause` getter or an `instanceof` check threw: keep the text collected so far.
+  }
   return text.replace(/\?\S+/g, '?<redacted>');
 }
 
@@ -114,37 +144,48 @@ function plainError(res, status, body) {
 }
 
 function sendFile(found, req, res, pathname) {
-  res.writeHead(200, {
+  // Closed explicitly on every path: Node ends the process when a FileHandle is garbage-collected
+  // while still open, and a stream piped into a closed response does not always close it.
+  const close = () => found.handle.close().catch(() => undefined);
+  if (res.destroyed || req.method === 'HEAD') {
+    close();
+    if (!res.destroyed) res.writeHead(200, staticHeaders(found, pathname)).end();
+    return;
+  }
+  res.writeHead(200, staticHeaders(found, pathname));
+  pipeline(found.handle.createReadStream({ autoClose: false }), res, (error) => {
+    close();
+    // A client that disconnected is not a server error.
+    if (!error || res.destroyed || error.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+    logError(req, pathname, error);
+    plainError(res, 500, 'Internal Server Error');
+  });
+}
+
+function staticHeaders(found, pathname) {
+  return {
     'Content-Type': MIME[extname(found.file)] ?? 'application/octet-stream',
     'Content-Length': found.size,
     'Cache-Control': HASHED.test(pathname)
       ? 'public, max-age=31536000, immutable'
       : 'public, max-age=0, must-revalidate',
     'X-Content-Type-Options': 'nosniff',
-  });
-  if (req.method === 'HEAD') {
-    found.handle.close().catch(() => undefined);
-    res.end();
-    return;
-  }
-  // pipeline closes the file and the response on error or client disconnect.
-  pipeline(found.handle.createReadStream(), res, (error) => {
-    if (!error || error.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
-    logError(req, pathname, error);
-    plainError(res, 500, 'Internal Server Error');
-  });
+  };
 }
 
 async function handle(req, res) {
   // The URL is `http://` + Host + the raw request target, so a target starting with `//` stays a
   // path (Netlify's behaviour) instead of naming a host. A target that is not a path (absolute
   // form, `*`), a Host that would change the URL's shape (`a@b`, `x/y`), or a URL or Web Request
-  // that cannot be built is a client error.
-  const host = req.headers.host ?? 'localhost';
+  // that cannot be built is a client error. So is an empty or missing Host: `http://` + '' + target
+  // would make the first path segment the host.
+  const host = req.headers.host ?? '';
   const target = req.url ?? '/';
   let url;
   try {
-    if (!target.startsWith('/') || /[\s/?#@\\]/.test(host)) throw new TypeError('bad target');
+    if (!target.startsWith('/') || host === '' || /[\s/?#@\\]/.test(host)) {
+      throw new TypeError('bad target');
+    }
     url = new URL(`http://${host}${target}`);
   } catch {
     plainError(res, 400, 'Bad Request');
@@ -169,6 +210,8 @@ async function handle(req, res) {
     const response = await netlifyAppEngineHandler(request);
     await writeWebResponse(response, req, res);
   } catch (error) {
+    // A client that disconnected aborts the request; that is not a server error.
+    if (res.destroyed) return;
     logError(req, url.pathname, error);
     plainError(res, 500, 'Internal Server Error');
   }
@@ -187,11 +230,27 @@ function listen(server, port, host) {
   });
 }
 
-const ipv4 = createServer(handle);
-const port = await listen(ipv4, Number(process.env.PORT ?? 4000), '127.0.0.1');
-const ipv6 = createServer(handle);
-await listen(ipv6, port, '::1').catch((error) => {
-  if (error.code !== 'EADDRNOTAVAIL' && error.code !== 'EAFNOSUPPORT') throw error;
-  console.log('serve-ssr: no IPv6 loopback; listening on 127.0.0.1 only');
-});
+/**
+ * Listens on 127.0.0.1 and then ::1 on the same port. With PORT=0 the port comes from 127.0.0.1,
+ * and it can already be taken on ::1; then both are retried on a new port, a few times.
+ */
+async function listenOnLoopback(requested) {
+  for (let attempt = 1; ; attempt++) {
+    const ipv4 = createServer(handle);
+    const port = await listen(ipv4, requested, '127.0.0.1');
+    try {
+      await listen(createServer(handle), port, '::1');
+      return port;
+    } catch (error) {
+      if (error.code === 'EADDRNOTAVAIL' || error.code === 'EAFNOSUPPORT') {
+        console.log('serve-ssr: no IPv6 loopback; listening on 127.0.0.1 only');
+        return port;
+      }
+      if (error.code !== 'EADDRINUSE' || requested !== 0 || attempt >= 5) throw error;
+      await new Promise((resolve) => ipv4.close(resolve));
+    }
+  }
+}
+
+const port = await listenOnLoopback(Number(process.env.PORT ?? 4000));
 console.log(`Omni League SSR runner listening on http://localhost:${port}`);

@@ -100,6 +100,42 @@ describe('netlifyAppEngineHandler', () => {
     expect(logged).not.toContain('ott=');
   });
 
+  it.each([
+    ['a null-prototype object', () => Object.create(null) as unknown],
+    [
+      'an object whose toString throws',
+      () => ({
+        toString() {
+          throw new Error('toString failed');
+        },
+      }),
+    ],
+  ])('answers a rejection with %s with a plain 500 and a log line', async (_, makeValue) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    useEngine(() => Promise.reject(makeValue()));
+
+    const response = await netlifyAppEngineHandler(request('/x?ott=SECRET'));
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('Internal Server Error');
+    expect(console.error).toHaveBeenCalledTimes(1);
+    expect(loggedText()).toContain('GET /x');
+    expect(loggedText()).not.toContain('SECRET');
+  });
+
+  it('logs the redacted cause of an engine error', async () => {
+    useEngine(() =>
+      Promise.reject(
+        new TypeError('fetch failed', { cause: new Error('ECONNREFUSED /api?ott=SECRET') }),
+      ),
+    );
+
+    await netlifyAppEngineHandler(request('/x'));
+
+    expect(loggedText()).toContain('Caused by: Error: ECONNREFUSED /api?<redacted>');
+    expect(loggedText()).not.toContain('SECRET');
+  });
+
   it('answers a synchronous throw from the engine with a plain 500', async () => {
     useEngine(() => {
       throw new Error('sync');
