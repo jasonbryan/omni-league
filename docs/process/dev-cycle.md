@@ -8,7 +8,7 @@ In Claude Code, the main session orchestrates the cycle with the `/dev-cycle` sk
 
 | Role | Agent | Owns |
 | --- | --- | --- |
-| Orchestrator | main session (`/dev-cycle`) | Picks the next issue, dispatches role agents, moves labels, merges non-gated PRs, reports to the owner |
+| Orchestrator | main session (`/dev-cycle`) | Picks the next issue, dispatches role agents, moves labels, merges non-gated PRs (gate PRs only on the owner's chat instruction), reports to the owner |
 | Planner | `planner` | Turns a requirement into sliced, testable issues; drafts ADRs for `gate:technology` |
 | Plan reviewer | `plan-reviewer` | Challenges an issue before any code is written |
 | Designer | `designer` | Builds the HTML mockup for `gate:ui-design` |
@@ -16,7 +16,7 @@ In Claude Code, the main session orchestrates the cycle with the `/dev-cycle` sk
 | Tester | `tester` | Independently verifies the PR against the acceptance criteria |
 | PR reviewer | `pr-reviewer` | Reviews the diff for correctness, security, and conventions |
 | Deployer | `deployer` | Ships merged work to preview/production and verifies it |
-| Owner | the human | Approves gates by merging gate PRs; answers blocked questions |
+| Owner | the human | Approves gates by merging gate PRs or telling the orchestrator in chat to merge them; answers blocked questions |
 
 ## Issue state machine
 
