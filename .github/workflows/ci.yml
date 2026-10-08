@@ -1,0 +1,112 @@
+# CI pipeline (ADR 0009). One required check, `ci`, run once per mergeable tree:
+# ready PRs only; drafts get a skipped job (0 billed minutes); nothing re-runs on main.
+# Required check, merge procedure, and minutes: docs/process/ci.md.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main, production]
+  push:
+    branches: [main]
+    paths: [package-lock.json, .github/workflows/ci.yml]
+  workflow_dispatch:
+    inputs:
+      webkit:
+        description: Also run the webkit-mobile e2e project
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  ACTIONLINT_VERSION: 1.7.12
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+
+jobs:
+  ci:
+    name: ci
+    # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes.
+    if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      # Docs-only PRs (docs/, design/, .claude/, root *.md) run only install and format:check.
+      # HEAD is the PR merge commit; its first parent is the base branch.
+      # --no-renames lists both paths of a rename, so moving an app file into docs/ is an app change.
+      # Any file ESLint lints (.js .mjs .cjs .ts .mts .cts) is an app file wherever it lives.
+      - name: scope
+        id: scope
+        run: |
+          changed="$(git diff --no-renames --name-only HEAD^1 HEAD)"
+          app_files="$(printf '%s\n' "$changed" | grep -vE '^(docs/|design/|\.claude/|[^/]+\.md$)' || true)"
+          code_files="$(printf '%s\n' "$changed" | grep -E '\.[cm]?[jt]s$' || true)"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$changed" ] && [ -z "$app_files" ] && [ -z "$code_files" ]; then
+            echo "app=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: install
+        id: install
+        run: npm ci
+      # Every check below runs even when an earlier one failed, so one run reports them all.
+      - name: format:check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run format:check
+      - name: audit signatures
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm audit signatures
+      - name: lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run lint
+      - name: typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run typecheck
+      - name: test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm test
+      - name: test:convex
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run test:convex
+      - name: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run build
+      # Checksum-verified binary, no action (ADR 0009). Version and hash are bumped by hand.
+      - name: actionlint
+        if: ${{ !cancelled() && steps.scope.outputs.app == 'true' }}
+        run: |
+          curl -fsSL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+      # e2e steps (#13) are added here and run only when every check above passed.
+
+  warm-cache:
+    name: warm-cache
+    # Runs on main only when the lockfile or this workflow changes, so that PR
+    # runs restore main's npm cache (a PR run cannot restore another PR's cache).
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      - name: install (fills the npm cache that setup-node saves)
+        run: npm ci --ignore-scripts
