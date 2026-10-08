@@ -262,6 +262,49 @@ describe('injectQuery on the server platform', () => {
     });
   });
 
+  it.each([
+    [
+      'an Error named TimeoutError',
+      () => Object.assign(new Error('upstream: lock wait'), { name: 'TimeoutError' }),
+    ],
+    [
+      'a plain object named TimeoutError',
+      () => ({ name: 'TimeoutError', message: 'upstream: lock wait' }),
+    ],
+  ])(
+    'keeps %s that is not a timeout as the real error, with the fixed failure marker',
+    async (_label, make) => {
+      configure({ timeoutMs: 1234 });
+      const teams = createQuery();
+      const failure = make();
+      httpClients[0].queries[0].reject(failure);
+      await stable();
+
+      const error = teams.error();
+      expect(error?.message).not.toBe('Convex query timed out after 1234 ms');
+      if (failure instanceof Error) expect(error).toBe(failure);
+      else expect(error?.name).not.toBe('TimeoutError');
+      expect(transferred()).toEqual({
+        e: { name: 'Error', message: 'Convex query failed during server render' },
+      });
+      expect(TestBed.inject(TransferState).toJson()).not.toContain('lock wait');
+    },
+  );
+
+  it('keeps a DOMException that is not a timeout as the real error', async () => {
+    configure({ timeoutMs: 1234 });
+    const teams = createQuery();
+    const failure = new DOMException('The operation was aborted', 'AbortError');
+    httpClients[0].queries[0].reject(failure);
+    await stable();
+
+    expect(teams.error()?.message).toContain('The operation was aborted');
+    expect(teams.error()?.message).not.toContain('timed out');
+    expect(transferred()).toEqual({
+      e: { name: 'Error', message: 'Convex query failed during server render' },
+    });
+  });
+
   it('defaults the timeout to 5000 ms', async () => {
     vi.useFakeTimers();
     configure();

@@ -61,6 +61,11 @@ export type ServerQueryResult =
 
 const FAILED_MESSAGE = 'Convex query failed during server render';
 
+/** The loader's own timeout error; only it (and a fetch-signal timeout) is reported as a timeout. */
+class LoaderTimeoutError extends Error {
+  override readonly name = 'TimeoutError';
+}
+
 /**
  * Server-only, one instance per render (root-provided; Angular SSR bootstraps a new application
  * per request). Holds that render's HTTP client and its dedupe map, so nothing is shared across
@@ -112,10 +117,15 @@ export class ConvexServerQueryLoader {
       );
       return { value };
     } catch (caught) {
-      const timedOut = (caught as { name?: unknown } | null)?.name === 'TimeoutError';
-      // Either timer may fire first (the loader's, or the default fetch's AbortSignal); both read the same.
+      // Either timer may fire first (the loader's own error, or the default fetch's AbortSignal
+      // DOMException); both read the same. Any other error keeps its identity, whatever its name.
+      const timedOut =
+        caught instanceof LoaderTimeoutError ||
+        (caught instanceof DOMException && caught.name === 'TimeoutError');
       const error = timedOut
-        ? this.timeoutError()
+        ? caught instanceof LoaderTimeoutError
+          ? caught
+          : this.timeoutError()
         : caught instanceof Error
           ? caught
           : new Error(String(caught));
@@ -140,8 +150,6 @@ export class ConvexServerQueryLoader {
   }
 
   private timeoutError(): Error {
-    const error = new Error(`Convex query timed out after ${this.timeoutMs} ms`);
-    error.name = 'TimeoutError';
-    return error;
+    return new LoaderTimeoutError(`Convex query timed out after ${this.timeoutMs} ms`);
   }
 }
