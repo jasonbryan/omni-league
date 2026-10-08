@@ -35,3 +35,14 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 ## Dispatching
 
 Give each role agent the issue or PR number, the phase, and any feedback it must act on. Agents read GitHub themselves, so pass references, not copies of the issue. Agent reports are not shown to the owner; relay what matters in step 9.
+
+### Model and effort
+
+Each agent's frontmatter sets its default `model` and `effort` (table in [dev cycle, Roles](../../../docs/process/dev-cycle.md#model-and-effort)). The owner authorizes the orchestrator to override them per dispatch with the Agent tool's `model` and `effort` parameters, by these rules:
+
+- **Mechanical or docs-only tasks** (label edits, applying a reviewer's exact wording, glossary entries): `sonnet` or `haiku`, `low` or `medium`.
+- **Complex implementation or testing** (concurrency, SSR/hydration, cross-cutting infra): `implementer` and `tester` escalate to `opus`, `high`.
+- **Security, payments, auth, and server-rendering work:** at least `opus`, `high`, in every role; the hardest of these may use `fable`, `xhigh`.
+- **Escalation round:** the final fix round or final review round after earlier rounds found defects uses `fable`, `xhigh`. `fable`/`xhigh` is for escalations only: this final round, and the hardest security, payments, auth, and SSR tasks. `opus` stays the heavy default.
+
+When several rules match, use the highest model and the highest effort among them (model order `haiku` < `sonnet` < `opus` < `fable`; effort order `low` < `medium` < `high` < `xhigh` < `max`). Every phase comment the orchestrator posts records the model and effort used, for example `(model: opus, effort: high)`.

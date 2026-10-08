@@ -18,6 +18,22 @@ In Claude Code, the main session orchestrates the cycle with the `/dev-cycle` sk
 | Deployer      | `deployer`                  | Ships merged work to preview/production and verifies it                                                                                                |
 | Owner         | the human                   | Approves gates by merging gate PRs or telling the orchestrator in chat to merge them; answers blocked questions                                        |
 
+### Model and effort
+
+Each role agent's frontmatter (`model:` and `effort:` in `.claude/agents/<agent>.md`) sets its default model and effort level:
+
+| Agent           | Model    | Effort   |
+| --------------- | -------- | -------- |
+| `planner`       | `opus`   | `high`   |
+| `plan-reviewer` | `opus`   | `high`   |
+| `designer`      | `opus`   | `high`   |
+| `implementer`   | `sonnet` | `high`   |
+| `tester`        | `sonnet` | `high`   |
+| `pr-reviewer`   | `opus`   | `high`   |
+| `deployer`      | `sonnet` | `medium` |
+
+The orchestrator may override both per dispatch: lighter for mechanical or docs-only tasks, at least `opus`/`high` for security, payments, auth, and server-rendering work, and `fable`/`xhigh` only for escalations: the final fix or review round after earlier rounds found defects, and the hardest security, payments, auth, and SSR tasks. When several rules match, the highest model and the highest effort among them apply. The rules are in the [dev-cycle skill, Model and effort](../../.claude/skills/dev-cycle/SKILL.md#model-and-effort), and every phase comment records the model and effort used.
+
 ## Issue state machine
 
 Each open issue carries exactly one `status:` label.
