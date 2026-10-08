@@ -1,6 +1,6 @@
 # 0007: UI component library and styling
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-08 (owner merged PR #20)
 - **Gate:** `gate:technology`
 - **Issue:** #6
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)

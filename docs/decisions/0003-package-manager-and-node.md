@@ -1,6 +1,6 @@
 # 0003: Package manager and Node.js version
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-08 (owner merged PR #21)
 - **Gate:** `gate:technology`
 - **Issue:** #1
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)

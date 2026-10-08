@@ -1,6 +1,6 @@
 # 0004: Unit and Convex function test runners
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-08 (owner merged PR #19)
 - **Gate:** `gate:technology`
 - **Issue:** #3
 - **Date:** 2026-10-07
