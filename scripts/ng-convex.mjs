@@ -2,6 +2,7 @@
 // specification"). Node built-ins only. Usage: node scripts/ng-convex.mjs <build|serve> [args...]
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { constants } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
@@ -34,7 +35,8 @@ if (url) {
   try {
     parsed = new URL(url);
   } catch {
-    fail(`CONVEX_URL is not a valid URL: ${url}`);
+    // Never echo the raw value here: it has not passed the credential check yet.
+    fail('CONVEX_URL is not a valid URL');
   }
   // Only a bare origin: no credentials (they would ship in the public bundle), path, query, or fragment.
   if (
@@ -50,7 +52,7 @@ if (url) {
   }
   const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) {
-    fail(`CONVEX_URL must use https:, or http: on localhost/127.0.0.1; got ${url}`);
+    fail(`CONVEX_URL must use https:, or http: on localhost/127.0.0.1; got ${parsed.protocol}`);
   }
 
   // 4. Derive the HTTP-action (site) URL (ADR 0008).
@@ -61,7 +63,7 @@ if (url) {
     siteUrl = `http://${parsed.hostname}:3211`;
   } else {
     fail(
-      `cannot derive the Convex site URL from ${url}; supported forms are ` +
+      `cannot derive the Convex site URL from ${parsed.origin}; supported forms are ` +
         `https://<name>.convex.cloud and http://localhost:3210 (or http://127.0.0.1:3210)`,
     );
   }
@@ -81,5 +83,17 @@ const ng = join(root, 'node_modules', '@angular', 'cli', 'bin', 'ng.js');
 const child = spawn(process.execPath, [ng, ...ngArgs], { stdio: 'inherit' });
 // Forward termination signals so a SIGTERM to the wrapper alone (CI timeout, process manager) does
 // not orphan `ng serve`/`ng build`.
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
-child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+let received = null;
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    received ??= signal;
+    child.kill(signal);
+  });
+}
+// Terminated by a signal: exit 128 + its number (130 for SIGINT, 143 for SIGTERM), as a shell does.
+// The signal the wrapper received wins, because `ng` turns SIGINT into its own exit (serve re-kills
+// itself with SIGTERM, build exits 127); otherwise use the signal that killed the child.
+child.on('exit', (code, signal) => {
+  const terminatedBy = received ?? signal;
+  process.exit(terminatedBy ? 128 + constants.signals[terminatedBy] : (code ?? 0));
+});
