@@ -166,8 +166,8 @@ webServer: {
   name: 'app',
   command: 'npm run serve:ssr',          // node dist/<app>/server/server.mjs
   url: 'http://localhost:4000/',         // a Prerender route; must not read Convex data
-  env: { PORT: '4000', NG_ALLOWED_HOSTS: 'localhost,127.0.0.1' },
-  reuseExistingServer: !process.env.CI,
+  env: { PORT: '4000' },                 // allowed hosts: angular.json security.allowedHosts (ADR 0010)
+  reuseExistingServer: false,            // a stale server on port 4000 is never reused
   stdout: 'pipe',                        // server render errors appear in the job log
   gracefulShutdown: { signal: 'SIGTERM', timeout: 2_000 },
 },
@@ -175,7 +175,7 @@ use: { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:4000' },
 ```
 
 - **The build happens before Playwright, not in `webServer.command`.** `webServer` starts an already-built `dist/` (the e2e script runs the build first), so a build failure shows as a build step, not a server-start timeout.
-- **Readiness accepts HTTP 400.** Playwright treats the `url` as ready on "a 2xx, 3xx, 400, 401, 402, or 403 status code" ([playwright.dev/docs/test-webserver](https://playwright.dev/docs/test-webserver)). The SSR engine answers **400** to a `Host` that is not allowed. A missing or wrong `NG_ALLOWED_HOSTS` therefore does not fail at startup: every test fails with 400, and the server log (`stdout: 'pipe'`) names the rejected host. Tested in the scratch run below.
+- **Readiness accepts HTTP 400.** Playwright treats the `url` as ready on "a 2xx, 3xx, 400, 401, 402, or 403 status code" ([playwright.dev/docs/test-webserver](https://playwright.dev/docs/test-webserver)). The SSR engine answers **400** to a `Host` that is not allowed. A host missing from `security.allowedHosts` in `angular.json` (ADR 0010 replaced `NG_ALLOWED_HOSTS`) therefore does not fail at startup: every test fails with 400, and the server log (`stdout: 'pipe'`) names the rejected host. Tested in the scratch run below.
 - **Why a development build.** Angular's hydration mismatch checks are dev-mode only. In `@angular/core` 22.2.1 the element and text node checks are written as `ngDevMode && validateMatchingNode(...)` (`fesm2022/_debug_node-chunk.mjs`). The sibling check (`validateSiblingNodeExists`) and the NG0505 and NG0506 warnings are also guarded by `ngDevMode`.
   - Scratch run: the same deliberate mismatch, a `<table><tr>` with no `<tbody>`, logged `ERROR RuntimeError: NG0500: During hydration Angular expected <tr> but found <tbody>` in a development build and **nothing** in a production build.
   - A fixture listening to a production build would therefore pass a page with a hydration mismatch.
