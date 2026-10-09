@@ -8,11 +8,32 @@ import { fetchRawHtml } from './support/raw-html';
 const HEADING = /<h1\b[^>]*>\s*Omni League\s*<\/h1>/;
 
 test.describe('smoke: placeholder home', () => {
-  test('raw server HTML of / is 200 and contains the h1', async ({ request }) => {
+  test('raw server HTML of / is 200 and has the app shell around the h1', async ({ request }) => {
     const { status, headers, html } = await fetchRawHtml(request, '/');
     expect(status).toBe(200);
     expect(headers['content-type']).toContain('text/html');
     expect(html).toMatch(HEADING);
+
+    // App shell (#75), in DOM order: skip link, top bar with the home link, main holding the h1.
+    const at = (pattern: RegExp): number => html.search(pattern);
+    const skipLink = at(/<a\b[^>]*\bhref="[^"]*#main"[^>]*>\s*Skip to main content\s*<\/a>/);
+    const header = at(/<header\b/);
+    // The link's only text is "Omni League"; Angular may leave comment nodes beside it.
+    const home = at(
+      /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*>\s*Omni League\s*(?:<!--[^>]*-->\s*)*<\/a>/,
+    );
+    const main = at(/<main\b[^>]*\bid="main"[^>]*\btabindex="-1"/);
+    const heading = at(HEADING);
+    expect(skipLink).toBeGreaterThanOrEqual(0);
+    expect(header).toBeGreaterThan(skipLink);
+    expect(home).toBeGreaterThan(header);
+    expect(main).toBeGreaterThan(home);
+    expect(heading).toBeGreaterThan(main);
+    expect(html.indexOf('</main>')).toBeGreaterThan(heading);
+    // No Sign in until the sign-in route exists, and no sidebar on the home page (#73 decisions).
+    expect(html).not.toContain('Sign in');
+    expect(html).not.toContain('aria-label="Open navigation"');
+    expect(html).not.toMatch(/<nav\b/);
   });
 
   test.describe('with JavaScript disabled', () => {
@@ -25,7 +46,7 @@ test.describe('smoke: placeholder home', () => {
     });
   });
 
-  test('/ loads, shows the h1, applies the global styles, and passes the axe helper', async ({
+  test('/ loads in the app shell, applies the global styles, and passes the axe helper', async ({
     page,
     consoleGuard,
   }) => {
@@ -40,6 +61,38 @@ test.describe('smoke: placeholder home', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
     // On the local development build, scan the hydrated page, not the server HTML alone.
     if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
+
+    // App shell (#75): the first Tab reaches the skip link, shown as a pill with a visible outline;
+    // Enter moves focus to main without leaving the page.
+    const skipLink = page.getByRole('link', { name: 'Skip to main content' });
+    await page.keyboard.press('Tab');
+    await expect(skipLink).toBeFocused();
+    const box = await skipLink.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box && viewport).toBeTruthy();
+    if (box && viewport) {
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.height).toBeGreaterThan(0);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    }
+    expect(await skipLink.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('main#main')).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe('/');
+
+    // One banner and one main landmark, no navigation landmark, and a 56px sticky top bar.
+    await expect(page.getByRole('banner')).toHaveCount(1);
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(page.getByRole('navigation')).toHaveCount(0);
+    expect(
+      await page.locator('header').evaluate((el) => {
+        const style = getComputedStyle(el);
+        return { position: style.position, top: style.top, height: style.height };
+      }),
+    ).toEqual({ position: 'sticky', top: '0px', height: '56px' });
 
     // base.css (#61): the offset that keeps anchor targets and focused elements below the sticky
     // top bar (4.5rem at the 16px root font size, WCAG 2.4.11).
@@ -60,7 +113,9 @@ test.describe('smoke: placeholder home', () => {
     ).toBe(true);
     expect(thirdPartyRequests).toEqual([]);
 
-    await expectAccessible(page);
+    await expectAccessible(page, {
+      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]'],
+    });
   });
 
   test('/ hydrates (dev-mode "Angular hydrated <n> component(s)" log)', async ({
