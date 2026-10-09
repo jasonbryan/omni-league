@@ -81,7 +81,7 @@ npx playwright install --only-shell chromium   # add: npx playwright install web
 
 Ports 3210, 3211 (the backend's HTTP actions), and 4000 must be free: a running server or backend is never reused, so stop your own `npx convex dev` first. Arguments go to `playwright test`, for example `npm run e2e -- e2e/smoke.spec.ts`. The HTML report is in `playwright-report/` (`npx playwright show-report`); failure screenshots and traces are in `test-results/`.
 
-**The e2e backend (#59).** It runs in anonymous mode with no Convex account or secret, pinned to the backend release and ports in `e2e/support/convex-backend.json` (bumping the release needs no gate). The first run downloads that release (63.7 MB on Linux) to `~/.cache/convex`. Every Convex CLI call goes through `scripts/e2e-convex.mjs`, which never targets anything but this backend:
+**The e2e backend (#59).** It runs in anonymous mode with no Convex account or secret, pinned to the backend release and ports in `e2e/support/convex-backend.json` (bumping the release needs no gate). The first run downloads that release (63.7 MB on Linux) to `~/.cache/convex`. While Playwright runs, the CLI also serves Convex's local dashboard on port 6790 (or the next free port), which it downloads on first use; the CLI has no option to turn it off. Every Convex CLI call goes through `scripts/e2e-convex.mjs`, which never targets anything but this backend:
 
 - The CLI runs from its own project directory, `.convex-e2e/` (gitignored), never the repository root. Your `.env.local`, which may name your cloud dev deployment, is never read and stays byte-identical, and your own local dev backend's data in `.convex/` is never reset.
 - Every `CONVEX_*` variable is removed from the CLI's environment.
