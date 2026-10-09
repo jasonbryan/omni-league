@@ -3,16 +3,18 @@
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/postcss';
 import postcss from 'postcss';
 import { check } from 'prettier';
 import {
+  KIT_SOURCES,
   inlineFonts,
   inlineKitIntoFile,
   inlineKitIntoHtml,
+  main,
   prepareKitSources,
   stripKitFromHtml,
 } from './inline-mockup-kit.mjs';
@@ -226,6 +228,86 @@ describe('the kit build reads mockups without their own earlier kit block', () =
       );
       await writeFile(page, edited);
       assert.match(await buildKitCss(mockups), /\.leading-tight\s*\{/);
+    });
+  });
+});
+
+describe('the real kit entry and the real orchestration', () => {
+  const kitDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'design', 'mockup-kit');
+  const mockupsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'design', 'mockups');
+
+  it('design/mockup-kit/mockup-kit.css scans the stripped copy, never design/mockups', async () => {
+    const css = await readFile(join(kitDir, 'mockup-kit.css'), 'utf8');
+    const sources = [...css.matchAll(/^@source\s+['"]([^'"]+)['"]\s*;/gm)].map((m) =>
+      resolve(kitDir, m[1]),
+    );
+    assert.ok(sources.includes(KIT_SOURCES), `no @source resolves to ${KIT_SOURCES}`);
+    for (const source of sources) {
+      assert.ok(
+        source !== mockupsDir && !source.startsWith(`${mockupsDir}/`),
+        `@source ${source} reads design/mockups, which holds the earlier kit block`,
+      );
+    }
+  });
+
+  async function withFixture(run) {
+    const dir = await mkdtemp(join(tmpdir(), 'mockup-kit-main-'));
+    try {
+      const mockups = join(dir, 'mockups');
+      const output = join(dir, 'out');
+      await mkdir(mockups, { recursive: true });
+      await mkdir(output, { recursive: true });
+      await cp(join(fixtures, 'page.html'), join(mockups, 'page.html'));
+      await writeFile(join(output, 'mockup-kit.css'), '.kit-built{color:red}');
+      // Put an earlier kit block in the mockup, as a second run would find it.
+      await main(['--skip-build'], {
+        mockupsDir: mockups,
+        kitOutput: output,
+        kitSources: join(dir, 'sources'),
+        log: () => {},
+      });
+      return await run({ mockups, output, sources: join(dir, 'sources') });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('main() strips the kit blocks into the scanned directory before it runs the build', async () => {
+    await withFixture(async ({ mockups, output, sources }) => {
+      assert.match(await readFile(join(mockups, 'page.html'), 'utf8'), /<style id="mockup-kit">/);
+      let scannedAtBuild;
+      const build = async () => {
+        scannedAtBuild = await readFile(join(sources, 'page.html'), 'utf8').catch(() => null);
+        await writeFile(join(output, 'mockup-kit.css'), '.kit-built{color:blue}');
+      };
+      await main([], {
+        mockupsDir: mockups,
+        kitOutput: output,
+        kitSources: sources,
+        build,
+        log: () => {},
+      });
+      assert.ok(scannedAtBuild, 'the build ran before the scanned copy existed');
+      assert.ok(!scannedAtBuild.includes('mockup-kit'), 'the scanned copy still has a kit block');
+      const page = await readFile(join(mockups, 'page.html'), 'utf8');
+      assert.match(page, /\.kit-built\{color:blue\}/);
+    });
+  });
+
+  it('main() with --skip-build does not run the build', async () => {
+    await withFixture(async ({ mockups, output, sources }) => {
+      let built = false;
+      const build = async () => {
+        built = true;
+      };
+      await main(['--skip-build'], {
+        mockupsDir: mockups,
+        kitOutput: output,
+        kitSources: sources,
+        build,
+        log: () => {},
+      });
+      assert.equal(built, false);
     });
   });
 });

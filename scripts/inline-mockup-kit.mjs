@@ -25,7 +25,7 @@ const KIT_OUTPUT = join(root, 'dist', 'mockup-kit', 'browser');
 const MOCKUPS_DIR = join(root, 'design', 'mockups');
 // Where the kit's `@source` looks for classes (design/mockup-kit/mockup-kit.css): a copy of the
 // mockups with their kit blocks removed, so the build never reads its own earlier output.
-const KIT_SOURCES = join(root, 'dist', 'mockup-kit-source');
+export const KIT_SOURCES = join(root, 'dist', 'mockup-kit-source');
 
 const MIME = {
   '.woff2': 'font/woff2',
@@ -147,20 +147,33 @@ function buildKit() {
   });
 }
 
-async function main(argv) {
+/**
+ * One `npm run design:css` pass. The directories and the build step are parameters so a test can run
+ * the real orchestration on a fixture with a fake build.
+ */
+export async function main(
+  argv,
+  {
+    mockupsDir = MOCKUPS_DIR,
+    kitSources = KIT_SOURCES,
+    kitOutput = KIT_OUTPUT,
+    build = buildKit,
+    log = console.log,
+  } = {},
+) {
   const skipBuild = argv.includes('--skip-build');
   const files = argv.filter((arg) => !arg.startsWith('--')).map((file) => resolve(file));
   if (!skipBuild) {
-    await prepareKitSources(MOCKUPS_DIR, KIT_SOURCES);
-    await buildKit();
+    await prepareKitSources(mockupsDir, kitSources);
+    await build();
   }
-  const targets = files.length > 0 ? files : await htmlFilesUnder(MOCKUPS_DIR);
-  const cssPath = join(KIT_OUTPUT, 'mockup-kit.css');
+  const targets = files.length > 0 ? files : await htmlFilesUnder(mockupsDir);
+  const cssPath = join(kitOutput, 'mockup-kit.css');
   for (const target of targets) {
     const changed = await inlineKitIntoFile(target, cssPath);
-    console.log(`mockup-kit: ${changed ? 'updated' : 'unchanged'} ${target}`);
+    log(`mockup-kit: ${changed ? 'updated' : 'unchanged'} ${target}`);
   }
-  if (targets.length === 0) console.log('mockup-kit: no mockups in design/mockups/');
+  if (targets.length === 0) log('mockup-kit: no mockups in design/mockups/');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
