@@ -20,8 +20,11 @@ Applies to any code that creates charges, subscriptions, refunds, or invoices, o
 - Player and team payments are **direct charges**: a Checkout Session created with the `Stripe-Account` header and `payment_intent_data.application_fee_amount`.
 - Only org admins of that organization start onboarding or read its status.
 - The connected account id comes only from Stripe's API response. No public function takes an account id, amount, fee, price, or currency as an argument.
-- `application_fee_amount` must be positive and below the charge amount. Compute it with the shared fee helper, never inline; it carries one fee per roster entry or prepaid slot.
-- Fees that no payment carries are **billed**: a pending invoice item on the organization's account (`customer_account`), invoiced monthly.
+- The application fee is the **greater of** a percentage of the payment and a per-player floor for the roster entries and prepaid slots the payment pays for the first time (ADR 0012, "Application fee calculation"). Compute every fee, on Checkout and on a bill, with the one server helper `convex/payments/fee.ts`, never inline.
+- The helper uses integer cents only: the percentage in basis points (`APPLICATION_FEE_PERCENT_BPS`) and the floor in cents (`APPLICATION_FEE_FLOOR_CENTS`), both copied onto the season at publish. Round only the percentage part, once per payment, half up to the cent.
+- `application_fee_amount` must be positive and below the charge. Send at most `amount − 50` cents and bill the rest as a shortfall. Omit the parameter when the carried fee is 0.
+- Store the fee inputs and parts on the payment record, so every fee can be recomputed from it.
+- Fees that no payment carries are **billed**: a pending invoice item on the organization's account (`customer_account`), invoiced monthly. Each item carries its final amount; nothing is recomputed at invoice time.
 
 ## Flows
 
@@ -45,5 +48,6 @@ Applies to any code that creates charges, subscriptions, refunds, or invoices, o
 ## Tests
 
 - Payment PRs include tests for success, failure, duplicate webhook delivery, an invalid signature, an unknown connected account, and a payment event from another organization's account.
+- The fee helper has unit tests for: the percentage part larger, the floor part larger, rounding at half a cent, the cap with a shortfall, and a carried fee of 0.
 - E2E and `ci` never call Stripe and hold no Stripe secret: the fake gateway runs under `IS_TEST`, and tests sign their own webhook events with per-run secrets.
 - Manual verification uses a Stripe sandbox, test cards, and the Stripe CLI (installed per machine, never in `ci`) against an owner-named dev deployment.
