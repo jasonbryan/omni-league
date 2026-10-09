@@ -1,0 +1,38 @@
+/* Design tokens in spartan's naming (ADR 0007). The utilities that read them (`bg-primary`,
+   `text-muted-foreground`, `rounded-lg`, `font-sans`) come from brain's hlm-tailwind-preset.css.
+
+   These are STARTER values, a neutral grey scale, so the kit builds and the contrast test has
+   something to check. They are not the product's visual style: #60's design PR proposes the real
+   values through gate:ui-design and #61 sets them. Do not tune them here.
+
+   scripts/token-contrast.test.mjs checks the pairs below (npm run test:scripts):
+   - text, 4.5:1: --foreground on --background; each --X-foreground on --X; --muted-foreground on
+     --background and on --muted
+   - UI components, 3:1: --ring, --input, and --primary on --background
+   --border is not checked: it marks decorative separators and card edges. A control whose only
+   boundary is its border must use --input, which is checked.
+
+   Add a `.dark` block only if the owner approves a dark theme. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.6 0 0);
+  --ring: oklch(0.55 0 0);
+  --radius: 0.625rem;
+  --font-sans:
+    'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
