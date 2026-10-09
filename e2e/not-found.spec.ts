@@ -185,7 +185,7 @@ test.describe('not-found page', () => {
     page,
     consoleGuard,
   }) => {
-    const response = await page.goto('/app/x');
+    const response = await page.goto('/app/x?ref=1');
     expect(response?.status()).toBe(404);
     await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
     if (!remoteBaseUrl) {
@@ -195,6 +195,12 @@ test.describe('not-found page', () => {
         })
         .toBe(true);
     }
+    // The server HTML leaves the query string out of the skip link (PR #90); hydration adds it.
+    expect(await response?.text()).not.toContain('ref=1');
+    await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
+      'href',
+      '/app/x?ref=1#main',
+    );
 
     await page.getByRole('main').getByRole('link', { name: 'Go to the home page' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);

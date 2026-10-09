@@ -7,7 +7,6 @@
 // - a redirect whose Location copies the query string is `no-store`.
 // Add a sample path here for every new server route, with a sample value for each parameter.
 import { randomUUID } from 'node:crypto';
-import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 
@@ -31,8 +30,8 @@ test.describe('query strings and the CDN', () => {
       expect(response.status, path).toBeLessThan(500);
       expect(response.body, path).not.toContain(token);
       expect(response.headers.location ?? '', path).not.toContain(token);
-      // Netlify does not pass `Netlify-Vary` on to the client, so only the local server shows it.
-      if (!remoteBaseUrl && EDGE_PATHS.includes(path)) {
+      // Netlify passes `Netlify-Vary` on to the client (seen on PR #90's preview).
+      if (EDGE_PATHS.includes(path)) {
         expect(response.headers['netlify-vary'], path).toBe('query');
       }
     }
