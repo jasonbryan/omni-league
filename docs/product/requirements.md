@@ -87,13 +87,20 @@ Owner's words: "I know of some systems and orgs that will try to cheat the syste
 
 **Requirement:** the application fee cannot be avoided by under-registering players.
 
-**Mechanism** (owner answer, 2026-10-09, chat: "Confirm as proposed"):
+**Fee amount: greater of a percentage or a per-player floor.** The owner asked on [PR #74](https://github.com/jasonbryan/omni-league/pull/74#issuecomment-6085088864) whether an organization could still claim one player when two or more play. Owner decision, 2026-10-09 (chat): "Hybrid: % of payment, per-player floor".
 
-1. **Per rostered player.** The fee is assessed for every roster entry in a season, whatever the organization's pricing (team fee, per-player fee, or a split). A pending invite is not charged; the fee applies once the invite is accepted.
+- The application fee on each registration payment is the **greater of** a percentage of that payment and a **per-player floor** for every roster entry the payment pays for.
+- Where no payment carries the fee (free seasons, offline payments), the floor still applies to every roster entry (see below).
+- The percentage depends on the money paid, not on how many players are listed, so listing fewer players does not lower it.
+
+**Mechanism** (owner answer, 2026-10-09, chat: "Confirm as proposed"; kept with the hybrid decision):
+
+1. **Per rostered player.** The per-player floor is assessed for every roster entry in a season, whatever the organization's pricing (team fee, per-player fee, or a split). A pending invite is not charged; the floor applies once the invite is accepted.
 2. **Everyone who plays is rostered.** Only rostered players can appear in score reports and stat lines.
 3. **Minimum roster size per sport format,** set in the sport configuration: the number of players on the field (beach volleyball 2, 4, or 6; soccer 5, 7, or 11; softball 10). An organization may raise it but not lower it. It must be met by rostered players (accepted adults and guardian-managed minors), not by pending invites.
-4. **A team is confirmed only when** its roster meets the minimum and the fee for every roster entry is paid. A team payment collects the fee for the larger of the roster size and the minimum.
+4. **A team is confirmed only when** its roster meets the minimum and the fee for every roster entry is paid. A team payment's floor counts the larger of the roster size and the minimum.
 5. **Late additions pay.** A player added after the team has paid is not active (cannot appear in score reports) until the fee for that roster entry is paid.
+6. **Rosters are visible to opponents.** The teams in a season can see each other's rosters, so a player who is not listed is noticed.
 
 **Trade-offs:** captains must collect accepts before the team is confirmed; late additions add a checkout step; small fees on a late addition may cost the organization a Stripe processing fee.
 
@@ -101,13 +108,13 @@ Owner's words: "I know of some systems and orgs that will try to cheat the syste
 
 Owner answer, 2026-10-09 (chat): "Yes, org is invoiced."
 
-- The fee applies to every roster entry in a free (zero-price) season.
+- The per-player floor applies to every roster entry in a free (zero-price) season.
 - An organizer may mark a roster entry as paid outside the platform (an **offline payment**). The fee still applies to that roster entry.
 - When no player payment carries the fee, the platform bills the organization's connected account for it.
 
-**Residual gaps:** the platform cannot see unrostered players who turn up in person, and an organization could take payment outside the platform without marking it.
+**Residual gap:** the platform cannot see who turns up in person or money paid outside the platform. An organization that both lists fewer players than play and takes their money outside the platform still pays less. The minimum roster size, rostered-only scores and stat lines, and visible rosters limit this. Beyond that it is a terms-of-service matter for the owner.
 
-How the fee is collected (Connect account type, charge type, and how the organization's connected account is billed when no player payment carries the fee) is a `gate:technology` decision in its own ADR (#57). `docs/conventions/stripe.md` does not cover Connect yet.
+How the fee is collected and calculated (Connect account type, charge type, the greater-of calculation, and how the organization's connected account is billed when no player payment carries the fee) is decided in [ADR 0012](../decisions/0012-stripe-connect.md) (#57).
 
 ## Future (out of scope)
 
@@ -139,8 +146,9 @@ Questions still open for the owner. The planner records them as `status:blocked`
 
 1. **Guardian:** confirm the working assumption above.
 2. **Standings:** confirm or change the proposed defaults per sport.
-3. **Fee amount:** the application fee per roster entry.
-4. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
-5. **Fee on refunds and lost disputes:** whether the platform returns the application fee when a payment is refunded or a dispute is lost.
+3. **Fee percentage:** the percentage of each registration payment.
+4. **Per-player floor:** the minimum fee per roster entry, in dollars.
+5. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
+6. **Fee on refunds and lost disputes:** whether the platform returns the application fee when a payment is refunded or a dispute is lost.
 
 Features beyond the above are not yet specified.
