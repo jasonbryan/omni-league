@@ -92,6 +92,10 @@ describe('PAIRS', () => {
       '--ring on --background 3',
       '--input on --background 3',
       '--primary on --background 3',
+      '--sidebar-foreground on --sidebar 4.5',
+      '--sidebar-primary-foreground on --sidebar-primary 4.5',
+      '--sidebar-accent-foreground on --sidebar-accent 4.5',
+      '--sidebar-ring on --sidebar 3',
     ]);
   });
 
@@ -106,7 +110,7 @@ describe('checkTokens on src/styles/tokens.css', () => {
     assert.deepEqual(problems, []);
     const failed = results.filter((r) => !r.ok).map(formatResult);
     assert.deepEqual(failed, []);
-    assert.ok(results.length >= 11, 'the pairs were actually checked');
+    assert.ok(results.length >= 15, 'the pairs were actually checked');
   });
 });
 

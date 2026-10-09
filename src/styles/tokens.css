@@ -1,38 +1,46 @@
 /* Design tokens in spartan's naming (ADR 0007). The utilities that read them (`bg-primary`,
    `text-muted-foreground`, `rounded-lg`, `font-sans`) come from brain's hlm-tailwind-preset.css.
 
-   These are STARTER values, a neutral grey scale, so the kit builds and the contrast test has
-   something to check. They are not the product's visual style: #60's design PR proposes the real
-   values through gate:ui-design and #61 sets them. Do not tune them here.
+   Indigo palette, light theme only, approved through gate:ui-design in #73. The values are the
+   `:root` block in design/mockups/61-token-sheet.html ("For src/styles/tokens.css").
 
    scripts/token-contrast.test.mjs checks the pairs below (npm run test:scripts):
    - text, 4.5:1: --foreground on --background; each --X-foreground on --X; --muted-foreground on
-     --background and on --muted
-   - UI components, 3:1: --ring, --input, and --primary on --background
-   --border is not checked: it marks decorative separators and card edges. A control whose only
-   boundary is its border must use --input, which is checked.
+     --background and on --muted; --sidebar-foreground on --sidebar; --sidebar-primary-foreground
+     on --sidebar-primary; --sidebar-accent-foreground on --sidebar-accent
+   - UI components, 3:1: --ring, --input, and --primary on --background; --sidebar-ring on --sidebar
+   --border is not checked: it marks decorative separators and card edges. A form field must use
+   --input, which is checked.
 
    Add a `.dark` block only if the owner approves a dark theme. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.975 0.005 275);
+  --foreground: oklch(0.21 0.034 278);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.21 0.034 278);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.6 0 0);
-  --ring: oklch(0.55 0 0);
-  --radius: 0.625rem;
+  --popover-foreground: oklch(0.21 0.034 278);
+  --primary: oklch(0.51 0.23 277);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0.025 280);
+  --secondary-foreground: oklch(0.4 0.16 278);
+  --muted: oklch(0.955 0.007 275);
+  --muted-foreground: oklch(0.48 0.03 278);
+  --accent: oklch(0.94 0.035 280);
+  --accent-foreground: oklch(0.44 0.2 278);
+  --destructive: oklch(0.48 0.19 27);
+  --border: oklch(0.915 0.01 275);
+  --input: oklch(0.62 0.025 278);
+  --ring: oklch(0.51 0.23 277);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.3 0.03 278);
+  --sidebar-primary: oklch(0.51 0.23 277);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.035 280);
+  --sidebar-accent-foreground: oklch(0.44 0.2 278);
+  --sidebar-border: oklch(0.915 0.01 275);
+  --sidebar-ring: oklch(0.51 0.23 277);
+  --radius: 0.75rem;
   --font-sans:
     'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }

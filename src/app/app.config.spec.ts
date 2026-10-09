@@ -1,3 +1,4 @@
+import { OVERLAY_DEFAULT_CONFIG } from '@angular/cdk/overlay';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { App } from './app';
@@ -33,5 +34,11 @@ describe('appConfig with no Convex URL', () => {
       expect(spy.mock.calls.filter((args) => !isTestOnlyHydrationWarning(args))).toEqual([]);
       spy.mockRestore();
     }
+  });
+
+  it('provides the spartan helm defaults (overlays do not use the popover API)', () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(OVERLAY_DEFAULT_CONFIG)).toEqual({ usePopover: false });
   });
 });
