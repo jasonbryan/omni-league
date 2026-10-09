@@ -21,6 +21,7 @@ Leagues belong to an organization.
 - Public pages are needed at launch: visitors can view an organization's leagues on public pages, and users can register for those leagues from them (owner's words, [relayed on #5](https://github.com/jasonbryan/omni-league/issues/5#issuecomment-6049202887): "users will need to be able to register to organizations leagues").
 - Public pages should be indexed by search engines and show link previews when shared (owner follow-up answer, [relayed on #5](https://github.com/jasonbryan/omni-league/issues/5#issuecomment-6049202887)).
 - An organization can have multiple locations where its leagues are held (owner answer on #5).
+- **Draft, then publish.** Leagues and seasons stay off public pages until an organizer publishes them (owner answer, 2026-10-09, chat: "Yes, draft then publish"). Until then they are drafts, which the organization's staff see in the signed-in app.
 
 ## Organizations and staff
 
@@ -30,6 +31,7 @@ Owner answers, 2026-10-09 (chat).
   - **Org admins** manage everything in the organization and invite people.
   - **League organizers** run the specific leagues they are assigned to.
 - One person can belong to several organizations, with a role in each.
+- **Any signed-in user may create an organization** and becomes its first org admin (owner answer, 2026-10-09, chat: "Any signed-in user").
 - **The organization is the access boundary for staff.** Staff see and change only their own organization's data. A league organizer is further limited to their assigned leagues.
 
 ## Accounts, players, and guardians
@@ -85,7 +87,7 @@ Owner's words: "I know of some systems and orgs that will try to cheat the syste
 
 **Requirement:** the application fee cannot be avoided by under-registering players.
 
-**Proposed mechanism (owner to confirm; not decided):**
+**Mechanism** (owner answer, 2026-10-09, chat: "Confirm as proposed"):
 
 1. **Per rostered player.** The fee is assessed for every roster entry in a season, whatever the organization's pricing (team fee, per-player fee, or a split). A pending invite is not charged; the fee applies once the invite is accepted.
 2. **Everyone who plays is rostered.** Only rostered players can appear in score reports and stat lines.
@@ -95,9 +97,17 @@ Owner's words: "I know of some systems and orgs that will try to cheat the syste
 
 **Trade-offs:** captains must collect accepts before the team is confirmed; late additions add a checkout step; small fees on a late addition may cost the organization a Stripe processing fee.
 
-**Residual gaps:** the platform cannot see unrostered players who turn up in person; an organization could take payment outside the platform; the fee on free (zero-price) seasons and on offline payments is not yet decided (see Open).
+### Free seasons and offline payments
 
-How the fee is collected (Connect account type, charge type, and how a fee is charged when no player payment carries it) is a `gate:technology` decision in its own ADR. `docs/conventions/stripe.md` does not cover Connect yet.
+Owner answer, 2026-10-09 (chat): "Yes, org is invoiced."
+
+- The fee applies to every roster entry in a free (zero-price) season.
+- An organizer may mark a roster entry as paid outside the platform (an **offline payment**). The fee still applies to that roster entry.
+- When no player payment carries the fee, the platform bills the organization's connected account for it.
+
+**Residual gaps:** the platform cannot see unrostered players who turn up in person, and an organization could take payment outside the platform without marking it.
+
+How the fee is collected (Connect account type, charge type, and how the organization's connected account is billed when no player payment carries the fee) is a `gate:technology` decision in its own ADR (#57). `docs/conventions/stripe.md` does not cover Connect yet.
 
 ## Future (out of scope)
 
@@ -129,10 +139,8 @@ Questions still open for the owner. The planner records them as `status:blocked`
 
 1. **Guardian:** confirm the working assumption above.
 2. **Standings:** confirm or change the proposed defaults per sport.
-3. **Application fee mechanism:** confirm the proposal, including the minimum roster sizes.
-4. **Fee amount and who sees it:** the fee per roster entry, and whether it is shown to the payer as a separate line or absorbed by the organization.
-5. **Free seasons and offline payments:** whether a zero-price season still carries the fee, and whether an organizer may mark a registration as paid outside the platform (if so, how the fee is charged).
-6. **Who creates an organization:** any signed-in user (who becomes its first org admin), or only people the platform invites.
-7. **Unpublished leagues and seasons:** whether leagues and seasons stay off public pages until an organizer publishes them.
+3. **Fee amount:** the application fee per roster entry.
+4. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
+5. **Fee on refunds and lost disputes:** whether the platform returns the application fee when a payment is refunded or a dispute is lost.
 
 Features beyond the above are not yet specified.
