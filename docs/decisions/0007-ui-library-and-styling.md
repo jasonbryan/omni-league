@@ -321,7 +321,7 @@ The system verified this mechanism in a scratch Angular 22.2 app with Tailwind 4
    @import '../../src/styles/tokens.css';
    @import '@spartan-ng/brain/hlm-tailwind-preset.css';
    @import '@fontsource-variable/inter/wght.css';
-   @source '../../dist/mockup-kit-source';
+   @source '../mockups';
    @source '../../src/app';
    ```
 
@@ -334,7 +334,6 @@ The system verified this mechanism in a scratch Angular 22.2 app with Tailwind 4
    - **Fonts:** it rewrites the kit's font `url(...)` references as base64 `data:` URIs, about 65 KB for the Latin subset.
    - **Placement:** it writes the CSS into a `<style id="mockup-kit">` block preceded by `<!-- prettier-ignore -->`, so Prettier (ADR 0002) leaves the generated CSS alone.
    - **Result:** the mockup stays a single static file that opens offline.
-   - **Idempotent:** the script first copies the mockups, with their kit blocks removed, to `dist/mockup-kit-source` and the kit scans that copy. Scanning the mockups themselves would read the earlier block, turning words in the CSS into utilities and keeping classes that were removed from the markup.
 4. **Markup.** The mockup uses the same native elements, `data-*` state attributes, and classes that the helm directives apply, for example the `buttonVariants` class string for a primary button.
 5. **Icons.** Icons in mockups are inline `<svg>` markup taken from the installed `@ng-icons/lucide` version, where each export is an SVG string. That keeps mockup icons identical to the app's.
 
