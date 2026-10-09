@@ -74,6 +74,22 @@ export default defineConfig([
     },
   },
 
+  // Vendored spartan helm code (ADR 0007), copied from upstream and formatted by Prettier only.
+  // Upstream uses `hlm*` selectors and untyped `inject(ElementRef)`; these rules are off here so a
+  // re-copy from upstream stays a plain diff. Every other rule still applies.
+  {
+    files: ['src/app/ui/**/*.ts'],
+    rules: {
+      '@angular-eslint/directive-selector': 'off',
+      '@angular-eslint/component-selector': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+    },
+  },
+
   // Restricted imports: only the Convex adapter folder may import convex/browser (#11).
   {
     files: ['src/**/*.ts'],
