@@ -105,7 +105,7 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 
 ### Decision 3: changes while offline
 
-- **3A, recommended: the adapter refuses them.** `run()` on mutation and action helpers checks the WebSocket at call time (`isWebSocketConnected`). If it is not connected, `run()` waits up to 3 seconds for a connection, then rejects with `ConvexOfflineError` without calling the Convex client, so nothing is queued. This check is separate from the 5-second `online` signal that drives the offline note and disables submit buttons (section 3), so a change started in the first seconds of a disconnect, or on field wifi with no internet, is refused too.
+- **3A, recommended: the adapter refuses them.** `run()` on mutation and action helpers checks the WebSocket at call time (`isWebSocketConnected`) and `navigator.onLine`. If the socket is not connected, or `navigator.onLine` is false, `run()` waits up to 3 seconds for both to hold, then rejects with `ConvexOfflineError` without calling the Convex client, so nothing is queued. This check is separate from the 5-second `online` signal that drives the offline note and disables submit buttons (section 3), so a change started in the first seconds of a disconnect, or on field wifi with no internet, is refused too.
 - 3B: let the Convex client queue them. Rejected: a registration or score sent minutes or hours later is offline change entry, which the owner did not choose, and the user has no feedback.
 - 3C: only disable buttons. Rejected as the only guard: any programmatic call would still be queued.
 
@@ -209,8 +209,8 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
   - false when `hasEverConnected` is still false 5 seconds after start (a cold start on field wifi with no internet, where `navigator.onLine` stays true);
   - false when `isWebSocketConnected` has been false for 5 seconds after having connected;
   - true as soon as `isWebSocketConnected` is true and `navigator.onLine` is true; always true on the server; with no Convex URL, it follows `navigator.onLine` only.
-  - `online` drives the note and disabled buttons only. The guard in `run()` reads `isWebSocketConnected` at call time (Decision 3A), so the 5-second debounce never lets a change through.
-- **Residual:** a mutation already sent when the socket drops is re-sent by the Convex client on reconnect (`RequestManager.restart()`); the user started it online and its button stays pending until then.
+  - `online` drives the note and disabled buttons only. The guard in `run()` reads `isWebSocketConnected` and `navigator.onLine` at call time (Decision 3A), so the 5-second debounce never lets a change through. `navigator.onLine` is part of the guard because `convex` 1.46 does not listen for the browser `offline` event.
+- **Residual:** a mutation already sent when the socket drops is re-sent by the Convex client on reconnect (`RequestManager.restart()`); the user started it online and its button stays pending until then. A silent drop is also not seen by `convex` 1.46 until its `serverInactivityThreshold` (60 seconds, `web_socket_manager.js`) passes, so for up to 60 seconds after a real drop with `navigator.onLine` still true, `isWebSocketConnected` stays true and a change can be handed to the client and re-sent on reconnect. The `navigator.onLine` check narrows this to drops the browser reports; it does not close it.
 - **Reconnect timing:** `convex` 1.46 reconnects at once on the browser `online` event and otherwise backs off up to 16 seconds (plus or minus half, `web_socket_manager.js`), so the note can stay up to about 24 seconds after a silent recovery.
 
 ### 4. Updates, stale shells, rollback, and the kill switch
@@ -231,20 +231,20 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 - **Client:** the click on "Turn on notifications" first calls `Notification.requestPermission()` synchronously in the handler, so Safari's user-activation rule is met before any asynchronous step; only if permission is granted does it call `SwPush.requestSubscription({ serverPublicKey })`. **No permission request on load or on any other trigger**, on every browser (Safari requires it; elsewhere it is the UX rule).
 - `SwPush.requestSubscription` waits for `navigator.serviceWorker.controller` and then `getRegistration()`, so it hangs until the worker controls the page (a first visit, up to `registerWhenStable:30000`). The button stays disabled until the page is controlled.
 - iPhone and iPad in Safari without install show how to add the app to the Home Screen first (iOS 16.4+), and that the installed app needs a fresh sign-in (separate storage, section 3).
-- **Sending:** an internal action in the default runtime calls `encryptNotification` and `fetch`. No `"use node"`.
+- **Sending:** an internal action in the default runtime calls `encryptNotification` and `fetch`. No `"use node"`. `internal.pushSend.deliver` takes each row id with the `userId` the send was scheduled for, and skips a row whose `userId` has since changed (`push.subscribe` reassigns an endpoint's row, and a 429 retry can run up to 1 hour later), so a reassigned row never gets another user's notification. Event notifications (#85) reuse this path.
 - **VAPID token cache:** `vapidHeaders` once per push-service origin, stored in an internal table and reused for at least 1 hour and until 1 hour before its 12-hour expiry.
 - **Payload,** one JSON for ngsw and for Safari 18.4's declarative mode: `{ "web_push": 8030, "notification": { "title", "body", "navigate": <absolute URL>, "data": { "onActionClick": { "default": { "operation": "navigateLastFocusedOrOpen", "url": <path> } } } } }`. Every payload has a title, because Safari revokes permission after a push with no notification. Under 3,993 bytes. TTL per kind (24 hours for the test notification), urgency `normal`, and an optional `Topic` to collapse repeats.
 - **Endpoint allow-list** (checked when a subscription is saved and again before every send, matching the host exactly or as a dot-bounded suffix, `https:` only): `fcm.googleapis.com` (Chrome and other Chromium browsers), `push.services.mozilla.com` (Firefox), `push.apple.com` (Safari), `notify.windows.com` (Edge on Windows). Anything else is refused, so the action cannot be pointed at an arbitrary URL. A browser whose push service is not listed shows "not available".
 - **Responses:**
 
-  | Push service answer             | Outcome                                                                                 |
-  | ------------------------------- | --------------------------------------------------------------------------------------- |
-  | 201, 202                        | `lastSuccessAt` set, `failureCount` reset                                               |
-  | 404, 410                        | subscription row deleted (expired or unsubscribed)                                      |
-  | 413                             | error logged; no retry (a payload bug)                                                  |
-  | 429                             | one retry after `Retry-After`, at most 1 hour                                           |
-  | 5xx, network error              | up to 3 retries with backoff                                                            |
-  | other 4xx (`BadJwtToken`, etc.) | `failureCount` incremented and the reason logged; row deleted after 5 failures in a row |
+  | Push service answer             | Outcome                                                                                     |
+  | ------------------------------- | ------------------------------------------------------------------------------------------- |
+  | 201, 202                        | `lastSuccessAt` set, `failureCount` reset                                                   |
+  | 404, 410                        | subscription row deleted (expired or unsubscribed)                                          |
+  | 413                             | error logged; no retry (a payload bug)                                                      |
+  | 429                             | one retry after `Retry-After`, at most 1 hour; the retry skips a row whose `userId` changed |
+  | 5xx, network error              | up to 3 retries with backoff                                                                |
+  | other 4xx (`BadJwtToken`, etc.) | `failureCount` incremented and the reason logged; row deleted after 5 failures in a row     |
 
 - **Logs** contain the push-service host and status only, never an endpoint, key, or token.
 
@@ -282,7 +282,7 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
   Reassigning an endpoint to the caller is safe: an endpoint is an unguessable capability URL held only by the browser that created it, so presenting it proves control of that browser.
 
 - **Lifecycle** (#89):
-  - **Start-up and every sign-in:** when the browser has a subscription and a user is signed in, the client calls `push.getMyDeviceStatus`. If it is false (another user's row, or none), the client calls `SwPush.unsubscribe()` and shows "off"; the other user's row then gets 404 or 410 on its next send and is deleted. If it is true, the client upserts the row again. Only rows the caller already owns are re-upserted, so a session that ended without sign-out (expiry, cleared storage) never hands its device to the next user, and the next user never receives notifications without turning them on.
+  - **Start-up and every sign-in:** when the browser has a subscription and a user is signed in, meaning the Convex client is authenticated (not only that a Better Auth session exists), the client calls `push.getMyDeviceStatus`. If the query throws (unauthenticated during the token fetch, or offline), nothing changes: no unsubscribe and no upsert, so a start-up race never unsubscribes the owner's own device. If it returns false (another user's row, or none), the client calls `SwPush.unsubscribe()` and shows "off"; the other user's row then gets 404 or 410 on its next send and is deleted. If it is true, the client upserts the row again. Only rows the caller already owns are re-upserted, so a session that ended without sign-out (expiry, cleared storage) never hands its device to the next user, and the next user never receives notifications without turning them on.
   - **Sign-out** calls `push.unsubscribe` and `SwPush.unsubscribe()` first; each failure (offline, no worker) is caught and sign-out completes.
   - **Rotation and changes:** a key that differs from `getConfig`, a past `expirationTime`, or `pushSubscriptionChanges` re-subscribes, for the owning user only.
   - **Deletion:** the `users` `onDelete` trigger deletes the user's rows; 404 or 410 on a send deletes the row; `deliver` skips and deletes a row past its `expirationTime`; a daily cron deletes rows not seen and not sent to successfully for 90 days (404 and 410 arrive only on a send, so rows for devices that never get one would otherwise stay).
