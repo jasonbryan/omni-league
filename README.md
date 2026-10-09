@@ -93,7 +93,7 @@ Test-only functions live in `convex/testing.ts`: internal functions only, each s
 
 **WebKit.** `E2E_WEBKIT=1 npm run e2e` adds the `webkit-mobile` project (360 x 800, touch), the iOS Safari proxy. CI runs it only on release PRs into `production` and on `workflow_dispatch` with `webkit: true`; on macOS it is a closer Safari proxy than CI's Linux WebKit.
 
-**Screenshots (tester).** `npm run e2e:screenshots` saves a full-page PNG of `/` at each Chromium width to `e2e/screenshots/<route-slug>-<width>.png` (gitignored), for example `home-360.png` and `home-1280.png`. Other routes: `E2E_SCREENSHOT_ROUTES=/,/some/route npm run e2e:screenshots` (`/some/route` is saved as `some-route-<width>.png`). CI uploads the folder in the `e2e-report` artifact.
+**Screenshots (tester).** `npm run e2e:screenshots` saves a full-page PNG of `/` at each Chromium width to `e2e/screenshots/<route-slug>-<width>.png` (gitignored), for example `home-360.png` and `home-1280.png`. Other routes: `E2E_SCREENSHOT_ROUTES=/,/some/route npm run e2e:screenshots` (`/some/route` is saved as `some-route-<width>.png`). A route may be a 404 document, such as the not-found page; each saved path is printed with the document's HTTP status. CI uploads the folder in the `e2e-report` artifact.
 
 **Writing specs.** Import `test` and `expect` from `e2e/support/fixtures.ts`, not `@playwright/test`:
 

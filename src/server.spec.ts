@@ -1,4 +1,6 @@
 import type { AngularAppEngine } from '@angular/ssr';
+import type { Route } from '@angular/router';
+import { routes } from './app/app.routes';
 import { netlifyAppEngineHandler, setAppEngineForTesting, setNoindexForTesting } from './server';
 
 // Error behaviour of the SSR entry (#37, carried over from #30 and #24 / PR #38). Every case calls
@@ -35,13 +37,24 @@ describe('netlifyAppEngineHandler', () => {
     vi.restoreAllMocks();
   });
 
-  it('passes the engine response through unchanged', async () => {
-    const page = new Response('<h1>Omni League</h1>', { status: 200 });
+  it('passes the engine response through, adding only Netlify-Vary: query', async () => {
+    const page = new Response('<h1>Omni League</h1>', {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public' },
+    });
     const engine = useEngine(() => Promise.resolve(page));
 
     const response = await netlifyAppEngineHandler(request('/o/acme?q=1'));
 
-    expect(response).toBe(page);
+    expect(response.status).toBe(200);
+    expect(response.statusText).toBe('OK');
+    expect([...response.headers]).toEqual([
+      ['cache-control', 'public'],
+      ['content-type', 'text/html;charset=UTF-8'],
+      ['netlify-vary', 'query'],
+    ]);
+    expect(await response.text()).toBe('<h1>Omni League</h1>');
     expect(engine.handle).toHaveBeenCalledTimes(1);
   });
 
@@ -194,6 +207,121 @@ describe('netlifyAppEngineHandler', () => {
   });
 });
 
+// A request path that starts with two slashes (after URL parsing, so also `/\x`, `/x/..//x`, and
+// `/%2e%2e//x`) makes Angular throw NG05702 before any component renders (#23). The handler answers
+// with a permanent redirect to the same path with one leading slash: a relative `Location` that
+// cannot name another host, so it is not an open redirect.
+describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  /** `Location` resolved the way a browser does, against the URL it came from. */
+  function resolvedLocation(response: Response, path: string): URL {
+    return new URL(response.headers.get('Location') ?? '', `http://localhost${path}`);
+  }
+
+  it.each([
+    ['//evil.com/x', '/evil.com/x'],
+    ['///evil.com/x', '/evil.com/x'],
+    ['/\\evil.com/x', '/evil.com/x'],
+    ['/\\/\\evil.com', '/evil.com'],
+    ['/\t/evil.com', '/evil.com'],
+    ['/x/..//evil.com', '/evil.com'],
+    ['/x/%2e%2e//evil.com', '/evil.com'],
+    ['/%2E%2E//evil.com', '/evil.com'],
+    ['//evil.com/x?next=//evil.com', '/evil.com/x?next=//evil.com'],
+    ['//evil.com/%2F%2Fx', '/evil.com/%2F%2Fx'],
+    ['//%2F/evil.com', '/%2F/evil.com'],
+    ['//%5Cevil.com', '/%5Cevil.com'],
+    ['//', '/'],
+    ['//?q=1', '/?q=1'],
+  ])('redirects %s to %s without calling the engine', async (path, location) => {
+    const engine = useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(new Request(`http://localhost${path}`));
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe(location);
+    expect(resolvedLocation(response, path).origin).toBe('http://localhost');
+    // The Location carries the request's query string, so no shared cache may store it.
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await response.text()).toBe('');
+    expect(engine.handle).not.toHaveBeenCalled();
+  });
+
+  it.each(['/a//b', '/evil.com', '/%2F%2Fevil.com', '/%5Cevil.com', '/x?next=//evil.com'])(
+    'hands %s to the engine as it is (its path has one leading slash)',
+    async (path) => {
+      const engine = useEngine(() =>
+        Promise.resolve(new Response('<h1>Page not found</h1>', { status: 404 })),
+      );
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe('<h1>Page not found</h1>');
+      expect(engine.handle).toHaveBeenCalledTimes(1);
+      expect(new URL(engine.handle.mock.calls[0][0].url).pathname).toBe(path.split('?')[0]);
+    },
+  );
+
+  // Every combination of up to four of these pieces after the first slash: whatever the parser
+  // makes of it, the engine never sees a path starting with `//`, and a redirect stays on this site.
+  it('never hands the engine a path starting with // and never redirects off the site', async () => {
+    const pieces = [
+      '/',
+      '\\',
+      '.',
+      '..',
+      '%2e',
+      '%2E%2e',
+      '%2f',
+      '%5c',
+      '\t',
+      'x',
+      'evil.com',
+      '@',
+    ];
+    const paths: string[] = [];
+    const build = (prefix: string, depth: number): void => {
+      paths.push(prefix);
+      if (depth === 4) return;
+      for (const piece of pieces) build(prefix + piece, depth + 1);
+    };
+    build('/', 0);
+
+    const seen: string[] = [];
+    useEngine((req) => {
+      seen.push(new URL(req.url).pathname);
+      return Promise.resolve(new Response('ok'));
+    });
+    for (const path of paths) {
+      const response = await netlifyAppEngineHandler(new Request(`http://localhost${path}`));
+      if (response.status === 301) {
+        expect(response.headers.get('Location'), path).toMatch(/^\/(?![/\\])/);
+        expect(resolvedLocation(response, path).origin, path).toBe('http://localhost');
+      } else {
+        expect(response.status, path).toBe(200);
+      }
+    }
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.filter((pathname) => /^[/\\]{2}/.test(pathname))).toEqual([]);
+  });
+
+  it('is noindex on a non-production build', async () => {
+    setNoindexForTesting(true);
+    useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(request('//evil.com/x'));
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+  });
+});
+
 // `noindex` on non-production Netlify builds (#15, ADR 0010 item 6). The flag is the build-time
 // `__NOINDEX__` define set by scripts/ng-convex.mjs from Netlify's CONTEXT; the server entry reads no
 // environment at runtime.
@@ -274,5 +402,296 @@ describe('netlifyAppEngineHandler X-Robots-Tag', () => {
 
     expect(response.status).toBe(status);
     expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+  });
+});
+
+// Netlify's CDN stores an edge-function response whose Cache-Control allows it, and on PR #90's
+// preview it keyed the stored response by path alone: `/x?token=B` got the HTML rendered for
+// `/x?token=A`, and `//x` got a 301 whose Location held another visitor's query string. Every
+// response from the handler therefore varies the cache key by the whole query string, and the
+// redirect, whose Location copies the query string, is never stored.
+describe('netlifyAppEngineHandler cache key', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+
+  it.each([
+    [
+      'a cacheable rendered page',
+      '/o/acme?ott=SECRET',
+      () =>
+        Promise.resolve(
+          new Response('<h1>Page not found</h1>', {
+            status: 404,
+            headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+          }),
+        ),
+      404,
+    ],
+    [
+      'an engine redirect with immutable headers',
+      '/o/old?ott=SECRET',
+      () => Promise.resolve(Response.redirect('http://localhost/o/acme?ott=SECRET', 302)),
+      302,
+    ],
+    ['the plain 404', '/does-not-exist?ott=SECRET', () => Promise.resolve(null), 404],
+    ['the plain 400', '/%E0%A4%A?ott=SECRET', () => Promise.resolve(null), 400],
+    ['the plain 500', '/x?ott=SECRET', () => Promise.reject(new Error('render failed')), 500],
+    ['the // redirect', '//x?ott=SECRET', () => Promise.resolve(null), 301],
+    ['an unroutable path', '/(//evil.com)?ott=SECRET', () => Promise.resolve(null), 404],
+  ] as const)('%s carries Netlify-Vary: query', async (_, path, handle, status) => {
+    for (const flag of [false, true]) {
+      setNoindexForTesting(flag);
+      useEngine(handle);
+
+      const response = await netlifyAppEngineHandler(new Request(`http://localhost${path}`));
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+    }
+  });
+
+  it('keeps a Netlify-Vary the route set', async () => {
+    useEngine(() =>
+      Promise.resolve(new Response('ok', { headers: { 'Netlify-Vary': 'query=season' } })),
+    );
+
+    const response = await netlifyAppEngineHandler(request('/o/acme?season=2'));
+
+    expect(response.headers.get('Netlify-Vary')).toBe('query=season');
+  });
+
+  it('the // redirect is no-store, also on a non-production build', async () => {
+    setNoindexForTesting(true);
+    useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(request('//x?token=A'));
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe('/x?token=A');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+});
+
+// The router normalizes some URLs (`/x//` to `/x/`, `/x/(y)` to `/x`), and the engine then answers
+// with a redirect that takes the status the route set. With the not-found view's 404 a production
+// build sent 404 with a Location, an empty body, and the route's public Cache-Control, which the CDN
+// stored; a development build threw "Invalid redirect status code: 404" (PR #90, round 2). A
+// redirect's Location can carry the request's query string, so no shared cache may store one.
+describe('netlifyAppEngineHandler, an engine response with a Location', () => {
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+
+  function engineResponse(status: number, location: string): () => Promise<Response> {
+    return () =>
+      Promise.resolve(
+        new Response(null, {
+          status,
+          headers: {
+            Location: location,
+            'Cache-Control': PUBLIC_PAGE_CACHE,
+            'Content-Type': 'text/html;charset=UTF-8',
+            Vary: 'X-Forwarded-Prefix',
+          },
+        }),
+      );
+  }
+
+  it.each([
+    [404, '/x//?token=A/B', '/x/?token=A%2FB'],
+    [404, '/organizations/(x)?ott=SECRET', '/organizations?ott=SECRET'],
+    [200, '/x/(y)', '/x'],
+    [500, '/x//', '/x/'],
+    [404, '/app/x//', '/app/x/'],
+  ])('turns a %i with a Location into a no-store 302 (%s)', async (status, path, location) => {
+    for (const flag of [false, true]) {
+      setNoindexForTesting(flag);
+      useEngine(engineResponse(status, location));
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('Location')).toBe(location);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+      expect(response.headers.get('Vary')).toBe('X-Forwarded-Prefix');
+      expect(response.headers.get('X-Robots-Tag')).toBe(flag ? 'noindex' : null);
+      expect(await response.text()).toBe('');
+    }
+  });
+
+  it.each([
+    ['//evil.com/x?token=A', '/x?token=A'],
+    ['https://evil.com/x?token=A', '/x?token=A'],
+    ['/\\evil.com/x', '/x'],
+    ['\\\\evil.com', '/'],
+    ['http://localhost//evil.com', '/evil.com'],
+    ['/a//b/', '/a//b/'],
+    ['x/', '/o/x/'],
+  ])('keeps the 302 for a Location of %s on this site: %s', async (location, expected) => {
+    useEngine(engineResponse(404, location));
+
+    const response = await netlifyAppEngineHandler(request('/o/acme'));
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe(expected);
+    expect(response.headers.get('Location')).toMatch(/^\/(?![/\\])/);
+    expect(new URL(expected, 'http://localhost/o/acme').origin).toBe('http://localhost');
+  });
+
+  it('answers a 404 whose Location is not a URL with the plain 404', async () => {
+    useEngine(engineResponse(404, 'http://['));
+
+    const response = await netlifyAppEngineHandler(request('/o/acme'));
+
+    expect(response.status).toBe(404);
+    expect(response.headers.has('Location')).toBe(false);
+    expect(await response.text()).toBe('Not found');
+  });
+
+  it.each([301, 302, 303, 307, 308])(
+    'keeps a %i redirect and its Location, and makes it no-store',
+    async (status) => {
+      useEngine(engineResponse(status, '/x/?token=A%2FB'));
+
+      const response = await netlifyAppEngineHandler(request('/x//?token=A/B'));
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get('Location')).toBe('/x/?token=A%2FB');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+    },
+  );
+
+  it('makes a redirect with immutable headers no-store', async () => {
+    useEngine(() => Promise.resolve(Response.redirect('http://localhost/o/acme?ott=SECRET', 302)));
+
+    const response = await netlifyAppEngineHandler(request('/o/old?ott=SECRET'));
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('http://localhost/o/acme?ott=SECRET');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('leaves a response without a Location as it is', async () => {
+    useEngine(() =>
+      Promise.resolve(
+        new Response('<h1>Page not found</h1>', {
+          status: 404,
+          headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+        }),
+      ),
+    );
+
+    const response = await netlifyAppEngineHandler(request('/x?token=A'));
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
+    expect(await response.text()).toBe('<h1>Page not found</h1>');
+  });
+});
+
+// A path with one leading slash that the router still reads as `//...` (`/(//evil.com)` is an empty
+// first segment), as a named-outlet route (the app has no named `<router-outlet>`), or cannot parse
+// at all can never render as itself. Angular would log NG05702 with a stack, or warn NG04018 and
+// render `/`, on every such request. The handler answers the plain 404 without calling the engine.
+describe('netlifyAppEngineHandler, a path the router cannot render', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    '/(//evil.com)',
+    '/(//evil.com)?q=1',
+    '/(//x)/y',
+    '/(//)',
+    '/(//(evil.com:////',
+    '/(a:b)',
+    '/x/(a:b//c:d)',
+    '/a(b',
+    '/;a=b//x',
+    // Angular's Location drops one trailing slash before the router parses the path.
+    '/(x/',
+    '/(x/?q=1',
+    '/a(b/',
+    '/(///',
+    '/(a:b)/',
+    '/x/(a:b)/',
+    // The router parses the path and the query string together.
+    '/a(?token=A/B',
+    '/x/(?q=1',
+    '/(/?q=1',
+  ])('answers %s with the plain 404 without calling the engine', async (path) => {
+    const engine = useEngine(() => Promise.resolve(new Response('ok')));
+
+    const response = await netlifyAppEngineHandler(request(path));
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Not found');
+    expect(response.headers.has('Cache-Control')).toBe(false);
+    expect(engine.handle).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/',
+    '/x',
+    '/x/y',
+    '/x?q=(//evil.com)',
+    '/x(//evil.com)',
+    '/x(y)',
+    '/(x)',
+    '/x/(y)',
+    '/(/evil.com)',
+    '/x/(//y)',
+    '/x%28y%29',
+    '/%28%2F%2Fevil.com%29',
+    '/a(',
+    '/a)',
+    '/x/',
+    '/x//',
+    '/(x)/',
+    '/x/(y)/',
+    '/a(/',
+    '/x?q=(a:b)',
+    '/x?redirect=/(a:b)&q=a(b',
+    '/x/?token=A/B',
+  ])(
+    'hands %s to the engine (the router reads one leading slash and only the primary outlet)',
+    async (path) => {
+      const engine = useEngine(() => Promise.resolve(new Response('ok')));
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response.status).toBe(200);
+      expect(engine.handle).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('holds only while no route names an outlet', () => {
+    const outlets = (list: readonly Route[]): string[] =>
+      list.flatMap((route) => [
+        ...(route.outlet ? [route.outlet] : []),
+        ...outlets(route.children ?? []),
+      ]);
+    expect(outlets(routes)).toEqual([]);
   });
 });

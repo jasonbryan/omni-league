@@ -138,8 +138,9 @@ export class ShellSheet {
       return;
     }
     const fragment = decodeFragment(url.hash.slice(1));
-    // A URL the client router cannot reach (no matching route, a chunk that fails to load) loads
-    // as a full page, as the link itself would have.
+    // A URL the client router cannot reach loads as a full page, as the link itself would have.
+    // The `**` route (#23) matches every primary path, but the router still rejects a chunk that
+    // fails to load and an auxiliary outlet no route matches (`/(//evil.com)`).
     this.router.navigateByUrl(url.pathname + url.search + url.hash).then(
       () => {
         if (fragment) this.document.getElementById(fragment)?.scrollIntoView();
