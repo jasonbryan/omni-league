@@ -116,6 +116,30 @@ test.describe('smoke: placeholder home', () => {
     await expectAccessible(page, {
       expectedOrder: ['a[href$="#main"]', 'header a[href="/"]'],
     });
+
+    // Focusing a top bar control on a scrolled page leaves the page where it is (#75): the sticky
+    // header cancels the html scroll-padding-top, which otherwise makes the browser scroll focused
+    // header elements "into view". The phone sheet returns focus to the menu button the same way.
+    // The page is made tall here, in this page load, as the home page does not scroll.
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '3000px';
+      document.querySelector('main')?.append(spacer);
+      window.scrollTo(0, 600);
+    });
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(600);
+    const home = page.locator('header a[href="/"]');
+    await home.evaluate((el: HTMLElement) => {
+      el.focus();
+    });
+    await expect(home).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(600);
+    // By keyboard: Shift+Tab to the skip link, then Tab back to the home link.
+    await page.keyboard.press('Shift+Tab');
+    await expect(skipLink).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(home).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(600);
   });
 
   test('/ hydrates (dev-mode "Angular hydrated <n> component(s)" log)', async ({

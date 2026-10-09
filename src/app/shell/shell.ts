@@ -88,8 +88,11 @@ function decodeFragment(fragment: string): string {
       >Skip to main content</a
     >
     <div class="flex min-h-dvh flex-col">
+      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css) on the header and
+           everything in it. The header is always in view, so focusing one of its controls (by Tab,
+           or focus returning to the menu button as the sheet closes) must not scroll the page. -->
       <header
-        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6"
+        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:-scroll-mt-18"
       >
         @if (sidebar(); as sidebar) {
           <hlm-sheet
