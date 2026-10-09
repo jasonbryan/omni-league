@@ -1,0 +1,21 @@
+/* Small stand-in for the built mockup-kit.css (#58). Not a real font. */
+@font-face {
+  font-family: 'Fixture Sans';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url(./media/fixture-cyrillic.woff2) format('woff2-variations');
+  unicode-range: U+0301, U+0400-045F;
+}
+
+@font-face {
+  font-family: 'Fixture Sans';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url('./media/fixture-latin.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131;
+}
+
+.fixture-only-class {
+  font-family: 'Fixture Sans', sans-serif;
+  color: #123456;
+}

@@ -63,6 +63,17 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "mockup-kit": {
+              "styles": [
+                "src/styles.css",
+                {
+                  "input": "design/mockup-kit/mockup-kit.css",
+                  "bundleName": "mockup-kit",
+                  "inject": false
+                }
+              ],
+              "outputHashing": "none"
             }
           },
           "defaultConfiguration": "production"
