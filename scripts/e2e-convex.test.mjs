@@ -293,6 +293,44 @@ describe('main', () => {
   }
 });
 
+describe('main with the backend port held by another process', () => {
+  /** Holds 127.0.0.1:`port`; if something already holds it, the port is busy either way. */
+  async function hold(port) {
+    const server = createServer();
+    const held = await new Promise((resolve, reject) => {
+      server.once('error', (failure) =>
+        failure.code === 'EADDRINUSE' ? resolve(false) : reject(failure),
+      );
+      server.listen(port, '127.0.0.1', () => resolve(true));
+    });
+    return () => (held ? new Promise((resolve) => server.close(resolve)) : Promise.resolve());
+  }
+
+  for (const command of ['push', 'serve']) {
+    it(`${command} fails before starting the CLI, so nothing is pushed`, async () => {
+      const release = await hold(BACKEND.cloudPort);
+      try {
+        const started = [];
+        const errors = [];
+        const code = await main([command], {
+          env: {},
+          startCli: async (...args) => {
+            started.push(args);
+            return 0;
+          },
+          log: () => {},
+          error: (line) => errors.push(line),
+        });
+        assert.equal(code, 1);
+        assert.equal(started.length, 0);
+        assert.match(errors.join('\n'), new RegExp(`port ${BACKEND.cloudPort} is in use`));
+      } finally {
+        await release();
+      }
+    });
+  }
+});
+
 describe('e2ePlan (npm run e2e)', () => {
   const step = (plan, name) => plan.find((s) => s.name === name);
 

@@ -67,6 +67,7 @@ describe('IS_TEST guard', () => {
   // Unset, then values that are not exactly "true".
   const refused: [string, string | undefined][] = [
     ['unset', undefined],
+    ['"false"', 'false'],
     ['"TRUE"', 'TRUE'],
     ['"1"', '1'],
     ['"true " (trailing space)', 'true '],
