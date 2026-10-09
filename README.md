@@ -47,7 +47,7 @@ The local SSR runner serves the build the way Netlify does (ADR 0010): static fi
 
 ### Checks
 
-All checks run without a Convex deployment, `.env.local`, or Convex credentials.
+All checks run without a cloud Convex deployment, `.env.local`, or Convex credentials; `npm run e2e` starts its own anonymous local backend.
 
 ```sh
 npm run lint           # ESLint
@@ -73,9 +73,23 @@ Playwright with `@axe-core/playwright` ([ADR 0005](docs/decisions/0005-e2e-and-a
 npx playwright install --only-shell chromium   # add: npx playwright install webkit, for E2E_WEBKIT=1
 ```
 
-**Local run.** `npm run e2e` builds with `npm run build -- --configuration development` (so hydration mismatch checks run), starts `npm run serve:ssr` with `PORT=4000`, and runs every spec in `e2e/` in the `chromium-mobile` (360 x 800) and `chromium-desktop` (1280 x 720) projects. Port 4000 must be free: an already running server is never reused. Arguments go to `playwright test`, for example `npm run e2e -- e2e/smoke.spec.ts`. The HTML report is in `playwright-report/` (`npx playwright show-report`); failure screenshots and traces are in `test-results/`.
+**Local run.** `npm run e2e` (`scripts/e2e.mjs`) runs three steps:
 
-**Against a URL.** `E2E_BASE_URL=<url> npm run e2e -- e2e/smoke.spec.ts` targets an already running app (for example a Netlify preview) and starts no local server. A preview is a production build, so the hydration checks cannot run: the `Angular hydrated <n> component(s)` assertion and the `/%E0%A4%A` 400 check are reported as skipped, and the run prints so. The fixtures also stub the Netlify Drawer script `/.netlify/scripts/cdp` with an empty script in this mode ([hosting, Smoke runs](docs/process/hosting.md#smoke-runs-local)).
+1. `node scripts/e2e-convex.mjs push`: `convex dev --once` pushes `convex/` to the anonymous local Convex backend and regenerates `convex/_generated/`.
+2. `npm run build -- --configuration development` with `CONVEX_URL=http://127.0.0.1:3210`, so the bundles name the local backend and the hydration mismatch checks run.
+3. `playwright test`. It starts the backend (`node scripts/e2e-convex.mjs serve`, ready on `http://127.0.0.1:3210/version`) and `npm run serve:ssr` with `PORT=4000`. `globalSetup` then sets `IS_TEST=true` on the backend and runs `testing:reset` once. Every spec in `e2e/` runs in the `chromium-mobile` (360 x 800) and `chromium-desktop` (1280 x 720) projects.
+
+Ports 3210, 3211 (the backend's HTTP actions), and 4000 must be free: a running server or backend is never reused, so stop your own `npx convex dev` first. Arguments go to `playwright test`, for example `npm run e2e -- e2e/smoke.spec.ts`. The HTML report is in `playwright-report/` (`npx playwright show-report`); failure screenshots and traces are in `test-results/`.
+
+**The e2e backend (#59).** It runs in anonymous mode with no Convex account or secret, pinned to the backend release and ports in `e2e/support/convex-backend.json` (bumping the release needs no gate). The first run downloads that release (63.7 MB on Linux) to `~/.cache/convex`. Every Convex CLI call goes through `scripts/e2e-convex.mjs`, which never targets anything but this backend:
+
+- The CLI runs from its own project directory, `.convex-e2e/` (gitignored), never the repository root. Your `.env.local`, which may name your cloud dev deployment, is never read and stays byte-identical, and your own local dev backend's data in `.convex/` is never reset.
+- Every `CONVEX_*` variable is removed from the CLI's environment.
+- Before `env set` or `run`, a target check requires the anonymous deployment on `http://127.0.0.1:3210`, recorded in `.convex-e2e/` and reported by the backend on that port. The call then carries that backend's own URL and admin key.
+
+Test-only functions live in `convex/testing.ts`: internal functions only, each starting with the `IS_TEST` guard (`convex/lib/testOnly.ts`), which throws unless `IS_TEST` is exactly `true`. `testing:reset` deletes the documents of every table in `convex/schema.ts`, cancels pending scheduled functions, and deletes stored files. Tests isolate themselves by their own data (a tenant per test, from #60), not by more resets. In a spec, `convexRun('testing:<name>', args)` from `e2e/support/convex.ts` runs one of them. The self-test `e2e/convex-backend.spec.ts` (`chromium-desktop` only) calls `testing:ping` and checks that the built bundles name only `http://127.0.0.1:3210`.
+
+**Against a URL.** `E2E_BASE_URL=<url> npm run e2e -- e2e/smoke.spec.ts` targets an already running app (for example a Netlify preview). It starts no local server and no Convex backend, and makes no Convex CLI call; `scripts/e2e-convex.mjs` refuses every command while `E2E_BASE_URL` is set. A preview is a production build, so the hydration checks cannot run: the `Angular hydrated <n> component(s)` assertion and the `/%E0%A4%A` 400 check are reported as skipped, and the run prints so. The fixtures also stub the Netlify Drawer script `/.netlify/scripts/cdp` with an empty script in this mode ([hosting, Smoke runs](docs/process/hosting.md#smoke-runs-local)).
 
 **WebKit.** `E2E_WEBKIT=1 npm run e2e` adds the `webkit-mobile` project (360 x 800, touch), the iOS Safari proxy. CI runs it only on release PRs into `production` and on `workflow_dispatch` with `webkit: true`; on macOS it is a closer Safari proxy than CI's Linux WebKit.
 
@@ -97,5 +111,7 @@ The tester's manual accessibility checks are in [docs/process/wcag-checklist.md]
 ```sh
 CONVEX_AGENT_MODE=anonymous npx convex dev --once
 ```
+
+`node scripts/e2e-convex.mjs push` (the first step of `npm run e2e`) regenerates it the same way without touching `.env.local`. CI runs it, then fails if `git diff --exit-code convex/_generated` shows a difference ([CI, E2E steps](docs/process/ci.md#e2e-steps)).
 
 `npx convex ai-files install` refreshes `convex/_generated/ai/guidelines.md`. It also writes Convex sections into `AGENTS.md` and `CLAUDE.md` and installs agent skills under `.claude/` and `.agents/`; those extra changes are not committed.

@@ -52,6 +52,8 @@ __screenshots__/
 !.env.example
 # Anonymous local Convex backend state (database, admin key)
 /.convex/
+# The e2e backend's own Convex CLI project: its .env.local, state, and admin key (#59)
+/.convex-e2e/
 
 # Agent worktrees created inside the checkout (dev cycle)
 /.claude/worktrees/

@@ -153,10 +153,22 @@ jobs:
           if [ "$E2E_WEBKIT" = "1" ]; then
             npx playwright install --with-deps webkit
           fi
-      # Development build, then the specs against `npm run serve:ssr`; no Convex URL, no secrets.
+      # Anonymous local Convex backend, no secrets (ADR 0005, #59): `convex dev --once` downloads the
+      # pinned backend (e2e/support/convex-backend.json), pushes the functions, and runs codegen.
+      - name: e2e backend
+        id: e2e-backend
+        if: ${{ success() && steps.scope.outputs.app == 'true' }}
+        run: node scripts/e2e-convex.mjs push
+      # Codegen drift (ADR 0009): committed convex/_generated must match what codegen just wrote.
+      - name: convex codegen drift
+        if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
+        run: git diff --exit-code convex/_generated
+      # Push again, development build with CONVEX_URL=http://127.0.0.1:3210, then the specs against
+      # the local backend and `npm run serve:ssr` (scripts/e2e.mjs). Runs after a drift failure
+      # too, so one run reports both.
       - name: e2e
         id: e2e
-        if: ${{ success() && steps.scope.outputs.app == 'true' }}
+        if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
         run: npm run e2e
       - name: e2e report
         if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
