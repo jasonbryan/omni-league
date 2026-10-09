@@ -84,6 +84,53 @@ test.describe('not-found page', () => {
     expect(target.html).toMatch(NOT_FOUND_H1);
   });
 
+  // The real engine, not a stub: encoded, mixed-slash, CR/LF, unicode, and long variants either
+  // redirect on this site (Location starts with exactly one `/`, query kept) or get a 4xx, never a
+  // 5xx. A host in front (Netlify) may answer some of them with its own 400, which is also safe.
+  test('encoded and mixed-slash variants never get a 5xx or an off-site Location', async () => {
+    const origin = new URL(baseURL).origin;
+    const redirects: [string, string][] = [
+      ['//evil.com/x?q=1&next=//evil.com', '/evil.com/x?q=1&next=//evil.com'],
+      ['//evil.com/%0d%0aSet-Cookie:%20a=b', '/evil.com/%0d%0aSet-Cookie:%20a=b'],
+      ['//evil.com/x?%0d%0aX-Injected:1', '/evil.com/x?%0d%0aX-Injected:1'],
+      ['//%C3%A9vil.com/%C3%BC', '/%C3%A9vil.com/%C3%BC'],
+      ['//@evil.com', '/@evil.com'],
+      [`//evil.com/${'a'.repeat(2000)}`, `/evil.com/${'a'.repeat(2000)}`],
+    ];
+    for (const [path, location] of redirects) {
+      const response = await rawGet(path);
+      expect(response.status, path).toBe(301);
+      expect(response.location, path).toBe(location);
+    }
+    for (const path of [
+      '/%2F%2Fevil.com',
+      '/%2f%2fevil.com',
+      '/%5Cevil.com',
+      '/%5C%5Cevil.com',
+      '/%2e%2e//evil.com',
+      '/%2E%2E/%2F/evil.com',
+      '/./..//evil.com',
+      '/\\/\\evil.com',
+      '/%09/evil.com',
+      '/%0d%0a/evil.com',
+      '/app//evil.com',
+      '/app/%2F%2Fevil.com',
+      '/(//evil.com)',
+      '/x(//evil.com)',
+      `/${'a'.repeat(2000)}`,
+      ...redirects.map(([path]) => path),
+    ]) {
+      const response = await rawGet(path);
+      expect(response.status, path).toBeLessThan(500);
+      expect(response.status, path).toBeGreaterThanOrEqual(300);
+      if (response.status >= 300 && response.status < 400) {
+        expect(response.location, path).toMatch(/^\/(?![/\\])/);
+        expect(response.location, path).not.toMatch(/[\r\n\t]/);
+        expect(new URL(response.location ?? '', `${origin}/`).origin, path).toBe(origin);
+      }
+    }
+  });
+
   test('hydrates; keyboard: skip link, home link focus ring, Enter goes home; axe and landmarks', async ({
     page,
     consoleGuard,
