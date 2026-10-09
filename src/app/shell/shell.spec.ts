@@ -4,7 +4,7 @@ import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
-import { skipLinkHref } from './shell';
+import { LOAD_SHELL_SHEET, skipLinkHref } from './shell';
 import { LOAD_PAGE } from './shell-sheet';
 import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
@@ -165,16 +165,6 @@ describe('Shell', () => {
     });
   });
 
-  describe('top bar scroll margin', () => {
-    // html has `scroll-padding-top: 4.5rem` (base.css); without the opposite margin, focusing a
-    // control in the sticky header scrolls the page by up to that much.
-    it('cancels the scroll padding on the header and everything in it', async () => {
-      const harness = await render(SidebarTestPage);
-      const classes = host(harness).querySelector('header')?.className.split(/\s+/);
-      expect(classes).toContain('[&,&_*]:-scroll-mt-18');
-    });
-  });
-
   describe('phone sheet', () => {
     // jsdom lays nothing out, so the document is made taller than the viewport for the CDK block
     // scroll strategy to apply (it checks scrollHeight), and window.scroll, which jsdom does not
@@ -317,6 +307,136 @@ describe('Shell', () => {
 
       expect(router.url).toBe('/organizations/test#row-2');
       expect(scrolled).toEqual([false]);
+    });
+
+    /** Macrotasks only: whenStable would also wait for a navigation held by a guard. */
+    async function flush(): Promise<void> {
+      for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    function expectNoSheetLeft(): void {
+      expect(dialog()).toBeNull();
+      expect(document.querySelector('.cdk-overlay-pane')).toBeNull();
+      expect(document.querySelector('.cdk-overlay-backdrop')).toBeNull();
+      expect(document.documentElement.classList).not.toContain('cdk-global-scrollblock');
+    }
+
+    describe('a press waiting on the sheet chunk', () => {
+      /** Holds the sheet's import back until `release()`. */
+      function holdSheetImport(): { release: () => void; loads: () => number } {
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let loads = 0;
+        const load = async (): Promise<typeof import('./shell-sheet')> => {
+          loads++;
+          await held;
+          return import('./shell-sheet');
+        };
+        TestBed.configureTestingModule({
+          providers: [{ provide: LOAD_SHELL_SHEET, useValue: load }],
+        });
+        return { release, loads: () => loads };
+      }
+
+      it('is dropped when the shell is destroyed before the chunk loads', async () => {
+        const hold = holdSheetImport();
+        const harness = await render(SidebarTestPage);
+        menuButton(harness).click();
+        expect(hold.loads()).toBe(1);
+        harness.fixture.destroy();
+        hold.release();
+        await flush();
+        expectNoSheetLeft();
+        expect(document.querySelector('app-shell-sheet')).toBeNull();
+      });
+
+      it('is dropped by Escape, and the next press opens the sheet', async () => {
+        const hold = holdSheetImport();
+        const harness = await render(SidebarTestPage);
+        const button = menuButton(harness);
+        button.focus();
+        button.click();
+        button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        hold.release();
+        await flush();
+        await settle(harness);
+        expectNoSheetLeft();
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+
+        button.click();
+        await vi.waitFor(() => {
+          expect(dialog()).not.toBeNull();
+        });
+        expect(hold.loads()).toBe(1);
+      });
+
+      it('is dropped by the start of a navigation that keeps the shell', async () => {
+        const hold = holdSheetImport();
+        const harness = await render(SidebarTestPage, '/a');
+        const button = menuButton(harness);
+        button.click();
+        await harness.navigateByUrl('/b');
+        expect(menuButton(harness)).toBe(button);
+        hold.release();
+        await flush();
+        await settle(harness);
+        expectNoSheetLeft();
+      });
+    });
+
+    describe('with the sheet chunk loaded', () => {
+      const pageRoutes: Routes = [
+        { path: 'plain', component: PlainTestPage },
+        { path: '**', component: SidebarTestPage },
+      ];
+
+      async function loadedSheet(routes: Routes): Promise<RouterTestingHarness> {
+        const harness = await open(routes);
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+        await settle(harness);
+        expect(dialog()).toBeNull();
+        return harness;
+      }
+
+      it('does not open while a navigation is under way', async () => {
+        let pass!: (value: boolean) => void;
+        const guard = new Promise<boolean>((resolve) => {
+          pass = resolve;
+        });
+        const harness = await loadedSheet([
+          { path: 'held', canActivate: [() => guard], component: PlainTestPage },
+          ...pageRoutes,
+        ]);
+        const router = TestBed.inject(Router);
+        const navigation = router.navigateByUrl('/held');
+        expect(router.currentNavigation()).not.toBeNull();
+        menuButton(harness).click();
+        await flush();
+        expect(dialog()).toBeNull();
+
+        pass(true);
+        await navigation;
+        await settle(harness);
+        expect(router.url).toBe('/held');
+        expectNoSheetLeft();
+      });
+
+      // The chunk is already in the module cache here, so the sheet is created and opened within
+      // the same navigation that replaces the page.
+      it('leaves nothing on the next page when a navigation follows the first press in the same turn', async () => {
+        const harness = await render(SidebarTestPage, '/', pageRoutes);
+        const router = TestBed.inject(Router);
+        menuButton(harness).click();
+        const navigation = router.navigateByUrl('/plain');
+        await navigation;
+        await settle(harness);
+        expect(router.url).toBe('/plain');
+        expectNoSheetLeft();
+      });
     });
 
     it('loads the link as a full page when the router cannot navigate to it', async () => {

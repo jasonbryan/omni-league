@@ -245,6 +245,16 @@ function tearDownWalk(key: string): void {
 }
 
 /**
+ * The key that moves focus to the next element. WebKit on macOS follows the system default and
+ * Tabs only to text fields; Option+Tab moves through every element, as Tab does in WebKit on Linux
+ * (CI) and in Chromium. Prefix `Shift+` to move back.
+ */
+export function tabKey(page: Page): 'Tab' | 'Alt+Tab' {
+  const browserName = page.context().browser()?.browserType().name();
+  return browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab';
+}
+
+/**
  * Presses Tab from the top of the page through one full round of the page's Tab sequence (from
  * focus leaving the page to leaving it again) and on until focus returns to the first element of
  * that round, or the step limit is hit. Checks, per ADR 0005:
@@ -261,10 +271,7 @@ function tearDownWalk(key: string): void {
 export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise<TabWalkResult> {
   const domOrder = await page.evaluate(setUpWalk, WALK_KEY);
   const failures: string[] = [];
-  // WebKit on macOS follows the system default and Tabs only to text fields; Option+Tab moves
-  // through every element, as Tab does in WebKit on Linux (CI) and in Chromium.
-  const browserName = page.context().browser()?.browserType().name();
-  const tabKey = browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab';
+  const tab = tabKey(page);
   const maxSteps = options.maxSteps ?? domOrder.length * 2 + 5;
   const same = (a: StepInfo | undefined, b: StepInfo): boolean =>
     !!a && a.where === 'element' && a.index === b.index && a.description === b.description;
@@ -285,7 +292,7 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
   };
   try {
     for (let step = 1; step <= maxSteps && !done; step++) {
-      await page.keyboard.press(tabKey);
+      await page.keyboard.press(tab);
       const info = await page.evaluate(readStep, WALK_KEY);
       if (info.where === 'start') {
         trap('Tab did not move focus from the top of the page');

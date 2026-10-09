@@ -1,6 +1,6 @@
 // Smoke spec (#13): the prerendered placeholder home `/`. #15 runs it against previews with
 // E2E_BASE_URL, where the local-build-only checks are skipped.
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
@@ -65,7 +65,8 @@ test.describe('smoke: placeholder home', () => {
     // App shell (#75): the first Tab reaches the skip link, shown as a pill with a visible outline;
     // Enter moves focus to main without leaving the page.
     const skipLink = page.getByRole('link', { name: 'Skip to main content' });
-    await page.keyboard.press('Tab');
+    const tab = tabKey(page);
+    await page.keyboard.press(tab);
     await expect(skipLink).toBeFocused();
     const box = await skipLink.boundingBox();
     const viewport = page.viewportSize();
@@ -135,9 +136,9 @@ test.describe('smoke: placeholder home', () => {
     await expect(home).toBeFocused();
     expect(await page.evaluate(() => window.scrollY)).toBe(600);
     // By keyboard: Shift+Tab to the skip link, then Tab back to the home link.
-    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press(`Shift+${tab}`);
     await expect(skipLink).toBeFocused();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tab);
     await expect(home).toBeFocused();
     expect(await page.evaluate(() => window.scrollY)).toBe(600);
   });
