@@ -481,6 +481,129 @@ describe('netlifyAppEngineHandler cache key', () => {
   });
 });
 
+// The router normalizes some URLs (`/x//` to `/x/`, `/x/(y)` to `/x`), and the engine then answers
+// with a redirect that takes the status the route set. With the not-found view's 404 a production
+// build sent 404 with a Location, an empty body, and the route's public Cache-Control, which the CDN
+// stored; a development build threw "Invalid redirect status code: 404" (PR #90, round 2). A
+// redirect's Location can carry the request's query string, so no shared cache may store one.
+describe('netlifyAppEngineHandler, an engine response with a Location', () => {
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+
+  function engineResponse(status: number, location: string): () => Promise<Response> {
+    return () =>
+      Promise.resolve(
+        new Response(null, {
+          status,
+          headers: {
+            Location: location,
+            'Cache-Control': PUBLIC_PAGE_CACHE,
+            'Content-Type': 'text/html;charset=UTF-8',
+            Vary: 'X-Forwarded-Prefix',
+          },
+        }),
+      );
+  }
+
+  it.each([
+    [404, '/x//?token=A/B', '/x/?token=A%2FB'],
+    [404, '/organizations/(x)?ott=SECRET', '/organizations?ott=SECRET'],
+    [200, '/x/(y)', '/x'],
+    [500, '/x//', '/x/'],
+    [404, '/app/x//', '/app/x/'],
+  ])('turns a %i with a Location into a no-store 302 (%s)', async (status, path, location) => {
+    for (const flag of [false, true]) {
+      setNoindexForTesting(flag);
+      useEngine(engineResponse(status, location));
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('Location')).toBe(location);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+      expect(response.headers.get('Vary')).toBe('X-Forwarded-Prefix');
+      expect(response.headers.get('X-Robots-Tag')).toBe(flag ? 'noindex' : null);
+      expect(await response.text()).toBe('');
+    }
+  });
+
+  it.each([
+    ['//evil.com/x?token=A', '/x?token=A'],
+    ['https://evil.com/x?token=A', '/x?token=A'],
+    ['/\\evil.com/x', '/x'],
+    ['\\\\evil.com', '/'],
+    ['http://localhost//evil.com', '/evil.com'],
+    ['/a//b/', '/a//b/'],
+    ['x/', '/o/x/'],
+  ])('keeps the 302 for a Location of %s on this site: %s', async (location, expected) => {
+    useEngine(engineResponse(404, location));
+
+    const response = await netlifyAppEngineHandler(request('/o/acme'));
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe(expected);
+    expect(response.headers.get('Location')).toMatch(/^\/(?![/\\])/);
+    expect(new URL(expected, 'http://localhost/o/acme').origin).toBe('http://localhost');
+  });
+
+  it('answers a 404 whose Location is not a URL with the plain 404', async () => {
+    useEngine(engineResponse(404, 'http://['));
+
+    const response = await netlifyAppEngineHandler(request('/o/acme'));
+
+    expect(response.status).toBe(404);
+    expect(response.headers.has('Location')).toBe(false);
+    expect(await response.text()).toBe('Not found');
+  });
+
+  it.each([301, 302, 303, 307, 308])(
+    'keeps a %i redirect and its Location, and makes it no-store',
+    async (status) => {
+      useEngine(engineResponse(status, '/x/?token=A%2FB'));
+
+      const response = await netlifyAppEngineHandler(request('/x//?token=A/B'));
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get('Location')).toBe('/x/?token=A%2FB');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+    },
+  );
+
+  it('makes a redirect with immutable headers no-store', async () => {
+    useEngine(() => Promise.resolve(Response.redirect('http://localhost/o/acme?ott=SECRET', 302)));
+
+    const response = await netlifyAppEngineHandler(request('/o/old?ott=SECRET'));
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('http://localhost/o/acme?ott=SECRET');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('leaves a response without a Location as it is', async () => {
+    useEngine(() =>
+      Promise.resolve(
+        new Response('<h1>Page not found</h1>', {
+          status: 404,
+          headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+        }),
+      ),
+    );
+
+    const response = await netlifyAppEngineHandler(request('/x?token=A'));
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
+    expect(await response.text()).toBe('<h1>Page not found</h1>');
+  });
+});
+
 // A path with one leading slash that the router still reads as `//...` (`/(//evil.com)` is an empty
 // first segment), as a named-outlet route (the app has no named `<router-outlet>`), or cannot parse
 // at all can never render as itself. Angular would log NG05702 with a stack, or warn NG04018 and
@@ -505,6 +628,17 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     '/x/(a:b//c:d)',
     '/a(b',
     '/;a=b//x',
+    // Angular's Location drops one trailing slash before the router parses the path.
+    '/(x/',
+    '/(x/?q=1',
+    '/a(b/',
+    '/(///',
+    '/(a:b)/',
+    '/x/(a:b)/',
+    // The router parses the path and the query string together.
+    '/a(?token=A/B',
+    '/x/(?q=1',
+    '/(/?q=1',
   ])('answers %s with the plain 404 without calling the engine', async (path) => {
     const engine = useEngine(() => Promise.resolve(new Response('ok')));
 
@@ -532,6 +666,14 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     '/%28%2F%2Fevil.com%29',
     '/a(',
     '/a)',
+    '/x/',
+    '/x//',
+    '/(x)/',
+    '/x/(y)/',
+    '/a(/',
+    '/x?q=(a:b)',
+    '/x?redirect=/(a:b)&q=a(b',
+    '/x/?token=A/B',
   ])(
     'hands %s to the engine (the router reads one leading slash and only the primary outlet)',
     async (path) => {

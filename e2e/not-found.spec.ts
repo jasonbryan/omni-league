@@ -147,6 +147,28 @@ test.describe('not-found page', () => {
     }
   });
 
+  // The engine's redirect for a normalized URL is a 302 that no shared cache stores, its Location
+  // stays on this site, and the target renders the not-found page itself (PR #90, round 3).
+  test('a normalized unknown path gets a no-store 302 to a page that renders the 404', async () => {
+    for (const [path, location] of [
+      [`${UNKNOWN}//?token=A/B`, `${UNKNOWN}/?token=A%2FB`],
+      ['/organizations/(x)?token=A/B', '/organizations?token=A%2FB'],
+      ['/organizations/x/(y)/', '/organizations/x'],
+      ['/x/)', '/x/'],
+    ]) {
+      const response = await rawGet(path);
+      expect(response.status, path).toBe(302);
+      expect(response.headers['cache-control'], path).toBe('no-store');
+      expect(response.headers['netlify-vary'], path).toBe('query');
+      expect(response.location, path).toBe(location);
+      expect(response.body, path).toBe('');
+      const target = await rawGet(location);
+      expect(target.status, location).toBe(404);
+      expect(target.location, location).toBeUndefined();
+      expect(target.body.match(NOT_FOUND_H1), location).toHaveLength(1);
+    }
+  });
+
   test('hydrates; keyboard: skip link, home link focus ring, Enter goes home; axe and landmarks', async ({
     page,
     consoleGuard,

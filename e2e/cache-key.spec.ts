@@ -4,7 +4,7 @@
 // so (Angular conventions, Rendering, "Query strings and the CDN"):
 // - server HTML never contains the request's query string;
 // - every edge-function response sends `Netlify-Vary: query` (src/server-cache.ts);
-// - a redirect whose Location copies the query string is `no-store`.
+// - every response with a Location is `no-store` (it can copy the query string).
 // Add a sample path here for every new server route, with a sample value for each parameter.
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './support/fixtures';
@@ -62,6 +62,15 @@ test.describe('query strings and the CDN', () => {
       const later = await rawGet(`${redirect}${query}`);
       expect(later.status, query).toBe(301);
       expect(later.location, query).toBe(`${unique}/x${query}`);
+    }
+
+    // The router normalizes `/x//` to `/x/`, and the engine redirects there (PR #90, round 2).
+    const normalized = `${unique}//`;
+    for (const query of [`?token=${a}`, `?token=${a}`, `?token=${b}`, '']) {
+      const response = await rawGet(`${normalized}${query}`);
+      expect(response.status, query).toBe(302);
+      expect(response.headers['cache-control'], query).toBe('no-store');
+      expect(response.location, query).toBe(`${unique}/${query}`);
     }
   });
 });

@@ -12,7 +12,7 @@ import {
   redactedErrorText,
 } from './server-error-response';
 import { withQueryCacheKey } from './server-cache';
-import { leadingSlashesRedirect } from './server-redirect';
+import { leadingSlashesRedirect, withSafeRedirect } from './server-redirect';
 import { NOINDEX_BUILD, withNoindex } from './server-robots';
 import { isUnroutablePath } from './server-unroutable';
 
@@ -60,8 +60,14 @@ function getAppEngine(): AppEngine {
  *   (`src/server-unroutable.ts`);
  * - no matching route (`null`): plain 404. With the router's `**` route (#23) every path matches,
  *   and an unknown one renders the not-found view with status 404;
+ * - a URL the router normalizes (`/x//`, `/x/(y)`): the engine's 302 to the normalized URL, where
+ *   the not-found view renders (`setNotFoundStatus` in `src/app/core/not-found-status.ts`);
  * - anything thrown or rejected: plain 500, logged with the method, the pathname, and the error
  *   text with every query string redacted (a query string can carry a one-time token, ADR 0008).
+ *
+ * Every response with a `Location` is `no-store`, and one with a status other than 301, 302, 303,
+ * 307, or 308 becomes a 302 to a path on this site (`withSafeRedirect` in
+ * `src/server-redirect.ts`, PR #90).
  *
  * Every response carries `Netlify-Vary: query` unless the route set its own `Netlify-Vary`, so
  * Netlify's CDN never answers one query string with a response stored for another
@@ -69,13 +75,13 @@ function getAppEngine(): AppEngine {
  * `X-Robots-Tag: noindex` (#15).
  */
 export async function netlifyAppEngineHandler(request: Request): Promise<Response> {
-  const response = withQueryCacheKey(await render(request));
+  const response = withQueryCacheKey(withSafeRedirect(await render(request), new URL(request.url)));
   return noindex ? withNoindex(response) : response;
 }
 
 async function render(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const { pathname } = url;
+  const { pathname, search } = url;
   if (isMalformedPath(pathname)) {
     return badRequestResponse();
   }
@@ -83,7 +89,7 @@ async function render(request: Request): Promise<Response> {
   if (redirect) {
     return redirect;
   }
-  if (isUnroutablePath(pathname)) {
+  if (isUnroutablePath(pathname, search)) {
     return notFoundResponse();
   }
 

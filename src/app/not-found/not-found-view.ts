@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, RESPONSE_INIT, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCompass, lucideHouse } from '@ng-icons/lucide';
+import { setNotFoundStatus } from '../core/not-found-status';
 
 /**
  * The not-found view (#23): the `not-found` state of design/mockups/23-not-found.html, approved
@@ -10,8 +11,8 @@ import { lucideCompass, lucideHouse } from '@ng-icons/lucide';
  * route's page wraps it, and a public page renders it in its own shell for an unknown slug
  * (ADR 0006, "Status codes").
  *
- * On the server it sets the response status to 404 through `RESPONSE_INIT`, which is `null` in the
- * browser, during prerender, and in unit tests. It reads no data and nothing per visitor, so the
+ * On the server it sets the response status to 404 through `RESPONSE_INIT` (`setNotFoundStatus`),
+ * which is `null` in the browser, during prerender, and in unit tests. It reads no data and nothing per visitor, so the
  * server and the browser render the same DOM.
  */
 @Component({
@@ -50,8 +51,7 @@ import { lucideCompass, lucideHouse } from '@ng-icons/lucide';
 })
 export class NotFoundView {
   constructor() {
-    const responseInit = inject(RESPONSE_INIT, { optional: true });
-    if (responseInit) responseInit.status = 404;
+    setNotFoundStatus();
     inject(Title).setTitle('Page not found | Omni League');
   }
 }
