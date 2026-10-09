@@ -194,6 +194,116 @@ describe('netlifyAppEngineHandler', () => {
   });
 });
 
+// A request path that starts with two slashes (after URL parsing, so also `/\x`, `/x/..//x`, and
+// `/%2e%2e//x`) makes Angular throw NG05702 before any component renders (#23). The handler answers
+// with a permanent redirect to the same path with one leading slash: a relative `Location` that
+// cannot name another host, so it is not an open redirect.
+describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  /** `Location` resolved the way a browser does, against the URL it came from. */
+  function resolvedLocation(response: Response, path: string): URL {
+    return new URL(response.headers.get('Location') ?? '', `http://localhost${path}`);
+  }
+
+  it.each([
+    ['//evil.com/x', '/evil.com/x'],
+    ['///evil.com/x', '/evil.com/x'],
+    ['/\\evil.com/x', '/evil.com/x'],
+    ['/\\/\\evil.com', '/evil.com'],
+    ['/\t/evil.com', '/evil.com'],
+    ['/x/..//evil.com', '/evil.com'],
+    ['/x/%2e%2e//evil.com', '/evil.com'],
+    ['/%2E%2E//evil.com', '/evil.com'],
+    ['//evil.com/x?next=//evil.com', '/evil.com/x?next=//evil.com'],
+    ['//evil.com/%2F%2Fx', '/evil.com/%2F%2Fx'],
+    ['//%2F/evil.com', '/%2F/evil.com'],
+    ['//%5Cevil.com', '/%5Cevil.com'],
+    ['//', '/'],
+    ['//?q=1', '/?q=1'],
+  ])('redirects %s to %s without calling the engine', async (path, location) => {
+    const engine = useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(new Request(`http://localhost${path}`));
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe(location);
+    expect(resolvedLocation(response, path).origin).toBe('http://localhost');
+    expect(await response.text()).toBe('');
+    expect(engine.handle).not.toHaveBeenCalled();
+  });
+
+  it.each(['/a//b', '/evil.com', '/%2F%2Fevil.com', '/%5Cevil.com', '/x?next=//evil.com'])(
+    'hands %s to the engine as it is (its path has one leading slash)',
+    async (path) => {
+      const page = new Response('<h1>Page not found</h1>', { status: 404 });
+      const engine = useEngine(() => Promise.resolve(page));
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response).toBe(page);
+      expect(engine.handle).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  // Every combination of up to four of these pieces after the first slash: whatever the parser
+  // makes of it, the engine never sees a path starting with `//`, and a redirect stays on this site.
+  it('never hands the engine a path starting with // and never redirects off the site', async () => {
+    const pieces = [
+      '/',
+      '\\',
+      '.',
+      '..',
+      '%2e',
+      '%2E%2e',
+      '%2f',
+      '%5c',
+      '\t',
+      'x',
+      'evil.com',
+      '@',
+    ];
+    const paths: string[] = [];
+    const build = (prefix: string, depth: number): void => {
+      paths.push(prefix);
+      if (depth === 4) return;
+      for (const piece of pieces) build(prefix + piece, depth + 1);
+    };
+    build('/', 0);
+
+    const seen: string[] = [];
+    useEngine((req) => {
+      seen.push(new URL(req.url).pathname);
+      return Promise.resolve(new Response('ok'));
+    });
+    for (const path of paths) {
+      const response = await netlifyAppEngineHandler(new Request(`http://localhost${path}`));
+      if (response.status === 301) {
+        expect(response.headers.get('Location'), path).toMatch(/^\/(?![/\\])/);
+        expect(resolvedLocation(response, path).origin, path).toBe('http://localhost');
+      } else {
+        expect(response.status, path).toBe(200);
+      }
+    }
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.filter((pathname) => /^[/\\]{2}/.test(pathname))).toEqual([]);
+  });
+
+  it('is noindex on a non-production build', async () => {
+    setNoindexForTesting(true);
+    useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(request('//evil.com/x'));
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+  });
+});
+
 // `noindex` on non-production Netlify builds (#15, ADR 0010 item 6). The flag is the build-time
 // `__NOINDEX__` define set by scripts/ng-convex.mjs from Netlify's CONTEXT; the server entry reads no
 // environment at runtime.

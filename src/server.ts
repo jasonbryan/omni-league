@@ -11,6 +11,7 @@ import {
   notFoundResponse,
   redactedErrorText,
 } from './server-error-response';
+import { leadingSlashesRedirect } from './server-redirect';
 import { NOINDEX_BUILD, withNoindex } from './server-robots';
 
 // SSR entry per ADR 0010 item 2. Netlify runs the exported `netlifyAppEngineHandler` in an edge
@@ -50,7 +51,10 @@ function getAppEngine(): AppEngine {
  * Renders the request with Angular. The error mapping lives here, not in a wrapper, because this
  * is the function the Netlify edge function exports:
  * - a path that cannot be percent-decoded: plain 400, without calling the engine;
- * - no matching route (`null`): plain 404;
+ * - a path starting with `//` (Angular's NG05702): 301 to the same path with one leading slash,
+ *   without calling the engine (`src/server-redirect.ts`, #23);
+ * - no matching route (`null`): plain 404. With the router's `**` route (#23) every path matches,
+ *   and an unknown one renders the not-found view with status 404;
  * - anything thrown or rejected: plain 500, logged with the method, the pathname, and the error
  *   text with every query string redacted (a query string can carry a one-time token, ADR 0008).
  *
@@ -63,9 +67,14 @@ export async function netlifyAppEngineHandler(request: Request): Promise<Respons
 }
 
 async function render(request: Request): Promise<Response> {
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
   if (isMalformedPath(pathname)) {
     return badRequestResponse();
+  }
+  const redirect = leadingSlashesRedirect(url);
+  if (redirect) {
+    return redirect;
   }
 
   try {
