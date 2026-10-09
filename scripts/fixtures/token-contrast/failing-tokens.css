@@ -1,0 +1,32 @@
+/* Deliberately failing token set for scripts/token-contrast.test.mjs (#58).
+   Three pairs fall short; every other required pair passes:
+   - --muted-foreground on --background (text, needs 4.5:1)
+   - --muted-foreground on --muted (text, needs 4.5:1)
+   - --input on --background (UI component, needs 3:1) */
+:root {
+  --background: #ffffff;
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.45 0.2 27);
+  --destructive-foreground: #ffffff;
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.5 0 0);
+}
+
+/* A dark theme is ignored: only :root is checked. */
+.dark {
+  --background: #000000;
+  --foreground: #010101;
+}

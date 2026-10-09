@@ -61,6 +61,10 @@ npm run build
 npm run e2e            # e2e and accessibility tests (see "E2E tests")
 ```
 
+### Mockup kit
+
+`npm run design:css` builds the mockup kit (`ng build --configuration production,mockup-kit`, entry `design/mockup-kit/mockup-kit.css`) and writes it into every `design/mockups/**/*.html` as one `<style id="mockup-kit">` block, so each mockup stays a single offline file with the app's tokens, helm classes, and Inter (ADR 0007). Run it after changing a mockup's classes or `src/styles/tokens.css`. `-- --skip-build` reuses `dist/mockup-kit/`. The kit is not part of `npm run build`.
+
 ### E2E tests
 
 Playwright with `@axe-core/playwright` ([ADR 0005](docs/decisions/0005-e2e-and-accessibility-testing.md)). Install the browser once (and again after a Playwright upgrade):
