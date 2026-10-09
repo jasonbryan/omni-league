@@ -23,9 +23,10 @@
 //   Playwright never resets) a backend another session started.
 // - With E2E_BASE_URL set, every command refuses: that run uses no local backend.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
-import { constants } from 'node:os';
+import { constants, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 export const ROOT = join(import.meta.dirname, '..');
@@ -41,7 +42,8 @@ export const DEPLOYMENT_NAME = 'anonymous-agent';
 
 const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
-const TARGET_FILE = 'target.env';
+/** Under the home directory, where an older CLI kept every checkout's anonymous deployments. */
+export const SHARED_STATE_DIRNAME = Object.freeze(['.convex', 'anonymous-convex-backend-state']);
 const USAGE = 'usage: node scripts/e2e-convex.mjs <push|serve|setup|run <function> [json-args]>';
 
 /** E2E_BASE_URL when it is a non-empty string (the same rule as e2e/support/env.ts). */
@@ -79,6 +81,24 @@ export function devArgs({ once }) {
     '--typecheck',
     'disable',
   ];
+}
+
+/**
+ * Throws when the CLI would pick the shared `~/.convex/anonymous-convex-backend-state/anonymous-agent/`
+ * (CLI 1.46 selects it for `anonymous:anonymous-agent` when it exists): `push` would then push into
+ * that legacy deployment and `setup` would find no local deployment in `.convex-e2e/`. Fine once
+ * `.convex-e2e/` has its own local deployment config.
+ */
+export function assertNoSharedState({ homeDir = homedir(), projectDir = PROJECT_DIR } = {}) {
+  const shared = join(homeDir, ...SHARED_STATE_DIRNAME, DEPLOYMENT_NAME);
+  const own = join(projectDir, '.convex', 'local', 'default', 'config.json');
+  if (existsSync(shared) && !existsSync(own)) {
+    throw new Error(
+      `e2e-convex: refused: ${shared} exists (left by an older Convex CLI and shared by every checkout ` +
+        `on this machine), so the CLI would select it instead of creating a deployment in ${projectDir}. ` +
+        'Move or delete that directory (stop any backend using it first), then run again.',
+    );
+  }
 }
 
 /** Writes the CLI's project files into `dir` (idempotent). */
@@ -220,15 +240,22 @@ export async function runConvex(
     throw new Error('e2e-convex: only `env set` and `run` go through runConvex');
   }
   const target = await resolveTarget({ projectDir, expectedProjectDir, instanceName });
+  // One file per call: concurrent calls (parallel Playwright workers) never share or truncate one.
+  const targetFile = `target-${randomUUID()}.env`;
   writeFileSync(
-    join(projectDir, TARGET_FILE),
+    join(projectDir, targetFile),
     `CONVEX_SELF_HOSTED_URL=${target.url}\nCONVEX_SELF_HOSTED_ADMIN_KEY=${target.adminKey}\n`,
-    { mode: 0o600 },
+    { mode: 0o600, flag: 'wx' },
   );
-  const result = await spawnCli([...args, '--env-file', TARGET_FILE], {
-    cwd: projectDir,
-    env: convexCliEnv(env),
-  });
+  let result;
+  try {
+    result = await spawnCli([...args, '--env-file', targetFile], {
+      cwd: projectDir,
+      env: convexCliEnv(env),
+    });
+  } finally {
+    rmSync(join(projectDir, targetFile), { force: true });
+  }
   if (result.code !== 0) {
     const detail = result.stderr.split(target.adminKey).join('<admin key>').trim();
     throw new Error(`e2e-convex: convex ${args.slice(0, 2).join(' ')} failed:\n${detail}`);
@@ -276,6 +303,9 @@ export async function main(
     startCli: start = startCli,
     log = (line) => console.log(line),
     error = (line) => console.error(line),
+    homeDir = homedir(),
+    projectDir = PROJECT_DIR,
+    portsFree = assertPortsFree,
   } = {},
 ) {
   const [command, ...rest] = argv;
@@ -289,14 +319,15 @@ export async function main(
     switch (command) {
       case 'push':
       case 'serve': {
-        prepareProjectDir();
-        await assertPortsFree([BACKEND.cloudPort, BACKEND.sitePort]);
+        prepareProjectDir(projectDir);
+        assertNoSharedState({ homeDir, projectDir });
+        await portsFree([BACKEND.cloudPort, BACKEND.sitePort]);
         log(
           `e2e-convex: convex dev${command === 'push' ? ' --once' : ''} on the anonymous local ` +
             `backend ${BACKEND.backendVersion} at ${LOCAL_CONVEX_URL}`,
         );
         return await start(devArgs({ once: command === 'push' }), {
-          cwd: PROJECT_DIR,
+          cwd: projectDir,
           env: convexCliEnv(env),
         });
       }

@@ -1,13 +1,23 @@
 // Unit tests for scripts/e2e-convex.mjs and scripts/e2e.mjs (#59). Run with `npm run test:scripts`.
 // No Convex CLI or backend runs: each case uses a temporary project directory and stubs.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import {
   assertLocalTarget,
+  assertNoSharedState,
   assertPortsFree,
   BACKEND,
   convexCliEnv,
@@ -21,6 +31,7 @@ import {
   resolveTarget,
   ROOT,
   runConvex,
+  SHARED_STATE_DIRNAME,
 } from './e2e-convex.mjs';
 import { e2ePlan } from './e2e.mjs';
 
@@ -197,16 +208,76 @@ describe('runConvex', () => {
     assert.equal(out, '"ok"\n');
     assert.equal(calls.length, 1);
     const [{ args, options }] = calls;
-    assert.deepEqual(args, ['run', 'testing:ping', '--env-file', 'target.env']);
+    assert.deepEqual(args.slice(0, 3), ['run', 'testing:ping', '--env-file']);
+    assert.equal(args.length, 4);
+    assert.match(args[3], /^target-[0-9a-f-]+\.env$/);
     assert.equal(options.cwd, dir);
     assert.deepEqual(options.env, { PATH: '/bin', CONVEX_AGENT_MODE: 'anonymous' });
-    const targetFile = readFileSync(join(dir, 'target.env'), 'utf8');
-    assert.equal(
-      targetFile,
-      `CONVEX_SELF_HOSTED_URL=${LOCAL_CONVEX_URL}\nCONVEX_SELF_HOSTED_ADMIN_KEY=${ADMIN_KEY}\n`,
-    );
+    // The call's own target file existed while the CLI ran (see the parallel test), and is gone.
+    assert.equal(existsSync(join(dir, args[3])), false);
     // .env.local (a cloud deployment) is untouched.
     assert.equal(readFileSync(join(dir, '.env.local'), 'utf8'), CLOUD_ENV_LOCAL);
+  });
+
+  it('gives each call its own private target file, so parallel calls never race', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const expected = `CONVEX_SELF_HOSTED_URL=${LOCAL_CONVEX_URL}\nCONVEX_SELF_HOSTED_ADMIN_KEY=${ADMIN_KEY}\n`;
+    const seen = [];
+    let running = 0;
+    let peak = 0;
+    const spawnCli = async (args) => {
+      const file = join(dir, args[args.indexOf('--env-file') + 1]);
+      running += 1;
+      peak = Math.max(peak, running);
+      const before = readFileSync(file, 'utf8');
+      // Yield so every other call starts (and, with a shared file, rewrites or removes it).
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const after = readFileSync(file, 'utf8');
+      seen.push({ file, before, after, mode: statSync(file).mode & 0o777 });
+      running -= 1;
+      return { code: 0, stdout: '"ok"\n', stderr: '' };
+    };
+    const calls = Array.from({ length: 8 }, (_, index) =>
+      runConvex(['run', 'testing:ping', JSON.stringify({ index })], {
+        projectDir: dir,
+        expectedProjectDir: dir,
+        instanceName: async () => 'anonymous-agent',
+        spawnCli,
+        env: {},
+      }),
+    );
+    assert.deepEqual(await Promise.all(calls), Array(8).fill('"ok"\n'));
+    assert.equal(peak, 8, 'the calls overlapped');
+    assert.equal(new Set(seen.map((entry) => entry.file)).size, 8, 'one target file per call');
+    for (const entry of seen) {
+      assert.equal(entry.before, expected);
+      assert.equal(entry.after, expected);
+      assert.equal(entry.mode, 0o600);
+    }
+    assert.deepEqual(
+      readdirSync(dir).filter((name) => name.endsWith('.env')),
+      [],
+      'no target file is left behind',
+    );
+  });
+
+  it('removes the target file when the CLI fails, and does not leak the admin key', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const spawnCli = async () => ({ code: 1, stdout: '', stderr: `bad key ${ADMIN_KEY}\n` });
+    await assert.rejects(
+      runConvex(['run', 'testing:ping'], {
+        projectDir: dir,
+        expectedProjectDir: dir,
+        instanceName: async () => 'anonymous-agent',
+        spawnCli,
+        env: {},
+      }),
+      (failure) => !failure.message.includes(ADMIN_KEY) && /<admin key>/.test(failure.message),
+    );
+    assert.deepEqual(
+      readdirSync(dir).filter((name) => name.endsWith('.env')),
+      [],
+    );
   });
 
   it('never spawns the CLI when the target check refuses', async () => {
@@ -239,6 +310,46 @@ describe('runConvex', () => {
       /only `env set` and `run`/,
     );
     assert.equal(calls.length, 0);
+  });
+});
+
+describe('assertNoSharedState (the CLI would select the shared anonymous-agent state)', () => {
+  /** A temporary home with (or without) the shared state directory the CLI may select. */
+  function home({ shared }) {
+    const dir = mkdtempSync(join(tmpdir(), 'e2e-convex-home-'));
+    temps.push(dir);
+    if (shared) mkdirSync(join(dir, ...SHARED_STATE_DIRNAME, DEPLOYMENT_NAME), { recursive: true });
+    return dir;
+  }
+
+  it('names the legacy state under ~/.convex/anonymous-convex-backend-state', () => {
+    assert.deepEqual(SHARED_STATE_DIRNAME, ['.convex', 'anonymous-convex-backend-state']);
+  });
+
+  it('refuses when the shared directory exists and the e2e dir has no local deployment', () => {
+    const homeDir = home({ shared: true });
+    const dir = projectDir();
+    assert.throws(
+      () => assertNoSharedState({ homeDir, projectDir: dir }),
+      (failure) =>
+        /refused/.test(failure.message) &&
+        failure.message.includes(
+          join(homeDir, '.convex', 'anonymous-convex-backend-state', 'anonymous-agent'),
+        ),
+    );
+  });
+
+  it('accepts when the shared directory is absent', () => {
+    assert.doesNotThrow(() =>
+      assertNoSharedState({ homeDir: home({ shared: false }), projectDir: projectDir() }),
+    );
+  });
+
+  it('accepts when the e2e dir already has its own local deployment', () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    assert.doesNotThrow(() =>
+      assertNoSharedState({ homeDir: home({ shared: true }), projectDir: dir }),
+    );
   });
 });
 
@@ -314,6 +425,8 @@ describe('main with the backend port held by another process', () => {
         const errors = [];
         const code = await main([command], {
           env: {},
+          homeDir: mkdtempSync(join(tmpdir(), 'e2e-convex-home-')),
+          projectDir: projectDir(),
           startCli: async (...args) => {
             started.push(args);
             return 0;
@@ -329,6 +442,58 @@ describe('main with the backend port held by another process', () => {
       }
     });
   }
+});
+
+describe('main with shared anonymous-agent state in the home directory', () => {
+  for (const command of ['push', 'serve']) {
+    it(`${command} refuses, names the directory, and never starts the CLI`, async () => {
+      const homeDir = mkdtempSync(join(tmpdir(), 'e2e-convex-home-'));
+      temps.push(homeDir);
+      const shared = join(homeDir, '.convex', 'anonymous-convex-backend-state', 'anonymous-agent');
+      mkdirSync(shared, { recursive: true });
+      const started = [];
+      const errors = [];
+      const code = await main([command], {
+        env: {},
+        homeDir,
+        projectDir: projectDir(),
+        startCli: async (...args) => {
+          started.push(args);
+          return 0;
+        },
+        log: () => {},
+        error: (line) => errors.push(line),
+      });
+      assert.equal(code, 1);
+      assert.equal(started.length, 0);
+      assert.ok(errors.join('\n').includes(shared), errors.join('\n'));
+    });
+  }
+
+  it('push proceeds when the e2e dir already has its own local deployment', async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'e2e-convex-home-'));
+    temps.push(homeDir);
+    mkdirSync(join(homeDir, '.convex', 'anonymous-convex-backend-state', 'anonymous-agent'), {
+      recursive: true,
+    });
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const started = [];
+    const code = await main(['push'], {
+      env: {},
+      homeDir,
+      projectDir: dir,
+      startCli: async (args, options) => {
+        started.push({ args, options });
+        return 0;
+      },
+      log: () => {},
+      error: () => {},
+      portsFree: async () => {},
+    });
+    assert.equal(code, 0);
+    assert.equal(started.length, 1);
+    assert.equal(started[0].options.cwd, dir);
+  });
 });
 
 describe('e2ePlan (npm run e2e)', () => {

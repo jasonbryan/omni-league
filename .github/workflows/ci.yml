@@ -159,10 +159,20 @@ jobs:
         id: e2e-backend
         if: ${{ success() && steps.scope.outputs.app == 'true' }}
         run: node scripts/e2e-convex.mjs push
-      # Codegen drift (ADR 0009): committed convex/_generated must match what codegen just wrote.
+      # Codegen drift (ADR 0009): committed convex/_generated must match what codegen just wrote:
+      # no changed tracked file and no new untracked file.
       - name: convex codegen drift
         if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
-        run: git diff --exit-code convex/_generated
+        run: |
+          drift=0
+          git diff --exit-code convex/_generated || drift=1
+          untracked="$(git status --porcelain --untracked-files=all -- convex/_generated)"
+          if [ -n "$untracked" ]; then
+            echo "$untracked"
+            echo "::error::codegen wrote files that are not committed under convex/_generated"
+            drift=1
+          fi
+          exit "$drift"
       # Push again, development build with CONVEX_URL=http://127.0.0.1:3210, then the specs against
       # the local backend and `npm run serve:ssr` (scripts/e2e.mjs). Runs after a drift failure
       # too, so one run reports both.
