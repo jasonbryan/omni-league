@@ -169,6 +169,65 @@ test.describe('not-found page', () => {
     }
   });
 
+  // `setNotFoundStatus` copies the engine's URL comparison (src/app/core/not-found-status.ts). If
+  // the copy says "no redirect" where the engine redirects, the development build throws (500); if
+  // it says "redirect" where the engine renders, the not-found page goes out with 200 and the
+  // public Cache-Control. This corpus crosses the router's normalizations with route prefixes and
+  // query strings, so an `@angular/ssr` upgrade that moves either side fails here.
+  test('the not-found status agrees with the engine across normalized paths', async () => {
+    const prefixes = [UNKNOWN, '/organizations/nf-drift', '/app/nf-drift'];
+    const suffixes = [
+      '',
+      '/',
+      '//',
+      '///',
+      '/(y)',
+      '/(y)/',
+      '/)',
+      '/x/..',
+      '/index.html',
+      '//index.html',
+      '/(y)/index.html',
+      ';a=b',
+      ';a=b//',
+      '/%28y%29',
+      '(y)',
+      '()',
+      '/x//y',
+    ];
+    const notFoundH1 = new RegExp(NOT_FOUND_H1.source);
+    const failures: string[] = [];
+    for (const prefix of prefixes) {
+      for (const suffix of suffixes) {
+        for (const query of ['', '?token=A/B', '?q=(a)']) {
+          const path = `${prefix}${suffix}${query}`;
+          const response = await rawGet(path);
+          const notFound = notFoundH1.test(response.body);
+          if (response.status >= 500) failures.push(`${path}: ${response.status}`);
+          if (notFound && response.status !== 404) {
+            failures.push(`${path}: not-found page with ${response.status}`);
+          }
+          if (response.location === undefined) continue;
+          if (response.status < 300 || response.status >= 400) {
+            failures.push(`${path}: Location with ${response.status}`);
+          }
+          if (response.headers['cache-control'] !== 'no-store') {
+            failures.push(`${path}: Location with ${response.headers['cache-control']}`);
+          }
+          if (!/^\/(?![/\\])/.test(response.location)) {
+            failures.push(`${path}: Location ${response.location}`);
+            continue;
+          }
+          const target = await rawGet(response.location);
+          if (target.status !== 404 || !notFoundH1.test(target.body)) {
+            failures.push(`${path} -> ${response.location}: ${target.status}`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
   test('hydrates; keyboard: skip link, home link focus ring, Enter goes home; axe and landmarks', async ({
     page,
     consoleGuard,
