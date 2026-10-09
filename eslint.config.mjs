@@ -33,6 +33,7 @@ export default defineConfig([
     '.pnpm-store/',
     '**/.env*',
     '.convex/',
+    '.convex-e2e/',
     // Agent worktrees inside the checkout; flat config does not read .gitignore.
     '.claude/worktrees/',
   ]),

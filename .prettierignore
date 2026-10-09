@@ -24,6 +24,7 @@ node_modules/
 # Environment files and local Convex backend state
 .env*
 .convex/
+.convex-e2e/
 
 # Agent worktrees created inside the checkout (dev cycle)
 .claude/worktrees/

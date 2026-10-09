@@ -3,6 +3,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
+    "resolveJsonModule": true,
     "types": ["node"]
   },
   "include": ["*.ts", "*.mts", "e2e/**/*.ts"]
