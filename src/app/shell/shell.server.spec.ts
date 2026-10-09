@@ -50,7 +50,10 @@ describe('Shell server render', () => {
     const button = body.querySelector('button[aria-label="Open navigation"]');
     expect(button?.getAttribute('aria-expanded')).toBe('false');
     expect(button?.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(button?.hasAttribute('aria-controls')).toBe(false);
     expect(body.querySelector('[role="dialog"]')).toBeNull();
+    // The sheet is imported on the first press in the browser, never on the server.
+    expect(body.querySelector('app-shell-sheet, hlm-sheet')).toBeNull();
     expect(html).not.toContain('Close navigation');
 
     expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test?y=1#main');

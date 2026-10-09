@@ -2,7 +2,10 @@ import { type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { LOAD_PAGE, skipLinkHref } from './shell';
+import { buttonVariants } from '../ui/button';
+import { hlm } from '../ui/utils';
+import { skipLinkHref } from './shell';
+import { LOAD_PAGE } from './shell-sheet';
 import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
 async function render(
@@ -142,14 +145,33 @@ describe('Shell', () => {
       expect(button.getAttribute('aria-haspopup')).toBe('dialog');
       expect(button.getAttribute('aria-expanded')).toBe('false');
       expect(button.getAttribute('type')).toBe('button');
+      expect(button.hasAttribute('aria-controls')).toBe(false);
       expect(dialog()).toBeNull();
     });
 
-    it('sets no ARIA attribute on the sheet host itself', async () => {
+    // The button is plain markup, so it carries the helm button's classes itself, plus the shell's
+    // own offset and its hiding from 1024px.
+    it('styles the menu button as hlmBtn variant="ghost" size="icon-lg", hidden from 1024px', async () => {
       const harness = await render(SidebarTestPage);
-      const sheet = host(harness).querySelector('hlm-sheet');
-      expect(sheet).not.toBeNull();
-      expect(sheet?.getAttributeNames().filter((name) => name.startsWith('aria-'))).toEqual([]);
+      const expected = hlm(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), '-ms-1.5');
+      expect(menuButton(harness).className.split(/\s+/).sort()).toEqual(
+        [...expected.split(/\s+/), 'lg:hidden'].sort(),
+      );
+    });
+
+    it('creates no sheet until the menu button is pressed', async () => {
+      const harness = await render(SidebarTestPage);
+      expect(host(harness).querySelector('app-shell-sheet, hlm-sheet')).toBeNull();
+    });
+  });
+
+  describe('top bar scroll margin', () => {
+    // html has `scroll-padding-top: 4.5rem` (base.css); without the opposite margin, focusing a
+    // control in the sticky header scrolls the page by up to that much.
+    it('cancels the scroll padding on the header and everything in it', async () => {
+      const harness = await render(SidebarTestPage);
+      const classes = host(harness).querySelector('header')?.className.split(/\s+/);
+      expect(classes).toContain('[&,&_*]:-scroll-mt-18');
     });
   });
 
@@ -167,6 +189,9 @@ describe('Shell', () => {
       Element.prototype.scrollIntoView = () => undefined;
     });
     afterEach(() => {
+      // Destroys a sheet left open while the stubs are still in place: its scroll strategy calls
+      // window.scroll as it detaches.
+      TestBed.resetTestingModule();
       Reflect.deleteProperty(document.documentElement, 'scrollHeight');
       Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
       vi.restoreAllMocks();
@@ -177,9 +202,55 @@ describe('Shell', () => {
       const button = menuButton(harness);
       button.focus();
       button.click();
+      // The first press imports the sheet before it opens.
+      await vi.waitFor(() => {
+        expect(dialog()).not.toBeNull();
+      });
       await settle(harness);
       return harness;
     }
+
+    it('opens on the first press, once, however often the button is pressed while it loads', async () => {
+      const harness = await render(SidebarTestPage);
+      const button = menuButton(harness);
+      button.click();
+      button.click();
+      await vi.waitFor(() => {
+        expect(dialog()).not.toBeNull();
+      });
+      await settle(harness);
+      expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+      expect(host(harness).querySelectorAll('app-shell-sheet')).toHaveLength(1);
+    });
+
+    it('points aria-controls at the open dialog, and sets no ARIA attribute on the sheet hosts', async () => {
+      const harness = await open();
+      const id = dialog()?.id;
+      expect(id).toBeTruthy();
+      expect(menuButton(harness).getAttribute('aria-controls')).toBe(id);
+      for (const sheetHost of host(harness).querySelectorAll('app-shell-sheet, hlm-sheet')) {
+        expect(sheetHost.getAttributeNames().filter((name) => name.startsWith('aria-'))).toEqual(
+          [],
+        );
+      }
+    });
+
+    it('opens again after a close, with the same sheet', async () => {
+      const harness = await open();
+      dialog()?.querySelector<HTMLElement>('[aria-label="Close navigation"]')?.click();
+      await settle(harness);
+      expect(dialog()).toBeNull();
+      expect(menuButton(harness).hasAttribute('aria-controls')).toBe(false);
+
+      menuButton(harness).click();
+      await vi.waitFor(() => {
+        expect(dialog()).not.toBeNull();
+      });
+      await settle(harness);
+      expect(menuButton(harness).getAttribute('aria-expanded')).toBe('true');
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Close navigation');
+      expect(host(harness).querySelectorAll('app-shell-sheet')).toHaveLength(1);
+    });
 
     it('opens a modal dialog named "Navigation" with the sidebar inside and focus on Close', async () => {
       const harness = await open();

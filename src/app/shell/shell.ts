@@ -1,28 +1,23 @@
-import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  InjectionToken,
+  TemplateRef,
+  ViewContainerRef,
   computed,
   contentChild,
   inject,
+  inputBinding,
+  signal,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideMenu, lucideTrophy, lucideX } from '@ng-icons/lucide';
+import { lucideMenu, lucideTrophy } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
-import { HlmButton } from '../ui/button';
-import {
-  HlmSheet,
-  HlmSheetClose,
-  HlmSheetContent,
-  HlmSheetPortal,
-  HlmSheetTrigger,
-} from '../ui/sheet';
-import { SheetLinks } from './sheet-links';
+import type { ShellSheet } from './shell-sheet';
 import { ShellSidebar } from './shell-sidebar';
 
 /**
@@ -40,45 +35,20 @@ export function skipLinkHref(router: Router, url: string): string {
   return router.serializeUrl(tree).replace(/^[/\\]+/, '/');
 }
 
-/** Loads a URL as a full page load (`location.assign`); a token so unit tests can observe it. */
-export const LOAD_PAGE = new InjectionToken<(url: string) => void>('LOAD_PAGE', {
-  factory: () => {
-    const document = inject(DOCUMENT);
-    return (url) => {
-      document.location.assign(url);
-    };
-  },
-});
-
-function decodeFragment(fragment: string): string {
-  try {
-    return decodeURIComponent(fragment);
-  } catch {
-    return fragment;
-  }
-}
-
 /**
  * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar, the
  * page's sidebar when it supplies an `<ng-template appShellSidebar>` (a column from 1024px, a sheet
  * behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
  * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
+ *
+ * The menu button is plain markup, rendered on the server and hydrated as is. The sheet
+ * (`ShellSheet`: the helm sheet, the CDK dialog, and the helm class merging) is imported on the
+ * button's first press, so a page downloads none of that code until a visitor opens the sheet.
  */
 @Component({
   selector: 'app-shell',
-  imports: [
-    HlmButton,
-    HlmSheet,
-    HlmSheetClose,
-    HlmSheetContent,
-    HlmSheetPortal,
-    HlmSheetTrigger,
-    NgIcon,
-    NgTemplateOutlet,
-    RouterLink,
-    SheetLinks,
-  ],
-  providers: [provideIcons({ lucideMenu, lucideTrophy, lucideX })],
+  imports: [NgIcon, NgTemplateOutlet, RouterLink],
+  providers: [provideIcons({ lucideMenu, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <a
@@ -94,58 +64,21 @@ function decodeFragment(fragment: string): string {
       <header
         class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:-scroll-mt-18"
       >
-        @if (sidebar(); as sidebar) {
-          <hlm-sheet
-            class="flex lg:hidden"
-            [side]="'left'"
-            [aria-label]="'Navigation'"
-            [autoFocus]="'[aria-label=&quot;Close navigation&quot;]'"
-            [restoreFocus]="menuButton"
-            (closed)="onSheetClosed()"
+        @if (sidebar()) {
+          <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg" (shell.spec.ts checks
+               them), so the server-rendered button needs none of the helm button code. -->
+          <button
+            #menuButton
+            type="button"
+            class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground size-9 -ms-1.5 lg:hidden"
+            aria-label="Open navigation"
+            aria-haspopup="dialog"
+            [attr.aria-expanded]="sheetOpen()"
+            [attr.aria-controls]="sheetOpen() ? sheet()?.dialogId() : null"
+            (click)="openSheet()"
           >
-            <button
-              #menuButton
-              hlmBtn
-              hlmSheetTrigger
-              type="button"
-              variant="ghost"
-              size="icon-lg"
-              class="-ms-1.5"
-              aria-label="Open navigation"
-            >
-              <ng-icon name="lucideMenu" class="text-xl" aria-hidden="true" />
-            </button>
-            <hlm-sheet-content
-              *hlmSheetPortal
-              [showCloseButton]="false"
-              class="gap-0 bg-sidebar text-base text-sidebar-foreground shadow-xl data-[side=left]:w-72 data-[side=left]:max-w-[calc(100%-3rem)] data-[side=left]:border-r-0"
-            >
-              <div
-                class="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sidebar-border px-3"
-              >
-                <span class="flex items-center gap-2 rounded-md text-base font-semibold">
-                  <ng-container [ngTemplateOutlet]="brand" />
-                </span>
-                <button
-                  hlmBtn
-                  hlmSheetClose
-                  type="button"
-                  variant="ghost"
-                  size="icon-lg"
-                  aria-label="Close navigation"
-                >
-                  <ng-icon name="lucideX" class="text-xl" aria-hidden="true" />
-                </button>
-              </div>
-              <div
-                appSheetLinks
-                class="flex-1 overflow-y-auto px-3 py-5"
-                (linkActivated)="closeForLink($event)"
-              >
-                <ng-container [ngTemplateOutlet]="sidebar.template" />
-              </div>
-            </hlm-sheet-content>
-          </hlm-sheet>
+            <ng-icon name="lucideMenu" class="text-xl" aria-hidden="true" />
+          </button>
         }
         <a routerLink="/" class="flex items-center gap-2 rounded-md text-base font-semibold">
           <ng-container [ngTemplateOutlet]="brand" />
@@ -164,6 +97,7 @@ function decodeFragment(fragment: string): string {
         </main>
       </div>
     </div>
+    <ng-container #sheetHost />
 
     <ng-template #brand>
       <span
@@ -177,12 +111,12 @@ function decodeFragment(fragment: string): string {
 })
 export class Shell {
   private readonly router = inject(Router);
-  private readonly document = inject(DOCUMENT);
-  private readonly loadPage = inject(LOAD_PAGE);
 
   protected readonly sidebar = contentChild(ShellSidebar);
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
-  private readonly sheet = viewChild(HlmSheet);
+  private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
+  private readonly brand = viewChild.required<TemplateRef<unknown>>('brand');
+  private readonly sheetHost = viewChild.required('sheetHost', { read: ViewContainerRef });
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -193,8 +127,10 @@ export class Shell {
   );
   protected readonly skipHref = computed(() => skipLinkHref(this.router, this.url()));
 
-  /** The link activated inside the sheet, followed once the sheet has closed. */
-  private pendingLink: string | null = null;
+  /** The phone sheet, once the first press of the menu button has loaded it. */
+  protected readonly sheet = signal<ShellSheet | null>(null);
+  protected readonly sheetOpen = computed(() => this.sheet()?.isOpen() ?? false);
+  private sheetLoad: Promise<ShellSheet> | null = null;
 
   protected skipToMain(event: MouseEvent): void {
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
@@ -204,34 +140,30 @@ export class Shell {
     this.main().nativeElement.focus();
   }
 
-  protected closeForLink(href: string): void {
-    this.pendingLink = href;
-    this.sheet()?.close();
+  protected async openSheet(): Promise<void> {
+    this.sheetLoad ??= this.loadSheet().catch((error: unknown) => {
+      // A failed chunk load is tried again on the next press.
+      this.sheetLoad = null;
+      throw error;
+    });
+    (await this.sheetLoad).open();
   }
 
-  /**
-   * After the overlay detaches: the CDK block scroll strategy has restored the scroll position
-   * from before the sheet opened, and focus is back on the menu button, so the jump runs now.
-   */
-  protected onSheetClosed(): void {
-    const href = this.pendingLink;
-    this.pendingLink = null;
-    if (!href) return;
-    const url = new URL(href);
-    if (url.origin !== this.document.location.origin) {
-      this.loadPage(url.href);
-      return;
-    }
-    const fragment = decodeFragment(url.hash.slice(1));
-    // A URL the client router cannot reach (no matching route, a chunk that fails to load) loads
-    // as a full page, as the link itself would have.
-    this.router.navigateByUrl(url.pathname + url.search + url.hash).then(
-      () => {
-        if (fragment) this.document.getElementById(fragment)?.scrollIntoView();
-      },
-      () => {
-        this.loadPage(url.href);
-      },
-    );
+  private async loadSheet(): Promise<ShellSheet> {
+    const { ShellSheet } = await import('./shell-sheet');
+    const sidebar = this.sidebar();
+    const menuButton = this.menuButton()?.nativeElement;
+    if (!sidebar || !menuButton) throw new Error('app-shell: no sidebar for the sheet');
+    const ref = this.sheetHost().createComponent(ShellSheet, {
+      bindings: [
+        inputBinding('sidebar', () => this.sidebar()?.template ?? sidebar.template),
+        inputBinding('brand', this.brand),
+        inputBinding('returnFocus', () => menuButton),
+      ],
+    });
+    // Renders the helm sheet and registers its content template, which open() needs.
+    ref.changeDetectorRef.detectChanges();
+    this.sheet.set(ref.instance);
+    return ref.instance;
   }
 }
