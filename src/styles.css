@@ -7,10 +7,14 @@
 @import '@fontsource-variable/inter/wght.css';
 @import './styles/base.css';
 
+/* Specs name classes that must not appear (for example the button's removed focus classes), so
+   scanning them would put unused rules in the production CSS. */
+@source not './**/*.spec.ts';
+
 /* Angular's critical-CSS inliner (beasties) cannot resolve `var(--font-sans)`, so with base.css
    alone it inlines no Inter @font-face and adds no font preload. The literal family name lets it
    inline the Latin @font-face and preload that file in production builds (ADR 0007, "Fonts under
-   SSR"). The computed font stack is the same as `font-sans`. After base.css so it wins. */
+   SSR"). It resolves to the same font as `font-sans`. After base.css so it wins. */
 @layer base {
   body {
     font-family: 'Inter Variable', var(--font-sans);
