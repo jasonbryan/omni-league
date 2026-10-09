@@ -6,6 +6,7 @@ import { constants } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...extraArgs] = process.argv.slice(2);
@@ -76,6 +77,16 @@ if (url) {
   console.log('Convex URL: none');
 }
 
+// `noindex` on non-production Netlify builds (#15): the server define here, and `_headers` for
+// static files once the build succeeds (scripts/noindex.mjs). CONTEXT is public build metadata.
+const noindex = command === 'build' && noindexForContext(process.env.CONTEXT);
+if (command === 'build') {
+  console.log(
+    `noindex: ${noindex ? 'on' : 'off'} (Netlify CONTEXT ${process.env.CONTEXT || 'unset'})`,
+  );
+  defines.push(`--define=__NOINDEX__=${noindex}`);
+}
+
 // 5. Spawn the CLI through Node with an argv array: no shell, same quoting on every OS.
 const ngArgs = [command, ...defines, ...extraArgs];
 console.log(`Running: ng ${ngArgs.join(' ')}`);
@@ -95,5 +106,13 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 // itself with SIGTERM, build exits 127); otherwise use the signal that killed the child.
 child.on('exit', (code, signal) => {
   const terminatedBy = received ?? signal;
-  process.exit(terminatedBy ? 128 + constants.signals[terminatedBy] : (code ?? 0));
+  if (terminatedBy) process.exit(128 + constants.signals[terminatedBy]);
+  if (code !== 0 || !noindex) process.exit(code ?? 0);
+  writeNoindexHeaders(join(root, 'dist', 'omni-league', 'browser')).then(
+    () => {
+      console.log('noindex: wrote dist/omni-league/browser/_headers');
+      process.exit(0);
+    },
+    (error) => fail(`could not write the noindex _headers file: ${error.message}`),
+  );
 });

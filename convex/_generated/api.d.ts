@@ -9,6 +9,7 @@
  */
 
 import type * as health from "../health.js";
+import type * as lib_previewOrigin from "../lib/previewOrigin.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   health: typeof health;
+  "lib/previewOrigin": typeof lib_previewOrigin;
 }>;
 
 /**

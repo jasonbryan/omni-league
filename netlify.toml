@@ -1,19 +1,22 @@
-# Netlify build and deploy settings (ADR 0010 items 3 and 6). Inert until the owner links the
-# Netlify site in #15, which verifies it on a real deploy and adds the deploy environment check.
-# SSR runs as the edge function the plugin generates from src/server.ts (netlifyAppEngineHandler).
+# Netlify build and deploy settings (ADR 0010 items 3 and 6; setup and checks in
+# docs/process/hosting.md). SSR runs as the edge function the plugin generates from src/server.ts
+# (netlifyAppEngineHandler). Non-production builds are `noindex` (scripts/noindex.mjs, #15).
 
 [build]
   publish = "dist/omni-league/browser"
 
-# Deploy previews: one Convex preview deployment per PR, named pr-<number>.
+# Deploy previews: one Convex preview deployment per PR, named pr-<number>. The deploy environment
+# check runs after `npx convex deploy`, because pr-<number> does not exist before it.
 [context.deploy-preview]
-  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\""
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\" && node scripts/check-deploy-env.mjs preview --preview-name \"pr-$REVIEW_ID\""
 
 # Branch deploys: main only, the staging deploy, with the Convex preview deployment named main.
 [context.branch-deploy]
-  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\""
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\""
 
-# Production is not enabled until the production deploy issue adds `node scripts/check-deploy-env.mjs production` before `npx convex deploy` (#15, ADR 0010).
+# Production is not enabled until the production deploy issue adds the check BEFORE the deploy:
+# `npm ci && node scripts/check-deploy-env.mjs production && npx convex deploy ...` (#15, ADR 0010).
+# After the deploy would be too late: the functions would already be on the production backend.
 [context.production]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL"
 

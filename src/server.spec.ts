@@ -1,5 +1,5 @@
 import type { AngularAppEngine } from '@angular/ssr';
-import { netlifyAppEngineHandler, setAppEngineForTesting } from './server';
+import { netlifyAppEngineHandler, setAppEngineForTesting, setNoindexForTesting } from './server';
 
 // Error behaviour of the SSR entry (#37, carried over from #30 and #24 / PR #38). Every case calls
 // the exported `netlifyAppEngineHandler`, the function the Netlify edge function runs.
@@ -31,6 +31,7 @@ describe('netlifyAppEngineHandler', () => {
 
   afterEach(() => {
     setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
     vi.restoreAllMocks();
   });
 
@@ -190,5 +191,88 @@ describe('netlifyAppEngineHandler', () => {
     expect(response.status).toBe(404);
     expect(response.headers.get('Content-Type')).toMatch(/^text\/plain\b/);
     expect(await response.text()).toBe('Not found');
+  });
+});
+
+// `noindex` on non-production Netlify builds (#15, ADR 0010 item 6). The flag is the build-time
+// `__NOINDEX__` define set by scripts/ng-convex.mjs from Netlify's CONTEXT; the server entry reads no
+// environment at runtime.
+describe('netlifyAppEngineHandler X-Robots-Tag', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  it('is absent by default (a build without a non-production CONTEXT)', async () => {
+    useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(request('/does-not-exist'));
+
+    expect(response.headers.has('X-Robots-Tag')).toBe(false);
+  });
+
+  it('is noindex on a rendered page, keeping its status, headers, and body', async () => {
+    setNoindexForTesting(true);
+    useEngine(() =>
+      Promise.resolve(
+        new Response('<h1>Omni League</h1>', {
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            'Content-Type': 'text/html;charset=UTF-8',
+            'Cache-Control': 'public, max-age=0, s-maxage=60',
+          },
+        }),
+      ),
+    );
+
+    const response = await netlifyAppEngineHandler(request('/o/acme'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+    expect(response.headers.get('Content-Type')).toBe('text/html;charset=UTF-8');
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=0, s-maxage=60');
+    expect(await response.text()).toBe('<h1>Omni League</h1>');
+  });
+
+  it('replaces an X-Robots-Tag the route set', async () => {
+    setNoindexForTesting(true);
+    useEngine(() =>
+      Promise.resolve(new Response('ok', { headers: { 'X-Robots-Tag': 'index, follow' } })),
+    );
+
+    const response = await netlifyAppEngineHandler(request('/o/acme'));
+
+    expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+  });
+
+  it('is noindex on a redirect whose headers are immutable', async () => {
+    setNoindexForTesting(true);
+    useEngine(() => Promise.resolve(Response.redirect('http://localhost/o/acme', 302)));
+
+    const response = await netlifyAppEngineHandler(request('/o/old'));
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('http://localhost/o/acme');
+    expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+  });
+
+  it.each([
+    ['the plain 404', '/does-not-exist', () => Promise.resolve(null), 404],
+    ['the plain 400', '/%E0%A4%A', () => Promise.resolve(null), 400],
+    ['the plain 500', '/x', () => Promise.reject(new Error('render failed')), 500],
+  ] as const)('is noindex on %s', async (_, path, handle, status) => {
+    setNoindexForTesting(true);
+    useEngine(handle);
+
+    const response = await netlifyAppEngineHandler(request(path));
+
+    expect(response.status).toBe(status);
+    expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
   });
 });
