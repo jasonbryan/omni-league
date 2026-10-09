@@ -73,13 +73,13 @@ export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id
 /**
  * Inserts a league of `organizationId` at the named locations of that organization, with a slug
  * from its name that is unique within the organization (`name`, `name-2`, ...). Throws when a
- * location name is unknown.
+ * location name is unknown. Returns the new league's id and slug.
  */
 export async function insertLeague(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
   league: LeagueSeed,
-): Promise<Id<'leagues'>> {
+): Promise<{ leagueId: Id<'leagues'>; slug: string }> {
   const locationIds: Id<'locations'>[] = [];
   for (const name of league.locations) {
     const location = await ctx.db
@@ -96,13 +96,14 @@ export async function insertLeague(
     locationIds.push(location._id);
   }
   const slug = await uniqueLeagueSlug(ctx, organizationId, slugify(league.name));
-  return ctx.db.insert('leagues', {
+  const leagueId = await ctx.db.insert('leagues', {
     organizationId,
     name: league.name,
     slug,
     sport: league.sport,
     locationIds,
   });
+  return { leagueId, slug };
 }
 
 async function uniqueLeagueSlug(

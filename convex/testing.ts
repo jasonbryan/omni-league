@@ -74,10 +74,13 @@ export const seedLeague = internalMutation({
   },
 });
 
-/** Adds a league to the organization with `organizationSlug`, at its named locations (#60). */
+/**
+ * Adds a league to the organization with `organizationSlug`, at its named locations (#60), and
+ * returns the league's slug.
+ */
 export const addLeague = internalMutation({
   args: { organizationSlug: v.string(), ...leagueSeedValidator.fields },
-  returns: v.null(),
+  returns: v.object({ slug: v.string() }),
   handler: async (ctx, { organizationSlug, ...league }) => {
     assertTestDeployment();
     const organization = await ctx.db
@@ -87,7 +90,7 @@ export const addLeague = internalMutation({
     if (!organization) {
       throw new Error(`No organization has the slug ${JSON.stringify(organizationSlug)}`);
     }
-    await insertLeague(ctx, organization._id, league);
-    return null;
+    const { slug } = await insertLeague(ctx, organization._id, league);
+    return { slug };
   },
 });

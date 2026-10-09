@@ -154,7 +154,7 @@ describe('testing:addLeague', () => {
         sport: 'beachVolleyball',
         locations: ['Field One'],
       }),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ slug: 'league-c' });
 
     const page = await t.query(api.organizations.getPublicPage, { slug: 'e2e-org-a1b2' });
     expect(page?.leagues.map((league) => league.name)).toEqual([
