@@ -1,10 +1,9 @@
 // Not-found page (#23): the router `**` route, rendered on the server with status 404 inside the
 // app shell (top bar only). Each browser test does all its checks in one page load.
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
 import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { rawGet } from './support/raw-get';
 import { fetchRawHtml } from './support/raw-html';
 
 const UNKNOWN = '/this-page-does-not-exist';
@@ -12,28 +11,6 @@ const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidat
 const NOT_FOUND_H1 = /<h1\b[^>]*>\s*Page not found\s*<\/h1>/g;
 // The home link's text is "Go to the home page"; Angular may leave comment nodes beside it.
 const HOME_LINK = /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*Go to the home page\s*<\/a>/;
-
-/**
- * One GET with the request target exactly as given. Playwright's request API and `fetch` resolve
- * `//evil.com/x` as a protocol-relative URL (another host), so they cannot send it.
- */
-function rawGet(path: string): Promise<{ status: number; location: string | undefined }> {
-  const base = new URL(baseURL);
-  const send = base.protocol === 'https:' ? httpsRequest : httpRequest;
-  return new Promise((resolve, reject) => {
-    const req = send(
-      { hostname: base.hostname, port: base.port || undefined, path, method: 'GET' },
-      (res) => {
-        res.resume();
-        res.on('end', () => {
-          resolve({ status: res.statusCode ?? 0, location: res.headers.location });
-        });
-      },
-    );
-    req.on('error', reject);
-    req.end();
-  });
-}
 
 test.describe('not-found page', () => {
   test.use({ expectedDocumentStatus: 404 });
@@ -44,7 +21,10 @@ test.describe('not-found page', () => {
     for (const path of [UNKNOWN, '/app/x']) {
       const { status, headers, html } = await fetchRawHtml(request, path);
       expect(status, path).toBe(404);
-      expect(headers['cache-control'], path).toBe(PUBLIC_PAGE_CACHE);
+      // Netlify removes the spaces after the commas.
+      expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
       expect(headers['content-type'], path).toContain('text/html');
       expect(html.match(NOT_FOUND_H1), path).toHaveLength(1);
       expect(html.match(/<h1\b/g), path).toHaveLength(1);
@@ -73,7 +53,14 @@ test.describe('not-found page', () => {
       ['/x/..//evil.com', '/evil.com'],
     ]) {
       const response = await rawGet(path);
+      // Netlify sends `/\` on as `/%5C`, one path segment, which gets the rendered 404.
+      if (remoteBaseUrl && path.startsWith('/\\')) {
+        expect(response.status, path).toBe(404);
+        expect(response.body, path).toMatch(NOT_FOUND_H1);
+        continue;
+      }
       expect(response.status, path).toBe(301);
+      expect(response.headers['cache-control'], path).toBe('no-store');
       expect(response.location, path).toBe(location);
       expect(new URL(response.location ?? '', `${baseURL}${path}`).origin, path).toBe(
         new URL(baseURL).origin,

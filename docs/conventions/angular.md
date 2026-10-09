@@ -48,6 +48,11 @@ Server routes:
 
 - **Anonymous only.** Server renders never read cookies, the `Authorization` header, or any per-user state, and never call `setAuth`. Personalised content loads after hydration (`@defer` or a Client route).
 - **Cacheable.** Public Server routes set `headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' }`.
+- **Query strings and the CDN** (PR #90). Netlify's CDN stores these responses, and on PR #90's preview it ignored the query string when matching a stored one, so `/x?token=B` got the HTML rendered for `/x?token=A`. A query string can carry a one-time token (`?ott=`, ADR 0008), so:
+  - Server HTML never contains the raw query string, and never a value read from it unless the page needs it to render (a filter or a page number, never a token). The skip link drops the query on the server and the browser adds it back (`skipLinkHref` in `src/app/shell/shell.ts`).
+  - Every edge-function response sends `Netlify-Vary: query` (`src/server-cache.ts`), which puts the whole query string in the cache key. A route may set a narrower `Netlify-Vary` (`query=season|page`) in its `headers`; its HTML then depends on no other parameter.
+  - A redirect whose `Location` copies the query string is `Cache-Control: no-store` (`src/server-redirect.ts`).
+  - Each new server route adds a sample path to `e2e/cache-key.spec.ts`, which checks that no response holds the request's query string and that a request never gets the body or `Location` of one with another query string. Run it against the PR's preview as well (`E2E_BASE_URL=… npm run e2e -- e2e/cache-key.spec.ts`).
 - **Query args derive only from the route and URL** (params, query string), so server and browser compute the same args.
 - **SSR-safe code.** No `window`, `document`, `localStorage`, or `navigator` outside `afterNextRender`/`afterEveryRender`; no `isPlatformBrowser` branches in templates; no direct DOM manipulation. `ngSkipHydration` only on a browser-only widget's host, with a code comment and an issue link.
 - **Meta tags** are set with `Title` and `Meta` (`og:title`, `og:description`, `og:url`, `og:type`, `og:image` when one exists, `<link rel="canonical">`) from the same query results, during the server render.

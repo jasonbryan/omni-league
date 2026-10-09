@@ -101,6 +101,15 @@ describe('Shell', () => {
       });
     }
 
+    it('skipLinkHref without the query keeps the path and drops the query and fragment', () => {
+      TestBed.configureTestingModule({ providers: [provideRouter([])] });
+      const router = TestBed.inject(Router);
+      expect(skipLinkHref(router, '/organizations/x?ott=SECRET&y=1#top', false)).toBe(
+        '/organizations/x#main',
+      );
+      expect(skipLinkHref(router, '/(//evil.com)?ott=SECRET', false)).toBe('/evil.com#main');
+    });
+
     it('follows the URL after a navigation', async () => {
       const harness = await render(PlainTestPage, '/a');
       expect(skipLink(harness).getAttribute('href')).toBe('/a#main');

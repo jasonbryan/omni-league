@@ -1,4 +1,6 @@
 import type { AngularAppEngine } from '@angular/ssr';
+import type { Route } from '@angular/router';
+import { routes } from './app/app.routes';
 import { netlifyAppEngineHandler, setAppEngineForTesting, setNoindexForTesting } from './server';
 
 // Error behaviour of the SSR entry (#37, carried over from #30 and #24 / PR #38). Every case calls
@@ -35,13 +37,24 @@ describe('netlifyAppEngineHandler', () => {
     vi.restoreAllMocks();
   });
 
-  it('passes the engine response through unchanged', async () => {
-    const page = new Response('<h1>Omni League</h1>', { status: 200 });
+  it('passes the engine response through, adding only Netlify-Vary: query', async () => {
+    const page = new Response('<h1>Omni League</h1>', {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public' },
+    });
     const engine = useEngine(() => Promise.resolve(page));
 
     const response = await netlifyAppEngineHandler(request('/o/acme?q=1'));
 
-    expect(response).toBe(page);
+    expect(response.status).toBe(200);
+    expect(response.statusText).toBe('OK');
+    expect([...response.headers]).toEqual([
+      ['cache-control', 'public'],
+      ['content-type', 'text/html;charset=UTF-8'],
+      ['netlify-vary', 'query'],
+    ]);
+    expect(await response.text()).toBe('<h1>Omni League</h1>');
     expect(engine.handle).toHaveBeenCalledTimes(1);
   });
 
@@ -233,6 +246,8 @@ describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
     expect(response.status).toBe(301);
     expect(response.headers.get('Location')).toBe(location);
     expect(resolvedLocation(response, path).origin).toBe('http://localhost');
+    // The Location carries the request's query string, so no shared cache may store it.
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(await response.text()).toBe('');
     expect(engine.handle).not.toHaveBeenCalled();
   });
@@ -240,13 +255,16 @@ describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
   it.each(['/a//b', '/evil.com', '/%2F%2Fevil.com', '/%5Cevil.com', '/x?next=//evil.com'])(
     'hands %s to the engine as it is (its path has one leading slash)',
     async (path) => {
-      const page = new Response('<h1>Page not found</h1>', { status: 404 });
-      const engine = useEngine(() => Promise.resolve(page));
+      const engine = useEngine(() =>
+        Promise.resolve(new Response('<h1>Page not found</h1>', { status: 404 })),
+      );
 
       const response = await netlifyAppEngineHandler(request(path));
 
-      expect(response).toBe(page);
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe('<h1>Page not found</h1>');
       expect(engine.handle).toHaveBeenCalledTimes(1);
+      expect(new URL(engine.handle.mock.calls[0][0].url).pathname).toBe(path.split('?')[0]);
     },
   );
 
@@ -384,5 +402,154 @@ describe('netlifyAppEngineHandler X-Robots-Tag', () => {
 
     expect(response.status).toBe(status);
     expect(response.headers.get('X-Robots-Tag')).toBe('noindex');
+  });
+});
+
+// Netlify's CDN stores an edge-function response whose Cache-Control allows it, and on PR #90's
+// preview it keyed the stored response by path alone: `/x?token=B` got the HTML rendered for
+// `/x?token=A`, and `//x` got a 301 whose Location held another visitor's query string. Every
+// response from the handler therefore varies the cache key by the whole query string, and the
+// redirect, whose Location copies the query string, is never stored.
+describe('netlifyAppEngineHandler cache key', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    setNoindexForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+
+  it.each([
+    [
+      'a cacheable rendered page',
+      '/o/acme?ott=SECRET',
+      () =>
+        Promise.resolve(
+          new Response('<h1>Page not found</h1>', {
+            status: 404,
+            headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+          }),
+        ),
+      404,
+    ],
+    [
+      'an engine redirect with immutable headers',
+      '/o/old?ott=SECRET',
+      () => Promise.resolve(Response.redirect('http://localhost/o/acme?ott=SECRET', 302)),
+      302,
+    ],
+    ['the plain 404', '/does-not-exist?ott=SECRET', () => Promise.resolve(null), 404],
+    ['the plain 400', '/%E0%A4%A?ott=SECRET', () => Promise.resolve(null), 400],
+    ['the plain 500', '/x?ott=SECRET', () => Promise.reject(new Error('render failed')), 500],
+    ['the // redirect', '//x?ott=SECRET', () => Promise.resolve(null), 301],
+    ['an unroutable path', '/(//evil.com)?ott=SECRET', () => Promise.resolve(null), 404],
+  ] as const)('%s carries Netlify-Vary: query', async (_, path, handle, status) => {
+    for (const flag of [false, true]) {
+      setNoindexForTesting(flag);
+      useEngine(handle);
+
+      const response = await netlifyAppEngineHandler(new Request(`http://localhost${path}`));
+
+      expect(response.status).toBe(status);
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+    }
+  });
+
+  it('keeps a Netlify-Vary the route set', async () => {
+    useEngine(() =>
+      Promise.resolve(new Response('ok', { headers: { 'Netlify-Vary': 'query=season' } })),
+    );
+
+    const response = await netlifyAppEngineHandler(request('/o/acme?season=2'));
+
+    expect(response.headers.get('Netlify-Vary')).toBe('query=season');
+  });
+
+  it('the // redirect is no-store, also on a non-production build', async () => {
+    setNoindexForTesting(true);
+    useEngine(() => Promise.resolve(null));
+
+    const response = await netlifyAppEngineHandler(request('//x?token=A'));
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('Location')).toBe('/x?token=A');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+});
+
+// A path with one leading slash that the router still reads as `//...` (`/(//evil.com)` is an empty
+// first segment), as a named-outlet route (the app has no named `<router-outlet>`), or cannot parse
+// at all can never render as itself. Angular would log NG05702 with a stack, or warn NG04018 and
+// render `/`, on every such request. The handler answers the plain 404 without calling the engine.
+describe('netlifyAppEngineHandler, a path the router cannot render', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    setAppEngineForTesting(undefined);
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    '/(//evil.com)',
+    '/(//evil.com)?q=1',
+    '/(//x)/y',
+    '/(//)',
+    '/(//(evil.com:////',
+    '/(a:b)',
+    '/x/(a:b//c:d)',
+    '/a(b',
+    '/;a=b//x',
+  ])('answers %s with the plain 404 without calling the engine', async (path) => {
+    const engine = useEngine(() => Promise.resolve(new Response('ok')));
+
+    const response = await netlifyAppEngineHandler(request(path));
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe('Not found');
+    expect(response.headers.has('Cache-Control')).toBe(false);
+    expect(engine.handle).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/',
+    '/x',
+    '/x/y',
+    '/x?q=(//evil.com)',
+    '/x(//evil.com)',
+    '/x(y)',
+    '/(x)',
+    '/x/(y)',
+    '/(/evil.com)',
+    '/x/(//y)',
+    '/x%28y%29',
+    '/%28%2F%2Fevil.com%29',
+    '/a(',
+    '/a)',
+  ])(
+    'hands %s to the engine (the router reads one leading slash and only the primary outlet)',
+    async (path) => {
+      const engine = useEngine(() => Promise.resolve(new Response('ok')));
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response.status).toBe(200);
+      expect(engine.handle).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('holds only while no route names an outlet', () => {
+    const outlets = (list: readonly Route[]): string[] =>
+      list.flatMap((route) => [
+        ...(route.outlet ? [route.outlet] : []),
+        ...outlets(route.children ?? []),
+      ]);
+    expect(outlets(routes)).toEqual([]);
   });
 });

@@ -7,7 +7,8 @@
  * Such a path gets a permanent redirect to the same path and query string with one leading slash,
  * where the router renders the page or the not-found view. The `Location` is relative and starts
  * with exactly one `/` followed by neither `/` nor `\`, so a browser resolves it on this site: it
- * is not an open redirect (`//evil.com/x` goes to `/evil.com/x` here, never to `evil.com`).
+ * is not an open redirect (`//evil.com/x` goes to `/evil.com/x` here, never to `evil.com`). It is
+ * `no-store`, because it carries the request's query string (PR #90).
  *
  * Web-API-only: bundled into the Netlify edge function (ESLint enforces it for `src/server*.ts`).
  */
@@ -18,5 +19,8 @@ const LEADING_SLASHES = /^[/\\]+/;
 export function leadingSlashesRedirect(url: URL): Response | null {
   if (!/^[/\\]{2}/.test(url.pathname)) return null;
   const location = url.pathname.replace(LEADING_SLASHES, '/') + url.search;
-  return new Response(null, { status: 301, headers: { Location: location } });
+  return new Response(null, {
+    status: 301,
+    headers: { Location: location, 'Cache-Control': 'no-store' },
+  });
 }

@@ -32,7 +32,7 @@ function render(): Promise<string> {
   return renderApplication(bootstrap, {
     document:
       '<!doctype html><html><head><base href="/"></head><body><app-root></app-root></body></html>',
-    url: 'http://localhost/organizations/test?y=1',
+    url: 'http://localhost/organizations/test?ott=SECRET&y=1',
     allowedHosts: ['localhost'],
   });
 }
@@ -56,6 +56,10 @@ describe('Shell server render', () => {
     expect(body.querySelector('app-shell-sheet, hlm-sheet')).toBeNull();
     expect(html).not.toContain('Close navigation');
 
-    expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test?y=1#main');
+    // The server HTML never holds the query string (PR #90): the CDN may store it, and a query
+    // string can carry a one-time token. The browser adds the query after hydration.
+    expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test#main');
+    expect(html).not.toContain('SECRET');
+    expect(html).not.toContain('y=1');
   });
 });

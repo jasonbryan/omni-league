@@ -1,10 +1,11 @@
-import { NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet, isPlatformServer } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
   InjectionToken,
+  PLATFORM_ID,
   TemplateRef,
   ViewContainerRef,
   computed,
@@ -30,10 +31,15 @@ import { ShellSidebar } from './shell-sidebar';
  * route still serializes with a leading `//` (`/(//evil.com)` gives `//evil.com`, which is also
  * `router.url` for that request). So leading slashes and backslashes, which a browser reads as the
  * start of another host, collapse to one slash.
+ *
+ * With `withQuery` false the query string is dropped. The server render does that: Netlify's CDN
+ * may store the HTML of a public page, and a query string can carry a one-time token (ADR 0008),
+ * so server HTML never holds it (PR #90; Angular conventions, Rendering).
  */
-export function skipLinkHref(router: Router, url: string): string {
+export function skipLinkHref(router: Router, url: string, withQuery = true): string {
   const tree = router.parseUrl(url);
   tree.fragment = 'main';
+  if (!withQuery) tree.queryParams = {};
   return router.serializeUrl(tree).replace(/^[/\\]+/, '/');
 }
 
@@ -138,7 +144,12 @@ export class Shell {
     ),
     { initialValue: this.router.url },
   );
-  protected readonly skipHref = computed(() => skipLinkHref(this.router, this.url()));
+  // The server leaves the query string out of the HTML (see skipLinkHref); the browser puts it
+  // back on hydration. Before hydration the link reloads the page without the query string.
+  private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
+  protected readonly skipHref = computed(() =>
+    skipLinkHref(this.router, this.url(), !this.onServer),
+  );
 
   /** The phone sheet, once the first press of the menu button has loaded it. */
   protected readonly sheet = signal<ShellSheet | null>(null);
