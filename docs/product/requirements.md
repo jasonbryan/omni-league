@@ -116,6 +116,19 @@ Owner answer, 2026-10-09 (chat): "Yes, org is invoiced."
 
 How the fee is collected and calculated (Connect account type, charge type, the greater-of calculation, and how the organization's connected account is billed when no player payment carries the fee) is decided in [ADR 0012](../decisions/0012-stripe-connect.md) (#57).
 
+## Installable app (PWA)
+
+Owner's words, 2026-10-09 (chat): "I would like to add that the app should be a PWA as well, so i don't have to create a separate mobile application".
+
+The web app is also a progressive web app (**PWA**), so no separate mobile app is built. The owner chose this launch scope the same day (chat):
+
+- **Installable.** Users can install the app to the home screen on iPhone, Android, and desktop. It has its own icon and opens in its own window, without the browser's address bar (standalone display).
+- **Works on a weak signal.** The app shell and recently viewed public pages, such as schedules and standings, load offline or on poor field wifi, with a clear note that the user is offline. Changes, such as registering or reporting a score, need a connection.
+- **Push notifications:** game reminders, schedule changes, and score updates. On iPhone and iPad they work only after the app is installed to the Home Screen (an Apple limit).
+- **Not chosen: offline score entry.** A score cannot be entered offline to be sent later.
+
+Who receives each notification, when reminders are sent, and whether users choose per kind are open (#85). The technology is decided in the `gate:technology` proposal for #79.
+
 ## Future (out of scope)
 
 - **Player Pro:** a planned paid subscription for players to track their personal stats across leagues (owner direction, 2026-10-07). Out of scope until the owner raises it; it is why results keep per-player stat lines.
@@ -126,6 +139,7 @@ How the fee is collected and calculated (Connect account type, charge type, the 
 - Backend: Convex.
 - Payments: Stripe.
 - Version control, issues, and PRs: GitHub.
+- Installable progressive web app, instead of a separate mobile app (see Installable app (PWA)).
 
 ## Constraints
 
@@ -150,5 +164,6 @@ Questions still open for the owner. The planner records them as `status:blocked`
 4. **Per-player floor:** the minimum fee per roster entry, in dollars.
 5. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
 6. **Fee on refunds and lost disputes:** whether the platform returns the application fee when a payment is refunded or a dispute is lost.
+7. **Push notifications (#85):** who receives each kind, when game reminders are sent, and whether users choose per kind.
 
 Features beyond the above are not yet specified.
