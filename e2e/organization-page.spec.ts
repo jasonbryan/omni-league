@@ -206,6 +206,16 @@ test.describe('organization page in the browser', () => {
     await expect(nav).toBeVisible();
     await expect(menuButton).toBeHidden();
     expect((await sidebarColumn.boundingBox())?.width).toBe(256);
+    // The league and location icons are muted, as in the mockup: the colour utility on <ng-icon>
+    // wins over ng-icon's own layer (src/styles.css). The eyebrow above the h1 is muted too.
+    const muted = await page
+      .getByRole('main')
+      .getByText('Organization', { exact: true })
+      .evaluate((el) => getComputedStyle(el).color);
+    for (const group of ['Leagues', 'Locations']) {
+      const icon = nav.locator(`ul[aria-label="${group}"] ng-icon`).first();
+      expect(await icon.evaluate((el) => getComputedStyle(el).color), group).toBe(muted);
+    }
 
     await expectAccessible(page, {
       expectedOrder: [
