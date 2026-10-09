@@ -4,6 +4,12 @@
 import type { GenericDatabaseWriter, GenericDataModel } from 'convex/server';
 import { type GenericId, v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
+import {
+  insertLeague,
+  insertTenant,
+  leagueSeedValidator,
+  tenantValidator,
+} from './lib/tenantWrites';
 import { assertTestDeployment } from './lib/testOnly';
 import schema from './schema';
 
@@ -49,5 +55,39 @@ export const reset = internalMutation({
       files++;
     }
     return { documents, scheduledFunctions, files };
+  },
+});
+
+/**
+ * Creates the calling test's own tenant (ADR 0005, per-test tenant fixture): an organization with
+ * the unique name and slug the test chose, its locations, and its leagues. Throws, writing nothing,
+ * when the slug is malformed or taken or a league names a location the tenant does not have.
+ * Tests assert only on their own tenant's data, so no reset runs between tests.
+ */
+export const seedLeague = internalMutation({
+  args: tenantValidator,
+  returns: v.object({ slug: v.string() }),
+  handler: async (ctx, tenant) => {
+    assertTestDeployment();
+    await insertTenant(ctx, tenant);
+    return { slug: tenant.organization.slug };
+  },
+});
+
+/** Adds a league to the organization with `organizationSlug`, at its named locations (#60). */
+export const addLeague = internalMutation({
+  args: { organizationSlug: v.string(), ...leagueSeedValidator.fields },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, ...league }) => {
+    assertTestDeployment();
+    const organization = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', organizationSlug))
+      .unique();
+    if (!organization) {
+      throw new Error(`No organization has the slug ${JSON.stringify(organizationSlug)}`);
+    }
+    await insertLeague(ctx, organization._id, league);
+    return null;
   },
 });
