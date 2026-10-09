@@ -47,6 +47,15 @@ Every preview deployment (`pr-<n>` and staging `main`) gets these Convex default
 
 **Google sign-in is unavailable on previews.** Each preview's `*.convex.site` callback URL is new, and Google refuses wildcard redirect URIs. Previews offer email + password only.
 
+## Demo data
+
+Every new preview deployment (`pr-<n>`, and staging `main`) gets demo data: `npx convex deploy ... --preview-run seed:demo` in `netlify.toml`'s `deploy-preview` and `branch-deploy` contexts runs the internal mutation `seed:demo` (`convex/seed.ts`) after the push (#60). It creates the organizations of `design/mockups/60-organization-page.html`:
+
+- `/organizations/gulf-coast-sport-social`: three locations and five leagues;
+- `/organizations/port-aransas-beach-volleyball-club`: no locations and no leagues.
+
+It writes nothing when any organization already exists. Convex ignores `--preview-run` on a production deploy, and the production context never passes it (`scripts/netlify-toml.test.mjs`), so production gets no demo data; `seed:demo` is deployed there only as an internal function, which no client can call.
+
 ## Deploy environment check
 
 `scripts/check-deploy-env.mjs` fails the Netlify build, so nothing is published, when a Convex deployment has the wrong variables. It reads variable names only (`npx convex env list --names-only`), plus the value of `AUTH_EMAIL_DISABLED` in preview mode, which it compares in memory. It never prints a value, and it prints the name of the deployment it checked.
