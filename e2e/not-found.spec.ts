@@ -118,6 +118,35 @@ test.describe('not-found page', () => {
     }
   });
 
+  // The router normalizes these paths (`/x//` to `/x/`, `/x/(y)` to `/x`), so the engine answers
+  // with a redirect, and it takes the status the not-found view set: production sends 404 with a
+  // Location and an empty body (the browser shows its own error page), and the development build
+  // throws "Invalid redirect status code: 404" (500). An unknown path must still end on the
+  // not-found page: either directly, or through a redirect that no shared cache stores (its
+  // Location carries the query string).
+  test('an unknown path the router normalizes still ends on the not-found page', async () => {
+    for (const path of [
+      `${UNKNOWN}//`,
+      `${UNKNOWN}//?ott=SECRET`,
+      '/organizations/x//',
+      '/organizations/(x)',
+      '/app/x//',
+    ]) {
+      const response = await rawGet(path);
+      expect(response.status, path).toBeLessThan(500);
+      if (response.status >= 300 && response.status < 400) {
+        expect(response.headers['cache-control'], path).toBe('no-store');
+        expect(response.location, path).toMatch(/^\/(?![/\\])/);
+        const target = await rawGet(response.location ?? '');
+        expect(target.status, `${path} -> ${response.location}`).toBe(404);
+        expect(target.body, `${path} -> ${response.location}`).toMatch(NOT_FOUND_H1);
+      } else {
+        expect(response.status, path).toBe(404);
+        expect(response.body, path).toMatch(NOT_FOUND_H1);
+      }
+    }
+  });
+
   test('hydrates; keyboard: skip link, home link focus ring, Enter goes home; axe and landmarks', async ({
     page,
     consoleGuard,
