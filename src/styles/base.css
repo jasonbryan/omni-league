@@ -1,0 +1,22 @@
+/* Base layer shared by src/styles.css and design/mockup-kit/mockup-kit.css (#61), as approved in
+   design/mockups/61-token-sheet.html ("Base styles"). Import it after tokens.css and brain's
+   hlm-tailwind-preset.css, which define the utilities used here.
+
+   Focus: a solid 2px --ring outline replaces helm's translucent halo (2.25:1, under the 3:1 of
+   WCAG 1.4.11). A component must not remove it with `outline-none`.
+   Scroll offset: 4.5rem keeps anchor targets and focused elements below the sticky 56px top bar
+   (WCAG 2.4.11). */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-padding-top: 4.5rem;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}

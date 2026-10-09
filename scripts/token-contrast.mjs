@@ -14,8 +14,9 @@ const TEXT = 4.5; // WCAG 1.4.3, text
 const UI = 3; // WCAG 1.4.11, user interface components
 
 /**
- * Pairs the issue requires. `--border` is not listed: it marks decorative separators and card
- * edges, which 1.4.11 does not cover. A control bounded only by `--border` must use `--input`.
+ * Pairs the issue requires. `--border` and `--sidebar-border` are not listed: they mark decorative
+ * separators and card edges, which 1.4.11 does not cover. A control bounded only by `--border`
+ * must use `--input`.
  * `optional` pairs are skipped when the foreground token is not defined.
  */
 export const PAIRS = [
@@ -31,6 +32,10 @@ export const PAIRS = [
   { fg: '--ring', bg: '--background', min: UI },
   { fg: '--input', bg: '--background', min: UI },
   { fg: '--primary', bg: '--background', min: UI },
+  { fg: '--sidebar-foreground', bg: '--sidebar', min: TEXT },
+  { fg: '--sidebar-primary-foreground', bg: '--sidebar-primary', min: TEXT },
+  { fg: '--sidebar-accent-foreground', bg: '--sidebar-accent', min: TEXT },
+  { fg: '--sidebar-ring', bg: '--sidebar', min: UI },
 ];
 
 /** Custom properties declared in `:root` blocks, as a Map of name to the raw value. */
