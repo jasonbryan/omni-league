@@ -33,8 +33,10 @@
               "allowedHosts": ["localhost", "127.0.0.1"]
             },
             "ssr": {
-              "entry": "src/server.ts"
+              "entry": "src/server.ts",
+              "platform": "neutral"
             },
+            "externalDependencies": ["node:process"],
             "define": {
               "__CONVEX_URL__": "null",
               "__CONVEX_SITE_URL__": "null",

@@ -6,6 +6,7 @@ import { constants } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { checkServerBundle } from './edge-bundle.mjs';
 import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -107,12 +108,37 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 child.on('exit', (code, signal) => {
   const terminatedBy = received ?? signal;
   if (terminatedBy) process.exit(128 + constants.signals[terminatedBy]);
-  if (code !== 0 || !noindex) process.exit(code ?? 0);
-  writeNoindexHeaders(join(root, 'dist', 'omni-league', 'browser')).then(
-    () => {
-      console.log('noindex: wrote dist/omni-league/browser/_headers');
-      process.exit(0);
-    },
-    (error) => fail(`could not write the noindex _headers file: ${error.message}`),
+  if (code !== 0 || command !== 'build') process.exit(code ?? 0);
+  afterBuild().then(
+    () => process.exit(0),
+    (error) => fail(error.message),
   );
 });
+
+/**
+ * After a successful build: the edge-safety check of the server bundle (scripts/edge-bundle.mjs),
+ * then the noindex `_headers` file. A failed check fails the build, so Netlify publishes nothing.
+ */
+async function afterBuild() {
+  const serverDir = join(root, 'dist', 'omni-league', 'server');
+  const problems = await checkServerBundle(serverDir);
+  for (const { file, problem } of problems) {
+    console.error(`edge-bundle: FAIL dist/omni-league/server/${file}: ${problem}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `${problems.length} problem(s) in the server bundle; Netlify Edge Functions refuse ` +
+        `filesystem access (scripts/edge-bundle.mjs)`,
+    );
+  }
+  console.log('edge-bundle: PASS (no filesystem access in dist/omni-league/server)');
+  if (!noindex) return;
+  try {
+    await writeNoindexHeaders(join(root, 'dist', 'omni-league', 'browser'));
+  } catch (error) {
+    throw new Error(`could not write the noindex _headers file: ${error.message}`, {
+      cause: error,
+    });
+  }
+  console.log('noindex: wrote dist/omni-league/browser/_headers');
+}
