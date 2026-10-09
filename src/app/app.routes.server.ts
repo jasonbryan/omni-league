@@ -13,6 +13,13 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=86400' },
   },
   {
+    // ADR 0006: a public page that reads Convex data, anonymous and cacheable. A failed query
+    // replaces the Cache-Control with no-store (src/app/core/server-error-status.ts, #60).
+    path: 'organizations/:orgSlug',
+    renderMode: RenderMode.Server,
+    headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
+  },
+  {
     path: '**',
     renderMode: RenderMode.Server, // public pages and not-found (the view sets status 404, #23)
     // ADR 0006 "Cacheable": the not-found render is anonymous and the same for every visitor.
