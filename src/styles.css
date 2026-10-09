@@ -1,3 +1,9 @@
+/* @ng-icons/core sets an icon's `color: var(--ng-icon__color, currentColor)` in `@layer ng-icon`,
+   which it declares when the first icon renders. A layer declared later wins, so that rule would
+   beat Tailwind's utilities and ignore a colour class on an <ng-icon>. Declared first, it loses to
+   them, as in the mockup kit (#60). */
+@layer ng-icon;
+
 /* Global styles (ADR 0007, "Token mechanism"). `source('.')` scans src/ only, so classes that
    appear only in a mockup stay out of production CSS. base.css is shared with the mockup kit
    (design/mockup-kit/mockup-kit.css), so the app and the mockups get one copy of the base layer. */

@@ -126,7 +126,12 @@ describe('testing:reset', () => {
 describe('convex/testing.ts exports', () => {
   test('every export is a registered internal function, so no client can call it', () => {
     const exports = Object.entries(testing);
-    expect(exports.map(([name]) => name).sort()).toEqual(['ping', 'reset']);
+    expect(exports.map(([name]) => name).sort()).toEqual([
+      'addLeague',
+      'ping',
+      'reset',
+      'seedLeague',
+    ]);
     for (const [name, fn] of exports) {
       // The markers `internalQuery`/`internalMutation`/`internalAction` set (convex/server).
       const markers = fn as Partial<

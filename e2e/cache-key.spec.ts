@@ -11,7 +11,12 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 
 /** Paths the edge function answers (server and client routes), one per route kind. */
-const EDGE_PATHS = ['/this-page-does-not-exist', '/app/x', '/app'];
+const EDGE_PATHS = [
+  '/this-page-does-not-exist',
+  '/app/x',
+  '/app',
+  '/organizations/cache-key-sample',
+];
 /** Prerendered pages: static files, the same bytes for every request. */
 const STATIC_PATHS = ['/'];
 
@@ -42,7 +47,7 @@ test.describe('query strings and the CDN', () => {
   test('a request never gets the body or Location of a request with another query string', async () => {
     const unique = `/cache-key-${randomUUID()}`;
     const [a, b] = [canary(), canary()];
-    for (const path of [unique, `/app${unique}`]) {
+    for (const path of [unique, `/app${unique}`, `/organizations${unique}`]) {
       const first = await rawGet(`${path}?token=${a}`);
       expect(sharedCacheable(first.headers['cache-control']), path).toBe(true);
       await rawGet(`${path}?token=${a}`);

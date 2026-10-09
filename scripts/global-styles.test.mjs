@@ -79,6 +79,17 @@ describe('the two stylesheets that import the base file', () => {
     assert.match(css, /@import\s+'@spartan-ng\/brain\/hlm-tailwind-preset\.css'\s*;/);
     assert.match(css, /@import\s+'@fontsource-variable\/inter\/wght\.css'\s*;/);
   });
+
+  // @ng-icons/core puts its host `color: var(--ng-icon__color, currentColor)` in `@layer ng-icon`,
+  // and a layer declared later wins. Declared before Tailwind's layers, a colour utility on an
+  // <ng-icon> wins over it, as in the mockup kit (#60).
+  it('src/styles.css declares the ng-icon layer first, before Tailwind declares its layers', async () => {
+    const css = withoutComments(await read('src', 'styles.css'));
+    const statement = /@layer\s+ng-icon\s*;/.exec(css);
+    assert.ok(statement, '@layer ng-icon; is declared');
+    assert.ok(statement.index < css.indexOf("@import 'tailwindcss'"), 'before Tailwind');
+    assert.doesNotMatch(css.slice(0, statement.index), /\S/, 'as the first statement');
+  });
 });
 
 /** Every file under `dir` with one of the extensions, as paths relative to the repo root. */
