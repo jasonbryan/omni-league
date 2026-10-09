@@ -1,13 +1,21 @@
 // Unit tests for scripts/inline-mockup-kit.mjs (#58). Run with `npm run test:scripts` (node:test).
 // They use the committed fixture in scripts/fixtures/mockup-kit/ and need no Angular build.
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/postcss';
+import postcss from 'postcss';
 import { check } from 'prettier';
-import { inlineKitIntoFile, inlineKitIntoHtml, inlineFonts } from './inline-mockup-kit.mjs';
+import {
+  inlineFonts,
+  inlineKitIntoFile,
+  inlineKitIntoHtml,
+  prepareKitSources,
+  stripKitFromHtml,
+} from './inline-mockup-kit.mjs';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'mockup-kit');
 const kitCss = join(fixtures, 'kit.css');
@@ -117,5 +125,107 @@ describe('inlineFonts', () => {
 describe('inlineKitIntoHtml', () => {
   it('refuses a page with no </head> to put the block in', () => {
     assert.throws(() => inlineKitIntoHtml('<p>no head</p>', 'a{}'), /<\/head>/);
+  });
+});
+
+describe('stripKitFromHtml', () => {
+  it('removes the block and its <!-- prettier-ignore --> line, and nothing else', () => {
+    const page = '<html>\n  <head>\n    <title>x</title>\n  </head>\n</html>\n';
+    const withKit = inlineKitIntoHtml(page, '.leading-tight{line-height:1.25}');
+    assert.notEqual(withKit, page);
+    assert.equal(stripKitFromHtml(withKit), page);
+  });
+
+  it('leaves a page without a block unchanged', () => {
+    assert.equal(stripKitFromHtml('<p>hi</p>'), '<p>hi</p>');
+  });
+});
+
+// The build itself is `ng build`; here the same Tailwind engine (@tailwindcss/postcss, as in the
+// Angular build) runs on a stand-in entry, which is fast enough for `ci`. The full two-run proof with
+// the real build is recorded in the PR evidence for #58.
+describe('the kit build reads mockups without their own earlier kit block', () => {
+  const entryFile = join(dirname(fileURLToPath(import.meta.url)), '..', 'design', 'kit-test.css');
+
+  async function buildKitCss(sourceDir) {
+    const entry = `@import 'tailwindcss' source(none);\n@source '${sourceDir}';\n`;
+    const result = await postcss([tailwindcss()]).process(entry, { from: entryFile });
+    return result.css;
+  }
+
+  /** One `npm run design:css` pass, with Tailwind standing in for `ng build`. */
+  async function designCss(mockupsDir, sourcesDir, pages) {
+    await prepareKitSources(mockupsDir, sourcesDir);
+    const css = await buildKitCss(sourcesDir);
+    for (const page of pages) {
+      const before = await readFile(page, 'utf8');
+      await writeFile(page, inlineKitIntoHtml(before, css));
+    }
+  }
+
+  async function withMockups(run) {
+    const dir = await mkdtemp(join(tmpdir(), 'mockup-kit-build-'));
+    try {
+      const mockups = join(dir, 'mockups');
+      await mkdir(join(mockups, 'nested'), { recursive: true });
+      const page = join(mockups, 'page.html');
+      const nested = join(mockups, 'nested', 'other.html');
+      const html = (classes) =>
+        `<html>\n  <head>\n    <title>x</title>\n  </head>\n  <body>\n    <p class="${classes}">x</p>\n  </body>\n</html>\n`;
+      await writeFile(page, html('leading-tight table'));
+      await writeFile(nested, html('shimmer-never-defined bg-destructive'));
+      return await run({ mockups, sources: join(dir, 'sources'), page, nested, html });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('copies every mockup, nested ones included, with the block removed', async () => {
+    await withMockups(async ({ mockups, sources, page, nested }) => {
+      await designCss(mockups, sources, [page, nested]);
+      assert.match(await readFile(page, 'utf8'), /<style id="mockup-kit">/);
+      assert.equal(await prepareKitSources(mockups, sources), 2);
+      for (const file of ['page.html', join('nested', 'other.html')]) {
+        assert.ok(!(await readFile(join(sources, file), 'utf8')).includes('mockup-kit'));
+      }
+    });
+  });
+
+  it('a second full run leaves every mockup byte-identical', async () => {
+    await withMockups(async ({ mockups, sources, page, nested }) => {
+      await designCss(mockups, sources, [page, nested]);
+      const first = [await readFile(page), await readFile(nested)];
+      assert.match(first[0].toString(), /\.leading-tight\s*\{/);
+      await designCss(mockups, sources, [page, nested]);
+      await designCss(mockups, sources, [page, nested]);
+      assert.ok((await readFile(page)).equals(first[0]));
+      assert.ok((await readFile(nested)).equals(first[1]));
+    });
+  });
+
+  it('a class removed from a mockup disappears from its block on the next run', async () => {
+    await withMockups(async ({ mockups, sources, page, nested, html }) => {
+      await designCss(mockups, sources, [page, nested]);
+      assert.match(await readFile(page, 'utf8'), /\.leading-tight\s*\{/);
+      await writeFile(page, html('table'));
+      await designCss(mockups, sources, [page, nested]);
+      const after = await readFile(page, 'utf8');
+      assert.doesNotMatch(after, /\.leading-tight\s*\{/);
+      assert.match(after, /\.table\s*\{/);
+      assert.equal(after.match(/<style id="mockup-kit">/g)?.length, 1);
+    });
+  });
+
+  it('scanning the mockups directly keeps the removed class (the bug this guards against)', async () => {
+    await withMockups(async ({ mockups, page }) => {
+      const css = await buildKitCss(mockups);
+      await writeFile(page, inlineKitIntoHtml(await readFile(page, 'utf8'), css));
+      const edited = (await readFile(page, 'utf8')).replace(
+        'class="leading-tight table"',
+        'class="table"',
+      );
+      await writeFile(page, edited);
+      assert.match(await buildKitCss(mockups), /\.leading-tight\s*\{/);
+    });
   });
 });

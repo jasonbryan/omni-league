@@ -1,9 +1,11 @@
 /* Entry for the mockup kit (ADR 0007, "How a self-contained mockup gets the same tokens and styles").
    Built only by `ng build --configuration production,mockup-kit` and inlined into each mockup by
-   `npm run design:css` (scripts/inline-mockup-kit.mjs). Never part of a production build. */
+   `npm run design:css` (scripts/inline-mockup-kit.mjs). Never part of a production build.
+   `dist/mockup-kit-source` is a copy of design/mockups/ without the inlined kit blocks, written by that
+   script before the build; scanning the mockups directly would make the build read its own output. */
 @import 'tailwindcss' source(none);
 @import '../../src/styles/tokens.css';
 @import '@spartan-ng/brain/hlm-tailwind-preset.css';
 @import '@fontsource-variable/inter/wght.css';
-@source '../mockups';
+@source '../../dist/mockup-kit-source';
 @source '../../src/app';
