@@ -7,8 +7,10 @@ import { describe, it } from 'node:test';
 import { checkServerBundle, findEdgeUnsafeCode } from './edge-bundle.mjs';
 
 const CREATE_REQUIRE = 'createRequire (Node CommonJS require shim)';
+const DENO_CWD = 'Deno.cwd (filesystem access)';
 const CWD = 'process.cwd (filesystem access)';
 const IMPORT = 'import of a Node filesystem module (fs, path, or module)';
+const BARE = 'import of a package outside the allow-list';
 const REQUIRE = 'require of a Node filesystem module (fs, path, or module)';
 
 // The construct that failed every SSR request on Netlify Edge (PR #54): `convex/browser`'s `node`
@@ -53,6 +55,19 @@ describe('findEdgeUnsafeCode', () => {
     });
   }
 
+  it('flags process["cwd"], Deno.cwd, and a template-literal import of node:path', () => {
+    assert.deepEqual(findEdgeUnsafeCode('const r=process["cwd"]();'), [CWD]);
+    assert.deepEqual(findEdgeUnsafeCode("const r=process['cwd']();"), [CWD]);
+    assert.deepEqual(findEdgeUnsafeCode('const r=Deno.cwd();'), [DENO_CWD]);
+    assert.deepEqual(findEdgeUnsafeCode('const p=await import(`node:path`);'), [IMPORT]);
+  });
+
+  it('flags a bare import outside the allow-list, static or dynamic', () => {
+    assert.deepEqual(findEdgeUnsafeCode('import{x}from"pathe";'), [BARE]);
+    assert.deepEqual(findEdgeUnsafeCode("await import('left-pad');"), [BARE]);
+    assert.deepEqual(findEdgeUnsafeCode('import"xhr2-extra";'), [BARE]);
+  });
+
   it('accepts edge-safe code: node:process, relative chunks, and look-alike names', () => {
     const source = [
       "import { env } from 'node:process';",
@@ -60,7 +75,8 @@ describe('findEdgeUnsafeCode', () => {
       'import Aw from"./angular-app-manifest.mjs";',
       'const lazy = () => import("./chunk-XYYCKFVS.mjs");',
       'const p = new URL(request.url).pathname; resolve("."); fsPath("module");',
-      'import{x}from"pathe";import{y}from"fsevents-like";',
+      '// moved from "CanLoadMore" to "LoadingMore"; add import "@angular/compiler"; first',
+      'import{x}from"node:process";const x=await import("xhr2");import"xhr2";',
     ].join('\n');
     assert.deepEqual(findEdgeUnsafeCode(source), []);
   });
