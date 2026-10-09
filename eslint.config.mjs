@@ -75,13 +75,16 @@ export default defineConfig([
   },
 
   // Vendored spartan helm code (ADR 0007), copied from upstream and formatted by Prettier only.
-  // Upstream uses `hlm*` selectors and untyped `inject(ElementRef)`; these rules are off here so a
+  // Upstream uses `hlm*` selectors, untyped `inject(ElementRef)`, `input(…, { alias: 'class' })`,
+  // and `state ?? signal('closed')` fallbacks on an optional signal; these rules are off here so a
   // re-copy from upstream stays a plain diff. Every other rule still applies.
   {
     files: ['src/app/ui/**/*.ts'],
     rules: {
       '@angular-eslint/directive-selector': 'off',
       '@angular-eslint/component-selector': 'off',
+      '@angular-eslint/no-input-rename': 'off',
+      '@angular-eslint/no-uncalled-signals': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
