@@ -11,6 +11,7 @@ import {
   notFoundResponse,
   redactedErrorText,
 } from './server-error-response';
+import { NOINDEX_BUILD, withNoindex } from './server-robots';
 
 // SSR entry per ADR 0010 item 2. Netlify runs the exported `netlifyAppEngineHandler` in an edge
 // function (the plugin finds it by that name); `scripts/serve-ssr.mjs` runs it locally.
@@ -19,6 +20,7 @@ import {
 type AppEngine = Pick<AngularAppEngine, 'handle'>;
 
 let appEngine: AppEngine | undefined;
+let noindex = NOINDEX_BUILD;
 
 /**
  * Test seam: replaces the engine used by `netlifyAppEngineHandler`. `undefined` restores the real
@@ -26,6 +28,14 @@ let appEngine: AppEngine | undefined;
  */
 export function setAppEngineForTesting(engine: AppEngine | undefined): void {
   appEngine = engine;
+}
+
+/**
+ * Test seam: turns the `X-Robots-Tag: noindex` header on or off. `undefined` restores the
+ * build-time flag (`__NOINDEX__`, see `src/server-robots.ts`).
+ */
+export function setNoindexForTesting(value: boolean | undefined): void {
+  noindex = value ?? NOINDEX_BUILD;
 }
 
 function getAppEngine(): AppEngine {
@@ -43,8 +53,16 @@ function getAppEngine(): AppEngine {
  * - no matching route (`null`): plain 404;
  * - anything thrown or rejected: plain 500, logged with the method, the pathname, and the error
  *   text with every query string redacted (a query string can carry a one-time token, ADR 0008).
+ *
+ * On a non-production Netlify build every response, including those three, also carries
+ * `X-Robots-Tag: noindex` (#15).
  */
 export async function netlifyAppEngineHandler(request: Request): Promise<Response> {
+  const response = await render(request);
+  return noindex ? withNoindex(response) : response;
+}
+
+async function render(request: Request): Promise<Response> {
   const { pathname } = new URL(request.url);
   if (isMalformedPath(pathname)) {
     return badRequestResponse();

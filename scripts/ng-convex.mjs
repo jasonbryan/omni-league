@@ -6,6 +6,8 @@ import { constants } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { checkServerBundle } from './edge-bundle.mjs';
+import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...extraArgs] = process.argv.slice(2);
@@ -76,6 +78,16 @@ if (url) {
   console.log('Convex URL: none');
 }
 
+// `noindex` on non-production Netlify builds (#15): the server define here, and `_headers` for
+// static files once the build succeeds (scripts/noindex.mjs). CONTEXT is public build metadata.
+const noindex = command === 'build' && noindexForContext(process.env.CONTEXT);
+if (command === 'build') {
+  console.log(
+    `noindex: ${noindex ? 'on' : 'off'} (Netlify CONTEXT ${process.env.CONTEXT || 'unset'})`,
+  );
+  defines.push(`--define=__NOINDEX__=${noindex}`);
+}
+
 // 5. Spawn the CLI through Node with an argv array: no shell, same quoting on every OS.
 const ngArgs = [command, ...defines, ...extraArgs];
 console.log(`Running: ng ${ngArgs.join(' ')}`);
@@ -95,5 +107,38 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 // itself with SIGTERM, build exits 127); otherwise use the signal that killed the child.
 child.on('exit', (code, signal) => {
   const terminatedBy = received ?? signal;
-  process.exit(terminatedBy ? 128 + constants.signals[terminatedBy] : (code ?? 0));
+  if (terminatedBy) process.exit(128 + constants.signals[terminatedBy]);
+  if (code !== 0 || command !== 'build') process.exit(code ?? 0);
+  afterBuild().then(
+    () => process.exit(0),
+    (error) => fail(error.message),
+  );
 });
+
+/**
+ * After a successful build: the edge-safety check of the server bundle (scripts/edge-bundle.mjs),
+ * then the noindex `_headers` file. A failed check fails the build, so Netlify publishes nothing.
+ */
+async function afterBuild() {
+  const serverDir = join(root, 'dist', 'omni-league', 'server');
+  const problems = await checkServerBundle(serverDir);
+  for (const { file, problem } of problems) {
+    console.error(`edge-bundle: FAIL dist/omni-league/server/${file}: ${problem}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `${problems.length} problem(s) in the server bundle; Netlify Edge Functions refuse ` +
+        `filesystem access (scripts/edge-bundle.mjs)`,
+    );
+  }
+  console.log('edge-bundle: PASS (no filesystem access in dist/omni-league/server)');
+  if (!noindex) return;
+  try {
+    await writeNoindexHeaders(join(root, 'dist', 'omni-league', 'browser'));
+  } catch (error) {
+    throw new Error(`could not write the noindex _headers file: ${error.message}`, {
+      cause: error,
+    });
+  }
+  console.log('noindex: wrote dist/omni-league/browser/_headers');
+}

@@ -129,6 +129,9 @@ jobs:
       - name: test:convex
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
         run: npm run test:convex
+      - name: test:scripts
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run test:scripts
       - name: build
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
         run: npm run build
