@@ -92,6 +92,33 @@ async function filesUnder(dir, extensions) {
   return found.sort();
 }
 
+describe('focus treatment in the app shell and the vendored sheet (#75)', () => {
+  // The search from #75 criterion 9 (`rg -n`), run on the raw source, comments included.
+  const HALO = /outline-none|ring-ring\/50|focus-visible:ring-3/;
+
+  it("finds only main's focus:outline-none in src/app/shell/ and src/app/ui/sheet/", async () => {
+    const files = [
+      ...(await filesUnder(join(root, 'src', 'app', 'shell'), ['.css', '.ts', '.html'])),
+      ...(await filesUnder(join(root, 'src', 'app', 'ui', 'sheet'), ['.css', '.ts', '.html'])),
+    ];
+    assert.ok(
+      files.some((file) => file.endsWith(join('ui', 'sheet', 'hlm-sheet-content.ts'))),
+      'the vendored sheet was listed',
+    );
+    const matches = [];
+    for (const file of files) {
+      (await read(file)).split('\n').forEach((line, index) => {
+        if (HALO.test(line)) matches.push(`${file}:${index + 1}: ${line.trim()}`);
+      });
+    }
+    assert.equal(matches.length, 1, matches.join('\n'));
+    assert.match(
+      matches[0],
+      /shell\.ts:\d+: <main #main id="main" tabindex="-1" class="[^"]*\bfocus:outline-none\b/,
+    );
+  });
+});
+
 describe('colour literals in src/', () => {
   // The search from #61, run on the source with comments removed: an issue reference such as
   // `#100` in a comment is not a colour.
