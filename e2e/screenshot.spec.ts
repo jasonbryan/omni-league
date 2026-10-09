@@ -21,13 +21,17 @@ function routeSlug(route: string): string {
 }
 
 test.describe('screenshots', () => {
+  // A route may be a 404 document (the not-found page, #23): its own 404 resource message is
+  // allowed, and the status is printed beside the path. Every other console rule still applies.
+  test.use({ expectedDocumentStatus: 404 });
+
   for (const route of routes) {
     test(`full-page screenshot of ${route}`, async ({ page, consoleGuard }, testInfo) => {
       test.skip(
         testInfo.project.use.browserName !== 'chromium',
         'screenshots use the two Chromium projects (ADR 0005)',
       );
-      await page.goto(route);
+      const response = await page.goto(route);
       if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
       await page.evaluate(() => document.fonts.ready);
       const width = page.viewportSize()?.width ?? 0;
@@ -37,7 +41,7 @@ test.describe('screenshots', () => {
         body: png,
         contentType: 'image/png',
       });
-      console.log(`Screenshot: ${path}`);
+      console.log(`Screenshot: ${path} (HTTP ${String(response?.status())})`);
     });
   }
 });
