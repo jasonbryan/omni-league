@@ -14,7 +14,9 @@ The owner asked on 2026-10-09 (chat): "I would like to add that the app should b
 3. **Push notifications:** game reminders, schedule changes, score updates; on iPhone only after install.
 4. **Not chosen:** offline score entry.
 
-This ADR decides the service worker, how offline pages get their data, how changes are refused offline, deploy and update behaviour, how Convex sends Web Push, where the VAPID keys live, and how push subscriptions are stored. Who receives which notification is open for the owner (#85) and does not change these choices.
+This ADR decides the service worker, how offline pages get their data, how changes are refused offline, deploy and update behaviour, how Convex sends Web Push, where the VAPID keys live, and how push subscriptions are stored. Who receives which notification was answered by the owner on #85 (2026-10-09) and does not change these choices; the per-device switches it adds are covered in Decision section 7.
+
+**Revision 2 (2026-10-09)** applies the plan review on PR #87 ([ADR review](https://github.com/jasonbryan/omni-league/pull/87#issuecomment-6086196446)): the connection rule (section 3), the shared-device lifecycle (section 7), the supply-chain control for `@block65/webcrypto-web-push` (Packages), and optional items 4 to 10.
 
 ### Constraints from accepted ADRs
 
@@ -103,7 +105,7 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 
 ### Decision 3: changes while offline
 
-- **3A, recommended: the adapter refuses them.** While the connection is down, `run()` on mutation and action helpers rejects at once with `ConvexOfflineError` and does not call the Convex client, so nothing is queued. The UI shows the offline note and disables submit buttons.
+- **3A, recommended: the adapter refuses them.** `run()` on mutation and action helpers checks the WebSocket at call time (`isWebSocketConnected`). If it is not connected, `run()` waits up to 3 seconds for a connection, then rejects with `ConvexOfflineError` without calling the Convex client, so nothing is queued. This check is separate from the 5-second `online` signal that drives the offline note and disables submit buttons (section 3), so a change started in the first seconds of a disconnect, or on field wifi with no internet, is refused too.
 - 3B: let the Convex client queue them. Rejected: a registration or score sent minutes or hours later is offline change entry, which the owner did not choose, and the user has no feedback.
 - 3C: only disable buttons. Rejected as the only guard: any programmatic call would still be queued.
 
@@ -114,7 +116,7 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 - **Version and licence:** 2.0.0 (2026-09-03), MIT, published with npm provenance. One dependency, `uint8array-extras` 1.6.0 (MIT). No install script. About 110,000 downloads a week (2026-10-01 to 10-07).
 - **What it does:** RFC 8291 `aes128gcm` encryption with every message padded to 4,096 bytes (maximum payload 3,993 bytes), and RFC 8292 VAPID. It exports `encryptNotification` and `vapidHeaders` separately, so the VAPID token can be cached and reused, as Apple asks.
 - **Verified** in a default-runtime Convex action on the local backend: the body decrypted with the reference implementation `http_ece` to the exact payload, and the VAPID signature verified (Test evidence).
-- **Cons:** one maintainer (44 GitHub stars). Mitigation: pinned exactly; the project's sending code wraps it behind one internal function, so Option 4D can replace it without touching callers.
+- **Cons:** one human contributor (44 GitHub stars) and a 21-month gap between 1.0.2 and 2.0.0. Its code runs inside Convex actions, which can read every deployment variable (`BETTER_AUTH_SECRET`, the Stripe key, `VAPID_PRIVATE_KEY`). Mitigation: pinned exactly, kept out of Dependabot's grouped updates, and every version change reviewed with `npm diff` and a provenance check (Packages, Supply-chain control); the project's sending code wraps it behind one internal function, so Option 4D can replace it without touching callers.
 
 #### Option 4B: `web-push` in a `"use node"` action
 
@@ -180,42 +182,55 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
   - **No `dataGroups`.** The worker stores nothing but these same-origin build files.
   - The default `navigationUrls` (everything except paths with a file extension or `__`) stay.
 
-- **Build check** `scripts/sw-config-check.mjs`, run by `npm run build` after the edge-safety check (ADR 0010, hosting), fails the build when the built `ngsw.json` has any data group, an index other than `/index.csr.html`, a navigation strategy other than `performance`, or an asset URL that is not a same-origin path or contains `/api/`, `convex.cloud`, or `convex.site`. This is the enforced form of "never cache Convex or auth".
+- **Build check** `scripts/sw-config-check.mjs`, run by `npm run build` after the edge-safety check (ADR 0010, hosting), fails the build when the built `ngsw.json` has any data group, an index other than `/index.csr.html`, a navigation strategy other than `performance`, or an asset URL that is not a same-origin path or contains `/api/`, `convex.cloud`, or `convex.site`. This is the enforced form of "never cache Convex or auth". When `angular.json` has no `serviceWorker` option and no `ngsw.json` was built (the kill switch, section 4), it prints `sw-config-check: SKIP` and passes; with the option set and no `ngsw.json`, it fails.
 - `@angular/pwa` is **not** added or run. Its schematic is `ng-add` `save: false` and would prefetch the prerendered `/index.html` and write placeholder icons; #80 and #81 write the files by hand.
 
 ### 2. Interaction with SSR, hydration, Convex, auth, and previews
 
-| Concern                    | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSR and hydration          | First visit: server render and hydration as in ADR 0006. Later visits in a browser with the worker: the client shell, rendered in the browser (no hydration, so no mismatch is possible). Every page that works through in-app navigation already works this way. Unknown paths are routed by the client `**` route (#23), so #81 waits for it.                                                                            |
-| Crawlers and link previews | They fetch raw HTML and never run a worker: statuses, titles, `og:*` tags, and `Cache-Control` are unchanged. The scratch run showed `/does-not-exist` as 404 to a plain request while a worker-controlled tab got the shell.                                                                                                                                                                                              |
-| Netlify Edge               | `ngsw-worker.js`, `ngsw.json`, `safety-worker.js`, and `manifest.webmanifest` are files in `browser/`, so the edge function excludes them and the CDN serves them with `max-age=0, must-revalidate`. ngsw fetches `ngsw.json` with a cache-busting query. No `netlify.toml` change. Navigations served by the worker cost no edge invocation.                                                                              |
-| Convex WebSocket           | Cannot be intercepted (WebSockets standard). Data offline comes only from saved copies (item 3).                                                                                                                                                                                                                                                                                                                           |
-| Auth (ADR 0008)            | Better Auth requests go to `*.convex.site`, a different origin; ngsw matches no group and passes them to the network unstored. Tokens stay in `localStorage` as ADR 0008 decided. The shell `index.csr.html` is identical for every user. The build check forbids any group that could match auth or Convex.                                                                                                               |
-| Previews and staging       | Each preview origin has its own worker and caches, so previews never share state. The `_headers` `noindex` rule also covers the worker files, which is harmless. **Netlify's Drawer** script, injected into preview and staging HTML, changes `index.csr.html` after the build, so ngsw's hash check fails there and the worker falls back to the network: the app still works, but offline does not. See Owner questions. |
-| Local verification         | `npm run build` then `npm run serve:ssr` serves the production build with the worker exactly as hashed, which is the reliable test target (Test evidence).                                                                                                                                                                                                                                                                 |
+| Concern                    | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSR and hydration          | First visit: server render and hydration as in ADR 0006. Later visits in a browser with the worker: the client shell, rendered in the browser (no hydration, so no mismatch is possible). Every page that works through in-app navigation already works this way. Unknown paths are routed by the client `**` route (#23), so #81 waits for it.                                                                                                                                                                                                                     |
+| Crawlers and link previews | They fetch raw HTML and never run a worker: statuses, titles, `og:*` tags, and `Cache-Control` are unchanged. The scratch run showed `/does-not-exist` as 404 to a plain request while a worker-controlled tab got the shell.                                                                                                                                                                                                                                                                                                                                       |
+| Netlify Edge               | `ngsw-worker.js`, `ngsw.json`, `safety-worker.js`, and `manifest.webmanifest` are files in `browser/`, so the edge function excludes them and the CDN serves them with `max-age=0, must-revalidate`. ngsw fetches `ngsw.json` with a cache-busting query. No `netlify.toml` change. Navigations served by the worker cost no edge invocation.                                                                                                                                                                                                                       |
+| Convex WebSocket           | Cannot be intercepted (WebSockets standard). Data offline comes only from saved copies (item 3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Auth (ADR 0008)            | Better Auth requests go to `*.convex.site`, a different origin; ngsw matches no group and passes them to the network unstored. Tokens stay in `localStorage` as ADR 0008 decided. The shell `index.csr.html` is identical for every user. The build check forbids any group that could match auth or Convex.                                                                                                                                                                                                                                                        |
+| Previews and staging       | Each preview origin has its own worker and caches, so previews never share state. The `_headers` `noindex` rule also covers the worker files, which is harmless. **Netlify's Drawer** script, injected into preview and staging HTML, changes `index.csr.html` after the build, so ngsw's hash check fails there and the worker falls back to the network: the app still works, but offline does not. The owner chose to turn the Drawer off for Deploy Previews and Branch deploys (Owner questions); preview evidence counts once the owner confirms the setting. |
+| Local verification         | `npm run build` then `npm run serve:ssr` serves the production build with the worker exactly as hashed, which is the reliable test target (Test evidence). The spec runs with `E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts`, not `npm run e2e`, which would rebuild `dist/` in development mode under the running server.                                                                                                                                                                                                                |
 
 ### 3. Saved copies (offline data)
 
-- **Where:** `localStorage`, key `cvx-saved:<function>:<JSON args>`, value `{ v: convexToJson(result), savedAt }`. Synchronous reads let the first render show the saved copy with no loading flash. Values are public data, so script access to `localStorage` exposes nothing new.
+- **Where:** `localStorage`, key `cvx-saved:<function>:<JSON args with sorted keys>`, value `{ v: convexToJson(result), savedAt }`. Synchronous reads let the first render show the saved copy with no loading flash. Values are public data, so script access to `localStorage` exposes nothing new.
 - **What:** only functions on an allow-list (`OFFLINE_SAVED_QUERIES`) that are deliberately public and whose result does not depend on the caller. Signed-in data is never saved, so a shared device keeps nothing private.
 - **Limits:** 50 entries, least recently used removed first; entries older than 14 days are ignored and removed. Storage errors are ignored.
-- **Precedence:** a `TransferState` entry first (hydration unchanged), then a live result, then a saved copy, then loading. The server never reads saved copies.
-- **Adapter additions** (ADR 0006's adapter, additive): `QueryRef.savedAt`, an `online` signal (false when `navigator.onLine` is false, or when the WebSocket has been disconnected for 5 seconds after having connected, from `subscribeToConnectionState`), and `ConvexOfflineError`.
+- **Precedence:** a `TransferState` entry first (hydration unchanged), then a live result, then a saved copy, then loading. The server never reads saved copies. A live result of `null` (the record was unpublished or deleted) removes the saved entry.
+- **iPhone and iPad:** a Home Screen web app keeps its storage apart from Safari, so saved copies and the Better Auth token (ADR 0008, `localStorage`) do not carry over; users sign in again after install (#80, #83).
+- **Adapter additions** (ADR 0006's adapter, additive): `QueryRef.savedAt`, `ConvexOfflineError`, and an `online` signal from `navigator.onLine` and `subscribeToConnectionState` (`convex` 1.46 `ConnectionState`):
+  - false at once when `navigator.onLine` is false;
+  - false when `hasEverConnected` is still false 5 seconds after start (a cold start on field wifi with no internet, where `navigator.onLine` stays true);
+  - false when `isWebSocketConnected` has been false for 5 seconds after having connected;
+  - true as soon as `isWebSocketConnected` is true and `navigator.onLine` is true; always true on the server; with no Convex URL, it follows `navigator.onLine` only.
+  - `online` drives the note and disabled buttons only. The guard in `run()` reads `isWebSocketConnected` at call time (Decision 3A), so the 5-second debounce never lets a change through.
+- **Residual:** a mutation already sent when the socket drops is re-sent by the Convex client on reconnect (`RequestManager.restart()`); the user started it online and its button stays pending until then.
+- **Reconnect timing:** `convex` 1.46 reconnects at once on the browser `online` event and otherwise backs off up to 16 seconds (plus or minus half, `web_socket_manager.js`), so the note can stay up to about 24 seconds after a silent recovery.
 
 ### 4. Updates, stale shells, rollback, and the kill switch
 
 - **Updates:** ngsw checks `ngsw.json` whenever the app opens and on navigations, downloads a new version in the background, and keeps the old one until the tab reloads. On `VERSION_READY` the app shows a "new version" prompt with Reload; on `unrecoverable` it asks the user to reload. It also calls `checkForUpdate()` when the page becomes visible, at most every 30 minutes, for installed apps left open.
-- **Stale-shell risk:** an open tab or installed app can run the previous frontend until it reloads. ADR 0010 already requires each release's functions to accept the previous frontend's calls. This ADR extends that window: **public Convex functions keep accepting the previous release's arguments for at least 14 days** (expand/contract, as for schema changes). The PR reviewer checks it.
+- **Stale-shell risk:** an open tab or installed app can run the previous frontend until it reloads. ADR 0010 already requires each release's functions to accept the previous frontend's calls. This ADR extends that window: **public Convex functions keep accepting the previous release's arguments for at least 14 days** (expand/contract, as for schema changes). #81 writes the rule into `docs/conventions/convex.md`, where the PR reviewer checks it.
+- **Forced reload past the window:** a dismissed prompt could keep a shell running longer than 14 days. The app records when it first ran each version (`localStorage`, keyed by the ngsw version hash). On `VERSION_READY`, if the running version was first run more than 14 days ago, the app activates the update and reloads without the prompt. A client installs the newest version available, so a version's first-run time is never earlier than its release, and the rule fires no later than the compatibility window ends.
 - **Rollback:** Netlify "Publish deploy" of an earlier build changes the `ngsw.json` hash, which ngsw treats as a new version, so clients get it through the same prompt.
-- **Kill switch**, each shipped as a release through `gate:production`:
-  1. Remove the `serviceWorker` build option (or `ngsw.json`). Every client that next opens the app online gets a 404, deletes its caches, and unregisters. Scratch run: 6 seconds after one navigation.
+- **Kill switch**, each shipped through `gate:production`:
+  1. Remove the `serviceWorker` build option, so no `ngsw.json` is built (`sw-config-check` prints `SKIP`). Every client that next opens the app online gets a 404 for `ngsw.json`, deletes its caches, and unregisters. Scratch run: 6 seconds after one navigation.
   2. If the worker script itself fails to start, serve the packaged `safety-worker.js` at the `ngsw-worker.js` URL until users have unregistered ([Service worker devops](https://angular.dev/ecosystem/service-workers/devops)).
-  - #81 rehearses step 1 on a local production build.
+  - **Emergency path:** a release from `main` would also ship everything merged since the last release. Instead, the deployer opens a release PR from a branch cut from `production` whose only change is step 1 (or step 2), labelled `gate:production`; the owner's merge ships it. The same change then lands on `main` through a normal PR before the next release, or the next release turns the worker back on.
+  - #81 rehearses step 1 on a local production build and writes both paths into `docs/process/hosting.md`.
+- **Release check:** after #81 no `ci` job proves offline behaviour (`e2e/pwa.spec.ts` needs a production build). Every release request (`gate:production`) records an `e2e/pwa.spec.ts` run against a local production build of the release commit; #81 adds the step to `docs/process/hosting.md`.
 
 ### 5. Web Push
 
-- **Client:** `SwPush.requestSubscription({ serverPublicKey })` called directly from the click on "Turn on notifications". **No permission request on load or on any other trigger**, on every browser (Safari requires it; elsewhere it is the UX rule). iPhone and iPad in Safari without install show how to add the app to the Home Screen first (iOS 16.4+).
+- **Client:** the click on "Turn on notifications" first calls `Notification.requestPermission()` synchronously in the handler, so Safari's user-activation rule is met before any asynchronous step; only if permission is granted does it call `SwPush.requestSubscription({ serverPublicKey })`. **No permission request on load or on any other trigger**, on every browser (Safari requires it; elsewhere it is the UX rule).
+- `SwPush.requestSubscription` waits for `navigator.serviceWorker.controller` and then `getRegistration()`, so it hangs until the worker controls the page (a first visit, up to `registerWhenStable:30000`). The button stays disabled until the page is controlled.
+- iPhone and iPad in Safari without install show how to add the app to the Home Screen first (iOS 16.4+), and that the installed app needs a fresh sign-in (separate storage, section 3).
 - **Sending:** an internal action in the default runtime calls `encryptNotification` and `fetch`. No `"use node"`.
 - **VAPID token cache:** `vapidHeaders` once per push-service origin, stored in an internal table and reused for at least 1 hour and until 1 hour before its 12-hour expiry.
 - **Payload,** one JSON for ngsw and for Safari 18.4's declarative mode: `{ "web_push": 8030, "notification": { "title", "body", "navigate": <absolute URL>, "data": { "onActionClick": { "default": { "operation": "navigateLastFocusedOrOpen", "url": <path> } } } } }`. Every payload has a title, because Safari revokes permission after a push with no notification. Under 3,993 bytes. TTL per kind (24 hours for the test notification), urgency `normal`, and an optional `Topic` to collapse repeats.
@@ -243,15 +258,17 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 | Production           | the production pair, never used elsewhere                  | **owner only**, at the first production release |
 
 - Variables: `VAPID_PUBLIC_KEY` (base64url, 65-byte uncompressed P-256 point), `VAPID_PRIVATE_KEY` (base64url, 32-byte private scalar), `VAPID_SUBJECT` (`mailto:` or `https:`; Apple rejects anything else). Production uses `mailto:support@<domain>`, ADR 0011's support contact.
-- `scripts/vapid-keys.mjs` (Node Web Crypto, no package) prints a new pair. No key is in the repository, GitHub, or Netlify.
+- `scripts/vapid-keys.mjs` (Node Web Crypto, no package) writes a new pair to a new file named by `--out`, created with mode 600; it refuses an existing file or a path inside the repository, and prints only the public key and the file path, so no private key reaches a terminal or an agent transcript (AGENTS.md, Secrets). The value is then set from the file (`npx convex env set` for a developer's dev deployment, the dashboard for the owner). No key is in the repository, GitHub, or Netlify.
 - The browser gets the public key from the public query `push.getConfig`, not from a build-time define, so the key has one source and can rotate without a rebuild.
 - `scripts/check-deploy-env.mjs` production mode requires the three names (names only).
-- **Rotation:** a new pair invalidates every subscription (Apple answers `VapidPkHashMismatch`, others 403). Clients compare their subscription's key with `getConfig` on start-up and subscribe again (#83); rows that then fail are deleted by the response rules.
+- **Rotation:** a new pair invalidates every subscription (Apple answers `VapidPkHashMismatch`, others 403). Clients compare their subscription's key with `getConfig` on start-up and subscribe again (#89); rows that then fail are deleted by the response rules.
 
 ### 7. Subscriptions and access rules
 
-- **Table `pushSubscriptions`:** `userId`, `endpoint`, `p256dh`, `auth`, optional `expirationTime`, `createdAt`, optional `lastSuccessAt`, `failureCount`; indexes `by_endpoint` and `by_userId`. At most 10 per user, the oldest replaced.
+- **Table `pushSubscriptions`:** `userId`, `endpoint`, `p256dh`, `auth`, optional `expirationTime`, `createdAt`, `lastSeenAt` (set by every `push.subscribe` upsert, including the start-up re-upsert), optional `lastSuccessAt`, `failureCount`; indexes `by_endpoint`, `by_userId`, and `by_lastSeenAt`. At most 10 per user, the least recently seen replaced. #85 adds the owner's three per-device switches (reminders, schedule changes, scores; all on by default, #85 comment of 2026-10-09) as fields on this row, because a row is one device.
+- **Alternative considered:** an array of subscriptions on the `users` document. Rejected: no index by endpoint, so reassignment and `getMyDeviceStatus` scan every user; each send result rewrites the user document and conflicts with profile edits; the 10-row cap and the cleanup are harder to express.
 - **Internal table `pushVapidTokens`:** push-service origin, `Authorization` value, expiry.
+- **Internal table `pushTestSends`:** `userId`, `sentAt`; index `by_userId_and_sentAt`. Holds the `push.sendTest` rate limit (#84); `sendTest` deletes the caller's rows older than 10 minutes.
 - **Public functions:**
 
   | Function                 | Kind     | Rule                                                                                                                          |
@@ -264,8 +281,12 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 
   Reassigning an endpoint to the caller is safe: an endpoint is an unguessable capability URL held only by the browser that created it, so presenting it proves control of that browser.
 
-- **Lifecycle:** sign-out calls `push.unsubscribe` and `SwPush.unsubscribe()` first; the `users` `onDelete` trigger deletes the user's rows; expired subscriptions are deleted on 404 or 410; `pushSubscriptionChanges` and key rotation re-subscribe on the next start.
-- Event notifications (reminders, schedule changes, scores) reuse this path; their recipients and timing wait for the owner (#85).
+- **Lifecycle** (#89):
+  - **Start-up and every sign-in:** when the browser has a subscription and a user is signed in, the client calls `push.getMyDeviceStatus`. If it is false (another user's row, or none), the client calls `SwPush.unsubscribe()` and shows "off"; the other user's row then gets 404 or 410 on its next send and is deleted. If it is true, the client upserts the row again. Only rows the caller already owns are re-upserted, so a session that ended without sign-out (expiry, cleared storage) never hands its device to the next user, and the next user never receives notifications without turning them on.
+  - **Sign-out** calls `push.unsubscribe` and `SwPush.unsubscribe()` first; each failure (offline, no worker) is caught and sign-out completes.
+  - **Rotation and changes:** a key that differs from `getConfig`, a past `expirationTime`, or `pushSubscriptionChanges` re-subscribes, for the owning user only.
+  - **Deletion:** the `users` `onDelete` trigger deletes the user's rows; 404 or 410 on a send deletes the row; `deliver` skips and deletes a row past its `expirationTime`; a daily cron deletes rows not seen and not sent to successfully for 90 days (404 and 410 arrive only on a send, so rows for devices that never get one would otherwise stay).
+- Event notifications (reminders, schedule changes, scores) reuse this path. The owner chose recipients, reminder timing, and per-kind switches on #85 (2026-10-09); none changes this design.
 
 ### Packages
 
@@ -280,9 +301,21 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 - `@angular/service-worker` 22.2.2 (2026-10-08) is inside the 3-day `min-release-age` until 2026-10-11, and its peer requires the identical `@angular/core`, so #81 installs the version matching the lockfile's `@angular/core`.
 - No `overrides` entry.
 
+### Supply-chain control for `@block65/webcrypto-web-push`
+
+"Pinned exactly" alone does not stop Dependabot's monthly `npm-minor-patch` group from bumping the pin, and a grouped PR hides one package among many. #84, which installs the package, also makes these changes:
+
+- **`.github/dependabot.yml`:** the `npm-minor-patch` group gains `exclude-patterns: ["@block65/webcrypto-web-push"]`. Dependabot then opens a separate PR for each of its version updates ("Any outdated dependencies that do not match a rule are updated in individual pull requests", [Dependabot options reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)). Cooldown and `min-release-age` still apply. A `test:scripts` text check confirms the exclusion stays.
+- **`docs/process/ci.md`, Dependabot PRs:** any PR whose `package-lock.json` changes the resolved version of `@block65/webcrypto-web-push` or `uint8array-extras` (Dependabot version or security update, or a person) needs, before the PR reviewer's `APPROVE`, a PR comment with:
+  1. `npm diff --diff=<package>@<old> --diff=<package>@<new>`, read in full by the reviewer (collapsed in Evidence);
+  2. for `@block65/webcrypto-web-push`, the provenance of the new version from `https://registry.npmjs.org/-/npm/v1/attestations/<package>@<version>`: an SLSA provenance attestation built from `https://github.com/block65/webcrypto-web-push` at tag `v<version>` (2.0.0: workflow `.github/workflows/deploy.yml`, checked 2026-10-09). `npm audit signatures`, already a `ci` step, verifies the signatures but does not fail when a version simply has none. `uint8array-extras` 1.6.0 publishes no provenance, so it gets the diff only.
+- A new version with no provenance, or provenance from another repository or workflow, is treated as a replacement of the package and goes through `gate:technology`.
+
+**AGENTS.md.** Its rule "Bumping the minor or patch version of an already-accepted package does not need a gate" needs no exception for the normal path: these bumps still need no gate, only the review evidence above. The provenance escalation is the one case the sentence does not anticipate. Proposed wording for an owner-merged docs PR (not part of this ADR): "Bumping the minor or patch version of an already-accepted package does not need a gate, unless an Accepted ADR sets a stricter rule for that package (ADR 0013, `@block65/webcrypto-web-push`)."
+
 ## Recommendation
 
-`@angular/service-worker` gives the shell offline, safe updates, a tested kill switch, and push handling with no custom worker code and no new build tool. Its limits (no navigation timeout, 504 for uncached data) do not matter here, because Convex data never passes through a worker: the app keeps saved copies itself, which also covers in-app navigation offline. The `performance` strategy opens the shell instantly on poor field wifi, which is the owner's case; crawlers are unaffected. `@block65/webcrypto-web-push` is the only checked library that implements RFC 8291's `aes128gcm` on Web Crypto and ran in Convex's default runtime, so sending needs no Node runtime. It has one maintainer, so it is pinned and wrapped, with a hand-written fallback.
+`@angular/service-worker` gives the shell offline, safe updates, a tested kill switch, and push handling with no custom worker code and no new build tool. Its limits (no navigation timeout, 504 for uncached data) do not matter here, because Convex data never passes through a worker: the app keeps saved copies itself, which also covers in-app navigation offline. The `performance` strategy opens the shell instantly on poor field wifi, which is the owner's case; crawlers are unaffected. `@block65/webcrypto-web-push` is the only checked library that implements RFC 8291's `aes128gcm` on Web Crypto and ran in Convex's default runtime, so sending needs no Node runtime. It has one maintainer, so it is pinned, wrapped, kept out of grouped updates, and reviewed with `npm diff` and provenance on every change, with a hand-written fallback.
 
 ## Cost
 
@@ -298,17 +331,22 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 
 **Convex:** push sends at an assumed 500 opted-in users and 10 notifications each a month are about 7,000 function calls (0.7% of the 1M included) and well under 0.1 GB-hour of action compute: $0. Saved copies cost nothing on the server. **Push services:** no account or fee. **Total monthly cost: unchanged** (about $9 after the first production release).
 
-**CI minutes (ADR 0009):** unchanged. No new job, step, or browser project. `sw-config-check` runs inside the existing `build` step in under a second, and its script test inside `test:scripts`. `e2e/pwa.spec.ts` runs only with `E2E_BASE_URL` (a production build: the PR preview or a local `serve:ssr`), so `ci` skips it; the tester runs it locally. Push delivery is tested with `fetch` stubbed in Convex tests.
+**CI minutes (ADR 0009):** about +10 seconds per app-PR run, for #88's two offline e2e tests (`chromium-mobile`, development build, `context.setOffline` and `page.routeWebSocket`). No new job, step, or browser project. `sw-config-check` runs inside the existing `build` step in under a second, and its script test inside `test:scripts`. `e2e/pwa.spec.ts` runs only with `E2E_BASE_URL` (a production build: a local `serve:ssr`, or the PR preview once the owner confirms the Drawer setting), so `ci` skips it; the tester runs it locally, and every release request records a run (Decision section 4). Push delivery is tested with `fetch` stubbed in Convex tests. The daily cleanup cron (#89) is one function call a day.
 
 ## Consequences
 
 - **New dependencies:** `@angular/service-worker` (#81) and `@block65/webcrypto-web-push` (#84). No new service, build tool, or `allowScripts` entry.
-- **Slices:** #80 (install: manifest, icons), #81 (service worker, offline note, update prompt, build check, kill-switch rehearsal), #82 (saved copies, organization page first), #83 (push on or off per device, subscription storage, VAPID setup), #84 (test notification and the sending path), #85 (event notifications, blocked on the owner).
-- **ADR 0006** gains, additively, the adapter's `online` signal, `ConvexOfflineError`, saved copies, and `QueryRef.savedAt` (#81, #82). Its rendering rules are unchanged.
+- **Slices:** #80 (install: manifest, icons), #88 (connection state, changes refused offline, offline note; no worker), #81 (service worker, update prompt, build check, kill-switch rehearsal), #82 (saved copies, organization page first), #83 (push on or off per device, subscription storage, VAPID setup), #89 (subscription follows the signed-in user and the key; sign-out; cleanup cron), #84 (test notification, the sending path, and the supply-chain control), #85 (event notifications, waiting for the schedule and score issues).
+- **ADR 0006** gains, additively, the adapter's `online` signal, `ConvexOfflineError` (#88), saved copies, and `QueryRef.savedAt` (#82). Its rendering rules are unchanged.
 - **ADR 0010:** no `netlify.toml` change. The 14-day backward-compatibility window above extends its release rule. The cost estimate above replaces nothing and adds up to about 85 credits.
-- **ADR 0005 and ADR 0009:** unchanged; `e2e/pwa.spec.ts` is a local-only spec like the preview smoke run.
-- **`docs/process/hosting.md`** gains "Service worker" (kill switch, Drawer effect; #81) and the VAPID variables (#83). **`docs/conventions/angular.md`** gains: no data groups, no manual worker registration, and mutations go through the adapter's offline guard (#81).
-- **Owner setup:** a preview-only VAPID pair as Convex default preview variables (#83), and the production pair at the first release (`gate:production`).
+- **ADR 0005 and ADR 0009:** unchanged in structure; `e2e/pwa.spec.ts` is a local-only spec like the preview smoke run, and #88 adds two tests to the existing `ci` e2e run.
+- **Docs:**
+  - `docs/process/hosting.md` gains "Service worker" (both kill-switch paths, the Drawer setting, the local production-build run, the release check; #81) and the VAPID variables (#83).
+  - `docs/conventions/angular.md` gains: mutations and actions only through the adapter's guarded helpers (#88); no data groups and no manual worker registration (#81).
+  - `docs/conventions/convex.md` gains the 14-day function-compatibility rule (#81).
+  - `docs/process/ci.md` and `.github/dependabot.yml` gain the `@block65/webcrypto-web-push` control (#84).
+  - `AGENTS.md`: an optional owner-merged wording change (Packages, Supply-chain control).
+- **Owner setup:** the Drawer off for Deploy Previews and Branch deploys (chosen 2026-10-09), a preview-only VAPID pair as Convex default preview variables (#83, before #84's preview check), and the production pair at the first release (`gate:production`).
 - **Harder later:**
   - Public pages have two render paths, server-rendered on a first visit and client-rendered from the worker afterwards; both must stay correct.
   - Old frontends live longer, hence the 14-day function compatibility rule.
@@ -317,8 +355,8 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 
 ## Owner questions
 
-1. **Netlify Drawer on previews and staging.** Its injected script breaks ngsw's file hashes there, so offline cannot be checked on previews or staging, only on a local production build. Options: turn the Drawer off for Deploy Previews and Branch deploys in the Netlify UI **(recommended: reviews happen on GitHub, and e2e already stubs the Drawer)**; or keep it and test offline only locally. #81 confirms the effect on its first preview.
-2. **Push recipients and timing** are asked on #85; nothing in this ADR depends on the answer.
+1. **Netlify Drawer on previews and staging. Answered 2026-10-09** ([PR #87 comment](https://github.com/jasonbryan/omni-league/pull/87#issuecomment-6086158597)): the owner turns the Drawer off for Deploy Previews and Branch deploys. Until the owner confirms the setting on PR #87 or in chat, offline and update evidence comes from local production builds; after that, preview evidence counts too.
+2. **Push recipients and timing. Answered 2026-10-09** on #85: rostered players with an account plus guardians of minors; one reminder 24 hours before; score updates only when confirmed or corrected; three per-device switches, all on by default. Nothing else in this ADR changes.
 
 ## Test evidence (2026-10-09, scratch directories outside the repository)
 
@@ -350,7 +388,7 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
   | `@block65/webcrypto-web-push`, Node    | 2 ms                 | same                                                    | yes, exact              | same                                                                |
   | `@pushforge/builder`, default and Node | 3 ms and 11 ms       | `aesgcm` (draft), `Crypto-Key` and `Encryption` headers | only as `aesgcm`        | signature valid; `exp` 1 h                                          |
 
-- **Not tested:** delivery through a real push service (no browser subscription in headless Chromium), Convex cloud's runtime (#84 sends from a cloud dev deployment), real iPhone and Android devices (owner checks in #80 and #84), and the worker on a Netlify preview (Owner question 1).
+- **Not tested:** delivery through a real push service (no browser subscription in headless Chromium), Convex cloud's runtime (#84's pre-merge check on its preview deployment), real iPhone and Android devices (owner checks in #80, #83, and #84), and the worker on a Netlify preview (Owner question 1).
 
 ## Sources
 
@@ -359,5 +397,6 @@ All options keep the first visit unchanged: the browser has no worker yet, so it
 - **Apple and WebKit:** [Sending web push notifications in web apps and browsers](https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers), [Web Push for web apps on iOS and iPadOS](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/), [Meet Declarative Web Push](https://webkit.org/blog/16535/meet-declarative-web-push/), [News from WWDC25](https://webkit.org/blog/16993/news-from-wwdc25-web-technology-coming-this-fall-in-safari-26-beta/).
 - **Chrome:** [Install criteria](https://web.dev/articles/install-criteria).
 - **Convex:** [Runtimes](https://docs.convex.dev/functions/runtimes); `convex@1.46.0` `dist/esm/browser/sync/request_manager.js` (`restart`), `dist/esm-types/browser/sync/client.d.ts` (`ConnectionState`).
+- **Supply chain:** [Dependabot options reference (`groups`, `exclude-patterns`)](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference); npm attestations for `@block65/webcrypto-web-push@2.0.0` (`https://registry.npmjs.org/-/npm/v1/attestations/@block65%2fwebcrypto-web-push@2.0.0`, checked 2026-10-09); `npm view uint8array-extras@1.6.0 dist.attestations` (none).
 - **Workbox:** [GoogleChrome/workbox](https://github.com/GoogleChrome/workbox) (release v7.4.1, 2026-05-05).
 - **npm registry and download API (2026-10-09):** `@angular/service-worker`, `@angular/pwa`, `workbox-build`, `workbox-window`, `web-push`, `@block65/webcrypto-web-push`, `uint8array-extras`, `@pushforge/builder`, `@convex-dev/expo-push-notifications`; repositories `block65/webcrypto-web-push`, `draphy/pushforge`, `web-push-libs/web-push`.
