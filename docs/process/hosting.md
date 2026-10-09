@@ -76,6 +76,13 @@ Previews and staging send `X-Robots-Tag: noindex`; production does not. Netlify'
 
 A local build (no `CONTEXT`) has neither.
 
+## Edge-safe server bundle
+
+Netlify Edge Functions refuse filesystem access, and Netlify counts `process.cwd()` as such access, so `path.resolve('.')` throws there. Neither Node nor local Deno reproduces it. On PR #54 every SSR request returned 500 because `convex/browser` resolved to its Node entry (the `node` export condition). That entry runs `createRequire(resolve('.'))` at module load ([log](https://github.com/jasonbryan/omni-league/pull/54#issuecomment-6073720764)).
+
+- **`angular.json` builds the server bundle for `ssr.platform: "neutral"`**, Angular's option for edge runtimes. Packages then resolve to their non-Node entries (`convex/browser` to its `import` entry, with no `ws` client), and Angular adds no Node `require` banner. `externalDependencies: ["node:process"]` keeps the one Node built-in the server needs, the `@netlify/angular-runtime` helper's own import (ADR 0010 item 2), out of the bundle. A neutral build fails on any other unresolved Node built-in. On this platform Angular also leaves `@angular/platform-server`'s lazy `import("xhr2")` unbundled. It runs only for `HttpClient` requests over XHR during SSR, and the app has no `HttpClient`; server reads go through `ConvexHttpClient`, which uses `fetch`.
+- **`npm run build` runs the edge-safety check after `ng build`** (`scripts/edge-bundle.mjs`, tests in `scripts/edge-bundle.test.mjs`). It fails the build when any `.mjs` file under `dist/omni-league/server/` contains `createRequire`, `process.cwd`, or an import or `require` of `fs`, `path`, or `module` (with or without `node:`). The check runs locally, in CI, and on Netlify, so such a bundle is never published. It prints `edge-bundle: PASS` or one `edge-bundle: FAIL <file>: <problem>` line per problem.
+
 ## Cleanup
 
 No cleanup job. Convex deletes preview deployments 5 days after creation. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.
@@ -94,6 +101,8 @@ E2E_BASE_URL=https://main--charming-longma-28c00d.netlify.app npm run e2e -- e2e
 
 The hydration-log assertion and the `/%E0%A4%A` check are reported as skipped against a URL ([README](../../README.md#e2e-tests)). `E2E_WEBKIT` stays unset.
 
+**Netlify Drawer.** Netlify injects `<script src="/.netlify/scripts/cdp">` into preview and staging HTML, and that script adds the Drawer review toolbar in an iframe. The iframe is not app markup, and it fails the axe helper's Tab walk (2.4.7, "iframe has the same outline and box-shadow focused as unfocused"). With `E2E_BASE_URL` set, the e2e fixtures answer that one path with an empty script (`e2e/support/netlify-drawer.ts`), so no Drawer loads and every other request reaches the preview unchanged. A local run (no `E2E_BASE_URL`) installs no stub. If the owner later turns the Drawer off for Deploy Previews and Branch deploys in the Netlify UI, the stub becomes a no-op.
+
 ## Observed results
 
 Recorded by #15's testing; until #23 (the not-found page with `Cache-Control: ... s-maxage=60`) merges, the `Cache-Status`, server-route `noindex`, and cold-start render checks are **partial**, and #23 repeats them on its own preview. The first production release waits for a full pass.
@@ -102,4 +111,6 @@ Recorded by #15's testing; until #23 (the not-found page with `Cache-Control: ..
 | ------------------------------------------------------ | ------------------------------- |
 | Cold start (3 fresh deploys, tester and owner's phone) | pending (#15, Phase 5)          |
 | `Cache-Status` of a repeated `/does-not-exist`         | pending (#15, Phase 5), partial |
-| Netlify UI refuses a project name with `--`            | pending (owner, setup 5)        |
+| Netlify UI refuses a project name with `--`            | not claimable (owner, setup 5)  |
+
+Project names: Netlify caps project names at 37 characters, so `deploy-preview-<n>--charming-longma-28c00d` (40 or more) and `<24 hex>--charming-longma-28c00d` (48) cannot be claimed by another project. `main--charming-longma-28c00d` is already this project's staging hostname, so Netlify cannot route it to another project (the UI's availability check for it never completed, and nothing was saved). `PREVIEW_ORIGIN_PATTERN` stays as is ([#15 comment](https://github.com/jasonbryan/omni-league/issues/15#issuecomment-6073378587)).
