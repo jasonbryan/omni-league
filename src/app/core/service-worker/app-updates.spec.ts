@@ -260,6 +260,27 @@ describe('AppUpdates', () => {
       expect(storedFirstRuns()).toEqual({ a: START, b: START + DAY });
     });
 
+    // A newly opened page runs the newest version the worker has, so NO_NEW_VERSION_DETECTED names
+    // the running version until this page learns of a newer one (PR #119 review).
+    it('after VERSION_READY, records the running version, never the downloaded one', () => {
+      const updates = setUp();
+      updates.start();
+      sw.versionReady('a', 'b');
+      vi.setSystemTime(START + DAY);
+      sw.noNewVersion('b');
+
+      expect(storedFirstRuns()).toEqual({ a: START });
+    });
+
+    it('records nothing for NO_NEW_VERSION_DETECTED while a detected version is downloading', () => {
+      const updates = setUp();
+      updates.start();
+      sw.versionUpdates.next({ type: 'VERSION_DETECTED', version: { hash: 'b' } });
+      sw.noNewVersion('b');
+
+      expect(storedFirstRuns()).toEqual({});
+    });
+
     it('treats a version with no record as first run now, so it shows the prompt', () => {
       const updates = setUp();
       updates.start();

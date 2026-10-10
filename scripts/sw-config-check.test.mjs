@@ -5,7 +5,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { checkNgswManifest, serviceWorkerOptionSet, swConfigCheck } from './sw-config-check.mjs';
+import {
+  checkNgswManifest,
+  serviceWorkerDefine,
+  serviceWorkerOptionSet,
+  swConfigCheck,
+} from './sw-config-check.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -311,6 +316,22 @@ describe('serviceWorkerOptionSet', () => {
   });
 });
 
+// The kill switch is one setting (PR #119 review): the `serviceWorker` option decides both whether
+// the build writes the worker and whether the app registers it.
+describe('serviceWorkerDefine', () => {
+  it('turns registration on exactly when angular.json sets the serviceWorker option', () => {
+    assert.equal(serviceWorkerDefine(angularJson()), '--define=__SERVICE_WORKER__=true');
+    assert.equal(
+      serviceWorkerDefine(angularJson({ inConfiguration: true })),
+      '--define=__SERVICE_WORKER__=true',
+    );
+    assert.equal(
+      serviceWorkerDefine(angularJson({ option: false })),
+      '--define=__SERVICE_WORKER__=false',
+    );
+  });
+});
+
 describe('the repository configuration (ADR 0013 section 1)', () => {
   it('angular.json sets serviceWorker to ngsw-config.json in the build options of every configuration', async () => {
     const angular = JSON.parse(await readFile(join(ROOT, 'angular.json'), 'utf8'));
@@ -358,6 +379,32 @@ describe('the repository configuration (ADR 0013 section 1)', () => {
           resources: { files: ['/media/**', '/icons/**'] },
         },
       ],
+    );
+  });
+
+  it('angular.json defaults __SERVICE_WORKER__ to false, so a build outside npm run build registers no worker', async () => {
+    const angular = JSON.parse(await readFile(join(ROOT, 'angular.json'), 'utf8'));
+    assert.equal(
+      angular.projects['omni-league'].architect.build.options.define.__SERVICE_WORKER__,
+      'false',
+    );
+  });
+
+  it('npm run build and npm start pass __SERVICE_WORKER__ from the serviceWorker option', async () => {
+    const source = await readFile(join(ROOT, 'scripts', 'ng-convex.mjs'), 'utf8');
+    // At the top level, for both commands, from the repository's angular.json.
+    assert.match(
+      source,
+      /^const swDefine = serviceWorkerDefine\(JSON\.parse\(readFileSync\(join\(root, 'angular\.json'\)/m,
+    );
+    assert.match(source, /^defines\.push\(swDefine\);$/m);
+  });
+
+  it('the app registers the worker only when __SERVICE_WORKER__ is true, in a production build', async () => {
+    const config = await readFile(join(ROOT, 'src', 'app', 'app.config.ts'), 'utf8');
+    assert.match(
+      config,
+      /provideServiceWorker\(\s*'ngsw-worker\.js',\s*serviceWorkerRegistration\(SERVICE_WORKER_BUILD, isDevMode\(\)\),?\s*\)/,
     );
   });
 

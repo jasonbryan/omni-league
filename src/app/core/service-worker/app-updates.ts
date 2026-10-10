@@ -67,6 +67,11 @@ export class AppUpdates {
   private dismissed = false;
   /** A forced reload waits for the next navigation or visibility change. */
   private reloadArmed = false;
+  /**
+   * This page has seen a version newer than the one it runs (VERSION_DETECTED or VERSION_READY), so
+   * the newest version the worker has may not be the running one.
+   */
+  private newerVersionSeen = false;
   /** When the last update check started by the page becoming visible ran; unset before the first. */
   private lastCheck: number | undefined;
 
@@ -112,12 +117,20 @@ export class AppUpdates {
 
   private onVersionEvent(event: VersionEvent): void {
     const now = Date.now();
+    if (event.type === 'VERSION_DETECTED') {
+      this.newerVersionSeen = true;
+      return;
+    }
     if (event.type === 'NO_NEW_VERSION_DETECTED') {
-      // The newest version the worker has: the running one, or the one the next load runs.
-      firstRunOf(event.version.hash, now);
+      // Only the running version gets a first-run time (ADR 0013 §4). The event names the newest
+      // version the worker has. A newly opened page runs that version, so it is the running one
+      // until this page sees a newer version; after that, the running one is VERSION_READY's
+      // `currentVersion`, already recorded there.
+      if (!this.newerVersionSeen) firstRunOf(event.version.hash, now);
       return;
     }
     if (event.type !== 'VERSION_READY') return;
+    this.newerVersionSeen = true;
     const firstRun = firstRunOf(event.currentVersion.hash, now);
     if (now - firstRun > FORCED_RELOAD_AGE_MS) {
       this.reloadArmed = true;

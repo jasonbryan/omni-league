@@ -243,9 +243,11 @@ test.describe('service worker (production build)', () => {
     await context.setOffline(false);
     await expect(note).toBeHidden({ timeout: 10_000 });
 
-    // Later: the card goes for this page session, and the page loses its padding.
+    // Later: the card goes for this page session, focus moves to the main region (not <body>), and
+    // the page loses its padding.
     await card.getByRole('button', { name: 'Later' }).click();
     await expect(card).toHaveCount(0);
+    await expect(page.locator('main#main')).toBeFocused();
     await expect(status).toHaveText('');
     expect(await page.evaluate(() => getComputedStyle(document.body).paddingBottom)).toBe('0px');
 

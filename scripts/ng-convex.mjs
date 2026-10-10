@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { checkServerBundle } from './edge-bundle.mjs';
 import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
-import { swConfigCheck } from './sw-config-check.mjs';
+import { serviceWorkerDefine, swConfigCheck } from './sw-config-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...extraArgs] = process.argv.slice(2);
@@ -88,6 +88,15 @@ if (command === 'build') {
   );
   defines.push(`--define=__NOINDEX__=${noindex}`);
 }
+
+// The service worker (#81, ADR 0013 section 4): the app registers it exactly when angular.json sets
+// the `serviceWorker` build option, so removing that option (the kill switch) turns off both the
+// worker build and its registration. Production builds only: development builds never register.
+const swDefine = serviceWorkerDefine(JSON.parse(readFileSync(join(root, 'angular.json'), 'utf8')));
+console.log(
+  `service worker: ${swDefine.endsWith('=true') ? 'on' : 'off'} (angular.json serviceWorker option)`,
+);
+defines.push(swDefine);
 
 // 5. Spawn the CLI through Node with an argv array: no shell, same quoting on every OS.
 const ngArgs = [command, ...defines, ...extraArgs];

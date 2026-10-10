@@ -7,7 +7,8 @@
 // `node scripts/sw-config-check.mjs` after a build.
 //
 // With no `serviceWorker` option in angular.json and no ngsw.json (the kill switch, ADR 0013
-// section 4), it prints `sw-config-check: SKIP` and passes.
+// section 4), it prints `sw-config-check: SKIP` and passes. The same option decides whether the app
+// registers the worker (`serviceWorkerDefine`).
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -30,6 +31,20 @@ export function serviceWorkerOptionSet(angularJson) {
     const sets = (options) => !!options?.serviceWorker;
     return sets(build?.options) || Object.values(build?.configurations ?? {}).some(sets);
   });
+}
+
+/**
+ * The `--define` that tells the app whether to register the worker: `true` exactly when angular.json
+ * sets the `serviceWorker` option. The option is the kill switch's single setting (ADR 0013
+ * section 4, PR #119 review): without it the build writes no worker and the app registers none, so
+ * no client requests the missing `ngsw-worker.js`. `scripts/ng-convex.mjs` passes it to every
+ * `ng build` and `ng serve`; angular.json's default (`false`) covers a plain `ng build`.
+ *
+ * @param {any} angularJson
+ * @returns {string}
+ */
+export function serviceWorkerDefine(angularJson) {
+  return `--define=__SERVICE_WORKER__=${String(serviceWorkerOptionSet(angularJson))}`;
 }
 
 /**
@@ -142,7 +157,10 @@ export async function swConfigCheck({ angularJsonPath, browserDir }) {
     }
     return {
       status: 'SKIP',
-      lines: [`${PREFIX} SKIP (no serviceWorker option and no ngsw.json: the worker is off)`],
+      lines: [
+        `${PREFIX} SKIP (no serviceWorker option and no ngsw.json: the worker is off, and the ` +
+          'app registers none)',
+      ],
     };
   }
   let manifest;

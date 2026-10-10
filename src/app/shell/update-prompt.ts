@@ -71,7 +71,7 @@ import { AppUpdates } from '../core/service-worker/app-updates';
                   type="button"
                   data-slot="button"
                   class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2"
-                  (click)="updates.later()"
+                  (click)="later()"
                 >
                   Later
                 </button>
@@ -125,11 +125,11 @@ import { AppUpdates } from '../core/service-worker/app-updates';
 export class UpdatePrompt {
   protected readonly updates = inject(AppUpdates);
   private readonly card = viewChild<ElementRef<HTMLElement>>('card');
+  private readonly document = inject(DOCUMENT);
 
   constructor() {
-    const document = inject(DOCUMENT);
-    const root = document.documentElement;
-    const body = document.body;
+    const root = this.document.documentElement;
+    const body = this.document.body;
     // Measures the card and writes the page's padding: imperative DOM, after rendering.
     afterRenderEffect((onCleanup) => {
       const card = this.card()?.nativeElement;
@@ -150,6 +150,17 @@ export class UpdatePrompt {
         body.style.removeProperty('padding-bottom');
       });
     });
+  }
+
+  /**
+   * Later hides the card. When focus was in it, focus moves to the main region (the skip link's
+   * target, `tabindex="-1"`) without scrolling, so it does not fall to `<body>` and the next Tab
+   * starts in the page content (PR #119 review).
+   */
+  protected later(): void {
+    const hadFocus = this.card()?.nativeElement.contains(this.document.activeElement) ?? false;
+    this.updates.later();
+    if (hadFocus) this.document.getElementById('main')?.focus({ preventScroll: true });
   }
 }
 

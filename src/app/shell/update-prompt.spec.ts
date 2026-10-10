@@ -134,6 +134,52 @@ describe('UpdatePrompt', () => {
       expect(text(status())).toBe('');
       expect(reload).not.toHaveBeenCalled();
     });
+
+    // PR #119 review: focus must not fall to <body> when Later removes the focused button.
+    describe('focus after Later', () => {
+      let main: HTMLElement;
+      let input: HTMLInputElement;
+
+      beforeEach(() => {
+        // The shell's main region (`shell.ts`), and a control on the page.
+        main = document.createElement('main');
+        main.id = 'main';
+        main.tabIndex = -1;
+        input = document.createElement('input');
+        main.append(input);
+        document.body.append(main);
+        // The prompt's host is not in the document in this fixture; the shell puts it after the app.
+        document.body.append(host);
+      });
+
+      afterEach(() => {
+        main.remove();
+        host.remove();
+      });
+
+      it('moves focus from Later to the main region, not to <body>', () => {
+        const focus = vi.spyOn(main, 'focus');
+        button('Later')?.focus();
+        expect(document.activeElement).toBe(button('Later'));
+
+        button('Later')?.click();
+        TestBed.tick();
+
+        expect(card()).toBeNull();
+        expect(document.activeElement).toBe(main);
+        expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+      });
+
+      it('leaves focus where it was when it was not in the card', () => {
+        input.focus();
+
+        button('Later')?.click();
+        TestBed.tick();
+
+        expect(card()).toBeNull();
+        expect(document.activeElement).toBe(input);
+      });
+    });
   });
 
   describe('unrecoverable state', () => {
