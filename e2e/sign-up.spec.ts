@@ -225,7 +225,13 @@ test.describe('sign-up', () => {
     }
     await screenshot(page, testInfo, '62-app-signed-in');
     await expectAccessible(page, {
-      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]', 'main button'],
+      // Sign out, then #64's "Create an organization" in "Your organizations" (none yet).
+      expectedOrder: [
+        'a[href$="#main"]',
+        'header a[href="/"]',
+        'main button',
+        'main a[href="/app/organizations/new"]',
+      ],
     });
 
     // Signed in, /sign-up goes straight on to /app.

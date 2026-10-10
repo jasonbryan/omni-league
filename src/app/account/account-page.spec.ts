@@ -37,26 +37,32 @@ describe('AccountPage', () => {
     return harness.routeNativeElement!;
   }
 
+  const emitMe = () =>
+    convex.activeSubscriptions.find((s) => s.name === 'users:me')?.emit({ name: 'Maya Okafor' });
+
   it('asks users.me only once Convex has accepted the token', async () => {
     const page = await open();
     TestBed.tick();
     expect(convex.subscriptions).toEqual([]);
     expect(page.querySelector('h1')?.textContent?.trim()).toBe('Your account');
-    expect(page.querySelector('section')).toBeNull();
+    expect(page.querySelector('section[aria-label="Signed-in account"]')).toBeNull();
 
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
-    expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([['users:me', {}]]);
+    expect(convex.activeSubscriptions.map((s) => [s.name, s.args]).sort()).toEqual([
+      ['organizations:listMine', {}],
+      ['users:me', {}],
+    ]);
   });
 
   it('shows "Signed in as <name>" with the initials, in the approved panel', async () => {
     const page = await open();
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
-    convex.activeSubscriptions[0]?.emit({ name: 'Maya Okafor' });
+    emitMe();
     await harness.fixture.whenStable();
 
-    const section = page.querySelector('section');
+    const section = page.querySelector('section[aria-label="Signed-in account"]');
     expect(section?.getAttribute('aria-label')).toBe('Signed-in account');
     expect(section?.querySelector('p')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
       'Signed in asMaya Okafor',
@@ -67,11 +73,28 @@ describe('AccountPage', () => {
     expect(page.querySelectorAll('h1')).toHaveLength(1);
   });
 
+  it('shows "Your organizations" below the account panel (#64)', async () => {
+    const page = await open();
+    TestBed.inject(AuthService).onChange(true);
+    TestBed.tick();
+    emitMe();
+    convex.activeSubscriptions
+      .find((s) => s.name === 'organizations:listMine')
+      ?.emit([{ name: 'Coastal Bend Rec Club', slug: 'coastal-bend-rec-club', role: 'orgAdmin' }]);
+    await harness.fixture.whenStable();
+
+    const sections = [...page.querySelectorAll('section')];
+    expect(
+      sections.map((s) => s.getAttribute('aria-label') ?? s.getAttribute('aria-labelledby')),
+    ).toEqual(['Signed-in account', 'organizations-heading']);
+    expect(sections[1]?.querySelector('h3')?.textContent?.trim()).toBe('Coastal Bend Rec Club');
+  });
+
   it('Sign out deletes the session and goes to /', async () => {
     const page = await open();
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
-    convex.activeSubscriptions[0]?.emit({ name: 'Maya Okafor' });
+    emitMe();
     await harness.fixture.whenStable();
 
     const button = [...page.querySelectorAll('button')].find(

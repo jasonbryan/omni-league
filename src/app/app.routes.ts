@@ -33,6 +33,15 @@ export const routes: Routes = [
         loadComponent: () => import('./account/account-page').then((m) => m.AccountPage),
       },
       {
+        // Create an organization (#64). Ahead of `**`; #65's `organizations/:slug` follows it, and
+        // the reserved slug `new` keeps the two apart.
+        path: 'organizations/new',
+        title: 'Create an organization | Omni League',
+        canActivate: [requireSignedIn],
+        loadComponent: () =>
+          import('./organizations/create-organization-page').then((m) => m.CreateOrganizationPage),
+      },
+      {
         path: '**',
         loadComponent: () => import('./not-found/not-found-page').then((m) => m.NotFoundPage),
       },
