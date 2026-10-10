@@ -20,6 +20,11 @@ function routeSlug(route: string): string {
   return slug || 'home';
 }
 
+/** `/sign-up` and everything under `/app` are `RenderMode.Client` (app.routes.server.ts). */
+function isClientRoute(route: string): boolean {
+  return /^\/(?:sign-up|app)(?:[/?#]|$)/.test(route);
+}
+
 test.describe('screenshots', () => {
   // A route may be a 404 document (the not-found page, #23): its own 404 resource message is
   // allowed, and the status is printed beside the path. Every other console rule still applies.
@@ -32,7 +37,9 @@ test.describe('screenshots', () => {
         'screenshots use the two Chromium projects (ADR 0005)',
       );
       const response = await page.goto(route);
-      if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      // Client routes (#62) render in the browser only, so they never log hydration.
+      if (isClientRoute(route)) await expect(page.locator('main h1')).toBeVisible();
+      else if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
       await page.evaluate(() => document.fonts.ready);
       const width = page.viewportSize()?.width ?? 0;
       const path = join(testInfo.config.rootDir, 'screenshots', `${routeSlug(route)}-${width}.png`);

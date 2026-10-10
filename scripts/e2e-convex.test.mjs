@@ -24,6 +24,7 @@ import {
   convexCliEnv,
   DEPLOYMENT_NAME,
   devArgs,
+  E2E_SITE_URL,
   isListening,
   LOCAL_CONVEX_URL,
   main,
@@ -442,6 +443,65 @@ describe('main', () => {
       assert.match(errors.join('\n'), /E2E_BASE_URL/);
     });
   }
+});
+
+describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
+  /** Runs `setup` against a stub CLI; returns the CLI calls and everything printed. */
+  async function setup({ fail } = {}) {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const calls = [];
+    const lines = [];
+    const code = await main(['setup'], {
+      env: {},
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      spawnCli: async (args) => {
+        calls.push(args.slice(0, -2)); // without `--env-file <target>`
+        if (fail && args[2] === fail) {
+          return { code: 1, stdout: '', stderr: `cannot set ${args.slice(2, 4).join('=')}` };
+        }
+        const reset = { documents: 0, authDocuments: 3, scheduledFunctions: 0, files: 0 };
+        return { code: 0, stdout: args[0] === 'run' ? JSON.stringify(reset) : '', stderr: '' };
+      },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    });
+    return { code, calls, output: lines.join('\n') };
+  }
+
+  it('sets IS_TEST, SITE_URL, and a new random BETTER_AUTH_SECRET, then resets', async () => {
+    const first = await setup();
+    assert.equal(first.code, 0);
+    assert.deepEqual(
+      first.calls.map((args) => args.slice(0, 3)),
+      [
+        ['env', 'set', 'IS_TEST'],
+        ['env', 'set', 'SITE_URL'],
+        ['env', 'set', 'BETTER_AUTH_SECRET'],
+        ['run', 'testing:reset'],
+      ],
+    );
+    assert.deepEqual(first.calls[0], ['env', 'set', 'IS_TEST', 'true']);
+    assert.deepEqual(first.calls[1], ['env', 'set', 'SITE_URL', E2E_SITE_URL]);
+    assert.equal(E2E_SITE_URL, 'http://localhost:4000');
+
+    // Random per run, at least 256 bits, and never printed.
+    const secret = first.calls[2][3];
+    assert.match(secret, /^[A-Za-z0-9_-]{43,}$/);
+    assert.ok(!first.output.includes(secret), 'the secret is printed');
+    const second = await setup();
+    assert.notEqual(second.calls[2][3], secret);
+  });
+
+  it('fails without printing the secret when setting it fails', async () => {
+    const { code, calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET' });
+    assert.equal(code, 1);
+    const secret = calls[2][3];
+    assert.ok(!output.includes(secret), 'the secret is printed');
+    assert.match(output, /BETTER_AUTH_SECRET/);
+    // The reset never runs with the old secret's signing key left in place.
+    assert.equal(calls.length, 3);
+  });
 });
 
 describe('main with the backend port held by another process', () => {
