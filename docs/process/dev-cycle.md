@@ -145,7 +145,7 @@ A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commi
 4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
 5. **On failure.** If `ci` fails, `gh pr ready <n> --undo` and send the PR back to the implementer.
 
-The branch is deleted and the issue closes through `Closes #n`.
+The branch is deleted and the issue closes through `Closes #n`. Merging (or closing) the PR also deletes its Convex preview deployment `pr-<n>` automatically ([Phase 8](#8-deploy)); nobody deletes it by hand.
 
 Until #12 adds the `ci` workflow, the orchestrator merges on `PASS` and `APPROVE` alone, with a one-line merge note on the PR saying CI was waived (as on PR #30).
 
@@ -158,7 +158,7 @@ The deployer runs after merges to `main`:
 
 Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub.
 
-- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. No cleanup job runs: Convex deletes preview backends after 5 days, and Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans).
+- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. **Closing or merging a PR deletes its Convex preview deployment automatically** (`.github/workflows/clean-previews.yml`, with a daily sweep for any it missed; [hosting, Cleanup](hosting.md#cleanup)), so the team's 40-deployment cap is not reached. The orchestrator checks the daily run's result (`gh run list --workflow clean-previews.yml`) and reports a failure to the owner. Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans); Convex also deletes preview backends after 5 days.
 - **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app`. The deployer smoke-tests it and reports the URL. The owner reviews UI changes there and requests changes as new issues.
 - **Production.** The deployer opens a release PR from `main` into the `production` branch. The owner's merge approves and ships it: Netlify builds with the owner-held production key, then the deployer smoke-tests the production URL.
 - **Rollback.** If the production smoke tests fail, the deployer opens a `type:bug` issue with the rollback steps, and the owner runs them: Netlify **Publish deploy** of the previous build, then merging a revert on `production` to redeploy the previous Convex functions.

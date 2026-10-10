@@ -2,7 +2,7 @@
 
 How continuous integration works in this repository. The decision and its reasoning are in [ADR 0009](../decisions/0009-ci-pipeline.md); this page is the operating reference. The development cycle is in [dev-cycle.md](dev-cycle.md).
 
-CI is one workflow, `.github/workflows/ci.yml` (name `CI`), with one job that matters for merging, `ci`. It runs once per tree that can merge: only on PRs that are ready for review, never on draft pushes, and never again on `main` after the merge.
+CI is one workflow, `.github/workflows/ci.yml` (name `CI`), with one job that matters for merging, `ci`. It runs once per tree that can merge: only on PRs that are ready for review, never on draft pushes, and never again on `main` after the merge. A second workflow, `clean-previews.yml`, is not CI: it deletes the Convex preview of a closed PR ([hosting, Cleanup](hosting.md#cleanup)) and is not a required check.
 
 ## Required check
 
@@ -93,7 +93,7 @@ Agents never push to `main` directly.
 - **Only GitHub-owned actions** (`actions/*`, `github/*`), each pinned to a full 40-character commit SHA with `# vX.Y.Z` on the same line. Dependabot (`.github/dependabot.yml`, monthly, grouped minor and patch) updates the SHA and the comment.
 - **actionlint** is not an action: the `ci` job downloads the tarball, checks it with `sha256sum --check --strict`, and runs it. Its version and hash live in the workflow's top-level `env:` and are bumped by hand, because Dependabot does not track it. The PR reviewer checks the actionlint release about quarterly; a patch or minor bump needs no gate.
 - **Adding an action:** a new GitHub-owned action may be added by the issue that needs it, without a gate, if it is pinned as above, listed in this table, and the issue states its minute cost. **Any action from another owner needs a `gate:technology` amendment to ADR 0009.** Prefer an npm CLI an accepted ADR already covers, or a checksum-verified binary.
-- **Workflow security:** top-level `permissions: contents: read` only (any elevation per job, in the issue that needs it); no `secrets.` in `ci` or `warm-cache`; no `pull_request_target`; event fields reach `run:` only through `env:`, quoted; `timeout-minutes` on every job.
+- **Workflow security:** top-level `permissions: contents: read` only (any elevation per job, in the issue that needs it); no `secrets.` in `ci` or `warm-cache` (the only secret in any workflow is `CONVEX_TEAM_TOKEN`, used by `clean-previews.yml` alone, by owner decision 2026-10-10; see [hosting](hosting.md#where-secrets-live)); no `pull_request_target`; event fields reach `run:` only through `env:`, quoted; `timeout-minutes` on every job.
 
 ## Minutes
 

@@ -17,11 +17,12 @@ The Netlify project (site name, `<site>` below) is **`charming-longma-28c00d`**.
 3. Create a Convex **preview** deploy key. Set the Netlify variable `CONVEX_DEPLOY_KEY` for the **Deploy Previews** and **Branch deploys** contexts only. No Production value until the first release.
 4. Set the Convex **default preview environment variables** (Convex dashboard, project settings), listed under [Preview variables](#preview-variables).
 5. In the Netlify UI, try to name a project with `--` (for example `deploy-preview-1--charming-longma-28c00d`) and record whether it is refused.
+6. Preview cleanup (#158), once: create a Convex **team access token** in the Convex dashboard (**Team Settings**, **Access Tokens**), then add it in GitHub (repository **Settings**, **Secrets and variables**, **Actions**, **New repository secret**) with the name `CONVEX_TEAM_TOKEN`. Until it is set, the [cleanup workflow](#cleanup) skips with a notice and deletes nothing.
 
 ## Where secrets live
 
 - **Netlify context values only.** `CONVEX_DEPLOY_KEY` holds the preview key in the Deploy Previews and Branch deploys contexts. The production key goes in the Production context at the first release, and only the owner handles it.
-- **Never in GitHub.** No workflow, deploy job, GitHub environment, repository secret, or Dependabot secret holds a deploy key or token. Netlify builds and posts the preview link; the smoke run is local.
+- **Never in GitHub, with one exception.** No workflow, deploy job, GitHub environment, repository secret, or Dependabot secret holds a deploy key or token. Netlify builds and posts the preview link; the smoke run is local. **The exception is the repository secret `CONVEX_TEAM_TOKEN`**, used only by `.github/workflows/clean-previews.yml` to delete the Convex preview deployments of closed PRs ([Cleanup](#cleanup)). Owner decision, 2026-10-10: "Do don't want to run in automate it" and "make it part of this development process", with GitHub on PR close chosen over a Netlify build step. No other workflow may reference it, and it is not a deploy key: it cannot deploy code, but a team access token can manage the team's Convex projects, so the owner revokes it in the dashboard if it leaks.
 - **Convex dashboard.** `BETTER_AUTH_SECRET` (preview-only value) is a Convex default preview variable.
 
 ## Preview variables
@@ -160,7 +161,35 @@ E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts --project
 
 ## Cleanup
 
-No cleanup job. Convex deletes preview deployments 5 days after creation. Convex 1.46 documents `--preview-create` as deleting and recreating a preview deployment with the same name, so a build may start from an empty backend; `seed:demo` runs on every build, so the demo data is there either way. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.
+A workflow deletes the Convex preview deployment of a PR when the PR is closed or merged (below). Without it, Convex deletes preview deployments 5 days after creation. Convex 1.46 documents `--preview-create` as deleting and recreating a preview deployment with the same name, so a build may start from an empty backend; `seed:demo` runs on every build, so the demo data is there either way. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.
+
+### Freeing Convex preview slots (#158)
+
+The Convex team caps deployments at 40, and a build that hits the cap fails with `DeploymentQuotaReached`. `.github/workflows/clean-previews.yml` ("Clean previews") runs `scripts/clean-previews.mjs` so a closed PR's slot is freed without anyone deleting it in the dashboard:
+
+| Trigger                                     | What it deletes                                                                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `pull_request` `closed` (merged too)        | Only `pr-<number>` of that PR (`--yes --pr <n>`).                                                                                       |
+| Daily at 05:23 UTC, and `workflow_dispatch` | Every `pr-<n>` whose PR is `CLOSED` or `MERGED` (`--yes`). This also clears a backlog and any PR whose close run was skipped or failed. |
+
+- **Secret.** The job reads the repository secret `CONVEX_TEAM_TOKEN` in the env of the one step that runs the script, and `gh` reads the PR state with the built-in workflow token (`pull-requests: read`, `contents: read`; no other permission). If the secret is not set, the job skips with a notice and does not fail. A PR from a fork, and a Dependabot PR, cannot read repository secrets, so their close run skips and the daily sweep deletes the preview.
+- **Setup.** [Owner setup](#owner-setup-one-time), step 6: create the token in the Convex dashboard (Team Settings, Access Tokens), and add it as `CONVEX_TEAM_TOKEN` (repository Settings, Secrets and variables, Actions, New repository secret). Revoke it in the dashboard if it leaks.
+- **Events.** It uses `pull_request`, never `pull_request_target`. Runs are serialized by a concurrency group and never cancelled.
+- **Checking it.** The orchestrator reads the daily run's result (`gh run list --workflow clean-previews.yml`) and reports a failure to the owner ([dev cycle, Deploy](dev-cycle.md#8-deploy)). The step's log shows one line per deployment and a summary; it never shows the token.
+
+**Manual fallback.** `npm run previews:clean` runs the same script from a terminal, with the same rules:
+
+```sh
+npm run previews:clean                 # list, ask for one y, delete
+npm run previews:clean -- --dry-run    # list only
+npm run previews:clean -- --yes        # delete without the prompt
+```
+
+It reads the token from `CONVEX_TEAM_TOKEN` in the environment, or prompts for it with nothing echoed, and needs `gh` installed and logged in. The script never prints, logs, or writes the token, and does not pass it to `gh`.
+
+**What it deletes.** Only deployments that are all of: in the `omni-league` project of team `jason-bryan`, type `preview`, named exactly `pr-<n>` (`^pr-[1-9][0-9]*$`), and whose PR `gh pr view <n> --json state` reports as `CLOSED` or `MERGED`. It never touches `main` (staging), dev or production deployments, another project, an open PR's preview, or a PR whose `gh` lookup fails. The close event alone does not authorize a delete: the script still asks `gh` for the state, so a PR reopened before the run is kept.
+
+**Output.** It lists the kept deployments with the reason, then the deployments to delete (deployment name, preview name, PR state), asks for `y`, and prints one line per deletion and a summary. It exits 1 if any delete failed. `--dry-run` never deletes, even with `--yes`.
 
 ## Smoke runs (local)
 

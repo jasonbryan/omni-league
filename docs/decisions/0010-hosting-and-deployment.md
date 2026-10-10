@@ -5,6 +5,7 @@
 - **Issue:** #9
 - **Date:** 2026-10-07
 - **Amended:** 2026-10-10, by #62 (PR #102): client-route shells are kept by no shared cache. See "Amendment: client shells and the shared cache (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-10-10, by #158: previews are cleaned up when their PR closes, by a workflow that holds one repository secret. See "Amendment: preview cleanup (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -697,3 +698,14 @@ PR #102's tester found that a deploy does not reliably purge the edge cache for 
 **Why.** A short lifetime still serves the old shell after a deploy. With `s-maxage=60, stale-while-revalidate=300`, an edge copy stored during the race is served fresh for 60 s, and then at least the request that triggers revalidation at each node gets it, for up to 300 s more: a blank page each time. With no shared cache, each load asks the edge function, which returns the current build's `index.csr.html` without rendering anything. The only cost is the invocations item 7 already counts. Installed clients make no such request, because the service worker answers navigations with its own shell. The browser revalidates on every load, as before.
 
 **Sources.** [PR #102 test, round 4](https://github.com/jasonbryan/omni-league/pull/102#issuecomment-6097301569), [owner's choice of a fifth round](https://github.com/jasonbryan/omni-league/pull/102#issuecomment-6097957149), Netlify [caching overview](https://docs.netlify.com/build/caching/caching-overview/).
+
+## Amendment: preview cleanup (2026-10-10)
+
+The Convex team caps deployments at 40, and each PR adds a preview deployment `pr-<n>` that nothing removed before Convex's 5-day expiry, so new previews failed with `DeploymentQuotaReached` (#158). The owner asked for the cleanup to be automatic: "Do don't want to run in automate it" and "make it part of this development process". The owner chose a workflow on PR close over a Netlify build step.
+
+| Rule in this ADR                                                        | Was                                 | Now                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Previews are removed by documented expiry, with no cleanup job (item 6) | No cleanup job                      | `clean-previews.yml` deletes the Convex preview deployment `pr-<n>` when PR `<n>` closes or merges, and sweeps every closed or merged PR's preview daily. Netlify's expiry for preview deploys is unchanged.                                                                                                     |
+| No deploy secret exists in GitHub (item 8, Consequences)                | No secret, no token, no cleanup job | One repository secret, `CONVEX_TEAM_TOKEN` (a Convex team access token), used only by `clean-previews.yml`. It is not a deploy key and cannot deploy code, but it can manage the team's Convex deployments. No deploy key, Netlify token, environment, or other secret is added; ADR 0009's rules for `ci` hold. |
+
+The workflow uses the `pull_request` event (never `pull_request_target`), `permissions: contents: read` and `pull-requests: read` only, pinned GitHub-owned actions, and skips with a notice when the secret is unset. Its engine, `scripts/clean-previews.mjs`, deletes only `preview`-type deployments of the `omni-league` project named `pr-<n>` whose PR `gh` reports as CLOSED or MERGED. Operating reference and the owner's setup: [hosting, Cleanup](../process/hosting.md#cleanup).

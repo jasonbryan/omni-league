@@ -1,0 +1,75 @@
+# Deletes the Convex preview deployments of closed and merged PRs (#158), so the Convex team cap of
+# 40 deployments never blocks a new PR preview (`DeploymentQuotaReached`).
+#
+# - A PR closed or merged: deletes only that PR's preview, `pr-<number>`.
+# - Daily, and by hand (workflow_dispatch): sweeps every `pr-<n>` whose PR is CLOSED or MERGED, which
+#   also catches PRs whose close event was skipped (a fork or Dependabot PR has no repository
+#   secrets, and a run can fail).
+#
+# The engine is scripts/clean-previews.mjs; its safety rules (preview type, the `pr-<n>` name, the
+# omni-league project, PR state from `gh`) apply here unchanged. Runs `pull_request`, never
+# `pull_request_target`: this repository is private, so a PR from a fork has no secrets.
+#
+# SECRET (owner decision 2026-10-10, docs/process/hosting.md "Never in GitHub"): the repository
+# secret CONVEX_TEAM_TOKEN is used only by this workflow, in the env of the one step that runs the
+# script. It is never echoed and never in a `run:` script. When the secret is not set, the job skips
+# with a notice instead of failing, so this workflow can merge before the owner adds the secret.
+# Setup and policy: docs/process/hosting.md, "Cleanup".
+name: Clean previews
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time; a delete in progress is never cancelled.
+concurrency:
+  group: clean-previews
+  cancel-in-progress: false
+
+jobs:
+  clean:
+    name: clean
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # `gh pr view` needs pull-requests: read; checkout needs contents: read.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The script uses only Node built-ins, so nothing is installed. Node comes from package.json.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      # Only whether the secret is set is read here, never its value.
+      - name: secret
+        id: secret
+        env:
+          HAS_TOKEN: ${{ secrets.CONVEX_TEAM_TOKEN != '' }}
+        run: |
+          echo "present=${HAS_TOKEN}" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice title=Convex previews not cleaned::The repository secret CONVEX_TEAM_TOKEN is not set (or this run cannot read it), so no preview was deleted. See docs/process/hosting.md, Cleanup."
+          fi
+      - name: delete previews
+        if: steps.secret.outputs.present == 'true'
+        env:
+          CONVEX_TEAM_TOKEN: ${{ secrets.CONVEX_TEAM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            node scripts/clean-previews.mjs --yes --pr "$PR_NUMBER"
+          else
+            node scripts/clean-previews.mjs --yes
+          fi
