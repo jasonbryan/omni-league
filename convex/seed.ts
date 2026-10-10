@@ -12,8 +12,11 @@ import { insertLeague, insertTenant, type Tenant } from './lib/tenantWrites';
  *
  * Later features add their demo rows here, under the same insert-only rule (hosting.md, Demo
  * data): never rename or remove an entry, because a renamed one is inserted again next to the old.
+ *
+ * Exported for `e2e/pwa.spec.ts` (#82), which opens these pages on a production build seeded by
+ * `seed:demo`. A plain value, not a Convex function, so it adds nothing to the API.
  */
-const DEMO: Tenant[] = [
+export const DEMO: readonly Tenant[] = [
   {
     organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
     locations: [

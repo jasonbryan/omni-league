@@ -267,7 +267,10 @@ describe('seed:demo', () => {
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    const exports = Object.entries(seed);
+    // `DEMO` is the plain data array e2e/pwa.spec.ts reads (#82): no function, nothing to call.
+    const { DEMO, ...functions } = seed;
+    expect(Array.isArray(DEMO)).toBe(true);
+    const exports = Object.entries(functions);
     expect(exports.map(([name]) => name)).toEqual(['demo']);
     for (const [name, fn] of exports) {
       const markers = fn as Partial<Record<'isInternal' | 'isPublic', boolean>>;
