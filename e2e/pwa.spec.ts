@@ -449,6 +449,53 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     ).toBe(true);
   });
 
+  // #100: the organization page needs its header and both lists saved. Any one missing is the
+  // not-saved view, and the page opens again once the copy is back.
+  test('offline, the page needs the header and both lists saved: any one missing shows the not-saved view', async ({
+    page,
+    context,
+  }) => {
+    const { organization } = SAVED_ORG;
+    const keys = [savedKey(organization.slug), ...savedListKeys(organization.slug)];
+    await installWorker(page);
+    await page.goto(SAVED_PATH);
+    const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+    await expect(h1).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate((all) => all.map((key) => localStorage.getItem(key) !== null), keys),
+      )
+      .toEqual([true, true, true]);
+
+    await setOffline(context, true);
+    for (const missing of keys) {
+      const kept = await page.evaluate((key) => {
+        const raw = localStorage.getItem(key);
+        localStorage.removeItem(key);
+        return raw;
+      }, missing);
+      expect(kept, missing).not.toBeNull();
+      const response = await page.reload();
+      expect(response?.fromServiceWorker(), missing).toBe(true);
+      await expect(
+        page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING }),
+        missing,
+      ).toBeVisible({ timeout: 5_000 });
+      await expect(page.locator('[data-saved-copy-note]'), missing).toHaveCount(0);
+
+      await page.evaluate(([key, raw]) => localStorage.setItem(key, raw), [
+        missing,
+        kept!,
+      ] as const);
+      await page.reload();
+      await expect(h1, `${missing} restored`).toBeVisible({ timeout: 5_000 });
+      await expect(
+        page.locator('main [data-saved-copy-note]'),
+        `${missing} restored`,
+      ).toBeVisible();
+    }
+  });
+
   test('a page never opened shows the not-saved view offline within 5 s, with links enabled', async ({
     page,
     context,
@@ -511,6 +558,13 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     };
     const unusable: [string, Record<string, unknown>][] = [
       ['{"name":"Shape Only"}', { v: { name: 'Shape Only' }, version }],
+      [
+        'the shape before #100 (lists, no totals)',
+        {
+          v: { name: organization.name, slug: organization.slug, leagues: [], locations: [] },
+          version,
+        },
+      ],
       ['42', { v: 42, version }],
       ['"x"', { v: 'x', version }],
       ['[1,2]', { v: [1, 2], version }],
