@@ -48,6 +48,20 @@ readonly addPlayer = injectMutation(api.teams.addPlayer);
 
 Known residual: a mutation already sent when the socket drops is re-sent by the Convex client on reconnect. `convex` 1.46 also notices a silent drop only after 60 seconds without server messages (`serverInactivityThreshold`), so in that window, with `navigator.onLine` still true, a change can be handed to the client and re-sent on reconnect.
 
+## Saved copies (ADR 0013 section 3, #82)
+
+In the browser, each live result of a query on `OFFLINE_SAVED_QUERIES` (`offline-saved-queries.ts`) is written to `localStorage`, and shown when the page has nothing else yet, so a recently viewed public page opens offline.
+
+- **Allow-list only.** A query is listed only if it is deliberately public and its result does not depend on the caller (Convex conventions, Functions). Nothing else is read or written, whatever the caller passes, so signed-in data is never saved.
+- **Key and value.** `cvx-saved:<function>:<JSON args with sorted keys>` (`savedCopyKey`), so equal args always give one key; value `{ v: convexToJson(result), savedAt, usedAt }` in epoch milliseconds.
+- **Precedence.** A transferred value first (hydration is unchanged), then a live result, then a saved copy, then loading. The copy is read once per args, synchronously, so the first render of a page opened offline already shows it.
+- **`savedAt`.** `QueryRef.savedAt()` is the time of the saved copy while one is shown, and `undefined` from the first live result on (a value or an error), and always on the server.
+- **Removed records.** A live `null` (or `undefined`) removes the saved entry.
+- **Limits.** At most 50 entries, the least recently used (written or shown) removed first; an entry older than 14 days is not used and is removed. Keys and values together stay under 1,000,000 UTF-16 code units, so they never crowd out the sign-in session; a larger result is not saved. Every storage error (no storage, quota exceeded, a value that is not a saved copy) is ignored.
+- **Server.** A server render never reads or writes saved copies.
+- **Pages.** A page shows the saved-copy note (`src/app/offline/saved-copy-note.ts`) under its `h1` only while `injectOnline()` is false, and the not-saved view (`src/app/offline/not-saved-view.ts`) when it is offline with no value. The organization page is the first (`organizations:getPublicPage`); later public pages add their query to the allow-list in their own issue.
+- **Specs.** A spec that renders a listed query in the browser clears `localStorage` before and after each test: spec files share one global, so a saved copy would otherwise seed a later test.
+
 ## No Convex URL
 
 CI, the e2e build, and a fresh clone build with no URL (`Convex URL: none`). The app starts with no client, and nothing is thrown or logged. Helpers report it instead:

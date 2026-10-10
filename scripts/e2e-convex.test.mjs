@@ -31,6 +31,7 @@ import {
   resolveTarget,
   ROOT,
   runConvex,
+  seedDemoCalls,
   SHARED_STATE_DIRNAME,
 } from './e2e-convex.mjs';
 import { e2ePlan } from './e2e.mjs';
@@ -379,8 +380,23 @@ describe('ports', () => {
   });
 });
 
+describe('seedDemoCalls (seed-demo)', () => {
+  it('sets PREVIEW_ORIGIN_PATTERN to the given pattern, then runs seed:demo, both through runConvex', () => {
+    const pattern = String.raw`^https://(main)--site\.netlify\.app$`;
+    const calls = seedDemoCalls(pattern);
+    assert.deepEqual(calls, [
+      ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', pattern],
+      ['run', 'seed:demo'],
+    ]);
+    // Each call is one runConvex accepts (env set or run), so each goes through the target check.
+    for (const args of calls) {
+      assert.ok((args[0] === 'env' && args[1] === 'set') || args[0] === 'run', args.join(' '));
+    }
+  });
+});
+
 describe('main', () => {
-  for (const command of ['push', 'serve', 'setup', 'run']) {
+  for (const command of ['push', 'serve', 'setup', 'seed-demo', 'run']) {
     it(`${command} refuses with E2E_BASE_URL set and spawns nothing`, async () => {
       const spawned = [];
       const errors = [];

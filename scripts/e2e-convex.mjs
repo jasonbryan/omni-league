@@ -5,6 +5,8 @@
 //   node scripts/e2e-convex.mjs serve            `convex dev`: the backend (Playwright webServer)
 //   node scripts/e2e-convex.mjs setup            globalSetup: `env set IS_TEST true`, `run testing:reset`
 //   node scripts/e2e-convex.mjs run <fn> [json]  `run` one test function; prints its JSON result
+//   node scripts/e2e-convex.mjs seed-demo        `env set PREVIEW_ORIGIN_PATTERN`, `run seed:demo`:
+//                                                the demo data of a production-build PWA run (#82)
 //
 // TARGETING (security). The CLI follows `.env.local`, which may name a contributor's cloud dev
 // deployment, and `convex dev` rewrites `.env.local`. So the CLI never runs from the repository
@@ -44,7 +46,20 @@ const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
 /** Under the home directory, where an older CLI kept every checkout's anonymous deployments. */
 export const SHARED_STATE_DIRNAME = Object.freeze(['.convex', 'anonymous-convex-backend-state']);
-const USAGE = 'usage: node scripts/e2e-convex.mjs <push|serve|setup|run <function> [json-args]>';
+const USAGE =
+  'usage: node scripts/e2e-convex.mjs <push|serve|setup|seed-demo|run <function> [json-args]>';
+
+/**
+ * The CLI calls of `seed-demo`, in order. `seed:demo` writes only where `PREVIEW_ORIGIN_PATTERN`
+ * is the preview constant (convex/seed.ts), so the local backend gets that value first. It admits
+ * only this project's Netlify preview origins, so it opens nothing on a local backend.
+ */
+export function seedDemoCalls(previewOriginPattern) {
+  return [
+    ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', previewOriginPattern],
+    ['run', 'seed:demo'],
+  ];
+}
 
 /** E2E_BASE_URL when it is a non-empty string (the same rule as e2e/support/env.ts). */
 export function remoteBaseUrl(env) {
@@ -338,6 +353,16 @@ export async function main(
           `e2e-convex: IS_TEST=true on ${LOCAL_CONVEX_URL}; testing:reset deleted ` +
             JSON.stringify(JSON.parse(reset)),
         );
+        return 0;
+      }
+      case 'seed-demo': {
+        // Node strips the types of this one constant file (convex/lib/previewOrigin.ts).
+        const { PREVIEW_ORIGIN_PATTERN } = await import('../convex/lib/previewOrigin.ts');
+        let inserted = '';
+        for (const args of seedDemoCalls(PREVIEW_ORIGIN_PATTERN)) {
+          inserted = await runConvex(args, { env, spawnCli });
+        }
+        log(`e2e-convex: seed:demo on ${LOCAL_CONVEX_URL} inserted ${inserted.trim()}`);
         return 0;
       }
       case 'run': {
