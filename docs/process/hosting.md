@@ -104,6 +104,44 @@ Netlify Edge Functions refuse filesystem access, and Netlify counts `process.cwd
 
 Sign-up from a preview calls the preview's own `*.convex.site` URL. Better Auth trusts that request because the preview's origin matches `PREVIEW_ORIGIN_PATTERN` ([Preview variables](#preview-variables)); production sets no pattern and trusts `SITE_URL` only.
 
+## Service worker
+
+Production builds register Angular's service worker (`@angular/service-worker`, [ADR 0013](../decisions/0013-pwa-stack.md) sections 1 and 4, #81). It keeps the app shell and the build files listed in `ngsw.json`, so the app opens offline, and it answers every navigation with the client shell (`index.csr.html`). It never keeps Convex data, auth requests, or `/api/` URLs. Development builds, including the e2e build, register no worker. Crawlers never run it, so the server HTML, statuses, and headers they get are unchanged.
+
+**Build check.** `npm run build` runs `scripts/sw-config-check.mjs` after the edge-safety check (tests in `scripts/sw-config-check.test.mjs`). It fails the build when the built `dist/omni-league/browser/ngsw.json` has any data group, an `index` other than `/index.csr.html`, a `navigationRequestStrategy` other than `performance`, or an asset URL that is not a same-origin path or contains `/api/`, `convex.cloud`, or `convex.site`. It also fails when a content-hashed `main-*`, `chunk-*`, or `polyfills-*` script or `styles-*` sheet in `browser/` is in no prefetch asset group: lazily loaded chunks, such as the phone sheet's, must open offline before their first use online (PR #107 testing). It prints `sw-config-check: PASS`, `sw-config-check: SKIP` (no `serviceWorker` option in `angular.json` and no `ngsw.json`: the kill switch), or one `sw-config-check: FAIL <problem>` line per problem. With the option set and no `ngsw.json`, it fails.
+
+**One switch.** The `serviceWorker` option in `angular.json` decides both whether the build writes the worker and whether the app registers it. `npm run build` and `npm start` (`scripts/ng-convex.mjs`) pass it to the app as the build-time define `__SERVICE_WORKER__` and print `service worker: on` or `off`. `provideServiceWorker` registers only when that define is true in a production build (`src/app/core/service-worker/service-worker-build.ts`). A plain `ng build` gets the `angular.json` default, `false`, and registers nothing.
+
+**Kill switch.** Each path ships through `gate:production`.
+
+1. **Normal release.** A PR on `main` removes the `serviceWorker` build option from `angular.json`, and changes nothing else. The build then writes no `ngsw.json`, prints `service worker: off` and `sw-config-check: SKIP`, and the app registers no worker. Every client that next opens the app online gets a 404 for `ngsw.json`, deletes its caches, and unregisters (about 6 seconds after one navigation in the ADR's scratch run). The PR's Evidence block records a passing kill-switch rehearsal (below). The release PR ships it as usual.
+2. **Emergency release.** A release from `main` would also ship everything merged since the last release. Instead, the deployer opens a release PR from a branch cut from `production` whose only change is the step above, labelled `gate:production`; the owner's merge ships it. The same change then lands on `main` through a normal PR before the next release, or the next release turns the worker back on.
+3. **If the worker script itself fails to start,** either release serves the packaged `safety-worker.js` at the `ngsw-worker.js` URL instead, until users have unregistered ([Service worker devops](https://angular.dev/ecosystem/service-workers/devops)).
+
+**Kill-switch rehearsal.** `e2e/pwa-kill-switch.spec.ts` rehearses step 1 on local production builds. It builds with the option, installs the worker in one client, rebuilds with the option removed from `angular.json` (restored afterwards), and serves that build on the same port. It then checks that the installed client deletes its caches and unregisters after one navigation, that a new client registers nothing within the 30-second registration window, and that neither page logs a console error or warning. It takes about a minute and is local only: `ci` and `npm run e2e` skip it. Run it with no Convex URL (as below) and a free port:
+
+```sh
+E2E_KILL_SWITCH=1 E2E_BASE_URL=http://localhost:4100 npx playwright test e2e/pwa-kill-switch.spec.ts
+```
+
+It starts and stops its own SSR server, and leaves the kill-switch build in `dist/`; run `npm run build` again before the production-build run below.
+
+**Netlify Drawer.** The Drawer script changes `index.csr.html` after the build, so ngsw's hash check fails where it is injected, and the worker falls back to the network there: the app works, but not offline. The owner turns the Drawer off for Deploy Previews and Branch deploys (Netlify UI; owner, 2026-10-09). With it off, offline and update evidence from a preview counts as well as from a local production build.
+
+**Local production-build run.** `npm run e2e` cannot test the worker: it rebuilds `dist/` in development mode. Run `e2e/pwa.spec.ts` against a production build instead:
+
+```sh
+npm run build                 # prints sw-config-check: PASS
+npm run serve:ssr             # http://localhost:4000; PORT=<port> for another port
+E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts
+```
+
+The spec runs in `chromium-mobile` only and is skipped without `E2E_BASE_URL`, so `ci` skips it. Stop `serve:ssr` afterwards ([dev cycle, Local processes](dev-cycle.md#local-processes)).
+
+**`CONVEX_URL` for this run.** `scripts/ng-convex.mjs` compiles in the Convex URL from the environment, or else from `.env.local`. A URL that names a backend that is not running keeps the adapter's `online` signal false, so the offline note never goes and the spec's "note disappears" check fails for a reason unrelated to the worker. So either build with no Convex URL (`CONVEX_URL` unset in the environment and absent from `.env.local`; `online` then follows `navigator.onLine`), or start #82's local backend sequence first and build against it.
+
+**Release check.** No `ci` job proves offline behaviour, because `e2e/pwa.spec.ts` needs a production build. Every release request (`gate:production`) records a run of the commands above on the release commit, with the output in its Evidence block.
+
 ## Cleanup
 
 No cleanup job. Convex deletes preview deployments 5 days after creation. Convex 1.46 documents `--preview-create` as deleting and recreating a preview deployment with the same name, so a build may start from an empty backend; `seed:demo` runs on every build, so the demo data is there either way. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.

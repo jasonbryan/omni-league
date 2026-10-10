@@ -9,6 +9,7 @@ Applies to everything under `convex/`. Once the project is scaffolded, read `con
 - Logic only the backend calls is `internalQuery` / `internalMutation` / `internalAction`.
 - Shared authorization lives in helper functions under `convex/lib/`, reused by every function rather than re-implemented.
 - Actions call the database only through `ctx.runQuery` / `ctx.runMutation`; external API calls (Stripe) happen only in actions or HTTP actions.
+- **14-day compatibility** ([ADR 0013](../decisions/0013-pwa-stack.md) section 4). The service worker lets an open tab or installed app run the previous frontend until it reloads, and the app forces that reload only after 14 days. So every public function keeps accepting the previous release's arguments, and keeps returning what the previous frontend reads, for at least 14 days after a release (expand/contract, as for schema changes): add an optional argument or a new function first, and remove the old form in a release at least 14 days later. The PR reviewer checks it on every change to a public function's `args` or `returns`.
 
 ## Data
 

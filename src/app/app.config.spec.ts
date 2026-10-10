@@ -1,11 +1,13 @@
 import { OVERLAY_DEFAULT_CONFIG } from '@angular/cdk/overlay';
 import { TestBed } from '@angular/core/testing';
 import { Router, UrlSerializer } from '@angular/router';
+import { SwRegistrationOptions, SwUpdate } from '@angular/service-worker';
 import { App } from './app';
 import { appConfig } from './app.config';
 import { AUTH_CLIENT } from './core/auth/auth-client';
 import { AuthService } from './core/auth/auth.service';
 import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
+import { AppUpdates } from './core/service-worker/app-updates';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 
 // TestBed has no server response, so provideClientHydration() warns NG0505. That warning is a test
@@ -52,6 +54,22 @@ describe('appConfig with no Convex URL', () => {
     // No Convex site URL in the test build, so no client is created.
     expect(TestBed.inject(AUTH_CLIENT)).toBeNull();
     expect(TestBed.inject(AuthService).signedIn()).toBe(false);
+  });
+
+  // ADR 0013 section 1 (#81): the worker registers 30 s after the app is stable, and only in
+  // production builds. Unit tests run in development mode, like `ng serve` and the e2e build.
+  it('provides the service worker, off in development builds, and adds no update prompt', async () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(SwRegistrationOptions)).toEqual({
+      enabled: false,
+      registrationStrategy: 'registerWhenStable:30000',
+    });
+    expect(TestBed.inject(SwUpdate).isEnabled).toBe(false);
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    expect(TestBed.inject(AppUpdates).start()).toBe(false);
+    expect(document.body.querySelector('app-update-prompt')).toBeNull();
   });
 
   // The server handler and the browser's router read a URL the same way (PR #105, tester round 2).
