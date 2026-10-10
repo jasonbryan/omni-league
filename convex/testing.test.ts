@@ -1,3 +1,4 @@
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 import { convexTest } from 'convex-test';
@@ -25,7 +26,10 @@ fixture.schema = schema;
 const HOUR = 60 * 60 * 1000;
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  // `reset` also clears the Better Auth component's tables (#62; testingAuth.test.ts).
+  betterAuthTest.register(t, 'betterAuth');
+  return t;
 }
 
 /** Two documents per fixture table, one pending scheduled function, and one stored file. */
@@ -106,6 +110,7 @@ describe('testing:reset', () => {
 
     await expect(t.mutation(internal.testing.reset, {})).resolves.toEqual({
       documents: 4,
+      authDocuments: 0,
       scheduledFunctions: 1,
       files: 1,
     });
@@ -117,6 +122,7 @@ describe('testing:reset', () => {
     const t = setup();
     await expect(t.mutation(internal.testing.reset, {})).resolves.toEqual({
       documents: 0,
+      authDocuments: 0,
       scheduledFunctions: 0,
       files: 0,
     });
@@ -127,10 +133,12 @@ describe('convex/testing.ts exports', () => {
   test('every export is a registered internal function, so no client can call it', () => {
     const exports = Object.entries(testing);
     expect(exports.map(([name]) => name).sort()).toEqual([
+      'accountByEmail',
       'addLeague',
       'ping',
       'reset',
       'seedLeague',
+      'seedTenant',
     ]);
     for (const [name, fn] of exports) {
       // The markers `internalQuery`/`internalMutation`/`internalAction` set (convex/server).

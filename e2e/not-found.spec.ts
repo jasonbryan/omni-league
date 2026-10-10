@@ -1,5 +1,7 @@
 // Not-found page (#23): the router `**` route, rendered on the server with status 404 inside the
-// app shell (top bar only). Each browser test does all its checks in one page load.
+// app shell (top bar only). Each browser test does all its checks in one page load. Since #62,
+// paths under /app are Client routes: the server sends the shell, and the browser renders the
+// not-found view for an unknown /app path.
 import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -18,7 +20,8 @@ test.describe('not-found page', () => {
   test('raw server HTML: 404 with the public Cache-Control for unknown paths, 200 for /', async ({
     request,
   }) => {
-    for (const path of [UNKNOWN, '/app/x']) {
+    // `/application/x` is not under /app (#62), so the server renders it.
+    for (const path of [UNKNOWN, '/application/x']) {
       const { status, headers, html } = await fetchRawHtml(request, path);
       expect(status, path).toBe(404);
       // Netlify removes the spaces after the commas.
@@ -100,8 +103,6 @@ test.describe('not-found page', () => {
       '/\\/\\evil.com',
       '/%09/evil.com',
       '/%0d%0a/evil.com',
-      '/app//evil.com',
-      '/app/%2F%2Fevil.com',
       '/(//evil.com)',
       '/x(//evil.com)',
       `/${'a'.repeat(2000)}`,
@@ -130,7 +131,6 @@ test.describe('not-found page', () => {
       `${UNKNOWN}//?ott=SECRET`,
       '/organizations/x//',
       '/organizations/(x)',
-      '/app/x//',
     ]) {
       const response = await rawGet(path);
       expect(response.status, path).toBeLessThan(500);
@@ -175,7 +175,7 @@ test.describe('not-found page', () => {
   // public Cache-Control. This corpus crosses the router's normalizations with route prefixes and
   // query strings, so an `@angular/ssr` upgrade that moves either side fails here.
   test('the not-found status agrees with the engine across normalized paths', async () => {
-    const prefixes = [UNKNOWN, '/organizations/nf-drift', '/app/nf-drift'];
+    const prefixes = [UNKNOWN, '/organizations/nf-drift', '/application/nf-drift'];
     const suffixes = [
       '',
       '/',
@@ -291,21 +291,26 @@ test.describe('not-found page', () => {
     await expect(page).toHaveTitle('Omni League');
   });
 
-  test('/app/x shows the not-found page, hydrates, and the home link goes home by click', async ({
+  // #62: /app paths are Client routes. The server sends the empty shell with status 200 (no guard
+  // or page runs there), even for these odd paths, and never a 5xx or a Location.
+  test('paths under /app get the client shell: 200, no Location, nothing rendered', async () => {
+    for (const path of ['/app//evil.com', '/app/%2F%2Fevil.com', '/app/x//', '/app/x/(y)']) {
+      const response = await rawGet(path);
+      expect(response.status, path).toBe(200);
+      expect(response.location, path).toBeUndefined();
+      expect(response.body, path).toMatch(/<app-root><\/app-root>/);
+      expect(response.body, path).not.toMatch(NOT_FOUND_H1);
+    }
+  });
+
+  test('/app/x shows the not-found view in the client shell, and the home link goes home', async ({
     page,
-    consoleGuard,
   }) => {
     const response = await page.goto('/app/x?ref=1');
-    expect(response?.status()).toBe(404);
+    expect(response?.status()).toBe(200);
     await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-    if (!remoteBaseUrl) {
-      await expect
-        .poll(() => consoleGuard.hydrated, {
-          message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-        })
-        .toBe(true);
-    }
-    // The server HTML leaves the query string out of the skip link (PR #90); hydration adds it.
+    await expect(page).toHaveTitle(/Page not found/);
+    // The shell holds no query string; the browser renders the skip link with it.
     expect(await response?.text()).not.toContain('ref=1');
     await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
       'href',

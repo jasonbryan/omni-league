@@ -44,6 +44,16 @@ CI, the e2e build, and a fresh clone build with no URL (`Convex URL: none`). The
 
 Its message points here: to configure a URL, copy `.env.example` to `.env.local` before the first `npx convex dev` (see the root README), then run `npm start` or `npm run build`. Feature pages can check `error() instanceof ConvexNotConfiguredError` to show a configuration message.
 
+## Auth
+
+`provideConvexAuth(AuthService)` in `app.config.ts` registers the auth source (ADR 0006 "Auth extension point", ADR 0008, #62). It takes a `ConvexAuthSource` instance, or an injectable class whose root instance is used. In the browser, the client factory then calls `setAuth(fetchToken, onChange)` when it creates the client, `clearAuth()` when `signedIn` turns false, and `setAuth` again when it turns true; live queries keep their subscriptions and rerun with the new identity. On the server it is ignored, so server renders stay anonymous.
+
+`AuthService` (`src/app/core/auth/`) is that source. Its `fetchToken` returns `null` without a request while signed out, so anonymous page views ask for no token, and `convexAuthenticated()` turns true once Convex has accepted the token (`onChange`). A page that reads the caller's own data asks only then, with `skipToken` before:
+
+```ts
+readonly me = injectQuery(api.users.me, () => (this.auth.convexAuthenticated() ? {} : skipToken));
+```
+
 ## Server rendering
 
 On `RenderMode.Server` routes, query helpers fetch once over HTTP during the render, and the browser picks up the result through `TransferState`. No `ConvexClient` is created on the server, so no WebSocket opens.

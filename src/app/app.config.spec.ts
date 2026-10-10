@@ -3,7 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { App } from './app';
 import { appConfig } from './app.config';
-import { CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
+import { AUTH_CLIENT } from './core/auth/auth-client';
+import { AuthService } from './core/auth/auth.service';
+import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
 
 // TestBed has no server response, so provideClientHydration() warns NG0505. That warning is a test
 // artifact (the real browser receives server-rendered HTML); every other console call fails the test.
@@ -40,5 +42,14 @@ describe('appConfig with no Convex URL', () => {
     TestBed.configureTestingModule({ providers: [...appConfig.providers] });
 
     expect(TestBed.inject(OVERLAY_DEFAULT_CONFIG)).toEqual({ usePopover: false });
+  });
+
+  it('registers AuthService as the Convex auth source (ADR 0008), with no Better Auth client', () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(CONVEX_AUTH)).toBe(TestBed.inject(AuthService));
+    // No Convex site URL in the test build, so no client is created.
+    expect(TestBed.inject(AUTH_CLIENT)).toBeNull();
+    expect(TestBed.inject(AuthService).signedIn()).toBe(false);
   });
 });

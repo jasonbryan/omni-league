@@ -50,7 +50,7 @@ describe('IS_TEST guard on the tenant seeds', () => {
     async (_, value) => {
       vi.stubEnv('IS_TEST', value);
       const t = setup();
-      await expect(t.mutation(internal.testing.seedLeague, TENANT)).rejects.toThrow(/IS_TEST/);
+      await expect(t.action(internal.testing.seedLeague, TENANT)).rejects.toThrow(/IS_TEST/);
       expect(await counts(t)).toEqual({ organizations: 0, locations: 0, leagues: 0 });
     },
   );
@@ -60,7 +60,7 @@ describe('IS_TEST guard on the tenant seeds', () => {
     async (_, value) => {
       vi.stubEnv('IS_TEST', 'true');
       const t = setup();
-      await t.mutation(internal.testing.seedLeague, TENANT);
+      await t.action(internal.testing.seedLeague, TENANT);
       vi.stubEnv('IS_TEST', value);
       await expect(
         t.mutation(internal.testing.addLeague, {
@@ -79,7 +79,7 @@ describe('testing:seedLeague', () => {
   test("creates the test's own organization, locations, and leagues", async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    await expect(t.mutation(internal.testing.seedLeague, TENANT)).resolves.toEqual({
+    await expect(t.action(internal.testing.seedLeague, TENANT)).resolves.toEqual({
       slug: 'e2e-org-a1b2',
     });
     expect(await t.query(api.organizations.getPublicPage, { slug: 'e2e-org-a1b2' })).toEqual({
@@ -99,9 +99,9 @@ describe('testing:seedLeague', () => {
   test('refuses a slug that is taken, and writes nothing', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    await t.mutation(internal.testing.seedLeague, TENANT);
+    await t.action(internal.testing.seedLeague, TENANT);
     await expect(
-      t.mutation(internal.testing.seedLeague, {
+      t.action(internal.testing.seedLeague, {
         ...TENANT,
         organization: { name: 'Another', slug: 'e2e-org-a1b2' },
       }),
@@ -115,7 +115,7 @@ describe('testing:seedLeague', () => {
       vi.stubEnv('IS_TEST', 'true');
       const t = setup();
       await expect(
-        t.mutation(internal.testing.seedLeague, {
+        t.action(internal.testing.seedLeague, {
           ...TENANT,
           organization: { name: 'Bad', slug },
         }),
@@ -128,7 +128,7 @@ describe('testing:seedLeague', () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
     await expect(
-      t.mutation(internal.testing.seedLeague, {
+      t.action(internal.testing.seedLeague, {
         ...TENANT,
         leagues: [{ name: 'League X', sport: 'soccer', locations: ['Nowhere'] }],
       }),
@@ -141,8 +141,8 @@ describe('testing:addLeague', () => {
   test('adds a league to the named organization only', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    await t.mutation(internal.testing.seedLeague, TENANT);
-    await t.mutation(internal.testing.seedLeague, {
+    await t.action(internal.testing.seedLeague, TENANT);
+    await t.action(internal.testing.seedLeague, {
       organization: { name: 'Other', slug: 'other' },
       locations: [{ name: 'Field One', address: 'Elsewhere' }],
       leagues: [],
@@ -174,7 +174,7 @@ describe('testing:addLeague', () => {
   test('refuses an unknown organization or location', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    await t.mutation(internal.testing.seedLeague, TENANT);
+    await t.action(internal.testing.seedLeague, TENANT);
     await expect(
       t.mutation(internal.testing.addLeague, {
         organizationSlug: 'missing',
@@ -197,7 +197,7 @@ describe('testing:addLeague', () => {
   test('gives a league with a taken name its own slug', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    await t.mutation(internal.testing.seedLeague, TENANT);
+    await t.action(internal.testing.seedLeague, TENANT);
     for (let i = 0; i < 2; i++) {
       await t.mutation(internal.testing.addLeague, {
         organizationSlug: 'e2e-org-a1b2',

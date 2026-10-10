@@ -1,5 +1,9 @@
 import { test as base, expect } from '@playwright/test';
-import { ConsoleGuard, type ExpectedDocumentStatus } from './console-guard';
+import {
+  ConsoleGuard,
+  type ExpectedDocumentStatus,
+  type ExpectedFailedRequest,
+} from './console-guard';
 import { remoteBaseUrl } from './env';
 import { stubNetlifyDrawer } from './netlify-drawer';
 
@@ -8,6 +12,8 @@ export interface ConsoleFixtureOptions {
   expectedDocumentStatus: ExpectedDocumentStatus | undefined;
   /** `test.use({ expectedConvexErrors: ['leagues:create'] })`: allow listed M(/A( Convex errors. */
   expectedConvexErrors: readonly string[];
+  /** `test.use({ expectedFailedRequests: [{ status: 422, path: '/api/auth/sign-up/email' }] })`. */
+  expectedFailedRequests: readonly ExpectedFailedRequest[];
 }
 
 export interface ConsoleFixtures {
@@ -25,9 +31,17 @@ export interface ConsoleFixtures {
 export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
   expectedDocumentStatus: [undefined, { option: true }],
   expectedConvexErrors: [[], { option: true }],
+  expectedFailedRequests: [[], { option: true }],
   consoleGuard: [
-    async ({ context, expectedDocumentStatus, expectedConvexErrors }, use) => {
-      const guard = new ConsoleGuard({ expectedDocumentStatus, expectedConvexErrors });
+    async (
+      { context, expectedDocumentStatus, expectedConvexErrors, expectedFailedRequests },
+      use,
+    ) => {
+      const guard = new ConsoleGuard({
+        expectedDocumentStatus,
+        expectedConvexErrors,
+        expectedFailedRequests,
+      });
       for (const page of context.pages()) guard.attach(page);
       context.on('page', (page) => guard.attach(page));
       await use(guard);

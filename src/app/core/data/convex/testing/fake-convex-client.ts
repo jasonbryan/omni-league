@@ -64,8 +64,12 @@ export class FakeConvexClient implements ConvexClientLike {
   readonly action = ((fn: FunctionReference<'action'>, args: unknown) =>
     this.enqueue('action', getFunctionName(fn), args)) as ConvexClientLike['action'];
 
-  setAuth(): void {
+  /** The arguments of each `setAuth` call, in order. */
+  readonly setAuthCalls: Parameters<ConvexClientLike['setAuth']>[] = [];
+
+  setAuth(...args: Parameters<ConvexClientLike['setAuth']>): void {
     this.lifecycle.push('setAuth');
+    this.setAuthCalls.push(args);
   }
 
   clearAuth(): void {

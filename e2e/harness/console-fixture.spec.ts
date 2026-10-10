@@ -221,6 +221,56 @@ test.describe('console fixture rules', () => {
       await close();
     });
   });
+
+  test.describe('expectedFailedRequests: 409 on /probe-conflict', () => {
+    const options = { expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }] };
+
+    /** Fetches `path`, answered with `status` by a route, and waits for the console error. */
+    async function failRequest(page: Page, path: string, status: number): Promise<void> {
+      await page.route(`**${path}`, (route) => route.fulfill({ status, body: '' }));
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate((p) => fetch(p).then(() => undefined), path),
+      ]);
+    }
+
+    test('allows the listed status and path', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await page.goto('/');
+      await failRequest(page, '/probe-conflict', 409);
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    for (const [path, status] of [
+      ['/probe-conflict', 500],
+      ['/probe-other', 409],
+      ['/probe-conflict/x', 409],
+    ] as const) {
+      test(`still fails on ${status} ${path}`, async ({ browser }) => {
+        const { page, guard, close } = await guardedPage(browser, options);
+        await page.goto('/');
+        await failRequest(page, '/probe-conflict', 409);
+        await failRequest(page, path, status);
+        expect(guard.problems()).toEqual([
+          expect.stringMatching(
+            new RegExp(
+              `^console\\.error: Failed to load resource: the server responded with a status of ${status} `,
+            ),
+          ),
+        ]);
+        await close();
+      });
+    }
+
+    test('fails on an unused entry, naming it', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems()).toEqual([
+        expect.stringContaining('expectedFailedRequests entry 409 /probe-conflict was not used'),
+      ]);
+      await close();
+    });
+  });
 });
 
 test.describe('console fixture wiring (real fixture)', () => {

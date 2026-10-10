@@ -4,6 +4,7 @@ export {
   CONVEX_CLIENT,
   CONVEX_CLIENT_FACTORY,
   provideConvex,
+  provideConvexAuth,
   type ConvexAuthSource,
   type ConvexClientLike,
 } from './convex-client';

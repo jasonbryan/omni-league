@@ -42,6 +42,7 @@ Hybrid rendering per ADR 0006: every route has a render mode in `src/app/app.rou
 | Public pages that read Convex data (organization, location, league, registration) | `RenderMode.Server`, with an explicit entry ahead of `**` |
 | Public pages with no Convex data (landing, about, help)                           | `RenderMode.Prerender`                                    |
 | Signed-in app, everything under `/app/**`                                         | `RenderMode.Client`                                       |
+| Sign-up and sign-in (`/sign-up`, `/sign-in`)                                      | `RenderMode.Client`                                       |
 | Anything else (`**`)                                                              | `RenderMode.Server`: the not-found page with status 404   |
 
 Server routes:
