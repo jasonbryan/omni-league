@@ -1,9 +1,10 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
-import { sportValidator } from './lib/sports';
+import { sportCountsValidator, sportValidator } from './lib/sports';
 
-// Every write to organizations, locations, and leagues goes through convex/lib/tenantWrites.ts,
-// which keeps `sortName` and the organization's counters in the same mutation as the row (#100).
+// Every write to organizations, locations, leagues, and sportLocations goes through
+// convex/lib/tenantWrites.ts, which keeps `sortName`, the organization's counters, and the
+// sportLocations rows in the same mutation as the row (#100, #101).
 // Those fields are optional only until every existing row is backfilled (`seed:demo`); #104 makes
 // them required.
 export default defineSchema({
@@ -27,6 +28,13 @@ export default defineSchema({
     leagueCount: v.optional(v.number()),
     /** The organization's number of locations: the public page's Locations total. */
     locationCount: v.optional(v.number()),
+    /** The organization's number of leagues of each sport (#101). */
+    sportLeagueCounts: v.optional(sportCountsValidator),
+    /**
+     * The organization's number of distinct locations that hold a league of each sport (#101): the
+     * number of its `sportLocations` rows of that sport.
+     */
+    sportLocationCounts: v.optional(sportCountsValidator),
   }).index('by_slug', ['slug']),
 
   locations: defineTable({
@@ -54,4 +62,14 @@ export default defineSchema({
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
     .index('by_organizationId_and_sortName', ['organizationId', 'sortName'])
     .index('by_organizationId_and_sport_and_sortName', ['organizationId', 'sport', 'sortName']),
+
+  // How many leagues of one sport are held at one location (#101). A row exists while that number
+  // is at least 1, so the rows of a sport are its distinct locations: the count a delete can keep
+  // correct without a scan. At most 3 rows per location.
+  sportLocations: defineTable({
+    organizationId: v.id('organizations'),
+    sport: sportValidator,
+    locationId: v.id('locations'),
+    leagueCount: v.number(),
+  }).index('by_organizationId_and_sport_and_locationId', ['organizationId', 'sport', 'locationId']),
 });

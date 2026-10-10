@@ -555,6 +555,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       leagueCount: 0,
       locationCount: 0,
       sportCount: 0,
+      sports: [],
     };
     const unusable: [string, Record<string, unknown>][] = [
       ['{"name":"Shape Only"}', { v: { name: 'Shape Only' }, version }],
@@ -564,6 +565,10 @@ test.describe('saved copies (production build with seed:demo data)', () => {
           v: { name: organization.name, slug: organization.slug, leagues: [], locations: [] },
           version,
         },
+      ],
+      [
+        'the shape before #101 (totals, no sports)',
+        { v: { ...valid, sports: undefined }, version },
       ],
       ['42', { v: 42, version }],
       ['"x"', { v: 'x', version }],

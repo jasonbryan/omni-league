@@ -37,6 +37,76 @@ async function snapshot(t: T) {
   }));
 }
 
+/**
+ * The sport counters and `sportLocations` rows a recount of the leagues gives, per organization
+ * slug (#101): the leagues of each sport, the distinct locations of each sport, and the
+ * leagues of each sport at each location (as `sport:location name`).
+ */
+async function sportRecount(t: T) {
+  return t.run(async (ctx) => {
+    const leagues = await ctx.db.query('leagues').collect();
+    const locations = await ctx.db.query('locations').collect();
+    const result: Record<
+      string,
+      { leagues: Record<string, number>; locations: Record<string, number>; rows: string[] }
+    > = {};
+    for (const organization of await ctx.db.query('organizations').collect()) {
+      const own = leagues.filter((league) => league.organizationId === organization._id);
+      const leagueCounts: Record<string, number> = {};
+      const locationCounts: Record<string, number> = {};
+      const rows: string[] = [];
+      for (const sport of ['beachVolleyball', 'soccer', 'softball']) {
+        const ofSport = own.filter((league) => league.sport === sport);
+        if (ofSport.length === 0) continue;
+        leagueCounts[sport] = ofSport.length;
+        const perLocation = new Map<string, number>();
+        for (const league of ofSport) {
+          for (const id of new Set(league.locationIds)) {
+            const name = locations.find((location) => location._id === id)?.name ?? '?';
+            perLocation.set(name, (perLocation.get(name) ?? 0) + 1);
+          }
+        }
+        locationCounts[sport] = perLocation.size;
+        for (const [name, count] of perLocation) rows.push(`${sport}:${name}:${count}`);
+      }
+      result[organization.slug] = {
+        leagues: leagueCounts,
+        locations: Object.fromEntries(Object.entries(locationCounts).filter(([, n]) => n > 0)),
+        rows: rows.sort(),
+      };
+    }
+    return result;
+  });
+}
+
+/** What the database holds for the same shape as `sportRecount`: the counters and the rows. */
+async function sportStored(t: T) {
+  return t.run(async (ctx) => {
+    const locations = await ctx.db.query('locations').collect();
+    const rows = await ctx.db.query('sportLocations').collect();
+    const result: Record<
+      string,
+      { leagues: Record<string, number>; locations: Record<string, number>; rows: string[] }
+    > = {};
+    for (const organization of await ctx.db.query('organizations').collect()) {
+      result[organization.slug] = {
+        leagues: organization.sportLeagueCounts ?? {},
+        locations: Object.fromEntries(
+          Object.entries(organization.sportLocationCounts ?? {}).filter(([, n]) => n > 0),
+        ),
+        rows: rows
+          .filter((row) => row.organizationId === organization._id)
+          .map(
+            (row) =>
+              `${row.sport}:${locations.find((l) => l._id === row.locationId)?.name}:${row.leagueCount}`,
+          )
+          .sort(),
+      };
+    }
+    return result;
+  });
+}
+
 /** An organization with two locations and two leagues, inserted with none of #100's fields. */
 async function insertRaw(t: T): Promise<void> {
   await t.run(async (ctx) => {
@@ -96,6 +166,23 @@ describe('seed:demo', () => {
       leagueCount: 5,
       locationCount: 3,
       sportCount: 3,
+      sports: [
+        {
+          key: 'beachVolleyball',
+          segment: 'beach-volleyball',
+          name: 'Beach volleyball',
+          leagueCount: 2,
+          locationCount: 1,
+        },
+        { key: 'soccer', segment: 'soccer', name: 'Soccer', leagueCount: 2, locationCount: 1 },
+        {
+          key: 'softball',
+          segment: 'softball',
+          name: 'Softball',
+          leagueCount: 1,
+          locationCount: 2,
+        },
+      ],
     });
     const gulfLocations = await t.query(api.organizations.listPublicLocations, {
       slug: 'gulf-coast-sport-social',
@@ -134,6 +221,7 @@ describe('seed:demo', () => {
       leagueCount: 0,
       locationCount: 0,
       sportCount: 0,
+      sports: [],
     });
   });
 
@@ -253,7 +341,13 @@ describe('seed:demo', () => {
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
     expect(after.leagues.slice(0, before.leagues.length)).toEqual(before.leagues);
     const gulf = after.organizations.find((organization) => organization._id === gulfId);
-    expect(gulf).toEqual({ ...before.organizations[0], leagueCount: 5, locationCount: 3 });
+    expect(gulf).toEqual({
+      ...before.organizations[0],
+      leagueCount: 5,
+      locationCount: 3,
+      sportLeagueCounts: { beachVolleyball: 2, soccer: 2, softball: 1 },
+      sportLocationCounts: { beachVolleyball: 1, soccer: 1, softball: 2 },
+    });
 
     const leagues = await t.query(api.organizations.listPublicLeagues, {
       slug: 'gulf-coast-sport-social',
@@ -317,6 +411,19 @@ describe('seed:demo', () => {
     for (const row of [...locations, ...leagues]) {
       expect(row.sortName, row.name).toBe(row.name.toLowerCase());
     }
+    // The sport counters and sportLocations rows equal a recount (#101).
+    const stored = await sportStored(t);
+    expect(stored).toEqual(await sportRecount(t));
+    expect(stored['front-range-rec-sports']).toEqual({
+      leagues: { soccer: 3, softball: 2 },
+      locations: { soccer: 2, softball: 2 },
+      rows: [
+        'soccer:Cottonwood Creek Fields:1',
+        'soccer:Larkspur Turf Center:2',
+        'softball:Bluebird Softball Complex:2',
+        'softball:Cottonwood Creek Fields:1',
+      ],
+    });
   });
 
   test('leaves a non-demo organization, its locations, and its leagues unchanged', async () => {
@@ -382,6 +489,34 @@ describe('seed:demo', () => {
         locations.filter((location) => location.organizationId === organization._id).length,
       ]);
     }
+    // The sport counters and sportLocations rows equal a recount (#101).
+    const stored = await sportStored(t);
+    expect(stored).toEqual(await sportRecount(t));
+    expect(stored['old-club']).toEqual({
+      leagues: { soccer: 1, softball: 1 },
+      locations: { soccer: 1 },
+      rows: ['soccer:Old Field:1'],
+    });
+    expect(
+      (await t.query(api.organizations.getPublicPage, { slug: 'old-club' }))?.sports.map(
+        ({ key, leagueCount, locationCount }) => [key, leagueCount, locationCount],
+      ),
+    ).toEqual([
+      ['soccer', 1, 1],
+      ['softball', 1, 0],
+    ]);
+    expect(
+      await t.query(api.organizations.listPublicLeagues, {
+        slug: 'old-club',
+        page: 1,
+        sport: 'softball',
+      }),
+    ).toEqual({
+      rows: [{ name: 'Beta League', sportName: 'Softball', locationNames: [] }],
+      page: 1,
+      pageCount: 1,
+      total: 1,
+    });
     expect(
       await t.query(api.organizations.listPublicLeagues, { slug: 'old-club', page: 1 }),
     ).toEqual({
@@ -400,6 +535,66 @@ describe('seed:demo', () => {
       backfilled: NONE,
     });
     expect(await snapshot(t)).toEqual(before);
+  });
+
+  test('backfills only the sport counters and sportLocations rows on an organization that has #100 fields, once', async () => {
+    const t = setup();
+    // As on staging after #100's backfill: leagueCount and locationCount are set, the sport
+    // counters are not, and a repeated location in one league counts once.
+    await t.run(async (ctx) => {
+      const organizationId = await ctx.db.insert('organizations', {
+        name: 'Mid Club',
+        slug: 'mid-club',
+        leagueCount: 3,
+        locationCount: 2,
+      });
+      const a = await ctx.db.insert('locations', {
+        organizationId,
+        name: 'Field A',
+        address: '1 A Road',
+        sortName: 'field a',
+      });
+      const b = await ctx.db.insert('locations', {
+        organizationId,
+        name: 'Field B',
+        address: '2 B Road',
+        sortName: 'field b',
+      });
+      for (const [name, sport, locationIds] of [
+        ['One', 'soccer', [a, a]],
+        ['Two', 'soccer', [a, b]],
+        ['Three', 'softball', [b]],
+      ] as const) {
+        await ctx.db.insert('leagues', {
+          organizationId,
+          name,
+          slug: name.toLowerCase(),
+          sport,
+          locationIds: [...locationIds],
+          sortName: name.toLowerCase(),
+        });
+      }
+    });
+
+    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+      ...ROWS,
+      backfilled: { ...NONE, organizations: 1 },
+    });
+    expect((await sportStored(t))['mid-club']).toEqual({
+      leagues: { soccer: 2, softball: 1 },
+      locations: { soccer: 2, softball: 1 },
+      rows: ['soccer:Field A:2', 'soccer:Field B:1', 'softball:Field B:1'],
+    });
+    expect(await sportStored(t)).toEqual(await sportRecount(t));
+
+    const before = await snapshot(t);
+    const rowsBefore = await t.run((ctx) => ctx.db.query('sportLocations').collect());
+    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+      ...NONE,
+      backfilled: NONE,
+    });
+    expect(await snapshot(t)).toEqual(before);
+    expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
   });
 
   test.each([

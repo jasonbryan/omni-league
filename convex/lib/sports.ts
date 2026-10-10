@@ -26,6 +26,41 @@ export function sportName(sport: Sport): string {
 }
 
 /**
+ * The URL segment of each sport's public view, `/organizations/<slug>/sports/<segment>` (#101):
+ * the one map the server functions and the route share. Segments are kebab-case; a sport key
+ * such as `beachVolleyball` is not a segment.
+ */
+export const SPORT_SEGMENTS: Readonly<Record<Sport, string>> = {
+  beachVolleyball: 'beach-volleyball',
+  soccer: 'soccer',
+  softball: 'softball',
+};
+
+/** The URL segment of a sport. */
+export function sportSegment(sport: Sport): string {
+  return SPORT_SEGMENTS[sport];
+}
+
+/** The sport with this URL segment, or `undefined` when there is none. */
+export function sportFromSegment(segment: string): Sport | undefined {
+  return (Object.keys(SPORT_SEGMENTS) as Sport[]).find(
+    (sport) => SPORT_SEGMENTS[sport] === segment,
+  );
+}
+
+/**
+ * A count per sport, keyed by sport key; a sport with no entry has a count of 0. The shape of an
+ * organization's `sportLeagueCounts` and `sportLocationCounts` (#101).
+ */
+export const sportCountsValidator = v.object({
+  beachVolleyball: v.optional(v.number()),
+  soccer: v.optional(v.number()),
+  softball: v.optional(v.number()),
+});
+
+export type SportCounts = Infer<typeof sportCountsValidator>;
+
+/**
  * A format key as stored on a season. It must list exactly the format keys in `SPORT_FORMATS`;
  * a unit test checks that.
  */
