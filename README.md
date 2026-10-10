@@ -65,6 +65,10 @@ npm run e2e            # e2e and accessibility tests (see "E2E tests")
 
 `npm run design:css` builds the mockup kit (`ng build --configuration production,mockup-kit`, entry `design/mockup-kit/mockup-kit.css`) and writes it into every `design/mockups/**/*.html` as one `<style id="mockup-kit">` block, so each mockup stays a single offline file with the app's tokens, helm classes, and Inter (ADR 0007). Run it after changing a mockup's classes, `src/styles/tokens.css`, or `src/styles/base.css`. `-- --skip-build` reuses `dist/mockup-kit/`. The kit is not part of `npm run build`.
 
+### App icons
+
+The icons that make Omni League installable (`public/icons/*.png`, `public/favicon.ico`) are exported from the SVG masters in `design/icons/`, which are copied from the approved mockup `design/mockups/80-app-icon.html` (#80). `npm run icons` rewrites the SVGs from the mockup and re-exports every file with the Chromium that the e2e tests install (`npx playwright install --only-shell chromium`); it adds no package. Run it after changing the mockup's SVG masters and commit the changed files. `npm run test:scripts` fails when a committed file no longer matches its SVG: each PNG records the SHA-256 of its source in a `tEXt` chunk, and where Chromium is installed the test also re-renders and compares pixels.
+
 ### E2E tests
 
 Playwright with `@axe-core/playwright` ([ADR 0005](docs/decisions/0005-e2e-and-accessibility-testing.md)). Install the browser once (and again after a Playwright upgrade):
