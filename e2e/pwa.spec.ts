@@ -321,6 +321,11 @@ const orgPath = (slug: string) => `/organizations/${slug}`;
 const SAVED_PATH = orgPath(SAVED_ORG.organization.slug);
 const savedKey = (slug: string) =>
   `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug })}`;
+/** Page 1 of each list, which the organization page also keeps as saved copies (#100). */
+const savedListKeys = (slug: string) =>
+  ['listPublicLeagues', 'listPublicLocations'].map(
+    (name) => `cvx-saved:organizations:${name}:${JSON.stringify({ page: 1, slug })}`,
+  );
 const NOT_SAVED_HEADING = "This page isn't saved on this device";
 
 /** The saved copy's `savedAt` for `slug` in the page's localStorage, or null. */
@@ -383,6 +388,14 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     const h1 = page.getByRole('heading', { level: 1, name: organization.name });
     await expect(h1).toBeVisible();
     await expect.poll(() => savedAtOf(page, organization.slug)).not.toBeNull();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (keys) => keys.map((key) => localStorage.getItem(key) !== null),
+          savedListKeys(organization.slug),
+        ),
+      )
+      .toEqual([true, true]);
     const firstSavedAt = (await savedAtOf(page, organization.slug)) ?? 0;
     const savedNote = page.locator('main [data-saved-copy-note]');
     const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
@@ -434,6 +447,53 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     expect(
       await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
     ).toBe(true);
+  });
+
+  // #100: the organization page needs its header and both lists saved. Any one missing is the
+  // not-saved view, and the page opens again once the copy is back.
+  test('offline, the page needs the header and both lists saved: any one missing shows the not-saved view', async ({
+    page,
+    context,
+  }) => {
+    const { organization } = SAVED_ORG;
+    const keys = [savedKey(organization.slug), ...savedListKeys(organization.slug)];
+    await installWorker(page);
+    await page.goto(SAVED_PATH);
+    const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+    await expect(h1).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate((all) => all.map((key) => localStorage.getItem(key) !== null), keys),
+      )
+      .toEqual([true, true, true]);
+
+    await setOffline(context, true);
+    for (const missing of keys) {
+      const kept = await page.evaluate((key) => {
+        const raw = localStorage.getItem(key);
+        localStorage.removeItem(key);
+        return raw;
+      }, missing);
+      expect(kept, missing).not.toBeNull();
+      const response = await page.reload();
+      expect(response?.fromServiceWorker(), missing).toBe(true);
+      await expect(
+        page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING }),
+        missing,
+      ).toBeVisible({ timeout: 5_000 });
+      await expect(page.locator('[data-saved-copy-note]'), missing).toHaveCount(0);
+
+      await page.evaluate(([key, raw]) => localStorage.setItem(key, raw), [
+        missing,
+        kept!,
+      ] as const);
+      await page.reload();
+      await expect(h1, `${missing} restored`).toBeVisible({ timeout: 5_000 });
+      await expect(
+        page.locator('main [data-saved-copy-note]'),
+        `${missing} restored`,
+      ).toBeVisible();
+    }
   });
 
   test('a page never opened shows the not-saved view offline within 5 s, with links enabled', async ({
@@ -489,9 +549,22 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     const { organization } = UNUSABLE_ORG;
     const path = orgPath(organization.slug);
     const version = OFFLINE_SAVED_QUERIES[0].version;
-    const valid = { name: organization.name, slug: organization.slug, leagues: [], locations: [] };
+    const valid = {
+      name: organization.name,
+      slug: organization.slug,
+      leagueCount: 0,
+      locationCount: 0,
+      sportCount: 0,
+    };
     const unusable: [string, Record<string, unknown>][] = [
       ['{"name":"Shape Only"}', { v: { name: 'Shape Only' }, version }],
+      [
+        'the shape before #100 (lists, no totals)',
+        {
+          v: { name: organization.name, slug: organization.slug, leagues: [], locations: [] },
+          version,
+        },
+      ],
       ['42', { v: 42, version }],
       ['"x"', { v: 'x', version }],
       ['[1,2]', { v: [1, 2], version }],

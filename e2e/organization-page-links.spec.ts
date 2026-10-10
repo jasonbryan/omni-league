@@ -4,7 +4,7 @@
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { numberedLocations, seedTenant } from './support/tenant';
+import { seedTenant, tallLocations } from './support/tenant';
 
 test.skip(
   remoteBaseUrl !== undefined,
@@ -13,11 +13,12 @@ test.skip(
 
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
-const LAST = 10;
+/** The last location row of the tall tenant: a list shows at most 5 (#100). */
+const LAST = 5;
 
 function tallTenant() {
   return seedTenant({
-    locations: numberedLocations(LAST),
+    locations: tallLocations(),
     leagues: [
       { name: 'Alpha League', sport: 'soccer', locations: ['Location 01'] },
       { name: 'Beta League', sport: 'softball', locations: ['Location 02', 'Location 03'] },

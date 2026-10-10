@@ -504,6 +504,63 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
   });
 });
 
+describe('main seed-demo (#82)', () => {
+  it('checks the target like setup and run: the given project dir and instance name', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const calls = [];
+    const checked = [];
+    const lines = [];
+    const code = await main(['seed-demo'], {
+      env: {},
+      projectDir: dir,
+      instanceName: async (url) => {
+        checked.push(url);
+        return 'anonymous-agent';
+      },
+      spawnCli: async (args, options) => {
+        calls.push({ args: args.slice(0, -2), cwd: options.cwd });
+        return { code: 0, stdout: args[0] === 'run' ? '{"organizations":4}' : '', stderr: '' };
+      },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    });
+    assert.equal(code, 0, lines.join('\n'));
+    assert.deepEqual(
+      calls.map(({ args }) => args.slice(0, 2)),
+      [
+        ['env', 'set'],
+        ['run', 'seed:demo'],
+      ],
+    );
+    // Both calls run from the e2e project dir given to main, after the target check.
+    assert.deepEqual(
+      calls.map(({ cwd }) => cwd),
+      [dir, dir],
+    );
+    assert.deepEqual(checked, [LOCAL_CONVEX_URL, LOCAL_CONVEX_URL]);
+  });
+
+  it('refuses without spawning the CLI when the backend is another deployment', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const spawned = [];
+    const lines = [];
+    const code = await main(['seed-demo'], {
+      env: {},
+      projectDir: dir,
+      instanceName: async () => 'someone-elses-deployment',
+      spawnCli: async (args) => {
+        spawned.push(args);
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    });
+    assert.equal(code, 1);
+    assert.equal(spawned.length, 0);
+    assert.match(lines.join('\n'), /refused/);
+  });
+});
+
 describe('main with the backend port held by another process', () => {
   /** Holds 127.0.0.1:`port`; if something already holds it, the port is busy either way. */
   async function hold(port) {

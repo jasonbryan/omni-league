@@ -61,3 +61,17 @@ export function numberedLocations(count: number): { name: string; address: strin
     address: `${i + 1} Test Road, Corpus Christi, TX 78412`,
   }));
 }
+
+/**
+ * The five locations of a tall page, the most a list shows (#100): numbered as above, with
+ * addresses that wrap over several lines, so the fifth row starts below the fold at 1280x720 and
+ * at 360x800.
+ */
+export function tallLocations(): { name: string; address: string }[] {
+  return numberedLocations(5).map((location, i) => ({
+    ...location,
+    address:
+      `${location.address}, Building ${i + 1}, Suite ${i + 1}00, at the north gate of the ` +
+      'Corpus Christi Municipal Recreation District grounds, past the visitor parking lot',
+  }));
+}
