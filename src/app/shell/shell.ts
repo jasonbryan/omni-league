@@ -1,19 +1,23 @@
 import { NgTemplateOutlet, isPlatformServer } from '@angular/common';
 import {
+  ApplicationRef,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
+  EnvironmentInjector,
   InjectionToken,
+  Injector,
   PLATFORM_ID,
   TemplateRef,
-  ViewContainerRef,
   computed,
   contentChild,
+  createComponent,
   inject,
   inputBinding,
   signal,
   viewChild,
+  type ComponentRef,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, NavigationStart, Router, RouterLink } from '@angular/router';
@@ -61,6 +65,13 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
  * button's first press, so a page downloads none of that code until a visitor opens the sheet.
  * A press waiting on that import is dropped by Escape, by the start of a navigation, or by the
  * shell's destruction, so the sheet never opens over the next page.
+ *
+ * The sheet has no anchor in this template (#94). A view container here would be server-rendered,
+ * and creating the sheet in it on the first press made hydration log "no hydration info available
+ * for a given TNode" in development builds. The sheet is created with `createComponent` and its
+ * host view attached to `ApplicationRef` for change detection. Its host element stays out of the
+ * document: the helm sheet renders its content through the CDK overlay, which needs no host in the
+ * page. The shell destroys the sheet when it is destroyed itself.
  */
 @Component({
   selector: 'app-shell',
@@ -120,7 +131,6 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
         </main>
       </div>
     </div>
-    <ng-container #sheetHost />
 
     <ng-template #brand>
       <span
@@ -136,12 +146,14 @@ export class Shell {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly loadShellSheet = inject(LOAD_SHELL_SHEET);
+  private readonly appRef = inject(ApplicationRef);
+  private readonly environmentInjector = inject(EnvironmentInjector);
+  private readonly injector = inject(Injector);
 
   protected readonly sidebar = contentChild(ShellSidebar);
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
   private readonly brand = viewChild.required<TemplateRef<unknown>>('brand');
-  private readonly sheetHost = viewChild.required('sheetHost', { read: ViewContainerRef });
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -164,8 +176,16 @@ export class Shell {
   private sheetLoad: Promise<ShellSheet | null> | null = null;
   /** Set by a press of the menu button, and cleared once the press opens the sheet or is dropped. */
   private openPending = false;
+  /** The sheet's component, destroyed with the shell. */
+  private sheetRef: ComponentRef<ShellSheet> | null = null;
 
   constructor() {
+    // Destroying the sheet's ComponentRef also detaches its view from ApplicationRef, and the helm
+    // sheet closes its dialog: no scrim or scroll block stays on the next page.
+    this.destroyRef.onDestroy(() => {
+      this.sheetRef?.destroy();
+      this.sheetRef = null;
+    });
     this.router.events
       .pipe(
         filter((event) => event instanceof NavigationStart),
@@ -206,20 +226,33 @@ export class Shell {
 
   private async loadSheet(): Promise<ShellSheet | null> {
     const { ShellSheet } = await this.loadShellSheet();
-    // A sheet created in the destroyed shell's container would still open over the next page.
+    // The shell's onDestroy has already run, so a sheet created now would never be destroyed and
+    // could still open over the next page.
     if (this.destroyRef.destroyed) return null;
     const sidebar = this.sidebar();
     const menuButton = this.menuButton()?.nativeElement;
     if (!sidebar || !menuButton) throw new Error('app-shell: no sidebar for the sheet');
-    const ref = this.sheetHost().createComponent(ShellSheet, {
+    // The element injector keeps the shell's providers in reach, as a view container here did.
+    const ref = createComponent(ShellSheet, {
+      environmentInjector: this.environmentInjector,
+      elementInjector: this.injector,
       bindings: [
         inputBinding('sidebar', () => this.sidebar()?.template ?? sidebar.template),
         inputBinding('brand', this.brand),
         inputBinding('returnFocus', () => menuButton),
       ],
     });
-    // Renders the helm sheet and registers its content template, which open() needs.
-    ref.changeDetectorRef.detectChanges();
+    this.sheetRef = ref;
+    this.appRef.attachView(ref.hostView);
+    try {
+      // Renders the helm sheet and registers its content template, which open() needs.
+      ref.changeDetectorRef.detectChanges();
+    } catch (error) {
+      // A sheet that failed to render must not stay attached: the next press creates its own.
+      ref.destroy();
+      this.sheetRef = null;
+      throw error;
+    }
     this.sheet.set(ref.instance);
     return ref.instance;
   }
