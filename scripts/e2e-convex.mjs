@@ -395,7 +395,7 @@ export async function main(
       case 'seed-demo': {
         let inserted = '';
         for (const args of seedDemoCalls(await previewOriginPattern())) {
-          inserted = await runConvex(args, { env, spawnCli });
+          inserted = await runConvex(args, target);
         }
         log(
           `e2e-convex: seed:demo on ${LOCAL_CONVEX_URL} inserted ` +

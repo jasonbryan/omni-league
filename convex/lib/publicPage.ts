@@ -1,25 +1,51 @@
-import { v, type Infer } from 'convex/values';
+import { v, type Infer, type Validator } from 'convex/values';
 
-// The result of organizations:getPublicPage (#60). It lives apart from organizations.ts and imports
-// only `convex/values`, so the Angular app can import the same validator to check saved copies
-// (ADR 0013 section 3, #82: `src/app/core/data/convex/offline-saved-queries.ts`) without bundling
-// the server function. Changing it changes what the app accepts as a saved copy.
+// The results of organizations:getPublicPage, listPublicLeagues, and listPublicLocations (#60,
+// #100). They live apart from organizations.ts and import only `convex/values`, so the Angular app
+// can import the same validators to check saved copies (ADR 0013 section 3, #82:
+// `src/app/core/data/convex/offline-saved-queries.ts`) without bundling the server functions.
+// Changing one changes what the app accepts as a saved copy.
 
-/** Everything the public organization page shows, and nothing else (no ids, staff, or payments). */
+/**
+ * The public organization page's header: everything but the lists (no ids, staff, or payments).
+ * The three totals are the organization's, never the number of rows a list shows (#100).
+ */
 export const publicPageValidator = v.object({
   name: v.string(),
   slug: v.string(),
-  locations: v.array(v.object({ name: v.string(), address: v.string() })),
-  leagues: v.array(
-    v.object({
-      name: v.string(),
-      sportName: v.string(),
-      locationNames: v.array(v.string()),
-    }),
-  ),
+  leagueCount: v.number(),
+  locationCount: v.number(),
+  sportCount: v.number(),
 });
 
 export type PublicPage = Infer<typeof publicPageValidator>;
 
-/** The `returns` validator of `organizations:getPublicPage`: the page, or `null` when none. */
+/** The `returns` validator of `organizations:getPublicPage`: the header, or `null` when none. */
 export const getPublicPageReturns = v.union(v.null(), publicPageValidator);
+
+const publicLocationValidator = v.object({ name: v.string(), address: v.string() });
+
+const publicLeagueValidator = v.object({
+  name: v.string(),
+  sportName: v.string(),
+  locationNames: v.array(v.string()),
+});
+
+/** One page of a public list, with the page it is, the number of pages, and the total. */
+function publicListValidator<Row extends Validator<unknown, 'required', string>>(row: Row) {
+  return v.object({
+    rows: v.array(row),
+    page: v.number(),
+    pageCount: v.number(),
+    total: v.number(),
+  });
+}
+
+/** The `returns` validator of `organizations:listPublicLocations`. */
+export const publicLocationsValidator = publicListValidator(publicLocationValidator);
+
+/** The `returns` validator of `organizations:listPublicLeagues`. */
+export const publicLeaguesValidator = publicListValidator(publicLeagueValidator);
+
+export type PublicLocations = Infer<typeof publicLocationsValidator>;
+export type PublicLeagues = Infer<typeof publicLeaguesValidator>;

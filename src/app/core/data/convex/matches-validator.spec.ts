@@ -1,20 +1,29 @@
 import { v } from 'convex/values';
-import { getPublicPageReturns } from '../../../../../convex/lib/publicPage';
+import {
+  getPublicPageReturns,
+  publicLeaguesValidator,
+  publicLocationsValidator,
+} from '../../../../../convex/lib/publicPage';
 import { matchesValidator } from './matches-validator';
 
 const PAGE = {
   name: 'Gulf Coast',
   slug: 'gulf-coast',
-  locations: [{ name: 'Bayside', address: '4410 Ocean Dr' }],
-  leagues: [{ name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] }],
+  leagueCount: 1,
+  locationCount: 1,
+  sportCount: 1,
 };
 
+const LOCATION = { name: 'Bayside', address: '4410 Ocean Dr' };
+const LEAGUE = { name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] };
+const LIST = { page: 1, pageCount: 1, total: 1 };
+
 describe('matchesValidator', () => {
-  it('accepts a getPublicPage result, empty lists included, and null', () => {
+  it('accepts a getPublicPage result and null', () => {
     expect(matchesValidator(PAGE, getPublicPageReturns)).toBe(true);
-    expect(matchesValidator({ ...PAGE, leagues: [], locations: [] }, getPublicPageReturns)).toBe(
-      true,
-    );
+    expect(
+      matchesValidator({ ...PAGE, leagueCount: 0, locationCount: 0 }, getPublicPageReturns),
+    ).toBe(true);
     expect(matchesValidator(null, getPublicPageReturns)).toBe(true);
   });
 
@@ -24,19 +33,50 @@ describe('matchesValidator', () => {
     ['a string', 'x'],
     ['an array', [1, 2]],
     ['undefined', undefined],
-    ['a list that is not an array', { ...PAGE, leagues: 'none' }],
-    ['a list item of the wrong shape', { ...PAGE, locations: [{ name: 'Bayside' }] }],
-    ['a nested string that is a number', { ...PAGE, leagues: [{ ...PAGE.leagues[0], name: 3 }] }],
+    ['a total that is a string', { ...PAGE, leagueCount: '1' }],
+    ['a missing total', { name: PAGE.name, slug: PAGE.slug, leagueCount: 1, locationCount: 1 }],
     [
-      'a nested array item of the wrong type',
-      { ...PAGE, leagues: [{ ...PAGE.leagues[0], locationNames: [1] }] },
+      'the earlier shape with lists and no totals',
+      { name: PAGE.name, slug: PAGE.slug, locations: [LOCATION], leagues: [LEAGUE] },
     ],
   ])('rejects %s for getPublicPage', (_, value) => {
     expect(matchesValidator(value, getPublicPageReturns)).toBe(false);
   });
 
   it('accepts extra fields, so a copy from a build that added a field still reads', () => {
-    expect(matchesValidator({ ...PAGE, leagueCount: 1 }, getPublicPageReturns)).toBe(true);
+    expect(matchesValidator({ ...PAGE, seasonCount: 1 }, getPublicPageReturns)).toBe(true);
+  });
+
+  it('accepts a page of a list, an empty one included', () => {
+    expect(matchesValidator({ rows: [LOCATION], ...LIST }, publicLocationsValidator)).toBe(true);
+    expect(matchesValidator({ rows: [LEAGUE], ...LIST }, publicLeaguesValidator)).toBe(true);
+    const empty = { rows: [], page: 1, pageCount: 0, total: 0 };
+    expect(matchesValidator(empty, publicLocationsValidator)).toBe(true);
+    expect(matchesValidator(empty, publicLeaguesValidator)).toBe(true);
+  });
+
+  it.each([
+    ['an object missing fields', { rows: [LEAGUE] }],
+    ['rows that are not an array', { rows: 'none', ...LIST }],
+    ['a league of the wrong shape', { rows: [{ name: 'Coed 2s' }], ...LIST }],
+    ['a league name that is a number', { rows: [{ ...LEAGUE, name: 3 }], ...LIST }],
+    [
+      'a location name that is not a string',
+      { rows: [{ ...LEAGUE, locationNames: [1] }], ...LIST },
+    ],
+    ['a page that is a string', { rows: [LEAGUE], ...LIST, page: '1' }],
+    ['null', null],
+  ])('rejects %s for listPublicLeagues', (_, value) => {
+    expect(matchesValidator(value, publicLeaguesValidator)).toBe(false);
+  });
+
+  it.each([
+    ['a location missing its address', { rows: [{ name: 'Bayside' }], ...LIST }],
+    ['a league row, which has no address', { rows: [LEAGUE], ...LIST }],
+    ['a total that is missing', { rows: [LOCATION], page: 1, pageCount: 1 }],
+    ['null', null],
+  ])('rejects %s for listPublicLocations', (_, value) => {
+    expect(matchesValidator(value, publicLocationsValidator)).toBe(false);
   });
 
   it('checks optional fields only when present', () => {

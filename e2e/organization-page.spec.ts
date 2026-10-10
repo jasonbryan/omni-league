@@ -1,6 +1,6 @@
 // Public organization page (#60): `/organizations/:orgSlug`, rendered on the server from
-// `organizations:getPublicPage`, with its sidebar in the app shell (#75) and a live subscription
-// after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
+// `organizations:getPublicPage` and page 1 of the league and location lists (#100), with its sidebar
+// in the app shell (#75) and live subscriptions after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
 // and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
@@ -11,7 +11,13 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
-import { numberedLocations, seedTenant, SPORT_NAMES, type Tenant } from './support/tenant';
+import {
+  numberedLocations,
+  seedTenant,
+  SPORT_NAMES,
+  tallLocations,
+  type Tenant,
+} from './support/tenant';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -36,12 +42,12 @@ function smallTenant(): Promise<Tenant> {
 }
 
 /**
- * Two leagues and ten locations: the last location's row starts below the fold at 1280x720 and at
- * 360x800 (asserted by the tests that use it).
+ * Two leagues and five locations, the most a list shows (#100): the last location's row starts
+ * below the fold at 1280x720 and at 360x800 (asserted by the tests that use it).
  */
 function tallTenant(): Promise<Tenant> {
   return seedTenant({
-    locations: numberedLocations(10),
+    locations: tallLocations(),
     leagues: [
       { name: 'Alpha League', sport: 'soccer', locations: ['Location 01'] },
       { name: 'Beta League', sport: 'softball', locations: ['Location 02', 'Location 03'] },
@@ -228,6 +234,80 @@ test.describe('organization page: raw server HTML', () => {
         // The query string never reaches the cacheable HTML (PR #90).
         if (query) expect(html, path).not.toContain(query.slice(1));
       }
+    },
+  );
+});
+
+// #100: each list shows its first 5 rows by name, and the tiles show the totals.
+test.describe('organization page: more than 5 rows per list', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'raw: 5 league rows, 5 location rows, totals in the tiles, a sidebar link per row shown',
+    RAW_HTTP,
+    async ({ request }) => {
+      // 13 of each, in one call, with leagues of two sports. "League 01" to "League 05", the
+      // leagues shown, are at "Location 13" to "Location 09", none of the locations shown.
+      const locations = numberedLocations(13);
+      const tenant = await seedTenant({
+        locations,
+        leagues: Array.from({ length: 13 }, (_, i) => ({
+          name: `League ${String(i + 1).padStart(2, '0')}`,
+          sport: i % 2 ? ('soccer' as const) : ('softball' as const),
+          locations: [locations[12 - i].name],
+        })),
+      });
+      const { status, headers, html } = await fetchRawHtml(request, `${tenant.path}?utm_source=x`);
+      expect(status).toBe(200);
+      // Netlify removes the spaces after the commas.
+      expect(headers['cache-control']?.replace(/\s+/g, '')).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+
+      const nav = sidebarHtml(html, tenant.name);
+      const content = html.split(nav).join('');
+      const shownLeagues = tenant.leagues.slice(0, 5);
+      const shownLocations = tenant.locations.slice(0, 5);
+      // Exactly the first 5 of each list, in name order.
+      expect(
+        [...content.matchAll(/\sid="(league|location)-(\d+)"/g)].map(
+          ([, kind, n]) => `${kind}-${n}`,
+        ),
+      ).toEqual([
+        ...[1, 2, 3, 4, 5].map((n) => `league-${n}`),
+        ...[1, 2, 3, 4, 5].map((n) => `location-${n}`),
+      ]);
+      expect(
+        [...content.matchAll(/<h3\b[^>]*>([^<]*)<\/h3>/g)].map(([, name]) => name.trim()),
+      ).toEqual([
+        ...shownLeagues.map((league) => league.name),
+        ...shownLocations.map((location) => location.name),
+      ]);
+      for (const hidden of [tenant.leagues[5], tenant.locations[5]]) {
+        expect(content).not.toContain(`>${hidden.name}</h3>`);
+      }
+      // A league shows its location's name though that location is not among the 5 shown.
+      expect(content).toContain(`${tenant.leagues[0].locations[0]}<`);
+
+      // Tiles: the totals, not the rows shown.
+      expect([...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n)).toEqual([
+        '13',
+        '13',
+        '2',
+      ]);
+
+      // Sidebar: one link per row shown, each resolving to a row in the content.
+      const rowLinks = hrefs(nav).slice(1);
+      expect(rowLinks).toEqual([
+        ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#league-${n}`),
+        ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#location-${n}`),
+      ]);
+      for (const href of rowLinks) {
+        expect(content, href).toMatch(new RegExp(`\\sid="${href.split('#')[1]}"`));
+      }
+
+      // The query string never reaches the cacheable HTML (PR #90).
+      expect(html).not.toContain('utm_source');
     },
   );
 });
@@ -626,7 +706,13 @@ test.describe('organization page in the browser', () => {
     const key = `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug: tenant.slug })}`;
     const savedAt = Date.now() - 60_000;
     const saved = JSON.stringify({
-      v: { name: 'Saved Copy Name', slug: tenant.slug, leagues: [], locations: [] },
+      v: {
+        name: 'Saved Copy Name',
+        slug: tenant.slug,
+        leagueCount: 0,
+        locationCount: 0,
+        sportCount: 0,
+      },
       savedAt,
       usedAt: savedAt,
       version: OFFLINE_SAVED_QUERIES[0].version,

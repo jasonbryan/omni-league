@@ -14,7 +14,8 @@ import { plantSavedCopy } from '../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../offline/saved-time';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
-import { GULF_COAST, PORT_ARANSAS } from './testing/pages';
+import type { PublicOrganizationPage } from './organization-path';
+import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
 
 // #82: saved copies on the organization page, the not-saved view, and the removed organization
 // (design/mockups/82-offline-pages.html states 1 to 5). "Offline" is the adapter's `online` signal
@@ -27,12 +28,29 @@ const PATH = `/organizations/${GULF_COAST.slug}`;
 
 let client: FakeConvexClient;
 
-function plant(page = GULF_COAST, savedAt = SAVED_AT): void {
-  plantSavedCopy(api.organizations.getPublicPage, { slug: page.slug }, page, savedAt);
+const HEADER = 'organizations:getPublicPage';
+const LEAGUES = 'organizations:listPublicLeagues';
+const LOCATIONS = 'organizations:listPublicLocations';
+
+/** The saved-copy allow-list entries' functions and the args the page asks them with. */
+const queries = (slug: string) => [
+  { fn: api.organizations.getPublicPage, name: HEADER, args: { slug } },
+  { fn: api.organizations.listPublicLeagues, name: LEAGUES, args: { slug, page: 1 } },
+  { fn: api.organizations.listPublicLocations, name: LOCATIONS, args: { slug, page: 1 } },
+];
+
+/** Saves the header and page 1 of both lists of `page`, as the page's three queries return them. */
+function plant(page: PublicOrganizationPage = GULF_COAST, savedAt = SAVED_AT): void {
+  const results = queryResults(page);
+  for (const { fn, name, args } of queries(page.slug)) {
+    plantSavedCopy(fn, args, results[name], savedAt);
+  }
 }
 
-const savedEntry = (slug = GULF_COAST.slug) =>
-  localStorage.getItem(savedCopyKey(api.organizations.getPublicPage, { slug }));
+const savedEntry = (slug = GULF_COAST.slug, name = HEADER) => {
+  const query = queries(slug).find((q) => q.name === name);
+  return query ? localStorage.getItem(savedCopyKey(query.fn, query.args)) : null;
+};
 
 function stubOnLine(value: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
@@ -69,10 +87,16 @@ async function settle(harness: RouterTestingHarness): Promise<void> {
   }
 }
 
-function subscription(): FakeSubscription {
-  const active = client.activeSubscriptions;
-  expect(active).toHaveLength(1);
+/** The one active subscription to the query `name` (the header query by default). */
+function subscription(name = HEADER): FakeSubscription {
+  const active = client.activeSubscriptions.filter((s) => s.name === name);
+  expect(active, name).toHaveLength(1);
   return active[0];
+}
+
+/** Emits the header and page 1 of both lists for `page`, as the three queries return them. */
+function emit(page: PublicOrganizationPage): void {
+  for (const [name, value] of Object.entries(queryResults(page))) subscription(name).emit(value);
 }
 
 const host = (harness: RouterTestingHarness) => harness.fixture.nativeElement as HTMLElement;
@@ -136,7 +160,7 @@ describe('OrganizationPage offline (#82)', () => {
       stubOnLine(true);
       window.dispatchEvent(new Event('online'));
       client.setConnected(true);
-      subscription().emit({ ...GULF_COAST, name: 'Gulf Coast Live' });
+      emit({ ...GULF_COAST, name: 'Gulf Coast Live' });
       await settle(harness);
       expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Live');
       expect(note(harness)).toBeNull();
@@ -144,7 +168,32 @@ describe('OrganizationPage offline (#82)', () => {
         v: { name: 'Gulf Coast Live' },
         savedAt: NOW,
       });
+      // The lists are kept too, so the next visit offline opens with them (#100).
+      for (const name of [LEAGUES, LOCATIONS]) {
+        expect(JSON.parse(savedEntry(GULF_COAST.slug, name) ?? 'null'), name).toMatchObject({
+          savedAt: NOW,
+        });
+      }
     });
+
+    it('shows page 1 of the leagues and locations lists and the totals from their saved copies', () => {
+      const tiles = [...host(harness).querySelectorAll('main dl > div dd')].map(text);
+      expect(tiles).toEqual(['5', '3', '3']);
+    });
+  });
+
+  it('dates the note by the oldest saved copy on screen', async () => {
+    const older = SAVED_AT - 3 * 60 * 60 * 1000;
+    plant();
+    plantSavedCopy(
+      api.organizations.listPublicLeagues,
+      { slug: GULF_COAST.slug, page: 1 },
+      queryResults(GULF_COAST)[LEAGUES],
+      older,
+    );
+    stubOnLine(false);
+    const harness = await open(PATH, { socket: 'down' });
+    expect(text(note(harness))).toContain(formatSavedTime(older, NOW).text);
   });
 
   it('online before the first live result: shows the saved copy with no note (state 4)', async () => {
@@ -190,7 +239,7 @@ describe('OrganizationPage offline (#82)', () => {
       stubOnLine(true);
       window.dispatchEvent(new Event('online'));
       client.setConnected(true);
-      subscription().emit(GULF_COAST);
+      emit(GULF_COAST);
       await settle(harness);
       expect(host(harness).querySelector('app-not-saved-view')).toBeNull();
       expect(text(host(harness).querySelector('main h1'))).toBe(GULF_COAST.name);
@@ -224,6 +273,42 @@ describe('OrganizationPage offline (#82)', () => {
         );
         expect(note(harness)).toBeNull();
         expect(savedEntry()).toBeNull();
+        expect(errors).not.toHaveBeenCalled();
+      },
+    );
+
+    // #100: the page needs all three copies; a missing or unusable one is the not-saved view.
+    it.each([
+      ['the header', HEADER],
+      ['the leagues list', LEAGUES],
+      ['the locations list', LOCATIONS],
+    ])('offline with %s not saved: shows the not-saved view', async (_, missing) => {
+      plant();
+      const missingQuery = queries(GULF_COAST.slug).find((q) => q.name === missing);
+      localStorage.removeItem(savedCopyKey(missingQuery!.fn, missingQuery!.args));
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+      expect(host(harness).querySelector('main h1')?.textContent).toContain("isn't saved");
+      expect(note(harness)).toBeNull();
+    });
+
+    it.each([
+      [LEAGUES, { rows: 'none', page: 1, pageCount: 1, total: 1 }],
+      [LEAGUES, { rows: [{ name: 'Coed' }], page: 1, pageCount: 1, total: 1 }],
+      [LOCATIONS, { rows: [], page: 1 }],
+      [LOCATIONS, null],
+    ])(
+      'offline with an unusable saved list (%s): shows the not-saved view and removes it',
+      async (name, value) => {
+        plant();
+        const query = queries(GULF_COAST.slug).find((q) => q.name === name)!;
+        plantSavedCopy(query.fn, query.args, value, SAVED_AT);
+        stubOnLine(false);
+        const errors = vi.spyOn(console, 'error');
+        const harness = await open(PATH, { socket: 'down' });
+        expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+        expect(savedEntry(GULF_COAST.slug, name)).toBeNull();
         expect(errors).not.toHaveBeenCalled();
       },
     );
@@ -270,7 +355,7 @@ describe('OrganizationPage offline (#82)', () => {
     }
     stubOnLine(true);
     const harness = await open();
-    subscription().emit(GULF_COAST);
+    emit(GULF_COAST);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe(GULF_COAST.name);
     expect(host(harness).querySelector('app-server-error-view')).toBeNull();
