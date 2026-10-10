@@ -239,6 +239,31 @@ test.describe('sign-up', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
   });
 
+  // Tester (#62): every unsafe returnTo, including encoded and dot-segment forms, lands on / and
+  // the browser never leaves this site, after sign-up and for a signed-in visitor opening
+  // /sign-up (the redirectSignedIn guard).
+  for (const raw of [
+    'https://evil.example/x',
+    '/\\evil.example/x',
+    '%2F%2Fevil.example%2Fx',
+    '/..//evil.example/x',
+    '/.//evil.example/x',
+    '/%2e%2e//evil.example/x',
+  ]) {
+    test(`returnTo=${JSON.stringify(raw)} lands on / after sign-up and when signed in`, async ({
+      page,
+    }) => {
+      const query = `?returnTo=${encodeURIComponent(raw)}`;
+      await signUp(page, newUser('Variant'), `/sign-up${query}`);
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+
+      await page.goto(`/sign-up${query}`);
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+    });
+  }
+
   test.describe('an email that already has an account', () => {
     test.use({ expectedFailedRequests: [{ status: 422, path: '/api/auth/sign-up/email' }] });
 

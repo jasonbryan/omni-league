@@ -291,3 +291,99 @@ describe('breached-password check (Pwned Passwords, mocked fetch)', () => {
     expect(pwned).not.toHaveBeenCalled();
   }, 30_000);
 });
+
+// Tester (#62): the origin check must hold even where Better Auth would skip it by default
+// (`NODE_ENV` "test" or `TEST` set, better-auth/dist/context/create-context.mjs), and for every
+// lookalike of this project's preview hostnames, over the real HTTP route.
+describe('origin check under a test environment (tester)', () => {
+  test('Vitest runs with NODE_ENV "test", the case Better Auth skips the check by default', () => {
+    // Better Auth reads process.env.NODE_ENV itself (@better-auth/core/env), not the typed `env`.
+    // eslint-disable-next-line @convex-dev/no-process-env -- asserts the variable Better Auth reads
+    expect(process.env['NODE_ENV']).toBe('test');
+  });
+
+  test.each([
+    'https://evil.example',
+    'https://deploy-preview-0--charming-longma-28c00d.netlify.app',
+    'https://deploy-preview-01--charming-longma-28c00d.netlify.app',
+    'http://deploy-preview-62--charming-longma-28c00d.netlify.app',
+    'https://deploy-preview-62--charming-longma-28c00d.netlify.app.evil.example',
+    'https://deploy-preview-62--charming-longma-28c00d-netlify.app',
+    'https://xdeploy-preview-62--charming-longma-28c00d.netlify.app',
+    'https://deploy-preview-62--charming-longma-28c00d.netlify.app:443',
+    'https://charming-longma-28c00d.netlify.app',
+  ])('with TEST=true and the preview pattern set, Origin %s is refused', async (origin) => {
+    vi.stubEnv('TEST', 'true');
+    vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
+    const t = setup();
+    const { status, json, headers } = await signUp(t, valid(), { origin });
+    expect(status).toBe(403);
+    expect(json['code']).toBe('INVALID_ORIGIN');
+    expect(headers.get('access-control-allow-origin')).toBeNull();
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+
+  test('a forged Referer with no Origin is refused too', async () => {
+    vi.stubEnv('TEST', 'true');
+    const t = setup();
+    const response = await t.fetch('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', referer: 'https://evil.example/x' },
+      body: JSON.stringify(valid()),
+    });
+    expect(response.status).toBe(403);
+    expect((await stored(t)).authUsers).toEqual([]);
+  });
+
+  test('a cross-site callbackURL from a trusted origin is refused', async () => {
+    const t = setup();
+    const { status, json } = await signUp(t, {
+      ...valid(),
+      callbackURL: 'https://evil.example/x',
+    } as SignUpBody);
+    expect(status).toBe(403);
+    expect(json['code']).toBe('INVALID_CALLBACK_URL');
+    expect((await stored(t)).authUsers).toEqual([]);
+  });
+});
+
+// Tester (#62): the password never appears in a response or in anything logged, on success and on
+// each refusal path (breached, check unavailable, too short, existing email, forged origin).
+describe('the password is never echoed or logged (tester)', () => {
+  test('across success and every refusal path', async () => {
+    const secret = 'unique tester passphrase 7f3a9c';
+    const logged: string[] = [];
+    for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+        logged.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
+      });
+    }
+    const t = setup();
+    const outputs: string[] = [];
+    const record = async (body: SignUpBody, opts?: { origin?: string | null }): Promise<number> => {
+      const { status, json, headers } = await signUp(t, body, opts);
+      outputs.push(JSON.stringify(json), JSON.stringify([...headers.entries()]));
+      return status;
+    };
+    expect(await record({ ...valid(), password: secret })).toBe(200);
+    expect(await record({ ...valid(), password: secret })).toBe(422);
+    expect(await record({ ...valid('b@example.com'), password: secret.slice(0, 14) })).toBe(400);
+    expect(
+      await record(
+        { ...valid('c@example.com'), password: secret },
+        { origin: 'https://evil.example' },
+      ),
+    ).toBe(403);
+    pwned.mockImplementation(() => Promise.reject(new TypeError('fetch failed')));
+    expect(await record({ ...valid('d@example.com'), password: secret })).toBe(500);
+    const hash = await sha1Hex(secret);
+    pwned.mockImplementation(() => Promise.resolve(rangeResponse(hash.slice(5))));
+    expect(await record({ ...valid('e@example.com'), password: secret })).toBe(400);
+
+    for (const text of [...outputs, ...logged]) {
+      expect(text).not.toContain(secret);
+      expect(text).not.toContain(secret.slice(0, 14));
+    }
+    vi.restoreAllMocks();
+  }, 60_000);
+});

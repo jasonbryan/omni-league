@@ -49,3 +49,33 @@ describe('afterAuthUrl', () => {
     expect(afterAuthUrl('')).toBe('/');
   });
 });
+
+// Tester (#62): dot segments and encoded dots resolve to a path that starts with `//` or `/\`
+// after parsing. The router gets the parsed result, so the result itself must never name another
+// host (`//host` is protocol-relative to `history.pushState` and to any later `callbackURL` use).
+describe('safeReturnTo, dot segments that resolve to another host', () => {
+  it.each([
+    '/..//evil.example/x',
+    '/.//evil.example/x',
+    '/a/..//evil.example/x',
+    '/%2e%2e//evil.example/x',
+    '/%2E//evil.example/x',
+    '/./\\evil.example/x',
+    '/../\\evil.example/x',
+  ])('never returns a protocol-relative path for %j', (raw) => {
+    const result = safeReturnTo(raw);
+    expect(result.startsWith('/')).toBe(true);
+    expect(result.startsWith('//')).toBe(false);
+    expect(result.startsWith('/\\')).toBe(false);
+    expect(new URL(result, 'https://app.example').origin).toBe('https://app.example');
+  });
+
+  it.each(['/%2F%2Fevil.example', '/%5Cevil.example', '/%5C%5Cevil.example'])(
+    'keeps the encoded slash or backslash %j as one same-site path segment',
+    (raw) => {
+      const result = safeReturnTo(raw);
+      expect(result).toBe(raw);
+      expect(new URL(result, 'https://app.example').origin).toBe('https://app.example');
+    },
+  );
+});
