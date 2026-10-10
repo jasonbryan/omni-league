@@ -8,9 +8,10 @@ export interface ConsoleGuardOptions {
   expectedDocumentStatus?: ExpectedDocumentStatus;
   /** Convex function names (`module:function`) whose rejected mutation or action may log. */
   expectedConvexErrors?: readonly string[];
+  /** `console.warn` messages the test expects: a string matches the start, a RegExp anywhere. */
+  expectedConsoleWarnings?: readonly (string | RegExp)[];
 }
 
-const NG05_WARNING = /\bNG05\d\d\b/;
 const DOCUMENT_404_PREFIX = 'Failed to load resource: the server responded with a status of 404';
 const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
 
@@ -23,19 +24,26 @@ function withoutFragment(url: string): string {
  * Console rules of ADR 0005 for one test. A test fails on:
  * - any uncaught page error (`pageerror`);
  * - any `console` message of type `error` (NG0500 to NG0504 included);
- * - any `console` message of type `warning` matching `/\bNG05\d\d\b/` (NG0505, NG0506, NG0508).
+ * - any `console` message of type `warning`. Angular's development warnings come with a code
+ *   (`NG0505`) and without one (`Unexpected state: no hydration info available …`, #94), so no
+ *   text rule tells them apart from other warnings, and every warning counts.
  * `log` and `info` are ignored (they are kept only for the hydration assertion).
  *
- * Two opt-in, per-test allowances (see the fixture options in `fixtures.ts`):
+ * Three opt-in, per-test allowances (see the fixture options in `fixtures.ts`):
  * - `expectedDocumentStatus: 404` ignores exactly the main document's own 404 resource message;
  * - `expectedConvexErrors` ignores `[CONVEX M(<name>)] ` / `[CONVEX A(<name>)] ` for listed names,
- *   and fails the test if a listed name never produced such a message.
+ *   and fails the test if a listed name never produced such a message;
+ * - `expectedConsoleWarnings` ignores a warning that starts with a listed string or matches a
+ *   listed RegExp, and fails the test if an entry matched no warning. Each entry needs a comment
+ *   linking the issue that removes the warning.
  */
 export class ConsoleGuard {
   private readonly failures: string[] = [];
   private readonly logs: string[] = [];
   private readonly usedConvexAllowances = new Set<string>();
   private readonly expectedConvexErrors: readonly string[];
+  private readonly usedWarningAllowances = new Set<string | RegExp>();
+  private readonly expectedConsoleWarnings: readonly (string | RegExp)[];
   private readonly expectedDocumentStatus: ExpectedDocumentStatus | undefined;
   /** Latest main-frame document response per page (URL without fragment, status). */
   private readonly documents = new WeakMap<Page, { url: string; status: number }>();
@@ -47,6 +55,7 @@ export class ConsoleGuard {
     }
     this.expectedDocumentStatus = status;
     this.expectedConvexErrors = options.expectedConvexErrors ?? [];
+    this.expectedConsoleWarnings = options.expectedConsoleWarnings ?? [];
   }
 
   /** Starts listening on a page. Call before the page navigates. */
@@ -76,16 +85,25 @@ export class ConsoleGuard {
     return this.logs.some((text) => HYDRATED_LOG.test(text));
   }
 
-  /** Everything that fails the test: console failures, then unused Convex allowances. */
+  /** Everything that fails the test: console failures, then unused allowances. */
   problems(): string[] {
-    const unused = this.expectedConvexErrors
+    const unusedConvex = this.expectedConvexErrors
       .filter((name) => !this.usedConvexAllowances.has(name))
       .map(
         (name) =>
           `expectedConvexErrors entry "${name}" was not used: no [CONVEX M(${name})] or ` +
           `[CONVEX A(${name})] console error was logged; remove the stale entry`,
       );
-    return [...this.failures, ...unused];
+    const unusedWarnings = this.expectedConsoleWarnings
+      .filter((entry) => !this.usedWarningAllowances.has(entry))
+      .map((entry) =>
+        typeof entry === 'string'
+          ? `expectedConsoleWarnings entry "${entry}" was not used: no console.warn started with ` +
+            `it; remove the stale entry`
+          : `expectedConsoleWarnings entry ${String(entry)} was not used: no console.warn ` +
+            `matched it; remove the stale entry`,
+      );
+    return [...this.failures, ...unusedConvex, ...unusedWarnings];
   }
 
   /** Throws one error listing every problem; called by the fixture at teardown. */
@@ -105,15 +123,27 @@ export class ConsoleGuard {
       this.logs.push(text);
       return;
     }
-    if (type === 'warning' && NG05_WARNING.test(text)) {
-      this.failures.push(`console.warn: ${text}`);
+    const url = message.location().url;
+    const at = url ? ` (at ${url})` : '';
+    if (type === 'warning') {
+      if (this.matchWarningAllowance(text)) return;
+      this.failures.push(`console.warn: ${text}${at}`);
       return;
     }
     if (type !== 'error') return;
     if (this.isExpectedDocument404(page, message, text)) return;
     if (this.matchConvexAllowance(text)) return;
-    const url = message.location().url;
-    this.failures.push(`console.error: ${text}${url ? ` (at ${url})` : ''}`);
+    this.failures.push(`console.error: ${text}${at}`);
+  }
+
+  private matchWarningAllowance(text: string): boolean {
+    // `search` ignores `lastIndex`, so a RegExp with the `g` flag matches the same way every time.
+    const entry = this.expectedConsoleWarnings.find((e) =>
+      typeof e === 'string' ? text.startsWith(e) : text.search(e) !== -1,
+    );
+    if (entry === undefined) return false;
+    this.usedWarningAllowances.add(entry);
+    return true;
   }
 
   private isExpectedDocument404(page: Page, message: ConsoleMessage, text: string): boolean {
