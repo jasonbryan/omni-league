@@ -1,4 +1,5 @@
-import { DefaultUrlSerializer, PRIMARY_OUTLET, type UrlSegmentGroup } from '@angular/router';
+import { PRIMARY_OUTLET, type UrlSegmentGroup } from '@angular/router';
+import { QueryTolerantUrlSerializer } from './app/core/url-serializer';
 
 /**
  * Paths the router can never render (#23, PR #90). Their pathname has one leading slash, so
@@ -18,12 +19,14 @@ import { DefaultUrlSerializer, PRIMARY_OUTLET, type UrlSegmentGroup } from '@ang
  * answers them with the plain 404 before the engine runs.
  *
  * A query string the router cannot decode (`?q=%`) is not a reason for the 404: the engine renders
- * the same path without it (`hasUndecodableQuery`, #91).
+ * the same path without it (`hasUndecodableQuery`, #91). The path is checked with the serializer
+ * the app's router uses (`QueryTolerantUrlSerializer` in `src/app/core/url-serializer.ts`), which
+ * reads such a URL without its query string.
  *
  * Web-API-only: bundled into the Netlify edge function (ESLint enforces it for `src/server*.ts`).
  */
 
-const serializer = new DefaultUrlSerializer();
+const serializer = new QueryTolerantUrlSerializer();
 
 function hasNamedOutlet(group: UrlSegmentGroup): boolean {
   return Object.entries(group.children).some(
@@ -46,10 +49,8 @@ function isUnroutable(path: string, search: string): boolean {
   let tree;
   try {
     tree = serializer.parse(path + search);
-  } catch (error) {
-    // Malformed percent-encoding in the query string (`?q=%`): the path alone decides here, and
-    // the engine renders a routable path without the query string (`hasUndecodableQuery`, #91).
-    return search && error instanceof URIError ? isUnroutable(path, '') : true;
+  } catch {
+    return true;
   }
   const serialized = serializer.serialize(tree);
   return /^[/\\]{2}/.test(serialized) || hasNamedOutlet(tree.root) || readsAsRoot(path, serialized);
@@ -58,20 +59,4 @@ function isUnroutable(path: string, search: string): boolean {
 /** True when the router reads a path other than `/` as `/` (`/(`, `/()x`, `/()`, `/(/`). */
 function readsAsRoot(path: string, serialized: string): boolean {
   return path !== '' && path !== '/' && serialized.split(/[?#]/, 1)[0] === '/';
-}
-
-/**
- * True when the router cannot decode the query string of a URL whose path it can parse (`/x?q=%`,
- * `/?%`, `/o/acme?q=%E0%A4%A`). The router would warn NG04018 and render `/` whatever the path
- * was. Call it after `isMalformedPath` and `isUnroutablePath`, so the only `URIError` left is the
- * query string's (#91).
- */
-export function hasUndecodableQuery(pathname: string, search: string): boolean {
-  if (search === '') return false;
-  try {
-    serializer.parse(pathname + search);
-    return false;
-  } catch (error) {
-    return error instanceof URIError;
-  }
 }
