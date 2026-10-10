@@ -11,6 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,11 +28,13 @@ import {
   isListening,
   LOCAL_CONVEX_URL,
   main,
+  previewOriginPattern,
   PROJECT_DIR,
   readLocalDeployment,
   resolveTarget,
   ROOT,
   runConvex,
+  seedDemoCalls,
   SHARED_STATE_DIRNAME,
 } from './e2e-convex.mjs';
 import { e2ePlan } from './e2e.mjs';
@@ -380,8 +383,45 @@ describe('ports', () => {
   });
 });
 
+describe('seedDemoCalls (seed-demo)', () => {
+  it('sets PREVIEW_ORIGIN_PATTERN to the given pattern, then runs seed:demo, both through runConvex', () => {
+    const pattern = String.raw`^https://(main)--site\.netlify\.app$`;
+    const calls = seedDemoCalls(pattern);
+    assert.deepEqual(calls, [
+      ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', pattern],
+      ['run', 'seed:demo'],
+    ]);
+    // Each call is one runConvex accepts (env set or run), so each goes through the target check.
+    for (const args of calls) {
+      assert.ok((args[0] === 'env' && args[1] === 'set') || args[0] === 'run', args.join(' '));
+    }
+  });
+});
+
+describe('previewOriginPattern (seed-demo)', () => {
+  it('reads the constant from convex/lib/previewOrigin.ts with no module-type warning', () => {
+    // A fresh process: Node warns once per file, and this test process may have loaded it.
+    const script =
+      `const { previewOriginPattern } = await import(${JSON.stringify(
+        new URL('./e2e-convex.mjs', import.meta.url).href,
+      )});\n` + 'process.stdout.write(await previewOriginPattern());';
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /^\^https:\/\/.*netlify\\\.app\$$/);
+    assert.equal(run.stderr, '');
+  });
+
+  it('restores process.emitWarning afterwards', async () => {
+    const before = process.emitWarning;
+    assert.equal(typeof (await previewOriginPattern()), 'string');
+    assert.equal(process.emitWarning, before);
+  });
+});
+
 describe('main', () => {
-  for (const command of ['push', 'serve', 'setup', 'run']) {
+  for (const command of ['push', 'serve', 'setup', 'seed-demo', 'run']) {
     it(`${command} refuses with E2E_BASE_URL set and spawns nothing`, async () => {
       const spawned = [];
       const errors = [];

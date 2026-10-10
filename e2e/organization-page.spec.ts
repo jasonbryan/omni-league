@@ -3,6 +3,7 @@
 // after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
 // and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
+import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -612,6 +613,57 @@ test.describe('organization page in the browser', () => {
     expect(
       await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
     ).toBe(true);
+  });
+
+  // #82: a saved copy never takes part in hydration. The server-rendered first load carries a
+  // TransferState entry, which wins over the saved copy (ADR 0013 section 3), so the page hydrates
+  // the server HTML unchanged, and the live result then replaces the saved copy in storage.
+  test('hydrates the transferred value over a saved copy with no console error, then saves the live result', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await smallTenant();
+    const key = `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug: tenant.slug })}`;
+    const savedAt = Date.now() - 60_000;
+    const saved = JSON.stringify({
+      v: { name: 'Saved Copy Name', slug: tenant.slug, leagues: [], locations: [] },
+      savedAt,
+      usedAt: savedAt,
+      version: OFFLINE_SAVED_QUERIES[0].version,
+    });
+    // Before any app script: plant the saved copy and record every h1 text the page ever shows.
+    await page.addInitScript(
+      ([savedKey, savedValue]) => {
+        localStorage.setItem(savedKey, savedValue);
+        const seen: string[] = [];
+        (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
+        new MutationObserver(() => {
+          for (const h1 of document.querySelectorAll('h1')) {
+            const text = h1.textContent.trim();
+            if (text && !seen.includes(text)) seen.push(text);
+          }
+        }).observe(document, { subtree: true, childList: true, characterData: true });
+      },
+      [key, saved] as const,
+    );
+
+    await page.goto(tenant.path);
+    await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
+    await hydrated(consoleGuard);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (savedKey) =>
+            (JSON.parse(localStorage.getItem(savedKey) ?? 'null') as { v?: { name?: string } })?.v
+              ?.name,
+          key,
+        ),
+      )
+      .toBe(tenant.name);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eH1s?: string[] }).e2eH1s ?? []),
+    ).not.toContain('Saved Copy Name');
+    await expect(page.locator('[data-saved-copy-note]')).toHaveCount(0);
   });
 
   test('an organization with no leagues and no locations shows the empty states, "None yet", and 0, 0, 0', async ({

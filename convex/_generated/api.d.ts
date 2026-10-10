@@ -14,6 +14,7 @@ import type * as http from "../http.js";
 import type * as lib_authOrigins from "../lib/authOrigins.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_previewOrigin from "../lib/previewOrigin.js";
+import type * as lib_publicPage from "../lib/publicPage.js";
 import type * as lib_slugs from "../lib/slugs.js";
 import type * as lib_sports from "../lib/sports.js";
 import type * as lib_tenantWrites from "../lib/tenantWrites.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authOrigins": typeof lib_authOrigins;
   "lib/password": typeof lib_password;
   "lib/previewOrigin": typeof lib_previewOrigin;
+  "lib/publicPage": typeof lib_publicPage;
   "lib/slugs": typeof lib_slugs;
   "lib/sports": typeof lib_sports;
   "lib/tenantWrites": typeof lib_tenantWrites;

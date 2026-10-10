@@ -138,9 +138,21 @@ E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts
 
 The spec runs in `chromium-mobile` only and is skipped without `E2E_BASE_URL`, so `ci` skips it. Stop `serve:ssr` afterwards ([dev cycle, Local processes](dev-cycle.md#local-processes)).
 
-**`CONVEX_URL` for this run.** `scripts/ng-convex.mjs` compiles in the Convex URL from the environment, or else from `.env.local`. A URL that names a backend that is not running keeps the adapter's `online` signal false, so the offline note never goes and the spec's "note disappears" check fails for a reason unrelated to the worker. So either build with no Convex URL (`CONVEX_URL` unset in the environment and absent from `.env.local`; `online` then follows `navigator.onLine`), or start #82's local backend sequence first and build against it.
+**`CONVEX_URL` for this run.** `scripts/ng-convex.mjs` compiles in the Convex URL from the environment, or else from `.env.local`. A URL that names a backend that is not running keeps the adapter's `online` signal false, so the offline note never goes and the spec's "note disappears" check fails for a reason unrelated to the worker. So either build with no Convex URL (`CONVEX_URL` unset in the environment and absent from `.env.local`; `online` then follows `navigator.onLine`), or run the sequence with data below.
 
-**Release check.** No `ci` job proves offline behaviour, because `e2e/pwa.spec.ts` needs a production build. Every release request (`gate:production`) records a run of the commands above on the release commit, with the output in its Evidence block.
+**With data (saved copies, #82).** The saved-copy tests in `e2e/pwa.spec.ts` open the demo organizations of `seed:demo` (`DEMO` in `convex/seed.ts`), so they need a build against a seeded backend; without one they are skipped with that reason. Locally, with the e2e backend (#59) and its target check, ports 3210, 3211, and 4000 free:
+
+```sh
+node scripts/e2e-convex.mjs serve &           # the anonymous local backend; record its PID
+node scripts/e2e-convex.mjs seed-demo         # sets PREVIEW_ORIGIN_PATTERN, runs seed:demo
+CONVEX_URL=http://127.0.0.1:3210 npm run build
+npm run serve:ssr &                           # record its PID
+E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts --project=chromium-mobile
+```
+
+`seed-demo` sets `PREVIEW_ORIGIN_PATTERN` on the local backend because `seed:demo` refuses to write anywhere else (Demo data, Production guard); on that backend the pattern only admits this project's preview origins. Stop `serve:ssr` and the backend afterwards ([dev cycle, Local processes](dev-cycle.md#local-processes)). A preview seeded by `seed:demo` may replace the backend, the seed, and the build once the Drawer is off.
+
+**Release check.** No `ci` job proves offline behaviour, because `e2e/pwa.spec.ts` needs a production build. Every release request (`gate:production`) records a run of the sequence with data above on the release commit, with the output in its Evidence block; the saved-copy tests must pass, not be skipped.
 
 ## Cleanup
 
