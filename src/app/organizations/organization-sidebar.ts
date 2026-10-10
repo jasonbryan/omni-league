@@ -19,7 +19,8 @@ export function initials(name: string): string {
 /**
  * The organization page's sidebar content (#60, #73 decision 3), rendered in the app shell's
  * sidebar slot: the initials tile and the name, Overview (the current page), then the leagues and
- * the locations, each a link to its row on this page until league and location pages exist.
+ * the locations shown on this page (at most 5 of each, #100), each a link to its row on this page
+ * until league and location pages exist.
  * After hydration a plain click on one of those links goes through the router with the visitor's
  * query string kept (#95); without JavaScript it loads `/path#row`.
  *

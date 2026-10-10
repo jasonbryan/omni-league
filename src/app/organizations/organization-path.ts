@@ -1,10 +1,19 @@
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '../../../convex/_generated/api';
 
-/** A found organization's public page, as `organizations:getPublicPage` returns it. */
-export type PublicOrganizationPage = NonNullable<
+/** A found organization's header and totals, as `organizations:getPublicPage` returns it. */
+export type PublicOrganizationHeader = NonNullable<
   FunctionReturnType<typeof api.organizations.getPublicPage>
 >;
+
+/**
+ * What the organization page shows (#100): the header and totals, with the rows of the page shown
+ * of `organizations:listPublicLeagues` and `organizations:listPublicLocations`.
+ */
+export type PublicOrganizationPage = PublicOrganizationHeader & {
+  leagues: FunctionReturnType<typeof api.organizations.listPublicLeagues>['rows'];
+  locations: FunctionReturnType<typeof api.organizations.listPublicLocations>['rows'];
+};
 
 /**
  * The organization page's path, `/organizations/<slug>`. Links, the canonical, and "Try again" are

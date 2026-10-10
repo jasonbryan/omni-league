@@ -7,7 +7,8 @@ import type { PublicOrganizationPage } from './organization-path';
  * The organization page's content column (#60): the name as the page's `<h1>`, the three summary
  * tiles (#73 decision 4), and the Leagues and Locations panels with their empty states, as in
  * design/mockups/60-organization-page.html. Each row carries the `id` the sidebar links to
- * (`league-<n>`, `location-<n>`, numbered in the order the query sorts them).
+ * (`league-<n>`, `location-<n>`, numbered in the order the query sorts them). The panels show the
+ * rows of page 1 of each list, at most 5 (#100); the tiles show the totals.
  */
 @Component({
   selector: 'app-organization-overview',
@@ -129,17 +130,16 @@ import type { PublicOrganizationPage } from './organization-path';
 export class OrganizationOverview {
   readonly page = input.required<PublicOrganizationPage>();
 
-  /** League, location, and sport counts, all from the same query result (#73 decision 4). */
+  /**
+   * The organization's league, location, and sport totals (#73 decision 4), from
+   * `getPublicPage`: never the number of rows shown, which is at most 5 per list (#100).
+   */
   protected readonly tiles = computed(() => {
-    const { leagues, locations } = this.page();
+    const { leagueCount, locationCount, sportCount } = this.page();
     return [
-      { label: 'Leagues', icon: 'lucideTrophy', count: leagues.length },
-      { label: 'Locations', icon: 'lucideMapPin', count: locations.length },
-      {
-        label: 'Sports',
-        icon: 'lucideVolleyball',
-        count: new Set(leagues.map((league) => league.sportName)).size,
-      },
+      { label: 'Leagues', icon: 'lucideTrophy', count: leagueCount },
+      { label: 'Locations', icon: 'lucideMapPin', count: locationCount },
+      { label: 'Sports', icon: 'lucideVolleyball', count: sportCount },
     ];
   });
 
