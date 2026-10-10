@@ -14,7 +14,7 @@ import {
 import { withQueryCacheKey } from './server-cache';
 import { leadingSlashesRedirect, withSafeRedirect } from './server-redirect';
 import { NOINDEX_BUILD, withNoindex } from './server-robots';
-import { isUnroutablePath } from './server-unroutable';
+import { hasUndecodableQuery, isUnroutablePath } from './server-unroutable';
 
 // SSR entry per ADR 0010 item 2. Netlify runs the exported `netlifyAppEngineHandler` in an edge
 // function (the plugin finds it by that name); `scripts/serve-ssr.mjs` runs it locally.
@@ -55,9 +55,14 @@ function getAppEngine(): AppEngine {
  * - a path that cannot be percent-decoded: plain 400, without calling the engine;
  * - a path starting with `//` (Angular's NG05702): `no-store` 301 to the same path with one
  *   leading slash, without calling the engine (`src/server-redirect.ts`, #23);
- * - a path the router reads as `//...` or as a named-outlet route (`/(//evil.com)`, `/(a:b)`):
- *   plain 404 without calling the engine, so Angular logs no error for it
- *   (`src/server-unroutable.ts`);
+ * - a path the router reads as `//...`, as a named-outlet route (`/(//evil.com)`, `/(a:b)`), or as
+ *   `/` (`/(`, `/()x`): plain 404 without calling the engine, so Angular logs no error for it and
+ *   the CDN stores no home page under it (`src/server-unroutable.ts`, #91). It wins over a
+ *   malformed query string;
+ * - a query string the router cannot decode (`/x?q=%`): `no-store` 302 to the same path without
+ *   the query string, without calling the engine. The router would render `/` for it whatever the
+ *   path was (#91). The `Location` is the already-checked pathname, so it stays on this site and
+ *   carries no query string;
  * - no matching route (`null`): plain 404. With the router's `**` route (#23) every path matches,
  *   and an unknown one renders the not-found view with status 404;
  * - a URL the router normalizes (`/x//`, `/x/(y)`): the engine's 302 to the normalized URL, where
@@ -92,6 +97,9 @@ async function render(request: Request): Promise<Response> {
   if (isUnroutablePath(pathname, search)) {
     return notFoundResponse();
   }
+  if (hasUndecodableQuery(pathname, search)) {
+    return queryDroppedRedirect(pathname);
+  }
 
   try {
     const result = await getAppEngine().handle(request, getContext());
@@ -100,6 +108,17 @@ async function render(request: Request): Promise<Response> {
     console.error(`Error handling ${request.method} ${pathname}:`, redactedErrorText(error));
     return internalServerErrorResponse();
   }
+}
+
+/**
+ * `no-store` 302 to `pathname` with no query string. `pathname` has passed `isMalformedPath`,
+ * `leadingSlashesRedirect`, and `isUnroutablePath`, so it starts with exactly one `/`.
+ */
+function queryDroppedRedirect(pathname: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: pathname, 'Cache-Control': 'no-store' },
+  });
 }
 
 /** Request handler used by the Angular CLI (dev server and build). */

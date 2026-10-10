@@ -182,8 +182,8 @@ describe('netlifyAppEngineHandler', () => {
     expect(await response.text()).toBe('Internal Server Error');
   });
 
-  it.each(['/o/acme', '/o/acme?q=%41', '/o/%E2%82%AC', '/o/acme?q=%', '/o/acme?q=%E0%A4%A', '/?%'])(
-    'answers an engine URIError for %s (well-formed path) with 500, not 400',
+  it.each(['/o/acme', '/o/acme?q=%41', '/o/%E2%82%AC'])(
+    'answers an engine URIError for %s (well-formed path and query) with 500, not 400',
     async (path) => {
       const engine = useEngine(() => Promise.reject(new URIError('URI malformed')));
 
@@ -394,6 +394,7 @@ describe('netlifyAppEngineHandler X-Robots-Tag', () => {
     ['the plain 404', '/does-not-exist', () => Promise.resolve(null), 404],
     ['the plain 400', '/%E0%A4%A', () => Promise.resolve(null), 400],
     ['the plain 500', '/x', () => Promise.reject(new Error('render failed')), 500],
+    ['the malformed-query redirect', '/x?q=%', () => Promise.resolve(null), 302],
   ] as const)('is noindex on %s', async (_, path, handle, status) => {
     setNoindexForTesting(true);
     useEngine(handle);
@@ -447,6 +448,7 @@ describe('netlifyAppEngineHandler cache key', () => {
     ['the plain 500', '/x?ott=SECRET', () => Promise.reject(new Error('render failed')), 500],
     ['the // redirect', '//x?ott=SECRET', () => Promise.resolve(null), 301],
     ['an unroutable path', '/(//evil.com)?ott=SECRET', () => Promise.resolve(null), 404],
+    ['the malformed-query redirect', '/x?ott=SECRET&q=%', () => Promise.resolve(null), 302],
   ] as const)('%s carries Netlify-Vary: query', async (_, path, handle, status) => {
     for (const flag of [false, true]) {
       setNoindexForTesting(flag);
@@ -639,6 +641,23 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     '/a(?token=A/B',
     '/x/(?q=1',
     '/(/?q=1',
+    // The router parses these to `/` and renders the home page for a path that is not `/` (#91).
+    '/(',
+    '/()x',
+    '/()',
+    '/(/',
+    '/()/',
+    '/()//',
+    '/()(',
+    '/()()',
+    '/()x)',
+    '/()x/y',
+    '/()/x',
+    '/()%20',
+    '/()?q=1',
+    // The unroutable path wins over a malformed query string (#91).
+    '/(?q=%',
+    '/()?q=%',
   ])('answers %s with the plain 404 without calling the engine', async (path) => {
     const engine = useEngine(() => Promise.resolve(new Response('ok')));
 
@@ -653,8 +672,11 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
 
   it.each([
     '/',
+    '/?q=1',
+    '/?utm_source=x',
     '/x',
     '/x/y',
+    '/o/acme?q=%41',
     '/x?q=(//evil.com)',
     '/x(//evil.com)',
     '/x(y)',
@@ -683,6 +705,35 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
 
       expect(response.status).toBe(200);
       expect(engine.handle).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  // The router cannot decode the query string, so it would warn NG04018 and render `/` whatever
+  // the path was (#91). The handler redirects to the same path without the query string.
+  it.each([
+    ['/x?q=%', '/x'],
+    ['/?q=%', '/'],
+    ['/?%', '/'],
+    ['/o/acme?q=%E0%A4%A', '/o/acme'],
+    ['/o/acme?q=%', '/o/acme'],
+    ['/o/acme?ott=SECRET&ref=%', '/o/acme'],
+    ['/x/?q=%', '/x/'],
+    ['/%E2%82%AC?q=%', '/%E2%82%AC'],
+    ['/x?q=a+%', '/x'],
+  ])(
+    'redirects %s, whose query string the router cannot decode, to %s without calling the engine',
+    async (path, location) => {
+      const engine = useEngine(() => Promise.resolve(new Response('ok')));
+
+      const response = await netlifyAppEngineHandler(request(path));
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get('Location')).toBe(location);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Netlify-Vary')).toBe('query');
+      expect(await response.text()).toBe('');
+      expect(engine.handle).not.toHaveBeenCalled();
+      expect(console.error).not.toHaveBeenCalled();
     },
   );
 
