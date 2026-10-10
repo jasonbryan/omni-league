@@ -8,7 +8,13 @@ export {
   type ConvexClientLike,
 } from './convex-client';
 export { CONVEX_URL } from './convex-url';
-export { ConvexNotConfiguredError, ConvexServerCallError, ConvexServerQueryError } from './errors';
+export {
+  ConvexNotConfiguredError,
+  ConvexOfflineError,
+  ConvexServerCallError,
+  ConvexServerQueryError,
+} from './errors';
+export { injectOnline } from './connection';
 export { injectAction, injectMutation, type CallRef } from './inject-call';
 export { injectQuery, skipToken, type QueryRef, type SkipToken } from './inject-query';
 export {

@@ -1,3 +1,4 @@
+import type { ConnectionState } from 'convex/browser';
 import { getFunctionName, type FunctionReference } from 'convex/server';
 import type { ConvexClientLike } from '../convex-client';
 
@@ -63,6 +64,46 @@ export class FakeConvexClient implements ConvexClientLike {
 
   readonly action = ((fn: FunctionReference<'action'>, args: unknown) =>
     this.enqueue('action', getFunctionName(fn), args)) as ConvexClientLike['action'];
+
+  private state: ConnectionState = {
+    hasInflightRequests: false,
+    isWebSocketConnected: true,
+    timeOfOldestInflightRequest: null,
+    hasEverConnected: true,
+    connectionCount: 1,
+    connectionRetries: 0,
+    inflightMutations: 0,
+    inflightActions: 0,
+  };
+  private readonly stateListeners = new Set<(state: ConnectionState) => void>();
+
+  /** Number of `subscribeToConnectionState` callbacks still subscribed. */
+  get connectionStateListeners(): number {
+    return this.stateListeners.size;
+  }
+
+  connectionState(): ConnectionState {
+    return { ...this.state };
+  }
+
+  subscribeToConnectionState(cb: (state: ConnectionState) => void): () => void {
+    this.stateListeners.add(cb);
+    return () => this.stateListeners.delete(cb);
+  }
+
+  /**
+   * Sets the connection state (connected by default) and notifies subscribers. `connected: false`
+   * before any `true` models a client that has never connected.
+   */
+  setConnected(connected: boolean, options: { neverConnected?: boolean } = {}): void {
+    this.state = {
+      ...this.state,
+      isWebSocketConnected: connected,
+      hasEverConnected: connected || (!options.neverConnected && this.state.hasEverConnected),
+      connectionCount: this.state.connectionCount + (connected ? 1 : 0),
+    };
+    for (const listener of [...this.stateListeners]) listener(this.connectionState());
+  }
 
   setAuth(): void {
     this.lifecycle.push('setAuth');

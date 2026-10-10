@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { isPlatformServer } from '@angular/common';
 import { ConvexClient } from 'convex/browser';
+import { ConvexConnection } from './connection';
 import { CONVEX_URL } from './convex-url';
 import { ConvexHydrationWindow } from './transfer';
 
@@ -21,6 +22,9 @@ export interface ConvexClientLike {
   setAuth: ConvexClient['setAuth'];
   clearAuth(): void;
   close(): Promise<void>;
+  /** Read by the `online` signal and by the offline guard in `run()` (ADR 0013, #88). */
+  connectionState: ConvexClient['connectionState'];
+  subscribeToConnectionState: ConvexClient['subscribeToConnectionState'];
 }
 
 /** Auth source for the #7 follow-up. Declared only: nothing provides `CONVEX_AUTH` yet. */
@@ -39,6 +43,8 @@ export function wrapConvexClient(client: ConvexClient): ConvexClientLike {
     setAuth: client.setAuth.bind(client),
     clearAuth: () => client.client.clearAuth(),
     close: () => client.close(),
+    connectionState: client.connectionState.bind(client),
+    subscribeToConnectionState: client.subscribeToConnectionState.bind(client),
   };
 }
 
@@ -68,7 +74,10 @@ export function provideConvex(): EnvironmentProviders {
   return makeEnvironmentProviders([
     { provide: CONVEX_CLIENT, useFactory: createConvexClient },
     provideAppInitializer(() => {
-      if (!isPlatformServer(inject(PLATFORM_ID))) inject(ConvexHydrationWindow).closeWhenStable();
+      if (isPlatformServer(inject(PLATFORM_ID))) return;
+      inject(ConvexHydrationWindow).closeWhenStable();
+      // Created at start, so the `online` signal's 5-second rule counts from the start of the app.
+      inject(ConvexConnection);
     }),
   ]);
 }
