@@ -7,6 +7,7 @@ import { TOKEN_PATH as TOKEN, tokensSettled } from './support/auth-tokens';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { stubNetlifyDrawer } from './support/netlify-drawer';
+import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { seedTenant } from './support/tenant';
 import { newUser, type TestUser } from './support/users';
 
@@ -53,6 +54,12 @@ async function settle(page: Page): Promise<void> {
 }
 
 test.describe('auth session store', () => {
+  // Remote runs: the production build's service worker would hide the auth requests these tests
+  // intercept and count (e2e/support/no-service-worker.ts).
+  test.beforeEach(async ({ context }) => {
+    if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
+  });
+
   test('an anonymous visitor makes no get-session or token request on any page', async ({
     page,
   }) => {
@@ -166,7 +173,9 @@ test.describe('auth session store', () => {
  */
 base.describe('auth token failures', () => {
   base.beforeEach(async ({ context }) => {
-    if (remoteBaseUrl) await stubNetlifyDrawer(context);
+    if (!remoteBaseUrl) return;
+    await stubNetlifyDrawer(context);
+    await holdServiceWorkerRegistration(context);
   });
 
   for (const failure of ['network', 'http-500', 'forged-token'] as const) {
@@ -245,6 +254,12 @@ base.describe('auth token failures', () => {
  * request in flight at sign-out never authenticates Convex, before or after another user signs in.
  */
 test.describe('auth session store, round 4', () => {
+  // Remote runs: the production build's service worker would hide the auth requests these tests
+  // intercept and count (e2e/support/no-service-worker.ts).
+  test.beforeEach(async ({ context }) => {
+    if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
+  });
+
   for (const raw of [
     '',
     'true',
@@ -438,7 +453,9 @@ test.describe('auth session store, round 4', () => {
 
 base.describe('auth token failures, round 4', () => {
   base.beforeEach(async ({ context }) => {
-    if (remoteBaseUrl) await stubNetlifyDrawer(context);
+    if (!remoteBaseUrl) return;
+    await stubNetlifyDrawer(context);
+    await holdServiceWorkerRegistration(context);
   });
 
   for (const failure of ['network', 'http-500'] as const) {
@@ -487,6 +504,12 @@ base.describe('auth token failures, round 4', () => {
 });
 
 test.describe('auth token refresh, round 4', () => {
+  // Remote runs: the production build's service worker would hide the auth requests these tests
+  // intercept and count (e2e/support/no-service-worker.ts).
+  test.beforeEach(async ({ context }) => {
+    if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
+  });
+
   // The second token request of a signed-in load is the Convex client's forced refresh
   // (forceRefreshToken: true, once the server confirms the first token). A cache that answered
   // it would make one request, and the client would never authenticate with a fresh token.

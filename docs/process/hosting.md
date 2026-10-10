@@ -162,6 +162,8 @@ The hydration-log assertion and the `/%E0%A4%A` check are reported as skipped ag
 
 **Netlify Drawer.** Netlify injects `<script src="/.netlify/scripts/cdp">` into preview and staging HTML, and that script adds the Drawer review toolbar in an iframe. The iframe is not app markup, and it fails the axe helper's Tab walk (2.4.7, "iframe has the same outline and box-shadow focused as unfocused"). With `E2E_BASE_URL` set, the e2e fixtures answer that one path with an empty script (`e2e/support/netlify-drawer.ts`), so no Drawer loads and every other request reaches the preview unchanged. A local run (no `E2E_BASE_URL`) installs no stub. If the owner later turns the Drawer off for Deploy Previews and Branch deploys in the Netlify UI, the stub becomes a no-op.
 
+**Service worker on remote runs.** A preview or staging build registers the service worker as soon as the app is stable, and once it controls the page it makes the page's fetches itself, so `page.route` and the page's `request` events miss them. With `E2E_BASE_URL` set, `e2e/auth-session.spec.ts` and `e2e/sign-up.spec.ts`, which intercept and count auth requests, hold the registration (`e2e/support/no-service-worker.ts`); other specs leave the worker on. A spec that adds such interception or counting does the same.
+
 ## Observed results
 
 Recorded by #15's testing, then by #23 on PR #90's preview (the not-found page, the first server route with `Cache-Control: ... s-maxage=60`). The cold-start render check stays **partial** until #23 records its third fresh deploy and the owner's edge-function log. The first production release waits for a full pass.

@@ -11,6 +11,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
@@ -58,6 +59,12 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise
 }
 
 test.describe('sign-up', () => {
+  // Remote runs: the production build's service worker would hide the auth requests these tests
+  // intercept and count (e2e/support/no-service-worker.ts).
+  test.beforeEach(async ({ context }) => {
+    if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
+  });
+
   test(
     'raw /sign-up, /app, and /app/x: 200 with the empty client shell, kept by no shared cache',
     RAW_HTTP,
