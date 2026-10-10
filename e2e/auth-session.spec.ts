@@ -94,7 +94,8 @@ test.describe('auth session store', () => {
     await page.reload();
     await expect(panel(page)).toContainText(user.name);
     await reloadTokens;
-    expect(count(seen, GET_SESSION)).toBeGreaterThanOrEqual(1);
+    // #111: a stored session is asked about exactly once per load.
+    expect(count(seen, GET_SESSION)).toBe(1);
     // Two token requests: the first, and the fresh one the Convex client asks for once the server
     // confirms it. The Convex client's second setAuth shares the first (#62 tester, round 3).
     expect(count(seen, TOKEN)).toBe(2);
@@ -104,6 +105,8 @@ test.describe('auth session store', () => {
     expect(await storesSessionToken(page)).toBe(false);
     // The sign-out response stores an empty session token; the session store's refetch removes it.
     await settle(page);
+    // #111: the key may still be present after sign-out, so its presence is not the test.
+    expect(await page.evaluate((key) => localStorage.getItem(key) !== null, STORE_KEY)).toBe(true);
 
     seen.length = 0;
     await page.reload();

@@ -14,6 +14,9 @@
 // - production: IS_TEST, AUTH_EMAIL_DISABLED, and PREVIEW_ORIGIN_PATTERN must be unset. (The email
 //   slice adds the presence checks for RESEND_API_KEY, RESEND_WEBHOOK_SECRET, and EMAIL_FROM,
 //   ADR 0011.)
+// - both: BETTER_AUTH_SECRET and SITE_URL must be set (#111, ADR 0008). Without the secret Better
+//   Auth would sign with its public default; without SITE_URL no origin is trusted. Only the names
+//   are read. An empty value is invisible to `--names-only`; convex/auth.ts refuses requests then.
 //
 // Targeting: `--preview-name <name>` selects the preview deployment `<name>` (for example `pr-12`,
 // or `main` for staging) with the preview deploy key in CONVEX_DEPLOY_KEY. Without it, the CLI
@@ -82,6 +85,17 @@ export async function checkDeployEnv(mode, reader) {
     }
   } else {
     throw new Error(USAGE);
+  }
+  // Required in both modes. Names only: these values are secrets or origins and are never read.
+  if (!names.has('BETTER_AUTH_SECRET')) {
+    failures.push(
+      'BETTER_AUTH_SECRET is not set; it must be set on every deployment, or auth would sign with a public default secret (ADR 0008).',
+    );
+  }
+  if (!names.has('SITE_URL')) {
+    failures.push(
+      'SITE_URL is not set; it must be set on every deployment, or no browser origin is trusted (ADR 0008).',
+    );
   }
   return failures;
 }
