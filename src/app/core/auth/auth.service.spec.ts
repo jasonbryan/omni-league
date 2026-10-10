@@ -292,6 +292,27 @@ describe('AuthService', () => {
       await expect(stale).resolves.toBeNull();
     });
 
+    // PR #102 tester round 4: the old user's token never reaches a caller once the next user has
+    // signed in, even though the Convex client would drop it.
+    it('returns null from a request in flight at sign-out that finishes after the next sign-in', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.holdTokens = true;
+      client.nextToken = 'jwt-old';
+      const stale = auth.fetchToken({ forceRefreshToken: true });
+      await loaded();
+      await auth.signOut();
+      client.emitSession({ id: 's2' });
+      expect(auth.signedIn()).toBe(true);
+      client.releaseTokens();
+      await expect(stale).resolves.toBeNull();
+      // Nor does it fill the cache: the next call asks again.
+      client.holdTokens = false;
+      client.nextToken = 'jwt-new';
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-new');
+      expect(client.tokenRequests).toBe(2);
+    });
+
     it('drops the cached token on sign-out', async () => {
       const auth = configure();
       client.emitSession({ id: 's1' });

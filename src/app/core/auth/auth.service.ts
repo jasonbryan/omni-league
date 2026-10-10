@@ -63,6 +63,8 @@ export class AuthService implements ConvexAuthSource {
   private cachedToken: string | null = null;
   /** The token request in flight, which a call that does not force a refresh shares. */
   private pendingToken: Promise<string | null> | null = null;
+  /** Rises each time the token is forgotten (sign-out, sign-up, or a signed-out answer). */
+  private tokenGeneration = 0;
   private watching = false;
   private resolveKnown: () => void = () => undefined;
   /** Settles once the session store has given its first answer. */
@@ -128,6 +130,7 @@ export class AuthService implements ConvexAuthSource {
 
   /** One token request. Never rejects: the Convex client does not catch a rejected fetchToken. */
   private requestToken(client: AuthClientLike): Promise<string | null> {
+    const generation = this.tokenGeneration;
     const request = (async (): Promise<string | null> => {
       try {
         const { data } = await client.convex.token({ fetchOptions: { throw: false } });
@@ -138,9 +141,11 @@ export class AuthService implements ConvexAuthSource {
         return null;
       }
     })().then((token) => {
-      // A request that a sign-out or a newer request replaced neither fills the cache nor, once
-      // signed out, answers with a token.
-      if (this.pendingToken !== request) return this.signedIn() ? token : null;
+      // A request from a session that has since ended answers `null`, even if another user has
+      // signed in meanwhile, and fills no cache. One that a newer forced request replaced in the
+      // same session answers with its token but leaves the cache to the newer one.
+      if (generation !== this.tokenGeneration) return null;
+      if (this.pendingToken !== request) return token;
       this.pendingToken = null;
       this.cachedToken = token;
       return token;
@@ -199,6 +204,7 @@ export class AuthService implements ConvexAuthSource {
   }
 
   private forgetToken(): void {
+    this.tokenGeneration += 1;
     this.cachedToken = null;
     this.pendingToken = null;
   }
