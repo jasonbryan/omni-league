@@ -5,17 +5,42 @@
 // Development builds register no worker (e2e/smoke.spec.ts), so this spec runs only with
 // E2E_BASE_URL set, against a production build: locally `npm run build`, `npm run serve:ssr`, then
 // `E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts` (not `npm run e2e`, which
-// rebuilds dist/ in development mode), or a preview with the Netlify Drawer off. The build has no
-// Convex URL, so the offline note follows `navigator.onLine` (docs/process/hosting.md, Service
-// worker). `ci` sets no E2E_BASE_URL, so it skips this spec. chromium-mobile only (ADR 0013, CI
-// minutes): nothing here depends on the browser project.
-import type { Page, TestInfo } from '@playwright/test';
+// rebuilds dist/ in development mode), or a preview with the Netlify Drawer off. A local build has
+// no Convex URL, so the offline note follows `navigator.onLine` (docs/process/hosting.md, Service
+// worker). A preview has one; its Convex sockets are routed (`routeConvexSockets`). `ci` sets no
+// E2E_BASE_URL, so it skips this spec. chromium-mobile only (ADR 0013, CI minutes): nothing here
+// depends on the browser project.
+import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 
 interface NgswManifest {
   assetGroups: { name: string; urls: string[] }[];
+}
+
+/** Whether `setOffline` last took the context offline. */
+let offline = false;
+
+/**
+ * A preview build connects to its Convex backend. Offline, Chromium logs every socket that fails
+ * to connect as a console error (`net::ERR_INTERNET_DISCONNECTED`), which the console fixture
+ * reports. So the context's Convex sockets are routed: while `setOffline` has the context offline,
+ * the route closes them before they reach the network; otherwise they go to the server. A local
+ * build has no Convex URL and opens no socket.
+ */
+async function routeConvexSockets(context: BrowserContext): Promise<void> {
+  offline = false;
+  await context.routeWebSocket(/^wss:\/\/[^/]+\.convex\.cloud\//, (ws) => {
+    if (offline) void ws.close();
+    else ws.connectToServer();
+  });
+}
+
+/** `context.setOffline`, and the Convex socket route follows it (`routeConvexSockets`). */
+async function setOffline(context: BrowserContext, value: boolean): Promise<void> {
+  offline = value;
+  await context.setOffline(value);
 }
 
 /** Every Cache Storage cache of the page's origin and the URLs it holds. */
@@ -88,6 +113,9 @@ test.describe('service worker (production build)', () => {
   );
   // Registration can take up to 30 s (registerWhenStable:30000), then the shell prefetch.
   test.describe.configure({ timeout: 120_000 });
+  test.beforeEach(async ({ context }) => {
+    await routeConvexSockets(context);
+  });
 
   test('opens / and an unknown path offline in the app shell with the offline note, which clears online', async ({
     page,
@@ -98,7 +126,7 @@ test.describe('service worker (production build)', () => {
     const note = page.locator('header + [role="status"] [data-offline-note]');
     await expect(note).toBeHidden();
 
-    await context.setOffline(true);
+    await setOffline(context, true);
     const home = await page.reload();
     expect(home?.status()).toBe(200);
     expect(home?.fromServiceWorker()).toBe(true);
@@ -115,7 +143,7 @@ test.describe('service worker (production build)', () => {
 
     // Back online: the note goes within 10 s, with no reload.
     const url = page.url();
-    await context.setOffline(false);
+    await setOffline(context, false);
     await expect(note).toBeHidden({ timeout: 10_000 });
     expect(page.url()).toBe(url);
   });
@@ -158,7 +186,7 @@ test.describe('service worker (production build)', () => {
     const chunks = (shell?.urls ?? []).filter((url) => /^\/chunk-[^/]+\.js$/.test(url));
     expect(chunks.length).toBeGreaterThan(1);
 
-    await context.setOffline(true);
+    await setOffline(context, true);
     const statuses = await page.evaluate(
       async (urls) =>
         Promise.all(urls.map(async (url) => [url, (await fetch(url)).status] as const)),
@@ -225,7 +253,7 @@ test.describe('service worker (production build)', () => {
 
     // Mockup state 2: with the offline note, the note at the top and the card at the bottom.
     await page.setViewportSize({ width: 360, height: 800 });
-    await context.setOffline(true);
+    await setOffline(context, true);
     const note = page.locator('header + [role="status"] [data-offline-note]');
     await expect(note).toBeVisible();
     await expect(card).toBeVisible();
@@ -240,7 +268,7 @@ test.describe('service worker (production build)', () => {
       path: offlinePath,
       contentType: 'image/png',
     });
-    await context.setOffline(false);
+    await setOffline(context, false);
     await expect(note).toBeHidden({ timeout: 10_000 });
 
     // Later: the card goes for this page session, focus moves to the main region (not <body>), and
