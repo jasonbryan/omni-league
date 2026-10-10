@@ -1,11 +1,14 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
 
 /**
- * ADR 0010 item 4: a Client route's shell is the same for every visitor and changes only with a
- * deploy, which purges Netlify's cache, so the CDN may keep it for a day. It holds no per-visitor
- * data and no query string (`Netlify-Vary: query` keys each query string apart anyway).
+ * ADR 0010 item 4 (amended, PR #102): a Client route's shell is the same for every visitor, but it
+ * names this build's content-hashed bundles, and a deploy deletes the previous build's. An edge copy
+ * stored while a deploy goes live outlives Netlify's purge, so a shared cache that kept the shell
+ * would serve a blank page until it expired. No shared cache keeps it: every load asks the edge
+ * function, as the cost estimate (ADR 0010 item 7) already assumes, and installed clients get the
+ * shell from the service worker (ADR 0013) without a request.
  */
-const CLIENT_SHELL_CACHE = 'public, max-age=0, s-maxage=86400';
+const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 
 // Route policy: ADR 0006 and docs/conventions/angular.md "Rendering".
 export const serverRoutes: ServerRoute[] = [

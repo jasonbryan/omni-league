@@ -47,6 +47,8 @@ Hybrid rendering per ADR 0006: every route has a render mode in `src/app/app.rou
 | Sign-up and sign-in (`/sign-up`, `/sign-in`)                                      | `RenderMode.Client`                                       |
 | Anything else (`**`)                                                              | `RenderMode.Server`: the not-found page with status 404   |
 
+Client routes set `headers: { 'Cache-Control': 'public, max-age=0, must-revalidate' }`, and nothing that lets a shared cache keep the client shell (`s-maxage`, `stale-while-revalidate`, `stale-if-error`, `CDN-Cache-Control`, `Netlify-CDN-Cache-Control`). The shell names the build's content-hashed bundles, which the next deploy deletes ([ADR 0010](../decisions/0010-hosting-and-deployment.md) item 4, amended; PR #102). `src/app/app.routes.server.spec.ts` checks every Client route.
+
 Server routes:
 
 - **Anonymous only.** Server renders never read cookies, the `Authorization` header, or any per-user state, and never call `setAuth`. Personalised content loads after hydration (`@defer` or a Client route).

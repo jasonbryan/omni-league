@@ -13,7 +13,7 @@ import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 
-const CLIENT_SHELL_CACHE = 'public, max-age=0, s-maxage=86400';
+const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
 
 /** Sign-up form order (mockup "Focus order", without #63's two Sign in links). */
@@ -59,7 +59,7 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise
 
 test.describe('sign-up', () => {
   test(
-    'raw /sign-up, /app, and /app/x: 200 with the empty client shell, cacheable as a shell',
+    'raw /sign-up, /app, and /app/x: 200 with the empty client shell, kept by no shared cache',
     RAW_HTTP,
     async ({ request }) => {
       for (const path of ['/sign-up', '/sign-up?returnTo=%2Fapp', '/app', '/app/x', '/app/x/y']) {
