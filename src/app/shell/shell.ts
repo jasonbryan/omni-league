@@ -238,8 +238,15 @@ export class Shell {
     });
     this.sheetRef = ref;
     this.appRef.attachView(ref.hostView);
-    // Renders the helm sheet and registers its content template, which open() needs.
-    ref.changeDetectorRef.detectChanges();
+    try {
+      // Renders the helm sheet and registers its content template, which open() needs.
+      ref.changeDetectorRef.detectChanges();
+    } catch (error) {
+      // A sheet that failed to render must not stay attached: the next press creates its own.
+      ref.destroy();
+      this.sheetRef = null;
+      throw error;
+    }
     this.sheet.set(ref.instance);
     return ref.instance;
   }

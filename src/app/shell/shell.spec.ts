@@ -1,10 +1,11 @@
 import { ApplicationRef, type EmbeddedViewRef, type Type, type ViewRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
-import { LOAD_SHELL_SHEET, skipLinkHref } from './shell';
+import { LOAD_SHELL_SHEET, Shell, skipLinkHref } from './shell';
 import { LOAD_PAGE } from './shell-sheet';
 import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
@@ -49,7 +50,10 @@ const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>('[r
  * Records every view attached to `ApplicationRef`. The shell attaches the sheet's host view there
  * (#94): it has no view container in its template, so the sheet's host element is in no document.
  */
-function trackAppViews(): { attached: ViewRef[]; detached: ViewRef[] } {
+function trackAppViews(onAttach?: (view: ViewRef) => void): {
+  attached: ViewRef[];
+  detached: ViewRef[];
+} {
   const appRef = TestBed.inject(ApplicationRef);
   const attached: ViewRef[] = [];
   const detached: ViewRef[] = [];
@@ -57,6 +61,7 @@ function trackAppViews(): { attached: ViewRef[]; detached: ViewRef[] } {
   const detachView = appRef.detachView.bind(appRef);
   vi.spyOn(appRef, 'attachView').mockImplementation((view) => {
     attached.push(view);
+    onAttach?.(view);
     attachView(view);
   });
   vi.spyOn(appRef, 'detachView').mockImplementation((view) => {
@@ -344,6 +349,31 @@ describe('Shell', () => {
       expect(sheetView.destroyed).toBe(true);
       expect(views.detached).toContain(sheetView);
       expectNoSheetLeft();
+    });
+
+    it('destroys a sheet whose first render throws, so the next press creates only one sheet', async () => {
+      const harness = await render(SidebarTestPage);
+      // The first sheet's first render throws; later sheets render normally.
+      let failures = 1;
+      views = trackAppViews((view) => {
+        if (failures-- > 0) {
+          vi.spyOn(view, 'detectChanges').mockImplementationOnce(() => {
+            throw new Error('first render failed');
+          });
+        }
+      });
+      const shell = harness.fixture.debugElement.query(By.directive(Shell)).componentInstance as {
+        openSheet(): Promise<void>;
+      };
+
+      await expect(shell.openSheet()).rejects.toThrow('first render failed');
+      const [failed] = views.attached;
+      expect(failed.destroyed).toBe(true);
+
+      await press(harness);
+      expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+      expect(views.attached).toHaveLength(2);
+      expect(views.attached.filter((view) => !view.destroyed)).toHaveLength(1);
     });
 
     const closePaths: [string, () => void][] = [

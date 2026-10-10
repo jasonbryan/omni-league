@@ -346,8 +346,9 @@ test.describe('organization page in the browser', () => {
 
   // #94: the first press creates the sheet on the hydrated page. In a development build that
   // creation logged "no hydration info available for a given TNode" while the shell's template
-  // held a view container; the console fixture fails the test on any warning.
-  for (const width of [320, 360]) {
+  // held a view container; the console fixture fails the test on any warning. The phone-sheet
+  // test above makes its first press at 360, so only 320 is added here.
+  for (const width of [320]) {
     test(`phone sheet (${width}): the first press on the hydrated page opens it with no console warning`, async ({
       page,
       consoleGuard,
