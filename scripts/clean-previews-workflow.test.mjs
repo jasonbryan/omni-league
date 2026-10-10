@@ -65,9 +65,15 @@ describe('clean-previews workflow actions', () => {
   it('checks out without persisting credentials and installs no packages', () => {
     assert.match(
       code,
-      /actions\/checkout@[0-9a-f]{40}[^\n]*\n\s+with:\n\s+persist-credentials: false/,
+      /actions\/checkout@[0-9a-f]{40}[^\n]*\n\s+with:\n(?:\s+ref: [^\n]*\n)?\s+persist-credentials: false/,
     );
     assert.ok(!/npm (ci|install)/.test(code));
+  });
+
+  it('checks out the default branch on every trigger, never a PR ref', () => {
+    const checkout = steps().find((step) => /actions\/checkout@/.test(step)) ?? '';
+    assert.match(checkout, /^ {10}ref: \$\{\{ github\.event\.repository\.default_branch \}\}$/m);
+    assert.ok(!/github\.(head_ref|sha)|pull_request\.head|refs\/pull/.test(code));
   });
 });
 

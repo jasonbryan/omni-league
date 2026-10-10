@@ -72,7 +72,8 @@ export function parseArgs(argv) {
 
 /**
  * The preview name of a deployment: its `previewIdentifier`, or the part of its `reference` after
- * `preview/` when it has none. Undefined when neither names a preview.
+ * `preview/` when it has none. Undefined when neither names a preview, and also when both do and
+ * disagree: such a deployment is kept, never deleted.
  */
 export function previewNameOf(deployment) {
   const id =
@@ -81,7 +82,18 @@ export function previewNameOf(deployment) {
     typeof deployment.reference === 'string' && deployment.reference.startsWith('preview/')
       ? deployment.reference.slice('preview/'.length)
       : undefined;
+  if (id !== undefined && ref !== undefined && id !== ref) return undefined;
   return id ?? ref;
+}
+
+/** True when `previewIdentifier` and a `preview/` `reference` both exist and differ. */
+function namesDisagree(deployment) {
+  return (
+    typeof deployment.previewIdentifier === 'string' &&
+    typeof deployment.reference === 'string' &&
+    deployment.reference.startsWith('preview/') &&
+    deployment.reference !== `preview/${deployment.previewIdentifier}`
+  );
 }
 
 /** Why `deployment` may not be considered at all, or undefined when it may. */
@@ -89,7 +101,11 @@ function ineligibleReason(deployment, projectId, previewName) {
   if (deployment.kind !== undefined && deployment.kind !== 'cloud') return 'not a cloud deployment';
   if (deployment.projectId !== projectId) return 'other project';
   if (deployment.deploymentType !== 'preview') return `type ${String(deployment.deploymentType)}`;
-  if (previewName === undefined) return 'no preview name';
+  if (previewName === undefined) {
+    return namesDisagree(deployment)
+      ? 'preview identifier and reference disagree'
+      : 'no preview name';
+  }
   if (!/^pr-[1-9][0-9]*$/.test(previewName)) return 'not a pr-<n> preview';
   if (!Number.isSafeInteger(Number(previewName.slice(3)))) return 'not a pr-<n> preview';
   if (typeof deployment.name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(deployment.name)) {

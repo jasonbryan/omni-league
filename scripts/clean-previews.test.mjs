@@ -39,7 +39,11 @@ function deployment(name, overrides = {}) {
 
 /** A preview deployment with Convex name `animal-<pr>` for the preview `pr-<pr>`. */
 function prDeployment(pr, overrides = {}) {
-  return deployment(`animal-${pr}`, { previewIdentifier: `pr-${pr}`, ...overrides });
+  return deployment(`animal-${pr}`, {
+    previewIdentifier: `pr-${pr}`,
+    reference: `preview/pr-${pr}`,
+    ...overrides,
+  });
 }
 
 /** A fetch stub over a table of `METHOD path` routes; records every request. */
@@ -140,10 +144,16 @@ describe('previewNameOf', () => {
       undefined,
     );
   });
-  it('prefers previewIdentifier over the reference', () => {
+  it('reads the name when previewIdentifier and the reference agree', () => {
+    assert.equal(
+      previewNameOf(deployment('x', { previewIdentifier: 'pr-2', reference: 'preview/pr-2' })),
+      'pr-2',
+    );
+  });
+  it('is undefined when previewIdentifier and the reference disagree', () => {
     assert.equal(
       previewNameOf(deployment('x', { previewIdentifier: 'main', reference: 'preview/pr-2' })),
-      'main',
+      undefined,
     );
   });
 });
@@ -158,6 +168,23 @@ describe('selectCandidates (what may be considered for deletion)', () => {
     assert.equal(candidate.pr, 140);
     assert.equal(candidate.previewName, 'pr-140');
     assert.equal(candidate.deployment.name, 'animal-140');
+  });
+
+  it('keeps a deployment whose previewIdentifier and reference both exist and disagree', () => {
+    const cases = [
+      prDeployment(7, { reference: 'preview/pr-8' }),
+      deployment('animal-9', { previewIdentifier: 'main', reference: 'preview/pr-9' }),
+      deployment('animal-10', { previewIdentifier: 'pr-10', reference: 'preview/main' }),
+    ];
+    for (const d of cases) {
+      assert.deepEqual(considered([d]), [], d.name);
+      const [entry] = selectCandidates([d], PROJECT_ID).kept;
+      assert.equal(entry.reason, 'preview identifier and reference disagree', d.name);
+    }
+  });
+
+  it('considers a deployment whose previewIdentifier and reference agree', () => {
+    assert.deepEqual(considered([prDeployment(7, { reference: 'preview/pr-7' })]), ['animal-7']);
   });
 
   it('never considers main (staging)', () => {
