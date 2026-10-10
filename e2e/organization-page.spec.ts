@@ -7,6 +7,8 @@ import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { rawGet } from './support/raw-get';
+import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { numberedLocations, seedTenant, SPORT_NAMES, type Tenant } from './support/tenant';
 
@@ -512,6 +514,55 @@ test.describe('organization page: unknown slug', () => {
     await expect(page.getByRole('navigation')).toHaveCount(0);
     await expect(page.getByRole('button')).toHaveCount(0);
     await expect(page).toHaveTitle('Page not found | Omni League');
+  });
+});
+
+// A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page
+// as if there were none (#91). Not a redirect: Netlify copies the query string into a Location
+// without one, so it would loop (PR #105). Against a preview it uses the demo organization.
+test.describe('organization page: undecodable query string', () => {
+  test('raw: the same page, cacheable, with no query string in the HTML', RAW_HTTP, async () => {
+    const path = remoteBaseUrl
+      ? '/organizations/gulf-coast-sport-social'
+      : (await smallTenant()).path;
+    const h1 = (html: string) => /<h1\b[^>]*>[^<]*<\/h1>/.exec(html)?.[0];
+    const bare = await rawGet(path);
+    expect(bare.status).toBe(200);
+    expect(h1(bare.body)).not.toMatch(/Omni League|Page not found/);
+
+    for (const query of ['?ref=%', '?q=%E0%A4%A', '?utm_source=x&ref=%']) {
+      const response = await rawGet(`${path}${query}`);
+      expect(response.status, query).toBe(200);
+      expect(response.location, query).toBeUndefined();
+      // Netlify removes the spaces after the commas.
+      expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(response.headers['netlify-vary'], query).toBe('query');
+      expect(h1(response.body), query).toBe(h1(bare.body));
+      for (const echo of ['ref=%', 'utm_source', '%E0%A4%A']) {
+        expect(response.body, query).not.toContain(echo);
+      }
+    }
+  });
+
+  // The browser's router parses the same URL after hydration. If it cannot decode the query string
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  test('browser: the organization page stays after hydration, at the same path', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { path, name } = remoteBaseUrl
+      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+      : await smallTenant();
+
+    const response = await page.goto(`${path}?ref=%`);
+    expect(response?.status()).toBe(200);
+    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+    else await hydrated(consoleGuard);
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+    await expect(page).toHaveTitle(`${name} | Omni League`);
+    expect(new URL(page.url()).pathname).toBe(path);
   });
 });
 

@@ -15,6 +15,7 @@ import { withQueryCacheKey } from './server-cache';
 import { leadingSlashesRedirect, withSafeRedirect } from './server-redirect';
 import { NOINDEX_BUILD, withNoindex } from './server-robots';
 import { isUnroutablePath } from './server-unroutable';
+import { hasUndecodableQuery } from './app/core/url-serializer';
 
 // SSR entry per ADR 0010 item 2. Netlify runs the exported `netlifyAppEngineHandler` in an edge
 // function (the plugin finds it by that name); `scripts/serve-ssr.mjs` runs it locally.
@@ -55,9 +56,16 @@ function getAppEngine(): AppEngine {
  * - a path that cannot be percent-decoded: plain 400, without calling the engine;
  * - a path starting with `//` (Angular's NG05702): `no-store` 301 to the same path with one
  *   leading slash, without calling the engine (`src/server-redirect.ts`, #23);
- * - a path the router reads as `//...` or as a named-outlet route (`/(//evil.com)`, `/(a:b)`):
- *   plain 404 without calling the engine, so Angular logs no error for it
- *   (`src/server-unroutable.ts`);
+ * - a path the router reads as `//...`, as a named-outlet route (`/(//evil.com)`, `/(a:b)`), or as
+ *   `/` (`/(`, `/()x`): plain 404 without calling the engine, so Angular logs no error for it and
+ *   the CDN stores no home page under it (`src/server-unroutable.ts`, #91). It wins over a
+ *   malformed query string;
+ * - a query string the router cannot decode (`/x?q=%`): the engine renders the request URL
+ *   without its query string, because the router would render `/` for it whatever the path was
+ *   (#91). The app's router reads such a URL the same way (`QueryTolerantUrlSerializer` in
+ *   `src/app/core/url-serializer.ts`), so the browser stays on the page. Not a redirect to the bare path: Netlify copies the request's query string into a
+ *   `Location` that has none, so that redirect would loop (PR #105). The response is cached like
+ *   any other, under its own query string (`Netlify-Vary: query`), and holds no query string;
  * - no matching route (`null`): plain 404. With the router's `**` route (#23) every path matches,
  *   and an unknown one renders the not-found view with status 404;
  * - a URL the router normalizes (`/x//`, `/x/(y)`): the engine's 302 to the normalized URL, where
@@ -92,14 +100,24 @@ async function render(request: Request): Promise<Response> {
   if (isUnroutablePath(pathname, search)) {
     return notFoundResponse();
   }
+  // The query string is checked on its own: the router stops parsing `/x//?q=%` at `//`, but
+  // reads it as `/x/?q=%` once `Location` drops one trailing slash (PR #105).
+  const engineRequest = hasUndecodableQuery(search) ? withoutQuery(request, url) : request;
 
   try {
-    const result = await getAppEngine().handle(request, getContext());
+    const result = await getAppEngine().handle(engineRequest, getContext());
     return result ?? notFoundResponse();
   } catch (error) {
     console.error(`Error handling ${request.method} ${pathname}:`, redactedErrorText(error));
     return internalServerErrorResponse();
   }
+}
+
+/** `request` with the same method, headers, and body, for `url` without its query string. */
+function withoutQuery(request: Request, url: URL): Request {
+  const bare = new URL(url);
+  bare.search = '';
+  return new Request(bare, request);
 }
 
 /** Request handler used by the Angular CLI (dev server and build). */

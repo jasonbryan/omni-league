@@ -65,6 +65,10 @@ npm run e2e            # e2e and accessibility tests (see "E2E tests")
 
 `npm run design:css` builds the mockup kit (`ng build --configuration production,mockup-kit`, entry `design/mockup-kit/mockup-kit.css`) and writes it into every `design/mockups/**/*.html` as one `<style id="mockup-kit">` block, so each mockup stays a single offline file with the app's tokens, helm classes, and Inter (ADR 0007). Run it after changing a mockup's classes, `src/styles/tokens.css`, or `src/styles/base.css`. `-- --skip-build` reuses `dist/mockup-kit/`. The kit is not part of `npm run build`.
 
+### App icons
+
+The icons that make Omni League installable (`public/icons/*.png`, `public/favicon.ico`) are exported from the SVG masters in `design/icons/`, which are copied from the approved mockup `design/mockups/80-app-icon.html` (#80). `npm run icons` rewrites the SVGs from the mockup and re-exports every file with the Chromium that the e2e tests install (`npx playwright install --only-shell chromium`); it adds no package. Run it after changing the mockup's SVG masters and commit the changed files. `npm run test:scripts` fails when a committed file no longer matches its SVG: each PNG records the SHA-256 of its source in a `tEXt` chunk, and where Chromium is installed the test also re-renders and compares pixels.
+
 ### E2E tests
 
 Playwright with `@axe-core/playwright` ([ADR 0005](docs/decisions/0005-e2e-and-accessibility-testing.md)). Install the browser once (and again after a Playwright upgrade):
@@ -77,7 +81,7 @@ npx playwright install --only-shell chromium   # add: npx playwright install web
 
 1. `node scripts/e2e-convex.mjs push`: `convex dev --once` pushes `convex/` to the anonymous local Convex backend and regenerates `convex/_generated/`.
 2. `npm run build -- --configuration development` with `CONVEX_URL=http://127.0.0.1:3210`, so the bundles name the local backend and the hydration mismatch checks run.
-3. `playwright test`. It starts the backend (`node scripts/e2e-convex.mjs serve`, ready on `http://127.0.0.1:3210/version`) and `npm run serve:ssr` with `PORT=4000`. `globalSetup` then sets `IS_TEST=true` on the backend and runs `testing:reset` once. Every spec in `e2e/` runs in the `chromium-mobile` (360 x 800) and `chromium-desktop` (1280 x 720) projects.
+3. `playwright test`. It starts the backend (`node scripts/e2e-convex.mjs serve`, ready on `http://127.0.0.1:3210/version`) and `npm run serve:ssr` with `PORT=4000`. `globalSetup` then sets `IS_TEST=true` on the backend and runs `testing:reset` once. Every test in `e2e/` runs in the `chromium-mobile` (360 x 800) and `chromium-desktop` (1280 x 720) projects, except raw-HTTP tests and `e2e/convex-backend.spec.ts`, which open no page and run in `chromium-desktop` only.
 
 Ports 3210, 3211 (the backend's HTTP actions), and 4000 must be free: a running server or backend is never reused, so stop your own `npx convex dev` first. Arguments go to `playwright test`, for example `npm run e2e -- e2e/smoke.spec.ts`. The HTML report is in `playwright-report/` (`npx playwright show-report`); failure screenshots and traces are in `test-results/`.
 
@@ -100,6 +104,7 @@ Test-only functions live in `convex/testing.ts`: internal functions only, each s
 - The **console fixture** fails a test on any page error, any `console.error`, and any `console.warn` (Angular's development warnings come with an `NG05xx` code and without one, #94). Opt-ins, per test: `test.use({ expectedDocumentStatus: 404 })` for a page that is a 404 document, `test.use({ expectedConvexErrors: ['module:function'] })` for an expected rejected Convex mutation or action, and `test.use({ expectedConsoleWarnings: ['Start of the warning', /pattern/] })` for an expected `console.warn` (a string matches the start of the message, a RegExp anywhere), with a comment linking the issue that removes it. An unused entry of either list fails the test.
 - The **axe helper**, `expectAccessible(page)` in `e2e/support/a11y.ts`, runs axe with the ADR tags, the Tab walk (2.1.2, 2.4.3, 2.4.7, 2.4.11; pass `expectedOrder` when the focus order deliberately differs from DOM order), and the 320px reflow check.
 - **Raw server HTML:** `fetchRawHtml(request, path)` in `e2e/support/raw-html.ts` for status, headers, and the HTML string, and `test.use({ javaScriptEnabled: false })` for locator assertions on the same HTML. Public pages assert their content both ways, and a non-empty `toHaveTitle` on the JavaScript-disabled page.
+- **Raw-HTTP tests**, which use only `request` or `rawGet` (`e2e/support/raw-get.ts`) and open no page, pass `RAW_HTTP` from `e2e/support/raw-http.ts` as the test details: `test(title, RAW_HTTP, async () => …)`. `playwright.config.ts` then runs them in `chromium-desktop` only (#91).
 - Wait with web-first assertions and `expect.poll`, never `page.waitForTimeout`.
 
 The tester's manual accessibility checks are in [docs/process/wcag-checklist.md](docs/process/wcag-checklist.md).

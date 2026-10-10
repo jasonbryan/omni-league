@@ -15,7 +15,7 @@ import {
 import { isPlatformServer } from '@angular/common';
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server';
 import { convexToJson } from 'convex/values';
-import { CONVEX_CLIENT } from './convex-client';
+import { CONVEX_CLIENT } from './client-token';
 import { CONVEX_URL } from './convex-url';
 import { ConvexNotConfiguredError } from './errors';
 import { ConvexServerQueryLoader, transferKey } from './server-query-loader';

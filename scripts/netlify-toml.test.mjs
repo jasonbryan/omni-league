@@ -66,3 +66,55 @@ describe('netlify.toml demo seed (#97)', () => {
     assert.equal(lines.length, 2);
   });
 });
+
+// Static files added for installing the app (#80). Only content-hashed build outputs may be
+// cached for a year; the manifest and the icons keep Netlify's default `max-age=0,
+// must-revalidate`, so a changed icon or name reaches users on the next load.
+
+/** The `[[headers]]` tables as `{ for, values }`, read with regular expressions. */
+function headerRules() {
+  return [...toml.matchAll(/^\[\[headers\]\]\s*$([\s\S]*?)(?=^\[|(?![\s\S]))/gm)].map(
+    ([, body]) => ({
+      for: /^\s*for\s*=\s*"([^"]*)"/m.exec(body)?.[1],
+      values: Object.fromEntries(
+        [...body.matchAll(/^\s+([A-Za-z-]+)\s*=\s*"([^"]*)"\s*$/gm)]
+          .filter((m) => m[1] !== 'for')
+          .map((m) => [m[1], m[2]]),
+      ),
+    }),
+  );
+}
+
+/** True when a Netlify `for` pattern (`*` matches anything, including `/`) matches `path`. */
+function matches(pattern, path) {
+  const source = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*');
+  return new RegExp(`^${source}$`).test(path);
+}
+
+describe('netlify.toml install files (#80)', () => {
+  const rules = headerRules();
+
+  it('serves the manifest as application/manifest+json', () => {
+    const rule = rules.find((r) => r.for === '/manifest.webmanifest');
+    assert.equal(rule?.values['Content-Type'], 'application/manifest+json');
+  });
+
+  for (const path of [
+    '/manifest.webmanifest',
+    '/favicon.ico',
+    '/icons/icon-192.png',
+    '/icons/icon-512.png',
+    '/icons/icon-maskable-512.png',
+    '/icons/apple-touch-icon.png',
+  ]) {
+    it(`${path} is not cached for longer than a revalidation`, () => {
+      const cached = rules.filter(
+        (r) =>
+          r.for &&
+          matches(r.for, path) &&
+          /immutable|max-age=[1-9]/.test(r.values['Cache-Control'] ?? ''),
+      );
+      assert.deepEqual(cached, []);
+    });
+  }
+});
