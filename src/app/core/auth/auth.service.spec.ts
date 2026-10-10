@@ -56,6 +56,41 @@ describe('AuthService', () => {
       expect(auth.signedIn()).toBe(true);
     });
 
+    // ADR 0008 "Cost": a browser with no stored session token (one that never signed in, or signed
+    // out) is signed out without a get-session request, so an anonymous page view makes none.
+    it.each([
+      ['nothing stored', ''],
+      ['other cookies only', 'better-auth.two_factor=x'],
+    ])('with %s, is signed out without subscribing to the session store', async (_, cookie) => {
+      client.storedCookie = cookie;
+      const auth = configure();
+      await expect(auth.isSignedIn()).resolves.toBe(false);
+      expect(client.sessionListeners).toBe(0);
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+      expect(client.tokenRequests).toBe(0);
+    });
+
+    it('with a stored session token, waits for the session store', async () => {
+      const auth = configure();
+      await loaded();
+      expect(client.sessionListeners).toBe(1);
+      client.emitSession(null);
+      await expect(auth.isSignedIn()).resolves.toBe(false);
+    });
+
+    it('with no stored session token, follows the session store after a sign-up', async () => {
+      client.storedCookie = '';
+      const auth = configure();
+      await loaded();
+      await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: true });
+      expect(auth.signedIn()).toBe(true);
+      expect(client.sessionListeners).toBe(1);
+      // Pending (the store's first fetch) keeps the sign-up's answer.
+      expect(auth.signedIn()).toBe(true);
+      client.emitSession(null);
+      expect(auth.signedIn()).toBe(false);
+    });
+
     it('is signed out and known at once without a client (server, or no Convex URL)', async () => {
       const auth = configure(null);
       expect(auth.signedIn()).toBe(false);
@@ -154,6 +189,20 @@ describe('AuthService', () => {
       client.emitSession({ id: 's1' });
       client.nextToken = null;
       await expect(auth.fetchToken({ forceRefreshToken: true })).resolves.toBeNull();
+    });
+
+    // The Convex client does not catch a rejected fetchToken, so a rejection would be an unhandled
+    // error. WebKit rejects a fetch that a page unload aborts with "TypeError: Load failed".
+    it('returns null, and keeps no token, when the token request throws', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.nextToken = 'jwt-1';
+      await auth.fetchToken({ forceRefreshToken: false });
+      client.tokenThrows = new TypeError('Load failed');
+      await expect(auth.fetchToken({ forceRefreshToken: true })).resolves.toBeNull();
+      client.tokenThrows = null;
+      client.nextToken = 'jwt-2';
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
     });
 
     it('reports whether Convex accepted the token through onChange', () => {

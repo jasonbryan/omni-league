@@ -23,6 +23,9 @@ export interface SignUpInput {
 
 type SessionState = 'unknown' | 'signed-in' | 'signed-out';
 
+/** A session cookie in the crossDomain plugin's store (`better-auth.session_token=…`). */
+const STORED_SESSION = /(?:^|; )[^=;]*session_token=/;
+
 /** Better Auth error codes, and the 18+ code from convex/auth.ts, by the failure they mean. */
 const FAILURE_BY_CODE: Record<string, SignUpFailure> = {
   USER_ALREADY_EXISTS: 'exists',
@@ -53,7 +56,9 @@ export class AuthService implements ConvexAuthSource {
   /** True once the Convex client has accepted a token (its `onChange`). */
   readonly convexAuthenticated = this.convexAuth.asReadonly();
 
+  private readonly destroyRef = inject(DestroyRef);
   private cachedToken: string | null = null;
+  private watching = false;
   private resolveKnown: () => void = () => undefined;
   /** Settles once the session store has given its first answer. */
   private readonly known = new Promise<void>((resolve) => (this.resolveKnown = resolve));
@@ -63,20 +68,28 @@ export class AuthService implements ConvexAuthSource {
       this.resolveKnown();
       return;
     }
-    const destroyRef = inject(DestroyRef);
     void this.client.then((client) => {
-      if (destroyRef.destroyed) return;
-      if (!client) {
+      if (this.destroyRef.destroyed) return;
+      // No stored session token (never signed in, or signed out): signed out with no get-session
+      // request, so an anonymous page view makes none (ADR 0008 "Cost").
+      if (!client || !STORED_SESSION.test(client.getCookie())) {
         this.setSession('signed-out');
         return;
       }
-      const unsubscribe = client.useSession.subscribe((state) => {
-        // Pending: the first fetch, or a refetch with no data yet. Keep the last answer.
-        if (state.isPending) return;
-        this.setSession(state.data?.session ? 'signed-in' : 'signed-out');
-      });
-      destroyRef.onDestroy(unsubscribe);
+      this.watchSession(client);
     });
+  }
+
+  /** Follows Better Auth's session store; subscribing starts its first get-session request. */
+  private watchSession(client: AuthClientLike): void {
+    if (this.watching || this.destroyRef.destroyed) return;
+    this.watching = true;
+    const unsubscribe = client.useSession.subscribe((state) => {
+      // Pending: the first fetch, or a refetch with no data yet. Keep the last answer.
+      if (state.isPending) return;
+      this.setSession(state.data?.session ? 'signed-in' : 'signed-out');
+    });
+    this.destroyRef.onDestroy(unsubscribe);
   }
 
   /** Whether the browser is signed in, once the session store has answered (route guards). */
@@ -100,8 +113,14 @@ export class AuthService implements ConvexAuthSource {
     await this.known;
     if (!this.signedIn()) return null;
     if (this.cachedToken && !forceRefreshToken) return this.cachedToken;
-    const { data } = await client.convex.token({ fetchOptions: { throw: false } });
-    this.cachedToken = data?.token ?? null;
+    try {
+      const { data } = await client.convex.token({ fetchOptions: { throw: false } });
+      this.cachedToken = data?.token ?? null;
+    } catch {
+      // Never rejects: the Convex client does not catch it. A network failure, or (WebKit) a fetch
+      // that a page unload aborted, is "no token", as a refused request is.
+      this.cachedToken = null;
+    }
     return this.cachedToken;
   };
 
@@ -129,6 +148,7 @@ export class AuthService implements ConvexAuthSource {
     // The response set the session; the store refetches it, but the answer is already known.
     this.cachedToken = null;
     this.setSession('signed-in');
+    this.watchSession(client);
     return { ok: true };
   }
 

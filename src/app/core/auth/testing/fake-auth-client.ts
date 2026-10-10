@@ -25,6 +25,8 @@ export class FakeAuthClient {
   /** The next `convex.token` result; `null` makes the request fail. */
   nextToken: string | null = 'jwt';
   tokenRequests = 0;
+  /** When set, `convex.token` rejects with it (a network failure, or a fetch a page unload aborted). */
+  tokenThrows: Error | null = null;
   /** The next `signUp.email` error; `null` makes it succeed. */
   nextSignUpError: { status: number; code?: string; message?: string } | null = null;
   /** When set, `signUp.email` throws it (a network failure). */
@@ -34,6 +36,11 @@ export class FakeAuthClient {
   private release: (() => void) | null = null;
   readonly signUps: Record<string, unknown>[] = [];
   signOuts = 0;
+  /**
+   * What the crossDomain plugin's `getCookie()` returns: the unexpired cookies stored in
+   * `localStorage`. A session token by default; `''` models a browser that never signed in.
+   */
+  storedCookie = 'better-auth.session_token=stored';
 
   get sessionListeners(): number {
     return this.listeners.size;
@@ -64,9 +71,12 @@ export class FakeAuthClient {
     },
   };
 
+  readonly getCookie = () => this.storedCookie;
+
   readonly convex = {
     token: () => {
       this.tokenRequests++;
+      if (this.tokenThrows) return Promise.reject(this.tokenThrows);
       const token = this.nextToken;
       return Promise.resolve(
         token === null
@@ -82,6 +92,7 @@ export class FakeAuthClient {
       if (this.holdSignUp) await new Promise<void>((resolve) => (this.release = resolve));
       if (this.signUpThrows) throw this.signUpThrows;
       const error = this.nextSignUpError;
+      if (!error) this.storedCookie = 'better-auth.session_token=t';
       return error
         ? { data: null, error: { statusText: '', ...error } }
         : { data: { token: 't', user: { id: 'u1' } }, error: null };
@@ -96,6 +107,7 @@ export class FakeAuthClient {
 
   readonly signOut = () => {
     this.signOuts++;
+    this.storedCookie = '';
     this.emitSession(null);
     return Promise.resolve({ data: { success: true }, error: null });
   };

@@ -6,7 +6,10 @@ import type { makeAuthClient } from './make-auth-client';
 export type AuthClient = ReturnType<typeof makeAuthClient>;
 
 /** The part of the client `AuthService` uses; unit tests substitute a fake. */
-export type AuthClientLike = Pick<AuthClient, 'useSession' | 'signUp' | 'signOut' | 'convex'>;
+export type AuthClientLike = Pick<
+  AuthClient,
+  'useSession' | 'signUp' | 'signOut' | 'convex' | 'getCookie'
+>;
 
 /** The deployment's HTTP-action URL (`*.convex.site`), compiled in by `scripts/ng-convex.mjs`. */
 export const AUTH_BASE_URL = new InjectionToken<string | null>('AUTH_BASE_URL', {
