@@ -6,20 +6,21 @@
   publish = "dist/omni-league/browser"
 
 # Deploy previews: one Convex preview deployment per PR, named pr-<number>. The deploy environment
-# check runs after `npx convex deploy`, because pr-<number> does not exist before it.
-# `--preview-run seed:demo` fills the new preview with demo data after the push (convex/seed.ts,
-# #60); Convex ignores it on a production deploy.
+# check runs after `npx convex deploy`, because pr-<number> does not exist before it. Then
+# `npx convex run seed:demo` inserts any missing demo data on every build (convex/seed.ts, #97),
+# never on a deployment that failed the check. Not `--preview-run`: it runs only when the deploy
+# creates a new deployment, and staging had no demo data after the #93 merge (#97).
 [context.deploy-preview]
-  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\" --preview-run seed:demo && node scripts/check-deploy-env.mjs preview --preview-name \"pr-$REVIEW_ID\""
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\" && node scripts/check-deploy-env.mjs preview --preview-name \"pr-$REVIEW_ID\" && npx convex run seed:demo --preview-name \"pr-$REVIEW_ID\""
 
 # Branch deploys: main only, the staging deploy, with the Convex preview deployment named main.
 [context.branch-deploy]
-  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\" --preview-run seed:demo && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\""
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\" && npx convex run seed:demo --preview-name \"$HEAD\""
 
 # Production is not enabled until the production deploy issue adds the check BEFORE the deploy:
 # `npm ci && node scripts/check-deploy-env.mjs production && npx convex deploy ...` (#15, ADR 0010).
 # After the deploy would be too late: the functions would already be on the production backend.
-# Production never passes `--preview-run` (scripts/netlify-toml.test.mjs): no demo data there.
+# Production never runs a function or the seed (scripts/netlify-toml.test.mjs): no demo data there.
 [context.production]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL"
 

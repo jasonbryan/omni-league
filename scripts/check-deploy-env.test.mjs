@@ -1,4 +1,4 @@
-// Unit tests for scripts/check-deploy-env.mjs (#15). Run with `npm run test:scripts` (node:test).
+// Unit tests for scripts/check-deploy-env.mjs (#15, #97). Run with `npm run test:scripts` (node:test).
 // The Convex CLI is never called: each case passes a stub reader.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -137,6 +137,14 @@ describe('checkDeployEnv, production mode', () => {
     assert.match(failures[0], /^IS_TEST /);
   });
 
+  it('fails when PREVIEW_ORIGIN_PATTERN is set, without reading its value (#97)', async () => {
+    const reader = stubReader({ PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN });
+    const failures = await checkDeployEnv('production', reader);
+    assert.equal(failures.length, 1);
+    assert.match(failures[0], /^PREVIEW_ORIGIN_PATTERN /);
+    assert.deepEqual(reader.reads, []);
+  });
+
   for (const value of ['true', SECRET.AUTH_EMAIL_DISABLED_WRONG]) {
     it(`fails when AUTH_EMAIL_DISABLED is set (to ${JSON.stringify(value)})`, async () => {
       const failures = await checkDeployEnv(
@@ -169,6 +177,12 @@ describe('runCheck output', () => {
     ['production', { SITE_URL: SECRET.SITE_URL }, 0, []],
     ['production', { IS_TEST: SECRET.IS_TEST }, 1, ['IS_TEST']],
     ['production', { AUTH_EMAIL_DISABLED: 'true' }, 1, ['AUTH_EMAIL_DISABLED']],
+    [
+      'production',
+      { PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN },
+      1,
+      ['PREVIEW_ORIGIN_PATTERN'],
+    ],
   ];
 
   for (const [mode, rawVars, expectedCode, failing] of cases) {
