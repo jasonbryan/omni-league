@@ -1,20 +1,20 @@
-// Writers for an organization with its locations and leagues, shared by the seeds: `seed:demo`
-// (previews and staging) and the IS_TEST tenant seeds in `convex/testing.ts`. Until #64 adds
-// organization creation, these are the only writers of these tables.
+// Writers for an organization with its locations and leagues: `organizations.create` (#64) and the
+// seeds, `seed:demo` (previews and staging) and the IS_TEST tenant seeds in `convex/testing.ts`.
+// These are the only writers of these tables.
 //
 // Writer contract (#100, #101): every insert, update, or delete of an organization, location,
 // league, or `sportLocations` row goes through this module, which keeps each row's `sortName`, the
 // organization's `leagueCount` and `locationCount`, its per-sport `sportLeagueCounts` and
 // `sportLocationCounts`, and the `sportLocations` rows in the same mutation as the row. A write
-// elsewhere makes the public page's totals, sports, and page count disagree with its rows. #64,
-// #65, #66, and #69 extend it. The first writer that unpublishes or deletes a league, or changes
+// elsewhere makes the public page's totals, sports, and page count disagree with its rows. #65, #66,
+// and #69 extend it. The first writer that unpublishes or deletes a league, or changes
 // its locations, decrements what `insertLeague` incremented: `leagueCount`,
 // `sportLeagueCounts[sport]`, and the `sportLocations` row of each location the league leaves,
 // deleting that row at 0 and decrementing `sportLocationCounts[sport]`.
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
-import { isSlug, MAX_SLUG_LENGTH, slugify } from './slugs';
+import { isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
 import { sportValidator, type Sport, type SportCounts } from './sports';
 
 /** A league to create; `locations` names locations of the same organization. */
@@ -62,24 +62,57 @@ async function increment(
   await ctx.db.patch('organizations', organizationId, { [counter]: count + 1 });
 }
 
+/** Whether an organization already has this slug. */
+export async function organizationSlugTaken(ctx: MutationCtx, slug: string): Promise<boolean> {
+  const taken = await ctx.db
+    .query('organizations')
+    .withIndex('by_slug', (q) => q.eq('slug', slug))
+    .first();
+  return taken !== null;
+}
+
+/** Throws when the slug is malformed or an organization already has it. */
+async function assertSlugFree(ctx: MutationCtx, slug: string): Promise<void> {
+  if (!isSlug(slug)) {
+    throw new Error(
+      `Organization slug ${JSON.stringify(slug)} is not a slug (lowercase letters and digits ` +
+        `joined by single hyphens, ${MIN_SLUG_LENGTH} to ${MAX_SLUG_LENGTH} characters)`,
+    );
+  }
+  if (await organizationSlugTaken(ctx, slug)) {
+    throw new Error(`Organization slug ${JSON.stringify(slug)} is taken`);
+  }
+}
+
+/**
+ * Inserts an organization with its counters at zero (`leagueCount`, `locationCount`, and the
+ * sport counters empty) and no `sportLocations` row: the writer of `organizations.create` (#64)
+ * and of every seed. Throws before writing when the slug is malformed or taken. A reserved slug is
+ * allowed here, because the demo seeds use them; `organizations.create` refuses them first.
+ */
+export async function insertOrganization(
+  ctx: MutationCtx,
+  organization: { name: string; slug: string },
+): Promise<Id<'organizations'>> {
+  const { name, slug } = organization;
+  await assertSlugFree(ctx, slug);
+  return ctx.db.insert('organizations', {
+    name,
+    slug,
+    leagueCount: 0,
+    locationCount: 0,
+    sportLeagueCounts: {},
+    sportLocationCounts: {},
+  });
+}
+
 /**
  * Inserts the organization, then its locations, then its leagues. Throws before writing when the
  * slug is malformed or taken, a location name repeats, or a league names a location the tenant
  * does not have.
  */
 export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id<'organizations'>> {
-  const { name, slug } = tenant.organization;
-  if (!isSlug(slug)) {
-    throw new Error(
-      `Organization slug ${JSON.stringify(slug)} is not a slug (lowercase letters and digits ` +
-        `joined by single hyphens, at most ${MAX_SLUG_LENGTH} characters)`,
-    );
-  }
-  const taken = await ctx.db
-    .query('organizations')
-    .withIndex('by_slug', (q) => q.eq('slug', slug))
-    .first();
-  if (taken) throw new Error(`Organization slug ${JSON.stringify(slug)} is taken`);
+  await assertSlugFree(ctx, tenant.organization.slug);
 
   const locationNames = new Set<string>();
   for (const location of tenant.locations) {
@@ -98,14 +131,7 @@ export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id
     }
   }
 
-  const organizationId = await ctx.db.insert('organizations', {
-    name,
-    slug,
-    leagueCount: 0,
-    locationCount: 0,
-    sportLeagueCounts: {},
-    sportLocationCounts: {},
-  });
+  const organizationId = await insertOrganization(ctx, tenant.organization);
   for (const location of tenant.locations) {
     await insertLocation(ctx, organizationId, location);
   }

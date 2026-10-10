@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { roleValidator } from './lib/roles';
 import { sportCountsValidator, sportValidator } from './lib/sports';
 
 // Every write to organizations, locations, leagues, and sportLocations goes through
@@ -19,8 +20,8 @@ export default defineSchema({
     adultConfirmedAt: v.number(),
   }).index('by_authUserId', ['authUserId']),
 
-  // Organizations are created only by seeds until #64 adds creation. The slug is unique
-  // (enforced by the writers in convex/lib/tenantWrites.ts) and names the public page.
+  // Created by `organizations.create` (#64) and the seeds, through convex/lib/tenantWrites.ts. The
+  // slug is unique (enforced by the writers) and names the public page.
   organizations: defineTable({
     name: v.string(),
     slug: v.string(),
@@ -36,6 +37,19 @@ export default defineSchema({
      */
     sportLocationCounts: v.optional(sportCountsValidator),
   }).index('by_slug', ['slug']),
+
+  // A user's role in one organization (#64, glossary: Membership), at most one row per user and
+  // organization. `leagueIds` are the leagues assigned to a `leagueOrganizer` (empty for an
+  // `orgAdmin`, who runs every league). Every staff function authorizes through
+  // convex/lib/access.ts.
+  memberships: defineTable({
+    userId: v.id('users'),
+    organizationId: v.id('organizations'),
+    role: roleValidator,
+    leagueIds: v.array(v.id('leagues')),
+  })
+    .index('by_organizationId', ['organizationId'])
+    .index('by_userId_and_organizationId', ['userId', 'organizationId']),
 
   locations: defineTable({
     organizationId: v.id('organizations'),

@@ -4,6 +4,7 @@ import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
 import { NotFoundPage } from './not-found/not-found-page';
+import { CreateOrganizationPage } from './organizations/create-organization-page';
 import { OrganizationPage } from './organizations/organization-page';
 import { Placeholder } from './placeholder/placeholder';
 import { SignUpPage } from './sign-up/sign-up-page';
@@ -127,13 +128,18 @@ describe('Route tables', () => {
     expect(route?.canActivate).toEqual([redirectSignedIn]);
   });
 
-  it('app has the guarded account page and its own not-found route', async () => {
+  it('app has the guarded account page, the guarded create-organization page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
     expect(app?.canActivate).toBeUndefined();
-    const [account, notFound, ...rest] = app?.children ?? [];
+    const [account, create, notFound, ...rest] = app?.children ?? [];
     expect(rest).toEqual([]);
+    // #64: ahead of the not-found route, so /app/organizations/new is not a 404.
+    expect(create?.path).toBe('organizations/new');
+    expect(create?.title).toBe('Create an organization | Omni League');
+    expect(create?.canActivate).toEqual([requireSignedIn]);
+    expect(await create?.loadComponent?.()).toBe(CreateOrganizationPage);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Your account | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);
