@@ -141,6 +141,31 @@ describe('ConvexSavedCopies', () => {
       expect(savedKeys()).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-2' }));
     });
 
+    it(`given ${String(SAVED_COPY_MAX_ENTRIES + 1)} saved results, one more write removes the least recently used down to the limit`, () => {
+      // 51 entries already in storage (for example written by another tab at the same moment).
+      for (let i = 0; i <= SAVED_COPY_MAX_ENTRIES; i++) {
+        const at = START + i * 1000;
+        localStorage.setItem(
+          savedCopyKey(getPublicPage, { slug: `org-${String(i)}` }),
+          JSON.stringify({ v: { name: `Org ${String(i)}` }, savedAt: at, usedAt: at }),
+        );
+      }
+      expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES + 1);
+
+      vi.setSystemTime(START + 100_000);
+      store.write(getPublicPage, { slug: 'org-new' }, { name: 'New' });
+      const keys = savedKeys();
+      expect(keys).toHaveLength(SAVED_COPY_MAX_ENTRIES);
+      expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-new' }));
+      // The two least recently used go; the next one stays.
+      expect(keys).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-0' }));
+      expect(keys).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-1' }));
+      expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-2' }));
+      expect(keys).toContain(
+        savedCopyKey(getPublicPage, { slug: `org-${String(SAVED_COPY_MAX_ENTRIES)}` }),
+      );
+    });
+
     it('updating an existing entry removes nothing else', () => {
       for (let i = 0; i < SAVED_COPY_MAX_ENTRIES; i++) {
         vi.setSystemTime(START + i * 1000);
