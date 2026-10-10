@@ -21,3 +21,15 @@ export class ConvexServerCallError extends Error {
 export class ConvexServerQueryError extends Error {
   override readonly name = 'ConvexServerQueryError';
 }
+
+/**
+ * A mutation or action was refused because the app had no usable connection when it was called
+ * and none came back within the adapter's wait (ADR 0013, Decision 3A). The Convex client was
+ * never called, so nothing was queued and nothing is sent later.
+ */
+export class ConvexOfflineError extends Error {
+  override readonly name = 'ConvexOfflineError';
+  constructor() {
+    super("You're offline. Nothing was sent.");
+  }
+}

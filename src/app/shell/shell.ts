@@ -1,25 +1,30 @@
 import { NgTemplateOutlet, isPlatformServer } from '@angular/common';
 import {
+  ApplicationRef,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
+  EnvironmentInjector,
   InjectionToken,
+  Injector,
   PLATFORM_ID,
   TemplateRef,
-  ViewContainerRef,
   computed,
   contentChild,
+  createComponent,
   inject,
   inputBinding,
   signal,
   viewChild,
+  type ComponentRef,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, NavigationStart, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu, lucideTrophy } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
+import { OfflineNote } from './offline-note';
 import type { ShellSheet } from './shell-sheet';
 import { ShellSidebar } from './shell-sidebar';
 
@@ -51,8 +56,8 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
 
 /**
  * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar, the
- * page's sidebar when it supplies an `<ng-template appShellSidebar>` (a column from 1024px, a sheet
- * behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
+ * offline note (#88), the page's sidebar when it supplies an `<ng-template appShellSidebar>` (a
+ * column from 1024px, a sheet behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
  * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
  *
  * The menu button is plain markup, rendered on the server and hydrated as is. The sheet
@@ -60,10 +65,17 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
  * button's first press, so a page downloads none of that code until a visitor opens the sheet.
  * A press waiting on that import is dropped by Escape, by the start of a navigation, or by the
  * shell's destruction, so the sheet never opens over the next page.
+ *
+ * The sheet has no anchor in this template (#94). A view container here would be server-rendered,
+ * and creating the sheet in it on the first press made hydration log "no hydration info available
+ * for a given TNode" in development builds. The sheet is created with `createComponent` and its
+ * host view attached to `ApplicationRef` for change detection. Its host element stays out of the
+ * document: the helm sheet renders its content through the CDK overlay, which needs no host in the
+ * page. The shell destroys the sheet when it is destroyed itself.
  */
 @Component({
   selector: 'app-shell',
-  imports: [NgIcon, NgTemplateOutlet, RouterLink],
+  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink],
   providers: [provideIcons({ lucideMenu, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'dropPendingOpen()' },
@@ -75,11 +87,12 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       >Skip to main content</a
     >
     <div class="flex min-h-dvh flex-col">
-      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css) on the header and
-           everything in it. The header is always in view, so focusing one of its controls (by Tab,
-           or focus returning to the menu button as the sheet closes) must not scroll the page. -->
+      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css, which adds the
+           offline note's height, --offline-note-h) on the header and everything in it. The header
+           is always in view, so focusing one of its controls (by Tab, or focus returning to the
+           menu button as the sheet closes) must not scroll the page. -->
       <header
-        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:-scroll-mt-18"
+        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
       >
         @if (sidebar()) {
           <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg" (shell.spec.ts checks
@@ -101,10 +114,14 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
           <ng-container [ngTemplateOutlet]="brand" />
         </a>
       </header>
+      <app-offline-note />
       <div class="flex flex-1">
         @if (sidebar(); as sidebar) {
           <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
-            <div class="sticky top-14 max-h-[calc(100dvh-3.5rem)] overflow-y-auto px-3 py-5">
+            <!-- Sticks below the top bar and the offline note (--offline-note-h, set by the note). -->
+            <div
+              class="sticky top-[calc(3.5rem+var(--offline-note-h,0px))] max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))] overflow-y-auto px-3 py-5"
+            >
               <ng-container [ngTemplateOutlet]="sidebar.template" />
             </div>
           </div>
@@ -114,7 +131,6 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
         </main>
       </div>
     </div>
-    <ng-container #sheetHost />
 
     <ng-template #brand>
       <span
@@ -130,12 +146,14 @@ export class Shell {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly loadShellSheet = inject(LOAD_SHELL_SHEET);
+  private readonly appRef = inject(ApplicationRef);
+  private readonly environmentInjector = inject(EnvironmentInjector);
+  private readonly injector = inject(Injector);
 
   protected readonly sidebar = contentChild(ShellSidebar);
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
   private readonly brand = viewChild.required<TemplateRef<unknown>>('brand');
-  private readonly sheetHost = viewChild.required('sheetHost', { read: ViewContainerRef });
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -158,8 +176,16 @@ export class Shell {
   private sheetLoad: Promise<ShellSheet | null> | null = null;
   /** Set by a press of the menu button, and cleared once the press opens the sheet or is dropped. */
   private openPending = false;
+  /** The sheet's component, destroyed with the shell. */
+  private sheetRef: ComponentRef<ShellSheet> | null = null;
 
   constructor() {
+    // Destroying the sheet's ComponentRef also detaches its view from ApplicationRef, and the helm
+    // sheet closes its dialog: no scrim or scroll block stays on the next page.
+    this.destroyRef.onDestroy(() => {
+      this.sheetRef?.destroy();
+      this.sheetRef = null;
+    });
     this.router.events
       .pipe(
         filter((event) => event instanceof NavigationStart),
@@ -200,20 +226,33 @@ export class Shell {
 
   private async loadSheet(): Promise<ShellSheet | null> {
     const { ShellSheet } = await this.loadShellSheet();
-    // A sheet created in the destroyed shell's container would still open over the next page.
+    // The shell's onDestroy has already run, so a sheet created now would never be destroyed and
+    // could still open over the next page.
     if (this.destroyRef.destroyed) return null;
     const sidebar = this.sidebar();
     const menuButton = this.menuButton()?.nativeElement;
     if (!sidebar || !menuButton) throw new Error('app-shell: no sidebar for the sheet');
-    const ref = this.sheetHost().createComponent(ShellSheet, {
+    // The element injector keeps the shell's providers in reach, as a view container here did.
+    const ref = createComponent(ShellSheet, {
+      environmentInjector: this.environmentInjector,
+      elementInjector: this.injector,
       bindings: [
         inputBinding('sidebar', () => this.sidebar()?.template ?? sidebar.template),
         inputBinding('brand', this.brand),
         inputBinding('returnFocus', () => menuButton),
       ],
     });
-    // Renders the helm sheet and registers its content template, which open() needs.
-    ref.changeDetectorRef.detectChanges();
+    this.sheetRef = ref;
+    this.appRef.attachView(ref.hostView);
+    try {
+      // Renders the helm sheet and registers its content template, which open() needs.
+      ref.changeDetectorRef.detectChanges();
+    } catch (error) {
+      // A sheet that failed to render must not stay attached: the next press creates its own.
+      ref.destroy();
+      this.sheetRef = null;
+      throw error;
+    }
     this.sheet.set(ref.instance);
     return ref.instance;
   }

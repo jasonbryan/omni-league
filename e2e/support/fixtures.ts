@@ -8,6 +8,12 @@ export interface ConsoleFixtureOptions {
   expectedDocumentStatus: ExpectedDocumentStatus | undefined;
   /** `test.use({ expectedConvexErrors: ['leagues:create'] })`: allow listed M(/A( Convex errors. */
   expectedConvexErrors: readonly string[];
+  /**
+   * `test.use({ expectedConsoleWarnings: ['Some warning'] })`: allow `console.warn` messages that
+   * start with a listed string or match a listed RegExp; an unused entry fails the test. Each entry
+   * carries a comment linking the issue that removes the warning.
+   */
+  expectedConsoleWarnings: readonly (string | RegExp)[];
 }
 
 export interface ConsoleFixtures {
@@ -25,9 +31,17 @@ export interface ConsoleFixtures {
 export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
   expectedDocumentStatus: [undefined, { option: true }],
   expectedConvexErrors: [[], { option: true }],
+  expectedConsoleWarnings: [[], { option: true }],
   consoleGuard: [
-    async ({ context, expectedDocumentStatus, expectedConvexErrors }, use) => {
-      const guard = new ConsoleGuard({ expectedDocumentStatus, expectedConvexErrors });
+    async (
+      { context, expectedDocumentStatus, expectedConvexErrors, expectedConsoleWarnings },
+      use,
+    ) => {
+      const guard = new ConsoleGuard({
+        expectedDocumentStatus,
+        expectedConvexErrors,
+        expectedConsoleWarnings,
+      });
       for (const page of context.pages()) guard.attach(page);
       context.on('page', (page) => guard.attach(page));
       await use(guard);

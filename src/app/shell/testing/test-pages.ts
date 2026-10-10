@@ -24,6 +24,8 @@ export class PlainTestPage {}
       <ng-template appShellSidebar>
         <nav aria-label="Test organization">
           <a class="sidebar-link" href="/organizations/test#row-2">Row 2</a>
+          <a class="other-path" href="/elsewhere?x=1#top">Elsewhere</a>
+          <a class="other-site" href="https://example.com/a?b=1#c">Another site</a>
         </nav>
       </ng-template>
       <div>

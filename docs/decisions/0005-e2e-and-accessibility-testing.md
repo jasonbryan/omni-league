@@ -5,6 +5,7 @@
 - **Issue:** #4
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 - **Amended:** by ADR 0009 (PR #31, CI pipeline): CI run conditions, the `webkit-mobile` trigger, and the Convex backend cache. See "Amendment: CI usage (ADR 0009)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** by #94 (PR #107): the console fixture fails on every `console.warn`, not only `NG05xx`, with a per-test `expectedConsoleWarnings` opt-in. See "Amendment: console warnings (#94)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -328,3 +329,20 @@ The owner asked for minimal GitHub Actions usage (PR #31). ADR 0009 runs CI as o
 **Effects on the first feature with live Convex data in e2e:** no `actions/cache` step; the rest of the backend wiring above stands.
 
 **Minutes (replaces "#8 (CI) minute estimate" totals for monthly planning):** per run, the e2e part of `ci` costs about 2 minutes for the harness and 4 to 7 once feature specs exist, because it shares the install with the static checks. ADR 0009 "Minutes and cost" has the monthly totals: about 340 to 410 minutes now and 510 to 680 with feature e2e, against Pro's 3,000.
+
+## Amendment: console warnings (#94, 2026-10-09)
+
+The console fixture fails a test on every `console.warn`, not only on warnings that match `/\bNG05\d\d\b/`. Issue #94 found a development-mode Angular warning with no `NG` code (`Unexpected state: no hydration info available for a given TNode`, logged when the phone sheet was created beside a view container), which the code-matching rule let through. The `error` and `pageerror` rules, the hydration log assertion, and `log` and `info` being ignored are unchanged.
+
+| Rule in this ADR                      | Was                                                                    | Now                                                                                                                                                                                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Which `console` warnings fail a test  | Only type `warning` messages matching `/\bNG05\d\d\b/` (Console rules) | Every type `warning` message. Angular's development warnings come with a code and without one, so no text rule separates them from other warnings                                                                                       |
+| Allowing a known warning (new opt-in) | None                                                                   | The per-test fixture option `expectedConsoleWarnings`: a list of strings (match the start of the message) or `RegExp`s (match anywhere). A message that matches an entry does not fail the test                                         |
+| An allowance that matches nothing     | Not applicable                                                         | An entry that matched no warning fails the test at teardown, as an unused `expectedConvexErrors` entry does. An allowance cannot outlive the warning it covers. Each entry carries a comment linking the issue that removes the warning |
+| A test that skips itself              | Not applicable                                                         | A test that skips itself does not fail for unused allowances (`expectedFailedRequests`, `expectedConvexErrors`, `expectedConsoleWarnings`). The unused-entry check does not run for a skipped test                                      |
+
+**Why every warning.** A fix for a warning with no code cannot be proved by a rule that does not see it: #94's tests failed on `main`'s shell only after the rule changed. Failing on any warning also catches the next code-less warning without a rule edit, and the opt-in keeps a test that cannot avoid one from being rewritten around it.
+
+**Effects.** Every existing e2e test now fails on a warning it used to ignore; PR #107 ran the full suite in `chromium-mobile`, `chromium-desktop`, and `webkit-mobile` under the new rule with no new failure. Specs written under the old rule (for example the sign-up specs in #62) must run once under the new one before they merge.
+
+**Sources.** [Issue #94](https://github.com/jasonbryan/omni-league/issues/94), [PR #107](https://github.com/jasonbryan/omni-league/pull/107), [PR #107 review](https://github.com/jasonbryan/omni-league/pull/107#issuecomment-6092306846).

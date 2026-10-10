@@ -7,6 +7,7 @@ import {
   CONVEX_CLIENT_FACTORY,
   CONVEX_URL,
   ConvexNotConfiguredError,
+  ConvexOfflineError,
   ConvexServerCallError,
   injectAction,
   injectMutation,
@@ -166,6 +167,98 @@ describe('mutation and action helpers on the server with a client present', () =
       expect(client.calls).toEqual([]);
       expect(client.subscriptions).toEqual([]);
       expect(client.lifecycle).toEqual([]);
+    });
+  }
+});
+
+describe('mutation and action helpers while offline (call-time guard)', () => {
+  let client: FakeConvexClient;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    client = new FakeConvexClient();
+    TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: client }] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  for (const helper of helpers) {
+    it(`${helper.kind} rejects with ConvexOfflineError when the socket stays down for 3 s, and never calls the client`, async () => {
+      const ref = TestBed.runInInjectionContext(helper.create);
+      const listenersBefore = client.connectionStateListeners; // the online signal's own
+      client.setConnected(false);
+      await vi.advanceTimersByTimeAsync(1_000); // dropped 1 s ago: the online signal is still true
+
+      const result = ref.run({ name: 'Sharks' });
+      const settled = vi.fn();
+      result.then(settled, settled);
+      expect(ref.pending()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2_900);
+      expect(settled).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(result).rejects.toBeInstanceOf(ConvexOfflineError);
+      expect(ref.error()).toBeInstanceOf(ConvexOfflineError);
+      expect(ref.error()?.name).toBe('ConvexOfflineError');
+      expect(ref.pending()).toBe(false);
+
+      client.setConnected(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(client.calls).toEqual([]);
+      expect(client.connectionStateListeners).toBe(listenersBefore);
+    });
+
+    it(`${helper.kind} rejects with ConvexOfflineError while navigator.onLine stays false for 3 s, with the socket reported connected`, async () => {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      const ref = TestBed.runInInjectionContext(helper.create);
+
+      const result = ref.run({ name: 'Sharks' });
+      const rejected = expect(result).rejects.toBeInstanceOf(ConvexOfflineError);
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      await rejected;
+      expect(ref.error()).toBeInstanceOf(ConvexOfflineError);
+      expect(client.calls).toEqual([]);
+    });
+
+    it(`${helper.kind} calls the client once and resolves when the socket reconnects 1 s after run()`, async () => {
+      const ref = TestBed.runInInjectionContext(helper.create);
+      client.setConnected(false);
+
+      const result = ref.run({ name: 'Sharks' });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(client.calls).toEqual([]);
+
+      client.setConnected(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(client.calls).toHaveLength(1);
+      expect(client.calls[0]).toMatchObject({ kind: helper.kind, args: { name: 'Sharks' } });
+      client.calls[0].resolve('team1');
+
+      await expect(result).resolves.toBe('team1');
+      expect(ref.error()).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it(`${helper.kind} calls the client when the browser comes back online within 3 s`, async () => {
+      const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      const ref = TestBed.runInInjectionContext(helper.create);
+
+      const result = ref.run({ name: 'Sharks' });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(client.calls).toEqual([]);
+
+      onLine.mockReturnValue(true);
+      window.dispatchEvent(new Event('online'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(client.calls).toHaveLength(1);
+      client.calls[0].resolve('team1');
+      await expect(result).resolves.toBe('team1');
     });
   }
 });
