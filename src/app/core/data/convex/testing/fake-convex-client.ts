@@ -105,8 +105,12 @@ export class FakeConvexClient implements ConvexClientLike {
     for (const listener of [...this.stateListeners]) listener(this.connectionState());
   }
 
-  setAuth(): void {
+  /** The arguments of each `setAuth` call, in order. */
+  readonly setAuthCalls: Parameters<ConvexClientLike['setAuth']>[] = [];
+
+  setAuth(...args: Parameters<ConvexClientLike['setAuth']>): void {
     this.lifecycle.push('setAuth');
+    this.setAuthCalls.push(args);
   }
 
   clearAuth(): void {

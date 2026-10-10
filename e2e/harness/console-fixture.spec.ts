@@ -4,6 +4,10 @@
 // - wiring tests use the real fixture through `test.use`; the failing ones are marked `test.fail()`,
 //   so they pass only if the fixture fails the test.
 import type { Browser, ConsoleMessage, Page } from '@playwright/test';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ConsoleGuard, type ConsoleGuardOptions } from '../support/console-guard';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
@@ -229,6 +233,57 @@ test.describe('console fixture rules', () => {
       await close();
     });
   });
+
+  test.describe('expectedFailedRequests: 409 on /probe-conflict', () => {
+    const options = { expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }] };
+
+    /** Fetches `path`, answered with `status` by a route, and waits for the console error. */
+    async function failRequest(page: Page, path: string, status: number): Promise<void> {
+      await page.route(`**${path}`, (route) => route.fulfill({ status, body: '' }));
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate((p) => fetch(p).then(() => undefined), path),
+      ]);
+    }
+
+    test('allows the listed status and path', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await page.goto('/');
+      await failRequest(page, '/probe-conflict', 409);
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    for (const [path, status] of [
+      ['/probe-conflict', 500],
+      ['/probe-other', 409],
+      ['/probe-conflict/x', 409],
+    ] as const) {
+      test(`still fails on ${status} ${path}`, async ({ browser }) => {
+        const { page, guard, close } = await guardedPage(browser, options);
+        await page.goto('/');
+        await failRequest(page, '/probe-conflict', 409);
+        await failRequest(page, path, status);
+        expect(guard.problems()).toEqual([
+          expect.stringMatching(
+            new RegExp(
+              `^console\\.error: Failed to load resource: the server responded with a status of ${status} `,
+            ),
+          ),
+        ]);
+        await close();
+      });
+    }
+
+    test('fails on an unused entry, naming it', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems()).toEqual([
+        expect.stringContaining('expectedFailedRequests entry 409 /probe-conflict was not used'),
+      ]);
+      await close();
+    });
+  });
+
   test.describe("expectedConsoleWarnings: ['probe warning']", () => {
     const options = { expectedConsoleWarnings: ['probe warning'] };
 
@@ -282,6 +337,52 @@ test.describe('console fixture rules', () => {
       await close();
     });
   });
+
+  // #62 tester: `test.skip()` inside a test runs after `test.use()` set the allowances, so a
+  // skipped test never reaches the request it allowed.
+  test.describe('in a skipped test', () => {
+    const options = {
+      expectedConvexErrors: ['probe:add'],
+      expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }],
+      expectedConsoleWarnings: ['probe warning', /probe \d+/],
+    };
+
+    test('reports every unused entry when the test ran', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems()).toEqual([
+        expect.stringContaining('expectedConvexErrors entry "probe:add" was not used'),
+        expect.stringContaining('expectedFailedRequests entry 409 /probe-conflict was not used'),
+        expect.stringContaining('expectedConsoleWarnings entry "probe warning" was not used'),
+        expect.stringContaining('expectedConsoleWarnings entry /probe \\d+/ was not used'),
+      ]);
+      await close();
+    });
+
+    test('does not report unused entries', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems({ skipped: true })).toEqual([]);
+      expect(() => guard.verify({ skipped: true })).not.toThrow();
+      await close();
+    });
+
+    test('still reports a console error', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await logInPage(page, 'error', 'probe error before the skip');
+      expect(guard.problems({ skipped: true })).toEqual([
+        'console.error: probe error before the skip',
+      ]);
+      await close();
+    });
+
+    test('still reports an unlisted console.warn', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await logInPage(page, 'warn', 'other warning before the skip');
+      expect(guard.problems({ skipped: true })).toEqual([
+        'console.warn: other warning before the skip',
+      ]);
+      await close();
+    });
+  });
 });
 
 test.describe('console fixture wiring (real fixture)', () => {
@@ -329,6 +430,78 @@ test.describe('console fixture wiring (real fixture)', () => {
       test.fail(true, 'the unused allowance probe:add must fail this test');
       await page.setContent('<p>ok</p>');
     });
+  });
+
+  // #62 tester: a test that skips itself after `test.use()` set allowances must end skipped, not
+  // failed at teardown. Before the fix this test failed with "entry … was not used".
+  test.describe('with allowances, skipped inside the test', () => {
+    test.use({
+      expectedConvexErrors: ['probe:add'],
+      expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }],
+      expectedConsoleWarnings: ['probe warning'],
+    });
+
+    test('ends skipped without an unused-entry failure', async ({ page }) => {
+      await page.setContent('<p>ok</p>');
+      test.skip(true, 'skips before the allowed request, as a local-only test does on a preview');
+    });
+  });
+
+  // #62 tester (round 2): an unused expectedFailedRequests entry still fails a test that runs.
+  test.describe('with expectedFailedRequests', () => {
+    test.use({ expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }] });
+
+    test('an unused entry fails the test at teardown', async ({ page }) => {
+      test.fail(true, 'the unused allowance 409 /probe-conflict must fail this test');
+      await page.setContent('<p>ok</p>');
+    });
+  });
+
+  // #62 tester (round 2): a test that skips itself still fails on a console or page error it hit
+  // before the skip. Its outcome is read from a child Playwright run (`probes/`), because a test
+  // cannot both skip itself and expect to fail.
+  test('a test that skips itself still fails on an earlier console or page error', ({
+    browserName,
+  }, testInfo) => {
+    // The child run is browser-independent: one Chromium project is enough.
+    test.skip(
+      browserName !== 'chromium' || testInfo.project.name !== 'chromium-desktop',
+      'one child run is enough',
+    );
+    test.setTimeout(120_000);
+    const outputDir = mkdtempSync(join(tmpdir(), 'console-probe-'));
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [
+          join(testInfo.config.rootDir, '..', 'node_modules', '@playwright', 'test', 'cli.js'),
+          'test',
+          '--config',
+          join(testInfo.config.rootDir, 'harness', 'probes', 'probe.config.ts'),
+        ],
+        { encoding: 'utf8', env: { ...process.env, PROBE_OUTPUT_DIR: outputDir } },
+      );
+      const report = JSON.parse(run.stdout) as {
+        suites: {
+          specs: { title: string; tests: { status: string; results: { status: string }[] }[] }[];
+        }[];
+      };
+      const outcomes = Object.fromEntries(
+        report.suites.flatMap((suite) =>
+          suite.specs.map((spec) => [spec.title, spec.tests[0]?.results[0]?.status]),
+        ),
+      );
+      expect(outcomes).toEqual({
+        'skips with no console error': 'skipped',
+        'skips after a console.error': 'failed',
+        'skips after a page error': 'failed',
+        'skips after a console.error on a second page': 'failed',
+        'skips after an unlisted console.warn': 'failed',
+        'does not skip (condition false), allowances unused': 'failed',
+      });
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true });
+    }
   });
 
   test.describe('with expectedDocumentStatus: 404', () => {

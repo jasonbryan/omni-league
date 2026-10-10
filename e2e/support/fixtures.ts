@@ -1,5 +1,9 @@
 import { test as base, expect } from '@playwright/test';
-import { ConsoleGuard, type ExpectedDocumentStatus } from './console-guard';
+import {
+  ConsoleGuard,
+  type ExpectedDocumentStatus,
+  type ExpectedFailedRequest,
+} from './console-guard';
 import { remoteBaseUrl } from './env';
 import { stubNetlifyDrawer } from './netlify-drawer';
 
@@ -8,6 +12,8 @@ export interface ConsoleFixtureOptions {
   expectedDocumentStatus: ExpectedDocumentStatus | undefined;
   /** `test.use({ expectedConvexErrors: ['leagues:create'] })`: allow listed M(/A( Convex errors. */
   expectedConvexErrors: readonly string[];
+  /** `test.use({ expectedFailedRequests: [{ status: 422, path: '/api/auth/sign-up/email' }] })`. */
+  expectedFailedRequests: readonly ExpectedFailedRequest[];
   /**
    * `test.use({ expectedConsoleWarnings: ['Some warning'] })`: allow `console.warn` messages that
    * start with a listed string or match a listed RegExp; an unused entry fails the test. Each entry
@@ -31,21 +37,31 @@ export interface ConsoleFixtures {
 export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
   expectedDocumentStatus: [undefined, { option: true }],
   expectedConvexErrors: [[], { option: true }],
+  expectedFailedRequests: [[], { option: true }],
   expectedConsoleWarnings: [[], { option: true }],
   consoleGuard: [
     async (
-      { context, expectedDocumentStatus, expectedConvexErrors, expectedConsoleWarnings },
+      {
+        context,
+        expectedDocumentStatus,
+        expectedConvexErrors,
+        expectedFailedRequests,
+        expectedConsoleWarnings,
+      },
       use,
+      testInfo,
     ) => {
       const guard = new ConsoleGuard({
         expectedDocumentStatus,
         expectedConvexErrors,
+        expectedFailedRequests,
         expectedConsoleWarnings,
       });
       for (const page of context.pages()) guard.attach(page);
       context.on('page', (page) => guard.attach(page));
       await use(guard);
-      guard.verify();
+      // `test.skip()` in the body runs after `test.use()` set the allowances (#62 tester).
+      guard.verify({ skipped: testInfo.status === 'skipped' });
     },
     { auto: true },
   ],
