@@ -98,6 +98,12 @@ async function render(request: Request): Promise<Response> {
     return notFoundResponse();
   }
   if (hasUndecodableQuery(pathname, search)) {
+    // TEMPORARY PROBE (#91): Netlify Location handling; reverted before review.
+    const probe = /probe=(\d)/.exec(search)?.[1];
+    if (probe === '1') return queryDroppedRedirect(`${pathname}?`);
+    if (probe === '2') return queryDroppedRedirect(`${url.origin}${pathname}`);
+    if (probe === '3') return queryDroppedRedirect(`${pathname}#`);
+    if (probe === '4') return queryDroppedRedirect(`.${pathname}`);
     return queryDroppedRedirect(pathname);
   }
 
