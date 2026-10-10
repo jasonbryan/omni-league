@@ -2,7 +2,9 @@
 // Node built-ins only: the file is read with regular expressions, not a YAML parser. The rules come
 // from docs/process/ci.md (Workflow security) plus the owner's exception for CONVEX_TEAM_TOKEN.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -115,5 +117,111 @@ describe('clean-previews workflow commands', () => {
 
   it('sweeps every closed or merged PR on schedule and dispatch', () => {
     assert.match(run, /else\n\s+node scripts\/clean-previews\.mjs --yes\n/);
+  });
+});
+
+describe('clean-previews workflow dry run on dispatch', () => {
+  it('has a boolean dry_run input that defaults to true', () => {
+    assert.match(
+      code,
+      /^ {2}workflow_dispatch:\n {4}inputs:\n {6}dry_run:\n(?: {8}.*\n)*? {8}type: boolean\n(?: {8}.*\n)*? {8}default: true\n/m,
+    );
+  });
+
+  it('reads the input through env, and only for a dispatch', () => {
+    assert.match(
+      code,
+      /DRY_RUN: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.dry_run \}\}/,
+    );
+    assert.ok(!/inputs\.dry_run/.test(code.replace(/^ +DRY_RUN: .*$/m, '')));
+  });
+});
+
+/** The `run:` script of the step whose text matches `pattern`, dedented. */
+function runScript(pattern) {
+  const step = steps().find((candidate) => pattern.test(candidate)) ?? '';
+  const body = /^ {8}run: \|\n((?: {10}.*\n|\n)+)/m.exec(step)?.[1] ?? '';
+  assert.ok(body, `no run script for ${pattern}`);
+  return body.replace(/^ {10}/gm, '');
+}
+
+/** Runs a workflow script in bash with a fake `node` that records its arguments. */
+function bash(script, env) {
+  const dir = mkdtempSync(join(tmpdir(), 'clean-previews-'));
+  try {
+    const log = join(dir, 'node-args');
+    const output = join(dir, 'github-output');
+    writeFileSync(output, '');
+    writeFileSync(join(dir, 'node'), `#!/bin/sh\necho "$@" >> '${log}'\n`);
+    chmodSync(join(dir, 'node'), 0o755);
+    const result = spawnSync('bash', ['-e', '-c', script], {
+      env: { PATH: `${dir}:/usr/bin:/bin`, GITHUB_OUTPUT: output, ...env },
+      encoding: 'utf8',
+    });
+    const read = (file) => {
+      try {
+        return readFileSync(file, 'utf8');
+      } catch {
+        return '';
+      }
+    };
+    return { ...result, nodeArgs: read(log), githubOutput: read(output) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('clean-previews workflow scripts, executed', () => {
+  const deleteScript = runScript(/node scripts\/clean-previews\.mjs/);
+  const secretScript = runScript(/name: secret/);
+
+  it('a missing secret skips with a notice and exits 0, so the job passes', () => {
+    for (const value of ['false', '']) {
+      const result = bash(secretScript, { HAS_TOKEN: value });
+      assert.equal(result.status, 0, value);
+      assert.match(result.stdout, /::notice[^\n]*CONVEX_TEAM_TOKEN/);
+      assert.ok(!result.githubOutput.includes('present=true'), value);
+    }
+  });
+
+  it('a present secret sets present=true and prints no notice', () => {
+    const result = bash(secretScript, { HAS_TOKEN: 'true' });
+    assert.equal(result.status, 0);
+    assert.equal(result.githubOutput, 'present=true\n');
+    assert.ok(!result.stdout.includes('::notice'));
+  });
+
+  const run = (env) => bash(deleteScript, env).nodeArgs.trim();
+
+  it('a PR close deletes only that PR, whatever the dry-run value', () => {
+    for (const DRY_RUN of ['', 'true', 'false']) {
+      assert.equal(
+        run({ GITHUB_EVENT_NAME: 'pull_request', PR_NUMBER: '159', DRY_RUN }),
+        'scripts/clean-previews.mjs --yes --pr 159',
+        DRY_RUN,
+      );
+    }
+  });
+
+  it('the daily schedule sweeps and deletes', () => {
+    assert.equal(
+      run({ GITHUB_EVENT_NAME: 'schedule', DRY_RUN: 'false' }),
+      'scripts/clean-previews.mjs --yes',
+    );
+    assert.equal(run({ GITHUB_EVENT_NAME: 'schedule' }), 'scripts/clean-previews.mjs --yes');
+  });
+
+  it('a dispatch with dry_run lists only: --dry-run, no --yes, no --pr', () => {
+    assert.equal(
+      run({ GITHUB_EVENT_NAME: 'workflow_dispatch', DRY_RUN: 'true' }),
+      'scripts/clean-previews.mjs --dry-run',
+    );
+  });
+
+  it('a dispatch with dry_run unticked sweeps and deletes', () => {
+    assert.equal(
+      run({ GITHUB_EVENT_NAME: 'workflow_dispatch', DRY_RUN: 'false' }),
+      'scripts/clean-previews.mjs --yes',
+    );
   });
 });
