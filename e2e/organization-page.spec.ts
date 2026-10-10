@@ -478,6 +478,25 @@ test.describe('organization page: undecodable query string', () => {
       }
     }
   });
+
+  // The browser's router parses the same URL after hydration. If it cannot decode the query string
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  test('browser: the organization page stays after hydration, at the same path', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { path, name } = remoteBaseUrl
+      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+      : await smallTenant();
+
+    const response = await page.goto(`${path}?ref=%`);
+    expect(response?.status()).toBe(200);
+    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+    else await hydrated(consoleGuard);
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+    await expect(page).toHaveTitle(`${name} | Omni League`);
+    expect(new URL(page.url()).pathname).toBe(path);
+  });
 });
 
 // ADR 0005: each test seeds its own tenant and sees only its own data, whatever else the shared

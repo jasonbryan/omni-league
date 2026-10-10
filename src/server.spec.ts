@@ -754,6 +754,28 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
+  // Angular's `Location` drops one trailing slash before the router parses the URL, so the router
+  // reads `/x//?q=%` as `/x/?q=%`, cannot decode it, warns NG04018, and renders `/` with the public
+  // Cache-Control. `DefaultUrlSerializer.parse('/x//?q=%')` stops at `//` without reading the query
+  // string, so a check on the raw pathname misses it (PR #105, tester).
+  it.each([
+    ['/x//?q=%', '/x//'],
+    ['/x/y//?q=%', '/x/y//'],
+    ['/o/acme//?ref=%', '/o/acme//'],
+    ['/x/\\?q=%', '/x//'],
+  ])(
+    'drops the undecodable query string of %s, whose path ends in //, and renders %s',
+    async (path, pathname) => {
+      const engine = useEngine(() => Promise.resolve(new Response('ok', { status: 200 })));
+
+      await netlifyAppEngineHandler(request(path));
+
+      expect(engine.handle).toHaveBeenCalledTimes(1);
+      expect(engine.handle.mock.calls[0][0].url).toBe(`http://localhost${pathname}`);
+      expect(console.error).not.toHaveBeenCalled();
+    },
+  );
+
   it('keeps the method and headers of a request whose query string it drops', async () => {
     const engine = useEngine(() => Promise.resolve(new Response(null, { status: 200 })));
 

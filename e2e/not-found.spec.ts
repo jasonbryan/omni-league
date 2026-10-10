@@ -116,6 +116,37 @@ test.describe('not-found page', () => {
     },
   );
 
+  // Angular's Location drops one trailing slash before the router parses the URL, so `/x//?q=%`
+  // reaches the router as `/x/?q=%`, which it cannot decode: it rendered the home page with 200
+  // and the public Cache-Control under any path ending in `//` (PR #105, tester).
+  test(
+    'a path ending in // with an undecodable query string never gets the home page',
+    RAW_HTTP,
+    async () => {
+      for (const path of ['/x//?q=%', '/x/\\?q=%', '/organizations/nf-x//?ref=%']) {
+        const response = await rawGet(path);
+        expect(response.status, path).toBeLessThan(500);
+        expect(response.status, path).not.toBe(200);
+        expect(response.body, path).not.toMatch(HOME_H1);
+      }
+    },
+  );
+
+  // The browser's router parses the same URL after hydration. If it cannot decode the query string
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  test('a query string the router cannot decode: the browser stays on the not-found page', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const response = await page.goto('/x?q=%');
+    expect(response?.status()).toBe(404);
+    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+    else await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+    await expect(page).toHaveTitle('Page not found | Omni League');
+    expect(new URL(page.url()).pathname).toBe('/x');
+  });
+
   // The real engine, not a stub: encoded, mixed-slash, CR/LF, unicode, and long variants either
   // redirect on this site (Location starts with exactly one `/`, query kept) or get a 4xx, never a
   // 5xx. A host in front (Netlify) may answer some of them with its own 400, which is also safe.
