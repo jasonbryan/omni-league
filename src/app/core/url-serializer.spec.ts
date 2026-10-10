@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { provideLocationMocks } from '@angular/common/testing';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -78,5 +79,33 @@ describe('the app router with the query-tolerant serializer', () => {
     expect(router.url).toBe('/x');
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  // A paging or filter query written by the app (`?leagues=2`) round-trips through the serializer
+  // unchanged, including a value the serializer must percent-encode (PR #105, tester round 3).
+  it('writes and reads a legitimate query string as the default serializer does', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([{ path: 'x', component: XPage }]),
+        provideLocationMocks(),
+        { provide: UrlSerializer, useClass: QueryTolerantUrlSerializer },
+      ],
+    });
+    const router = TestBed.inject(Router);
+    const location = TestBed.inject(Location);
+
+    await router.navigate(['/x'], { queryParams: { leagues: 2 } });
+    expect(location.path()).toBe('/x?leagues=2');
+    expect(router.routerState.snapshot.root.queryParamMap.get('leagues')).toBe('2');
+
+    await router.navigate(['/x'], {
+      queryParams: { q: '100% a&b=c' },
+      queryParamsHandling: 'merge',
+    });
+    expect(location.path()).toBe('/x?leagues=2&q=100%25%20a%26b%3Dc');
+    expect(router.routerState.snapshot.root.queryParamMap.get('q')).toBe('100% a&b=c');
+
+    await router.navigateByUrl(location.path());
+    expect(router.url).toBe('/x?leagues=2&q=100%25%20a%26b%3Dc');
   });
 });
