@@ -167,10 +167,13 @@ A workflow deletes the Convex preview deployment of a PR when the PR is closed o
 
 The Convex team caps deployments at 40, and a build that hits the cap fails with `DeploymentQuotaReached`. `.github/workflows/clean-previews.yml` ("Clean previews") runs `scripts/clean-previews.mjs` so a closed PR's slot is freed without anyone deleting it in the dashboard:
 
-| Trigger                                     | What it deletes                                                                                                                         |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `pull_request` `closed` (merged too)        | Only `pr-<number>` of that PR (`--yes --pr <n>`).                                                                                       |
-| Daily at 05:23 UTC, and `workflow_dispatch` | Every `pr-<n>` whose PR is `CLOSED` or `MERGED` (`--yes`). This also clears a backlog and any PR whose close run was skipped or failed. |
+| Trigger                              | What it deletes                                                                                                                              |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pull_request` `closed` (merged too) | Only `pr-<number>` of that PR (`--yes --pr <n>`).                                                                                            |
+| Daily at 05:23 UTC                   | Every `pr-<n>` whose PR is `CLOSED` or `MERGED` (`--yes`). This also clears a backlog and any PR whose close run was skipped or failed.      |
+| `workflow_dispatch`                  | The same sweep, but the `dry_run` input defaults to **true**: it lists what it would delete and deletes nothing. Untick `dry_run` to delete. |
+
+**First run.** The merge of the PR that adds this workflow closes that PR, so the close run deletes only its own `pr-<n>`. Before the first daily run, run the workflow by hand with `dry_run` ticked (`gh workflow run clean-previews.yml`), read the step log, and check that every `pr-<n>` listed belongs to a closed or merged PR and that nothing else is listed as deleted. Then untick `dry_run` (`gh workflow run clean-previews.yml -f dry_run=false`) or wait for the daily run.
 
 - **Secret.** The job reads the repository secret `CONVEX_TEAM_TOKEN` in the env of the one step that runs the script, and `gh` reads the PR state with the built-in workflow token (`pull-requests: read`, `contents: read`; no other permission). If the secret is not set, the job skips with a notice and does not fail. A PR from a fork, and a Dependabot PR, cannot read repository secrets, so their close run skips and the daily sweep deletes the preview.
 - **Setup.** [Owner setup](#owner-setup-one-time), step 6: create the token in the Convex dashboard (Team Settings, Access Tokens), and add it as `CONVEX_TEAM_TOKEN` (repository Settings, Secrets and variables, Actions, New repository secret). Revoke it in the dashboard if it leaks.

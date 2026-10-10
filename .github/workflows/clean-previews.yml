@@ -2,9 +2,12 @@
 # 40 deployments never blocks a new PR preview (`DeploymentQuotaReached`).
 #
 # - A PR closed or merged: deletes only that PR's preview, `pr-<number>`.
-# - Daily, and by hand (workflow_dispatch): sweeps every `pr-<n>` whose PR is CLOSED or MERGED, which
-#   also catches PRs whose close event was skipped (a fork or Dependabot PR has no repository
-#   secrets, and a run can fail).
+# - Daily (schedule): sweeps every `pr-<n>` whose PR is CLOSED or MERGED, which also catches PRs
+#   whose close event was skipped (a fork or Dependabot PR has no repository secrets, and a run can
+#   fail).
+# - By hand (workflow_dispatch): the same sweep, but the `dry_run` input defaults to true, so a
+#   manual run only lists what it would delete. Untick it to delete. Run it once as a dry run after
+#   the secret is added, to check the list before the first scheduled delete.
 #
 # The engine is scripts/clean-previews.mjs; its safety rules (preview type, the `pr-<n>` name, the
 # omni-league project, PR state from `gh`) apply here unchanged. Runs `pull_request`, never
@@ -23,6 +26,11 @@ on:
   schedule:
     - cron: '23 5 * * *'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be deleted and delete nothing (untick to delete)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -67,9 +75,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             node scripts/clean-previews.mjs --yes --pr "$PR_NUMBER"
+          elif [ "$DRY_RUN" = "true" ]; then
+            node scripts/clean-previews.mjs --dry-run
           else
             node scripts/clean-previews.mjs --yes
           fi
