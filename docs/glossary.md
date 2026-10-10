@@ -19,9 +19,9 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **Connected account:** an organization's own Stripe account, linked to the platform through Stripe Connect; players' payments go to it. It is a Stripe Accounts v2 account with the full Stripe Dashboard; Stripe collects its processing fees and carries its losses. Source: [requirements, Payments](product/requirements.md#payments), [ADR 0012](decisions/0012-stripe-connect.md).
 - **Draft:** a league or season that an organizer has not yet published. Drafts stay off public pages; the organization's staff see them in the signed-in app. Source: [requirements, Organizations and public registration](product/requirements.md#organizations-and-public-registration).
 - **Email verification:** confirming that a user owns the email address on a password account, by a link or code sent to it. Required before the first production release. Source: [requirements, Constraints](product/requirements.md#constraints), [ADR 0011](decisions/0011-transactional-email.md).
-- **Free agent:** an individual who registers for a season without a team; an organizer places them on a team. Source: [requirements, Registration](product/requirements.md#registration).
+- **Free agent:** an individual who registers for a season without a team; an organizer places them on a team. A rostered player cannot also be a free agent in the same season. Source: [requirements, Registration](product/requirements.md#registration), [Seasons](product/requirements.md#seasons).
 - **Game:** **Working definition — not yet specified by the owner.** A single scheduled contest between two teams in a season, with a time and location; captains report its score. Source: [requirements, Schedule, scores, and standings](product/requirements.md#schedule-scores-and-standings).
-- **Guardian:** **Working assumption — to confirm with the owner.** An adult user who manages minors' roster entries and may also be a player. ADR 0008's illustrative data model links the entry to the guardian's user id. Source: [requirements, Accounts](product/requirements.md#accounts-players-and-guardians), [ADR 0008](decisions/0008-auth-provider.md).
+- **Guardian:** an adult account holder who adds and manages a minor's roster entry and may also play (owner, 2026-10-10). The guardian adds the minor when accepting a team invite; the entry holds only the minor's display name and links to the guardian's user id. Source: [requirements, Accounts](product/requirements.md#accounts-players-and-guardians), [ADR 0008](decisions/0008-auth-provider.md).
 - **Install (installed app):** adding the app to a device's home screen, after which it opens in its own window with its own icon and no address bar. Browsers offer it from the web app manifest; on iPhone and iPad it is Safari's Share, then Add to Home Screen, and push notifications work there only once installed. Source: [requirements, Installable app (PWA)](product/requirements.md#installable-app-pwa).
 - **Invite:** a request, sent by a captain or organizer to an email address, to join a team or the organization's staff. The invited person needs no account to receive it, but signs up or signs in to accept it. A pending invite is not a roster entry and carries no application fee. Source: [requirements, Accounts](product/requirements.md#accounts-players-and-guardians).
 - **Invite link:** the `<origin>/invites/accept#<token>` link an org admin copies when creating a staff invite and sends themselves. It is shown once, because only the token's hash is stored; to resend, the org admin revokes the invite and creates a new one. Proposed in `design/mockups/67-organization-staff.html` (#67, #70).
@@ -29,8 +29,10 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **League organizer:** a staff role that runs the specific leagues an org admin assigns to it, within one organization. Source: [requirements, Organizations and staff](product/requirements.md#organizations-and-staff).
 - **Location:** a place where an organization's leagues are held. An organization can have several, and each has a public page. Source: [requirements](product/requirements.md#organizations-and-public-registration), [ADR 0006](decisions/0006-angular-app-baseline.md).
 - **Maskable icon:** the app icon variant whose art keeps to a central safe zone (a circle of 80% of the width), so an Android launcher can crop it to any shape. Approved in `design/mockups/80-app-icon.html` and shipped as `public/icons/icon-maskable-512.png` (#80).
+- **Maximum roster size:** the most roster entries a team in a season may have, set by an organizer at or above the season's minimum roster size. Source: [requirements, Seasons](product/requirements.md#seasons).
+- **Maximum teams:** the most teams a season takes. A season that has reached it is **full**, and new teams go on its waitlist. Source: [requirements, Seasons](product/requirements.md#seasons).
 - **Minimum roster size:** the fewest roster entries a team needs before it is confirmed, set per sport format in the sport configuration (beach volleyball 2, 4, or 6; soccer 5, 7, or 11; softball 10); an organization may raise it but not lower it. Part of the application-fee mechanism. Source: [requirements, Payments](product/requirements.md#payments).
-- **Minor:** a person below adult age. Minors hold no account at launch and appear only as roster entries managed by a guardian or organizer. Source: [requirements, Constraints](product/requirements.md#constraints), [ADR 0008](decisions/0008-auth-provider.md).
+- **Minor:** a person below adult age. Minors hold no account at launch and appear only as roster entries managed by a guardian or organizer; only a display name is stored, and opponents see the first name and last initial. Source: [requirements, Accounts](product/requirements.md#accounts-players-and-guardians), [requirements, Constraints](product/requirements.md#constraints), [ADR 0008](decisions/0008-auth-provider.md).
 - **New-version prompt:** the card at the bottom of the window that says a new version of the app is ready, with Reload and Later (Later hides it until the app is next opened); the service worker downloaded the version in the background. Its other state, the **unrecoverable message**, asks the user to reload when the worker lost files it needs. See `design/mockups/81-update-prompt.html` and [ADR 0013](decisions/0013-pwa-stack.md) section 4 (#81).
 - **No-access view:** what the admin area shows a signed-in league organizer or non-member: a message that only org admins can open it, and a link to Your organizations. No organization data loads. Proposed in `design/mockups/65-organization-admin-locations.html` (#65).
 - **Org admin:** a staff role that manages everything in one organization and invites people. One person can hold roles in several organizations. Source: [requirements, Organizations and staff](product/requirements.md#organizations-and-staff).
@@ -51,6 +53,7 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **Push subscription:** one browser's permission and address for receiving push notifications, created when a signed-in user turns notifications on for that device. A user can have one per device; it ends when the user turns notifications off, signs out on that device, or the push service reports it expired. Source: [requirements, Installable app (PWA)](product/requirements.md#installable-app-pwa), #83.
 - **PWA (progressive web app):** a web app that can be installed, works offline or on a weak signal, and can receive push notifications. Omni League is one, so no separate mobile app is built (owner, 2026-10-09). Source: [requirements, Installable app (PWA)](product/requirements.md#installable-app-pwa).
 - **Registration (register):** taking part in a season in one of three ways: a captain registers a whole team, a free agent registers alone, or a person joins an existing team. Each way needs an account. Source: [requirements, Registration](product/requirements.md#registration).
+- **Registration deadline:** the date an organizer sets on a season after which teams and free agents can no longer register; registration also closes when the season starts. Source: [requirements, Seasons](product/requirements.md#seasons).
 - **Reserved slug:** a slug that no organization or league can take because a route or the demo data uses it, such as `new` (`/app/organizations/new`). It is refused with the slug format message. Source: #64, #99.
 - **Return-to URL (`returnTo`):** the query parameter on `/sign-in` and `/sign-up` naming where the browser goes after success. Only a same-origin path is accepted; anything else becomes `/`. Source: [ADR 0008, Return-to-registration URL](decisions/0008-auth-provider.md#return-to-registration-url).
 - **Roster:** the list of roster entries on a team for one season. The teams in a season can see each other's rosters. Source: [requirements, Seasons](product/requirements.md#seasons).
@@ -70,9 +73,10 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **Sport-specific rules (sport configuration):** the rules that differ by sport, such as scoring, team size, minimum roster size, and standings, configurable per sport so new sports need no restructuring. Source: [requirements, Sports](product/requirements.md#sports-initial).
 - **Standings:** the ranking of teams in a season, calculated by the sport's standings rules. The per-sport defaults are a proposal for the owner to confirm. Source: [requirements, Schedule, scores, and standings](product/requirements.md#schedule-scores-and-standings).
 - **Stat line:** one player's recorded statistics for one game. Results keep stat lines per player, not only team scores. Source: [requirements, Schedule, scores, and standings](product/requirements.md#schedule-scores-and-standings).
-- **Team:** a group of players in one season, with a captain; it is confirmed once its roster meets the minimum roster size and its fees are paid. Source: [requirements, Registration](product/requirements.md#registration), [Payments](product/requirements.md#payments).
+- **Team:** a group of players in one season, with a captain; it is confirmed once its roster meets the minimum roster size and its fees are paid. A person is on at most one team in a season. Source: [requirements, Registration](product/requirements.md#registration), [Payments](product/requirements.md#payments).
 - **User:** a person with an account. Every adult player and every organizer is a user; in the backend the app's `users` record is keyed on the auth provider's user id. Source: [requirements, Accounts](product/requirements.md#accounts-players-and-guardians), [ADR 0008](decisions/0008-auth-provider.md).
 - **Visitor:** anyone viewing a public page. A visitor goes from a public registration page to sign-in and back. Source: [requirements](product/requirements.md#organizations-and-public-registration), [ADR 0008](decisions/0008-auth-provider.md).
+- **Waitlist:** the queue of teams that registered after a season was full. A waitlisted team is not yet a team and has no roster entries; an organizer promotes it, which creates the team. Source: [requirements, Seasons](product/requirements.md#seasons).
 
 ## Process terms
 
@@ -196,12 +200,15 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 
 ## Open questions for the owner
 
-The owner answered the earlier questions on 2026-10-09; the answers are in [docs/product/requirements.md](product/requirements.md). These remain open, and the list there is the source:
+The owner answered the earlier questions on 2026-10-09 and 2026-10-10; the answers are in [docs/product/requirements.md](product/requirements.md). These remain open, and the list there is the source:
 
-1. **Guardian:** confirm the working assumption in the Guardian entry.
-2. **Standings:** confirm or change the proposed defaults per sport.
-3. **Fee percentage:** the percentage of each registration payment.
-4. **Per-player floor:** the minimum fee per roster entry.
-5. **Fee shown to the payer:** a separate line for the payer, or absorbed by the organization.
-6. **Fee on refunds and lost disputes:** whether the platform returns the application fee.
-7. **Push notifications:** who receives each kind, when game reminders are sent, and whether users choose per kind (#85).
+1. **Standings:** confirm or change the proposed defaults per sport.
+2. **Fee percentage:** the percentage of each registration payment.
+3. **Per-player floor:** the minimum fee per roster entry.
+4. **Fee shown to the payer:** a separate line for the payer, or absorbed by the organization.
+5. **Fee on refunds and lost disputes:** whether the platform returns the application fee.
+6. **Push notifications:** who receives each kind, when game reminders are sent, and whether users choose per kind (#85).
+7. **Invite email:** whether the platform emails team invites.
+8. **Free agents:** what they tell the organizer, and whether free agents and waitlisted teams can withdraw.
+9. **Payments before registration ships:** whether the first release with registration must include the payment slices.
+10. **Registration deadline scope:** whether it also stops accepting invites and organizer placement.
