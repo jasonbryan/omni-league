@@ -154,9 +154,22 @@ export class AuthService implements ConvexAuthSource {
   }
 }
 
+/**
+ * Better Auth's body validation (`VALIDATION_ERROR`, 400) joins one `[body.<field>] <message>` per
+ * issue with `; `. A malformed email gives `[body.email] Invalid email address`. Only a refusal
+ * whose every issue is on `email` is the Email field's error; any other field is unexpected here.
+ */
+function isEmailValidationError(message: string | undefined): boolean {
+  if (!message) return false;
+  return message.split(/; (?=\[)/).every((issue) => issue.startsWith('[body.email] '));
+}
+
 function failureOf(error: { status: number; code?: string; message?: string }): SignUpFailure {
   const byCode = error.code === undefined ? undefined : FAILURE_BY_CODE[error.code];
   if (byCode) return byCode;
+  if (error.code === 'VALIDATION_ERROR' && isEmailValidationError(error.message)) {
+    return 'invalid-email';
+  }
   // The breached-password check fails closed with a 500 whose message starts this way (ADR 0008).
   if (error.status === 500 && error.message?.startsWith('Failed to check password')) {
     return 'check-unavailable';

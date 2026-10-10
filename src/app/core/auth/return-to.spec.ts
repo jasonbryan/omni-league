@@ -11,6 +11,8 @@ describe('safeReturnTo', () => {
     ['/organizations/x?tab=leagues#top', '/organizations/x?tab=leagues#top'],
     ['/a/../app', '/app'],
     ['/app%2F..%2Fx', '/app%2F..%2Fx'],
+    ['/../app', '/app'],
+    ['/./app?x=1', '/app?x=1'],
   ])('accepts the same-site path %j as %j', (raw, expected) => {
     expect(safeReturnTo(raw)).toBe(expected);
   });
@@ -31,6 +33,16 @@ describe('safeReturnTo', () => {
     '',
     '?returnTo=/app',
     '#/app',
+    // Dot segments that resolve to `//host` or `/\host` (#62 tester).
+    '/..//evil.example/x',
+    '/.//evil.example/x',
+    '/a/..//evil.example/x',
+    '/%2e%2e//evil.example/x',
+    '/%2E//evil.example/x',
+    '/./\\evil.example/x',
+    '/../\\evil.example/x',
+    '/.\t//evil.example/x',
+    '/a/b/../..//evil.example',
   ])('turns %j into /', (raw) => {
     expect(safeReturnTo(raw)).toBe('/');
   });

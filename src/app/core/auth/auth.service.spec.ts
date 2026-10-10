@@ -197,6 +197,31 @@ describe('AuthService', () => {
         'check-unavailable',
       ],
       ['400 invalid email', { status: 400, code: 'INVALID_EMAIL' }, 'invalid-email'],
+      // Better Auth 1.6 answers a malformed email with its body-validation error (#62 tester).
+      [
+        '400 validation error on the email',
+        { status: 400, code: 'VALIDATION_ERROR', message: '[body.email] Invalid email address' },
+        'invalid-email',
+      ],
+      [
+        '400 validation error on another field',
+        { status: 400, code: 'VALIDATION_ERROR', message: '[body.name] Invalid input' },
+        'unexpected',
+      ],
+      [
+        '400 validation error on the email and another field',
+        {
+          status: 400,
+          code: 'VALIDATION_ERROR',
+          message: '[body.email] Invalid email address; [body.name] Invalid input',
+        },
+        'unexpected',
+      ],
+      [
+        '400 validation error without a message',
+        { status: 400, code: 'VALIDATION_ERROR' },
+        'unexpected',
+      ],
       ['400 too short', { status: 400, code: 'PASSWORD_TOO_SHORT' }, 'password-too-short'],
       ['400 too long', { status: 400, code: 'PASSWORD_TOO_LONG' }, 'password-too-long'],
       ['400 no 18+', { status: 400, code: 'ADULT_CONFIRMATION_REQUIRED' }, 'adult-required'],
