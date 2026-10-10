@@ -308,6 +308,34 @@ describe('ConvexSavedCopies', () => {
       });
     });
 
+    // Tester, PR #136 round 2: nested shapes, checked through read() rather than the matcher alone.
+    const league = { name: 'L', sportName: 'Soccer', locationNames: ['Field'] };
+    const location = { name: 'Field', address: '1 Main St' };
+    it.each([
+      ['a nested field of the wrong type', { ...page('A'), leagues: [{ ...league, name: 1 }] }],
+      [
+        'a nested list item of the wrong type',
+        { ...page('A'), leagues: [{ ...league, locationNames: [1] }] },
+      ],
+      ['a nested required field missing', { ...page('A'), locations: [{ name: 'Field' }] }],
+      ['a null list item', { ...page('A'), locations: [null] }],
+      ['a top-level required field missing', { name: 'A', leagues: [], locations: [] }],
+    ])('does not use a nested value of the wrong shape (%s), and removes it', (_, value) => {
+      plantSavedCopy(getPublicPage, { slug: 'bad' }, value, START);
+      expect(store.read(getPublicPage, { slug: 'bad' })).toBeUndefined();
+      expect(savedKeys()).toEqual([]);
+    });
+
+    it('uses a value with extra fields inside its list items', () => {
+      const value = {
+        ...page('A'),
+        leagues: [{ ...league, logo: 'x' }],
+        locations: [{ ...location, lat: 1.5 }],
+      };
+      plantSavedCopy(getPublicPage, { slug: 'a' }, value, START);
+      expect(store.read(getPublicPage, { slug: 'a' })?.value).toEqual(value);
+    });
+
     it.each([
       ['another version', { version: VERSION + 1 }],
       ['no version (saved before versions)', { version: undefined }],
