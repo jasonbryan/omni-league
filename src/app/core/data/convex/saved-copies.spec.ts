@@ -1,8 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { getFunctionName, makeFunctionReference } from 'convex/server';
-import { convexToJson } from 'convex/values';
+import { convexToJson, type Value } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
-import { getPublicPageReturns } from '../../../../../convex/lib/publicPage';
+import {
+  getPublicPageReturns,
+  publicLeaguesValidator,
+  publicLocationsValidator,
+} from '../../../../../convex/lib/publicPage';
 import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import {
   ConvexSavedCopies,
@@ -15,6 +19,8 @@ import {
 import { plantSavedCopy } from './testing/saved-copy';
 
 const getPublicPage = api.organizations.getPublicPage;
+const listPublicLeagues = api.organizations.listPublicLeagues;
+const listPublicLocations = api.organizations.listPublicLocations;
 /** Same function name as the listed query, with free-form args, for the key-order cases. */
 const listedAnyArgs = makeFunctionReference<'query', Record<string, unknown>, unknown>(
   'organizations:getPublicPage',
@@ -27,7 +33,16 @@ const DAY = 24 * 60 * 60 * 1000;
 const VERSION = OFFLINE_SAVED_QUERIES[0].version;
 
 /** A `getPublicPage` result with this name and no leagues or locations. */
-const page = (name: string) => ({ name, slug: 'org', leagues: [], locations: [] });
+const page = (name: string) => ({
+  name,
+  slug: 'org',
+  leagueCount: 0,
+  locationCount: 0,
+  sportCount: 0,
+});
+
+/** A `listPublicLeagues` / `listPublicLocations` result with these rows. */
+const list = (rows: Value[]) => ({ rows, page: 1, pageCount: 1, total: rows.length });
 
 const savedKeys = () =>
   Object.keys(localStorage)
@@ -50,11 +65,19 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists organizations:getPublicPage, a deliberately public, caller-independent query, with its own returns validator', () => {
-    expect(OFFLINE_SAVED_QUERIES).toHaveLength(1);
-    expect(getFunctionName(OFFLINE_SAVED_QUERIES[0].query)).toBe('organizations:getPublicPage');
-    // The very validator the Convex function declares, not a restated copy.
-    expect(OFFLINE_SAVED_QUERIES[0].returns).toBe(getPublicPageReturns);
+  it('lists the organization page queries, deliberately public and caller-independent, each with its own returns validator', () => {
+    // The very validators the Convex functions declare, not restated copies.
+    expect(
+      OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
+    ).toEqual([
+      ['organizations:getPublicPage', getPublicPageReturns],
+      ['organizations:listPublicLeagues', publicLeaguesValidator],
+      ['organizations:listPublicLocations', publicLocationsValidator],
+    ]);
+    for (const { returns, version } of OFFLINE_SAVED_QUERIES) {
+      expect(Number.isInteger(version)).toBe(true);
+      expect(returns).toBeDefined();
+    }
     expect(Number.isInteger(VERSION)).toBe(true);
   });
 
@@ -87,8 +110,9 @@ describe('ConvexSavedCopies', () => {
       const result = {
         name: 'Gulf Coast',
         slug: 'gulf-coast',
-        locations: [{ name: 'Bayside', address: '4410 Ocean Dr' }],
-        leagues: [{ name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] }],
+        leagueCount: 1,
+        locationCount: 1,
+        sportCount: 1,
       };
       store.write(getPublicPage, { slug: 'gulf-coast' }, result);
       const raw = localStorage.getItem(
@@ -104,6 +128,44 @@ describe('ConvexSavedCopies', () => {
         value: result,
         savedAt: START,
       });
+    });
+
+    it.each([
+      [
+        'organizations:listPublicLeagues',
+        listPublicLeagues,
+        list([{ name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] }]),
+      ],
+      [
+        'organizations:listPublicLocations',
+        listPublicLocations,
+        list([{ name: 'Bayside', address: '4410 Ocean Dr' }]),
+      ],
+    ])(
+      'saves page 1 of %s under a key with its slug and page, and reads it back',
+      (name, query, result) => {
+        const args = { slug: 'gulf-coast', page: 1 };
+        store.write(query, args, result);
+        const raw = localStorage.getItem(`cvx-saved:${name}:{"page":1,"slug":"gulf-coast"}`);
+        expect(JSON.parse(raw ?? 'null')).toEqual({
+          v: convexToJson(result),
+          savedAt: START,
+          usedAt: START,
+          version: VERSION,
+        });
+        expect(store.read(query, args)).toEqual({ value: result, savedAt: START });
+        // Another page of the same list is its own copy.
+        expect(store.read(query, { slug: 'gulf-coast', page: 2 })).toBeUndefined();
+      },
+    );
+
+    it('keeps the header and the two lists of one organization as three separate copies', () => {
+      store.write(getPublicPage, { slug: 'a' }, page('A'));
+      store.write(listPublicLeagues, { slug: 'a', page: 1 }, list([]));
+      store.write(listPublicLocations, { slug: 'a', page: 1 }, list([]));
+      expect(savedKeys()).toHaveLength(3);
+      store.write(getPublicPage, { slug: 'a' }, null);
+      expect(savedKeys()).toHaveLength(2);
     });
 
     it('writes nothing for a query that is not on the allow-list, and never reads one', () => {
@@ -289,7 +351,11 @@ describe('ConvexSavedCopies', () => {
       ['a number', 42],
       ['a string', 'x'],
       ['an array', [1, 2]],
-      ['a list of the wrong type', { ...page('A'), leagues: 'none' }],
+      ['a total of the wrong type', { ...page('A'), leagueCount: 'none' }],
+      [
+        'the earlier shape with lists and no totals',
+        { name: 'A', slug: 'org', leagues: [], locations: [] },
+      ],
       ['null (write never stores it)', null],
     ])(
       'does not use a value that does not match the query result (%s), and removes it',
@@ -301,10 +367,10 @@ describe('ConvexSavedCopies', () => {
     );
 
     it('uses a value with a field the query result does not name (a newer build added it)', () => {
-      plantSavedCopy(getPublicPage, { slug: 'a' }, { ...page('A'), leagueCount: 0 }, START);
+      plantSavedCopy(getPublicPage, { slug: 'a' }, { ...page('A'), seasonCount: 0 }, START);
       expect(store.read(getPublicPage, { slug: 'a' })?.value).toEqual({
         ...page('A'),
-        leagueCount: 0,
+        seasonCount: 0,
       });
     });
 
@@ -312,28 +378,36 @@ describe('ConvexSavedCopies', () => {
     const league = { name: 'L', sportName: 'Soccer', locationNames: ['Field'] };
     const location = { name: 'Field', address: '1 Main St' };
     it.each([
-      ['a nested field of the wrong type', { ...page('A'), leagues: [{ ...league, name: 1 }] }],
+      ['a nested field of the wrong type', { ...list([]), rows: [{ ...league, name: 1 }] }],
       [
         'a nested list item of the wrong type',
-        { ...page('A'), leagues: [{ ...league, locationNames: [1] }] },
+        { ...list([]), rows: [{ ...league, locationNames: [1] }] },
       ],
-      ['a nested required field missing', { ...page('A'), locations: [{ name: 'Field' }] }],
-      ['a null list item', { ...page('A'), locations: [null] }],
-      ['a top-level required field missing', { name: 'A', leagues: [], locations: [] }],
-    ])('does not use a nested value of the wrong shape (%s), and removes it', (_, value) => {
-      plantSavedCopy(getPublicPage, { slug: 'bad' }, value, START);
-      expect(store.read(getPublicPage, { slug: 'bad' })).toBeUndefined();
+      ['a nested required field missing', { ...list([]), rows: [{ name: 'L' }] }],
+      ['a null list item', { ...list([]), rows: [null] }],
+      ['rows that are not an array', { ...list([]), rows: 'none' }],
+      ['a top-level required field missing', { rows: [], page: 1, pageCount: 1 }],
+    ])('does not use a list of the wrong shape (%s), and removes it', (_, value) => {
+      plantSavedCopy(listPublicLeagues, { slug: 'bad', page: 1 }, value, START);
+      expect(store.read(listPublicLeagues, { slug: 'bad', page: 1 })).toBeUndefined();
       expect(savedKeys()).toEqual([]);
     });
 
-    it('uses a value with extra fields inside its list items', () => {
-      const value = {
-        ...page('A'),
-        leagues: [{ ...league, logo: 'x' }],
-        locations: [{ ...location, lat: 1.5 }],
-      };
-      plantSavedCopy(getPublicPage, { slug: 'a' }, value, START);
-      expect(store.read(getPublicPage, { slug: 'a' })?.value).toEqual(value);
+    it('does not use a league row where a location row belongs, or the reverse, and removes it', () => {
+      plantSavedCopy(listPublicLocations, { slug: 'a', page: 1 }, list([league]), START);
+      plantSavedCopy(listPublicLeagues, { slug: 'a', page: 1 }, list([location]), START);
+      expect(store.read(listPublicLocations, { slug: 'a', page: 1 })).toBeUndefined();
+      expect(store.read(listPublicLeagues, { slug: 'a', page: 1 })).toBeUndefined();
+      expect(savedKeys()).toEqual([]);
+    });
+
+    it('uses a list with extra fields inside its rows', () => {
+      const leagues = list([{ ...league, logo: 'x' }]);
+      const locations = list([{ ...location, lat: 1.5 }]);
+      plantSavedCopy(listPublicLeagues, { slug: 'a', page: 1 }, leagues, START);
+      plantSavedCopy(listPublicLocations, { slug: 'a', page: 1 }, locations, START);
+      expect(store.read(listPublicLeagues, { slug: 'a', page: 1 })?.value).toEqual(leagues);
+      expect(store.read(listPublicLocations, { slug: 'a', page: 1 })?.value).toEqual(locations);
     });
 
     it.each([

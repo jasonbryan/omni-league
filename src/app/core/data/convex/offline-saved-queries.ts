@@ -1,7 +1,11 @@
 import type { FunctionReference, FunctionReturnType } from 'convex/server';
 import type { GenericValidator, Validator } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
-import { getPublicPageReturns } from '../../../../../convex/lib/publicPage';
+import {
+  getPublicPageReturns,
+  publicLeaguesValidator,
+  publicLocationsValidator,
+} from '../../../../../convex/lib/publicPage';
 
 /** A query on the saved-copy allow-list, with what a saved copy of it must match. */
 export interface OfflineSavedQuery {
@@ -42,9 +46,9 @@ function savedQuery<Q extends FunctionReference<'query'>>(
  * (schedules, standings).
  */
 export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
-  // #100 (PR #140) drops `locations` and `leagues` from this result. Whichever PR merges second
-  // changes the result in convex/lib/publicPage.ts only; this entry then follows it, copies in the
-  // earlier shape stop matching and are removed, and `version` stays 1. The paged queries #100 adds
-  // show offline only if they join this list, each with its own `returns` from convex/lib/.
   savedQuery(api.organizations.getPublicPage, getPublicPageReturns, 1),
+  // The organization page's lists (#100). Each (slug, page) is its own saved copy, so the page
+  // opens offline with page 1 of each list; another page opens offline once it has been viewed.
+  savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
+  savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
 ];

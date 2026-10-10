@@ -2,7 +2,14 @@ import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { env, internalMutation, type MutationCtx } from './_generated/server';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
-import { insertLeague, insertTenant, type Tenant } from './lib/tenantWrites';
+import {
+  backfilledValidator,
+  backfillTenantFields,
+  insertLeague,
+  insertLocation,
+  insertTenant,
+  type Tenant,
+} from './lib/tenantWrites';
 
 /**
  * The demo organizations. All names and addresses are fictional demo values. The first two are
@@ -120,11 +127,12 @@ export const DEMO: readonly Tenant[] = [
   },
 ];
 
-/** Rows inserted by one run, per table. */
-const insertedValidator = v.object({
+/** Rows inserted by one run, per table, and the rows its backfill changed (#100). */
+const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
   leagues: v.number(),
+  backfilled: backfilledValidator,
 });
 
 /**
@@ -169,16 +177,21 @@ async function ensureOrganization(
  *
  * Insert-only, per record: it inserts each demo organization (by slug), location (by name within
  * its organization), and league (by name within its organization, with its location links) only
- * when it is missing, and never updates or deletes a row. A second run inserts nothing, and rows
- * that are not demo rows are never touched. It returns the number of rows it inserted per table,
- * which the build log shows. It throws before reading or writing unless the deployment is a
- * preview or staging deployment (`assertPreviewDeployment`).
+ * when it is missing, through the shared writers, which keep the organization's counters. It
+ * never deletes a row, and a second run inserts nothing. It returns the number of rows it inserted
+ * per table, which the build log shows. It throws before reading or writing unless the deployment
+ * is a preview or staging deployment (`assertPreviewDeployment`).
+ *
+ * Before inserting, it backfills the fields #100 added on any row written before them
+ * (`backfillTenantFields`, the only update it makes, on demo and other rows alike) and reports the
+ * changed rows as `backfilled`. #104 removes the backfill.
  */
 export const demo = internalMutation({
   args: {},
-  returns: insertedValidator,
+  returns: resultValidator,
   handler: async (ctx) => {
     assertPreviewDeployment();
+    const backfilled = await backfillTenantFields(ctx);
     const inserted = { organizations: 0, locations: 0, leagues: 0 };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
@@ -193,7 +206,7 @@ export const demo = internalMutation({
           )
           .first();
         if (existing) continue;
-        await ctx.db.insert('locations', { organizationId, ...location });
+        await insertLocation(ctx, organizationId, location);
         inserted.locations++;
       }
 
@@ -210,6 +223,6 @@ export const demo = internalMutation({
         inserted.leagues++;
       }
     }
-    return inserted;
+    return { ...inserted, backfilled };
   },
 });
