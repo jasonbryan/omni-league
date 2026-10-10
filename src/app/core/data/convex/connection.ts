@@ -12,7 +12,7 @@ import {
   type Signal,
 } from '@angular/core';
 import { isPlatformServer } from '@angular/common';
-import { CONVEX_CLIENT } from './convex-client';
+import { CONVEX_CLIENT } from './client-token';
 
 /** How long the socket may be down before `online` turns false (ADR 0013, section 3). */
 export const OFFLINE_SIGNAL_DELAY_MS = 5_000;

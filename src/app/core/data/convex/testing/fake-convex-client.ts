@@ -1,6 +1,6 @@
 import type { ConnectionState } from 'convex/browser';
 import { getFunctionName, type FunctionReference } from 'convex/server';
-import type { ConvexClientLike } from '../convex-client';
+import type { ConvexClientLike } from '../client-token';
 
 /** One `onUpdate` registration on the fake client. */
 export interface FakeSubscription {

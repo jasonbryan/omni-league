@@ -11,7 +11,7 @@ import {
 import { isPlatformServer } from '@angular/common';
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server';
 import { CALL_CONNECTION_WAIT_MS, ConvexConnection } from './connection';
-import { CONVEX_CLIENT, type ConvexClientLike } from './convex-client';
+import { CONVEX_CLIENT, type ConvexClientLike } from './client-token';
 import { ConvexNotConfiguredError, ConvexOfflineError, ConvexServerCallError } from './errors';
 
 export interface CallRef<Args, R> {
