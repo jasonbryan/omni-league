@@ -135,30 +135,89 @@ describe('colour literals in src/', () => {
   // `#100` in a comment is not a colour.
   const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(/;
   // The install colours (#80) cannot be tokens: the theme-color meta and the manifest are read by
-  // the browser and the operating system, which know no CSS variable. These are the only lines
-  // allowed, and each is a value fixed by the approved mockup, not a style.
-  const INSTALL_COLOUR_LINES = {
-    [join('src', 'index.html')]: /^<meta name="theme-color" content="#[0-9a-f]{6}" \/>$/,
-    [join('src', 'index.spec.ts')]:
-      /^expect\(meta\?\.getAttribute\('content'\)\)\.toBe\('#[0-9a-f]{6}'\);$/,
-    [join('src', 'pwa-assets.spec.ts')]: /^(?:theme|background)_color: '#[0-9a-f]{6}',$/,
-  };
+  // the browser and the operating system, which know no CSS variable. These four lines are the only
+  // ones allowed. Each entry is an exact file and full trimmed line, allowed at most once.
+  const ALLOWED = [
+    { file: join('src', 'index.html'), line: '<meta name="theme-color" content="#ffffff" />' },
+    {
+      file: join('src', 'index.spec.ts'),
+      line: "expect(meta?.getAttribute('content')).toBe('#ffffff');",
+    },
+    { file: join('src', 'pwa-assets.spec.ts'), line: "theme_color: '#ffffff'," },
+    { file: join('src', 'pwa-assets.spec.ts'), line: "background_color: '#f6f7fa'," },
+  ];
 
-  it('finds nothing in .css, .ts, and .html files except src/styles/tokens.css', async () => {
+  /** Colour literals in `sources` ({ file: text }) that the allow-list does not cover. */
+  function findColourLiterals(sources) {
+    const used = new Map();
+    const matches = [];
+    for (const [file, text] of Object.entries(sources)) {
+      withoutComments(text)
+        .split('\n')
+        .forEach((raw, index) => {
+          if (!COLOUR.test(raw)) return;
+          const line = raw.trim();
+          const key = `${file}\n${line}`;
+          const allowed = ALLOWED.some((entry) => entry.file === file && entry.line === line);
+          if (allowed && !used.has(key)) {
+            used.set(key, 1);
+            return;
+          }
+          matches.push(`${file}:${index + 1}: ${line}`);
+        });
+    }
+    return matches;
+  }
+
+  it('finds nothing in .css, .ts, and .html files except src/styles/tokens.css and the four allowed lines', async () => {
     const files = (await filesUnder(join(root, 'src'), ['.css', '.ts', '.html'])).filter(
       (file) => file !== join('src', 'styles', 'tokens.css'),
     );
     assert.ok(files.length > 10, 'the source files were actually listed');
-    const matches = [];
-    for (const file of files) {
-      withoutComments(await read(file))
-        .split('\n')
-        .forEach((line, index) => {
-          if (INSTALL_COLOUR_LINES[file]?.test(line.trim())) return;
-          if (COLOUR.test(line)) matches.push(`${file}:${index + 1}: ${line.trim()}`);
-        });
+    const sources = {};
+    for (const file of files) sources[file] = await read(file);
+    assert.deepEqual(findColourLiterals(sources), []);
+    // Each allowed line still exists exactly once, so the list cannot go stale.
+    for (const { file, line } of ALLOWED) {
+      const count = sources[file].split('\n').filter((l) => l.trim() === line).length;
+      assert.equal(count, 1, `${file}: ${line}`);
     }
-    assert.deepEqual(matches, []);
+  });
+
+  it('allows the four lines once each and rejects a second theme-color meta or an extra hex line', () => {
+    const [html, spec, assets1] = ALLOWED;
+    const assets2 = ALLOWED[3];
+    const ok = {
+      [html.file]: `  ${html.line}\n`,
+      [spec.file]: `${spec.line}\n`,
+      [assets1.file]: `${assets1.line}\n${assets2.line}\n`,
+    };
+    assert.deepEqual(findColourLiterals(ok), []);
+    // A second theme-color meta, even identical, exceeds the max count of 1.
+    assert.equal(
+      findColourLiterals({ ...ok, [html.file]: `${html.line}\n${html.line}\n` }).length,
+      1,
+    );
+    // A different theme-color meta is not on the list.
+    assert.equal(
+      findColourLiterals({
+        ...ok,
+        [html.file]: `${html.line}\n<meta name="theme-color" content="#000000" />\n`,
+      }).length,
+      1,
+    );
+    // An extra hex line in an allowed file, and the same line in another file.
+    assert.equal(
+      findColourLiterals({
+        ...ok,
+        [assets1.file]: `${ok[assets1.file]}  border_color: '#123456',\n`,
+      }).length,
+      1,
+    );
+    assert.equal(
+      findColourLiterals({ ...ok, [join('src', 'other.ts')]: `${assets1.line}\n` }).length,
+      1,
+    );
   });
 
   it('catches a colour literal and ignores comments that name an issue', () => {
