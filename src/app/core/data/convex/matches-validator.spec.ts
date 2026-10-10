@@ -45,7 +45,7 @@ describe('matchesValidator', () => {
     ['a total that is a string', { ...PAGE, leagueCount: '1' }],
     ['a missing total', { name: PAGE.name, slug: PAGE.slug, leagueCount: 1, locationCount: 1 }],
     [
-      'the shape before #101 (totals, no sports)',
+      'the shape before issue 101 (totals, no sports)',
       { name: PAGE.name, slug: PAGE.slug, leagueCount: 1, locationCount: 1, sportCount: 1 },
     ],
     [
