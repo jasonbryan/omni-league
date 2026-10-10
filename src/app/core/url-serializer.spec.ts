@@ -36,6 +36,25 @@ describe('QueryTolerantUrlSerializer', () => {
     expect(serializer.serialize(serializer.parse(url))).toBe(plain.serialize(plain.parse(bare)));
   });
 
+  // The router decodes the fragment with `decodeURIComponent`, so `/x#%` throws `URIError` and the
+  // router would navigate to `/` (#116).
+  it.each([
+    ['/x#%', '/x'],
+    ['/x#%E0%A4%A', '/x'],
+    ['/x?q=1#%', '/x?q=1'],
+    ['/x?q=%#%', '/x'],
+    ['/x/#%', '/x/'],
+  ])('drops the undecodable fragment of %s and reads %s', (url, bare) => {
+    const tree = serializer.parse(url);
+    expect(tree.fragment).toBeNull();
+    expect(serializer.serialize(tree)).toBe(plain.serialize(plain.parse(bare)));
+  });
+
+  it('keeps a decodable fragment', () => {
+    expect(serializer.parse('/x#frag%20ok').fragment).toBe('frag ok');
+    expect(serializer.parse('/x?q=%#frag%20ok').fragment).toBe('frag ok');
+  });
+
   it.each(['/x', '/x?ref=%41', '/x?q=1#top', '/x/(y)', '/a;b=c?d=e', '/?q=%25'])(
     'reads %s as the default serializer does',
     (url) => {
@@ -43,7 +62,7 @@ describe('QueryTolerantUrlSerializer', () => {
     },
   );
 
-  it.each(['/%', '/%?q=1', '/%?q=%', '/a(b', '/a(?q=%'])(
+  it.each(['/%', '/%?q=1', '/%?q=%', '/a(b', '/a(?q=%', '/%#%', '/a(b#%'])(
     'still throws for %s, whose path the router cannot read',
     (url) => {
       expect(() => plain.parse(url)).toThrow();
@@ -75,6 +94,27 @@ describe('the app router with the query-tolerant serializer', () => {
 
     // A string URL goes through `Router.parseUrl`, as the browser's URL does on the first navigation.
     await router.navigateByUrl('/x?q=%');
+
+    expect(router.url).toBe('/x');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('stays on the page for an undecodable fragment, with no NG04018 warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', component: HomePage },
+          { path: 'x', component: XPage },
+        ]),
+        provideLocationMocks(),
+        { provide: UrlSerializer, useClass: QueryTolerantUrlSerializer },
+      ],
+    });
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/x#%');
 
     expect(router.url).toBe('/x');
     expect(warn).not.toHaveBeenCalled();

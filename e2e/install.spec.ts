@@ -70,8 +70,6 @@ test.describe('install to the Home Screen', () => {
     ({ browserName, isMobile }) => browserName !== 'chromium' || isMobile,
     'chromium-desktop only',
   );
-  // `/app` and the unknown path are 404 pages (the page's own resource message is expected).
-  test.use({ expectedDocumentStatus: 404 });
 
   test('head tags, manifest, icons, and the parsed manifest', async ({
     page,
