@@ -18,6 +18,7 @@ import { convexToJson } from 'convex/values';
 import { CONVEX_CLIENT } from './client-token';
 import { CONVEX_URL } from './convex-url';
 import { ConvexNotConfiguredError } from './errors';
+import { ConvexSavedCopies } from './saved-copies';
 import { ConvexServerQueryLoader, transferKey } from './server-query-loader';
 import { ConvexHydrationWindow, decodeTransferred, type TransferredQuery } from './transfer';
 
@@ -29,6 +30,12 @@ export interface QueryRef<T> {
   readonly value: Signal<T | undefined>;
   readonly isLoading: Signal<boolean>;
   readonly error: Signal<Error | undefined>;
+  /**
+   * When the value shown was saved, in epoch milliseconds, while `value()` is a saved copy (an
+   * allow-listed query in the browser with no transferred value and no live result yet, ADR 0013
+   * section 3); `undefined` otherwise, and from the first live result on.
+   */
+  readonly savedAt: Signal<number | undefined>;
 }
 
 function isArgsFn<A>(args: A | (() => A | SkipToken)): args is () => A | SkipToken {
@@ -57,6 +64,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       request: Request;
       value?: FunctionReturnType<Q>;
       error?: Error;
+      savedAt?: number;
     }
 
     const readArgs = (): FunctionArgs<Q> | SkipToken => (isArgsFn(args) ? args() : args);
@@ -81,6 +89,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
         value: signal<FunctionReturnType<Q> | undefined>(undefined).asReadonly(),
         isLoading: signal(false).asReadonly(),
         error: signal<Error | undefined>(error).asReadonly(),
+        savedAt: signal<number | undefined>(undefined).asReadonly(),
       };
     }
 
@@ -108,14 +117,30 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       return req;
     };
 
+    // Saved copies (ADR 0013 section 3): browser only, allow-listed queries only, and only for a
+    // request with no transferred seed. Read once per request, synchronously, so a page opened
+    // offline renders its saved copy on the first render. The server never reads them.
+    const savedCopies = client ? inject(ConvexSavedCopies) : null;
+    const saved = computed<Result | undefined>(() => {
+      const req = readRequest();
+      if (req === skipToken || !savedCopies || seed?.request === req) return undefined;
+      const copy = untracked(() => savedCopies.read(query, req.args));
+      return copy
+        ? { request: req, value: copy.value as FunctionReturnType<Q>, savedAt: copy.savedAt }
+        : undefined;
+    });
+
     // A result counts only for the request that produced it, so an args change reads as loading.
+    // Precedence: the live result, then the transferred seed, then a saved copy, then loading.
     const result = signal<Result | undefined>(undefined);
     const current = computed(() => {
       const req = readRequest();
       if (req === skipToken) return undefined;
       const latest = result();
       if (latest?.request === req) return latest;
-      return seed?.request === req ? seed : undefined;
+      if (seed?.request === req) return seed;
+      const copy = saved();
+      return copy?.request === req ? copy : undefined;
     });
 
     effect((onCleanup) => {
@@ -131,7 +156,11 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
         client!.onUpdate(
           query,
           req.args,
-          (value) => result.set({ request: req, value }),
+          (value) => {
+            result.set({ request: req, value });
+            // Each live result becomes the saved copy; `null` removes it. Not listed: no-op.
+            savedCopies?.write(query, req.args, value);
+          },
           (error) => result.set({ request: req, error }),
         ),
       );
@@ -142,6 +171,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       value: computed(() => current()?.value),
       isLoading: computed(() => readRequest() !== skipToken && !current()),
       error: computed(() => current()?.error),
+      savedAt: computed(() => current()?.savedAt),
     };
   });
 }

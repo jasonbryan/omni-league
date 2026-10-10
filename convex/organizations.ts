@@ -1,40 +1,26 @@
-import { v, type Infer } from 'convex/values';
+import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { getPublicPageReturns } from './lib/publicPage';
 import { isSlug } from './lib/slugs';
 import { sportName } from './lib/sports';
 
 /** Most locations and leagues a public page lists; the reads stay bounded. */
 export const PUBLIC_PAGE_LIMIT = 200;
 
-/** Everything the public organization page shows, and nothing else (no ids, staff, or payments). */
-export const publicPageValidator = v.object({
-  name: v.string(),
-  slug: v.string(),
-  locations: v.array(v.object({ name: v.string(), address: v.string() })),
-  leagues: v.array(
-    v.object({
-      name: v.string(),
-      sportName: v.string(),
-      locationNames: v.array(v.string()),
-    }),
-  ),
-});
-
-export type PublicPage = Infer<typeof publicPageValidator>;
-
 /**
  * The public page of the organization with this slug, or `null` when there is none (#60).
  *
  * Deliberately public (convex.md, Functions): visitors and crawlers read it without signing in,
  * and the server render calls it anonymously. It reads no identity, so every caller gets the same
- * result, and returns only the fields of `publicPageValidator`. #66 adds the draft filter: leagues
- * stay off this page until they are published.
+ * result, and returns only the fields of `publicPageValidator` (`lib/publicPage.ts`). #66 adds
+ * the draft filter: leagues stay off this page until they are published.
  */
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (ADR 0002): an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
   args: { slug: v.string() },
-  returns: v.union(v.null(), publicPageValidator),
+  // The app checks saved copies against this same validator (convex/lib/publicPage.ts, #82).
+  returns: getPublicPageReturns,
   handler: async (ctx, { slug }) => {
     if (!isSlug(slug)) return null;
     const organization = await ctx.db
