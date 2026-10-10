@@ -83,8 +83,17 @@ jobs:
           case "$GITHUB_EVENT_NAME" in
             push)
               # Only the first line of each commit message, and only digits from it, are used.
-              prs="$(jq -r '(.commits // [])[].message | split("\n")[0]' "$GITHUB_EVENT_PATH" \
-                | grep -oE '\(#[1-9][0-9]*\)' | tr -d '(#)' | sort -un | head -n 20 || true)"
+              nums="$(jq -r '(.commits // [])[].message | split("\n")[0]' "$GITHUB_EVENT_PATH" \
+                | grep -oE '\(#[1-9][0-9]*\)' | tr -d '(#)' || true)"
+              # A number of 10 or more digits is no PR number: skip it with a notice, never fail.
+              for big in $(printf '%s\n' "$nums" | grep -E '^[0-9]{10,}$' || true); do
+                echo "::notice title=Skipped an oversized number::(#${big:0:12}...) in a commit subject is too long to be a PR number, so it was skipped."
+              done
+              # Each number once (at its last place), at most 20. A squash subject names its own PR
+              # last, so tail keeps it. sort -n only sets the run order.
+              prs="$(printf '%s\n' "$nums" | grep -E '^[0-9]{1,9}$' \
+                | awk '{ a[NR] = $0; l[$0] = NR } END { for (i = 1; i <= NR; i++) if (l[a[i]] == i) print a[i] }' \
+                | tail -n 20 | sort -n || true)"
               if [ -z "$prs" ]; then
                 echo "No (#<n>) in the pushed commit subjects; the daily sweep covers any preview."
                 exit 0

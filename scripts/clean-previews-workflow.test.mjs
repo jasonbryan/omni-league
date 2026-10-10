@@ -262,6 +262,37 @@ describe('clean-previews workflow scripts, executed', () => {
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(subject)), pr(7, 8));
   });
 
+  it('a push skips an oversized number with a notice, deletes the rest, and exits 0', () => {
+    const big = '99999999999999999999';
+    const result = bash(
+      deleteScript,
+      { GITHUB_EVENT_NAME: 'push' },
+      push(`fix: a (#${big}) (#12)`, 'chore: b (#1234567890)'),
+    );
+    assert.equal(result.status, 0);
+    assert.equal(result.nodeArgs.trim(), pr(12));
+    assert.equal(result.stdout.match(/::notice title=Skipped an oversized number/g)?.length, 2);
+    // Nine digits is still a PR number.
+    assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push('c (#999999999)')), pr(999999999));
+    // Only an oversized number: no run, exit 0.
+    const only = bash(deleteScript, { GITHUB_EVENT_NAME: 'push' }, push(`d (#${big})`));
+    assert.equal(only.status, 0);
+    assert.equal(only.nodeArgs, '');
+  });
+
+  it('a push past 20 numbers keeps the last 20, so the PR own number survives', () => {
+    const numbers = Array.from({ length: 30 }, (_, i) => i + 1);
+    const subject = `feat: x ${numbers.map((n) => `(#${n})`).join(' ')}`;
+    const kept = numbers.slice(-20);
+    assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(subject)), pr(...kept));
+    // Across commits: the newest commit's numbers come last and win.
+    const commits = numbers.map((n) => `fix: c${n} (#${n})`);
+    assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(...commits)), pr(...kept));
+    // The PR number need not be the highest: the last match is kept, counted at its last place.
+    const lowLast = `feat: y ${[...numbers, 5].map((n) => `(#${n})`).join(' ')}`;
+    assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(lowLast)), pr(5, ...numbers.slice(11)));
+  });
+
   it('a push run fails when any single delete fails, after trying the rest', () => {
     const script = deleteScript.replaceAll('node scripts', 'false scripts');
     const result = bash(script, { GITHUB_EVENT_NAME: 'push' }, push('a (#1)', 'b (#2)'));

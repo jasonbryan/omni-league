@@ -464,7 +464,7 @@ Scale the traffic by a factor _k_. Previews and production deploys stay fixed.
 - **A PR cannot read the production key.**
   - Netlify supplies variable values per context, so a PR that edits `netlify.toml` still gets the preview value.
   - A changed production command takes effect only after the owner merges a release PR into `production`.
-- **No GitHub environment is used.** GitHub Pro's environment secrets and deployment branch policies are not needed, because no deploy credential lives in GitHub.
+- **No deploy credential lives in a GitHub environment.** GitHub Pro's environment secrets and deployment branch policies are not needed for deploys. The one environment, `preview-cleanup`, holds the cleanup token (see the amendment table below, which takes precedence).
 - **Residual risk: agents act through the owner's GitHub account.** A push or merge to `production` by that account builds production.
   - **GitHub Pro narrows this.** The owner adds a `production` ruleset that blocks deletion and force-push, requires a pull request, and requires ADR 0009's single status check `ci` (source "GitHub Actions"), with "Require branches to be up to date before merging" on, as on `main`. On a release PR into `production`, `ci` also runs the `webkit-mobile` e2e project (ADR 0009), so a WebKit failure blocks the release. A stray direct push then fails.
   - **It does not close it.** The ruleset cannot tell an agent from the owner, and required approvals would block the owner too (Context, GitHub plan).
