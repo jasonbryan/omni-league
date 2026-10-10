@@ -42,11 +42,21 @@ Owner answers, 2026-10-09 (chat), as corrected the same day: "I would like a cor
 - **Joining needs an account.** To accept an invite, join a team, or register, the person signs up for an account (or signs in). Adult rostered players therefore always have accounts.
 - **A pending invite is not a roster entry.** The invited person is on the roster only after accepting.
 - **Minors** are always roster entries under a guardian, with no account.
-- **Guardian (working assumption, to confirm):** an adult user who manages minors' roster entries and may also be a player.
+- **Guardian** (owner, chat, 2026-10-10: "As proposed", answering [#139](https://github.com/jasonbryan/omni-league/issues/139#issuecomment-6098208263)): an adult account holder who adds and manages a minor's roster entry and may also play.
+  - A captain invites the guardian's email; on accepting, the guardian joins the roster, adds a minor, or both.
+  - Only the minor's display name is stored.
+  - Opponents see a minor's first name and last initial.
 
 ## Seasons
 
 A league runs repeated **seasons** (owner answer, 2026-10-09). Registration, teams, the schedule, standings, and fees belong to a season.
+
+Owner answers, 2026-10-10 (chat):
+
+- **Registration deadline** ("Organizer sets a date"): each season has a registration deadline set by an organizer. Registration also closes when the season starts.
+- **Limits:** a season can have a maximum number of teams and a maximum roster size, which is at or above the sport format's minimum roster size.
+- **Waitlist:** when a season is full, new teams go on its waitlist, and an organizer promotes teams from it.
+- **One team per season** ("No" to playing on two teams): a person is on at most one team in a season, and a rostered player cannot also be a free agent in that season.
 
 ## Registration
 
@@ -158,12 +168,15 @@ Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted
 
 Questions still open for the owner. The planner records them as `status:blocked` issues or in the PR that raises them, rather than inventing requirements.
 
-1. **Guardian:** confirm the working assumption above.
-2. **Standings:** confirm or change the proposed defaults per sport.
-3. **Fee percentage:** the percentage of each registration payment.
-4. **Per-player floor:** the minimum fee per roster entry, in dollars.
-5. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
-6. **Fee on refunds and lost disputes:** whether the platform returns the application fee when a payment is refunded or a dispute is lost.
-7. **Push notifications (#85):** who receives each kind, when game reminders are sent, and whether users choose per kind.
+1. **Standings:** confirm or change the proposed defaults per sport.
+2. **Fee percentage:** the percentage of each registration payment.
+3. **Per-player floor:** the minimum fee per roster entry, in dollars.
+4. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
+5. **Fee on refunds and lost disputes:** whether the platform returns the application fee when a payment is refunded or a dispute is lost.
+6. **Push notifications (#85):** who receives each kind, when game reminders are sent, and whether users choose per kind.
+7. **Invite email:** whether the platform emails team invites, or the captain sends the link (#131).
+8. **Free agents:** what a free agent tells the organizer (position, skill, availability), and whether free agents and waitlisted teams can withdraw (#133, #145).
+9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
+10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
 
 Features beyond the above are not yet specified.
