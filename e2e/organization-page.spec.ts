@@ -10,7 +10,13 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
-import { numberedLocations, seedTenant, SPORT_NAMES, type Tenant } from './support/tenant';
+import {
+  numberedLocations,
+  seedTenant,
+  SPORT_NAMES,
+  tallLocations,
+  type Tenant,
+} from './support/tenant';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -35,18 +41,12 @@ function smallTenant(): Promise<Tenant> {
 }
 
 /**
- * Two leagues and five locations, the most a list shows (#100), with addresses long enough to wrap
- * over several lines: the last location's row starts below the fold at 1280x720 and at 360x800
- * (asserted by the tests that use it).
+ * Two leagues and five locations, the most a list shows (#100): the last location's row starts
+ * below the fold at 1280x720 and at 360x800 (asserted by the tests that use it).
  */
 function tallTenant(): Promise<Tenant> {
   return seedTenant({
-    locations: numberedLocations(5).map((location, i) => ({
-      ...location,
-      address:
-        `${location.address}, Building ${i + 1}, Suite ${i + 1}00, at the north gate of the ` +
-        'Corpus Christi Municipal Recreation District grounds, past the visitor parking lot',
-    })),
+    locations: tallLocations(),
     leagues: [
       { name: 'Alpha League', sport: 'soccer', locations: ['Location 01'] },
       { name: 'Beta League', sport: 'softball', locations: ['Location 02', 'Location 03'] },
