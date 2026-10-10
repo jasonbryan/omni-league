@@ -37,6 +37,12 @@ const ALLOWED_PREVIEW = {
   AUTH_EMAIL_DISABLED: 'true',
 };
 
+/** The variables a production deployment must have (#111); none of the forbidden ones. */
+const ALLOWED_PRODUCTION = {
+  SITE_URL: SECRET.SITE_URL,
+  BETTER_AUTH_SECRET: SECRET.BETTER_AUTH_SECRET,
+};
+
 /** Runs `runCheck` with a stub reader and captures everything it writes. */
 async function run(mode, vars) {
   const out = [];
@@ -109,7 +115,7 @@ describe('checkDeployEnv, preview mode', () => {
     );
     assert.deepEqual(
       failures.map((line) => line.split(' ')[0]),
-      ['IS_TEST', 'AUTH_EMAIL_DISABLED', 'RESEND_API_KEY'],
+      ['IS_TEST', 'AUTH_EMAIL_DISABLED', 'RESEND_API_KEY', 'BETTER_AUTH_SECRET', 'SITE_URL'],
     );
   });
 
@@ -126,19 +132,25 @@ describe('checkDeployEnv, preview mode', () => {
 
 describe('checkDeployEnv, production mode', () => {
   it('passes when neither IS_TEST nor AUTH_EMAIL_DISABLED is set', async () => {
-    const reader = stubReader({ SITE_URL: SECRET.SITE_URL, RESEND_API_KEY: SECRET.RESEND_API_KEY });
+    const reader = stubReader({ ...ALLOWED_PRODUCTION, RESEND_API_KEY: SECRET.RESEND_API_KEY });
     assert.deepEqual(await checkDeployEnv('production', reader), []);
     assert.deepEqual(reader.reads, []);
   });
 
   it('fails when IS_TEST is set', async () => {
-    const failures = await checkDeployEnv('production', stubReader({ IS_TEST: SECRET.IS_TEST }));
+    const failures = await checkDeployEnv(
+      'production',
+      stubReader({ ...ALLOWED_PRODUCTION, IS_TEST: SECRET.IS_TEST }),
+    );
     assert.equal(failures.length, 1);
     assert.match(failures[0], /^IS_TEST /);
   });
 
   it('fails when PREVIEW_ORIGIN_PATTERN is set, without reading its value (#97)', async () => {
-    const reader = stubReader({ PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN });
+    const reader = stubReader({
+      ...ALLOWED_PRODUCTION,
+      PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN,
+    });
     const failures = await checkDeployEnv('production', reader);
     assert.equal(failures.length, 1);
     assert.match(failures[0], /^PREVIEW_ORIGIN_PATTERN /);
@@ -149,12 +161,78 @@ describe('checkDeployEnv, production mode', () => {
     it(`fails when AUTH_EMAIL_DISABLED is set (to ${JSON.stringify(value)})`, async () => {
       const failures = await checkDeployEnv(
         'production',
-        stubReader({ AUTH_EMAIL_DISABLED: value }),
+        stubReader({ ...ALLOWED_PRODUCTION, AUTH_EMAIL_DISABLED: value }),
       );
       assert.equal(failures.length, 1);
       assert.match(failures[0], /^AUTH_EMAIL_DISABLED /);
     });
   }
+});
+
+// #111: a deployment with no BETTER_AUTH_SECRET would sign with Better Auth's public default
+// secret, and one with no SITE_URL trusts no origin. Names only: the values are never read.
+describe('checkDeployEnv, required auth variables (#111)', () => {
+  const without = (vars, ...names) =>
+    Object.fromEntries(Object.entries(vars).filter(([name]) => !names.includes(name)));
+
+  for (const [mode, allowed] of [
+    ['preview', ALLOWED_PREVIEW],
+    ['production', ALLOWED_PRODUCTION],
+  ]) {
+    it(`${mode}: fails with one line starting "BETTER_AUTH_SECRET is not set" when only the secret is missing`, async () => {
+      const failures = await checkDeployEnv(
+        mode,
+        stubReader(without(allowed, 'BETTER_AUTH_SECRET')),
+      );
+      assert.equal(failures.length, 1);
+      assert.match(failures[0], /^BETTER_AUTH_SECRET is not set/);
+    });
+
+    it(`${mode}: fails with one line starting "SITE_URL is not set" when only SITE_URL is missing`, async () => {
+      const failures = await checkDeployEnv(mode, stubReader(without(allowed, 'SITE_URL')));
+      assert.equal(failures.length, 1);
+      assert.match(failures[0], /^SITE_URL is not set/);
+    });
+
+    it(`${mode}: reports both when both are missing, and runCheck says 2 problem(s)`, async () => {
+      const vars = without(allowed, 'BETTER_AUTH_SECRET', 'SITE_URL');
+      const failures = await checkDeployEnv(mode, stubReader(vars));
+      assert.deepEqual(
+        failures.map((line) => line.split(' ')[0]),
+        ['BETTER_AUTH_SECRET', 'SITE_URL'],
+      );
+      const result = await run(mode, vars);
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, /2 problem\(s\)/);
+      assertNoValue(result);
+    });
+
+    it(`${mode}: runCheck returns 1 when only the secret is missing and 0 when both are set`, async () => {
+      assert.equal((await run(mode, without(allowed, 'BETTER_AUTH_SECRET'))).code, 1);
+      assert.equal((await run(mode, allowed)).code, 0);
+    });
+  }
+
+  it('production: with none of the forbidden variables, a missing secret or SITE_URL still fails', async () => {
+    for (const missing of ['BETTER_AUTH_SECRET', 'SITE_URL']) {
+      const vars = without(ALLOWED_PRODUCTION, missing);
+      for (const forbidden of ['IS_TEST', 'AUTH_EMAIL_DISABLED', 'PREVIEW_ORIGIN_PATTERN']) {
+        assert.ok(!(forbidden in vars));
+      }
+      const result = await run('production', vars);
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, new RegExp(`FAIL ${missing} is not set`));
+    }
+  });
+
+  it('reads no value: preview reads only AUTH_EMAIL_DISABLED, production reads none', async () => {
+    const preview = stubReader(without(ALLOWED_PREVIEW, 'BETTER_AUTH_SECRET', 'SITE_URL'));
+    await checkDeployEnv('preview', preview);
+    assert.deepEqual(preview.reads, ['AUTH_EMAIL_DISABLED']);
+    const production = stubReader(without(ALLOWED_PRODUCTION, 'BETTER_AUTH_SECRET', 'SITE_URL'));
+    await checkDeployEnv('production', production);
+    assert.deepEqual(production.reads, []);
+  });
 });
 
 describe('runCheck output', () => {
@@ -174,12 +252,17 @@ describe('runCheck output', () => {
       1,
       ['RESEND_API_KEY'],
     ],
-    ['production', { SITE_URL: SECRET.SITE_URL }, 0, []],
-    ['production', { IS_TEST: SECRET.IS_TEST }, 1, ['IS_TEST']],
-    ['production', { AUTH_EMAIL_DISABLED: 'true' }, 1, ['AUTH_EMAIL_DISABLED']],
+    ['production', ALLOWED_PRODUCTION, 0, []],
+    ['production', { ...ALLOWED_PRODUCTION, IS_TEST: SECRET.IS_TEST }, 1, ['IS_TEST']],
     [
       'production',
-      { PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN },
+      { ...ALLOWED_PRODUCTION, AUTH_EMAIL_DISABLED: 'true' },
+      1,
+      ['AUTH_EMAIL_DISABLED'],
+    ],
+    [
+      'production',
+      { ...ALLOWED_PRODUCTION, PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN },
       1,
       ['PREVIEW_ORIGIN_PATTERN'],
     ],
