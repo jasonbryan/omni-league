@@ -134,6 +134,15 @@ describe('colour literals in src/', () => {
   // The search from #61, run on the source with comments removed: an issue reference such as
   // `#100` in a comment is not a colour.
   const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(/;
+  // The install colours (#80) cannot be tokens: the theme-color meta and the manifest are read by
+  // the browser and the operating system, which know no CSS variable. These are the only lines
+  // allowed, and each is a value fixed by the approved mockup, not a style.
+  const INSTALL_COLOUR_LINES = {
+    [join('src', 'index.html')]: /^<meta name="theme-color" content="#[0-9a-f]{6}" \/>$/,
+    [join('src', 'index.spec.ts')]:
+      /^expect\(meta\?\.getAttribute\('content'\)\)\.toBe\('#[0-9a-f]{6}'\);$/,
+    [join('src', 'pwa-assets.spec.ts')]: /^(?:theme|background)_color: '#[0-9a-f]{6}',$/,
+  };
 
   it('finds nothing in .css, .ts, and .html files except src/styles/tokens.css', async () => {
     const files = (await filesUnder(join(root, 'src'), ['.css', '.ts', '.html'])).filter(
@@ -145,6 +154,7 @@ describe('colour literals in src/', () => {
       withoutComments(await read(file))
         .split('\n')
         .forEach((line, index) => {
+          if (INSTALL_COLOUR_LINES[file]?.test(line.trim())) return;
           if (COLOUR.test(line)) matches.push(`${file}:${index + 1}: ${line.trim()}`);
         });
     }
