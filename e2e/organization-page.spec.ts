@@ -627,6 +627,34 @@ test.describe('organization page: undecodable query string', () => {
   });
 });
 
+// A fragment the router cannot decode (`#%`) is read as no fragment, as an undecodable query string
+// is (#116). The server never sees a fragment, so only the browser's router can send the visitor
+// to `/` (NG04018). The test collects the console messages itself: the console fixture fails only on
+// NG05xx warnings. Against a preview it uses the demo organization.
+test.describe('organization page: undecodable fragment', () => {
+  test('browser: the organization page stays after the first navigation, with no NG04018', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { path, name } = remoteBaseUrl
+      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+      : await smallTenant();
+    const messages: string[] = [];
+    page.on('console', (message) => messages.push(`${message.type()}: ${message.text()}`));
+
+    const response = await page.goto(`${path}#%`);
+    expect(response?.status()).toBe(200);
+    // The server-rendered HTML shows the page whatever the router does next, so wait until the
+    // client router's first navigation has finished: the app is stable once it has hydrated.
+    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+    else await hydrated(consoleGuard);
+
+    expect(messages.filter((message) => message.includes('NG04018'))).toEqual([]);
+    expect(new URL(page.url()).pathname).toBe(path);
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+  });
+});
+
 // ADR 0005: each test seeds its own tenant and sees only its own data, whatever else the shared
 // backend holds (other tests' tenants run in parallel).
 test.describe('tenant isolation', () => {

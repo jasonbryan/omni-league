@@ -136,12 +136,15 @@ export default defineConfig([
     },
   },
 
-  // Server-entry files (src/server.ts and its error module) are bundled into the Netlify edge
-  // function: Web APIs only, and no environment reads, because the production edge function can
-  // read the production deploy key (ADR 0010, #37). This block replaces the options of the
-  // no-restricted-imports block above for these files, so it repeats convex/browser.
+  // Server-entry files (src/server*.ts) and the app file they import
+  // (src/app/core/url-serializer.ts) are bundled into the Netlify edge function: Web APIs only,
+  // and no environment reads, because the production edge function can read the production deploy
+  // key (ADR 0010, #37). A file added to that import graph needs a `files` entry here:
+  // scripts/eslint-edge-runtime.test.mjs walks the imports and fails when one is missing.
+  // This block replaces the options of the no-restricted-imports block above for these files, so
+  // it repeats convex/browser.
   {
-    files: ['src/server*.ts'],
+    files: ['src/server*.ts', 'src/app/core/url-serializer.ts'],
     ignores: ['src/**/*.spec.ts'],
     rules: {
       'no-restricted-globals': [
