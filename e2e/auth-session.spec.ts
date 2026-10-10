@@ -4,9 +4,10 @@
 // authenticates the Convex client, so `users.me` never answers with a name.
 import { test as base, type Page } from '@playwright/test';
 import { TOKEN_PATH as TOKEN, tokensSettled } from './support/auth-tokens';
-import { baseURL, remoteBaseUrl } from './support/env';
+import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { stubNetlifyDrawer } from './support/netlify-drawer';
+import { seedTenant } from './support/tenant';
 import { newUser, type TestUser } from './support/users';
 
 /** The crossDomain plugin's store in `localStorage` (`@convex-dev/better-auth`). */
@@ -236,4 +237,286 @@ base.describe('auth token failures', () => {
       },
     );
   }
+});
+
+/**
+ * Tester (#62, round 4): adversarial checks of the round-3 fixes. A corrupt store never hangs
+ * fetchToken; a signed-in load makes exactly 2 token requests, one after the other; a token
+ * request in flight at sign-out never authenticates Convex, before or after another user signs in.
+ */
+test.describe('auth session store, round 4', () => {
+  for (const raw of [
+    '',
+    'true',
+    '0',
+    '{"better-auth.session_token":"text"}',
+    '{"better-auth.session_token":[]}',
+    '{"better-auth.session_token":{"value":null}}',
+    '{"better-auth.session_token":{"value":""}}',
+    '{"better-auth.session_token":{"value":123,"expires":null}}',
+    '{"better-auth.session_token":{"value":"forged","expires":"not a date"}}',
+    '{"other":null,"better-auth.session_token":{"value":"forged","expires":null}}',
+    `"${'x'.repeat(100_000)}"`,
+  ]) {
+    test(`a corrupt store value ${raw.slice(0, 80)} is signed out and the guard answers`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.evaluate(([key, value]) => localStorage.setItem(key, value), [STORE_KEY, raw]);
+      const seen = authRequests(page);
+      await page.goto('/app');
+      await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+      await settle(page);
+      expect(count(seen, TOKEN)).toBe(0);
+      expect(count(seen, GET_SESSION)).toBeLessThanOrEqual(2);
+    });
+  }
+
+  for (const raw of ['null', '{"better-auth.session_token":null}', '{"a":null}']) {
+    test(`with the store value ${raw}, a public live query still gets its data`, async ({
+      page,
+    }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+      const tenant = await seedTenant({ name: 'Corrupt Store' });
+      const answers: string[] = [];
+      page.on('websocket', (socket) => {
+        socket.on('framereceived', ({ payload }) => {
+          const text = typeof payload === 'string' ? payload : payload.toString();
+          if (text.includes('"Transition"') && text.includes(tenant.name)) answers.push(text);
+        });
+      });
+      await page.goto('/');
+      await page.evaluate(([key, value]) => localStorage.setItem(key, value), [STORE_KEY, raw]);
+      await page.goto(tenant.path);
+      await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
+      await expect.poll(() => answers.length, { timeout: 8_000 }).toBeGreaterThan(0);
+    });
+  }
+
+  test('every signed-in load makes exactly 2 token requests, one after the other', async ({
+    page,
+  }) => {
+    const user = newUser('TwoTokens');
+    const first = tokensSettled(page);
+    await signUp(page, user);
+    await expect(panel(page)).toContainText(user.name);
+    await first;
+
+    const events: string[] = [];
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === TOKEN) events.push('start');
+    });
+    page.on('requestfinished', (r) => {
+      if (new URL(r.url()).pathname === TOKEN) events.push('end');
+    });
+    page.on('requestfailed', (r) => {
+      if (new URL(r.url()).pathname === TOKEN) events.push('failed');
+    });
+    for (const load of [
+      () => page.reload(),
+      () => page.goto('/'),
+      () => page.goto('/app'),
+      () => page.reload(),
+      () => page.goto(`/sign-up?returnTo=${encodeURIComponent('/app')}`),
+    ]) {
+      events.length = 0;
+      const tokens = tokensSettled(page);
+      await load();
+      await tokens;
+      expect(events).toEqual(['start', 'end', 'start', 'end']);
+    }
+  });
+
+  test('several tabs that load at once each make exactly 2 token requests', async ({
+    context,
+    page,
+  }) => {
+    const user = newUser('Tabs');
+    const first = tokensSettled(page);
+    await signUp(page, user);
+    await expect(panel(page)).toContainText(user.name);
+    await first;
+
+    const tabs = await Promise.all(Array.from({ length: 4 }, () => context.newPage()));
+    const perTab = tabs.map((tab) => {
+      const seen = authRequests(tab);
+      return { tab, seen, settled: tokensSettled(tab) };
+    });
+    await Promise.all(perTab.map(({ tab }) => tab.goto('/app')));
+    await Promise.all(perTab.map(({ tab }) => expect(panel(tab)).toContainText(user.name)));
+    await Promise.all(perTab.map(({ settled }) => settled));
+    for (const { seen } of perTab) expect(count(seen, TOKEN)).toBe(2);
+  });
+
+  test('a token request in flight at sign-out never authenticates Convex, even after another user signs in', async ({
+    page,
+  }) => {
+    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+    const alice = newUser('HeldAlice');
+    const bob = newUser('HeldBob');
+    const first = tokensSettled(page);
+    await signUp(page, alice);
+    await expect(panel(page)).toContainText(alice.name);
+    await first;
+
+    // Hold the second token request of the next load (the Convex client's forced refresh) with
+    // Alice's real token in it, until after she signs out and Bob signs in.
+    let intercepted = 0;
+    let heldToken = '';
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let markHeld: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (markHeld = resolve));
+    let markDone: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => (markDone = resolve));
+    await page.route(
+      (url) => url.pathname === TOKEN,
+      async (route) => {
+        intercepted += 1;
+        if (intercepted !== 2) return route.continue();
+        const response = await route.fetch();
+        heldToken = ((await response.json()) as { token: string }).token;
+        markHeld();
+        await released;
+        await route.fulfill({ response });
+        markDone();
+      },
+    );
+    const authFramesAfterRelease: string[] = [];
+    let afterRelease = false;
+    const aliceAnswers: string[] = [];
+    let afterSignOut = false;
+    page.on('websocket', (socket) => {
+      socket.on('framesent', ({ payload }) => {
+        const text = typeof payload === 'string' ? payload : payload.toString();
+        if (afterRelease && text.includes('"Authenticate"')) authFramesAfterRelease.push(text);
+      });
+      socket.on('framereceived', ({ payload }) => {
+        const text = typeof payload === 'string' ? payload : payload.toString();
+        if (afterSignOut && text.includes(alice.name)) aliceAnswers.push(text);
+      });
+    });
+
+    await page.reload();
+    await expect(panel(page)).toContainText(alice.name);
+    await held;
+    expect(heldToken).not.toBe('');
+
+    afterSignOut = true;
+    await panel(page).getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL(`${baseURL}/`);
+
+    // Client-side navigation keeps this document, so the held request stays in flight.
+    await page.evaluate(() => {
+      history.pushState(null, '', '/sign-up');
+      dispatchEvent(new PopStateEvent('popstate', { state: null }));
+    });
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeVisible();
+    await page.locator('#name').fill(bob.name);
+    await page.locator('#email').fill(bob.email);
+    await page.locator('#password').fill(bob.password);
+    await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
+    await page.getByRole('button', { name: /Create account/ }).click();
+    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(panel(page)).toContainText(bob.name);
+    // Bob's tokens were new requests, not Alice's held one.
+    expect(intercepted).toBeGreaterThanOrEqual(3);
+
+    afterRelease = true;
+    release();
+    await done;
+    await page.waitForTimeout(3_000);
+    await expect(panel(page)).toContainText(bob.name);
+    expect(aliceAnswers).toEqual([]);
+    expect(authFramesAfterRelease.filter((frame) => frame.includes(heldToken))).toEqual([]);
+  });
+});
+
+base.describe('auth token failures, round 4', () => {
+  base.beforeEach(async ({ context }) => {
+    if (remoteBaseUrl) await stubNetlifyDrawer(context);
+  });
+
+  for (const failure of ['network', 'http-500'] as const) {
+    base(
+      `a slow ${failure} token request is shared by both setAuth calls and never authenticates Convex`,
+      async ({ page }) => {
+        const pageErrors: string[] = [];
+        page.on('pageerror', (error) => pageErrors.push(error.message));
+        const user = newUser('SlowFail');
+        const first = tokensSettled(page);
+        await signUp(page, user);
+        await expect(panel(page)).toContainText(user.name);
+        await first;
+
+        const starts: number[] = [];
+        await page.route(
+          (url) => url.pathname === TOKEN,
+          async (route) => {
+            starts.push(Date.now());
+            // Slow enough that the Convex client's second setAuth call starts while it waits.
+            await new Promise((resolve) => setTimeout(resolve, 1_500));
+            if (failure === 'network') return route.abort('failed');
+            return route.fulfill({
+              status: 500,
+              headers: {
+                'access-control-allow-origin': new URL(baseURL).origin,
+                'access-control-allow-credentials': 'true',
+                'content-type': 'application/json',
+              },
+              body: '{"message":"boom"}',
+            });
+          },
+        );
+        await page.reload();
+        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await page.waitForTimeout(5_000);
+        await expect(panel(page)).toHaveCount(0);
+        // Both setAuth calls share the first (slow) request; the Convex client's own forced
+        // refetch after a null token is the second. Unshared, the first two would start together.
+        expect(starts).toHaveLength(2);
+        expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(1_400);
+        expect(pageErrors).toEqual([]);
+      },
+    );
+  }
+});
+
+test.describe('auth token refresh, round 4', () => {
+  // The second token request of a signed-in load is the Convex client's forced refresh
+  // (forceRefreshToken: true, once the server confirms the first token). A cache that answered
+  // it would make one request, and the client would never authenticate with a fresh token.
+  test('the forced refresh makes its own request, and Convex authenticates with its token', async ({
+    page,
+  }) => {
+    const user = newUser('Refresh');
+    const first = tokensSettled(page);
+    await signUp(page, user);
+    await expect(panel(page)).toContainText(user.name);
+    await first;
+
+    // Each token's response; the Convex client sends the last one it fetched.
+    const tokens: string[] = [];
+    page.on('response', async (response) => {
+      if (new URL(response.url()).pathname !== TOKEN || response.status() !== 200) return;
+      tokens.push(((await response.json()) as { token: string }).token);
+    });
+    const authenticated: string[] = [];
+    page.on('websocket', (socket) => {
+      socket.on('framesent', ({ payload }) => {
+        const text = typeof payload === 'string' ? payload : payload.toString();
+        if (!text.includes('"Authenticate"')) return;
+        const message = JSON.parse(text) as { value?: string };
+        if (message.value) authenticated.push(message.value);
+      });
+    });
+    const settled = tokensSettled(page);
+    await page.reload();
+    await expect(panel(page)).toContainText(user.name);
+    await settled;
+    await expect.poll(() => tokens.length).toBe(2);
+    await expect.poll(() => authenticated.at(-1)).toBe(tokens[1]);
+  });
 });

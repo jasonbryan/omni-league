@@ -322,6 +322,98 @@ describe('AuthService', () => {
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
     });
 
+    // Tester (#62, round 4): many simultaneous callers, before and after the session check settles.
+    describe('with many simultaneous callers', () => {
+      const CALLERS = 50;
+      const many = (auth: AuthService, forceRefreshToken = false) =>
+        Array.from({ length: CALLERS }, () => auth.fetchToken({ forceRefreshToken }));
+
+      it('makes one request for callers that start before the session check settles', async () => {
+        const auth = configure();
+        client.nextToken = 'jwt-1';
+        const calls = many(auth);
+        await loaded();
+        expect(client.tokenRequests).toBe(0);
+        client.emitSession({ id: 's1' });
+        const tokens = await Promise.all(calls);
+        expect(new Set(tokens)).toEqual(new Set(['jwt-1']));
+        expect(client.tokenRequests).toBe(1);
+      });
+
+      it('makes one request for callers that start while it is in flight', async () => {
+        const auth = configure();
+        client.emitSession({ id: 's1' });
+        client.holdTokens = true;
+        const calls = many(auth);
+        await loaded();
+        const late = many(auth);
+        await loaded();
+        expect(client.tokenRequests).toBe(1);
+        client.nextToken = 'jwt-1';
+        client.releaseTokens();
+        const tokens = await Promise.all([...calls, ...late]);
+        expect(tokens).toHaveLength(CALLERS * 2);
+        expect(new Set(tokens)).toEqual(new Set(['jwt-1']));
+        expect(client.tokenRequests).toBe(1);
+      });
+
+      it.each([
+        ['is refused', () => (client.nextToken = null)],
+        ['throws', () => (client.tokenThrows = new TypeError('Load failed'))],
+      ])('returns null to every caller when the shared request %s', async (_, fail) => {
+        const auth = configure();
+        client.emitSession({ id: 's1' });
+        client.holdTokens = true;
+        const calls = many(auth);
+        await loaded();
+        fail();
+        client.releaseTokens();
+        const tokens = await Promise.all(calls);
+        expect(new Set(tokens)).toEqual(new Set([null]));
+        expect(client.tokenRequests).toBe(1);
+        // Nothing failed is cached: the next caller asks again.
+        client.tokenThrows = null;
+        client.nextToken = 'jwt-2';
+        await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
+        expect(client.tokenRequests).toBe(2);
+      });
+
+      it('starts one new request per forced refresh among waiting callers', async () => {
+        const auth = configure();
+        client.emitSession({ id: 's1' });
+        client.holdTokens = true;
+        const before = many(auth);
+        await loaded();
+        const forced = auth.fetchToken({ forceRefreshToken: true });
+        await loaded();
+        const after = many(auth);
+        await loaded();
+        expect(client.tokenRequests).toBe(2);
+        client.nextToken = 'jwt-2';
+        client.releaseTokens();
+        await Promise.all([...before, forced, ...after]);
+        expect(client.tokenRequests).toBe(2);
+        await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
+        expect(client.tokenRequests).toBe(2);
+      });
+
+      it('returns null to every caller waiting at sign-out, and makes no request after it', async () => {
+        const auth = configure();
+        client.emitSession({ id: 's1' });
+        client.holdTokens = true;
+        client.nextToken = 'jwt-old';
+        const calls = many(auth);
+        await loaded();
+        await auth.signOut();
+        client.emitSession(null);
+        client.releaseTokens();
+        const tokens = await Promise.all(calls);
+        expect(new Set(tokens)).toEqual(new Set([null]));
+        await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+        expect(client.tokenRequests).toBe(1);
+      });
+    });
+
     it('reports whether Convex accepted the token through onChange', () => {
       const auth = configure();
       expect(auth.convexAuthenticated()).toBe(false);
