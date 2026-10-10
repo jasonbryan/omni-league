@@ -104,6 +104,11 @@ async function render(request: Request): Promise<Response> {
     if (probe === '2') return queryDroppedRedirect(`${url.origin}${pathname}`);
     if (probe === '3') return queryDroppedRedirect(`${pathname}#`);
     if (probe === '4') return queryDroppedRedirect(`.${pathname}`);
+    if (probe === '5') return queryDroppedRedirect(pathname, 303);
+    if (probe === '6') return queryDroppedRedirect(pathname, 307);
+    if (probe === '7') return queryDroppedRedirect(pathname, 308);
+    if (probe === '8') return queryDroppedRedirect(pathname, 301);
+    if (probe === '9') return new Response(null, { status: 302, headers: { Location: pathname, 'Cache-Control': 'no-store', 'Netlify-Vary': 'query' } });
     return queryDroppedRedirect(pathname);
   }
 
@@ -120,9 +125,9 @@ async function render(request: Request): Promise<Response> {
  * `no-store` 302 to `pathname` with no query string. `pathname` has passed `isMalformedPath`,
  * `leadingSlashesRedirect`, and `isUnroutablePath`, so it starts with exactly one `/`.
  */
-function queryDroppedRedirect(pathname: string): Response {
+function queryDroppedRedirect(pathname: string, status = 302): Response {
   return new Response(null, {
-    status: 302,
+    status,
     headers: { Location: pathname, 'Cache-Control': 'no-store' },
   });
 }
