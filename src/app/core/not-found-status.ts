@@ -25,9 +25,9 @@ export function setNotFoundStatus(): void {
 /**
  * Whether `@angular/ssr` will answer with a redirect: the request URL and the URL the router left
  * in `PlatformLocation` differ once both are serialized. It mirrors `renderAngular` and
- * `constructSerializedUrl` in `@angular/ssr@22.2` (`fesm2022/ssr.mjs`); `src/server.spec.ts` and
- * `e2e/not-found.spec.ts` fail if the two drift apart. Also used by `setServerErrorStatus`.
- * Call it in an injection context.
+ * `constructSerializedUrl` in `@angular/ssr@22.2` (`fesm2022/ssr.mjs`); `e2e/not-found.spec.ts`
+ * ("the not-found status agrees with the engine across normalized paths") fails if the two drift
+ * apart. Also used by `setServerErrorStatus`. Call it in an injection context.
  */
 export function willRedirect(): boolean {
   const request = inject(REQUEST, { optional: true });
