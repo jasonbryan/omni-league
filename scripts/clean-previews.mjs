@@ -4,7 +4,7 @@
 //   npm run previews:clean -- --yes        delete without the prompt
 //   npm run previews:clean -- --dry-run    list only; never deletes (wins over --yes)
 //   node scripts/clean-previews.mjs --yes --pr <n>
-//                                          consider only the preview pr-<n> (the workflow on PR close)
+//                                          consider only the preview pr-<n> (the workflow on a push to main)
 //
 // WHY. The Convex team caps deployments (40), and every PR creates a preview deployment `pr-<n>`
 // that nothing removes before Convex's own 5-day expiry. At the cap the next preview build fails
@@ -31,8 +31,9 @@
 // The owner creates the token: Convex dashboard, Team Settings, Access Tokens. See
 // docs/process/hosting.md.
 //
-// AUTOMATION (#158). .github/workflows/clean-previews.yml runs this on PR close (`--yes --pr <n>`)
-// and on a daily schedule (`--yes`), with the repository secret CONVEX_TEAM_TOKEN and the built-in
+// AUTOMATION (#158). .github/workflows/clean-previews.yml runs this on a push to main (`--yes --pr <n>`
+// per PR in the commit subjects) and on a daily schedule (`--yes`), with the environment secret
+// CONVEX_TEAM_TOKEN of `preview-cleanup` (readable only on main) and the built-in
 // workflow token for `gh`. `--pr` narrows the list; every safety rule above still applies,
 // including the CLOSED or MERGED check. `npm run previews:clean` stays as a manual fallback.
 //
@@ -155,7 +156,9 @@ export function createApi({ fetch: fetchFn, token }) {
       throw new Error(`${method} ${path.split('?')[0]} failed: no response`);
     }
     if (!response.ok) {
-      throw new Error(`${method} ${path.split('?')[0]} failed: HTTP ${response.status}`);
+      const failure = new Error(`${method} ${path.split('?')[0]} failed: HTTP ${response.status}`);
+      failure.status = response.status;
+      throw failure;
     }
     return response;
   }
@@ -178,8 +181,13 @@ export function createApi({ fetch: fetchFn, token }) {
       if (!Array.isArray(list)) throw new Error('deployment list was not an array');
       return list;
     },
+    /** A 404 means the deployment is already gone (Convex expired it), which is the goal. */
     async deleteDeployment(name) {
-      await request('POST', `/deployments/${encodeURIComponent(name)}/delete`);
+      try {
+        await request('POST', `/deployments/${encodeURIComponent(name)}/delete`);
+      } catch (failure) {
+        if (failure.status !== 404) throw failure;
+      }
     },
   };
 }

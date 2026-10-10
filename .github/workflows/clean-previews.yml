@@ -1,28 +1,30 @@
 # Deletes the Convex preview deployments of closed and merged PRs (#158), so the Convex team cap of
 # 40 deployments never blocks a new PR preview (`DeploymentQuotaReached`).
 #
-# - A PR closed or merged: deletes only that PR's preview, `pr-<number>`.
+# - A push to main (a merge): deletes the preview of each PR whose number appears in a pushed
+#   commit subject as `(#<n>)`, the form a squash merge writes. Each goes through `--pr <n>`, which
+#   still requires the PR to be CLOSED or MERGED.
 # - Daily (schedule): sweeps every `pr-<n>` whose PR is CLOSED or MERGED, which also catches PRs
-#   whose close event was skipped (a fork or Dependabot PR has no repository secrets, and a run can
-#   fail).
+#   closed without a merge and any push run that was skipped or failed.
 # - By hand (workflow_dispatch): the same sweep, but the `dry_run` input defaults to true, so a
-#   manual run only lists what it would delete. Untick it to delete. Run it once as a dry run after
-#   the secret is added, to check the list before the first scheduled delete.
+#   manual run only lists what it would delete. Untick it to delete (only the exact value false
+#   deletes). Run it once as a dry run after the secret is added, to check the list.
 #
 # The engine is scripts/clean-previews.mjs; its safety rules (preview type, the `pr-<n>` name, the
-# omni-league project, PR state from `gh`) apply here unchanged. Runs `pull_request`, never
-# `pull_request_target`: this repository is private, so a PR from a fork has no secrets.
+# omni-league project, PR state from `gh`) apply here unchanged.
 #
-# SECRET (owner decision 2026-10-10, docs/process/hosting.md "Never in GitHub"): the repository
-# secret CONVEX_TEAM_TOKEN is used only by this workflow, in the env of the one step that runs the
-# script. It is never echoed and never in a `run:` script. When the secret is not set, the job skips
-# with a notice instead of failing, so this workflow can merge before the owner adds the secret.
-# Setup and policy: docs/process/hosting.md, "Cleanup".
+# SECRET (owner decision 2026-10-10, docs/process/hosting.md "Where secrets live"): CONVEX_TEAM_TOKEN
+# is an ENVIRONMENT secret of the `preview-cleanup` environment, whose deployment branches are
+# limited to `main`. The token can mint deploy keys, deploy, delete projects, and change environment
+# defaults, so no branch or PR run may read it: this workflow has no `pull_request` trigger, and the
+# environment refuses any other branch. The token is used only in the env of the one step that runs
+# the script. It is never echoed and never in a `run:` script. When the secret is not set, the job
+# skips with a notice instead of failing. Setup and policy: docs/process/hosting.md, "Cleanup".
 name: Clean previews
 
 on:
-  pull_request:
-    types: [closed]
+  push:
+    branches: [main]
   schedule:
     - cron: '23 5 * * *'
   workflow_dispatch:
@@ -35,16 +37,16 @@ on:
 permissions:
   contents: read
 
-# One run at a time; a delete in progress is never cancelled.
-concurrency:
-  group: clean-previews
-  cancel-in-progress: false
+# No concurrency group: a group lets GitHub replace a pending run, which would drop a push's delete,
+# and every delete is idempotent (a 404 counts as already deleted), so overlapping runs are safe.
 
 jobs:
   clean:
     name: clean
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # The token lives in this environment, which only `main` may deploy to (hosting.md, Cleanup).
+    environment: preview-cleanup
     # `gh pr view` needs pull-requests: read; checkout needs contents: read.
     permissions:
       contents: read
@@ -52,8 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The reviewed script on the default branch on every trigger, never a PR's own copy:
-          # this job holds the token. (A conflicted PR has no merge ref to check out either.)
+          # The reviewed script on the default branch on every trigger: this job holds the token.
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       # The script uses only Node built-ins, so nothing is installed. Node comes from package.json.
@@ -69,7 +70,7 @@ jobs:
         run: |
           echo "present=${HAS_TOKEN}" >> "$GITHUB_OUTPUT"
           if [ "$HAS_TOKEN" != "true" ]; then
-            echo "::notice title=Convex previews not cleaned::The repository secret CONVEX_TEAM_TOKEN is not set (or this run cannot read it), so no preview was deleted. See docs/process/hosting.md, Cleanup."
+            echo "::notice title=Convex previews not cleaned::The environment secret CONVEX_TEAM_TOKEN of preview-cleanup is not set, so no preview was deleted. See docs/process/hosting.md, Cleanup."
           fi
       - name: delete previews
         if: steps.secret.outputs.present == 'true'
@@ -77,13 +78,36 @@ jobs:
           CONVEX_TEAM_TOKEN: ${{ secrets.CONVEX_TEAM_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            node scripts/clean-previews.mjs --yes --pr "$PR_NUMBER"
-          elif [ "$DRY_RUN" = "true" ]; then
-            node scripts/clean-previews.mjs --dry-run
-          else
-            node scripts/clean-previews.mjs --yes
-          fi
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              # Only the first line of each commit message, and only digits from it, are used.
+              prs="$(jq -r '(.commits // [])[].message | split("\n")[0]' "$GITHUB_EVENT_PATH" \
+                | grep -oE '\(#[1-9][0-9]*\)' | tr -d '(#)' | sort -un | head -n 20 || true)"
+              if [ -z "$prs" ]; then
+                echo "No (#<n>) in the pushed commit subjects; the daily sweep covers any preview."
+                exit 0
+              fi
+              status=0
+              for pr in $prs; do
+                node scripts/clean-previews.mjs --yes --pr "$pr" || status=1
+              done
+              exit "$status"
+              ;;
+            schedule)
+              node scripts/clean-previews.mjs --yes
+              ;;
+            workflow_dispatch)
+              # Fail safe: only the exact value false deletes.
+              if [ "$DRY_RUN" = "false" ]; then
+                node scripts/clean-previews.mjs --yes
+              else
+                node scripts/clean-previews.mjs --dry-run
+              fi
+              ;;
+            *)
+              echo "Unexpected event $GITHUB_EVENT_NAME; nothing deleted."
+              exit 1
+              ;;
+          esac

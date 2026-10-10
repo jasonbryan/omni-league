@@ -265,6 +265,19 @@ describe('createApi', () => {
     assert.equal(fetchStub.calls[0].url, `${BASE_URL}/deployments/animal-1/delete`);
   });
 
+  it('counts a 404 on delete as already deleted, and still throws on other statuses', async () => {
+    for (const [status, rejects] of [
+      [404, false],
+      [403, true],
+      [500, true],
+    ]) {
+      const fetchStub = stubFetch({ 'POST /deployments/animal-1/delete': { status } });
+      const api = createApi({ fetch: fetchStub, token: TOKEN });
+      if (rejects) await assert.rejects(api.deleteDeployment('animal-1'), new RegExp(`${status}`));
+      else await api.deleteDeployment('animal-1');
+    }
+  });
+
   it('throws with the HTTP status, never the token, on a failure', async () => {
     const fetchStub = stubFetch({
       'GET /teams/jason-bryan/projects/omni-league': { status: 401, body: { message: TOKEN } },
@@ -426,6 +439,18 @@ describe('runClean', () => {
     assert.match(text, /FAILED animal-2.*500/);
     assert.match(text, /deleted animal-3/);
     assert.match(text, /2 deleted, 1 failed/);
+  });
+
+  it('a preview that expired before the delete (404) is not a failure', async () => {
+    const h = harness({
+      deployments: [prDeployment(1), prDeployment(2)],
+      states: { 1: 'CLOSED', 2: 'CLOSED' },
+      deleteStatus: { 'animal-1': 404 },
+      args: { yes: true },
+    });
+    assert.equal(await h.run(), 0);
+    assert.equal(h.err.length, 0);
+    assert.match(h.out.join('\n'), /2 deleted, 0 failed/);
   });
 
   it('--pr <n> considers only that PR, and still requires it to be closed or merged', async () => {

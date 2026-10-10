@@ -24,18 +24,23 @@ function steps() {
 }
 
 describe('clean-previews workflow triggers', () => {
-  it('runs on PR close, daily, and by hand', () => {
-    assert.match(code, /^on:\n {2}pull_request:\n {4}types: \[closed\]$/m);
+  it('runs on a push to main, daily, and by hand', () => {
+    assert.match(code, /^on:\n {2}push:\n {4}branches: \[main\]\n {2}schedule:/m);
     assert.match(code, /^ {2}schedule:\n {4}- cron: '[^']+'$/m);
     assert.match(code, /^ {2}workflow_dispatch:/m);
   });
 
-  it('never uses pull_request_target or workflow_run', () => {
-    assert.ok(!/pull_request_target|workflow_run/.test(code));
+  it('has no pull_request, pull_request_target, or workflow_run trigger, so no branch run holds the token', () => {
+    assert.ok(!/pull_request|workflow_run/.test(code.replace(/pull-requests: read/, '')));
+    const triggers = /^on:\n([\s\S]*?)^permissions:/m.exec(code)?.[1] ?? '';
+    assert.deepEqual(
+      [...triggers.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]),
+      ['push', 'schedule', 'workflow_dispatch'],
+    );
   });
 
-  it('has a concurrency group that does not cancel a running delete', () => {
-    assert.match(code, /^concurrency:\n {2}group: clean-previews\n {2}cancel-in-progress: false$/m);
+  it('has no concurrency group, which could replace a pending run and drop a delete', () => {
+    assert.ok(!/concurrency:|cancel-in-progress/.test(code));
   });
 });
 
@@ -45,6 +50,13 @@ describe('clean-previews workflow permissions', () => {
     const job = /^ {2}clean:\n([\s\S]*)$/m.exec(code)?.[1] ?? '';
     const permissions = /^ {4}permissions:\n((?: {6}\S.*\n)+)/m.exec(job)?.[1];
     assert.equal(permissions, '      contents: read\n      pull-requests: read\n');
+  });
+
+  it('declares the preview-cleanup environment, which holds the token and limits it to main', () => {
+    const job = /^ {2}clean:\n([\s\S]*)$/m.exec(code)?.[1] ?? '';
+    assert.match(job, /^ {4}environment: preview-cleanup$/m);
+    // A plain name, not a mapping or an expression: the environment cannot depend on the event.
+    assert.ok(!/environment:\s*\n|environment:.*\$\{\{/.test(code));
   });
 
   it('sets timeout-minutes on the job', () => {
@@ -70,7 +82,7 @@ describe('clean-previews workflow actions', () => {
     assert.ok(!/npm (ci|install)/.test(code));
   });
 
-  it('checks out the default branch on every trigger, never a PR ref', () => {
+  it('checks out the default branch on every trigger, never a branch or PR ref', () => {
     const checkout = steps().find((step) => /actions\/checkout@/.test(step)) ?? '';
     assert.match(checkout, /^ {10}ref: \$\{\{ github\.event\.repository\.default_branch \}\}$/m);
     assert.ok(!/github\.(head_ref|sha)|pull_request\.head|refs\/pull/.test(code));
@@ -114,15 +126,15 @@ describe('clean-previews workflow secret handling', () => {
 describe('clean-previews workflow commands', () => {
   const run = steps().find((step) => /node scripts\/clean-previews\.mjs/.test(step)) ?? '';
 
-  it('deletes only the closed PR on a pull_request event, passing the number through env', () => {
-    assert.match(run, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}/);
-    assert.match(run, /node scripts\/clean-previews\.mjs --yes --pr "\$PR_NUMBER"/);
+  it('reads PR numbers from the push event file, never through an expression', () => {
+    assert.match(run, /"\$GITHUB_EVENT_PATH"/);
+    assert.ok(!/github\.event\.(commits|head_commit)/.test(code));
     assert.ok(!/--pr \$\{\{/.test(run));
-    assert.match(run, /"\$GITHUB_EVENT_NAME" = "pull_request"/);
   });
 
-  it('sweeps every closed or merged PR on schedule and dispatch', () => {
-    assert.match(run, /else\n\s+node scripts\/clean-previews\.mjs --yes\n/);
+  it('has no pull_request branch, and an unknown event deletes nothing and fails', () => {
+    assert.ok(!/pull_request/.test(run));
+    assert.match(run, /\*\)\n\s+echo "Unexpected event [^\n]*nothing deleted\."\n\s+exit 1/);
   });
 });
 
@@ -132,6 +144,14 @@ describe('clean-previews workflow dry run on dispatch', () => {
       code,
       /^ {2}workflow_dispatch:\n {4}inputs:\n {6}dry_run:\n(?: {8}.*\n)*? {8}type: boolean\n(?: {8}.*\n)*? {8}default: true\n/m,
     );
+  });
+
+  it('deletes only when the input is exactly false', () => {
+    assert.match(
+      code,
+      /if \[ "\$DRY_RUN" = "false" \]; then\n\s+node scripts\/clean-previews\.mjs --yes\n/,
+    );
+    assert.ok(!/\$DRY_RUN" (=|!=) "true"/.test(code));
   });
 
   it('reads the input through env, and only for a dispatch', () => {
@@ -152,16 +172,23 @@ function runScript(pattern) {
 }
 
 /** Runs a workflow script in bash with a fake `node` that records its arguments. */
-function bash(script, env) {
+function bash(script, env, event) {
   const dir = mkdtempSync(join(tmpdir(), 'clean-previews-'));
   try {
     const log = join(dir, 'node-args');
     const output = join(dir, 'github-output');
     writeFileSync(output, '');
+    const eventPath = join(dir, 'event.json');
+    if (event !== undefined) writeFileSync(eventPath, JSON.stringify(event));
     writeFileSync(join(dir, 'node'), `#!/bin/sh\necho "$@" >> '${log}'\n`);
     chmodSync(join(dir, 'node'), 0o755);
     const result = spawnSync('bash', ['-e', '-c', script], {
-      env: { PATH: `${dir}:/usr/bin:/bin`, GITHUB_OUTPUT: output, ...env },
+      env: {
+        PATH: `${dir}:/usr/bin:/bin`,
+        GITHUB_OUTPUT: output,
+        GITHUB_EVENT_PATH: eventPath,
+        ...env,
+      },
       encoding: 'utf8',
     });
     const read = (file) => {
@@ -197,16 +224,48 @@ describe('clean-previews workflow scripts, executed', () => {
     assert.ok(!result.stdout.includes('::notice'));
   });
 
-  const run = (env) => bash(deleteScript, env).nodeArgs.trim();
+  const run = (env, event) => bash(deleteScript, env, event).nodeArgs.trim();
+  const push = (...messages) => ({ commits: messages.map((message) => ({ message })) });
+  const pr = (...numbers) =>
+    numbers.map((number) => `scripts/clean-previews.mjs --yes --pr ${number}`).join('\n');
 
-  it('a PR close deletes only that PR, whatever the dry-run value', () => {
-    for (const DRY_RUN of ['', 'true', 'false']) {
-      assert.equal(
-        run({ GITHUB_EVENT_NAME: 'pull_request', PR_NUMBER: '159', DRY_RUN }),
-        'scripts/clean-previews.mjs --yes --pr 159',
-        DRY_RUN,
-      );
+  it('a push deletes the PR named in each commit subject, one --pr run each', () => {
+    assert.equal(
+      run(
+        { GITHUB_EVENT_NAME: 'push' },
+        push('feat(organizations): sport counts (#101) (#155)', 'fix: x (#9)'),
+      ),
+      pr(9, 101, 155),
+    );
+  });
+
+  it('a push reads the subject only, and each number once', () => {
+    assert.equal(
+      run(
+        { GITHUB_EVENT_NAME: 'push' },
+        push('fix: a (#12)\n\nbody mentions (#13) and (#14)', 'chore: b (#12)'),
+      ),
+      pr(12),
+    );
+  });
+
+  it('a push with no (#n) in a subject runs nothing and exits 0', () => {
+    for (const event of [push('chore: direct commit'), push('fix: #5 and (#0) and (#x)'), {}]) {
+      const result = bash(deleteScript, { GITHUB_EVENT_NAME: 'push' }, event);
+      assert.equal(result.status, 0, JSON.stringify(event));
+      assert.equal(result.nodeArgs, '');
     }
+  });
+
+  it('a push passes only digits to the script, whatever the subject holds', () => {
+    const subject = 'x (#7) $(touch pwned); `id` --yes (#8)';
+    assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(subject)), pr(7, 8));
+  });
+
+  it('a push run fails when any single delete fails, after trying the rest', () => {
+    const script = deleteScript.replaceAll('node scripts', 'false scripts');
+    const result = bash(script, { GITHUB_EVENT_NAME: 'push' }, push('a (#1)', 'b (#2)'));
+    assert.equal(result.status, 1);
   });
 
   it('the daily schedule sweeps and deletes', () => {
@@ -224,10 +283,25 @@ describe('clean-previews workflow scripts, executed', () => {
     );
   });
 
-  it('a dispatch with dry_run unticked sweeps and deletes', () => {
+  it('a dispatch deletes only when dry_run is exactly false; anything else lists only', () => {
     assert.equal(
       run({ GITHUB_EVENT_NAME: 'workflow_dispatch', DRY_RUN: 'false' }),
       'scripts/clean-previews.mjs --yes',
     );
+    for (const DRY_RUN of ['', 'False', '0', 'no', 'maybe']) {
+      assert.equal(
+        run({ GITHUB_EVENT_NAME: 'workflow_dispatch', DRY_RUN }),
+        'scripts/clean-previews.mjs --dry-run',
+        DRY_RUN,
+      );
+    }
+  });
+
+  it('a pull_request or any other event deletes nothing and fails', () => {
+    for (const GITHUB_EVENT_NAME of ['pull_request', 'workflow_run', '']) {
+      const result = bash(deleteScript, { GITHUB_EVENT_NAME, DRY_RUN: 'false' });
+      assert.equal(result.status, 1, GITHUB_EVENT_NAME);
+      assert.equal(result.nodeArgs, '', GITHUB_EVENT_NAME);
+    }
   });
 });
