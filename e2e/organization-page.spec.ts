@@ -344,6 +344,67 @@ test.describe('organization page in the browser', () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  // #94: the first press creates the sheet on the hydrated page. In a development build that
+  // creation logged "no hydration info available for a given TNode" while the shell's template
+  // held a view container; the console fixture fails the test on any warning.
+  for (const width of [320, 360]) {
+    test(`phone sheet (${width}): the first press on the hydrated page opens it with no console warning`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
+      await page.setViewportSize({ width, height: 800 });
+      const tenant = await smallTenant();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      const dialog = page.getByRole('dialog', { name: 'Navigation' });
+      await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+      // The dialog container has no box of its own: the helm sheet content inside is fixed.
+      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+      // The sheet's host element is not in the document: only the overlay holds its content.
+      expect(await page.locator('app-shell-sheet').count()).toBe(0);
+    });
+  }
+
+  // #94: the sheet is created outside the shell's template. A navigation that replaces the page
+  // while the sheet is open leaves no dialog, scrim, or scroll block on the next page. That the
+  // shell destroys the sheet's ComponentRef is asserted in shell.spec.ts.
+  test('phone sheet (360): a navigation away while it is open leaves no overlay or scroll block', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
+    // The tall tenant's page scrolls, so the open sheet blocks scrolling.
+    const tenant = await tallTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+    await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.classList.contains('cdk-global-scrollblock')),
+      )
+      .toBe(true);
+
+    // The header's home link is under the scrim; a script click starts the client navigation.
+    await page.evaluate(() => {
+      document.querySelector<HTMLAnchorElement>('header a[href="/"]')?.click();
+    });
+    await expect(page).toHaveURL(`${ORIGIN}/`);
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    await expect(page.locator('.cdk-overlay-pane')).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains('cdk-global-scrollblock'),
+      ),
+    ).toBe(false);
+    expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
+  });
+
   test.describe('with JavaScript disabled', () => {
     test.use({ javaScriptEnabled: false });
 
