@@ -435,3 +435,91 @@ describe('seed:demo', () => {
     }
   });
 });
+
+describe('seed:demo backfill against a recount (#100, tester)', () => {
+  /** Each organization's counters next to a recount of its rows, and every row's sortName. */
+  async function expectCountersMatchRecount(t: T) {
+    const { organizations, locations, leagues } = await snapshot(t);
+    for (const organization of organizations) {
+      expect([organization.slug, organization.leagueCount, organization.locationCount]).toEqual([
+        organization.slug,
+        leagues.filter((league) => league.organizationId === organization._id).length,
+        locations.filter((location) => location.organizationId === organization._id).length,
+      ]);
+    }
+    for (const row of [...locations, ...leagues]) {
+      expect(row.sortName, row.name).toBe(row.name.toLowerCase());
+    }
+  }
+
+  test('rows added by the writers to an organization without counters are counted by the backfill', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await insertRaw(t);
+    await t.run(async (ctx) => {
+      const old = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'old-club'))
+        .unique();
+      if (!old) throw new Error('fixture: old-club is missing');
+      await insertLocation(ctx, old._id, { name: 'New Field', address: '3 New Road' });
+    });
+    await t.mutation(internal.testing.addLeague, {
+      organizationSlug: 'old-club',
+      name: 'Gamma League',
+      sport: 'soccer',
+      locations: ['New Field'],
+    });
+    // The writers leave an unset counter unset, so the backfill recounts it.
+    const old = (await snapshot(t)).organizations.find((o) => o.slug === 'old-club');
+    expect([old?.leagueCount, old?.locationCount]).toEqual([undefined, undefined]);
+
+    const result = await t.mutation(internal.seed.demo, {});
+    expect(result.backfilled).toEqual({ organizations: 1, locations: 2, leagues: 2 });
+    await expectCountersMatchRecount(t);
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({
+      leagueCount: 3,
+      locationCount: 3,
+      sportCount: 2,
+    });
+  });
+
+  test('an organization with only one counter set is recounted for both', async () => {
+    const t = setup();
+    await insertRaw(t);
+    await t.run(async (ctx) => {
+      const old = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'old-club'))
+        .unique();
+      if (!old) throw new Error('fixture: old-club is missing');
+      await ctx.db.patch('organizations', old._id, { leagueCount: 99 });
+    });
+    const result = await t.mutation(internal.seed.demo, {});
+    expect(result.backfilled.organizations).toBe(1);
+    await expectCountersMatchRecount(t);
+  });
+
+  test('three runs after mixed writes keep every counter equal to a recount', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await insertRaw(t);
+    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.testing.addLeague, {
+      organizationSlug: 'gulf-coast-sport-social',
+      name: 'Extra Gulf League',
+      sport: 'soccer',
+      locations: ['Bayside Athletic Complex'],
+    });
+    for (let run = 0; run < 3; run++) {
+      await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+        ...NONE,
+        backfilled: NONE,
+      });
+      await expectCountersMatchRecount(t);
+    }
+    expect(
+      await t.query(api.organizations.getPublicPage, { slug: 'gulf-coast-sport-social' }),
+    ).toMatchObject({ leagueCount: 6, locationCount: 3, sportCount: 3 });
+  });
+});

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
-import { describe, expect, test } from 'vitest';
-import { api } from './_generated/api';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { insertLeague, insertLocation, insertTenant, type Tenant } from './lib/tenantWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
@@ -499,5 +499,115 @@ describe('organizations module source', () => {
     expect(PUBLIC_LIST_MAX_PAGE).toBe(40);
     expect(organizationsSource.match(/\.take\(page \* PUBLIC_LIST_PAGE_SIZE\)/g)).toHaveLength(2);
     expect(organizationsSource).not.toMatch(/take\(200\)|PUBLIC_PAGE_LIMIT|paginate|cursor/i);
+  });
+});
+
+describe('organizations: totals and page bounds against a recount (#100, tester)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** The organization's rows recounted, keyed by slug: leagues, locations, and distinct sports. */
+  async function recount(t: T) {
+    return t.run(async (ctx) => {
+      const organizations = await ctx.db.query('organizations').collect();
+      const locations = await ctx.db.query('locations').collect();
+      const leagues = await ctx.db.query('leagues').collect();
+      return Object.fromEntries(
+        organizations.map((organization) => {
+          const own = leagues.filter((league) => league.organizationId === organization._id);
+          return [
+            organization.slug,
+            {
+              leagueCount: own.length,
+              locationCount: locations.filter((l) => l.organizationId === organization._id).length,
+              sportCount: new Set(own.map((league) => league.sport)).size,
+            },
+          ];
+        }),
+      );
+    });
+  }
+
+  test('getPublicPage and both list totals equal a recount after every writer, in two organizations', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    const orgA = await seedA(t);
+    await seedB(t);
+    await t.run(async (ctx) => {
+      await insertLocation(ctx, orgA, { name: 'aaa Courts', address: '9 Shore Rd' });
+      await insertLeague(ctx, orgA, { name: 'zz League', sport: 'soccer', locations: [] });
+    });
+    await t.mutation(internal.testing.addLeague, {
+      organizationSlug: 'other-org',
+      name: 'Second B League',
+      sport: 'beachVolleyball',
+      locations: ['B Field'],
+    });
+    const expected = await recount(t);
+    for (const slug of ['gulf-coast', 'other-org']) {
+      const page = await t.query(api.organizations.getPublicPage, { slug });
+      expect({ slug, ...page }).toMatchObject({ slug, ...expected[slug] });
+      const leagues = await t.query(api.organizations.listPublicLeagues, { slug, page: 1 });
+      const locations = await t.query(api.organizations.listPublicLocations, { slug, page: 1 });
+      expect([leagues.total, locations.total]).toEqual([
+        expected[slug].leagueCount,
+        expected[slug].locationCount,
+      ]);
+    }
+  });
+
+  test('counters equal a recount after concurrent writes to one organization', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    const orgA = await seedA(t);
+    await Promise.all([
+      ...Array.from({ length: 20 }, (_, i) =>
+        t.mutation(internal.testing.addLeague, {
+          organizationSlug: 'gulf-coast',
+          name: `Concurrent League ${i}`,
+          sport: 'softball',
+          locations: ['Bayside Athletic Complex'],
+        }),
+      ),
+      ...Array.from({ length: 10 }, (_, i) =>
+        t.run((ctx) =>
+          insertLocation(ctx, orgA, { name: `Concurrent Field ${i}`, address: `${i} Road` }),
+        ),
+      ),
+    ]);
+    const expected = (await recount(t))['gulf-coast'];
+    expect(expected).toEqual({ leagueCount: 23, locationCount: 12, sportCount: 3 });
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'gulf-coast' })).toMatchObject(
+      expected,
+    );
+  });
+
+  test.each([-0, Number.NEGATIVE_INFINITY, 1e300, 2 ** 53, 1 + Number.EPSILON, 3 - 1e-9])(
+    'page %d of 13 locations returns page 1',
+    async (page) => {
+      const t = setup();
+      await seedLocations(t, 'thirteen', THIRTEEN);
+      const result = await t.query(api.organizations.listPublicLocations, {
+        slug: 'thirteen',
+        page,
+      });
+      expect(result).toMatchObject({ page: 1, pageCount: 3, total: 13 });
+      expect(names(result)).toEqual(SORTED.slice(0, 5));
+    },
+  );
+
+  test('a counter far above the rows still caps the page at 40, and no page throws', async () => {
+    const t = setup();
+    const organizationId = await seedLocations(t, 'drift', THIRTEEN);
+    await t.run((ctx) =>
+      ctx.db.patch('organizations', organizationId, { locationCount: 1e9, leagueCount: 1e9 }),
+    );
+    for (const fn of [api.organizations.listPublicLocations, api.organizations.listPublicLeagues]) {
+      const huge = await t.query(fn, { slug: 'drift', page: 1e6 });
+      expect(huge).toMatchObject({ page: 1, pageCount: PUBLIC_LIST_MAX_PAGE });
+      const last = await t.query(fn, { slug: 'drift', page: PUBLIC_LIST_MAX_PAGE });
+      expect(last).toMatchObject({ page: 40, pageCount: 40, rows: [] });
+    }
   });
 });
