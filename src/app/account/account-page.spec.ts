@@ -1,0 +1,105 @@
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { AuthService } from '../core/auth/auth.service';
+import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
+import { CONVEX_CLIENT } from '../core/data/convex';
+import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { buttonVariants } from '../ui/button/hlm-button';
+import { AccountPage, initialsOf } from './account-page';
+
+// /app (#62), design/mockups/62-sign-up.html state 10.
+
+@Component({ template: 'home' })
+class Home {}
+
+describe('AccountPage', () => {
+  let auth: FakeAuthClient;
+  let convex: FakeConvexClient;
+  let harness: RouterTestingHarness;
+
+  async function open() {
+    auth = new FakeAuthClient();
+    convex = new FakeConvexClient();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeAuthClient(auth),
+        { provide: CONVEX_CLIENT, useValue: convex },
+        provideRouter([
+          { path: 'app', component: AccountPage },
+          { path: '', component: Home },
+        ]),
+      ],
+    });
+    auth.emitSession({ id: 's1' });
+    harness = await RouterTestingHarness.create('/app');
+    return harness.routeNativeElement!;
+  }
+
+  it('asks users.me only once Convex has accepted the token', async () => {
+    const page = await open();
+    TestBed.tick();
+    expect(convex.subscriptions).toEqual([]);
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('Your account');
+    expect(page.querySelector('section')).toBeNull();
+
+    TestBed.inject(AuthService).onChange(true);
+    TestBed.tick();
+    expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([['users:me', {}]]);
+  });
+
+  it('shows "Signed in as <name>" with the initials, in the approved panel', async () => {
+    const page = await open();
+    TestBed.inject(AuthService).onChange(true);
+    TestBed.tick();
+    convex.activeSubscriptions[0]?.emit({ name: 'Maya Okafor' });
+    await harness.fixture.whenStable();
+
+    const section = page.querySelector('section');
+    expect(section?.getAttribute('aria-label')).toBe('Signed-in account');
+    expect(section?.querySelector('p')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'Signed in asMaya Okafor',
+    );
+    expect(section?.querySelector('p > span')?.textContent?.trim()).toBe('Maya Okafor');
+    const initials = section?.querySelector('span[aria-hidden="true"]');
+    expect(initials?.textContent?.trim()).toBe('MO');
+    expect(page.querySelectorAll('h1')).toHaveLength(1);
+  });
+
+  it('Sign out deletes the session and goes to /', async () => {
+    const page = await open();
+    TestBed.inject(AuthService).onChange(true);
+    TestBed.tick();
+    convex.activeSubscriptions[0]?.emit({ name: 'Maya Okafor' });
+    await harness.fixture.whenStable();
+
+    const button = [...page.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Sign out',
+    );
+    expect(button?.getAttribute('type')).toBe('button');
+    expect([...(button?.classList ?? [])].sort()).toEqual(
+      buttonVariants({ variant: 'outline', size: 'lg' }).split(' ').sort(),
+    );
+    button?.click();
+    await harness.fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await harness.fixture.whenStable();
+
+    expect(auth.signOuts).toBe(1);
+    expect(TestBed.inject(AuthService).signedIn()).toBe(false);
+    expect(TestBed.inject(Router).url).toBe('/');
+  });
+});
+
+describe('initialsOf', () => {
+  it.each([
+    ['Maya Okafor', 'MO'],
+    ['  maya   de la cruz ', 'MC'],
+    ['Prince', 'P'],
+    ['Élodie Ånström', 'ÉÅ'],
+    ['', ''],
+  ])('%j gives %j', (name, initials) => {
+    expect(initialsOf(name)).toBe(initials);
+  });
+});

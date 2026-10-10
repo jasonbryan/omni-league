@@ -4,7 +4,9 @@ import { Router, UrlSerializer } from '@angular/router';
 import { SwRegistrationOptions, SwUpdate } from '@angular/service-worker';
 import { App } from './app';
 import { appConfig } from './app.config';
-import { CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
+import { AUTH_CLIENT } from './core/auth/auth-client';
+import { AuthService } from './core/auth/auth.service';
+import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
 import { AppUpdates } from './core/service-worker/app-updates';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 
@@ -43,6 +45,15 @@ describe('appConfig with no Convex URL', () => {
     TestBed.configureTestingModule({ providers: [...appConfig.providers] });
 
     expect(TestBed.inject(OVERLAY_DEFAULT_CONFIG)).toEqual({ usePopover: false });
+  });
+
+  it('registers AuthService as the Convex auth source (ADR 0008), with no Better Auth client', () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(CONVEX_AUTH)).toBe(TestBed.inject(AuthService));
+    // No Convex site URL in the test build, so no client is created.
+    expect(TestBed.inject(AUTH_CLIENT)).toBeNull();
+    expect(TestBed.inject(AuthService).signedIn()).toBe(false);
   });
 
   // ADR 0013 section 1 (#81): the worker registers 30 s after the app is stable, and only in

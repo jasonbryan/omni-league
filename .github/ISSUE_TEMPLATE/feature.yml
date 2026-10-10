@@ -31,7 +31,6 @@ body:
       label: Gates
       description: Gates this issue needs before implementation. Give reasons in the notes below.
       options:
-        - label: 'gate:ui-design (new screen or visible change)'
         - label: 'gate:technology (new package, service, or tool)'
         - label: 'gate:production (production deploy or Stripe live-mode change)'
   - type: textarea

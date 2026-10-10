@@ -1,25 +1,55 @@
 import { RenderMode } from '@angular/ssr';
+import { AccountPage } from './account/account-page';
 import { routes } from './app.routes';
+import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
 import { NotFoundPage } from './not-found/not-found-page';
 import { OrganizationPage } from './organizations/organization-page';
 import { Placeholder } from './placeholder/placeholder';
+import { SignUpPage } from './sign-up/sign-up-page';
 
 // ADR 0006's public-page header: the not-found render is anonymous and the same for every visitor.
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+// ADR 0010 item 4 (amended, PR #102): a Client route's shell names this build's hashed bundles, so no
+// shared cache keeps it past a deploy.
+const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
+
+/** The directives of a `Cache-Control` value, by lower-case name (`true` when it has no value). */
+function directives(value: string): Map<string, string | true> {
+  return new Map(
+    value
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part): [string, string | true] => {
+        const [name, ...rest] = part.split('=');
+        return [name.trim().toLowerCase(), rest.length ? rest.join('=').trim() : true];
+      }),
+  );
+}
 
 // Route tables fixed by ADR 0006 "Rendering specification" for the scaffold (#10), with the
-// `app/**` shell header from ADR 0010 item 4 (#37), the `**` not-found header (#23), and the public
-// organization page (#60).
+// `app/**` shell header from ADR 0010 item 4 (#37), the `**` not-found header (#23), the public
+// organization page (#60), and sign-up and the signed-in app (#62).
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, app/** Client, organizations/:orgSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, app, app/** Client, organizations/:orgSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
+      // #62: no auth code runs on the server, so these render in the browser only.
+      {
+        path: 'sign-up',
+        renderMode: RenderMode.Client,
+        headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
+      },
+      {
+        path: 'app',
+        renderMode: RenderMode.Client,
+        headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
+      },
       {
         path: 'app/**',
         renderMode: RenderMode.Client,
-        // ADR 0010 item 4: the shell is identical for every user and changes only with a deploy.
-        headers: { 'Cache-Control': 'public, max-age=0, s-maxage=86400' },
+        headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
       },
       {
         // ADR 0006: a public page that reads Convex data, anonymous and cacheable.
@@ -35,8 +65,40 @@ describe('Route tables', () => {
     ]);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, and then **', async () => {
-    expect(routes.map((route) => route.path)).toEqual(['', 'organizations/:orgSlug', '**']);
+  // PR #102 tester round 4: an edge copy of a Client shell stored as a deploy went live kept naming
+  // the previous build's deleted `main-*.js` (a blank page) for as long as its `s-maxage`. Netlify
+  // deletes the old build's hashed files at once, so no Client shell may live in a shared cache.
+  it.each(
+    serverRoutes
+      .filter((route) => route.renderMode === RenderMode.Client)
+      .map((route) => [route.path, route] as const),
+  )('Client route %s is never kept by a shared cache', (_, route) => {
+    const headers = new Headers(route.renderMode === RenderMode.Client ? route.headers : {});
+    // Netlify and other CDNs take their TTL from these headers ahead of Cache-Control.
+    expect(headers.get('CDN-Cache-Control')).toBeNull();
+    expect(headers.get('Netlify-CDN-Cache-Control')).toBeNull();
+    const cache = directives(headers.get('Cache-Control') ?? '');
+    expect(cache.get('max-age')).toBe('0');
+    expect(cache.get('must-revalidate')).toBe(true);
+    for (const lifetime of ['s-maxage', 'stale-while-revalidate', 'stale-if-error']) {
+      expect(cache.has(lifetime), lifetime).toBe(false);
+    }
+  });
+
+  it('has Client routes for the bound above to check', () => {
+    expect(
+      serverRoutes.filter((route) => route.renderMode === RenderMode.Client).map((r) => r.path),
+    ).toEqual(['sign-up', 'app', 'app/**']);
+  });
+
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, sign-up, app, and then **', async () => {
+    expect(routes.map((route) => route.path)).toEqual([
+      '',
+      'organizations/:orgSlug',
+      'sign-up',
+      'app',
+      '**',
+    ]);
     const [home] = routes;
     expect(home.component).toBeUndefined();
     expect(await home.loadComponent?.()).toBe(Placeholder);
@@ -55,5 +117,29 @@ describe('Route tables', () => {
     expect(last?.path).toBe('**');
     expect(last?.component).toBeUndefined();
     expect(await last?.loadComponent?.()).toBe(NotFoundPage);
+  });
+
+  it('sign-up lazy-loads the sign-up page, titled, and sends a signed-in visitor on', async () => {
+    const route = routes.find((r) => r.path === 'sign-up');
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(SignUpPage);
+    expect(route?.title).toBe('Create an account | Omni League');
+    expect(route?.canActivate).toEqual([redirectSignedIn]);
+  });
+
+  it('app has the guarded account page and its own not-found route', async () => {
+    const app = routes.find((r) => r.path === 'app');
+    expect(app?.component).toBeUndefined();
+    expect(app?.loadComponent).toBeUndefined();
+    expect(app?.canActivate).toBeUndefined();
+    const [account, notFound, ...rest] = app?.children ?? [];
+    expect(rest).toEqual([]);
+    expect(account?.path).toBe('');
+    expect(account?.title).toBe('Your account | Omni League');
+    expect(account?.canActivate).toEqual([requireSignedIn]);
+    expect(await account?.loadComponent?.()).toBe(AccountPage);
+    expect(notFound?.path).toBe('**');
+    expect(notFound?.canActivate).toBeUndefined();
+    expect(await notFound?.loadComponent?.()).toBe(NotFoundPage);
   });
 });

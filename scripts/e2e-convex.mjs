@@ -3,8 +3,11 @@
 //
 //   node scripts/e2e-convex.mjs push             `convex dev --once`: push functions, run codegen
 //   node scripts/e2e-convex.mjs serve            `convex dev`: the backend (Playwright webServer)
-//   node scripts/e2e-convex.mjs setup            globalSetup: `env set IS_TEST true`, `run testing:reset`
+//   node scripts/e2e-convex.mjs setup            globalSetup: `env set` IS_TEST, SITE_URL, and a new
+//                                                random BETTER_AUTH_SECRET; `run testing:reset`
 //   node scripts/e2e-convex.mjs run <fn> [json]  `run` one test function; prints its JSON result
+//   node scripts/e2e-convex.mjs seed-demo        `env set PREVIEW_ORIGIN_PATTERN`, `run seed:demo`:
+//                                                the demo data of a production-build PWA run (#82)
 //
 // TARGETING (security). The CLI follows `.env.local`, which may name a contributor's cloud dev
 // deployment, and `convex dev` rewrites `.env.local`. So the CLI never runs from the repository
@@ -23,7 +26,7 @@
 //   Playwright never resets) a backend another session started.
 // - With E2E_BASE_URL set, every command refuses: that run uses no local backend.
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { constants, homedir } from 'node:os';
@@ -37,6 +40,9 @@ export const BACKEND = Object.freeze(
   JSON.parse(readFileSync(join(ROOT, 'e2e', 'support', 'convex-backend.json'), 'utf8')),
 );
 export const LOCAL_CONVEX_URL = `http://127.0.0.1:${BACKEND.cloudPort}`;
+/** The e2e app's origin (e2e/support/env.ts LOCAL_BASE_URL), Better Auth's SITE_URL (ADR 0008). */
+export const E2E_SITE_URL = 'http://localhost:4000';
+
 /** The name the CLI gives the anonymous deployment when CONVEX_AGENT_MODE=anonymous. */
 export const DEPLOYMENT_NAME = 'anonymous-agent';
 
@@ -44,7 +50,41 @@ const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
 /** Under the home directory, where an older CLI kept every checkout's anonymous deployments. */
 export const SHARED_STATE_DIRNAME = Object.freeze(['.convex', 'anonymous-convex-backend-state']);
-const USAGE = 'usage: node scripts/e2e-convex.mjs <push|serve|setup|run <function> [json-args]>';
+const USAGE =
+  'usage: node scripts/e2e-convex.mjs <push|serve|setup|seed-demo|run <function> [json-args]>';
+
+/**
+ * The CLI calls of `seed-demo`, in order. `seed:demo` writes only where `PREVIEW_ORIGIN_PATTERN`
+ * is the preview constant (convex/seed.ts), so the local backend gets that value first. It admits
+ * only this project's Netlify preview origins, so it opens nothing on a local backend.
+ */
+export function seedDemoCalls(previewOriginPattern) {
+  return [
+    ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', previewOriginPattern],
+    ['run', 'seed:demo'],
+  ];
+}
+
+/**
+ * `PREVIEW_ORIGIN_PATTERN` from convex/lib/previewOrigin.ts, the single source (Node strips the
+ * types of that one constant file). The repo's package.json has no `type`, so Node warns
+ * `MODULE_TYPELESS_PACKAGE_JSON` when it reparses the file as a module; only that warning is held
+ * back, for this one import.
+ */
+export async function previewOriginPattern() {
+  const emitWarning = process.emitWarning;
+  process.emitWarning = function (warning, ...rest) {
+    const [options, code] = rest;
+    const warningCode = typeof options === 'object' && options !== null ? options.code : code;
+    if (warningCode === 'MODULE_TYPELESS_PACKAGE_JSON') return;
+    return emitWarning.call(this, warning, ...rest);
+  };
+  try {
+    return (await import('../convex/lib/previewOrigin.ts')).PREVIEW_ORIGIN_PATTERN;
+  } finally {
+    process.emitWarning = emitWarning;
+  }
+}
 
 /** E2E_BASE_URL when it is a non-empty string (the same rule as e2e/support/env.ts). */
 export function remoteBaseUrl(env) {
@@ -305,9 +345,11 @@ export async function main(
     error = (line) => console.error(line),
     homeDir = homedir(),
     projectDir = PROJECT_DIR,
+    instanceName,
     portsFree = assertPortsFree,
   } = {},
 ) {
+  const target = { env, spawnCli, projectDir, expectedProjectDir: projectDir, instanceName };
   const [command, ...rest] = argv;
   if (remoteBaseUrl(env) !== undefined) {
     error(
@@ -332,11 +374,32 @@ export async function main(
         });
       }
       case 'setup': {
-        await runConvex(['env', 'set', 'IS_TEST', 'true'], { env, spawnCli });
-        const reset = await runConvex(['run', 'testing:reset'], { env, spawnCli });
+        await runConvex(['env', 'set', 'IS_TEST', 'true'], target);
+        await runConvex(['env', 'set', 'SITE_URL', E2E_SITE_URL], target);
+        // A new secret every run (ADR 0005, ADR 0008), so none is stored anywhere. It is never
+        // printed: on failure only its name is. `testing:reset` then clears the component's
+        // `jwks`, whose signing key the previous run's secret encrypted.
+        const secret = randomBytes(32).toString('base64url');
+        try {
+          await runConvex(['env', 'set', 'BETTER_AUTH_SECRET', secret], target);
+        } catch {
+          throw new Error('e2e-convex: convex env set BETTER_AUTH_SECRET failed');
+        }
+        const reset = await runConvex(['run', 'testing:reset'], target);
         log(
-          `e2e-convex: IS_TEST=true on ${LOCAL_CONVEX_URL}; testing:reset deleted ` +
-            JSON.stringify(JSON.parse(reset)),
+          `e2e-convex: IS_TEST=true, SITE_URL=${E2E_SITE_URL}, and a new BETTER_AUTH_SECRET on ` +
+            `${LOCAL_CONVEX_URL}; testing:reset deleted ${JSON.stringify(JSON.parse(reset))}`,
+        );
+        return 0;
+      }
+      case 'seed-demo': {
+        let inserted = '';
+        for (const args of seedDemoCalls(await previewOriginPattern())) {
+          inserted = await runConvex(args, target);
+        }
+        log(
+          `e2e-convex: seed:demo on ${LOCAL_CONVEX_URL} inserted ` +
+            JSON.stringify(JSON.parse(inserted)),
         );
         return 0;
       }
@@ -346,7 +409,7 @@ export async function main(
           error(USAGE);
           return 2;
         }
-        log((await runConvex(['run', name, ...(json ? [json] : [])], { env, spawnCli })).trim());
+        log((await runConvex(['run', name, ...(json ? [json] : [])], target)).trim());
         return 0;
       }
       default:

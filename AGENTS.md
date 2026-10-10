@@ -27,11 +27,12 @@ The project owner is the final approver for the gates below. Agents prepare the 
 
 | Gate              | Triggers                                                                                                                                | Proposal artifact                                                                                                          |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `gate:ui-design`  | Any new screen, or a visible change to layout, navigation, or visual style                                                              | Static HTML mockup in `design/mockups/`, opened as a PR                                                                    |
 | `gate:technology` | Adding or replacing a framework, library, package (dependency or devDependency), external service, hosting provider, or build/test tool | ADR in `docs/decisions/` with status `Accepted`, opened as a PR (the open PR is the proposal; the merge is the acceptance) |
 | `gate:production` | Any deploy to the production environment, and any change to Stripe live-mode configuration                                              | Release PR or deploy request issue listing the changes                                                                     |
 
 Bumping the minor or patch version of an already-accepted package does not need a gate. Code built against an unapproved gate stays on its branch until the gate PR is merged.
+
+New screens and visible UI changes need no gate (owner, 2026-10-10). Implementers build them against the design system: `src/styles/tokens.css`, `design/mockup-kit/`, [docs/conventions/angular.md](docs/conventions/angular.md), and the approved mockups in `design/mockups/`; where an approved mockup covers a screen, the UI matches it. The owner reviews the UI on staging after merge and requests changes as new issues.
 
 ## Development cycle
 

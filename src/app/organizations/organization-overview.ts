@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMapPin, lucideMapPinOff, lucideTrophy, lucideVolleyball } from '@ng-icons/lucide';
+import { SavedCopyNote } from '../offline/saved-copy-note';
 import type { PublicOrganizationPage } from './organization-path';
 
 /**
@@ -8,11 +9,12 @@ import type { PublicOrganizationPage } from './organization-path';
  * tiles (#73 decision 4), and the Leagues and Locations panels with their empty states, as in
  * design/mockups/60-organization-page.html. Each row carries the `id` the sidebar links to
  * (`league-<n>`, `location-<n>`, numbered in the order the query sorts them). The panels show the
- * rows of page 1 of each list, at most 5 (#100); the tiles show the totals.
+ * rows of page 1 of each list, at most 5 (#100); the tiles show the totals. With `savedAt` set
+ * (a saved copy shown offline, #82), the saved-copy note sits right under the `h1`.
  */
 @Component({
   selector: 'app-organization-overview',
-  imports: [NgIcon],
+  imports: [NgIcon, SavedCopyNote],
   providers: [provideIcons({ lucideMapPin, lucideMapPinOff, lucideTrophy, lucideVolleyball })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
@@ -21,6 +23,9 @@ import type { PublicOrganizationPage } from './organization-path';
     <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
       {{ page().name }}
     </h1>
+    @if (savedAt(); as savedAt) {
+      <app-saved-copy-note [savedAt]="savedAt" />
+    }
     <dl class="mt-6 grid grid-cols-3 gap-3 md:gap-4">
       @for (tile of tiles(); track tile.label) {
         <div
@@ -129,6 +134,8 @@ import type { PublicOrganizationPage } from './organization-path';
 })
 export class OrganizationOverview {
   readonly page = input.required<PublicOrganizationPage>();
+  /** When the saved copy shown was saved; set only while offline (`OrganizationPage`). */
+  readonly savedAt = input<number | undefined>(undefined);
 
   /**
    * The organization's league, location, and sport totals (#73 decision 4), from

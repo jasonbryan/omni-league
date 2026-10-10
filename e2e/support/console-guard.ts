@@ -3,16 +3,33 @@ import type { ConsoleMessage, Page } from '@playwright/test';
 /** Document status a test may expect; only 404 is supported (#23). */
 export type ExpectedDocumentStatus = 404;
 
+/**
+ * A request a test expects to fail with this HTTP status, by URL path on any origin (#62): for
+ * example a 422 from `/api/auth/sign-up/email` when the email already has an account.
+ */
+export interface ExpectedFailedRequest {
+  status: number;
+  path: string;
+}
+
 export interface ConsoleGuardOptions {
   /** Ignore the page's own "Failed to load resource … 404" message (and nothing else). */
   expectedDocumentStatus?: ExpectedDocumentStatus;
   /** Convex function names (`module:function`) whose rejected mutation or action may log. */
   expectedConvexErrors?: readonly string[];
+  /** Requests whose own "Failed to load resource" message may log (each must happen). */
+  expectedFailedRequests?: readonly ExpectedFailedRequest[];
   /** `console.warn` messages the test expects: a string matches the start, a RegExp anywhere. */
   expectedConsoleWarnings?: readonly (string | RegExp)[];
 }
 
+export interface VerifyOptions {
+  /** The test skipped itself (`test.skip()` in its body): unused allowances are not problems. */
+  skipped?: boolean;
+}
+
 const DOCUMENT_404_PREFIX = 'Failed to load resource: the server responded with a status of 404';
+const FAILED_RESOURCE = /^Failed to load resource: the server responded with a status of (\d{3})\b/;
 const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
 
 function withoutFragment(url: string): string {
@@ -33,15 +50,21 @@ function withoutFragment(url: string): string {
  * - `expectedDocumentStatus: 404` ignores exactly the main document's own 404 resource message;
  * - `expectedConvexErrors` ignores `[CONVEX M(<name>)] ` / `[CONVEX A(<name>)] ` for listed names,
  *   and fails the test if a listed name never produced such a message;
+ * - `expectedFailedRequests` ignores the resource message of a request with a listed status and
+ *   URL path, and fails the test if a listed request never produced one;
  * - `expectedConsoleWarnings` ignores a warning that starts with a listed string or matches a
  *   listed RegExp, and fails the test if an entry matched no warning. Each entry needs a comment
  *   linking the issue that removes the warning.
+ * A test that skips itself after `test.use()` (for example a local-only test on a remote run) is not
+ * failed for unused allowances of any kind.
  */
 export class ConsoleGuard {
   private readonly failures: string[] = [];
   private readonly logs: string[] = [];
   private readonly usedConvexAllowances = new Set<string>();
   private readonly expectedConvexErrors: readonly string[];
+  private readonly expectedFailedRequests: readonly ExpectedFailedRequest[];
+  private readonly usedRequestAllowances = new Set<ExpectedFailedRequest>();
   private readonly usedWarningAllowances = new Set<string | RegExp>();
   private readonly expectedConsoleWarnings: readonly (string | RegExp)[];
   private readonly expectedDocumentStatus: ExpectedDocumentStatus | undefined;
@@ -55,6 +78,7 @@ export class ConsoleGuard {
     }
     this.expectedDocumentStatus = status;
     this.expectedConvexErrors = options.expectedConvexErrors ?? [];
+    this.expectedFailedRequests = options.expectedFailedRequests ?? [];
     this.expectedConsoleWarnings = options.expectedConsoleWarnings ?? [];
   }
 
@@ -85,14 +109,26 @@ export class ConsoleGuard {
     return this.logs.some((text) => HYDRATED_LOG.test(text));
   }
 
-  /** Everything that fails the test: console failures, then unused allowances. */
-  problems(): string[] {
+  /**
+   * Everything that fails the test: console failures, then unused allowances. With `skipped` (the
+   * test skipped itself, so it may never reach what it allowed) unused allowances of every kind
+   * (Convex errors, failed requests, console warnings) are not reported; console failures still are.
+   */
+  problems({ skipped = false }: VerifyOptions = {}): string[] {
+    if (skipped) return [...this.failures];
     const unusedConvex = this.expectedConvexErrors
       .filter((name) => !this.usedConvexAllowances.has(name))
       .map(
         (name) =>
           `expectedConvexErrors entry "${name}" was not used: no [CONVEX M(${name})] or ` +
           `[CONVEX A(${name})] console error was logged; remove the stale entry`,
+      );
+    const unusedRequests = this.expectedFailedRequests
+      .filter((entry) => !this.usedRequestAllowances.has(entry))
+      .map(
+        (entry) =>
+          `expectedFailedRequests entry ${entry.status} ${entry.path} was not used: no request ` +
+          'with that status and path failed; remove the stale entry',
       );
     const unusedWarnings = this.expectedConsoleWarnings
       .filter((entry) => !this.usedWarningAllowances.has(entry))
@@ -103,12 +139,12 @@ export class ConsoleGuard {
           : `expectedConsoleWarnings entry ${String(entry)} was not used: no console.warn ` +
             `matched it; remove the stale entry`,
       );
-    return [...this.failures, ...unusedConvex, ...unusedWarnings];
+    return [...this.failures, ...unusedConvex, ...unusedRequests, ...unusedWarnings];
   }
 
   /** Throws one error listing every problem; called by the fixture at teardown. */
-  verify(): void {
-    const problems = this.problems();
+  verify(options: VerifyOptions = {}): void {
+    const problems = this.problems(options);
     if (problems.length > 0) {
       throw new Error(
         `Console fixture: ${problems.length} problem(s)\n${problems.map((p) => `  - ${p}`).join('\n')}`,
@@ -133,6 +169,7 @@ export class ConsoleGuard {
     if (type !== 'error') return;
     if (this.isExpectedDocument404(page, message, text)) return;
     if (this.matchConvexAllowance(text)) return;
+    if (this.matchRequestAllowance(text, url)) return;
     this.failures.push(`console.error: ${text}${at}`);
   }
 
@@ -154,6 +191,23 @@ export class ConsoleGuard {
     // main frame's latest navigation response (the 404 document itself) is accepted too.
     const document = this.documents.get(page);
     return document?.status === 404 && document.url === url;
+  }
+
+  private matchRequestAllowance(text: string, url: string): boolean {
+    const status = FAILED_RESOURCE.exec(text)?.[1];
+    if (status === undefined || !url) return false;
+    let path: string;
+    try {
+      path = new URL(url).pathname;
+    } catch {
+      return false;
+    }
+    const entry = this.expectedFailedRequests.find(
+      (e) => String(e.status) === status && e.path === path,
+    );
+    if (entry === undefined) return false;
+    this.usedRequestAllowances.add(entry);
+    return true;
   }
 
   private matchConvexAllowance(text: string): boolean {

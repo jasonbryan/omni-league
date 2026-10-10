@@ -3,7 +3,8 @@ import { provideRouter, UrlSerializer } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { routes } from './app.routes';
 import { provideClientHydration } from '@angular/platform-browser';
-import { provideConvex } from './core/data/convex';
+import { AuthService } from './core/auth/auth.service';
+import { provideConvex, provideConvexAuth } from './core/data/convex';
 import {
   SERVICE_WORKER_BUILD,
   serviceWorkerRegistration,
@@ -23,6 +24,9 @@ export const appConfig: ApplicationConfig = {
     { provide: UrlSerializer, useClass: QueryTolerantUrlSerializer },
     provideClientHydration(),
     provideConvex(),
+    // ADR 0008 "Angular wiring": the browser Convex client authenticates with Better Auth's JWT.
+    // The server ignores it: AUTH_CLIENT is null there and server renders stay anonymous.
+    provideConvexAuth(AuthService),
     provideSpartanHlm(),
     // ADR 0013 sections 1 and 4 (#81): production builds with angular.json's `serviceWorker`
     // option only, so development builds (including the e2e build) and the kill-switch build

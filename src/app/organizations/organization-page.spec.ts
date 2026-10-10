@@ -64,7 +64,14 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
+// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
+// next one, nor a later spec file (spec files share one global).
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
+  localStorage.clear();
   // The page removes its tags on destroy; make sure no spec leaks one into the next.
   for (const el of head().querySelectorAll('meta[property^="og:"], link[rel="canonical"]')) {
     el.remove();

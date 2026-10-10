@@ -48,6 +48,21 @@ readonly addPlayer = injectMutation(api.teams.addPlayer);
 
 Known residual: a mutation already sent when the socket drops is re-sent by the Convex client on reconnect. `convex` 1.46 also notices a silent drop only after 60 seconds without server messages (`serverInactivityThreshold`), so in that window, with `navigator.onLine` still true, a change can be handed to the client and re-sent on reconnect.
 
+## Saved copies (ADR 0013 section 3, #82)
+
+In the browser, each live result of a query on `OFFLINE_SAVED_QUERIES` (`offline-saved-queries.ts`) is written to `localStorage`, and shown when the page has nothing else yet, so a recently viewed public page opens offline.
+
+- **Allow-list only.** A query is listed only if it is deliberately public and its result does not depend on the caller (Convex conventions, Functions). Nothing else is read or written, whatever the caller passes, so signed-in data is never saved.
+- **Key and value.** `cvx-saved:<function>:<JSON args with sorted keys>` (`savedCopyKey`), so equal args always give one key; value `{ v: convexToJson(result), savedAt, usedAt, version }`, times in epoch milliseconds.
+- **Checked before use.** Each allow-list entry carries the query's own `returns` validator, imported from where the Convex function takes it (`getPublicPageReturns`, `publicLeaguesValidator`, `publicLocationsValidator` in `convex/lib/publicPage.ts`), and a `version`. A copy is shown only if its value matches the validator (`matchesValidator`; extra fields are allowed, missing or mistyped ones are not) and its `version` is the entry's; anything else under the key is removed and the page behaves as if nothing were saved. So when a query's result changes (#100 changed `getPublicPage` to three totals), copies in the earlier shape stop matching on their own, also for a rolled-back build. Bump `version` only when the result keeps its shape but changes meaning. The type of `savedQuery` makes the build fail if the validator is not one of the query's result type.
+- **Precedence.** A transferred value first (hydration is unchanged), then a live result, then a saved copy, then loading. The copy is read once per args, synchronously, so the first render of a page opened offline already shows it.
+- **`savedAt`.** `QueryRef.savedAt()` is the time of the saved copy while one is shown, and `undefined` from the first live result on (a value or an error), and always on the server.
+- **Removed records.** A live `null` (or `undefined`) removes the saved entry.
+- **Limits.** At most 50 entries, the least recently used (written or shown) removed first; an entry older than 14 days, or saved more than a minute in the future (the clock was set back), is not used and is removed. Keys and values together stay under 1,000,000 UTF-16 code units, so they never crowd out the sign-in session; a larger result is not saved. Every storage error (no storage, quota exceeded, a value that is not a saved copy) is ignored.
+- **Server.** A server render never reads or writes saved copies.
+- **Pages.** A page shows the saved-copy note (`src/app/offline/saved-copy-note.ts`) under its `h1` only while `injectOnline()` is false, and the not-saved view (`src/app/offline/not-saved-view.ts`) when it is offline with no value. The organization page is the first: `organizations:getPublicPage` and page 1 of `organizations:listPublicLeagues` and `organizations:listPublicLocations` (#100), each its own saved copy; the page shows offline only when all three are saved, dated by the oldest. Later public pages add their queries to the allow-list in their own issue.
+- **Specs.** A spec that renders a listed query in the browser clears `localStorage` before and after each test: spec files share one global, so a saved copy would otherwise seed a later test.
+
 ## No Convex URL
 
 CI, the e2e build, and a fresh clone build with no URL (`Convex URL: none`). The app starts with no client, and nothing is thrown or logged. Helpers report it instead:
@@ -56,6 +71,16 @@ CI, the e2e build, and a fresh clone build with no URL (`Convex URL: none`). The
 - `run()`: rejects with `ConvexNotConfiguredError` (also in `error()`); `pending()` stays `false`.
 
 Its message points here: to configure a URL, copy `.env.example` to `.env.local` before the first `npx convex dev` (see the root README), then run `npm start` or `npm run build`. Feature pages can check `error() instanceof ConvexNotConfiguredError` to show a configuration message.
+
+## Auth
+
+`provideConvexAuth(AuthService)` in `app.config.ts` registers the auth source (ADR 0006 "Auth extension point", ADR 0008, #62). It takes a `ConvexAuthSource` instance, or an injectable class whose root instance is used. In the browser, the client factory then calls `setAuth(fetchToken, onChange)` when it creates the client, `clearAuth()` when `signedIn` turns false, and `setAuth` again when it turns true; live queries keep their subscriptions and rerun with the new identity. On the server it is ignored, so server renders stay anonymous.
+
+`AuthService` (`src/app/core/auth/`) is that source. Its `fetchToken` returns `null` without a request while signed out, so anonymous page views ask for no token, and `convexAuthenticated()` turns true once Convex has accepted the token (`onChange`). A page that reads the caller's own data asks only then, with `skipToken` before:
+
+```ts
+readonly me = injectQuery(api.users.me, () => (this.auth.convexAuthenticated() ? {} : skipToken));
+```
 
 ## Server rendering
 

@@ -1,6 +1,11 @@
-import { v, type Infer, type Validator } from 'convex/values';
+import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { query, type QueryCtx } from './_generated/server';
+import {
+  getPublicPageReturns,
+  publicLeaguesValidator,
+  publicLocationsValidator,
+} from './lib/publicPage';
 import { isSlug } from './lib/slugs';
 import { SPORT_NAMES, sportName, type Sport } from './lib/sports';
 
@@ -12,41 +17,6 @@ export const PUBLIC_LIST_PAGE_SIZE = 5;
  * (`PUBLIC_LIST_MAX_PAGE * PUBLIC_LIST_PAGE_SIZE`) whatever the args. Never taken from args.
  */
 export const PUBLIC_LIST_MAX_PAGE = 40;
-
-/** The public organization page's header: everything but the lists (no ids, staff, or payments). */
-export const publicPageValidator = v.object({
-  name: v.string(),
-  slug: v.string(),
-  leagueCount: v.number(),
-  locationCount: v.number(),
-  sportCount: v.number(),
-});
-
-export type PublicPage = Infer<typeof publicPageValidator>;
-
-const publicLocationValidator = v.object({ name: v.string(), address: v.string() });
-
-const publicLeagueValidator = v.object({
-  name: v.string(),
-  sportName: v.string(),
-  locationNames: v.array(v.string()),
-});
-
-/** One page of a public list, with the page it is, the number of pages, and the total. */
-function publicListValidator<Row extends Validator<unknown, 'required', string>>(row: Row) {
-  return v.object({
-    rows: v.array(row),
-    page: v.number(),
-    pageCount: v.number(),
-    total: v.number(),
-  });
-}
-
-export const publicLocationsValidator = publicListValidator(publicLocationValidator);
-export const publicLeaguesValidator = publicListValidator(publicLeagueValidator);
-
-export type PublicLocations = Infer<typeof publicLocationsValidator>;
-export type PublicLeagues = Infer<typeof publicLeaguesValidator>;
 
 const listArgs = { slug: v.string(), page: v.number() };
 
@@ -88,15 +58,16 @@ function pageRows<D>(read: D[], page: number): D[] {
  *
  * Deliberately public (convex.md, Functions): visitors and crawlers read it without signing in,
  * and the server render calls it anonymously. It reads no identity, so every caller gets the same
- * result, and returns only the fields of `publicPageValidator`. The league and location totals are
- * the organization's counters (a counter not yet backfilled reads as 0); the sport total is one
- * indexed `.first()` per sport. #66 adds the draft filter: leagues stay off this page until they
- * are published.
+ * result, and returns only the fields of `publicPageValidator` (`lib/publicPage.ts`). The league
+ * and location totals are the organization's counters (a counter not yet backfilled reads as 0);
+ * the sport total is one indexed `.first()` per sport. #66 adds the draft filter: leagues stay off
+ * this page until they are published.
  */
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (ADR 0002): an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
   args: { slug: v.string() },
-  returns: v.union(v.null(), publicPageValidator),
+  // The app checks saved copies against this same validator (convex/lib/publicPage.ts, #82).
+  returns: getPublicPageReturns,
   handler: async (ctx, { slug }) => {
     const organization = await organizationBySlug(ctx, slug);
     if (!organization) return null;

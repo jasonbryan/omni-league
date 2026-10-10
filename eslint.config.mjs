@@ -13,6 +13,18 @@ import tseslint from 'typescript-eslint';
 // built-in. Selector regexes cannot contain `/`, so the `/` in names like `fs/promises` is `.`.
 const BUILTIN_SOURCE = `/^(?:node:.*|${builtinModules.map((name) => name.replaceAll('/', '.')).join('|')})$/`;
 
+// ADR 0008: `@convex-dev/better-auth` makes npm install React as a required peer. React is not an
+// approved framework here, so no file may import it, or the component's React entry. Every
+// `no-restricted-imports` block below repeats these, because a later block's options replace an
+// earlier one's for the files they share.
+const REACT_MESSAGE =
+  'React is installed only as a peer of @convex-dev/better-auth and is not an approved framework (ADR 0008).';
+const REACT_PATHS = ['react', 'react-dom', '@convex-dev/better-auth/react'].map((name) => ({
+  name,
+  message: REACT_MESSAGE,
+}));
+const REACT_PATTERNS = [{ group: ['react/*', 'react-dom/*'], message: REACT_MESSAGE }];
+
 export default defineConfig([
   globalIgnores([
     'convex/_generated/',
@@ -94,6 +106,14 @@ export default defineConfig([
     },
   },
 
+  // Restricted imports everywhere: no React (ADR 0008).
+  {
+    files: ['**/*.{ts,mts,cts,js,mjs,cjs}'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: REACT_PATHS, patterns: REACT_PATTERNS }],
+    },
+  },
+
   // Restricted imports: only the Convex adapter folder may import convex/browser (#11).
   {
     files: ['src/**/*.ts'],
@@ -108,7 +128,9 @@ export default defineConfig([
               message:
                 'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
             },
+            ...REACT_PATHS,
           ],
+          patterns: REACT_PATTERNS,
         },
       ],
     },
@@ -186,12 +208,14 @@ export default defineConfig([
               name,
               message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
             })),
+            ...REACT_PATHS,
           ],
           patterns: [
             {
               group: ['node:*'],
               message: 'Server-entry files are Web-API-only: no node: imports (ADR 0010).',
             },
+            ...REACT_PATTERNS,
           ],
         },
       ],

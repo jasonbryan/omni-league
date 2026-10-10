@@ -18,6 +18,7 @@ Applies to everything under the Angular app. Use the latest stable major (ADR 00
 - Convex data reaches components through signal-based services wrapping the Convex client; components never call the Convex client directly.
 - Mutations and actions go only through the adapter's `injectMutation()` and `injectAction()`, which carry the offline guard (ADR 0013, Decision 3A): `run()` refuses a change with `ConvexOfflineError` when there is no connection, so nothing is queued and sent later.
 - Submit buttons that need the server look disabled while `injectOnline()` is false: `aria-disabled="true"` and 50% opacity, never the `disabled` attribute, so they stay focusable and the Tab order does not change. A press while offline, or a `ConvexOfflineError` from `run()`, shows the destructive form alert "You're offline. Nothing was sent." with one line saying what is unchanged, then "Try again when you're connected." (`design/mockups/88-offline-note.html`, states 2 and 3).
+- Saved copies (ADR 0013 section 3, #82): a public page whose query is on `OFFLINE_SAVED_QUERIES` shows the saved-copy note (`SavedCopyNote`) under its `h1` while `injectOnline()` is false and `QueryRef.savedAt()` is set, and the not-saved view (`NotSavedView`) when it is offline with no value (`design/mockups/82-offline-pages.html`). Only deliberately public queries whose result does not depend on the caller join the list, each with the query's own `returns` validator, which every saved copy must match before it is shown ([adapter README](../../src/app/core/data/convex/README.md#saved-copies-adr-0013-section-3-82)).
 - Async loading of non-Convex data uses `resource()` / `httpResource()`.
 
 ## Templates
@@ -44,7 +45,10 @@ Hybrid rendering per ADR 0006: every route has a render mode in `src/app/app.rou
 | Public pages that read Convex data (organization, location, league, registration) | `RenderMode.Server`, with an explicit entry ahead of `**` |
 | Public pages with no Convex data (landing, about, help)                           | `RenderMode.Prerender`                                    |
 | Signed-in app, everything under `/app/**`                                         | `RenderMode.Client`                                       |
+| Sign-up and sign-in (`/sign-up`, `/sign-in`)                                      | `RenderMode.Client`                                       |
 | Anything else (`**`)                                                              | `RenderMode.Server`: the not-found page with status 404   |
+
+Client routes set `headers: { 'Cache-Control': 'public, max-age=0, must-revalidate' }`, and nothing that lets a shared cache keep the client shell (`s-maxage`, `stale-while-revalidate`, `stale-if-error`, `CDN-Cache-Control`, `Netlify-CDN-Cache-Control`). The shell names the build's content-hashed bundles, which the next deploy deletes ([ADR 0010](../decisions/0010-hosting-and-deployment.md) item 4, amended; PR #102). `src/app/app.routes.server.spec.ts` checks every Client route.
 
 Server routes:
 

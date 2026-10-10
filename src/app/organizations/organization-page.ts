@@ -3,9 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
-import { injectQuery } from '../core/data/convex';
+import { injectOnline, injectQuery } from '../core/data/convex';
 import { bindPageMeta } from '../core/page-meta';
 import { NotFoundView } from '../not-found/not-found-view';
+import { NotSavedView } from '../offline/not-saved-view';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell, ShellSidebar } from '../shell';
 import { OrganizationOverview } from './organization-overview';
@@ -26,6 +27,14 @@ import { OrganizationSidebar } from './organization-sidebar';
  *   top bar only, so an error never enters the CDN cache. The live subscriptions replace it once
  *   every result has arrived.
  *
+ * Offline (#82, design/mockups/82-offline-pages.html): all three queries are on the adapter's
+ * `OFFLINE_SAVED_QUERIES`, so the browser keeps each live result as a saved copy and shows it when
+ * there is no transferred value and no live result yet. While the app is offline (`injectOnline()`
+ * false) the overview shows the saved-copy note under the `h1`, dated by the oldest saved copy on
+ * screen; online, a saved copy shows with no note until the live result replaces it. Offline with
+ * any of the three missing, the page shows the not-saved view. A live `null` header removes its
+ * saved copy (the adapter) and shows the not-found view.
+ *
  * The queries' only arguments are the route's slug and page 1, so the server and the browser use
  * the same `TransferState` keys and the server HTML holds no query string. Page numbers in the URL
  * are #103.
@@ -34,6 +43,7 @@ import { OrganizationSidebar } from './organization-sidebar';
   selector: 'app-organization-page',
   imports: [
     NotFoundView,
+    NotSavedView,
     OrganizationOverview,
     OrganizationSidebar,
     ServerErrorView,
@@ -47,11 +57,13 @@ import { OrganizationSidebar } from './organization-sidebar';
         <ng-template appShellSidebar>
           <app-organization-sidebar [page]="page" />
         </ng-template>
-        <app-organization-overview [page]="page" />
+        <app-organization-overview [page]="page" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="path()" />
+      } @else if (state() === 'not-saved') {
+        <app-not-saved-view [retryHref]="path()" />
       }
     </app-shell>
   `,
@@ -72,6 +84,7 @@ export class OrganizationPage {
     slug: this.slug(),
     page: 1,
   }));
+  private readonly online = injectOnline();
 
   /** The page's path from the route, for "Try again" when there is no result to build it from. */
   protected readonly path = computed(() => organizationPath(this.slug()));
@@ -85,12 +98,26 @@ export class OrganizationPage {
     return { ...header, leagues: leagues.rows, locations: locations.rows };
   });
 
+  /**
+   * When the oldest saved copy on screen was saved, only while offline (the note is hidden online)
+   * and only while some of the three results is still a saved copy.
+   */
+  protected readonly savedAt = computed(() => {
+    if (this.online()) return undefined;
+    const times = [this.header.savedAt(), this.leagues.savedAt(), this.locations.savedAt()].filter(
+      (time) => time !== undefined,
+    );
+    return times.length > 0 ? Math.min(...times) : undefined;
+  });
+
   protected readonly state = computed(() => {
     if (this.page()) return 'page';
     if (this.header.value() === null) return 'not-found';
     // Any error of any of the three, including a missing Convex URL; never its message (adapter
     // README).
     if (this.header.error() || this.leagues.error() || this.locations.error()) return 'error';
+    // Offline with nothing to show (never on the server, where `online` is always true).
+    if (!this.online()) return 'not-saved';
     return 'loading';
   });
 

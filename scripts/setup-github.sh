@@ -17,9 +17,8 @@ label "type:feature"  "a2eeef" "User-visible behaviour"
 label "type:bug"      "d73a4a" "Behaviour differs from spec"
 label "type:chore"    "ededed" "Tooling, infra, maintenance"
 label "type:decision" "f9d0c4" "ADR proposal"
-label "type:design"   "fef2c0" "UI mockup proposal"
+label "type:design"   "fef2c0" "Owner-requested UI mockup"
 
-label "gate:ui-design"  "b60205" "Owner approves the mockup"
 label "gate:technology" "b60205" "Owner approves the ADR"
 label "gate:production" "b60205" "Owner approves the production release"
 

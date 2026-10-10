@@ -10,7 +10,13 @@
 // worker). A preview has one; its Convex sockets are routed (`routeConvexSockets`). `ci` sets no
 // E2E_BASE_URL, so it skips this spec. chromium-mobile only (ADR 0013, CI minutes): nothing here
 // depends on the browser project.
+//
+// The saved-copy tests (#82) need page data: a build against a backend seeded by `seed:demo` (a
+// preview, or the local sequence in docs/process/hosting.md, Service worker). Without it they are
+// skipped with that reason.
 import type { BrowserContext, Page, TestInfo } from '@playwright/test';
+import { DEMO } from '../convex/seed';
+import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -21,18 +27,26 @@ interface NgswManifest {
 
 /** Whether `setOffline` last took the context offline. */
 let offline = false;
+/** Field wifi with no internet: every Convex socket is refused while `navigator.onLine` stays true. */
+let fieldWifi = false;
+
+/** A Convex sync socket: `wss://<name>.convex.cloud/api/<v>/sync`, or a local backend's `ws://`. */
+const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 
 /**
- * A preview build connects to its Convex backend. Offline, Chromium logs every socket that fails
- * to connect as a console error (`net::ERR_INTERNET_DISCONNECTED`), which the console fixture
- * reports. So the context's Convex sockets are routed: while `setOffline` has the context offline,
- * the route closes them before they reach the network; otherwise they go to the server. A local
- * build has no Convex URL and opens no socket.
+ * A build with a Convex URL (a preview, or a local build against the local backend) connects to
+ * its backend. Offline, Chromium logs every socket that fails to connect as a console error
+ * (`net::ERR_INTERNET_DISCONNECTED`), which the console fixture reports. So the context's Convex
+ * sockets are routed: while `setOffline` has the context offline, or in field-wifi mode, the route
+ * closes them at once and never calls `connectToServer()` (Playwright would otherwise open a
+ * mocked socket, which the client counts as connected); otherwise they go to the server. A local
+ * build with no Convex URL opens no socket.
  */
 async function routeConvexSockets(context: BrowserContext): Promise<void> {
   offline = false;
-  await context.routeWebSocket(/^wss:\/\/[^/]+\.convex\.cloud\//, (ws) => {
-    if (offline) void ws.close();
+  fieldWifi = false;
+  await context.routeWebSocket(CONVEX_SOCKET, (ws) => {
+    if (offline || fieldWifi) void ws.close();
     else ws.connectToServer();
   });
 }
@@ -297,6 +311,257 @@ test.describe('service worker (production build)', () => {
         contentType: 'image/png',
       });
       await expectAccessible(page);
+    }
+  });
+});
+
+// #82: saved copies of public pages (ADR 0013 section 3), design/mockups/82-offline-pages.html.
+const [SAVED_ORG, UNUSABLE_ORG, NOT_SAVED_ORG, FIELD_WIFI_ORG] = DEMO;
+const orgPath = (slug: string) => `/organizations/${slug}`;
+const SAVED_PATH = orgPath(SAVED_ORG.organization.slug);
+const savedKey = (slug: string) =>
+  `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug })}`;
+/** Page 1 of each list, which the organization page also keeps as saved copies (#100). */
+const savedListKeys = (slug: string) =>
+  ['listPublicLeagues', 'listPublicLocations'].map(
+    (name) => `cvx-saved:organizations:${name}:${JSON.stringify({ page: 1, slug })}`,
+  );
+const NOT_SAVED_HEADING = "This page isn't saved on this device";
+
+/** The saved copy's `savedAt` for `slug` in the page's localStorage, or null. */
+async function savedAtOf(page: Page, slug: string): Promise<number | null> {
+  return page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : (JSON.parse(raw) as { savedAt: number }).savedAt;
+  }, savedKey(slug));
+}
+
+/** Every link on the page has no `aria-disabled` (links stay enabled offline). */
+async function expectLinksEnabled(page: Page): Promise<void> {
+  const links = page.locator('a[href]');
+  expect(await links.count()).toBeGreaterThan(0);
+  expect(await page.locator('a[aria-disabled], a[disabled]').count()).toBe(0);
+}
+
+/** Screenshots at 360px and 1280px, each followed by the axe helper; ends at 360px. */
+async function screenshotsAndAxe(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+  for (const [width, height] of [
+    [360, 800],
+    [1280, 720],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await blurActiveElement(page);
+    const path = testInfo.outputPath(`${name}-${String(width)}.png`);
+    await page.screenshot({ path });
+    await testInfo.attach(`${name}-${String(width)}.png`, { path, contentType: 'image/png' });
+    await expectAccessible(page);
+  }
+  await page.setViewportSize({ width: 360, height: 800 });
+}
+
+test.describe('saved copies (production build with seed:demo data)', () => {
+  test.skip(
+    remoteBaseUrl === undefined,
+    'needs E2E_BASE_URL and a production build (docs/process/hosting.md, Service worker)',
+  );
+  test.describe.configure({ timeout: 120_000 });
+  // The saved-copy note shows the time in the device's locale and time zone: fix both.
+  test.use({ locale: 'en-US', timezoneId: 'America/Chicago' });
+  test.beforeEach(async ({ context, request }, testInfo) => {
+    skipUnlessMobile(testInfo);
+    const status = (await request.get(SAVED_PATH)).status();
+    test.skip(
+      status !== 200,
+      `${SAVED_PATH} answered ${String(status)}: needs a build against a backend seeded by ` +
+        'seed:demo (docs/process/hosting.md, Service worker)',
+    );
+    await routeConvexSockets(context);
+  });
+
+  test('a page opened online opens offline from its saved copy with the note; the live result replaces it on reconnect', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const { organization, leagues, locations } = SAVED_ORG;
+    await installWorker(page);
+    await page.goto(SAVED_PATH);
+    const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+    await expect(h1).toBeVisible();
+    await expect.poll(() => savedAtOf(page, organization.slug)).not.toBeNull();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (keys) => keys.map((key) => localStorage.getItem(key) !== null),
+          savedListKeys(organization.slug),
+        ),
+      )
+      .toEqual([true, true]);
+    const firstSavedAt = (await savedAtOf(page, organization.slug)) ?? 0;
+    const savedNote = page.locator('main [data-saved-copy-note]');
+    const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
+    await expect(savedNote).toHaveCount(0);
+
+    // Offline reload: the worker serves the shell and the page renders its saved copy.
+    await setOffline(context, true);
+    const reload = await page.reload();
+    expect(reload?.fromServiceWorker()).toBe(true);
+    await expect(h1).toBeVisible();
+    const main = page.getByRole('main');
+    for (const league of leagues) {
+      await expect(main.getByRole('heading', { level: 3, name: league.name })).toBeVisible();
+    }
+    for (const location of locations) {
+      await expect(main.getByRole('heading', { level: 3, name: location.name })).toBeVisible();
+      await expect(main.getByText(location.address)).toBeVisible();
+    }
+    await expect(offlineNote).toBeVisible();
+    await expect(savedNote).toBeVisible();
+    // Right under the h1, with the time in the device's locale and time zone.
+    expect(
+      await page.evaluate(() => document.querySelector('main h1')?.nextElementSibling?.tagName),
+    ).toBe('APP-SAVED-COPY-NOTE');
+    const expectedTime = await page.evaluate(
+      (savedAt) => new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(savedAt),
+      firstSavedAt,
+    );
+    const noteText = ((await savedNote.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    expect(noteText).toBe(
+      `Saved copy from today at ${expectedTime.replace(/\s+/g, ' ')}. It may have changed since.`,
+    );
+    await expect(savedNote.locator('time')).toHaveAttribute(
+      'datetime',
+      /^\d{4}-\d\d-\d\dT\d\d:\d\d-0[56]:00$/,
+    );
+    await expectLinksEnabled(page);
+    await screenshotsAndAxe(page, testInfo, 'saved-copy-offline');
+
+    // Back online: the live result replaces the saved copy in place, with no reload.
+    await page.evaluate(() => {
+      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+    });
+    await setOffline(context, false);
+    await expect(savedNote).toHaveCount(0, { timeout: 30_000 });
+    await expect(offlineNote).toBeHidden();
+    await expect(h1).toBeVisible();
+    await expect.poll(() => savedAtOf(page, organization.slug)).toBeGreaterThan(firstSavedAt);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+    ).toBe(true);
+  });
+
+  test('a page never opened shows the not-saved view offline within 5 s, with links enabled', async ({
+    page,
+    context,
+  }, testInfo) => {
+    const path = orgPath(NOT_SAVED_ORG.organization.slug);
+    await installWorker(page);
+    await setOffline(context, true);
+    const response = await page.goto(path);
+    expect(response?.fromServiceWorker()).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING })).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page).toHaveTitle('Not saved on this device | Omni League');
+    await expect(page.getByRole('main').getByRole('link', { name: 'Try again' })).toHaveAttribute(
+      'href',
+      path,
+    );
+    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expectLinksEnabled(page);
+    await screenshotsAndAxe(page, testInfo, 'not-saved-offline');
+
+    // The top bar's home link still works offline (an in-app navigation). The axe helper's Tab
+    // walk leaves focus on the skip link, which then covers the home link: blur it first.
+    await blurActiveElement(page);
+    await page.getByRole('banner').getByRole('link', { name: 'Omni League' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+  });
+
+  test('field wifi (navigator.onLine true, every Convex socket closed): a page never opened shows the not-saved view within 10 s', async ({
+    page,
+  }) => {
+    const path = orgPath(FIELD_WIFI_ORG.organization.slug);
+    await installWorker(page);
+    fieldWifi = true;
+    const response = await page.goto(path);
+    expect(response?.fromServiceWorker()).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    expect(await page.evaluate(() => navigator.onLine)).toBe(true);
+  });
+  // PR #136's test FAIL: a saved value that is not a getPublicPage result of this build crashed
+  // the page offline and logged errors online. Each is now removed and treated as not saved; the
+  // console fixture fails the test on any console error.
+  test('a saved value of the wrong shape or version is removed: not-saved view offline, the live page online', async ({
+    page,
+    context,
+  }) => {
+    const { organization } = UNUSABLE_ORG;
+    const path = orgPath(organization.slug);
+    const version = OFFLINE_SAVED_QUERIES[0].version;
+    const valid = {
+      name: organization.name,
+      slug: organization.slug,
+      leagueCount: 0,
+      locationCount: 0,
+      sportCount: 0,
+    };
+    const unusable: [string, Record<string, unknown>][] = [
+      ['{"name":"Shape Only"}', { v: { name: 'Shape Only' }, version }],
+      ['42', { v: 42, version }],
+      ['"x"', { v: 'x', version }],
+      ['[1,2]', { v: [1, 2], version }],
+      ['another version', { v: valid, version: version + 1 }],
+      ['no version', { v: valid }],
+      ['a time in the future', { v: valid, version, savedAt: Date.now() + 365 * 86_400_000 }],
+    ];
+    const plant = (stored: Record<string, unknown>) =>
+      page.evaluate(
+        ([key, value]) => {
+          localStorage.setItem(key, value);
+        },
+        [
+          savedKey(organization.slug),
+          JSON.stringify({ savedAt: Date.now(), usedAt: Date.now(), ...stored }),
+        ] as const,
+      );
+    const h1 = page.getByRole('heading', { level: 1 });
+
+    await installWorker(page);
+    await setOffline(context, true);
+    for (const [label, stored] of unusable) {
+      await plant(stored);
+      const response = await page.goto(path);
+      expect(response?.fromServiceWorker(), label).toBe(true);
+      await expect(h1, label).toHaveText(NOT_SAVED_HEADING, { timeout: 5_000 });
+      await expect(page.locator('[data-saved-copy-note]'), label).toHaveCount(0);
+      expect(await savedAtOf(page, organization.slug), label).toBeNull();
+    }
+
+    // Online, the worker serves the shell, so no transferred value: the saved copy would show
+    // until the live result arrives. An unusable one is removed instead, and the live result saved.
+    await setOffline(context, false);
+    for (const [label, stored] of unusable) {
+      await plant(stored);
+      await page.goto(path);
+      await expect(h1, label).toHaveText(organization.name, { timeout: 30_000 });
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              (key) =>
+                JSON.parse(localStorage.getItem(key) ?? 'null') as {
+                  v?: { name?: string };
+                  version?: number;
+                } | null,
+              savedKey(organization.slug),
+            ),
+          { message: label },
+        )
+        .toMatchObject({ v: { name: organization.name }, version });
     }
   });
 });
