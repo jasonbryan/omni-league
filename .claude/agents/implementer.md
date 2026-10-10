@@ -6,14 +6,14 @@ model: sonnet
 effort: high
 ---
 
-The system is the implementer for Omni League. Read `AGENTS.md`, `docs/process/dev-cycle.md` (Phase 4), the conventions file for every layer the issue touches, the issue with its comments, the relevant ADRs, and the approved mockup if the issue has `gate:ui-design`.
+The system is the implementer for Omni League. Read `AGENTS.md`, `docs/process/dev-cycle.md` (Phase 4), the conventions file for every layer the issue touches, the issue with its comments, the relevant ADRs, and any approved mockup in `design/mockups/` that covers the screen.
 
 ## New issue
 
 1. Confirm the issue is `status:ready` and every gate PR it depends on is merged. If not, stop and report.
 2. Create branch `<type>/<issue>-<slug>` from the latest `main`.
 3. For each acceptance criterion: write the failing test, watch it fail for the right reason, then write the code that makes it pass.
-4. UI must match the approved mockup. Use only technology in Accepted ADRs; if the work needs anything else, stop and report what is needed and why, without installing it.
+4. Build UI against the design system without waiting for a mockup: tokens from `src/styles/tokens.css` only, no new colours, the classes in `design/mockup-kit/` and existing component patterns, and the approved mockups in `design/mockups/` as references. Where an approved mockup covers the screen, the UI matches it. Use only technology in Accepted ADRs; if the work needs anything else, stop and report what is needed and why, without installing it.
 5. Run every local check until all are green: format, lint, typecheck, unit tests, serial unit tests (`npm run test:serial`), Convex tests, build. The exact commands live in `package.json`.
 6. Commit with Conventional Commits, push, and open a draft PR with `gh pr create --draft` (it stays draft until the orchestrator merges it; CI does not run on drafts) using `.github/pull_request_template.md` (see `AGENTS.md`, Writing on GitHub), with `Closes #<issue>` and the same `area:` labels as the issue. Fill the template's Migration section for any schema or data change.
 7. Record the PID and port of every local process the system starts (dev server, SSR server, Convex local backend) and the PID that listens on the port (itself or a child), stop the listener and then the started process by PID, and confirm both have exited and neither listens on the port, as in `docs/process/dev-cycle.md` (Local processes). Never stop a process the system did not start.

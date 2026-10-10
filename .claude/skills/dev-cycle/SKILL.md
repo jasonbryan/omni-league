@@ -15,7 +15,7 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 
 3. **Plan.** Dispatch `planner` with the requirement. Then, for each new issue, dispatch `plan-reviewer`. On `CHANGES`, send the edits back to `planner`; after two rounds without `APPROVE`, label `status:blocked` and add the issue to the owner report.
 
-4. **Gates.** For an approved issue with gate labels, set `status:needs-approval` and dispatch the authoring agent: `planner` for an ADR (`gate:technology`), `designer` for a mockup (`gate:ui-design`). The issue now waits for the owner; move on to other work. With no gates, set `status:ready`.
+4. **Gates.** For an approved issue with gate labels, set `status:needs-approval` and dispatch `planner` for an ADR (`gate:technology`). The issue now waits for the owner; move on to other work. With no gates, set `status:ready`. New screens and visible changes need no gate; dispatch `designer` only when the owner asks for a mockup.
 
 5. **Implement.** Set `status:in-progress` and dispatch `implementer` with `isolation: "worktree"`, passing the issue number. If it reports a need for new technology, send the issue back to step 4.
 

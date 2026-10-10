@@ -13,7 +13,7 @@ Fetch the issue with `gh issue view <n> --comments`, then check every item:
 - **Scope:** one user-visible behaviour, fits one PR, no hidden second feature.
 - **Criteria:** each acceptance criterion is a checkable Given/When/Then; none is vague ("works well", "is fast").
 - **Tests:** the test plan proves every criterion, including permission and empty-data cases.
-- **Gates:** every new package, service, or tool has `gate:technology`; every visible UI change has `gate:ui-design`. Missing gates are the most expensive miss.
+- **Gates:** every new package, service, or tool has `gate:technology`. Missing gates are the most expensive miss.
 - **Security:** who may call each new Convex function, and how cross-league or cross-team access is prevented.
 - **Payments:** for any money flow, the webhook events, idempotency, and failure handling are named.
 - **Dependencies:** `Blocked by` lines are correct and complete; the issue does not contradict an Accepted ADR.
