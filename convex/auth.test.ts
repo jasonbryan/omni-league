@@ -5,7 +5,9 @@ import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { components } from './_generated/api';
-import { ADULT_CONFIRMATION_REQUIRED, PASSWORD_COMPROMISED_MESSAGE } from './auth';
+import type { GenericCtx } from '@convex-dev/better-auth';
+import type { DataModel } from './_generated/dataModel';
+import { ADULT_CONFIRMATION_REQUIRED, PASSWORD_COMPROMISED_MESSAGE, createAuth } from './auth';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -400,15 +402,17 @@ describe('body validation messages the client maps (tester)', () => {
       { email: 'a; [body.name]@example.com' },
       '[body.email] Invalid email address',
     ],
+    // A bad `name` no longer reaches body validation: the before hook answers NAME_INVALID first
+    // (#111, 'name bounds'), so these cases use `password` for the issue on another field.
     [
-      'a missing name and a malformed email',
-      { name: undefined, email: 'bad' },
-      '[body.name] Invalid input: expected string, received undefined; [body.email] Invalid email address',
+      'a missing password and a malformed email',
+      { password: undefined, email: 'bad' },
+      '[body.email] Invalid email address; [body.password] Invalid input: expected string, received undefined',
     ],
     [
-      'a numeric name',
-      { name: 123 as unknown as string },
-      '[body.name] Invalid input: expected string, received number',
+      'a numeric password',
+      { password: 123 as unknown as string },
+      '[body.password] Invalid input: expected string, received number',
     ],
   ])('%s: 400 VALIDATION_ERROR with %j, nothing created', async (_, change, message) => {
     const t = setup();
@@ -416,5 +420,326 @@ describe('body validation messages the client maps (tester)', () => {
     expect(status).toBe(400);
     expect(json).toEqual({ code: 'VALIDATION_ERROR', message });
     expect((await stored(t)).authUsers).toEqual([]);
+  });
+});
+
+// #111: while BETTER_AUTH_SECRET is unset or empty, Better Auth would sign with its public default
+// secret. createAuth refuses every endpoint instead, with a 503 whose body never names the variable.
+describe('auth not configured (#111)', () => {
+  const NOT_CONFIGURED = {
+    code: 'AUTH_NOT_CONFIGURED',
+    message: 'Authentication is not available.',
+  };
+
+  /** Every row the refusal must not create: the component's tables and the app's `users`. */
+  async function rows(t: T) {
+    return t.run(async (ctx) => {
+      const all = async (model: 'user' | 'account' | 'session' | 'jwks') =>
+        (
+          (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+            model,
+            paginationOpts: { numItems: 100, cursor: null },
+          })) as { page: unknown[] }
+        ).page;
+      return {
+        user: await all('user'),
+        account: await all('account'),
+        session: await all('session'),
+        jwks: await all('jwks'),
+        users: await ctx.db.query('users').collect(),
+      };
+    });
+  }
+  const NO_ROWS = { user: [], account: [], session: [], jwks: [], users: [] };
+
+  async function get(t: T, path: string) {
+    const response = await t.fetch(path, { headers: { origin: SITE_URL } });
+    const text = await response.text();
+    return { status: response.status, text, headers: response.headers };
+  }
+
+  describe.each([
+    ['unset', undefined],
+    ['empty', ''],
+  ])('with the secret %s', (_, value) => {
+    beforeEach(() => {
+      vi.stubEnv('BETTER_AUTH_SECRET', value);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test('POST /sign-up/email is 503 AUTH_NOT_CONFIGURED and creates and sets nothing', async () => {
+      const t = setup();
+      const { status, json, headers } = await signUp(t, valid());
+      expect(status).toBe(503);
+      expect(json).toEqual(NOT_CONFIGURED);
+      expect(headers.get('set-cookie')).toBeNull();
+      expect(headers.get('set-auth-token')).toBeNull();
+      expect(headers.get('set-better-auth-cookie')).toBeNull();
+      expect(await rows(t)).toEqual(NO_ROWS);
+      // Refused before the password is checked or hashed.
+      expect(pwned).not.toHaveBeenCalled();
+    });
+
+    test('GET /get-session and GET /convex/token are 503, return no token, and add no jwks row', async () => {
+      const t = setup();
+      for (const path of ['/api/auth/get-session', '/api/auth/convex/token']) {
+        const { status, text } = await get(t, path);
+        expect(status, path).toBe(503);
+        expect(JSON.parse(text), path).toEqual(NOT_CONFIGURED);
+        expect(text, path).not.toContain('token":"');
+      }
+      expect(await rows(t)).toEqual(NO_ROWS);
+    });
+
+    test('the 503 body does not contain the variable name', async () => {
+      const t = setup();
+      const response = await t.fetch('/api/auth/sign-up/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: SITE_URL },
+        body: JSON.stringify(valid()),
+      });
+      expect(await response.text()).not.toContain('BETTER_AUTH_SECRET');
+    });
+
+    test('an invalid name or a missing adultConfirmed still gets 503, not the other refusals', async () => {
+      const t = setup();
+      for (const body of [
+        { ...valid(), name: '   ' },
+        { ...valid(), name: 'x'.repeat(101) },
+        { ...valid(), adultConfirmed: undefined },
+      ]) {
+        const { status, json } = await signUp(t, body);
+        expect(status).toBe(503);
+        expect(json).toEqual(NOT_CONFIGURED);
+      }
+      expect(await rows(t)).toEqual(NO_ROWS);
+    });
+
+    test('auth.api.signUpEmail rejects with AUTH_NOT_CONFIGURED and creates no row', async () => {
+      const t = setup();
+      const error = await t.run(async (ctx) => {
+        try {
+          await createAuth(ctx).api.signUpEmail({ body: valid() as never });
+          return null;
+        } catch (caught) {
+          // An APIError is not a Convex value, so it cannot leave `t.run` as it is.
+          const { statusCode, body } = caught as { statusCode: number; body: unknown };
+          return { statusCode, body };
+        }
+      });
+      expect(error?.statusCode).toBe(503);
+      expect(error?.body).toMatchObject(NOT_CONFIGURED);
+      expect(await rows(t)).toEqual(NO_ROWS);
+    });
+
+    test('createAuth with an empty context (as registerRoutes calls it) does not throw', () => {
+      expect(() => createAuth({} as GenericCtx<DataModel>)).not.toThrow();
+    });
+
+    test('logs the cause on the server, never a secret value', async () => {
+      const t = setup();
+      const logged: string[] = [];
+      vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logged.push(args.map(String).join(' '));
+      });
+      await signUp(t, valid());
+      expect(logged).toEqual(['BETTER_AUTH_SECRET is not set']);
+    });
+  });
+
+  test('is read on every call: setting the secret afterwards turns auth on again', async () => {
+    vi.stubEnv('BETTER_AUTH_SECRET', undefined);
+    const t = setup();
+    expect((await signUp(t, valid())).status).toBe(503);
+    vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
+    expect((await signUp(t, valid())).status).toBe(200);
+  }, 30_000);
+
+  test('never falls back to the default secret: two unset instances sign differently', async () => {
+    vi.stubEnv('BETTER_AUTH_SECRET', undefined);
+    const secrets = await setup().run(async (ctx) => {
+      const contexts = await Promise.all([createAuth(ctx).$context, createAuth(ctx).$context]);
+      return contexts.map((context) => context.secret);
+    });
+    expect(secrets[0]).not.toBe(secrets[1]);
+    for (const secret of secrets) {
+      expect(secret).not.toBe('better-auth-secret-123456789');
+      expect(secret.length).toBeGreaterThanOrEqual(32);
+    }
+  });
+});
+
+// #111: the sign-up hook bounds `name`. The page trims and refuses an empty name; a direct POST
+// has to meet the same rule, and what is stored is the trimmed value.
+describe('name bounds (#111)', () => {
+  test.each([
+    ['empty', ''],
+    ['spaces only', '   '],
+    ['a number', 123],
+    ['missing', undefined],
+    ['101 characters', 'x'.repeat(101)],
+    ['101 characters after trimming', `  ${'x'.repeat(101)}  `],
+  ])('a name that is %s is 400 NAME_INVALID and creates nothing', async (_, name) => {
+    const t = setup();
+    const body = { ...valid(), name } as SignUpBody;
+    if (name === undefined) delete body.name;
+    const { status, json } = await signUp(t, body);
+    expect(status, JSON.stringify(json)).toBe(400);
+    expect(json['code']).toBe('NAME_INVALID');
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+
+  test.each([
+    ['100 characters', 'x'.repeat(100)],
+    ['100 characters with surrounding spaces', `  ${'x'.repeat(100)}  `],
+  ])(
+    'a name of %s signs up, stored trimmed',
+    async (_, name) => {
+      const t = setup();
+      const { status, json } = await signUp(t, { ...valid(), name });
+      expect(status, JSON.stringify(json)).toBe(200);
+      const { authUsers, users } = await stored(t);
+      expect(authUsers[0]?.['name']).toBe('x'.repeat(100));
+      expect(users[0]?.name).toBe('x'.repeat(100));
+    },
+    30_000,
+  );
+
+  test('a direct POST with "  Ada  " stores "Ada" in the auth user and the users row', async () => {
+    const t = setup();
+    expect((await signUp(t, { ...valid(), name: '  Ada  ' })).status).toBe(200);
+    const { authUsers, users } = await stored(t);
+    expect(authUsers[0]?.['name']).toBe('Ada');
+    expect(users[0]?.name).toBe('Ada');
+  }, 30_000);
+
+  test('an over-long name is NAME_INVALID even with adultConfirmed, and a valid name without it is still ADULT_CONFIRMATION_REQUIRED', async () => {
+    const t = setup();
+    const long = await signUp(t, { ...valid(), name: 'x'.repeat(101), adultConfirmed: true });
+    expect(long.status).toBe(400);
+    expect(long.json['code']).toBe('NAME_INVALID');
+    const body = { ...valid() };
+    delete body.adultConfirmed;
+    const unconfirmed = await signUp(t, body);
+    expect(unconfirmed.status).toBe(400);
+    expect(unconfirmed.json).toMatchObject(ADULT_CONFIRMATION_REQUIRED);
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+});
+
+// Tester (#111): edge cases the criteria imply, beyond the implementer's cases.
+describe('name bounds and refusal, tester probes (#111)', () => {
+  test.each([
+    ['tabs and newlines only', '\t\n\r '],
+    ['no-break and ideographic spaces only', ' 　'],
+    ['null', null],
+    ['an array', ['Ada']],
+    ['an object', { first: 'Ada' }],
+    ['a boolean', true],
+  ])('a name that is %s is 400 NAME_INVALID and creates nothing', async (_, name) => {
+    const t = setup();
+    const { status, json } = await signUp(t, { ...valid(), name } as unknown as SignUpBody);
+    expect(status, JSON.stringify(json)).toBe(400);
+    expect(json['code']).toBe('NAME_INVALID');
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+
+  test('the length is String.length after trim(): 50 emoji pass, 51 do not', async () => {
+    const t = setup();
+    const ok = await signUp(t, { ...valid(), name: '\u{1F3D0}'.repeat(50) });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+    const long = await signUp(t, { ...valid('b@example.com'), name: '\u{1F3D0}'.repeat(51) });
+    expect(long.status).toBe(400);
+    expect(long.json['code']).toBe('NAME_INVALID');
+  }, 30_000);
+
+  test('trimming keeps inner whitespace', async () => {
+    const t = setup();
+    expect((await signUp(t, { ...valid(), name: ' \tAda  Lovelace\n ' })).status).toBe(200);
+    expect((await stored(t)).authUsers[0]?.['name']).toBe('Ada  Lovelace');
+  }, 30_000);
+
+  test('two concurrent sign-ups with untrimmed names store trimmed names', async () => {
+    const t = setup();
+    const [a, b] = await Promise.all([
+      signUp(t, { ...valid('a@example.com'), name: '  Ada ' }),
+      signUp(t, { ...valid('b@example.com'), name: ' Grace  ' }),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const names = (await stored(t)).authUsers.map((user) => user['name']).sort();
+    expect(names).toEqual(['Ada', 'Grace']);
+  }, 30_000);
+
+  test('a bad email with a valid name is still the VALIDATION_ERROR the client maps to the email field', async () => {
+    const t = setup();
+    const { status, json } = await signUp(t, { ...valid(), email: 'nope' });
+    expect(status).toBe(400);
+    expect(json['code']).toBe('VALIDATION_ERROR');
+    expect(json['message']).toBe('[body.email] Invalid email address');
+  });
+
+  test.each([
+    ['an array', '[]'],
+    ['null', 'null'],
+    ['a string', '"x"'],
+    ['empty', ''],
+  ])('a sign-up body that is %s is a 4xx and creates nothing', async (_, raw) => {
+    const t = setup();
+    const response = await t.fetch('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: SITE_URL },
+      body: raw,
+    });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+
+  describe.each([
+    ['unset', undefined],
+    ['empty', ''],
+  ])('with the secret %s, every other route', (_, value) => {
+    test.each([
+      ['GET', '/api/auth/ok'],
+      ['GET', '/api/auth/convex/jwks'],
+      ['GET', '/api/auth/jwks'],
+      ['POST', '/api/auth/sign-in/email'],
+      ['POST', '/api/auth/sign-out'],
+      ['POST', '/api/auth/convex/token'],
+      ['GET', '/api/auth/get-session'],
+    ])(
+      '%s %s is 503 AUTH_NOT_CONFIGURED or not found, and writes no row and no cookie',
+      async (method, path) => {
+        vi.stubEnv('BETTER_AUTH_SECRET', value);
+        const t = setup();
+        const response = await t.fetch(path, {
+          method,
+          headers: { 'content-type': 'application/json', origin: SITE_URL },
+          ...(method === 'POST'
+            ? { body: JSON.stringify({ email: 'a@b.co', password: 'x' }) }
+            : {}),
+        });
+        const text = await response.text();
+        expect([503, 404], `${path} ${response.status} ${text}`).toContain(response.status);
+        if (response.status === 503)
+          expect(JSON.parse(text)).toMatchObject({ code: 'AUTH_NOT_CONFIGURED' });
+        expect(text).not.toContain('BETTER_AUTH_SECRET');
+        expect(response.headers.get('set-cookie')).toBeNull();
+        const rows = await t.run(async (ctx) => {
+          const page = async (model: 'user' | 'session' | 'jwks') =>
+            (
+              (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+                model,
+                paginationOpts: { numItems: 10, cursor: null },
+              })) as { page: unknown[] }
+            ).page;
+          return [await page('user'), await page('session'), await page('jwks')];
+        });
+        expect(rows).toEqual([[], [], []]);
+      },
+    );
   });
 });

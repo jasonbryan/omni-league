@@ -49,22 +49,64 @@ export const authComponent = createClient<DataModel>(components.betterAuth, {
 
 export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
 
+/** The longest sign-up `name`, in `String.length` units after `trim()` (as the page counts). */
+export const NAME_MAX_LENGTH = 100;
+
+/** The error a sign-up with a missing, blank, or over-long name gets (HTTP 400). */
+export const NAME_INVALID = {
+  code: 'NAME_INVALID',
+  message: 'Enter a name of 1 to 100 characters.',
+} as const;
+
+/** The error every endpoint gets while `BETTER_AUTH_SECRET` is unset or empty (HTTP 503). */
+export const AUTH_NOT_CONFIGURED = {
+  code: 'AUTH_NOT_CONFIGURED',
+  message: 'Authentication is not available.',
+} as const;
+
 /**
- * Refuses `/sign-up/email` unless the body's `adultConfirmed` is `true` (accounts are adults only,
- * ADR 0008 "Ages"). It runs for HTTP requests and for server-side `auth.api.signUpEmail` calls, so
- * a direct `POST /api/auth/sign-up/email` cannot skip it. Better Auth ignores the field itself.
+ * A secret for one `createAuth` call while `BETTER_AUTH_SECRET` is unset. Better Auth would
+ * otherwise sign with its public default secret. Nothing signed with this value outlives the call,
+ * and the guard below refuses every request, so nothing is signed with it at all.
  */
-const requireAdultConfirmation = createAuthMiddleware((ctx) => {
-  if (ctx.path !== '/sign-up/email') return Promise.resolve();
-  const body: unknown = ctx.body;
-  const confirmed =
-    typeof body === 'object' &&
-    body !== null &&
-    (body as Record<string, unknown>)[ADULT_CONFIRMATION_FIELD] === true;
-  return confirmed
-    ? Promise.resolve()
-    : Promise.reject(APIError.from('BAD_REQUEST', ADULT_CONFIRMATION_REQUIRED));
-});
+function placeholderSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The `before` hook for every endpoint, over HTTP and through `auth.api.*`, so a direct request
+ * cannot skip it. In order:
+ * 1. While the secret is unset (`configured` false), refuses with 503 AUTH_NOT_CONFIGURED. The body
+ *    never names the variable; the server log does. It runs first, so it also wins over the
+ *    sign-up checks.
+ * 2. On `/sign-up/email`, refuses a `name` that is not a string, is blank, or is longer than
+ *    NAME_MAX_LENGTH after `trim()` (NAME_INVALID). The stored name is the trimmed one
+ *    (`databaseHooks` in createAuth): a before hook cannot change the body, because the plugins'
+ *    before hooks return the original context, which replaces the change.
+ * 3. On `/sign-up/email`, refuses a body whose `adultConfirmed` is not `true` (accounts are adults
+ *    only, ADR 0008 "Ages"). Better Auth ignores the field itself.
+ */
+function requestGuard(configured: boolean) {
+  return createAuthMiddleware((ctx) => {
+    if (!configured) {
+      console.error('BETTER_AUTH_SECRET is not set');
+      return Promise.reject(APIError.from('SERVICE_UNAVAILABLE', AUTH_NOT_CONFIGURED));
+    }
+    if (ctx.path !== '/sign-up/email') return Promise.resolve();
+    const body: unknown = ctx.body;
+    const fields =
+      typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+    const name = typeof fields['name'] === 'string' ? fields['name'].trim() : '';
+    if (name === '' || name.length > NAME_MAX_LENGTH) {
+      return Promise.reject(APIError.from('BAD_REQUEST', NAME_INVALID));
+    }
+    if (fields[ADULT_CONFIRMATION_FIELD] !== true) {
+      return Promise.reject(APIError.from('BAD_REQUEST', ADULT_CONFIRMATION_REQUIRED));
+    }
+    return Promise.resolve();
+  });
+}
 
 /**
  * The Better Auth instance for one Convex function call. `registerRoutes` also calls it once with
@@ -72,10 +114,13 @@ const requireAdultConfirmation = createAuthMiddleware((ctx) => {
  */
 export function createAuth(ctx: GenericCtx<DataModel>) {
   const siteUrl = env.SITE_URL ?? '';
+  // Read on every call, never at module load. Unset or empty: see requestGuard.
+  const secret = env.BETTER_AUTH_SECRET;
+  const configured = secret !== undefined && secret !== '';
   const isTest = env.IS_TEST === 'true';
   return betterAuth({
     baseURL: env.CONVEX_SITE_URL,
-    secret: env.BETTER_AUTH_SECRET,
+    secret: configured ? secret : placeholderSecret(),
     database: authComponent.adapter(ctx),
     trustedOrigins: (request) =>
       trustedOrigins(request, {
@@ -101,7 +146,16 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
       // "test" or TEST is set; no environment variable may turn it off on a deployment.
       disableOriginCheck: false,
     },
-    hooks: { before: requireAdultConfirmation },
+    hooks: { before: requestGuard(configured) },
+    databaseHooks: {
+      user: {
+        // A direct POST cannot store leading or trailing whitespace in a name (NAME_INVALID covers
+        // the rest). Runs inside the sign-up, before the user.onCreate trigger copies the name.
+        create: {
+          before: (user) => Promise.resolve({ data: { ...user, name: user.name.trim() } }),
+        },
+      },
+    },
     plugins: [
       // Fails closed: an unreachable API refuses the sign-up. Off under IS_TEST, so e2e makes no
       // outside call; convex/auth.test.ts covers it with a mocked fetch.
