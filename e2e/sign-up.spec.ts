@@ -3,7 +3,7 @@
 // empty shell and no auth code runs there. Checks of what sign-up wrote run on local runs only
 // (they read the local backend through `testing:accountByEmail`); against a preview the browser
 // flow still runs, which is the "sign-up from the deploy-preview origin" check.
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page, Response, TestInfo } from '@playwright/test';
 import { join } from 'node:path';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -45,6 +45,27 @@ async function signUp(page: Page, user: TestUser, path = '/sign-up'): Promise<vo
   await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
   await fillForm(page, user);
   await createAccount(page).click();
+}
+
+/**
+ * Resolves once the page has fetched both Convex tokens of a sign-in: the first, which the Convex
+ * client authenticates with, and the fresh one it fetches as soon as the server confirms the first
+ * (`initialAuthTokenReuse` is off by default in `convex/browser`). WebKit reports a cross-origin
+ * fetch that the next `page.goto` aborts as a page error ("Fetch API cannot load … due to access
+ * control checks"), so a test that navigates again waits for both first.
+ */
+function convexTokensFetched(page: Page): Promise<void> {
+  let count = 0;
+  return new Promise((resolve) => {
+    const onResponse = (response: Response) => {
+      if (new URL(response.url()).pathname !== '/api/auth/convex/token') return;
+      count += 1;
+      if (count < 2) return;
+      page.off('response', onResponse);
+      resolve();
+    };
+    page.on('response', onResponse);
+  });
 }
 
 /** A full-page PNG for the tester's mockup comparison, at this project's width. */
@@ -257,9 +278,11 @@ test.describe('sign-up', () => {
       page,
     }) => {
       const query = `?returnTo=${encodeURIComponent(raw)}`;
+      const tokens = convexTokensFetched(page);
       await signUp(page, newUser('Variant'), `/sign-up${query}`);
       await expect(page).toHaveURL(`${baseURL}/`);
       await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+      await tokens;
 
       await page.goto(`/sign-up${query}`);
       await expect(page).toHaveURL(`${baseURL}/`);
@@ -276,8 +299,10 @@ test.describe('sign-up', () => {
     context.on('request', (request) => {
       if (new URL(request.url()).hostname.includes('evil')) offSite.push(request.url());
     });
+    const first = convexTokensFetched(page);
     await signUp(page, newUser('Fuzz'));
     await expect(page).toHaveURL(`${baseURL}/app`);
+    await first;
     const cases: [raw: string, landing: string | null][] = [
       ['/..//evil.example/x', '/'],
       ['/%2e%2e%2f%2fevil.example', null],
@@ -301,8 +326,10 @@ test.describe('sign-up', () => {
       [`/${'a'.repeat(4_000)}`, null],
     ];
     for (const [raw, landing] of cases) {
+      const tokens = convexTokensFetched(page);
       await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
       await page.waitForURL((url) => url.pathname !== '/sign-up');
+      await tokens;
       const url = new URL(page.url());
       expect(url.origin, raw).toBe(new URL(baseURL).origin);
       expect(url.pathname.startsWith('//'), `${raw} -> ${url.pathname}`).toBe(false);

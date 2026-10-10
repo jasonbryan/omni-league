@@ -44,10 +44,11 @@ const HEAD_TAGS: readonly (readonly [string, RegExp])[] = [
   ],
 ];
 
-/** `/` answers 200; `/app` has no client route until #62 and the unknown path is not found. */
+/** `/` answers 200, the Client routes `/app` and `/sign-up` (#62) 200, an unknown path 404. */
 const PAGES = [
   ['/', 200],
-  ['/app', 404],
+  ['/app', 200],
+  ['/sign-up', 200],
   ['/this-page-does-not-exist', 404],
 ] as const;
 
@@ -70,7 +71,7 @@ test.describe('install to the Home Screen', () => {
     ({ browserName, isMobile }) => browserName !== 'chromium' || isMobile,
     'chromium-desktop only',
   );
-  // `/app` and the unknown path are 404 pages (the page's own resource message is expected).
+  // The unknown path is a 404 page (the page's own resource message is expected).
   test.use({ expectedDocumentStatus: 404 });
 
   test('head tags, manifest, icons, and the parsed manifest', async ({
