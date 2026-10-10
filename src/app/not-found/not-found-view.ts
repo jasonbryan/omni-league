@@ -12,8 +12,8 @@ import { setNotFoundStatus } from '../core/not-found-status';
  * (ADR 0006, "Status codes").
  *
  * On the server it sets the response status to 404 through `RESPONSE_INIT` (`setNotFoundStatus`),
- * which is `null` in the browser, during prerender, and in unit tests. It reads no data and nothing per visitor, so the
- * server and the browser render the same DOM.
+ * which is `null` in the browser, during prerender, and in unit tests. It reads no data and
+ * nothing per visitor, so the server and the browser render the same DOM.
  */
 @Component({
   selector: 'app-not-found-view',
