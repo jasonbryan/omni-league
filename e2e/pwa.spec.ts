@@ -456,7 +456,9 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     await expectLinksEnabled(page);
     await screenshotsAndAxe(page, testInfo, 'not-saved-offline');
 
-    // The top bar's home link still works offline (an in-app navigation).
+    // The top bar's home link still works offline (an in-app navigation). The axe helper's Tab
+    // walk leaves focus on the skip link, which then covers the home link: blur it first.
+    await blurActiveElement(page);
     await page.getByRole('banner').getByRole('link', { name: 'Omni League' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/');
