@@ -51,7 +51,10 @@ describe('src/styles/base.css', () => {
     const css = withoutComments(await read('src', 'styles', 'base.css'));
     assert.match(css, /@layer base\s*\{/);
     assert.match(css, /\*\s*\{\s*@apply border-border;\s*\}/);
-    assert.match(css, /html\s*\{\s*scroll-padding-top:\s*4\.5rem;\s*\}/);
+    assert.match(
+      css,
+      /html\s*\{\s*scroll-padding-top:\s*calc\(4\.5rem \+ var\(--offline-note-h, 0px\)\);\s*\}/,
+    );
     assert.match(
       css,
       /body\s*\{\s*@apply bg-background text-foreground font-sans antialiased;\s*\}/,

@@ -6,17 +6,14 @@
    WCAG 1.4.11). A component must not remove it with `outline-none`.
    Scroll offset: 4.5rem keeps anchor targets and focused elements below the sticky 56px top bar
    (WCAG 2.4.11). While the offline note (#88, src/app/shell/offline-note.ts) shows below the top
-   bar, the offset grows by its 2.25rem height, as in design/mockups/88-offline-note.html; the
-   shell's header cancels the same amount on itself. */
+   bar, the offset grows by its measured height, --offline-note-h (36px, or more where it wraps), as
+   in design/mockups/88-offline-note.html; the shell's header cancels the same amount on itself. */
 @layer base {
   * {
     @apply border-border;
   }
   html {
-    scroll-padding-top: 4.5rem;
-  }
-  html:has([data-offline-note]) {
-    scroll-padding-top: 6.75rem;
+    scroll-padding-top: calc(4.5rem + var(--offline-note-h, 0px));
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;

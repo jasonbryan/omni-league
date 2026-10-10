@@ -44,26 +44,26 @@ describe('Shell offline note', () => {
     expect(host.querySelector('header + [role="status"] [data-offline-note]')).not.toBeNull();
   });
 
-  it('moves the sticky offsets below the note while it shows, and back when it goes', async () => {
+  it('offsets the header scroll margin and the sidebar column by the note height variable', async () => {
     const host = await render(SidebarTestPage);
     const header = host.querySelector('header');
     const sidebarColumn = host.querySelector('main')?.previousElementSibling?.firstElementChild;
+    const expectOffsets = () => {
+      expect(classes(header)).toContain(
+        '[&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]',
+      );
+      expect(classes(sidebarColumn)).toEqual(
+        expect.arrayContaining([
+          'sticky',
+          'top-[calc(3.5rem+var(--offline-note-h,0px))]',
+          'max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))]',
+        ]),
+      );
+    };
 
-    expect(classes(header)).toContain('[&,&_*]:-scroll-mt-18');
-    expect(classes(sidebarColumn)).toEqual(
-      expect.arrayContaining(['sticky', 'top-14', 'max-h-[calc(100dvh-3.5rem)]']),
-    );
-
+    // The classes stay put; only --offline-note-h (set by the note) changes (offline-note.spec.ts).
+    expectOffsets();
     setBrowserOnline(false);
-    expect(classes(header)).toContain('[&,&_*]:-scroll-mt-27');
-    expect(classes(header)).not.toContain('[&,&_*]:-scroll-mt-18');
-    expect(classes(sidebarColumn)).toEqual(
-      expect.arrayContaining(['sticky', 'top-23', 'max-h-[calc(100dvh-5.75rem)]']),
-    );
-    expect(classes(sidebarColumn)).not.toContain('top-14');
-
-    setBrowserOnline(true);
-    expect(classes(header)).toContain('[&,&_*]:-scroll-mt-18');
-    expect(classes(sidebarColumn)).toContain('top-14');
+    expectOffsets();
   });
 });

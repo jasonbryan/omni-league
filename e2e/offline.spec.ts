@@ -60,7 +60,7 @@ test.describe('offline note', () => {
     await page.clock.fastForward(5_000);
     await expect(note).toBeVisible();
     await expect(note).toHaveText("You're offline. Changes need a connection.");
-    expect(await scrollPaddingTop(page)).toBe('108px');
+    await expect.poll(() => scrollPaddingTop(page)).toBe('108px');
 
     // Step 2: once sockets reach the server again, the note clears within 10 s of fake time.
     // Each fast-forward fires the client's pending reconnect at most once.
@@ -68,7 +68,7 @@ test.describe('offline note', () => {
     await page.clock.fastForward(10_000);
     await expect(note).toBeHidden();
     await expect(status).toHaveText('Back online.');
-    expect(await scrollPaddingTop(page)).toBe('72px');
+    await expect.poll(() => scrollPaddingTop(page)).toBe('72px');
 
     // Step 3: the browser goes offline; the note shows at once.
     await context.setOffline(true);
@@ -84,6 +84,49 @@ test.describe('offline note', () => {
       await page.screenshot({ path });
       await testInfo.attach(`offline-note-${width}.png`, { path, contentType: 'image/png' });
     }
+    // At 320px the note wraps to two lines (56px). The scroll offset follows its measured height,
+    // so a focused or anchored element above the viewport lands below the note, not under it.
+    await page.setViewportSize({ width: 320, height: 800 });
+    await expect.poll(async () => (await note.boundingBox())?.height).toBe(56);
+    const noteBox = await status.boundingBox();
+    expect(noteBox).toMatchObject({ y: 56, height: 56 });
+    await expect.poll(() => scrollPaddingTop(page)).toBe('128px');
+    // The header cancels the same amount on itself (shell.ts).
+    expect(
+      await page.locator('header').evaluate((header) => getComputedStyle(header).scrollMarginTop),
+    ).toBe('-128px');
+    // The overview has no control of its own, so the test adds a button to main between two
+    // spacers (the page can then scroll the button to any offset), scrolls to the end, and focuses
+    // the button, now above the viewport.
+    await page.locator('main').evaluate((main) => {
+      const spacer = (height: string) => {
+        const element = document.createElement('div');
+        element.style.height = height;
+        return element;
+      };
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Focus target';
+      const target = document.createElement('div');
+      target.id = 'e2e-focus-target';
+      target.append(spacer('1000px'), button, spacer('2000px'));
+      main.append(target);
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    });
+    const button = page.locator('#e2e-focus-target button');
+    await expect.poll(async () => (await button.boundingBox())?.y ?? 0).toBeLessThan(0);
+    // Chromium centres a focused element it scrolls to, in the scrollport less the padding.
+    await button.focus();
+    await expect(button).toBeFocused();
+    expect((await button.boundingBox())?.y).toBeGreaterThanOrEqual(56 + 56 + 16);
+    // An anchored element (scrolled to its start) lands exactly 16px below the wrapped note.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await button.evaluate((element) => element.scrollIntoView({ block: 'start' }));
+    expect((await button.boundingBox())?.y).toBe(56 + 56 + 16);
+    await page.evaluate(() => {
+      document.getElementById('e2e-focus-target')?.remove();
+      window.scrollTo(0, 0);
+    });
     await page.setViewportSize({ width: 360, height: 800 });
 
     // Step 4: back online; the client reconnects at once on the browser's `online` event.

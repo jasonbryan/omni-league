@@ -3,6 +3,24 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { OfflineNote } from './offline-note';
 
+/** Stands in for `ResizeObserver` (jsdom has none): records what it observes and its callback. */
+class FakeResizeObserver {
+  static last: FakeResizeObserver | undefined;
+  readonly observed: Element[] = [];
+  disconnected = false;
+  constructor(readonly callback: () => void) {
+    FakeResizeObserver.last = this;
+  }
+  observe(target: Element): void {
+    this.observed.push(target);
+  }
+  disconnect(): void {
+    this.disconnected = true;
+  }
+}
+
+const noteHeightVar = () => document.documentElement.style.getPropertyValue('--offline-note-h');
+
 function setBrowserOnline(online: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(online);
   window.dispatchEvent(new Event(online ? 'online' : 'offline'));
@@ -17,6 +35,8 @@ describe('OfflineNote', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    FakeResizeObserver.last = undefined;
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
     client = new FakeConvexClient();
     TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: client }] });
     fixture = TestBed.createComponent(OfflineNote);
@@ -25,13 +45,16 @@ describe('OfflineNote', () => {
   });
 
   afterEach(() => {
+    fixture.destroy();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('is an empty, sticky status region below the top bar while online', () => {
     expect(region.getAttribute('role')).toBe('status');
-    expect(region.className).toBe('sticky top-14 z-20 block bg-foreground text-background');
+    expect(region.classList).toContain('sticky');
+    expect(region.classList).toContain('top-14');
     expect(region.textContent.trim()).toBe('');
     expect(region.querySelector('a, button, input, [tabindex]')).toBeNull();
   });
@@ -103,5 +126,36 @@ describe('OfflineNote', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     TestBed.tick();
     expect(region.textContent.trim()).toBe('');
+  });
+
+  it('sets --offline-note-h on <html> to the measured height of the region as it resizes', () => {
+    const observer = FakeResizeObserver.last;
+    expect(observer?.observed).toEqual([region]);
+    expect(noteHeightVar()).toBe('');
+
+    let height = 56;
+    vi.spyOn(region, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 56, 320, height),
+    );
+    observer?.callback();
+    expect(noteHeightVar()).toBe('56px');
+
+    height = 36;
+    observer?.callback();
+    expect(noteHeightVar()).toBe('36px');
+
+    height = 0;
+    observer?.callback();
+    expect(noteHeightVar()).toBe('');
+  });
+
+  it('removes --offline-note-h and stops observing when destroyed', () => {
+    vi.spyOn(region, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 56, 320, 36));
+    FakeResizeObserver.last?.callback();
+    expect(noteHeightVar()).toBe('36px');
+
+    fixture.destroy();
+    expect(noteHeightVar()).toBe('');
+    expect(FakeResizeObserver.last?.disconnected).toBe(true);
   });
 });

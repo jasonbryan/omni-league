@@ -20,7 +20,6 @@ import { NavigationEnd, NavigationStart, Router, RouterLink } from '@angular/rou
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu, lucideTrophy } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
-import { injectOnline } from '../core/data/convex';
 import { OfflineNote } from './offline-note';
 import type { ShellSheet } from './shell-sheet';
 import { ShellSidebar } from './shell-sidebar';
@@ -53,8 +52,8 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
 
 /**
  * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar, the
- * offline note (#88), the page's sidebar when it supplies an `<ng-template appShellSidebar>` (a column from 1024px, a sheet
- * behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
+ * offline note (#88), the page's sidebar when it supplies an `<ng-template appShellSidebar>` (a
+ * column from 1024px, a sheet behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
  * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
  *
  * The menu button is plain markup, rendered on the server and hydrated as is. The sheet
@@ -77,13 +76,12 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       >Skip to main content</a
     >
     <div class="flex min-h-dvh flex-col">
-      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css, larger
-           while the offline note shows) on the header and everything in it. The header is always
-           in view, so focusing one of its controls (by Tab, or focus returning to the menu button
-           as the sheet closes) must not scroll the page. -->
+      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css, which adds the
+           offline note's height, --offline-note-h) on the header and everything in it. The header
+           is always in view, so focusing one of its controls (by Tab, or focus returning to the
+           menu button as the sheet closes) must not scroll the page. -->
       <header
-        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6"
-        [class]="headerScrollMargin()"
+        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
       >
         @if (sidebar()) {
           <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg" (shell.spec.ts checks
@@ -109,7 +107,10 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       <div class="flex flex-1">
         @if (sidebar(); as sidebar) {
           <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
-            <div class="sticky overflow-y-auto px-3 py-5" [class]="sidebarOffset()">
+            <!-- Sticks below the top bar and the offline note (--offline-note-h, set by the note). -->
+            <div
+              class="sticky top-[calc(3.5rem+var(--offline-note-h,0px))] max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))] overflow-y-auto px-3 py-5"
+            >
               <ng-container [ngTemplateOutlet]="sidebar.template" />
             </div>
           </div>
@@ -154,15 +155,6 @@ export class Shell {
   private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),
-  );
-
-  // While the offline note shows (2.25rem tall), the sticky offsets grow by its height (#88).
-  private readonly online = injectOnline();
-  protected readonly headerScrollMargin = computed(() =>
-    this.online() ? '[&,&_*]:-scroll-mt-18' : '[&,&_*]:-scroll-mt-27',
-  );
-  protected readonly sidebarOffset = computed(() =>
-    this.online() ? 'top-14 max-h-[calc(100dvh-3.5rem)]' : 'top-23 max-h-[calc(100dvh-5.75rem)]',
   );
 
   /** The phone sheet, once the first press of the menu button has loaded it. */

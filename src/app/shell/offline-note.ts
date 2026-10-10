@@ -1,7 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   DestroyRef,
+  ElementRef,
+  afterNextRender,
   effect,
   inject,
   signal,
@@ -13,6 +16,9 @@ import { injectOnline } from '../core/data/convex';
 /** How long "Back online." stays in the status region for screen readers. */
 export const BACK_ONLINE_MS = 5_000;
 
+/** Custom property on `<html>` holding the note's height; base.css and the shell offset by it. */
+export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
+
 /**
  * The offline note (#88; design/mockups/88-offline-note.html): one status region directly below the
  * top bar. While the adapter's `online` signal is false it shows "You're offline. Changes need a
@@ -21,6 +27,10 @@ export const BACK_ONLINE_MS = 5_000;
  * true, so the server HTML holds an empty region.
  *
  * The host is the region itself, so `sticky` works against the shell's column rather than a wrapper.
+ *
+ * In the browser it keeps `--offline-note-h` on `<html>` equal to its measured height (unset while
+ * empty). html's `scroll-padding-top`, the header's negative scroll margin, and the sidebar's
+ * sticky offset add it, so they follow the note however many lines it wraps to (two at 320px).
  */
 @Component({
   selector: 'app-offline-note',
@@ -58,6 +68,29 @@ export class OfflineNote {
         timer = setTimeout(() => this.backOnline.set(false), BACK_ONLINE_MS);
       }
     });
-    inject(DestroyRef).onDestroy(() => clearTimeout(timer));
+    const destroyRef = inject(DestroyRef);
+    destroyRef.onDestroy(() => clearTimeout(timer));
+    this.trackHeight(destroyRef);
+  }
+
+  /** Mirrors the region's height into `--offline-note-h` (browser only: afterNextRender). */
+  private trackHeight(destroyRef: DestroyRef): void {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const root = inject(DOCUMENT).documentElement;
+    afterNextRender(() => {
+      const write = () => {
+        const height = host.getBoundingClientRect().height;
+        if (height > 0) root.style.setProperty(NOTE_HEIGHT_PROPERTY, `${height}px`);
+        else root.style.removeProperty(NOTE_HEIGHT_PROPERTY);
+      };
+      write();
+      // Every supported browser has ResizeObserver; jsdom (unit tests) does not.
+      const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(write);
+      observer?.observe(host);
+      destroyRef.onDestroy(() => {
+        observer?.disconnect();
+        root.style.removeProperty(NOTE_HEIGHT_PROPERTY);
+      });
+    });
   }
 }
