@@ -16,6 +16,7 @@
 // skipped with that reason.
 import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
+import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -315,7 +316,7 @@ test.describe('service worker (production build)', () => {
 });
 
 // #82: saved copies of public pages (ADR 0013 section 3), design/mockups/82-offline-pages.html.
-const [SAVED_ORG, , NOT_SAVED_ORG, FIELD_WIFI_ORG] = DEMO;
+const [SAVED_ORG, UNUSABLE_ORG, NOT_SAVED_ORG, FIELD_WIFI_ORG] = DEMO;
 const orgPath = (slug: string) => `/organizations/${slug}`;
 const SAVED_PATH = orgPath(SAVED_ORG.organization.slug);
 const savedKey = (slug: string) =>
@@ -477,5 +478,71 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     });
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     expect(await page.evaluate(() => navigator.onLine)).toBe(true);
+  });
+  // PR #136's test FAIL: a saved value that is not a getPublicPage result of this build crashed
+  // the page offline and logged errors online. Each is now removed and treated as not saved; the
+  // console fixture fails the test on any console error.
+  test('a saved value of the wrong shape or version is removed: not-saved view offline, the live page online', async ({
+    page,
+    context,
+  }) => {
+    const { organization } = UNUSABLE_ORG;
+    const path = orgPath(organization.slug);
+    const version = OFFLINE_SAVED_QUERIES[0].version;
+    const valid = { name: organization.name, slug: organization.slug, leagues: [], locations: [] };
+    const unusable: [string, Record<string, unknown>][] = [
+      ['{"name":"Shape Only"}', { v: { name: 'Shape Only' }, version }],
+      ['42', { v: 42, version }],
+      ['"x"', { v: 'x', version }],
+      ['[1,2]', { v: [1, 2], version }],
+      ['another version', { v: valid, version: version + 1 }],
+      ['no version', { v: valid }],
+      ['a time in the future', { v: valid, version, savedAt: Date.now() + 365 * 86_400_000 }],
+    ];
+    const plant = (stored: Record<string, unknown>) =>
+      page.evaluate(
+        ([key, value]) => {
+          localStorage.setItem(key, value);
+        },
+        [
+          savedKey(organization.slug),
+          JSON.stringify({ savedAt: Date.now(), usedAt: Date.now(), ...stored }),
+        ] as const,
+      );
+    const h1 = page.getByRole('heading', { level: 1 });
+
+    await installWorker(page);
+    await setOffline(context, true);
+    for (const [label, stored] of unusable) {
+      await plant(stored);
+      const response = await page.goto(path);
+      expect(response?.fromServiceWorker(), label).toBe(true);
+      await expect(h1, label).toHaveText(NOT_SAVED_HEADING, { timeout: 5_000 });
+      await expect(page.locator('[data-saved-copy-note]'), label).toHaveCount(0);
+      expect(await savedAtOf(page, organization.slug), label).toBeNull();
+    }
+
+    // Online, the worker serves the shell, so no transferred value: the saved copy would show
+    // until the live result arrives. An unusable one is removed instead, and the live result saved.
+    await setOffline(context, false);
+    for (const [label, stored] of unusable) {
+      await plant(stored);
+      await page.goto(path);
+      await expect(h1, label).toHaveText(organization.name, { timeout: 30_000 });
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              (key) =>
+                JSON.parse(localStorage.getItem(key) ?? 'null') as {
+                  v?: { name?: string };
+                  version?: number;
+                } | null,
+              savedKey(organization.slug),
+            ),
+          { message: label },
+        )
+        .toMatchObject({ v: { name: organization.name }, version });
+    }
   });
 });

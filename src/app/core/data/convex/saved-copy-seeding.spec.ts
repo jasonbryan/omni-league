@@ -10,9 +10,11 @@ import {
   injectQuery,
   provideConvex,
 } from './index';
+import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import { savedCopyKey } from './saved-copies';
 import { FakeConvexClient } from './testing/fake-convex-client';
 import { FakeConvexHttpClient } from './testing/fake-convex-http-client';
+import { plantSavedCopy } from './testing/saved-copy';
 
 const getPublicPage = api.organizations.getPublicPage;
 const myTeams = makeFunctionReference<'query', { leagueId: string }, unknown>('teams:mine');
@@ -24,10 +26,7 @@ const LIVE = { name: 'Live name', slug: 'gulf', leagues: [], locations: [] };
 const TRANSFERRED = { name: 'Transferred name', slug: 'gulf', leagues: [], locations: [] };
 
 function plant(slug: string, value: unknown, savedAt = SAVED_AT): void {
-  localStorage.setItem(
-    savedCopyKey(getPublicPage, { slug }),
-    JSON.stringify({ v: convexToJson(value as never), savedAt, usedAt: savedAt }),
-  );
+  plantSavedCopy(getPublicPage, { slug }, value, savedAt);
 }
 
 function stored(slug: string): unknown {
@@ -89,7 +88,12 @@ describe('injectQuery saved copies (browser)', () => {
     expect(page.savedAt()).toBeUndefined();
 
     client.subscriptions[0].emit(LIVE);
-    expect(stored('gulf')).toEqual({ v: convexToJson(LIVE), savedAt: NOW, usedAt: NOW });
+    expect(stored('gulf')).toEqual({
+      v: convexToJson(LIVE),
+      savedAt: NOW,
+      usedAt: NOW,
+      version: OFFLINE_SAVED_QUERIES[0].version,
+    });
 
     vi.setSystemTime(NOW + 60_000);
     client.subscriptions[0].emit({ ...LIVE, name: 'Renamed' });
@@ -156,6 +160,33 @@ describe('injectQuery saved copies (browser)', () => {
     TestBed.tick();
     expect(client.activeSubscriptions).toHaveLength(1);
     expect(client.activeSubscriptions[0].args).toEqual({ slug: 'bay' });
+  });
+
+  it.each([
+    ['an object missing fields', { name: 'Shape Only' }],
+    ['a number', 42],
+    ['a string', 'x'],
+    ['an array', [1, 2]],
+  ])(
+    'treats a saved value that is not a query result (%s) as no saved copy, and removes it',
+    (_, value) => {
+      plant('gulf', value);
+      const page = create();
+      expect(page.value()).toBeUndefined();
+      expect(page.isLoading()).toBe(true);
+      expect(page.savedAt()).toBeUndefined();
+      expect(stored('gulf')).toBeNull();
+    },
+  );
+
+  it('treats a saved copy of another version as no saved copy, and removes it', () => {
+    plantSavedCopy(getPublicPage, { slug: 'gulf' }, SAVED, SAVED_AT, {
+      version: OFFLINE_SAVED_QUERIES[0].version + 1,
+    });
+    const page = create();
+    expect(page.value()).toBeUndefined();
+    expect(page.isLoading()).toBe(true);
+    expect(stored('gulf')).toBeNull();
   });
 
   it('does not use a saved copy older than 14 days', () => {

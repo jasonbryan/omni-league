@@ -2,14 +2,15 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { convexToJson } from 'convex/values';
 import { api } from '../../../convex/_generated/api';
 import { CONVEX_CLIENT } from '../core/data/convex';
+import { OFFLINE_SAVED_QUERIES } from '../core/data/convex/offline-saved-queries';
 import { savedCopyKey } from '../core/data/convex/saved-copies';
 import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
+import { plantSavedCopy } from '../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../offline/saved-time';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
@@ -27,10 +28,7 @@ const PATH = `/organizations/${GULF_COAST.slug}`;
 let client: FakeConvexClient;
 
 function plant(page = GULF_COAST, savedAt = SAVED_AT): void {
-  localStorage.setItem(
-    savedCopyKey(api.organizations.getPublicPage, { slug: page.slug }),
-    JSON.stringify({ v: convexToJson(page), savedAt, usedAt: savedAt }),
-  );
+  plantSavedCopy(api.organizations.getPublicPage, { slug: page.slug }, page, savedAt);
 }
 
 const savedEntry = (slug = GULF_COAST.slug) =>
@@ -198,6 +196,37 @@ describe('OrganizationPage offline (#82)', () => {
       expect(text(host(harness).querySelector('main h1'))).toBe(GULF_COAST.name);
       expect(note(harness)).toBeNull();
     });
+
+    // PR #136's test FAIL: these values crashed the page (`OrganizationOverview.tiles`).
+    it.each<[string, unknown, Record<string, unknown>]>([
+      ['an object missing fields', { name: 'Shape Only' }, {}],
+      ['a number', 42, {}],
+      ['a string', 'x', {}],
+      ['an array', [1, 2], {}],
+      ['another version', GULF_COAST, { version: OFFLINE_SAVED_QUERIES[0].version + 1 }],
+      ['a time in the future', GULF_COAST, { savedAt: NOW + 24 * 60 * 60 * 1000 }],
+    ])(
+      'offline with a saved value that is not usable (%s): shows the not-saved view and removes it',
+      async (_, value, stored) => {
+        plantSavedCopy(
+          api.organizations.getPublicPage,
+          { slug: GULF_COAST.slug },
+          value,
+          SAVED_AT,
+          stored,
+        );
+        stubOnLine(false);
+        const errors = vi.spyOn(console, 'error');
+        const harness = await open(PATH, { socket: 'down' });
+        expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+        expect(text(host(harness).querySelector('main h1'))).toBe(
+          "This page isn't saved on this device",
+        );
+        expect(note(harness)).toBeNull();
+        expect(savedEntry()).toBeNull();
+        expect(errors).not.toHaveBeenCalled();
+      },
+    );
 
     it('field wifi: keeps the loading view for 5 s, then shows the not-saved view', async () => {
       stubOnLine(true);

@@ -61,6 +61,27 @@ export function seedDemoCalls(previewOriginPattern) {
   ];
 }
 
+/**
+ * `PREVIEW_ORIGIN_PATTERN` from convex/lib/previewOrigin.ts, the single source (Node strips the
+ * types of that one constant file). The repo's package.json has no `type`, so Node warns
+ * `MODULE_TYPELESS_PACKAGE_JSON` when it reparses the file as a module; only that warning is held
+ * back, for this one import.
+ */
+export async function previewOriginPattern() {
+  const emitWarning = process.emitWarning;
+  process.emitWarning = function (warning, ...rest) {
+    const [options, code] = rest;
+    const warningCode = typeof options === 'object' && options !== null ? options.code : code;
+    if (warningCode === 'MODULE_TYPELESS_PACKAGE_JSON') return;
+    return emitWarning.call(this, warning, ...rest);
+  };
+  try {
+    return (await import('../convex/lib/previewOrigin.ts')).PREVIEW_ORIGIN_PATTERN;
+  } finally {
+    process.emitWarning = emitWarning;
+  }
+}
+
 /** E2E_BASE_URL when it is a non-empty string (the same rule as e2e/support/env.ts). */
 export function remoteBaseUrl(env) {
   const value = env['E2E_BASE_URL'];
@@ -356,10 +377,8 @@ export async function main(
         return 0;
       }
       case 'seed-demo': {
-        // Node strips the types of this one constant file (convex/lib/previewOrigin.ts).
-        const { PREVIEW_ORIGIN_PATTERN } = await import('../convex/lib/previewOrigin.ts');
         let inserted = '';
-        for (const args of seedDemoCalls(PREVIEW_ORIGIN_PATTERN)) {
+        for (const args of seedDemoCalls(await previewOriginPattern())) {
           inserted = await runConvex(args, { env, spawnCli });
         }
         log(

@@ -3,6 +3,7 @@
 // after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
 // and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
+import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -628,6 +629,7 @@ test.describe('organization page in the browser', () => {
       v: { name: 'Saved Copy Name', slug: tenant.slug, leagues: [], locations: [] },
       savedAt,
       usedAt: savedAt,
+      version: OFFLINE_SAVED_QUERIES[0].version,
     });
     // Before any app script: plant the saved copy and record every h1 text the page ever shows.
     await page.addInitScript(

@@ -11,6 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +27,7 @@ import {
   isListening,
   LOCAL_CONVEX_URL,
   main,
+  previewOriginPattern,
   PROJECT_DIR,
   readLocalDeployment,
   resolveTarget,
@@ -392,6 +394,28 @@ describe('seedDemoCalls (seed-demo)', () => {
     for (const args of calls) {
       assert.ok((args[0] === 'env' && args[1] === 'set') || args[0] === 'run', args.join(' '));
     }
+  });
+});
+
+describe('previewOriginPattern (seed-demo)', () => {
+  it('reads the constant from convex/lib/previewOrigin.ts with no module-type warning', () => {
+    // A fresh process: Node warns once per file, and this test process may have loaded it.
+    const script =
+      `const { previewOriginPattern } = await import(${JSON.stringify(
+        new URL('./e2e-convex.mjs', import.meta.url).href,
+      )});\n` + 'process.stdout.write(await previewOriginPattern());';
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /^\^https:\/\/.*netlify\\\.app\$$/);
+    assert.equal(run.stderr, '');
+  });
+
+  it('restores process.emitWarning afterwards', async () => {
+    const before = process.emitWarning;
+    assert.equal(typeof (await previewOriginPattern()), 'string');
+    assert.equal(process.emitWarning, before);
   });
 });
 

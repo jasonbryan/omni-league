@@ -1,15 +1,18 @@
 import { TestBed } from '@angular/core/testing';
-import { makeFunctionReference } from 'convex/server';
+import { getFunctionName, makeFunctionReference } from 'convex/server';
 import { convexToJson } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
+import { getPublicPageReturns } from '../../../../../convex/lib/publicPage';
 import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import {
   ConvexSavedCopies,
   SAVED_COPY_MAX_AGE_MS,
   SAVED_COPY_MAX_ENTRIES,
+  SAVED_COPY_MAX_FUTURE_MS,
   SAVED_COPY_MAX_TOTAL_LENGTH,
   savedCopyKey,
 } from './saved-copies';
+import { plantSavedCopy } from './testing/saved-copy';
 
 const getPublicPage = api.organizations.getPublicPage;
 /** Same function name as the listed query, with free-form args, for the key-order cases. */
@@ -21,6 +24,10 @@ const myTeams = makeFunctionReference<'query', { leagueId: string }, unknown>('t
 
 const START = Date.UTC(2026, 9, 10, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
+const VERSION = OFFLINE_SAVED_QUERIES[0].version;
+
+/** A `getPublicPage` result with this name and no leagues or locations. */
+const page = (name: string) => ({ name, slug: 'org', leagues: [], locations: [] });
 
 const savedKeys = () =>
   Object.keys(localStorage)
@@ -43,8 +50,12 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists organizations:getPublicPage, a deliberately public, caller-independent query', () => {
-    expect(OFFLINE_SAVED_QUERIES).toEqual([getPublicPage]);
+  it('lists organizations:getPublicPage, a deliberately public, caller-independent query, with its own returns validator', () => {
+    expect(OFFLINE_SAVED_QUERIES).toHaveLength(1);
+    expect(getFunctionName(OFFLINE_SAVED_QUERIES[0].query)).toBe('organizations:getPublicPage');
+    // The very validator the Convex function declares, not a restated copy.
+    expect(OFFLINE_SAVED_QUERIES[0].returns).toBe(getPublicPageReturns);
+    expect(Number.isInteger(VERSION)).toBe(true);
   });
 
   describe('key', () => {
@@ -58,22 +69,27 @@ describe('ConvexSavedCopies', () => {
     });
 
     it('uses one key for the same args written in two key orders', () => {
-      store.write(listedAnyArgs, { season: 's1', page: 2 }, { n: 1 });
+      store.write(listedAnyArgs, { season: 's1', page: 2 }, page('One'));
       vi.setSystemTime(START + 1000);
-      store.write(listedAnyArgs, { page: 2, season: 's1' }, { n: 2 });
+      store.write(listedAnyArgs, { page: 2, season: 's1' }, page('Two'));
       expect(savedKeys()).toEqual([
         'cvx-saved:organizations:getPublicPage:{"page":2,"season":"s1"}',
       ]);
       expect(store.read(listedAnyArgs, { season: 's1', page: 2 })).toEqual({
-        value: { n: 2 },
+        value: page('Two'),
         savedAt: START + 1000,
       });
     });
   });
 
   describe('write', () => {
-    it('stores { v: convexToJson(result), savedAt, usedAt } for a listed query', () => {
-      const result = { name: 'Gulf Coast', count: 5n };
+    it('stores { v: convexToJson(result), savedAt, usedAt, version } for a listed query', () => {
+      const result = {
+        name: 'Gulf Coast',
+        slug: 'gulf-coast',
+        locations: [{ name: 'Bayside', address: '4410 Ocean Dr' }],
+        leagues: [{ name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] }],
+      };
       store.write(getPublicPage, { slug: 'gulf-coast' }, result);
       const raw = localStorage.getItem(
         'cvx-saved:organizations:getPublicPage:{"slug":"gulf-coast"}',
@@ -82,6 +98,7 @@ describe('ConvexSavedCopies', () => {
         v: convexToJson(result),
         savedAt: START,
         usedAt: START,
+        version: VERSION,
       });
       expect(store.read(getPublicPage, { slug: 'gulf-coast' })).toEqual({
         value: result,
@@ -98,7 +115,7 @@ describe('ConvexSavedCopies', () => {
       // An entry planted under that key by anything else is not used either.
       localStorage.setItem(
         'cvx-saved:teams:mine:{"leagueId":"a"}',
-        JSON.stringify({ v: ['Sharks'], savedAt: START, usedAt: START }),
+        JSON.stringify({ v: ['Sharks'], savedAt: START, usedAt: START, version: VERSION }),
       );
       const getItem = vi.spyOn(Storage.prototype, 'getItem');
       expect(store.read(myTeams, { leagueId: 'a' })).toBeUndefined();
@@ -106,8 +123,8 @@ describe('ConvexSavedCopies', () => {
     });
 
     it('removes the entry when the live result is null or undefined', () => {
-      store.write(getPublicPage, { slug: 'a' }, { name: 'A' });
-      store.write(getPublicPage, { slug: 'b' }, { name: 'B' });
+      store.write(getPublicPage, { slug: 'a' }, page('A'));
+      store.write(getPublicPage, { slug: 'b' }, page('B'));
       expect(savedKeys()).toHaveLength(2);
       store.write(getPublicPage, { slug: 'a' }, null);
       store.write(getPublicPage, { slug: 'b' }, undefined);
@@ -118,16 +135,16 @@ describe('ConvexSavedCopies', () => {
     it(`keeps at most ${SAVED_COPY_MAX_ENTRIES} entries, removing the least recently used first`, () => {
       for (let i = 0; i < SAVED_COPY_MAX_ENTRIES; i++) {
         vi.setSystemTime(START + i * 1000);
-        store.write(getPublicPage, { slug: `org-${i}` }, { name: `Org ${i}` });
+        store.write(getPublicPage, { slug: `org-${i}` }, page(`Org ${i}`));
       }
       expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES);
 
       // Reading org-0 makes it the most recently used, so org-1 is now the least recently used.
       vi.setSystemTime(START + 100_000);
-      expect(store.read(getPublicPage, { slug: 'org-0' })?.value).toEqual({ name: 'Org 0' });
+      expect(store.read(getPublicPage, { slug: 'org-0' })?.value).toEqual(page('Org 0'));
 
       vi.setSystemTime(START + 200_000);
-      store.write(getPublicPage, { slug: 'org-new' }, { name: 'New' });
+      store.write(getPublicPage, { slug: 'org-new' }, page('New'));
       const keys = savedKeys();
       expect(keys).toHaveLength(SAVED_COPY_MAX_ENTRIES);
       expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-0' }));
@@ -136,7 +153,7 @@ describe('ConvexSavedCopies', () => {
 
       // One more: org-2 goes next.
       vi.setSystemTime(START + 300_000);
-      store.write(getPublicPage, { slug: 'org-newer' }, { name: 'Newer' });
+      store.write(getPublicPage, { slug: 'org-newer' }, page('Newer'));
       expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES);
       expect(savedKeys()).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-2' }));
     });
@@ -147,13 +164,18 @@ describe('ConvexSavedCopies', () => {
         const at = START + i * 1000;
         localStorage.setItem(
           savedCopyKey(getPublicPage, { slug: `org-${String(i)}` }),
-          JSON.stringify({ v: { name: `Org ${String(i)}` }, savedAt: at, usedAt: at }),
+          JSON.stringify({
+            v: page(`Org ${String(i)}`),
+            savedAt: at,
+            usedAt: at,
+            version: VERSION,
+          }),
         );
       }
       expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES + 1);
 
       vi.setSystemTime(START + 100_000);
-      store.write(getPublicPage, { slug: 'org-new' }, { name: 'New' });
+      store.write(getPublicPage, { slug: 'org-new' }, page('New'));
       const keys = savedKeys();
       expect(keys).toHaveLength(SAVED_COPY_MAX_ENTRIES);
       expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-new' }));
@@ -169,27 +191,27 @@ describe('ConvexSavedCopies', () => {
     it('updating an existing entry removes nothing else', () => {
       for (let i = 0; i < SAVED_COPY_MAX_ENTRIES; i++) {
         vi.setSystemTime(START + i * 1000);
-        store.write(getPublicPage, { slug: `org-${i}` }, { name: `Org ${i}` });
+        store.write(getPublicPage, { slug: `org-${i}` }, page(`Org ${i}`));
       }
       vi.setSystemTime(START + 100_000);
-      store.write(getPublicPage, { slug: 'org-10' }, { name: 'Org 10 renamed' });
+      store.write(getPublicPage, { slug: 'org-10' }, page('Org 10 renamed'));
       expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES);
       expect(store.read(getPublicPage, { slug: 'org-10' })).toEqual({
-        value: { name: 'Org 10 renamed' },
+        value: page('Org 10 renamed'),
         savedAt: START + 100_000,
       });
     });
 
     it('does not save a result larger than the size budget, and drops the older copy of it', () => {
-      store.write(getPublicPage, { slug: 'big' }, { name: 'Small' });
-      const huge = { name: 'x'.repeat(SAVED_COPY_MAX_TOTAL_LENGTH) };
+      store.write(getPublicPage, { slug: 'big' }, page('Small'));
+      const huge = page('x'.repeat(SAVED_COPY_MAX_TOTAL_LENGTH));
       store.write(getPublicPage, { slug: 'big' }, huge);
       expect(savedKeys()).toEqual([]);
       expect(store.read(getPublicPage, { slug: 'big' })).toBeUndefined();
     });
 
     it('removes the least recently used entries until all of them fit the size budget', () => {
-      const quarter = { name: 'x'.repeat(Math.floor(SAVED_COPY_MAX_TOTAL_LENGTH / 4)) };
+      const quarter = page('x'.repeat(Math.floor(SAVED_COPY_MAX_TOTAL_LENGTH / 4)));
       for (let i = 0; i < 4; i++) {
         vi.setSystemTime(START + i * 1000);
         store.write(getPublicPage, { slug: `q-${i}` }, quarter);
@@ -202,27 +224,50 @@ describe('ConvexSavedCopies', () => {
       ]);
     });
 
+    it('does not save a live result that does not match the query result, and removes the older copy', () => {
+      store.write(getPublicPage, { slug: 'a' }, page('A'));
+      store.write(getPublicPage, { slug: 'a' }, { name: 'Shape Only' });
+      expect(savedKeys()).toEqual([]);
+      store.write(getPublicPage, { slug: 'a' }, 42);
+      expect(savedKeys()).toEqual([]);
+    });
+
+    it('removes entries of another version, of an unlisted query, or saved in the future when it makes room', () => {
+      plantSavedCopy(getPublicPage, { slug: 'old-version' }, page('Old'), START, {
+        version: VERSION + 1,
+      });
+      plantSavedCopy(getPublicPage, { slug: 'future' }, page('Future'), START + DAY);
+      localStorage.setItem(
+        'cvx-saved:teams:mine:{"leagueId":"a"}',
+        JSON.stringify({ v: ['Sharks'], savedAt: START, usedAt: START, version: VERSION }),
+      );
+      localStorage.setItem('cvx-savedX-not-ours', 'kept');
+      store.write(getPublicPage, { slug: 'new' }, page('New'));
+      expect(savedKeys()).toEqual([savedCopyKey(getPublicPage, { slug: 'new' })]);
+      expect(localStorage.getItem('cvx-savedX-not-ours')).toBe('kept');
+    });
+
     it('removes expired entries when it makes room', () => {
-      store.write(getPublicPage, { slug: 'old' }, { name: 'Old' });
+      store.write(getPublicPage, { slug: 'old' }, page('Old'));
       vi.setSystemTime(START + SAVED_COPY_MAX_AGE_MS + 1);
-      store.write(getPublicPage, { slug: 'new' }, { name: 'New' });
+      store.write(getPublicPage, { slug: 'new' }, page('New'));
       expect(savedKeys()).toEqual([savedCopyKey(getPublicPage, { slug: 'new' })]);
     });
   });
 
   describe('read', () => {
     it('uses an entry up to 14 days old', () => {
-      store.write(getPublicPage, { slug: 'a' }, { name: 'A' });
+      store.write(getPublicPage, { slug: 'a' }, page('A'));
       vi.setSystemTime(START + SAVED_COPY_MAX_AGE_MS);
       expect(store.read(getPublicPage, { slug: 'a' })).toEqual({
-        value: { name: 'A' },
+        value: page('A'),
         savedAt: START,
       });
     });
 
     it('does not use an entry older than 14 days, and removes it', () => {
       expect(SAVED_COPY_MAX_AGE_MS).toBe(14 * DAY);
-      store.write(getPublicPage, { slug: 'a' }, { name: 'A' });
+      store.write(getPublicPage, { slug: 'a' }, page('A'));
       vi.setSystemTime(START + SAVED_COPY_MAX_AGE_MS + 1);
       expect(store.read(getPublicPage, { slug: 'a' })).toBeUndefined();
       expect(savedKeys()).toEqual([]);
@@ -236,6 +281,67 @@ describe('ConvexSavedCopies', () => {
         expect(store.read(getPublicPage, { slug: 'bad' }), raw).toBeUndefined();
         expect(localStorage.getItem(key), raw).toBeNull();
       }
+    });
+
+    // The tester's repros on PR #136: each crashed the organization page offline.
+    it.each([
+      ['an object missing fields', { name: 'Shape Only' }],
+      ['a number', 42],
+      ['a string', 'x'],
+      ['an array', [1, 2]],
+      ['a list of the wrong type', { ...page('A'), leagues: 'none' }],
+      ['null (write never stores it)', null],
+    ])(
+      'does not use a value that does not match the query result (%s), and removes it',
+      (_, value) => {
+        plantSavedCopy(getPublicPage, { slug: 'bad' }, value, START);
+        expect(store.read(getPublicPage, { slug: 'bad' })).toBeUndefined();
+        expect(savedKeys()).toEqual([]);
+      },
+    );
+
+    it('uses a value with a field the query result does not name (a newer build added it)', () => {
+      plantSavedCopy(getPublicPage, { slug: 'a' }, { ...page('A'), leagueCount: 0 }, START);
+      expect(store.read(getPublicPage, { slug: 'a' })?.value).toEqual({
+        ...page('A'),
+        leagueCount: 0,
+      });
+    });
+
+    it.each([
+      ['another version', { version: VERSION + 1 }],
+      ['no version (saved before versions)', { version: undefined }],
+      ['a version that is not a number', { version: String(VERSION) }],
+    ])('does not use an entry with %s, and removes it', (_, stored) => {
+      plantSavedCopy(getPublicPage, { slug: 'a' }, page('A'), START, stored);
+      expect(store.read(getPublicPage, { slug: 'a' })).toBeUndefined();
+      expect(savedKeys()).toEqual([]);
+    });
+
+    it('does not use an entry saved in the future, and removes it', () => {
+      plantSavedCopy(getPublicPage, { slug: 'a' }, page('A'), START + SAVED_COPY_MAX_FUTURE_MS + 1);
+      expect(store.read(getPublicPage, { slug: 'a' })).toBeUndefined();
+      expect(savedKeys()).toEqual([]);
+
+      plantSavedCopy(getPublicPage, { slug: 'b' }, page('B'), START + 365 * DAY);
+      expect(store.read(getPublicPage, { slug: 'b' })).toBeUndefined();
+      expect(savedKeys()).toEqual([]);
+    });
+
+    it('uses an entry saved up to a minute ahead of the clock (a small clock correction)', () => {
+      expect(SAVED_COPY_MAX_FUTURE_MS).toBe(60_000);
+      plantSavedCopy(getPublicPage, { slug: 'a' }, page('A'), START + SAVED_COPY_MAX_FUTURE_MS);
+      expect(store.read(getPublicPage, { slug: 'a' })?.savedAt).toBe(
+        START + SAVED_COPY_MAX_FUTURE_MS,
+      );
+    });
+
+    it('removes an entry whose Convex JSON does not decode', () => {
+      plantSavedCopy(getPublicPage, { slug: 'a' }, null, START, {
+        v: { ...page('A'), name: { $integer: 'zz' } },
+      });
+      expect(store.read(getPublicPage, { slug: 'a' })).toBeUndefined();
+      expect(savedKeys()).toEqual([]);
     });
   });
 
@@ -251,7 +357,7 @@ describe('ConvexSavedCopies', () => {
         throw new DOMException('denied', 'SecurityError');
       });
       expect(() => {
-        store.write(getPublicPage, { slug: 'a' }, { name: 'A' });
+        store.write(getPublicPage, { slug: 'a' }, page('A'));
       }).not.toThrow();
       expect(() => {
         store.write(getPublicPage, { slug: 'a' }, null);
@@ -264,7 +370,7 @@ describe('ConvexSavedCopies', () => {
         throw new DOMException('denied', 'SecurityError');
       });
       expect(() => {
-        store.write(getPublicPage, { slug: 'a' }, { name: 'A' });
+        store.write(getPublicPage, { slug: 'a' }, page('A'));
       }).not.toThrow();
       expect(store.read(getPublicPage, { slug: 'a' })).toBeUndefined();
     });
