@@ -12,6 +12,15 @@ const PAGE = {
   leagueCount: 1,
   locationCount: 1,
   sportCount: 1,
+  sports: [
+    {
+      key: 'beachVolleyball',
+      segment: 'beach-volleyball',
+      name: 'Beach volleyball',
+      leagueCount: 1,
+      locationCount: 1,
+    },
+  ],
 };
 
 const LOCATION = { name: 'Bayside', address: '4410 Ocean Dr' };
@@ -35,6 +44,15 @@ describe('matchesValidator', () => {
     ['undefined', undefined],
     ['a total that is a string', { ...PAGE, leagueCount: '1' }],
     ['a missing total', { name: PAGE.name, slug: PAGE.slug, leagueCount: 1, locationCount: 1 }],
+    [
+      'the shape before issue 101 (totals, no sports)',
+      { name: PAGE.name, slug: PAGE.slug, leagueCount: 1, locationCount: 1, sportCount: 1 },
+    ],
+    [
+      'a sport key that is not a sport',
+      { ...PAGE, sports: [{ ...PAGE.sports[0], key: 'hockey' }] },
+    ],
+    ['a sport missing its segment', { ...PAGE, sports: [{ key: 'soccer', name: 'Soccer' }] }],
     [
       'the earlier shape with lists and no totals',
       { name: PAGE.name, slug: PAGE.slug, locations: [LOCATION], leagues: [LEAGUE] },

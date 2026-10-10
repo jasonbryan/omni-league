@@ -1,4 +1,5 @@
 import { v, type Infer, type Validator } from 'convex/values';
+import { sportValidator } from './sports';
 
 // The results of organizations:getPublicPage, listPublicLeagues, and listPublicLocations (#60,
 // #100). They live apart from organizations.ts and import only `convex/values`, so the Angular app
@@ -7,8 +8,22 @@ import { v, type Infer, type Validator } from 'convex/values';
 // Changing one changes what the app accepts as a saved copy.
 
 /**
+ * One sport with at least one league in the organization (#101): its key, the URL segment of its
+ * sport view, its display name, and its number of leagues and of distinct locations.
+ */
+export const publicSportValidator = v.object({
+  key: sportValidator,
+  segment: v.string(),
+  name: v.string(),
+  leagueCount: v.number(),
+  locationCount: v.number(),
+});
+
+/**
  * The public organization page's header: everything but the lists (no ids, staff, or payments).
  * The three totals are the organization's, never the number of rows a list shows (#100).
+ * `sports` has one entry per sport with a league, in the order of `SPORT_NAMES`, and `sportCount`
+ * is its length (#101).
  */
 export const publicPageValidator = v.object({
   name: v.string(),
@@ -16,6 +31,7 @@ export const publicPageValidator = v.object({
   leagueCount: v.number(),
   locationCount: v.number(),
   sportCount: v.number(),
+  sports: v.array(publicSportValidator),
 });
 
 export type PublicPage = Infer<typeof publicPageValidator>;

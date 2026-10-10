@@ -712,6 +712,7 @@ test.describe('organization page in the browser', () => {
         leagueCount: 0,
         locationCount: 0,
         sportCount: 0,
+        sports: [],
       },
       savedAt,
       usedAt: savedAt,

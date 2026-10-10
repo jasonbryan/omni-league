@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 // The per-test tenant seeds of `convex/testing.ts` (ADR 0005, #60), against the real schema.
 // `testing.test.ts` covers ping and reset with a fixture schema.
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
@@ -88,6 +89,16 @@ describe('testing:seedLeague', () => {
       leagueCount: 2,
       locationCount: 2,
       sportCount: 2,
+      sports: [
+        { key: 'soccer', segment: 'soccer', name: 'Soccer', leagueCount: 1, locationCount: 1 },
+        {
+          key: 'softball',
+          segment: 'softball',
+          name: 'Softball',
+          leagueCount: 1,
+          locationCount: 2,
+        },
+      ],
     });
     const page = { slug: 'e2e-org-a1b2', page: 1 };
     expect((await t.query(api.organizations.listPublicLocations, page)).rows).toEqual([
@@ -245,4 +256,112 @@ describe('testing:addLeague', () => {
     );
     expect(slugs).toEqual(['league-a', 'league-a-2', 'league-a-3', 'league-b']);
   });
+});
+
+describe('sport counters and sportLocations (#101)', () => {
+  /** What a recount of the leagues gives for the organization with this slug. */
+  async function stored(t: T, slug: string) {
+    return t.run(async (ctx) => {
+      const organization = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', slug))
+        .unique();
+      if (!organization) throw new Error('fixture: no organization');
+      const locations = await ctx.db.query('locations').collect();
+      const rows = await ctx.db
+        .query('sportLocations')
+        .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
+          q.eq('organizationId', organization._id),
+        )
+        .collect();
+      const leagues = await ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organization._id))
+        .collect();
+      const recount = new Map<string, number>();
+      for (const league of leagues) {
+        for (const id of new Set(league.locationIds)) {
+          const key = `${league.sport}:${locations.find((l) => l._id === id)?.name}`;
+          recount.set(key, (recount.get(key) ?? 0) + 1);
+        }
+      }
+      return {
+        sportLeagueCounts: organization.sportLeagueCounts,
+        sportLocationCounts: organization.sportLocationCounts,
+        rows: rows
+          .map((row) => [
+            `${row.sport}:${locations.find((l) => l._id === row.locationId)?.name}`,
+            row.leagueCount,
+          ])
+          .sort(),
+        recount: [...recount].sort(),
+      };
+    });
+  }
+
+  test('insertTenant sets both counters and the rows to a recount of its leagues', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, TENANT);
+    const result = await stored(t, 'e2e-org-a1b2');
+    expect(result.sportLeagueCounts).toEqual({ softball: 1, soccer: 1 });
+    expect(result.sportLocationCounts).toEqual({ softball: 2, soccer: 1 });
+    expect(result.rows).toEqual(result.recount);
+    expect(result.rows).toEqual([
+      ['soccer:Field One', 1],
+      ['softball:Field One', 1],
+      ['softball:Field Two', 1],
+    ]);
+  });
+
+  test('an organization with no league starts with both counters empty, not unset', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, { ...TENANT, leagues: [] });
+    const result = await stored(t, 'e2e-org-a1b2');
+    expect(result.sportLeagueCounts).toEqual({});
+    expect(result.sportLocationCounts).toEqual({});
+    expect(result.rows).toEqual([]);
+  });
+
+  test('testing:addLeague updates both counters and the rows of its organization only', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, TENANT);
+    await t.action(internal.testing.seedLeague, {
+      organization: { name: 'Other', slug: 'other' },
+      locations: [{ name: 'Field One', address: 'Elsewhere' }],
+      leagues: [],
+    });
+    for (const [name, sport, locations] of [
+      ['League C', 'soccer', ['Field One', 'Field Two']],
+      ['League D', 'soccer', ['Field Two', 'Field Two']],
+      ['League E', 'beachVolleyball', []],
+    ] as const) {
+      await t.mutation(internal.testing.addLeague, {
+        organizationSlug: 'e2e-org-a1b2',
+        name,
+        sport,
+        locations: [...locations],
+      });
+    }
+    const result = await stored(t, 'e2e-org-a1b2');
+    expect(result.sportLeagueCounts).toEqual({ beachVolleyball: 1, softball: 1, soccer: 3 });
+    expect(result.sportLocationCounts).toEqual({ softball: 2, soccer: 2 });
+    expect(result.rows).toEqual(result.recount);
+    expect(result.rows).toContainEqual(['soccer:Field Two', 2]);
+    const other = await stored(t, 'other');
+    expect(other).toMatchObject({ sportLeagueCounts: {}, sportLocationCounts: {}, rows: [] });
+  });
+
+  test('testing:reset leaves no sportLocations row', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = convexTest(schema, modules);
+    betterAuthTest.register(t, 'betterAuth');
+    await t.action(internal.testing.seedLeague, TENANT);
+    expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toHaveLength(3);
+    await t.mutation(internal.testing.reset, {});
+    expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.query('organizations').collect())).toEqual([]);
+  }, 30_000);
 });

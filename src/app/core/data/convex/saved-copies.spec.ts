@@ -39,6 +39,7 @@ const page = (name: string) => ({
   leagueCount: 0,
   locationCount: 0,
   sportCount: 0,
+  sports: [],
 });
 
 /** A `listPublicLeagues` / `listPublicLocations` result with these rows. */
@@ -112,7 +113,8 @@ describe('ConvexSavedCopies', () => {
         slug: 'gulf-coast',
         leagueCount: 1,
         locationCount: 1,
-        sportCount: 1,
+        sportCount: 0,
+        sports: [],
       };
       store.write(getPublicPage, { slug: 'gulf-coast' }, result);
       const raw = localStorage.getItem(
