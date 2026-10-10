@@ -11,12 +11,12 @@ In Claude Code, the main session orchestrates the cycle with the `/dev-cycle` sk
 | Orchestrator  | main session (`/dev-cycle`) | Picks the next issue, dispatches role agents, moves labels, merges non-gated PRs (gate PRs only on the owner's chat instruction), reports to the owner |
 | Planner       | `planner`                   | Turns a requirement into sliced, testable issues; drafts ADRs for `gate:technology`                                                                    |
 | Plan reviewer | `plan-reviewer`             | Challenges an issue before any code is written                                                                                                         |
-| Designer      | `designer`                  | Builds the HTML mockup for `gate:ui-design`                                                                                                            |
+| Designer      | `designer`                  | Builds an HTML mockup when the owner asks for one                                                                                                      |
 | Implementer   | `implementer`               | Writes code and tests on a branch, opens the PR                                                                                                        |
 | Tester        | `tester`                    | Independently verifies the PR against the acceptance criteria                                                                                          |
 | PR reviewer   | `pr-reviewer`               | Reviews the diff for correctness, security, and conventions                                                                                            |
 | Deployer      | `deployer`                  | Ships merged work to preview/production and verifies it                                                                                                |
-| Owner         | the human                   | Approves gates by merging gate PRs or telling the orchestrator in chat to merge them; answers blocked questions                                        |
+| Owner         | the human                   | Approves gates by merging gate PRs or telling the orchestrator in chat to merge them; reviews UI on staging; answers blocked questions                 |
 
 ### Model and effort
 
@@ -51,7 +51,7 @@ The orchestrator owns every transition. It updates the label and leaves a one- o
 
 - **Status:** `status:planning`, `status:plan-review`, `status:needs-approval`, `status:ready`, `status:in-progress`, `status:in-review`, `status:blocked`
 - **Type:** `type:feature`, `type:bug`, `type:chore`, `type:decision` (ADR), `type:design` (mockup)
-- **Gate:** `gate:ui-design`, `gate:technology`, `gate:production`. Applied to the issue that needs the gate and to the gate PR itself.
+- **Gate:** `gate:technology`, `gate:production`. Applied to the issue that needs the gate and to the gate PR itself.
 - **Area:** `area:frontend`, `area:backend`, `area:payments`, `area:infra`
 
 `scripts/setup-github.sh` creates them all.
@@ -73,7 +73,7 @@ The planner writes issues using `.github/ISSUE_TEMPLATE/feature.yml`. Each issue
 
 ### 2. Plan review
 
-The plan reviewer reads the issue cold and returns `APPROVE` or `CHANGES` with specific edits. It checks: scope fits one PR, criteria are testable, gates are not missed (any new package → `gate:technology`; any visible UI → `gate:ui-design`), security and tenancy implications are covered, and payments flows name their webhook and failure cases.
+The plan reviewer reads the issue cold and returns `APPROVE` or `CHANGES` with specific edits. It checks: scope fits one PR, criteria are testable, gates are not missed (any new package → `gate:technology`), security and tenancy implications are covered, and payments flows name their webhook and failure cases.
 
 On `CHANGES`, the planner revises. After two rounds without `APPROVE`, the issue goes to `status:blocked` with the open disagreement summarised for the owner.
 
@@ -86,7 +86,8 @@ If the issue has no gate labels, it moves straight to `status:ready`.
 Otherwise it moves to `status:needs-approval`, and one gate PR is opened per gate:
 
 - **`gate:technology`:** the planner writes `docs/decisions/NNNN-<slug>.md` from `docs/decisions/0000-template.md` with status `Accepted`, comparing at least two options. PR title `decision: <topic>`.
-- **`gate:ui-design`:** the designer writes `design/mockups/<issue>-<slug>.html`, a self-contained static page showing every state (empty, loading, error, populated) at mobile and desktop widths. PR title `design: <screen>`.
+
+New screens and visible UI changes need no gate and no mockup (owner, 2026-10-10). When the owner asks for a mockup, the designer writes `design/mockups/<issue>-<slug>.html`, a self-contained static page showing every state (empty, loading, error, populated) at mobile and desktop widths, in an ordinary `type:design` PR titled `design: <screen>` with no gate label.
 
 Gate PRs carry the `gate:*` label, link the issue, and are never merged by an agent on its own judgement. The owner merges to approve, or comments with changes, which the authoring agent applies. On merge, the issue moves to `status:ready`.
 
@@ -101,7 +102,7 @@ Gate PRs carry the `gate:*` label, link the issue, and are never merged by an ag
 The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` (for example `feature/12-team-roster`).
 
 - Write the failing test for each acceptance criterion first, then the code.
-- Match an approved mockup exactly; any deviation goes back through `gate:ui-design`.
+- Build UI against the design system: `src/styles/tokens.css`, `design/mockup-kit/`, [Angular conventions](../conventions/angular.md), and the approved mockups in `design/mockups/` as references. Where an approved mockup covers the screen, match it. Use tokens only: no new colours or tokens, and no new patterns where an existing one fits.
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
@@ -118,7 +119,7 @@ The serial run (`npm run test:serial`) runs the Angular specs in one worker, as 
 The tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The full suite, including the serial unit tests, and e2e tests run; UI work gets screenshots at mobile and desktop widths compared with the approved mockup, plus an automated accessibility check.
+- The full suite, including the serial unit tests, and e2e tests run; UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
 - Stop local processes as in [Local processes](#local-processes).
 
@@ -128,7 +129,7 @@ Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fix
 
 ### 6. PR review
 
-The PR reviewer reads the full diff against the issue and the conventions files, and returns `APPROVE` or `CHANGES` with file:line findings ranked by severity. Focus: correctness, Convex authorization and argument validation, Stripe safety, Angular conventions, test quality, and scope creep beyond the issue.
+The PR reviewer reads the full diff against the issue and the conventions files, and returns `APPROVE` or `CHANGES` with file:line findings ranked by severity. Focus: correctness, Convex authorization and argument validation, Stripe safety, Angular conventions, visible changes that break the design system, test quality, and scope creep beyond the issue.
 
 On `CHANGES`, the implementer fixes it, then the tester re-runs, then the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
 
@@ -158,7 +159,7 @@ The deployer runs after merges to `main`:
 Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub.
 
 - **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. No cleanup job runs: Convex deletes preview backends after 5 days, and Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans).
-- **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app`. The deployer smoke-tests it and reports the URL.
+- **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app`. The deployer smoke-tests it and reports the URL. The owner reviews UI changes there and requests changes as new issues.
 - **Production.** The deployer opens a release PR from `main` into the `production` branch. The owner's merge approves and ships it: Netlify builds with the owner-held production key, then the deployer smoke-tests the production URL.
 - **Rollback.** If the production smoke tests fail, the deployer opens a `type:bug` issue with the rollback steps, and the owner runs them: Netlify **Publish deploy** of the previous build, then merging a revert on `production` to redeploy the previous Convex functions.
 

@@ -22,7 +22,7 @@ What changed and why, in one to three sentences.
 
 - [ ] Every gate on the linked issue is approved, or none applies
 - [ ] Uses only technology in Accepted ADRs
-- [ ] UI matches the approved mockup, or no UI changed
+- [ ] UI uses only design tokens and existing patterns, and matches an approved mockup where one covers it, or no UI changed
 
 <details><summary>Evidence</summary>
 
