@@ -387,3 +387,34 @@ describe('the password is never echoed or logged (tester)', () => {
     vi.restoreAllMocks();
   }, 60_000);
 });
+
+// Tester (#62, round 2): the client maps `VALIDATION_ERROR` to the Email field only when every
+// `[body.<field>]` issue is on `email` (src/app/core/auth/auth.service.ts). This pins the server's
+// message format that mapping reads, and that the refused value is never echoed.
+describe('body validation messages the client maps (tester)', () => {
+  test.each([
+    ['a malformed email', { email: 'not-an-email' }, '[body.email] Invalid email address'],
+    ['an empty email', { email: '' }, '[body.email] Invalid email address'],
+    [
+      'an email with an issue separator in it',
+      { email: 'a; [body.name]@example.com' },
+      '[body.email] Invalid email address',
+    ],
+    [
+      'a missing name and a malformed email',
+      { name: undefined, email: 'bad' },
+      '[body.name] Invalid input: expected string, received undefined; [body.email] Invalid email address',
+    ],
+    [
+      'a numeric name',
+      { name: 123 as unknown as string },
+      '[body.name] Invalid input: expected string, received number',
+    ],
+  ])('%s: 400 VALIDATION_ERROR with %j, nothing created', async (_, change, message) => {
+    const t = setup();
+    const { status, json } = await signUp(t, { ...valid(), ...change });
+    expect(status).toBe(400);
+    expect(json).toEqual({ code: 'VALIDATION_ERROR', message });
+    expect((await stored(t)).authUsers).toEqual([]);
+  });
+});

@@ -264,6 +264,94 @@ test.describe('sign-up', () => {
     });
   }
 
+  // Tester (#62, round 2): a signed-in visitor opening /sign-up goes to the validated returnTo
+  // (redirectSignedIn). For each value the browser stays on this site with a path that starts
+  // with exactly one `/`, and no request ever goes to another host named in the value.
+  test('every returnTo keeps a signed-in visitor on this site', async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const offSite: string[] = [];
+    context.on('request', (request) => {
+      if (new URL(request.url()).hostname.includes('evil')) offSite.push(request.url());
+    });
+    await signUp(page, newUser('Fuzz'));
+    await expect(page).toHaveURL(`${baseURL}/app`);
+    const cases: [raw: string, landing: string | null][] = [
+      ['/..//evil.example/x', '/'],
+      ['/%2e%2e%2f%2fevil.example', null],
+      ['/%2e%2e%5c%5cevil.example', null],
+      ['/..\\\\evil.example', '/'],
+      ['/.\\/evil.example', '/'],
+      ['/\t/evil.example', '/'],
+      ['/.\n.//evil.example', '/'],
+      ['/%2F%2Fevil.example', null],
+      ['/%5Cevil.example', null],
+      ['/／／evil.example', null],
+      ['/．．//evil.example', null],
+      ['/x#//evil.example', null],
+      ['/app?next=//evil.example', null],
+      ['/@evil.example', null],
+      ['javascript:alert(1)', '/'],
+      ['data:text/html,<script>alert(1)</script>', '/'],
+      ['//evil.example', '/'],
+      ['https://evil.example/app', '/'],
+      [`${baseURL}/app`, '/'],
+      [`/${'a'.repeat(4_000)}`, null],
+    ];
+    for (const [raw, landing] of cases) {
+      await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
+      await page.waitForURL((url) => url.pathname !== '/sign-up');
+      const url = new URL(page.url());
+      expect(url.origin, raw).toBe(new URL(baseURL).origin);
+      expect(url.pathname.startsWith('//'), `${raw} -> ${url.pathname}`).toBe(false);
+      if (landing) expect(url.pathname, raw).toBe(landing);
+    }
+    expect(offSite).toEqual([]);
+  });
+
+  // Tester (#62, round 2): Better Auth 1.6 refuses a malformed email with 400 VALIDATION_ERROR
+  // (convex/auth.test.ts pins the message). The page cannot send one today, so the response is
+  // replaced: an email-only refusal shows on Email; one that also names another field is the
+  // generic alert.
+  test.describe('a VALIDATION_ERROR refusal', () => {
+    test.use({ expectedFailedRequests: [{ status: 400, path: '/api/auth/sign-up/email' }] });
+
+    for (const [message, onEmail] of [
+      ['[body.email] Invalid email address', true],
+      [
+        '[body.name] Invalid input: expected string, received number; [body.email] Invalid email address',
+        false,
+      ],
+    ] as const) {
+      test(`${onEmail ? 'on email only shows on Email' : 'on two fields is the generic alert'}`, async ({
+        page,
+      }) => {
+        await page.route('**/api/auth/sign-up/email', (route) =>
+          route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ code: 'VALIDATION_ERROR', message }),
+          }),
+        );
+        await signUp(page, newUser('Validation'));
+        if (onEmail) {
+          await expect(fieldError(page, 'email')).toHaveText(
+            'Enter an email address like name@example.com.',
+          );
+          await expect(field(page, 'email')).toHaveAttribute('aria-invalid', 'true');
+          await expect(
+            page.getByRole('alert').filter({ hasText: 'Sign-up could not be completed.' }),
+          ).toHaveCount(0);
+        } else {
+          await expect(
+            page.getByRole('alert').filter({ hasText: 'Sign-up could not be completed.' }),
+          ).toBeVisible();
+          await expect(fieldError(page, 'email')).toHaveCount(0);
+        }
+        await expect(page).toHaveURL(`${baseURL}/sign-up`);
+      });
+    }
+  });
+
   test.describe('an email that already has an account', () => {
     test.use({ expectedFailedRequests: [{ status: 422, path: '/api/auth/sign-up/email' }] });
 

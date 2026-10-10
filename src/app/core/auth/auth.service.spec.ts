@@ -217,6 +217,42 @@ describe('AuthService', () => {
         },
         'unexpected',
       ],
+      // Tester (#62, round 2): the server's own messages (convex/auth.test.ts), in its order.
+      [
+        '400 validation error, the server message for a missing name and a bad email',
+        {
+          status: 400,
+          code: 'VALIDATION_ERROR',
+          message:
+            '[body.name] Invalid input: expected string, received undefined; [body.email] Invalid email address',
+        },
+        'unexpected',
+      ],
+      [
+        '400 validation error on the email and the password',
+        {
+          status: 400,
+          code: 'VALIDATION_ERROR',
+          message:
+            '[body.email] Invalid email address; [body.password] Invalid input: expected string, received number',
+        },
+        'unexpected',
+      ],
+      [
+        '400 validation error on a field whose name starts with email',
+        { status: 400, code: 'VALIDATION_ERROR', message: '[body.emailAddress] Invalid input' },
+        'unexpected',
+      ],
+      [
+        '400 validation error on the whole body',
+        { status: 400, code: 'VALIDATION_ERROR', message: '[body] Invalid input' },
+        'unexpected',
+      ],
+      [
+        '400 with an email issue message but another code',
+        { status: 400, code: 'SOMETHING_ELSE', message: '[body.email] Invalid email address' },
+        'unexpected',
+      ],
       [
         '400 validation error without a message',
         { status: 400, code: 'VALIDATION_ERROR' },

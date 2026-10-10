@@ -4,6 +4,10 @@
 // - wiring tests use the real fixture through `test.use`; the failing ones are marked `test.fail()`,
 //   so they pass only if the fixture fails the test.
 import type { Browser, ConsoleMessage, Page } from '@playwright/test';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ConsoleGuard, type ConsoleGuardOptions } from '../support/console-guard';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
@@ -337,6 +341,62 @@ test.describe('console fixture wiring (real fixture)', () => {
       await page.setContent('<p>ok</p>');
       test.skip(true, 'skips before the allowed request, as a local-only test does on a preview');
     });
+  });
+
+  // #62 tester (round 2): an unused expectedFailedRequests entry still fails a test that runs.
+  test.describe('with expectedFailedRequests', () => {
+    test.use({ expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }] });
+
+    test('an unused entry fails the test at teardown', async ({ page }) => {
+      test.fail(true, 'the unused allowance 409 /probe-conflict must fail this test');
+      await page.setContent('<p>ok</p>');
+    });
+  });
+
+  // #62 tester (round 2): a test that skips itself still fails on a console or page error it hit
+  // before the skip. Its outcome is read from a child Playwright run (`probes/`), because a test
+  // cannot both skip itself and expect to fail.
+  test('a test that skips itself still fails on an earlier console or page error', ({
+    browserName,
+  }, testInfo) => {
+    // The child run is browser-independent: one Chromium project is enough.
+    test.skip(
+      browserName !== 'chromium' || testInfo.project.name !== 'chromium-desktop',
+      'one child run is enough',
+    );
+    test.setTimeout(120_000);
+    const outputDir = mkdtempSync(join(tmpdir(), 'console-probe-'));
+    try {
+      const run = spawnSync(
+        process.execPath,
+        [
+          join(testInfo.config.rootDir, '..', 'node_modules', '@playwright', 'test', 'cli.js'),
+          'test',
+          '--config',
+          join(testInfo.config.rootDir, 'harness', 'probes', 'probe.config.ts'),
+        ],
+        { encoding: 'utf8', env: { ...process.env, PROBE_OUTPUT_DIR: outputDir } },
+      );
+      const report = JSON.parse(run.stdout) as {
+        suites: {
+          specs: { title: string; tests: { status: string; results: { status: string }[] }[] }[];
+        }[];
+      };
+      const outcomes = Object.fromEntries(
+        report.suites.flatMap((suite) =>
+          suite.specs.map((spec) => [spec.title, spec.tests[0]?.results[0]?.status]),
+        ),
+      );
+      expect(outcomes).toEqual({
+        'skips with no console error': 'skipped',
+        'skips after a console.error': 'failed',
+        'skips after a page error': 'failed',
+        'skips after a console.error on a second page': 'failed',
+        'does not skip (condition false), allowances unused': 'failed',
+      });
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true });
+    }
   });
 
   test.describe('with expectedDocumentStatus: 404', () => {
