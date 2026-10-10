@@ -5,6 +5,7 @@
 - **Issue:** #5
 - **Date:** 2026-10-07 (revised 2026-10-07 after the owner's answer on public pages; revised again for dev-only hydration checks, the `@types/node` pin, and the indexing assumption; revised a third time to record the owner's indexing answer and the #11 / #24 adapter split)
 - **Amended:** 2026-10-08, wording only: hydration seed timing (first read of the args, not creation). See "Amendment: seed timing (2026-10-08)" at the end.
+- **Amended:** 2026-10-09, `provideConvexAuth` also accepts an injectable class (#62, PR #102). See "Amendment: injectable auth source (2026-10-09)" at the end.
 
 ## Context
 
@@ -523,3 +524,7 @@ A wording clarification that matches the shipped adapter (#24, PR #38). The deci
 **Why.** Component inputs, including `input.required()`, are bound after construction, so reading the args at creation throws NG0950 or reads a value that is not bound yet, and would break the `input()` pattern in `docs/conventions/angular.md`. The old text also gave two answers for a helper created before stable but first read after it ("created before stable" seeds; "after stable, entries are ignored" does not). The first-read rule resolves that corner in the safe direction. A helper rendered during hydration is created and first read in the same synchronous change detection, so the first browser render still matches the server HTML.
 
 **Source.** [PR #38, Review (round 3)](https://github.com/jasonbryan/omni-league/pull/38#issuecomment-6061985322), "ADR 0006 wording", optional follow-up for the owner; behaviour pinned by `src/app/core/data/convex/input-args.spec.ts` and `hydration-seeding.spec.ts`.
+
+## Amendment: injectable auth source (2026-10-09)
+
+`provideConvexAuth` accepts an injectable class as well as an instance. The signature in "Adapter specification" declares an instance only (`source: ConvexAuthSource`). The signature is now `source: ConvexAuthSource | Type<ConvexAuthSource>`: a class is registered with `useExisting`, so its root instance is the source. #62 (PR #102) calls `provideConvexAuth(AuthService)`. Behaviour, `setAuth`, and `clearAuth` timing are unchanged.
