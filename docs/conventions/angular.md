@@ -16,6 +16,8 @@ Applies to everything under the Angular app. Use the latest stable major (ADR 00
 - Signals for state: `signal()`, `computed()`, `linkedSignal()`, `effect()` only for side effects that leave Angular (logging, storage, imperative DOM APIs).
 - Update signals with `set()` and `update()`.
 - Convex data reaches components through signal-based services wrapping the Convex client; components never call the Convex client directly.
+- Mutations and actions go only through the adapter's `injectMutation()` and `injectAction()`, which carry the offline guard (ADR 0013, Decision 3A): `run()` refuses a change with `ConvexOfflineError` when there is no connection, so nothing is queued and sent later.
+- Submit buttons that need the server look disabled while `injectOnline()` is false: `aria-disabled="true"` and 50% opacity, never the `disabled` attribute, so they stay focusable and the Tab order does not change. A press while offline, or a `ConvexOfflineError` from `run()`, shows the destructive form alert "You're offline. Nothing was sent." with one line saying what is unchanged, then "Try again when you're connected." (`design/mockups/88-offline-note.html`, states 2 and 3).
 - Async loading of non-Convex data uses `resource()` / `httpResource()`.
 
 ## Templates

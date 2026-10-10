@@ -20,6 +20,7 @@ import { NavigationEnd, NavigationStart, Router, RouterLink } from '@angular/rou
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu, lucideTrophy } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
+import { OfflineNote } from './offline-note';
 import type { ShellSheet } from './shell-sheet';
 import { ShellSidebar } from './shell-sidebar';
 
@@ -51,8 +52,8 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
 
 /**
  * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar, the
- * page's sidebar when it supplies an `<ng-template appShellSidebar>` (a column from 1024px, a sheet
- * behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
+ * offline note (#88), the page's sidebar when it supplies an `<ng-template appShellSidebar>` (a
+ * column from 1024px, a sheet behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
  * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
  *
  * The menu button is plain markup, rendered on the server and hydrated as is. The sheet
@@ -63,7 +64,7 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
  */
 @Component({
   selector: 'app-shell',
-  imports: [NgIcon, NgTemplateOutlet, RouterLink],
+  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink],
   providers: [provideIcons({ lucideMenu, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'dropPendingOpen()' },
@@ -75,11 +76,12 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       >Skip to main content</a
     >
     <div class="flex min-h-dvh flex-col">
-      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css) on the header and
-           everything in it. The header is always in view, so focusing one of its controls (by Tab,
-           or focus returning to the menu button as the sheet closes) must not scroll the page. -->
+      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css, which adds the
+           offline note's height, --offline-note-h) on the header and everything in it. The header
+           is always in view, so focusing one of its controls (by Tab, or focus returning to the
+           menu button as the sheet closes) must not scroll the page. -->
       <header
-        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:-scroll-mt-18"
+        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
       >
         @if (sidebar()) {
           <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg" (shell.spec.ts checks
@@ -101,10 +103,14 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
           <ng-container [ngTemplateOutlet]="brand" />
         </a>
       </header>
+      <app-offline-note />
       <div class="flex flex-1">
         @if (sidebar(); as sidebar) {
           <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
-            <div class="sticky top-14 max-h-[calc(100dvh-3.5rem)] overflow-y-auto px-3 py-5">
+            <!-- Sticks below the top bar and the offline note (--offline-note-h, set by the note). -->
+            <div
+              class="sticky top-[calc(3.5rem+var(--offline-note-h,0px))] max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))] overflow-y-auto px-3 py-5"
+            >
               <ng-container [ngTemplateOutlet]="sidebar.template" />
             </div>
           </div>
