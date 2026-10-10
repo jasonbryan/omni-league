@@ -1,4 +1,5 @@
 import { DestroyRef, Directive, ElementRef, Renderer2, inject, output } from '@angular/core';
+import { isPlainClick } from './follow-link';
 
 /**
  * On the phone sheet's sidebar wrapper: a plain activation of any link inside is held back and
@@ -25,8 +26,7 @@ export class SheetLinks {
   }
 
   private intercept(event: MouseEvent): void {
-    if (event.defaultPrevented || event.button !== 0) return;
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
     const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
     if (!link || link.hasAttribute('download')) return;
     if (link.target && link.target !== '_self') return;

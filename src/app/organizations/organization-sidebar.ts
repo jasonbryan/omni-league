@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideLayoutDashboard, lucideMapPin, lucideTrophy } from '@ng-icons/lucide';
+import { FollowLink } from '../shell/follow-link';
 import { organizationPath, type PublicOrganizationPage } from './organization-path';
 
 /** Up to two letters for the initials tile: the first letter or digit of the first two words. */
@@ -19,6 +20,8 @@ export function initials(name: string): string {
  * The organization page's sidebar content (#60, #73 decision 3), rendered in the app shell's
  * sidebar slot: the initials tile and the name, Overview (the current page), then the leagues and
  * the locations, each a link to its row on this page until league and location pages exist.
+ * After hydration a plain click on one of those links goes through the router with the visitor's
+ * query string kept (#95); without JavaScript it loads `/path#row`.
  *
  * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
  * so it carries no `id`, and its groups are labelled with `aria-label`. Each `href` is built from
@@ -64,6 +67,7 @@ export function initials(name: string): string {
               <li>
                 <a
                   [href]="link.href"
+                  (click)="followLink.clicked($event)"
                   class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
                   ><ng-icon
                     name="lucideTrophy"
@@ -86,6 +90,7 @@ export function initials(name: string): string {
               <li>
                 <a
                   [href]="link.href"
+                  (click)="followLink.clicked($event)"
                   class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
                   ><ng-icon
                     name="lucideMapPin"
@@ -104,6 +109,7 @@ export function initials(name: string): string {
   `,
 })
 export class OrganizationSidebar {
+  protected readonly followLink = inject(FollowLink);
   readonly page = input.required<PublicOrganizationPage>();
 
   protected readonly path = computed(() => organizationPath(this.page().slug));
