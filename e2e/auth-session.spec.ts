@@ -3,6 +3,7 @@
 // stored one is asked about once; sign-out removes it. A failed or refused token request never
 // authenticates the Convex client, so `users.me` never answers with a name.
 import { test as base, type Page } from '@playwright/test';
+import { TOKEN_PATH as TOKEN, tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { stubNetlifyDrawer } from './support/netlify-drawer';
@@ -11,7 +12,6 @@ import { newUser, type TestUser } from './support/users';
 /** The crossDomain plugin's store in `localStorage` (`@convex-dev/better-auth`). */
 const STORE_KEY = 'better-auth_cookie';
 const GET_SESSION = '/api/auth/get-session';
-const TOKEN = '/api/auth/convex/token';
 
 /** Every `/api/auth/*` request path the page makes, in order. */
 function authRequests(page: Page): string[] {
@@ -24,37 +24,6 @@ function authRequests(page: Page): string[] {
 }
 
 const count = (seen: readonly string[], path: string) => seen.filter((p) => p === path).length;
-
-/**
- * Resolves once the page has made at least one token request and none is in flight for 500 ms,
- * so the next navigation aborts no token fetch (WebKit reports an aborted one as a page error). A
- * signed-in page load makes three today, so a fixed count is not used.
- */
-function tokensSettled(page: Page): Promise<void> {
-  let started = 0;
-  let open = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return new Promise((resolve) => {
-    const isToken = (url: string) => new URL(url).pathname === TOKEN;
-    const check = () => {
-      clearTimeout(timer);
-      if (started > 0 && open === 0) timer = setTimeout(resolve, 500);
-    };
-    page.on('request', (request) => {
-      if (!isToken(request.url())) return;
-      started += 1;
-      open += 1;
-      clearTimeout(timer);
-    });
-    const done = (request: { url(): string }) => {
-      if (!isToken(request.url())) return;
-      open -= 1;
-      check();
-    };
-    page.on('requestfinished', done);
-    page.on('requestfailed', done);
-  });
-}
 
 /** True when the crossDomain store holds a session token with a value (empty means cleared). */
 async function storesSessionToken(page: Page): Promise<boolean> {
@@ -118,6 +87,9 @@ test.describe('auth session store', () => {
     await expect(panel(page)).toContainText(user.name);
     await reloadTokens;
     expect(count(seen, GET_SESSION)).toBeGreaterThanOrEqual(1);
+    // Two token requests: the first, and the fresh one the Convex client asks for once the server
+    // confirms it. The Convex client's second setAuth shares the first (#62 tester, round 3).
+    expect(count(seen, TOKEN)).toBe(2);
 
     await panel(page).getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);

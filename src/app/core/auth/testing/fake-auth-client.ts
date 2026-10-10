@@ -41,6 +41,14 @@ export class FakeAuthClient {
    * `localStorage`. A session token by default; `''` models a browser that never signed in.
    */
   storedCookie = 'better-auth.session_token=stored';
+  /**
+   * When set, `getCookie()` throws it, as the crossDomain plugin does when the stored value is
+   * `null` or holds a `null` entry.
+   */
+  getCookieThrows: Error | null = null;
+  /** When true, `convex.token` waits for `releaseTokens()`. */
+  holdTokens = false;
+  private readonly heldTokens: (() => void)[] = [];
 
   get sessionListeners(): number {
     return this.listeners.size;
@@ -71,20 +79,28 @@ export class FakeAuthClient {
     },
   };
 
-  readonly getCookie = () => this.storedCookie;
+  readonly getCookie = () => {
+    if (this.getCookieThrows) throw this.getCookieThrows;
+    return this.storedCookie;
+  };
 
   readonly convex = {
-    token: () => {
+    token: async () => {
       this.tokenRequests++;
-      if (this.tokenThrows) return Promise.reject(this.tokenThrows);
+      if (this.holdTokens) await new Promise<void>((resolve) => this.heldTokens.push(resolve));
+      if (this.tokenThrows) throw this.tokenThrows;
       const token = this.nextToken;
-      return Promise.resolve(
-        token === null
-          ? { data: null, error: { status: 401, statusText: 'Unauthorized' } }
-          : { data: { token }, error: null },
-      );
+      return token === null
+        ? { data: null, error: { status: 401, statusText: 'Unauthorized' } }
+        : { data: { token }, error: null };
     },
   };
+
+  /** Lets every held `convex.token` request finish, with the `nextToken` set at that time. */
+  releaseTokens(): void {
+    this.holdTokens = false;
+    for (const release of this.heldTokens.splice(0)) release();
+  }
 
   readonly signUp = {
     email: async (body: Record<string, unknown>) => {

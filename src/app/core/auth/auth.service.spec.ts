@@ -61,8 +61,22 @@ describe('AuthService', () => {
     it.each([
       ['nothing stored', ''],
       ['other cookies only', 'better-auth.two_factor=x'],
+      // The sign-out response stores an empty token until the session store's refetch removes it.
+      ['an empty session token', 'better-auth.session_token='],
+      ['an empty session token before another cookie', 'better-auth.session_token=; other=x'],
     ])('with %s, is signed out without subscribing to the session store', async (_, cookie) => {
       client.storedCookie = cookie;
+      const auth = configure();
+      await expect(auth.isSignedIn()).resolves.toBe(false);
+      expect(client.sessionListeners).toBe(0);
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+      expect(client.tokenRequests).toBe(0);
+    });
+
+    // Tester (#62, round 3): the crossDomain plugin's getCookie() throws when the stored value is
+    // `null` or holds a `null` entry. That is no stored session, not a check that never settles.
+    it('is signed out without subscribing when reading the stored session throws', async () => {
+      client.getCookieThrows = new TypeError("Cannot read properties of null (reading 'expires')");
       const auth = configure();
       await expect(auth.isSignedIn()).resolves.toBe(false);
       expect(client.sessionListeners).toBe(0);
@@ -173,6 +187,109 @@ describe('AuthService', () => {
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-1');
       await expect(auth.fetchToken({ forceRefreshToken: true })).resolves.toBe('jwt-2');
       expect(client.tokenRequests).toBe(2);
+    });
+
+    // Tester (#62, round 3): the Convex client calls setAuth again when signedIn turns true while
+    // its first fetchToken waits, so two calls overlap. They share one request.
+    it('shares one token request between overlapping calls', async () => {
+      const auth = configure();
+      client.nextToken = 'jwt-1';
+      const first = auth.fetchToken({ forceRefreshToken: false });
+      const second = auth.fetchToken({ forceRefreshToken: false });
+      client.emitSession({ id: 's1' });
+      await expect(Promise.all([first, second])).resolves.toEqual(['jwt-1', 'jwt-1']);
+      expect(client.tokenRequests).toBe(1);
+    });
+
+    it('starts a new request for a forced refresh while one is in flight, and caches it', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.holdTokens = true;
+      const first = auth.fetchToken({ forceRefreshToken: false });
+      await loaded();
+      const forced = auth.fetchToken({ forceRefreshToken: true });
+      await loaded();
+      expect(client.tokenRequests).toBe(2);
+      // A later plain call shares the newest request.
+      const later = auth.fetchToken({ forceRefreshToken: false });
+      await loaded();
+      expect(client.tokenRequests).toBe(2);
+      client.nextToken = 'jwt-2';
+      client.releaseTokens();
+      await expect(Promise.all([first, forced, later])).resolves.toEqual([
+        'jwt-2',
+        'jwt-2',
+        'jwt-2',
+      ]);
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
+      expect(client.tokenRequests).toBe(2);
+    });
+
+    it('returns null to every caller of a shared request that fails, and asks again next time', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.nextToken = null;
+      const calls = [
+        auth.fetchToken({ forceRefreshToken: false }),
+        auth.fetchToken({ forceRefreshToken: false }),
+      ];
+      await expect(Promise.all(calls)).resolves.toEqual([null, null]);
+      expect(client.tokenRequests).toBe(1);
+      client.nextToken = 'jwt-2';
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
+      expect(client.tokenRequests).toBe(2);
+    });
+
+    it('returns null to every caller of a shared request that throws', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.tokenThrows = new TypeError('Load failed');
+      const calls = [
+        auth.fetchToken({ forceRefreshToken: false }),
+        auth.fetchToken({ forceRefreshToken: false }),
+      ];
+      await expect(Promise.all(calls)).resolves.toEqual([null, null]);
+      expect(client.tokenRequests).toBe(1);
+    });
+
+    it('returns null when starting the token request throws', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      vi.spyOn(client.convex, 'token').mockImplementation(() => {
+        throw new TypeError('Load failed');
+      });
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+    });
+
+    it('neither shares nor caches a request that was in flight at sign-out', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.holdTokens = true;
+      client.nextToken = 'jwt-old';
+      const stale = auth.fetchToken({ forceRefreshToken: false });
+      await loaded();
+      await auth.signOut();
+      client.emitSession({ id: 's2' });
+      client.holdTokens = false;
+      client.nextToken = 'jwt-new';
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-new');
+      expect(client.tokenRequests).toBe(2);
+      client.nextToken = 'jwt-old';
+      client.releaseTokens();
+      await stale;
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-new');
+      expect(client.tokenRequests).toBe(2);
+    });
+
+    it('returns null from a request that finishes after sign-out', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.holdTokens = true;
+      const stale = auth.fetchToken({ forceRefreshToken: false });
+      await loaded();
+      await auth.signOut();
+      client.releaseTokens();
+      await expect(stale).resolves.toBeNull();
     });
 
     it('drops the cached token on sign-out', async () => {
