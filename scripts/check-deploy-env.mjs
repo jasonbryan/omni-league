@@ -11,8 +11,9 @@
 //
 // - preview: IS_TEST must be unset, AUTH_EMAIL_DISABLED must be exactly `true`, and RESEND_API_KEY
 //   must be unset.
-// - production: IS_TEST and AUTH_EMAIL_DISABLED must be unset. (The email slice adds the presence
-//   checks for RESEND_API_KEY, RESEND_WEBHOOK_SECRET, and EMAIL_FROM, ADR 0011.)
+// - production: IS_TEST, AUTH_EMAIL_DISABLED, and PREVIEW_ORIGIN_PATTERN must be unset. (The email
+//   slice adds the presence checks for RESEND_API_KEY, RESEND_WEBHOOK_SECRET, and EMAIL_FROM,
+//   ADR 0011.)
 //
 // Targeting: `--preview-name <name>` selects the preview deployment `<name>` (for example `pr-12`,
 // or `main` for staging) with the preview deploy key in CONVEX_DEPLOY_KEY. Without it, the CLI
@@ -73,6 +74,11 @@ export async function checkDeployEnv(mode, reader) {
     }
     if (names.has('AUTH_EMAIL_DISABLED')) {
       failures.push('AUTH_EMAIL_DISABLED is set; it must not be set on production (ADR 0011).');
+    }
+    if (names.has('PREVIEW_ORIGIN_PATTERN')) {
+      failures.push(
+        'PREVIEW_ORIGIN_PATTERN is set; it must not be set on production (it admits preview origins and lets seed:demo write).',
+      );
     }
   } else {
     throw new Error(USAGE);

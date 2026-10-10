@@ -49,21 +49,27 @@ Every preview deployment (`pr-<n>` and staging `main`) gets these Convex default
 
 ## Demo data
 
-Every new preview deployment (`pr-<n>`, and staging `main`) gets demo data: `npx convex deploy ... --preview-run seed:demo` in `netlify.toml`'s `deploy-preview` and `branch-deploy` contexts runs the internal mutation `seed:demo` (`convex/seed.ts`) after the push (#60). It creates the organizations of `design/mockups/60-organization-page.html`:
+Every build of a preview (`pr-<n>`) and of staging (`main`) runs the internal mutation `seed:demo` (`convex/seed.ts`, #97), so each merged feature is visible on staging with demo data. In `netlify.toml`'s `deploy-preview` and `branch-deploy` contexts it is the last step, `npx convex run seed:demo --preview-name <name>`, with the same name as `--preview-create` (`pr-$REVIEW_ID`, `$HEAD`). It runs after `npx convex deploy` and after the [deploy environment check](#deploy-environment-check), so a deployment that fails the check is not seeded. It replaces `--preview-run seed:demo` (#60), which runs only when the deploy creates a new deployment: after the #93 merge, staging had no demo data (#97). The build log shows the run and the rows it inserted per table: 5 organizations, 10 locations, and 15 leagues on a new deployment, and zeros on a deployment that already has them.
 
-- `/organizations/gulf-coast-sport-social`: three locations and five leagues;
-- `/organizations/port-aransas-beach-volleyball-club`: no locations and no leagues.
+**What it creates.** Fictional organizations in US cities, covering every sport in at least two organizations, with one organization running more than one sport:
 
-It writes nothing when any organization already exists. Convex ignores `--preview-run` on a production deploy, and the production context never passes it (`scripts/netlify-toml.test.mjs`), so production gets no demo data; `seed:demo` is deployed there only as an internal function, which no client can call.
+- `/organizations/gulf-coast-sport-social` and `/organizations/port-aransas-beach-volleyball-club`: the organizations of `design/mockups/60-organization-page.html` (#73), unchanged. The first has three locations and five leagues; the second has no locations and no leagues (the empty state).
+- `/organizations/front-range-rec-sports` (soccer and softball), `/organizations/lakeshore-sand-league` (beach volleyball), and `/organizations/saguaro-valley-softball` (softball).
+
+**Insert-only, per record.** It inserts each demo organization (by `slug`), location (by name within its organization), and league (by name within its organization, with its location links) only when it is missing. It never updates or deletes a row, so a second run inserts nothing, and rows that are not demo rows are never touched. Its return value is the number of rows inserted per table. Later features add their demo rows to `convex/seed.ts` under the same rule. A demo entry is never renamed or removed, because a renamed entry is inserted again next to the old one.
+
+**Production guard.** `seed:demo` throws before reading or writing unless `PREVIEW_ORIGIN_PATTERN` is exactly the constant in `convex/lib/previewOrigin.ts`, which only preview and staging deployments have ([Preview variables](#preview-variables)). Production must not have it (`check-deploy-env.mjs production` fails when it is set), and `[context.production]` never runs a function or the seed (`scripts/netlify-toml.test.mjs`). So the seed cannot write on production, even when run from the dashboard or the CLI. It is deployed there only as an internal function, which no client can call. A preview whose `PREVIEW_ORIGIN_PATTERN` is missing or wrong fails its build at this step, and nothing is published.
+
+**Demo accounts** (an organization admin of a demo organization and a plain player) are #98.
 
 ## Deploy environment check
 
 `scripts/check-deploy-env.mjs` fails the Netlify build, so nothing is published, when a Convex deployment has the wrong variables. It reads variable names only (`npx convex env list --names-only`), plus the value of `AUTH_EMAIL_DISABLED` in preview mode, which it compares in memory. It never prints a value, and it prints the name of the deployment it checked.
 
-| Mode         | Fails when                                                                                         |
-| ------------ | -------------------------------------------------------------------------------------------------- |
-| `preview`    | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is not exactly `true`; `RESEND_API_KEY` is set             |
-| `production` | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is set (the email slice adds the ADR 0011 presence checks) |
+| Mode         | Fails when                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `preview`    | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is not exactly `true`; `RESEND_API_KEY` is set                                              |
+| `production` | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is set; `PREVIEW_ORIGIN_PATTERN` is set (the email slice adds the ADR 0011 presence checks) |
 
 **Targeting.** `--preview-name <name>` selects the preview deployment with the preview deploy key; it is the same name `npx convex deploy --preview-create` used (`pr-$REVIEW_ID`, or `$HEAD` = `main` for staging). Convex 1.46's `env` commands accept `--preview-name` but hide it from `--help`. If a Convex upgrade drops it, the CLI call fails and so does the build; it never passes silently. Without `--preview-name`, the CLI acts on the deployment that `CONVEX_DEPLOY_KEY` names (a production key).
 
@@ -74,7 +80,7 @@ It writes nothing when any organization already exists. Convex ignores `--previe
 
 **Preview residual (accepted).** When the preview check fails, Netlify publishes nothing, but the `pr-<n>` backend with the forbidden variable stays live on its `*.convex.site` URL until the next push recreates it or it expires after 5 days.
 
-**Running it locally (owner).** With the preview deploy key in `CONVEX_DEPLOY_KEY` (read it with `read -rs CONVEX_DEPLOY_KEY && export CONVEX_DEPLOY_KEY`, so it stays out of shell history), `node scripts/check-deploy-env.mjs production --preview-name pr-<n>` checks a preview against the production rules; it fails naming `AUTH_EMAIL_DISABLED`.
+**Running it locally (owner).** With the preview deploy key in `CONVEX_DEPLOY_KEY` (read it with `read -rs CONVEX_DEPLOY_KEY && export CONVEX_DEPLOY_KEY`, so it stays out of shell history), `node scripts/check-deploy-env.mjs production --preview-name pr-<n>` checks a preview against the production rules; it fails naming `AUTH_EMAIL_DISABLED` and `PREVIEW_ORIGIN_PATTERN`.
 
 ## `noindex`
 
@@ -94,7 +100,7 @@ Netlify Edge Functions refuse filesystem access, and Netlify counts `process.cwd
 
 ## Cleanup
 
-No cleanup job. Convex deletes preview deployments 5 days after creation. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.
+No cleanup job. Convex deletes preview deployments 5 days after creation. Convex 1.46 documents `--preview-create` as deleting and recreating a preview deployment with the same name, so a build may start from an empty backend; `seed:demo` runs on every build, so the demo data is there either way. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.
 
 ## Smoke runs (local)
 
