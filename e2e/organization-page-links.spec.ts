@@ -106,7 +106,7 @@ test.describe('organization page links (#95, tester probes)', () => {
     await context.setOffline(false);
   });
 
-  test('1280: a modified click or the middle button does no router navigation and keeps the page', async ({
+  test('1280: a modified click or the middle button is left to the browser: no router navigation, the page stays', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -115,29 +115,56 @@ test.describe('organization page links (#95, tester probes)', () => {
     await page.goto(`${tenant.path}?utm_source=x`);
     await hydrated(consoleGuard);
     await arm(page);
+    // What a modified click does natively depends on the platform: Ctrl+click opens a tab on
+    // Linux and Windows, Cmd+click on macOS, and the other chord follows the link in this tab.
+    // The test therefore does not rely on the browser's default action. A window listener, which
+    // runs after the app's handlers, records whether the app cancelled the event, then cancels it
+    // itself so no platform follows the link (and nothing opens a tab to wait for).
+    await page.evaluate(() => {
+      const seen: { type: string; defaultPrevented: boolean }[] = [];
+      (window as Window & { e2eClicks?: typeof seen }).e2eClicks = seen;
+      for (const type of ['click', 'auxclick']) {
+        window.addEventListener(type, (event) => {
+          seen.push({ type, defaultPrevented: event.defaultPrevented });
+          event.preventDefault();
+        });
+      }
+    });
     const url = page.url();
     const lengthBefore = await page.evaluate(() => history.length);
     const link = page
       .getByRole('navigation', { name: tenant.name })
       .locator(`a[href="${tenant.path}#league-2"]`);
-    for (const options of [
-      { modifiers: ['Control' as const] },
-      { modifiers: ['Meta' as const] },
-      { modifiers: ['Shift' as const] },
-      { modifiers: ['Alt' as const] },
-      { button: 'middle' as const },
-    ]) {
-      const opened = page
-        .context()
-        .waitForEvent('page', { timeout: 1_500 })
-        .catch(() => null);
+    // On macOS, Ctrl+click is a secondary click (a context menu), so the page gets no click event.
+    const mac = await page.evaluate(() => navigator.userAgent.includes('Macintosh'));
+    const cases = [
+      { modifiers: ['Control' as const], type: mac ? undefined : 'click' },
+      { modifiers: ['Meta' as const], type: 'click' },
+      { modifiers: ['Shift' as const], type: 'click' },
+      { modifiers: ['Alt' as const], type: 'click' },
+      { button: 'middle' as const, type: 'auxclick' },
+    ];
+    const expected: { type: string; defaultPrevented: boolean }[] = [];
+    for (const { type, ...options } of cases) {
+      const label = JSON.stringify(options);
       await link.click(options);
-      const popup = await opened;
-      await popup?.close();
-      expect(page.url(), JSON.stringify(options)).toBe(url);
-      expect(await page.evaluate(() => history.length), JSON.stringify(options)).toBe(lengthBefore);
-      expect(await marker(page), JSON.stringify(options)).toBe(true);
+      if (type) expected.push({ type, defaultPrevented: false });
+      // One event per click, and the app did not cancel it: a router navigation would have.
+      const seen = await page.evaluate(
+        () =>
+          (window as Window & { e2eClicks?: { type: string; defaultPrevented: boolean }[] })
+            .e2eClicks,
+      );
+      expect(seen, label).toEqual(expected);
+      expect(page.url(), label).toBe(url);
+      expect(await page.evaluate(() => history.length), label).toBe(lengthBefore);
+      expect(await marker(page), label).toBe(true);
     }
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    // Control: a plain click is cancelled by the app and navigates through the router.
+    await link.click();
+    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#league-2`);
+    expect(await marker(page)).toBe(true);
   });
 
   test('1280: ?ott= and ?utm_source= are both kept; a repeated click scrolls back and adds no entry', async ({
