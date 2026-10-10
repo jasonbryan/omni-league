@@ -1,10 +1,10 @@
 // Self-test of the e2e Convex wiring (#59): the run reaches the anonymous local backend, IS_TEST is
-// set there, and the build under test names that backend. It opens no page and has no viewport,
+// set there, and the build under test names that backend (and its HTTP-action URL, #62). It opens no page and has no viewport,
 // so it runs in chromium-desktop only. With E2E_BASE_URL set there is no local backend: skipped.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { convexRun } from './support/convex';
-import { LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
+import { LOCAL_CONVEX_SITE_URL, LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 
 const dist = join(process.cwd(), 'dist', 'omni-league');
@@ -18,7 +18,8 @@ function bundleFiles(dir: string): string[] {
 
 /**
  * Convex deployment URLs that appear as quoted string literals in `files` (the compiled-in
- * `__CONVEX_URL__`). Library doc comments quote example URLs in backticks, so they do not count.
+ * `__CONVEX_URL__` and `__CONVEX_SITE_URL__`). Library doc comments quote example URLs in
+ * backticks, so they do not count.
  */
 function convexUrlLiterals(files: string[]): Map<string, string[]> {
   const found = new Map<string, string[]>();
@@ -50,14 +51,18 @@ test.describe('local Convex backend', () => {
     const server = convexUrlLiterals(bundleFiles(join(dist, 'server')));
     console.log(`Convex URL literals, browser bundle: ${JSON.stringify([...browser])}`);
     console.log(`Convex URL literals, server bundle: ${JSON.stringify([...server])}`);
-    expect([...browser.keys()]).toEqual([LOCAL_CONVEX_URL]);
-    expect([...server.keys()]).toEqual([LOCAL_CONVEX_URL]);
+    // The deployment URL, and its HTTP-action URL for the Better Auth client (#62).
+    const expected = [LOCAL_CONVEX_URL, LOCAL_CONVEX_SITE_URL].sort();
+    expect([...browser.keys()].sort()).toEqual(expected);
+    expect([...server.keys()].sort()).toEqual(expected);
 
     // The SSR server serves exactly these browser files.
-    for (const file of browser.get(LOCAL_CONVEX_URL) ?? []) {
-      const response = await request.get(`/${file.replace(/^browser\//, '')}`);
-      expect(response.status(), file).toBe(200);
-      expect(await response.text(), file).toContain(`"${LOCAL_CONVEX_URL}"`);
+    for (const url of expected) {
+      for (const file of browser.get(url) ?? []) {
+        const response = await request.get(`/${file.replace(/^browser\//, '')}`);
+        expect(response.status(), file).toBe(200);
+        expect(await response.text(), file).toContain(`"${url}"`);
+      }
     }
   });
 });

@@ -19,5 +19,7 @@ export async function convexRun(
     [E2E_CONVEX_SCRIPT, 'run', name, JSON.stringify(args)],
     { encoding: 'utf8' },
   );
-  return JSON.parse(stdout) as unknown;
+  // The CLI prints nothing for a function that returns `null`.
+  const text = stdout.trim();
+  return text === '' ? null : (JSON.parse(text) as unknown);
 }
