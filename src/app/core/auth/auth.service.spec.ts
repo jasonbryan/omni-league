@@ -313,6 +313,52 @@ describe('AuthService', () => {
       expect(client.tokenRequests).toBe(2);
     });
 
+    // PR #102 tester round 5: a session that ends by the session store's answer (expired or revoked
+    // on the server), not by signOut(), also ends the request in flight.
+    it('returns null from a request in flight when the session store answers signed out, even after a new session', async () => {
+      const auth = configure();
+      await loaded();
+      client.emitSession({ id: 's1' });
+      client.holdTokens = true;
+      client.nextToken = 'jwt-old';
+      const stale = auth.fetchToken({ forceRefreshToken: false });
+      await loaded();
+      client.emitSession(null);
+      client.emitSession({ id: 's2' });
+      expect(auth.signedIn()).toBe(true);
+      client.releaseTokens();
+      await expect(stale).resolves.toBeNull();
+      client.nextToken = 'jwt-new';
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-new');
+      expect(client.tokenRequests).toBe(2);
+    });
+
+    // PR #102 tester round 5: in the same session, a request that a forced refresh replaced still
+    // answers its own caller with its token, and the cache keeps the forced request's token.
+    it('answers a request replaced by a forced refresh with its own token, and caches the newer one', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      const releases: ((token: string) => void)[] = [];
+      vi.spyOn(client.convex, 'token').mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            releases.push((token) => resolve({ data: { token }, error: null })),
+          ),
+      );
+      const first = auth.fetchToken({ forceRefreshToken: false });
+      await loaded();
+      const forced = auth.fetchToken({ forceRefreshToken: true });
+      await loaded();
+      expect(releases).toHaveLength(2);
+      // The forced request finishes first; the replaced one finishes later with an older token.
+      releases[1]('jwt-forced');
+      await expect(forced).resolves.toBe('jwt-forced');
+      releases[0]('jwt-first');
+      await expect(first).resolves.toBe('jwt-first');
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-forced');
+      expect(releases).toHaveLength(2);
+    });
+
     it('drops the cached token on sign-out', async () => {
       const auth = configure();
       client.emitSession({ id: 's1' });
