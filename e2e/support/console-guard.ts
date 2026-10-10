@@ -21,6 +21,11 @@ export interface ConsoleGuardOptions {
   expectedFailedRequests?: readonly ExpectedFailedRequest[];
 }
 
+export interface VerifyOptions {
+  /** The test skipped itself (`test.skip()` in its body): unused allowances are not problems. */
+  skipped?: boolean;
+}
+
 const NG05_WARNING = /\bNG05\d\d\b/;
 const DOCUMENT_404_PREFIX = 'Failed to load resource: the server responded with a status of 404';
 const FAILED_RESOURCE = /^Failed to load resource: the server responded with a status of (\d{3})\b/;
@@ -44,6 +49,8 @@ function withoutFragment(url: string): string {
  *   and fails the test if a listed name never produced such a message;
  * - `expectedFailedRequests` ignores the resource message of a request with a listed status and
  *   URL path, and fails the test if a listed request never produced one.
+ * A test that skips itself after `test.use()` (for example a local-only test on a remote run) is not
+ * failed for unused allowances.
  */
 export class ConsoleGuard {
   private readonly failures: string[] = [];
@@ -93,8 +100,13 @@ export class ConsoleGuard {
     return this.logs.some((text) => HYDRATED_LOG.test(text));
   }
 
-  /** Everything that fails the test: console failures, then unused Convex allowances. */
-  problems(): string[] {
+  /**
+   * Everything that fails the test: console failures, then unused allowances. With `skipped` (the
+   * test skipped itself, so it may never reach what it allowed) unused allowances are not reported;
+   * console failures still are.
+   */
+  problems({ skipped = false }: VerifyOptions = {}): string[] {
+    if (skipped) return [...this.failures];
     const unused = this.expectedConvexErrors
       .filter((name) => !this.usedConvexAllowances.has(name))
       .map(
@@ -113,8 +125,8 @@ export class ConsoleGuard {
   }
 
   /** Throws one error listing every problem; called by the fixture at teardown. */
-  verify(): void {
-    const problems = this.problems();
+  verify(options: VerifyOptions = {}): void {
+    const problems = this.problems(options);
     if (problems.length > 0) {
       throw new Error(
         `Console fixture: ${problems.length} problem(s)\n${problems.map((p) => `  - ${p}`).join('\n')}`,

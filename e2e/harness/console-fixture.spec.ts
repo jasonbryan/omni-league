@@ -271,6 +271,31 @@ test.describe('console fixture rules', () => {
       await close();
     });
   });
+
+  // #62 tester: `test.skip()` inside a test runs after `test.use()` set the allowances, so a
+  // skipped test never reaches the request it allowed.
+  test.describe('in a skipped test', () => {
+    const options = {
+      expectedConvexErrors: ['probe:add'],
+      expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }],
+    };
+
+    test('does not report unused entries', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems({ skipped: true })).toEqual([]);
+      expect(() => guard.verify({ skipped: true })).not.toThrow();
+      await close();
+    });
+
+    test('still reports a console error', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await logInPage(page, 'error', 'probe error before the skip');
+      expect(guard.problems({ skipped: true })).toEqual([
+        'console.error: probe error before the skip',
+      ]);
+      await close();
+    });
+  });
 });
 
 test.describe('console fixture wiring (real fixture)', () => {
@@ -297,6 +322,20 @@ test.describe('console fixture wiring (real fixture)', () => {
     test('an unused entry fails the test at teardown', async ({ page }) => {
       test.fail(true, 'the unused allowance probe:add must fail this test');
       await page.setContent('<p>ok</p>');
+    });
+  });
+
+  // #62 tester: a test that skips itself after `test.use()` set allowances must end skipped, not
+  // failed at teardown. Before the fix this test failed with "entry … was not used".
+  test.describe('with allowances, skipped inside the test', () => {
+    test.use({
+      expectedConvexErrors: ['probe:add'],
+      expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }],
+    });
+
+    test('ends skipped without an unused-entry failure', async ({ page }) => {
+      await page.setContent('<p>ok</p>');
+      test.skip(true, 'skips before the allowed request, as a local-only test does on a preview');
     });
   });
 

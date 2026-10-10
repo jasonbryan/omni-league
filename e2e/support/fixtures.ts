@@ -36,6 +36,7 @@ export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
     async (
       { context, expectedDocumentStatus, expectedConvexErrors, expectedFailedRequests },
       use,
+      testInfo,
     ) => {
       const guard = new ConsoleGuard({
         expectedDocumentStatus,
@@ -45,7 +46,8 @@ export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
       for (const page of context.pages()) guard.attach(page);
       context.on('page', (page) => guard.attach(page));
       await use(guard);
-      guard.verify();
+      // `test.skip()` in the body runs after `test.use()` set the allowances (#62 tester).
+      guard.verify({ skipped: testInfo.status === 'skipped' });
     },
     { auto: true },
   ],
