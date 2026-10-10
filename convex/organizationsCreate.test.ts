@@ -273,3 +273,48 @@ describe('organizations.listMine', () => {
     ).rejects.toThrow(/userId/);
   });
 });
+
+describe('organizations.create, edge cases (tester)', () => {
+  test('two simultaneous calls for one slug create exactly one organization and one membership', async () => {
+    const { t, a, b } = await setup();
+    const results = await Promise.allSettled([
+      a.mutation(api.organizations.create, { name: 'Race A', slug: 'race-slug' }),
+      b.mutation(api.organizations.create, { name: 'Race B', slug: 'race-slug' }),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(await counts(t)).toEqual({ organizations: 1, memberships: 1, sportLocations: 0 });
+  });
+
+  test('one user may create several organizations; each membership is its own row', async () => {
+    const { t, a } = await setup();
+    await a.mutation(api.organizations.create, { name: 'One', slug: 'one-org' });
+    await a.mutation(api.organizations.create, { name: 'Two', slug: 'two-org' });
+    expect((await counts(t)).memberships).toBe(2);
+  });
+
+  test('a slug with uppercase, unicode, a slash, or a dot is refused and nothing is created', async () => {
+    const { t, a } = await setup();
+    for (const slug of ['ABC', 'caf\u00e9', 'a/b', 'a.b', 'a_b', 'abc\n', '../x']) {
+      const data = await refusal(a.mutation(api.organizations.create, { name: 'Org', slug }));
+      expect(data.code, JSON.stringify(slug)).toBe('slugInvalid');
+    }
+    expect((await counts(t)).organizations).toBe(0);
+  });
+
+  test('listMine skips a membership whose organization no longer exists', async () => {
+    const { t, a } = await setup();
+    await a.mutation(api.organizations.create, { name: 'Gone', slug: 'gone-org' });
+    await a.mutation(api.organizations.create, { name: 'Kept', slug: 'kept-org' });
+    await t.run(async (ctx) => {
+      const gone = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'gone-org'))
+        .unique();
+      await ctx.db.delete('organizations', gone!._id);
+    });
+    await expect(a.query(api.organizations.listMine, {})).resolves.toEqual([
+      { name: 'Kept', slug: 'kept-org', role: 'orgAdmin' },
+    ]);
+  });
+});

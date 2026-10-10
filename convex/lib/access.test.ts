@@ -173,3 +173,42 @@ describe('requireLeagueOrganizer', () => {
     expect(organizerL1).toBeTruthy();
   });
 });
+
+describe('requireLeagueOrganizer, forged assignments', () => {
+  test("refuses an organizer whose leagueIds names another organization's league", async () => {
+    const { t, organizationA, lb } = await setup();
+    // organizer-l1 holds a membership in A only; a stray id of B's league in its assignments must
+    // not open B's league, because the membership is looked up in the league's own organization.
+    await t.run(async (ctx) => {
+      const membership = await ctx.db
+        .query('memberships')
+        .withIndex('by_organizationId', (q) => q.eq('organizationId', organizationA))
+        .collect();
+      const organizer = membership.find((m) => m.role === 'leagueOrganizer')!;
+      await ctx.db.patch('memberships', organizer._id, { leagueIds: [...organizer.leagueIds, lb] });
+    });
+    await expect(
+      t.withIdentity(identity('organizer-l1')).run((ctx) => requireLeagueOrganizer(ctx, lb)),
+    ).rejects.toThrow('Not allowed');
+  });
+
+  test('refuses a league organizer with no assigned leagues', async () => {
+    const { t, l1, organizationA } = await setup();
+    await t.run(async (ctx) => {
+      const user = await ctx.db.insert('users', {
+        authUserId: 'empty-organizer',
+        name: 'empty-organizer',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId: user,
+        organizationId: organizationA,
+        role: 'leagueOrganizer',
+        leagueIds: [],
+      });
+    });
+    await expect(
+      t.withIdentity(identity('empty-organizer')).run((ctx) => requireLeagueOrganizer(ctx, l1)),
+    ).rejects.toThrow('Not allowed');
+  });
+});
