@@ -129,9 +129,6 @@ jobs:
       - name: test:convex
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
         run: npm run test:convex
-      - name: test:scripts
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
-        run: npm run test:scripts
       - name: build
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
         run: npm run build
@@ -153,6 +150,13 @@ jobs:
           if [ "$E2E_WEBKIT" = "1" ]; then
             npx playwright install --with-deps webkit
           fi
+      # After e2e browsers so scripts/build-icons.test.mjs re-renders the icons in Chromium instead of
+      # skipping (#116). !cancelled(), not success(): it still reports its own failures when an earlier
+      # check failed (no Chromium is installed then, and that re-render check skips as before), and a
+      # failure here skips the e2e steps below, as before.
+      - name: test:scripts
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        run: npm run test:scripts
       # Anonymous local Convex backend, no secrets (ADR 0005, #59): `convex dev --once` downloads the
       # pinned backend (e2e/support/convex-backend.json), pushes the functions, and runs codegen.
       - name: e2e backend
