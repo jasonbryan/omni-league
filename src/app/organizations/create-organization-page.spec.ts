@@ -218,6 +218,31 @@ describe('CreateOrganizationPage', () => {
       expect(convex.calls).toEqual([]);
     });
 
+    it('the format message prints the reserved slug new in bold, as mockup states 8 and 9 do', async () => {
+      await type('name', NAME);
+      await type('slug', 'new');
+      await submit();
+      const bold = page.querySelectorAll('#slug-error strong');
+      expect(bold).toHaveLength(1);
+      expect(bold[0]?.textContent).toBe('new');
+      expect(bold[0]?.className).toBe('font-semibold');
+      expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugInvalid);
+    });
+
+    it('a server-sent format message prints new in bold too', async () => {
+      await type('name', NAME);
+      await submit();
+      convex.calls[0]?.reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugInvalid',
+          message: ORGANIZATION_MESSAGES.slugInvalid,
+        }),
+      );
+      await flush();
+      expect(page.querySelector('#slug-error strong')?.textContent).toBe('new');
+    });
+
     it.each(['ab', 'Bad-Slug', 'a--b', '-ab', 'new', 'gulf-coast-sport-social', 'a'.repeat(61)])(
       'the slug %s gets the format message',
       async (slug) => {

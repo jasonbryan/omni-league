@@ -27,6 +27,7 @@ import { api } from '../../../convex/_generated/api';
 import {
   checkOrganizationName,
   checkOrganizationSlug,
+  ORGANIZATION_MESSAGES,
   type OrganizationInputError,
 } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
@@ -41,6 +42,9 @@ export const MESSAGES = {
   offlineTitle: "You're offline. Nothing was sent.",
   offlineDescription: "Your details are still here. Try again when you're connected.",
 } as const;
+
+/** The reserved slug the format message names; the page prints it in bold. */
+const RESERVED_SLUG = 'new';
 
 type FieldName = 'name' | 'slug';
 const FIELDS: readonly FieldName[] = ['name', 'slug'];
@@ -264,6 +268,11 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                           ><strong class="font-semibold">{{ taken }}</strong> is already taken.
                           Choose another slug.</span
                         >
+                      } @else if (reservedParts(); as parts) {
+                        <span
+                          >{{ parts.before }}<strong class="font-semibold">new</strong
+                          >{{ parts.after }}</span
+                        >
                       } @else {
                         <span>{{ error }}</span>
                       }
@@ -356,6 +365,18 @@ export class CreateOrganizationPage {
   protected readonly takenSlug = computed(() =>
     this.shown.slug() ? null : (this.serverErrors.slug()?.taken ?? null),
   );
+
+  /**
+   * The format message split around the reserved slug it names, so the page can bold `new` as the
+   * mockup does (states 8 and 9); `null` for any other slug message. The string stays shared.
+   */
+  protected readonly reservedParts = computed(() => {
+    if (this.errors.slug() !== ORGANIZATION_MESSAGES.slugInvalid) return null;
+    const message = ORGANIZATION_MESSAGES.slugInvalid;
+    const at = message.indexOf(` ${RESERVED_SLUG},`) + 1;
+    if (at === 0) return null;
+    return { before: message.slice(0, at), after: message.slice(at + RESERVED_SLUG.length) };
+  });
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
