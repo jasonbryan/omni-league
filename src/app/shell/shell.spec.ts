@@ -1,4 +1,4 @@
-import { type Type } from '@angular/core';
+import { ApplicationRef, type EmbeddedViewRef, type Type, type ViewRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -44,6 +44,34 @@ function menuButton(harness: RouterTestingHarness): HTMLButtonElement {
 }
 
 const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>('[role="dialog"]');
+
+/**
+ * Records every view attached to `ApplicationRef`. The shell attaches the sheet's host view there
+ * (#94): it has no view container in its template, so the sheet's host element is in no document.
+ */
+function trackAppViews(): { attached: ViewRef[]; detached: ViewRef[] } {
+  const appRef = TestBed.inject(ApplicationRef);
+  const attached: ViewRef[] = [];
+  const detached: ViewRef[] = [];
+  const attachView = appRef.attachView.bind(appRef);
+  const detachView = appRef.detachView.bind(appRef);
+  vi.spyOn(appRef, 'attachView').mockImplementation((view) => {
+    attached.push(view);
+    attachView(view);
+  });
+  vi.spyOn(appRef, 'detachView').mockImplementation((view) => {
+    detached.push(view);
+    detachView(view);
+  });
+  return { attached, detached };
+}
+
+/** The `<app-shell-sheet>` host element of the sheet's (component host) view. */
+function sheetHostElement(view: ViewRef): Element {
+  const [element] = (view as EmbeddedViewRef<unknown>).rootNodes as Node[];
+  if (!(element instanceof Element)) throw new Error('the sheet view has no host element');
+  return element;
+}
 
 /** Lets the sheet's afterNextRender work (initial focus, close) and its close promise finish. */
 async function settle(harness: RouterTestingHarness): Promise<void> {
@@ -196,8 +224,11 @@ describe('Shell', () => {
       vi.restoreAllMocks();
     });
 
-    async function open(routes?: Routes): Promise<RouterTestingHarness> {
-      const harness = await render(SidebarTestPage, '/', routes);
+    /** The views attached to ApplicationRef since the last `open()` or `trackAppViews()`. */
+    let views: { attached: ViewRef[]; detached: ViewRef[] };
+
+    /** Presses the menu button and waits for the sheet to open. */
+    async function press(harness: RouterTestingHarness): Promise<void> {
       const button = menuButton(harness);
       button.focus();
       button.click();
@@ -206,11 +237,18 @@ describe('Shell', () => {
         expect(dialog()).not.toBeNull();
       });
       await settle(harness);
+    }
+
+    async function open(routes?: Routes): Promise<RouterTestingHarness> {
+      const harness = await render(SidebarTestPage, '/', routes);
+      views = trackAppViews();
+      await press(harness);
       return harness;
     }
 
     it('opens on the first press, once, however often the button is pressed while it loads', async () => {
       const harness = await render(SidebarTestPage);
+      views = trackAppViews();
       const button = menuButton(harness);
       button.click();
       button.click();
@@ -219,7 +257,7 @@ describe('Shell', () => {
       });
       await settle(harness);
       expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-      expect(host(harness).querySelectorAll('app-shell-sheet')).toHaveLength(1);
+      expect(views.attached).toHaveLength(1);
     });
 
     it('points aria-controls at the open dialog, and sets no ARIA attribute on the sheet hosts', async () => {
@@ -227,7 +265,13 @@ describe('Shell', () => {
       const id = dialog()?.id;
       expect(id).toBeTruthy();
       expect(menuButton(harness).getAttribute('aria-controls')).toBe(id);
-      for (const sheetHost of host(harness).querySelectorAll('app-shell-sheet, hlm-sheet')) {
+      const sheetHost = sheetHostElement(views.attached[0]);
+      const sheetHosts = [sheetHost, ...sheetHost.querySelectorAll('hlm-sheet')];
+      expect(sheetHosts.map((element) => element.localName)).toEqual([
+        'app-shell-sheet',
+        'hlm-sheet',
+      ]);
+      for (const sheetHost of sheetHosts) {
         expect(sheetHost.getAttributeNames().filter((name) => name.startsWith('aria-'))).toEqual(
           [],
         );
@@ -248,7 +292,7 @@ describe('Shell', () => {
       await settle(harness);
       expect(menuButton(harness).getAttribute('aria-expanded')).toBe('true');
       expect(document.activeElement?.getAttribute('aria-label')).toBe('Close navigation');
-      expect(host(harness).querySelectorAll('app-shell-sheet')).toHaveLength(1);
+      expect(views.attached).toHaveLength(1);
     });
 
     it('opens a modal dialog named "Navigation" with the sidebar inside and focus on Close', async () => {
@@ -270,6 +314,36 @@ describe('Shell', () => {
     it('blocks page scrolling while open', async () => {
       await open();
       expect(document.documentElement.classList).toContain('cdk-global-scrollblock');
+    });
+
+    // The sheet has no view container in the server-rendered template (#94): its host view is
+    // attached to ApplicationRef, and its host element stays out of the document. Only the CDK
+    // overlay container, which holds the dialog, is added to the body.
+    it('keeps the sheet host out of the document: only the overlay container joins the body', async () => {
+      const harness = await render(SidebarTestPage);
+      views = trackAppViews();
+      const bodyBefore = [...document.body.children];
+      await press(harness);
+      expect(views.attached).toHaveLength(1);
+      expect(sheetHostElement(views.attached[0]).isConnected).toBe(false);
+      expect(document.querySelector('app-shell-sheet, hlm-sheet')).toBeNull();
+      const added = [...document.body.children].filter((child) => !bodyBefore.includes(child));
+      expect(added.map((child) => child.className)).toEqual(['cdk-overlay-container']);
+      expect(added[0].contains(dialog())).toBe(true);
+    });
+
+    it('destroys the sheet with the shell while open: detached, no scrim, no scroll block', async () => {
+      const harness = await open();
+      const [sheetView] = views.attached;
+      expect(sheetView.destroyed).toBe(false);
+      expect(document.documentElement.classList).toContain('cdk-global-scrollblock');
+
+      harness.fixture.destroy();
+      await flush();
+
+      expect(sheetView.destroyed).toBe(true);
+      expect(views.detached).toContain(sheetView);
+      expectNoSheetLeft();
     });
 
     const closePaths: [string, () => void][] = [
@@ -352,6 +426,7 @@ describe('Shell', () => {
       it('is dropped when the shell is destroyed before the chunk loads', async () => {
         const hold = holdSheetImport();
         const harness = await render(SidebarTestPage);
+        views = trackAppViews();
         menuButton(harness).click();
         expect(hold.loads()).toBe(1);
         harness.fixture.destroy();
@@ -359,6 +434,8 @@ describe('Shell', () => {
         await flush();
         expectNoSheetLeft();
         expect(document.querySelector('app-shell-sheet')).toBeNull();
+        // No sheet was created, so none is left attached to ApplicationRef.
+        expect(views.attached).toEqual([]);
       });
 
       it('is dropped by Escape, and the next press opens the sheet', async () => {
@@ -438,6 +515,7 @@ describe('Shell', () => {
       // the same navigation that replaces the page.
       it('leaves nothing on the next page when a navigation follows the first press in the same turn', async () => {
         const harness = await render(SidebarTestPage, '/', pageRoutes);
+        views = trackAppViews();
         const router = TestBed.inject(Router);
         menuButton(harness).click();
         const navigation = router.navigateByUrl('/plain');
@@ -445,6 +523,8 @@ describe('Shell', () => {
         await settle(harness);
         expect(router.url).toBe('/plain');
         expectNoSheetLeft();
+        // A sheet created as the shell went away was destroyed with it.
+        expect(views.attached.every((view) => view.destroyed)).toBe(true);
       });
     });
 

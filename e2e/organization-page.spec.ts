@@ -273,6 +273,11 @@ test.describe('organization page in the browser', () => {
       await activate(page, menuButton);
       await expect(sheet).toBeVisible();
       await expect(close).toBeFocused();
+      // The width is read once the slide-in has finished: mid-animation, WebKit reports a
+      // fractional width (288.0000076) for the translated content.
+      await sheet.evaluate((element) =>
+        Promise.all(element.getAnimations().map((animation) => animation.finished)),
+      );
     }
 
     // Closing by Escape, Close, or the scrim leaves the scrolled page where it was, with focus
