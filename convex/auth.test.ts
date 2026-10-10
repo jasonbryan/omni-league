@@ -626,3 +626,117 @@ describe('name bounds (#111)', () => {
     expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
   });
 });
+
+// Tester (#111): edge cases the criteria imply, beyond the implementer's cases.
+describe('name bounds and refusal, tester probes (#111)', () => {
+  test.each([
+    ['tabs and newlines only', '\t\n\r '],
+    ['no-break and ideographic spaces only', ' 　'],
+    ['null', null],
+    ['an array', ['Ada']],
+    ['an object', { first: 'Ada' }],
+    ['a boolean', true],
+  ])('a name that is %s is 400 NAME_INVALID and creates nothing', async (_, name) => {
+    const t = setup();
+    const { status, json } = await signUp(t, { ...valid(), name } as unknown as SignUpBody);
+    expect(status, JSON.stringify(json)).toBe(400);
+    expect(json['code']).toBe('NAME_INVALID');
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+
+  test('the length is String.length after trim(): 50 emoji pass, 51 do not', async () => {
+    const t = setup();
+    const ok = await signUp(t, { ...valid(), name: '\u{1F3D0}'.repeat(50) });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+    const long = await signUp(t, { ...valid('b@example.com'), name: '\u{1F3D0}'.repeat(51) });
+    expect(long.status).toBe(400);
+    expect(long.json['code']).toBe('NAME_INVALID');
+  }, 30_000);
+
+  test('trimming keeps inner whitespace', async () => {
+    const t = setup();
+    expect((await signUp(t, { ...valid(), name: ' \tAda  Lovelace\n ' })).status).toBe(200);
+    expect((await stored(t)).authUsers[0]?.['name']).toBe('Ada  Lovelace');
+  }, 30_000);
+
+  test('two concurrent sign-ups with untrimmed names store trimmed names', async () => {
+    const t = setup();
+    const [a, b] = await Promise.all([
+      signUp(t, { ...valid('a@example.com'), name: '  Ada ' }),
+      signUp(t, { ...valid('b@example.com'), name: ' Grace  ' }),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const names = (await stored(t)).authUsers.map((user) => user['name']).sort();
+    expect(names).toEqual(['Ada', 'Grace']);
+  }, 30_000);
+
+  test('a bad email with a valid name is still the VALIDATION_ERROR the client maps to the email field', async () => {
+    const t = setup();
+    const { status, json } = await signUp(t, { ...valid(), email: 'nope' });
+    expect(status).toBe(400);
+    expect(json['code']).toBe('VALIDATION_ERROR');
+    expect(json['message']).toBe('[body.email] Invalid email address');
+  });
+
+  test.each([
+    ['an array', '[]'],
+    ['null', 'null'],
+    ['a string', '"x"'],
+    ['empty', ''],
+  ])('a sign-up body that is %s is a 4xx and creates nothing', async (_, raw) => {
+    const t = setup();
+    const response = await t.fetch('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: SITE_URL },
+      body: raw,
+    });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(500);
+    expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
+  });
+
+  describe.each([
+    ['unset', undefined],
+    ['empty', ''],
+  ])('with the secret %s, every other route', (_, value) => {
+    test.each([
+      ['GET', '/api/auth/ok'],
+      ['GET', '/api/auth/convex/jwks'],
+      ['GET', '/api/auth/jwks'],
+      ['POST', '/api/auth/sign-in/email'],
+      ['POST', '/api/auth/sign-out'],
+      ['POST', '/api/auth/convex/token'],
+      ['GET', '/api/auth/get-session'],
+    ])(
+      '%s %s is 503 AUTH_NOT_CONFIGURED or not found, and writes no row and no cookie',
+      async (method, path) => {
+        vi.stubEnv('BETTER_AUTH_SECRET', value);
+        const t = setup();
+        const response = await t.fetch(path, {
+          method,
+          headers: { 'content-type': 'application/json', origin: SITE_URL },
+          ...(method === 'POST'
+            ? { body: JSON.stringify({ email: 'a@b.co', password: 'x' }) }
+            : {}),
+        });
+        const text = await response.text();
+        expect([503, 404], `${path} ${response.status} ${text}`).toContain(response.status);
+        if (response.status === 503)
+          expect(JSON.parse(text)).toMatchObject({ code: 'AUTH_NOT_CONFIGURED' });
+        expect(text).not.toContain('BETTER_AUTH_SECRET');
+        expect(response.headers.get('set-cookie')).toBeNull();
+        const rows = await t.run(async (ctx) => {
+          const page = async (model: 'user' | 'session' | 'jwks') =>
+            (
+              (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+                model,
+                paginationOpts: { numItems: 10, cursor: null },
+              })) as { page: unknown[] }
+            ).page;
+          return [await page('user'), await page('session'), await page('jwks')];
+        });
+        expect(rows).toEqual([[], [], []]);
+      },
+    );
+  });
+});
