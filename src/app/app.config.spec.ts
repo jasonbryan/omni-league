@@ -1,11 +1,12 @@
 import { OVERLAY_DEFAULT_CONFIG } from '@angular/cdk/overlay';
 import { TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
+import { Router, UrlSerializer } from '@angular/router';
 import { App } from './app';
 import { appConfig } from './app.config';
 import { AUTH_CLIENT } from './core/auth/auth-client';
 import { AuthService } from './core/auth/auth.service';
 import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
+import { QueryTolerantUrlSerializer } from './core/url-serializer';
 
 // TestBed has no server response, so provideClientHydration() warns NG0505. That warning is a test
 // artifact (the real browser receives server-rendered HTML); every other console call fails the test.
@@ -51,5 +52,18 @@ describe('appConfig with no Convex URL', () => {
     // No Convex site URL in the test build, so no client is created.
     expect(TestBed.inject(AUTH_CLIENT)).toBeNull();
     expect(TestBed.inject(AuthService).signedIn()).toBe(false);
+  });
+
+  // The server handler and the browser's router read a URL the same way (PR #105, tester round 2).
+  it('reads a URL with an undecodable query string as its path, without a warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(UrlSerializer)).toBeInstanceOf(QueryTolerantUrlSerializer);
+    expect(TestBed.inject(Router).parseUrl('/organizations/acme?ref=%').toString()).toBe(
+      '/organizations/acme',
+    );
+    expect(warn.mock.calls.filter((args) => !isTestOnlyHydrationWarning(args))).toEqual([]);
+    warn.mockRestore();
   });
 });

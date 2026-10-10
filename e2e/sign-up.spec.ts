@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 
@@ -56,24 +57,26 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise
 }
 
 test.describe('sign-up', () => {
-  test('raw /sign-up, /app, and /app/x: 200 with the empty client shell, cacheable as a shell', async ({
-    request,
-  }) => {
-    for (const path of ['/sign-up', '/sign-up?returnTo=%2Fapp', '/app', '/app/x', '/app/x/y']) {
-      const { status, headers, html } = await fetchRawHtml(request, path);
-      expect(status, path).toBe(200);
-      expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
-        CLIENT_SHELL_CACHE.replace(/\s+/g, ''),
-      );
-      expect(headers['content-type'], path).toContain('text/html');
-      // No server render: the root is empty, so no guard, page, or auth code ran on the server.
-      expect(html, path).toMatch(/<app-root><\/app-root>/);
-      expect(html, path).not.toMatch(/<h1\b/);
-      expect(html, path).not.toContain('Create your account');
-      expect(html, path).not.toContain('Page not found');
-      expect(html, path).not.toContain('returnTo');
-    }
-  });
+  test(
+    'raw /sign-up, /app, and /app/x: 200 with the empty client shell, cacheable as a shell',
+    RAW_HTTP,
+    async ({ request }) => {
+      for (const path of ['/sign-up', '/sign-up?returnTo=%2Fapp', '/app', '/app/x', '/app/x/y']) {
+        const { status, headers, html } = await fetchRawHtml(request, path);
+        expect(status, path).toBe(200);
+        expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
+          CLIENT_SHELL_CACHE.replace(/\s+/g, ''),
+        );
+        expect(headers['content-type'], path).toContain('text/html');
+        // No server render: the root is empty, so no guard, page, or auth code ran on the server.
+        expect(html, path).toMatch(/<app-root><\/app-root>/);
+        expect(html, path).not.toMatch(/<h1\b/);
+        expect(html, path).not.toContain('Create your account');
+        expect(html, path).not.toContain('Page not found');
+        expect(html, path).not.toContain('returnTo');
+      }
+    },
+  );
 
   test('a signed-out visitor opening /app goes to /sign-up?returnTo=/app', async ({ page }) => {
     await page.goto('/app');

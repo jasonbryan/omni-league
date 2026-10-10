@@ -61,11 +61,19 @@ test.describe('console fixture rules', () => {
     await close();
   });
 
-  test('fails on an NG05xx console.warn and ignores other warnings', async ({ browser }) => {
+  // Angular's hydration warnings come with a code (NG0505) and without one (#94).
+  test('fails on every console.warn, with or without an NG05xx code', async ({ browser }) => {
     const { page, guard, close } = await guardedPage(browser);
     await logInPage(page, 'warn', 'plain warning');
+    await logInPage(
+      page,
+      'warn',
+      'Unexpected state: no hydration info available for a given TNode, which represents a view container.',
+    );
     await logInPage(page, 'warn', 'NG0505: Angular hydration was requested on the client');
     expect(guard.problems()).toEqual([
+      'console.warn: plain warning',
+      'console.warn: Unexpected state: no hydration info available for a given TNode, which represents a view container.',
       'console.warn: NG0505: Angular hydration was requested on the client',
     ]);
     await close();
@@ -276,13 +284,79 @@ test.describe('console fixture rules', () => {
     });
   });
 
+  test.describe("expectedConsoleWarnings: ['probe warning']", () => {
+    const options = { expectedConsoleWarnings: ['probe warning'] };
+
+    test('allows a warning that starts with the entry', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await logInPage(page, 'warn', 'probe warning: one');
+      await logInPage(page, 'warn', 'probe warning: two');
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    for (const text of ['a probe warning', 'Probe warning', 'other warning']) {
+      test(`still fails on: ${text}`, async ({ browser }) => {
+        const { page, guard, close } = await guardedPage(browser, options);
+        await logInPage(page, 'warn', 'probe warning: used');
+        await logInPage(page, 'warn', text);
+        expect(guard.problems()).toEqual([`console.warn: ${text}`]);
+        await close();
+      });
+    }
+
+    test('does not allow a console.error with the same text', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await logInPage(page, 'warn', 'probe warning: used');
+      await logInPage(page, 'error', 'probe warning as an error');
+      expect(guard.problems()).toEqual(['console.error: probe warning as an error']);
+      await close();
+    });
+
+    test('a RegExp entry matches anywhere in the message, also with the g flag', async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await guardedPage(browser, {
+        expectedConsoleWarnings: [/probe \d+/g],
+      });
+      await logInPage(page, 'warn', 'a probe 1 warning');
+      await logInPage(page, 'warn', 'a probe 2 warning');
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    test('fails on an unused entry, naming it', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, {
+        expectedConsoleWarnings: ['probe warning', /probe \d+/],
+      });
+      expect(guard.problems()).toEqual([
+        expect.stringContaining('expectedConsoleWarnings entry "probe warning" was not used'),
+        expect.stringContaining('expectedConsoleWarnings entry /probe \\d+/ was not used'),
+      ]);
+      expect(() => guard.verify()).toThrow(/probe warning/);
+      await close();
+    });
+  });
+
   // #62 tester: `test.skip()` inside a test runs after `test.use()` set the allowances, so a
   // skipped test never reaches the request it allowed.
   test.describe('in a skipped test', () => {
     const options = {
       expectedConvexErrors: ['probe:add'],
       expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }],
+      expectedConsoleWarnings: ['probe warning', /probe \d+/],
     };
+
+    test('reports every unused entry when the test ran', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, options);
+      expect(guard.problems()).toEqual([
+        expect.stringContaining('expectedConvexErrors entry "probe:add" was not used'),
+        expect.stringContaining('expectedFailedRequests entry 409 /probe-conflict was not used'),
+        expect.stringContaining('expectedConsoleWarnings entry "probe warning" was not used'),
+        expect.stringContaining('expectedConsoleWarnings entry /probe \\d+/ was not used'),
+      ]);
+      await close();
+    });
 
     test('does not report unused entries', async ({ browser }) => {
       const { guard, close } = await guardedPage(browser, options);
@@ -296,6 +370,15 @@ test.describe('console fixture rules', () => {
       await logInPage(page, 'error', 'probe error before the skip');
       expect(guard.problems({ skipped: true })).toEqual([
         'console.error: probe error before the skip',
+      ]);
+      await close();
+    });
+
+    test('still reports an unlisted console.warn', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, options);
+      await logInPage(page, 'warn', 'other warning before the skip');
+      expect(guard.problems({ skipped: true })).toEqual([
+        'console.warn: other warning before the skip',
       ]);
       await close();
     });
@@ -313,6 +396,26 @@ test.describe('console fixture wiring (real fixture)', () => {
     test.fail(true, 'the console fixture must fail this test');
     await page.setContent('<p>ok</p>');
     await logInPage(page, 'error', 'probe error through the real fixture');
+  });
+
+  test('a console.warn without an NG05xx code fails the test', async ({ page }) => {
+    test.fail(true, 'the console fixture must fail this test');
+    await page.setContent('<p>ok</p>');
+    await logInPage(page, 'warn', 'probe warning through the real fixture');
+  });
+
+  test.describe('with expectedConsoleWarnings', () => {
+    test.use({ expectedConsoleWarnings: ['probe warning'] });
+
+    test('a listed warning passes', async ({ page }) => {
+      await page.setContent('<p>ok</p>');
+      await logInPage(page, 'warn', 'probe warning through the real fixture');
+    });
+
+    test('an unused entry fails the test at teardown', async ({ page }) => {
+      test.fail(true, 'the unused allowance "probe warning" must fail this test');
+      await page.setContent('<p>ok</p>');
+    });
   });
 
   test.describe('with expectedConvexErrors', () => {
@@ -335,6 +438,7 @@ test.describe('console fixture wiring (real fixture)', () => {
     test.use({
       expectedConvexErrors: ['probe:add'],
       expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }],
+      expectedConsoleWarnings: ['probe warning'],
     });
 
     test('ends skipped without an unused-entry failure', async ({ page }) => {
@@ -392,6 +496,7 @@ test.describe('console fixture wiring (real fixture)', () => {
         'skips after a console.error': 'failed',
         'skips after a page error': 'failed',
         'skips after a console.error on a second page': 'failed',
+        'skips after an unlisted console.warn': 'failed',
         'does not skip (condition false), allowances unused': 'failed',
       });
     } finally {

@@ -14,6 +14,12 @@ export interface ConsoleFixtureOptions {
   expectedConvexErrors: readonly string[];
   /** `test.use({ expectedFailedRequests: [{ status: 422, path: '/api/auth/sign-up/email' }] })`. */
   expectedFailedRequests: readonly ExpectedFailedRequest[];
+  /**
+   * `test.use({ expectedConsoleWarnings: ['Some warning'] })`: allow `console.warn` messages that
+   * start with a listed string or match a listed RegExp; an unused entry fails the test. Each entry
+   * carries a comment linking the issue that removes the warning.
+   */
+  expectedConsoleWarnings: readonly (string | RegExp)[];
 }
 
 export interface ConsoleFixtures {
@@ -32,9 +38,16 @@ export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
   expectedDocumentStatus: [undefined, { option: true }],
   expectedConvexErrors: [[], { option: true }],
   expectedFailedRequests: [[], { option: true }],
+  expectedConsoleWarnings: [[], { option: true }],
   consoleGuard: [
     async (
-      { context, expectedDocumentStatus, expectedConvexErrors, expectedFailedRequests },
+      {
+        context,
+        expectedDocumentStatus,
+        expectedConvexErrors,
+        expectedFailedRequests,
+        expectedConsoleWarnings,
+      },
       use,
       testInfo,
     ) => {
@@ -42,6 +55,7 @@ export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
         expectedDocumentStatus,
         expectedConvexErrors,
         expectedFailedRequests,
+        expectedConsoleWarnings,
       });
       for (const page of context.pages()) guard.attach(page);
       context.on('page', (page) => guard.attach(page));

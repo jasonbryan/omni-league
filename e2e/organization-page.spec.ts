@@ -3,10 +3,12 @@
 // after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
 // and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
-import { expectAccessible, tabKey } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { rawGet } from './support/raw-get';
+import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { numberedLocations, seedTenant, SPORT_NAMES, type Tenant } from './support/tenant';
 
@@ -273,6 +275,11 @@ test.describe('organization page in the browser', () => {
       await activate(page, menuButton);
       await expect(sheet).toBeVisible();
       await expect(close).toBeFocused();
+      // The width is read once the slide-in has finished: mid-animation, WebKit reports a
+      // fractional width (288.0000076) for the translated content.
+      await sheet.evaluate((element) =>
+        Promise.all(element.getAnimations().map((animation) => animation.finished)),
+      );
     }
 
     // Closing by Escape, Close, or the scrim leaves the scrolled page where it was, with focus
@@ -335,6 +342,129 @@ test.describe('organization page in the browser', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await openSheet();
     expect((await sheet.boundingBox())?.width).toBe(272);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  });
+
+  // #94: the first press creates the sheet on the hydrated page. In a development build that
+  // creation logged "no hydration info available for a given TNode" while the shell's template
+  // held a view container; the console fixture fails the test on any warning. The phone-sheet
+  // test above makes its first press at 360, so only 320 is added here.
+  for (const width of [320]) {
+    test(`phone sheet (${width}): the first press on the hydrated page opens it with no console warning`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
+      await page.setViewportSize({ width, height: 800 });
+      const tenant = await smallTenant();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      const dialog = page.getByRole('dialog', { name: 'Navigation' });
+      await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+      // The dialog container has no box of its own: the helm sheet content inside is fixed.
+      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+      // The sheet's host element is not in the document: only the overlay holds its content.
+      expect(await page.locator('app-shell-sheet').count()).toBe(0);
+    });
+  }
+
+  // #94: the sheet is created outside the shell's template. A navigation that replaces the page
+  // while the sheet is open leaves no dialog, scrim, or scroll block on the next page. That the
+  // shell destroys the sheet's ComponentRef is asserted in shell.spec.ts.
+  test('phone sheet (360): a navigation away while it is open leaves no overlay or scroll block', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
+    // The tall tenant's page scrolls, so the open sheet blocks scrolling.
+    const tenant = await tallTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+    await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.classList.contains('cdk-global-scrollblock')),
+      )
+      .toBe(true);
+
+    // The header's home link is under the scrim; a script click starts the client navigation.
+    await page.evaluate(() => {
+      document.querySelector<HTMLAnchorElement>('header a[href="/"]')?.click();
+    });
+    await expect(page).toHaveURL(`${ORIGIN}/`);
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    await expect(page.locator('.cdk-overlay-pane')).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains('cdk-global-scrollblock'),
+      ),
+    ).toBe(false);
+    expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
+  });
+
+  // #94 with #88: the sheet opens and closes while the offline note shows. The sheet's chunk is
+  // loaded by a first press while online, because `setOffline` blocks every request, the chunk's
+  // included. The sheet is created outside the shell's template, so the note above it (a sibling
+  // of the top bar) must stay where it is, and the sheet must still open at 288px with focus on
+  // Close, close on Escape, and return focus to the menu button.
+  test('phone sheet (360): opens and closes while the offline note shows, with no console warning', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
+    const tenant = await smallTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const menuButton = page.getByRole('button', { name: 'Open navigation' });
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    const sheet = dialog.locator('[data-slot="sheet-content"]');
+    const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
+
+    // Online: the first press loads the chunk and creates the sheet; close it again.
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(note).toBeVisible({ timeout: 2_000 });
+    const noteBefore = await note.boundingBox();
+
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+    await sheet.evaluate((element) =>
+      Promise.all(element.getAnimations().map((animation) => animation.finished)),
+    );
+    expect((await sheet.boundingBox())?.width).toBe(288);
+    // The note is still shown, unmoved, under the scrim.
+    await expect(note).toBeVisible();
+    expect(await note.boundingBox()).toEqual(noteBefore);
+    expect(await page.locator('app-shell-sheet').count()).toBe(0);
+    // The tab walk of expectAccessible does not apply to an open modal: axe only.
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(menuButton).toBeFocused();
+    await expect(note).toBeVisible();
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains('cdk-global-scrollblock'),
+      ),
+    ).toBe(false);
+
+    // And once more: the second open after the note appeared works as the first one did.
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
   });
@@ -445,6 +575,55 @@ test.describe('organization page: unknown slug', () => {
     await expect(page.getByRole('navigation')).toHaveCount(0);
     await expect(page.getByRole('button')).toHaveCount(0);
     await expect(page).toHaveTitle('Page not found | Omni League');
+  });
+});
+
+// A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page
+// as if there were none (#91). Not a redirect: Netlify copies the query string into a Location
+// without one, so it would loop (PR #105). Against a preview it uses the demo organization.
+test.describe('organization page: undecodable query string', () => {
+  test('raw: the same page, cacheable, with no query string in the HTML', RAW_HTTP, async () => {
+    const path = remoteBaseUrl
+      ? '/organizations/gulf-coast-sport-social'
+      : (await smallTenant()).path;
+    const h1 = (html: string) => /<h1\b[^>]*>[^<]*<\/h1>/.exec(html)?.[0];
+    const bare = await rawGet(path);
+    expect(bare.status).toBe(200);
+    expect(h1(bare.body)).not.toMatch(/Omni League|Page not found/);
+
+    for (const query of ['?ref=%', '?q=%E0%A4%A', '?utm_source=x&ref=%']) {
+      const response = await rawGet(`${path}${query}`);
+      expect(response.status, query).toBe(200);
+      expect(response.location, query).toBeUndefined();
+      // Netlify removes the spaces after the commas.
+      expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(response.headers['netlify-vary'], query).toBe('query');
+      expect(h1(response.body), query).toBe(h1(bare.body));
+      for (const echo of ['ref=%', 'utm_source', '%E0%A4%A']) {
+        expect(response.body, query).not.toContain(echo);
+      }
+    }
+  });
+
+  // The browser's router parses the same URL after hydration. If it cannot decode the query string
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  test('browser: the organization page stays after hydration, at the same path', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { path, name } = remoteBaseUrl
+      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+      : await smallTenant();
+
+    const response = await page.goto(`${path}?ref=%`);
+    expect(response?.status()).toBe(200);
+    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+    else await hydrated(consoleGuard);
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+    await expect(page).toHaveTitle(`${name} | Omni League`);
+    expect(new URL(page.url()).pathname).toBe(path);
   });
 });
 

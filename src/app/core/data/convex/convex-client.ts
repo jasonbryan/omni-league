@@ -14,18 +14,10 @@ import {
 } from '@angular/core';
 import { isPlatformServer } from '@angular/common';
 import { ConvexClient } from 'convex/browser';
+import { CONVEX_CLIENT, type ConvexClientLike } from './client-token';
+import { ConvexConnection } from './connection';
 import { CONVEX_URL } from './convex-url';
 import { ConvexHydrationWindow } from './transfer';
-
-/** The part of `ConvexClient` the adapter uses; tests substitute a fake. */
-export interface ConvexClientLike {
-  onUpdate: ConvexClient['onUpdate'];
-  mutation: ConvexClient['mutation'];
-  action: ConvexClient['action'];
-  setAuth: ConvexClient['setAuth'];
-  clearAuth(): void;
-  close(): Promise<void>;
-}
 
 /** The auth source `provideConvexAuth()` registers (ADR 0006; `AuthService`, ADR 0008). */
 export interface ConvexAuthSource {
@@ -43,6 +35,8 @@ export function wrapConvexClient(client: ConvexClient): ConvexClientLike {
     setAuth: client.setAuth.bind(client),
     clearAuth: () => client.client.clearAuth(),
     close: () => client.close(),
+    connectionState: client.connectionState.bind(client),
+    subscribeToConnectionState: client.subscribeToConnectionState.bind(client),
   };
 }
 
@@ -50,9 +44,6 @@ export const CONVEX_CLIENT_FACTORY = new InjectionToken<(url: string) => ConvexC
   'CONVEX_CLIENT_FACTORY',
   { providedIn: 'root', factory: () => (url: string) => wrapConvexClient(new ConvexClient(url)) },
 );
-
-/** Browser: the app's one client, or `null` with no URL. Server: always `null` (no WebSocket). */
-export const CONVEX_CLIENT = new InjectionToken<ConvexClientLike | null>('CONVEX_CLIENT');
 
 /** The auth source, provided by `provideConvexAuth()`. Ignored on the server (ADR 0006). */
 export const CONVEX_AUTH = new InjectionToken<ConvexAuthSource>('CONVEX_AUTH');
@@ -93,7 +84,10 @@ export function provideConvex(): EnvironmentProviders {
   return makeEnvironmentProviders([
     { provide: CONVEX_CLIENT, useFactory: createConvexClient },
     provideAppInitializer(() => {
-      if (!isPlatformServer(inject(PLATFORM_ID))) inject(ConvexHydrationWindow).closeWhenStable();
+      if (isPlatformServer(inject(PLATFORM_ID))) return;
+      inject(ConvexHydrationWindow).closeWhenStable();
+      // Created at start, so the `online` signal's 5-second rule counts from the start of the app.
+      inject(ConvexConnection);
     }),
   ]);
 }

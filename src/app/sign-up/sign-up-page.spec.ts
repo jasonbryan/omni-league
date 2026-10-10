@@ -170,9 +170,11 @@ describe('SignUpPage', () => {
       await harness.fixture.whenStable();
       expect(input('password').type).toBe('text');
       expect(button.textContent?.replace(/\s+/g, ' ').trim()).toBe('Hide password');
-      expect(page.querySelector('[role="status"]')?.textContent?.trim()).toBe(
-        'Your password is shown.',
-      );
+      // The password field's own status, not the shell's offline note (also `role="status"`, #115).
+      const status = input('password')
+        .closest('[data-slot="field"]')
+        ?.querySelector('[role="status"]');
+      expect(status?.textContent?.trim()).toBe('Your password is shown.');
       button.click();
       await harness.fixture.whenStable();
       expect(input('password').type).toBe('password');

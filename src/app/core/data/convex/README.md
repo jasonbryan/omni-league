@@ -35,6 +35,19 @@ readonly addPlayer = injectMutation(api.teams.addPlayer);
 
 `injectAction` behaves the same. `run()` resolves with the result or rejects with the error that `error()` then holds. `pending()` stays `true` until every overlapping call settles. `error()` is cleared only by a later successful call.
 
+## Connection and offline (ADR 0013, #88)
+
+`injectOnline()` returns the app's `online` signal, which drives the offline note in the shell and the disabled look of submit buttons:
+
+- false at once when the browser reports offline (`navigator.onLine`, the `offline` event);
+- false once the socket has been down for 5 seconds, including a client that has not connected 5 seconds after the app started (field wifi with no internet, where `navigator.onLine` stays true);
+- true again as soon as the socket is connected and the browser reports online;
+- always true on the server; with no Convex URL it follows `navigator.onLine` only.
+
+`run()` does not use that 5-second signal. When called, it checks that the socket is connected and that `navigator.onLine` is true. If either fails, it waits up to 3 seconds for both (`pending()` is `true` meanwhile), then rejects with `ConvexOfflineError` (also in `error()`) without calling the client, so nothing is queued and sent later. `navigator.onLine` is checked because `convex` 1.46 does not listen for the `offline` event.
+
+Known residual: a mutation already sent when the socket drops is re-sent by the Convex client on reconnect. `convex` 1.46 also notices a silent drop only after 60 seconds without server messages (`serverInactivityThreshold`), so in that window, with `navigator.onLine` still true, a change can be handed to the client and re-sent on reconnect.
+
 ## No Convex URL
 
 CI, the e2e build, and a fresh clone build with no URL (`Convex URL: none`). The app starts with no client, and nothing is thrown or logged. Helpers report it instead:
@@ -71,6 +84,6 @@ On `RenderMode.Server` routes, query helpers fetch once over HTTP during the ren
 
 ## Testing
 
-Provide a fake through `CONVEX_CLIENT` (helpers) or `CONVEX_CLIENT_FACTORY` (the provider). `testing/fake-convex-client.ts` implements only the `ConvexClientLike` surface. Call `TestBed.tick()` before asserting on subscriptions: they open in an effect.
+Provide a fake through `CONVEX_CLIENT` (helpers) or `CONVEX_CLIENT_FACTORY` (the provider). `testing/fake-convex-client.ts` implements only the `ConvexClientLike` surface. It starts connected; `setConnected(false)` drops the socket (`{ neverConnected: true }` for a client that never connected) and notifies `subscribeToConnectionState` callbacks. Stub `navigator.onLine` with `vi.spyOn(window.navigator, 'onLine', 'get')` and dispatch `offline` or `online` on `window`; the `online` signal reads the browser after the first render, so call `TestBed.tick()` first. Call `TestBed.tick()` before asserting on subscriptions: they open in an effect.
 
 For the server path, set `PLATFORM_ID` to `'server'`, provide `CONVEX_URL`, and provide `CONVEX_HTTP_CLIENT_FACTORY` returning `testing/fake-convex-http-client.ts`. `server-render.spec.ts` shows a full `renderApplication` render. A spec that calls `renderApplication` must restore the global DOM classes after each test with `testing/dom-globals.ts`: the render swaps jsdom's `Event`, `Node` and the rest for domino's, and spec files share one global (`isolate: false`).

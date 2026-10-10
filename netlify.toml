@@ -30,6 +30,16 @@
 # Long-lived browser caching only for content-hashed build outputs. Nothing in public/ may use
 # these names (src/public-assets.spec.ts). Every other file keeps Netlify's default
 # `public, max-age=0, must-revalidate`.
+#
+# The web app manifest (#80) is a plain file in public/, so it keeps that default and is never
+# cached immutably: a changed name or icon reaches users on the next load. Only its content type
+# is set, so every deploy answers with the manifest media type, not a guessed one. The icons in
+# public/icons/ and favicon.ico also keep the default (scripts/netlify-toml.test.mjs).
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+
 [[headers]]
   for = "/media/*"
   [headers.values]
