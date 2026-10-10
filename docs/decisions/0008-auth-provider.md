@@ -4,6 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #7
 - **Date:** 2026-10-08 (accepted by the owner, who chose Better Auth after asking for Convex Auth to be re-analysed. Proposed 2026-10-07, revised the same day for the owner's email + password answer, and again to re-run Option A, Convex Auth, at the owner's request)
+- **Amended:** 2026-10-09, by #62 (PR #102): `returnTo` is validated on the parsed path, and a skipped test is exempt from the unused-allowance check. See "Amendment: return-to parsed path (2026-10-09)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -634,3 +635,18 @@ Sign-in feature issues carry `Blocked by: #7` only. The verification and reset s
 - **Google:** [OAuth 2.0 for web server apps, redirect URI validation](https://developers.google.com/identity/protocols/oauth2/web-server); [Public Suffix List](https://publicsuffix.org/list/public_suffix_list.dat) (`convex.site`).
 - **Email:** [Resend pricing](https://resend.com/pricing), [Resend 403 on resend.dev](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain).
 - **npm registry** (versions, licences, peers, dist-tags, publish dates), checked 2026-10-07: `@convex-dev/auth`, `@auth/core`, `@convex-dev/better-auth`, `better-auth`, `@noble/hashes`, `@clerk/clerk-js`, `@workos-inc/authkit-js`, `@auth0/auth0-spa-js`, `@convex-dev/resend`, `convex`, `convex-test`.
+
+## Amendment: return-to parsed path (2026-10-09)
+
+The #62 tester found that ADR 0008's `returnTo` rule, which checks the raw input, lets a dot-segment path through: `/..//evil.example/x` (also `/.//…`, `/%2e%2e//…`, `/./\…`, `/../\…`) parses to `//evil.example/x`, and a router that does not collapse the empty segment would treat it as another host. `safeReturnTo` in PR #102 checks the parsed path too. This is stricter than the ADR.
+
+| Rule in "Return-to-registration URL"         | Was                                                                                                       | Now                                                                                                                                                                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checks on the raw input                      | Starts with `/`; does not start with `//` or `/\`; parsed against a placeholder origin, keeps that origin | Unchanged                                                                                                                                                                                                                    |
+| Checks on the parsed result                  | None                                                                                                      | The parsed `pathname` must not start with `//` or `/\`. A path that does becomes `/`                                                                                                                                         |
+| What `safeReturnTo` returns                  | The raw input                                                                                             | The parsed path, query, and fragment. The parser removes dot segments and turns `\` into `/`, so the result holds neither and resolves to this site's origin against any base                                                |
+| Unused allowance in a test that skips itself | Not specified                                                                                             | A skipped test does not fail for unused `expectedFailedRequests`, `expectedConvexErrors`, or `expectedConsoleWarnings` entries. This narrows the unused-entry rule in ADR 0005 (see its console-warnings amendment, PR #109) |
+
+**Why.** A same-site check has to run on the value the router receives, not on the string the user typed. #63 shares the validator and inherits the rule.
+
+**Sources.** [PR #102 test report](https://github.com/jasonbryan/omni-league/pull/102#issuecomment-6092160741), [PR #102 review](https://github.com/jasonbryan/omni-league/pull/102#issuecomment-6092463987).
