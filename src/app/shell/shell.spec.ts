@@ -6,7 +6,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
 import { LOAD_SHELL_SHEET, Shell, skipLinkHref } from './shell';
-import { LOAD_PAGE } from './shell-sheet';
+import { LOAD_PAGE } from './follow-link';
 import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
 async function render(
@@ -244,8 +244,8 @@ describe('Shell', () => {
       await settle(harness);
     }
 
-    async function open(routes?: Routes): Promise<RouterTestingHarness> {
-      const harness = await render(SidebarTestPage, '/', routes);
+    async function open(routes?: Routes, url = '/'): Promise<RouterTestingHarness> {
+      const harness = await render(SidebarTestPage, url, routes);
       views = trackAppViews();
       await press(harness);
       return harness;
@@ -420,6 +420,52 @@ describe('Shell', () => {
 
       expect(router.url).toBe('/organizations/test#row-2');
       expect(scrolled).toEqual([false]);
+    });
+
+    it('keeps the current query string on a link to the current path, and replaces the fragment (#95)', async () => {
+      const harness = await open(undefined, '/organizations/test?utm_source=x&ott=abc#top');
+      const router = TestBed.inject(Router);
+      const target = host(harness).querySelector<HTMLElement>('#row-2');
+      if (!target) throw new Error('no target row');
+      const scrolled: boolean[] = [];
+      target.scrollIntoView = () => scrolled.push(dialog() !== null);
+
+      dialog()?.querySelector<HTMLElement>('a.sidebar-link')?.click();
+      expect(router.url).toBe('/organizations/test?utm_source=x&ott=abc#top');
+      await settle(harness);
+
+      expect(router.url).toBe('/organizations/test?utm_source=x&ott=abc#row-2');
+      expect(scrolled).toEqual([false]);
+    });
+
+    it('navigates through the router to the link URL, with its own query string, for another path on the site (#95)', async () => {
+      const loadPage = vi.fn<(url: string) => void>();
+      TestBed.configureTestingModule({ providers: [{ provide: LOAD_PAGE, useValue: loadPage }] });
+      const harness = await open(undefined, '/organizations/test?utm_source=x');
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+
+      dialog()?.querySelector<HTMLElement>('a.other-path')?.click();
+      await settle(harness);
+
+      expect(dialog()).toBeNull();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/elsewhere?x=1#top');
+      expect(TestBed.inject(Router).url).toBe('/elsewhere?x=1#top');
+      expect(loadPage).not.toHaveBeenCalled();
+    });
+
+    it('loads a link to another origin as a full page, with no router navigation (#95)', async () => {
+      const loadPage = vi.fn<(url: string) => void>();
+      TestBed.configureTestingModule({ providers: [{ provide: LOAD_PAGE, useValue: loadPage }] });
+      const harness = await open(undefined, '/organizations/test?utm_source=x');
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+
+      dialog()?.querySelector<HTMLElement>('a.other-site')?.click();
+      await settle(harness);
+
+      expect(dialog()).toBeNull();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(loadPage).toHaveBeenCalledExactlyOnceWith('https://example.com/a?b=1#c');
+      expect(TestBed.inject(Router).url).toBe('/organizations/test?utm_source=x');
     });
 
     /** Macrotasks only: whenStable would also wait for a navigation held by a guard. */
