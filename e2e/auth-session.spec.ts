@@ -320,9 +320,11 @@ test.describe('auth session store, round 4', () => {
       () => page.goto(`/sign-up?returnTo=${encodeURIComponent('/app')}`),
     ]) {
       events.length = 0;
-      const tokens = tokensSettled(page);
       await load();
-      await tokens;
+      // Wait for both, not for a quiet spell: on a preview, the server's confirmation of the first
+      // token can take longer than tokensSettled's quiet window.
+      await expect.poll(() => events.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(4);
+      await page.waitForTimeout(1_500);
       expect(events).toEqual(['start', 'end', 'start', 'end']);
     }
   });
@@ -338,13 +340,13 @@ test.describe('auth session store, round 4', () => {
     await first;
 
     const tabs = await Promise.all(Array.from({ length: 4 }, () => context.newPage()));
-    const perTab = tabs.map((tab) => {
-      const seen = authRequests(tab);
-      return { tab, seen, settled: tokensSettled(tab) };
-    });
+    const perTab = tabs.map((tab) => ({ tab, seen: authRequests(tab) }));
     await Promise.all(perTab.map(({ tab }) => tab.goto('/app')));
     await Promise.all(perTab.map(({ tab }) => expect(panel(tab)).toContainText(user.name)));
-    await Promise.all(perTab.map(({ settled }) => settled));
+    for (const { seen } of perTab) {
+      await expect.poll(() => count(seen, TOKEN), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+    }
+    await page.waitForTimeout(1_500);
     for (const { seen } of perTab) expect(count(seen, TOKEN)).toBe(2);
   });
 
