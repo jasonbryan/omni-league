@@ -3,7 +3,7 @@
 // after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
 // and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
-import { expectAccessible, tabKey } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -406,6 +406,67 @@ test.describe('organization page in the browser', () => {
       ),
     ).toBe(false);
     expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
+  });
+
+  // #94 with #88: the sheet opens and closes while the offline note shows. The sheet's chunk is
+  // loaded by a first press while online, because `setOffline` blocks every request, the chunk's
+  // included. The sheet is created outside the shell's template, so the note above it (a sibling
+  // of the top bar) must stay where it is, and the sheet must still open at 288px with focus on
+  // Close, close on Escape, and return focus to the menu button.
+  test('phone sheet (360): opens and closes while the offline note shows, with no console warning', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
+    const tenant = await smallTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const menuButton = page.getByRole('button', { name: 'Open navigation' });
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    const sheet = dialog.locator('[data-slot="sheet-content"]');
+    const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
+
+    // Online: the first press loads the chunk and creates the sheet; close it again.
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(note).toBeVisible({ timeout: 2_000 });
+    const noteBefore = await note.boundingBox();
+
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+    await sheet.evaluate((element) =>
+      Promise.all(element.getAnimations().map((animation) => animation.finished)),
+    );
+    expect((await sheet.boundingBox())?.width).toBe(288);
+    // The note is still shown, unmoved, under the scrim.
+    await expect(note).toBeVisible();
+    expect(await note.boundingBox()).toEqual(noteBefore);
+    expect(await page.locator('app-shell-sheet').count()).toBe(0);
+    // The tab walk of expectAccessible does not apply to an open modal: axe only.
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(menuButton).toBeFocused();
+    await expect(note).toBeVisible();
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains('cdk-global-scrollblock'),
+      ),
+    ).toBe(false);
+
+    // And once more: the second open after the note appeared works as the first one did.
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
   });
 
   test.describe('with JavaScript disabled', () => {
