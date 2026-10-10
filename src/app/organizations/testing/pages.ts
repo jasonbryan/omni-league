@@ -10,6 +10,17 @@ export const GULF_COAST: PublicOrganizationPage = {
   leagueCount: 5,
   locationCount: 3,
   sportCount: 3,
+  sports: [
+    {
+      key: 'beachVolleyball',
+      segment: 'beach-volleyball',
+      name: 'Beach volleyball',
+      leagueCount: 2,
+      locationCount: 1,
+    },
+    { key: 'soccer', segment: 'soccer', name: 'Soccer', leagueCount: 2, locationCount: 1 },
+    { key: 'softball', segment: 'softball', name: 'Softball', leagueCount: 1, locationCount: 2 },
+  ],
   locations: [
     { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
     { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
@@ -67,6 +78,7 @@ export const PORT_ARANSAS: PublicOrganizationPage = {
   leagueCount: 0,
   locationCount: 0,
   sportCount: 0,
+  sports: [],
   locations: [],
   leagues: [],
 };

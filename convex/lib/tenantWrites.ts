@@ -2,15 +2,20 @@
 // (previews and staging) and the IS_TEST tenant seeds in `convex/testing.ts`. Until #64 adds
 // organization creation, these are the only writers of these tables.
 //
-// Writer contract (#100): every insert, update, or delete of an organization, location, or league
-// goes through this module, which keeps each row's `sortName` and the organization's
-// `leagueCount` and `locationCount` in the same mutation as the row. A write elsewhere makes the
-// public page's totals and page count disagree with its rows. #64, #65, #66, and #69 extend it.
+// Writer contract (#100, #101): every insert, update, or delete of an organization, location,
+// league, or `sportLocations` row goes through this module, which keeps each row's `sortName`, the
+// organization's `leagueCount` and `locationCount`, its per-sport `sportLeagueCounts` and
+// `sportLocationCounts`, and the `sportLocations` rows in the same mutation as the row. A write
+// elsewhere makes the public page's totals, sports, and page count disagree with its rows. #64,
+// #65, #66, and #69 extend it. The first writer that unpublishes or deletes a league, or changes
+// its locations, decrements what `insertLeague` incremented: `leagueCount`,
+// `sportLeagueCounts[sport]`, and the `sportLocations` row of each location the league leaves,
+// deleting that row at 0 and decrementing `sportLocationCounts[sport]`.
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import { isSlug, MAX_SLUG_LENGTH, slugify } from './slugs';
-import { sportValidator } from './sports';
+import { sportValidator, type Sport, type SportCounts } from './sports';
 
 /** A league to create; `locations` names locations of the same organization. */
 export const leagueSeedValidator = v.object({
@@ -98,6 +103,8 @@ export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id
     slug,
     leagueCount: 0,
     locationCount: 0,
+    sportLeagueCounts: {},
+    sportLocationCounts: {},
   });
   for (const location of tenant.locations) {
     await insertLocation(ctx, organizationId, location);
@@ -163,7 +170,50 @@ export async function insertLeague(
     sortName: sortName(league.name),
   });
   await increment(ctx, organizationId, 'leagueCount');
+  await countLeagueInSport(ctx, organizationId, league.sport, locationIds);
   return { leagueId, slug };
+}
+
+/**
+ * Counts one new league of `sport` at `locationIds` (#101): adds 1 to `sportLeagueCounts[sport]`,
+ * and adds 1 to the `sportLocations` row of each distinct location, inserting the row at 1 and
+ * adding 1 to `sportLocationCounts[sport]` when it is new. An organization whose sport counters
+ * are not set yet (written before #101) is left alone, rows included: the backfill recounts
+ * counters and rows together and would count a row written here twice.
+ */
+async function countLeagueInSport(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  locationIds: Id<'locations'>[],
+): Promise<void> {
+  const organization = await ctx.db.get('organizations', organizationId);
+  if (!organization) throw new Error('No organization has this id');
+  const { sportLeagueCounts, sportLocationCounts } = organization;
+  if (sportLeagueCounts === undefined || sportLocationCounts === undefined) return;
+  let newLocations = 0;
+  for (const locationId of new Set(locationIds)) {
+    const row = await ctx.db
+      .query('sportLocations')
+      .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
+        q.eq('organizationId', organizationId).eq('sport', sport).eq('locationId', locationId),
+      )
+      .unique();
+    if (row) {
+      await ctx.db.patch('sportLocations', row._id, { leagueCount: row.leagueCount + 1 });
+    } else {
+      await ctx.db.insert('sportLocations', { organizationId, sport, locationId, leagueCount: 1 });
+      newLocations++;
+    }
+  }
+  await ctx.db.patch('organizations', organizationId, {
+    sportLeagueCounts: { ...sportLeagueCounts, [sport]: (sportLeagueCounts[sport] ?? 0) + 1 },
+    // A sport with no location has no entry, as the backfill leaves it.
+    sportLocationCounts:
+      newLocations === 0
+        ? sportLocationCounts
+        : { ...sportLocationCounts, [sport]: (sportLocationCounts[sport] ?? 0) + newLocations },
+  });
 }
 
 async function uniqueLeagueSlug(
@@ -195,9 +245,10 @@ export const backfilledValidator = v.object({
 });
 
 /**
- * Sets the fields #100 added on rows written before it (a reused staging deployment): `sortName`
- * on each location and league without one, and both counters, from a recount, on each organization
- * missing either. Reads at most `BACKFILL_SCAN_LIMIT` rows per table. Returns the number of rows
+ * Sets the fields #100 and #101 added on rows written before them (a reused staging deployment):
+ * `sortName` on each location and league without one, and the four counters (league and location
+ * totals, and the per-sport league and location counts with the `sportLocations` rows), from a
+ * recount, on each organization missing any. Reads at most `BACKFILL_SCAN_LIMIT` rows per table. Returns the number of rows
  * changed per table; a second run changes none. Run by `seed:demo` under its deployment guard,
  * before its inserts; #104 removes it once the fields are required.
  */
@@ -216,7 +267,12 @@ export async function backfillTenantFields(
     backfilled.leagues++;
   }
   for (const organization of await ctx.db.query('organizations').take(BACKFILL_SCAN_LIMIT)) {
-    if (organization.leagueCount !== undefined && organization.locationCount !== undefined) {
+    if (
+      organization.leagueCount !== undefined &&
+      organization.locationCount !== undefined &&
+      organization.sportLeagueCounts !== undefined &&
+      organization.sportLocationCounts !== undefined
+    ) {
       continue;
     }
     const organizationId = organization._id;
@@ -228,9 +284,35 @@ export async function backfillTenantFields(
       .query('leagues')
       .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
       .take(BACKFILL_SCAN_LIMIT);
+    // Recount the sport counters and the sportLocations rows together (#101), starting from no
+    // rows so that a row left by an earlier partial run is never counted twice.
+    const existingRows = await ctx.db
+      .query('sportLocations')
+      .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
+        q.eq('organizationId', organizationId),
+      )
+      .take(BACKFILL_SCAN_LIMIT);
+    for (const row of existingRows) await ctx.db.delete('sportLocations', row._id);
+    const sportLeagueCounts: SportCounts = {};
+    const sportLocationCounts: SportCounts = {};
+    const leaguesPerLocation = new Map<string, number>();
+    for (const league of leagues) {
+      sportLeagueCounts[league.sport] = (sportLeagueCounts[league.sport] ?? 0) + 1;
+      for (const locationId of new Set(league.locationIds)) {
+        const key = `${league.sport}/${locationId}`;
+        leaguesPerLocation.set(key, (leaguesPerLocation.get(key) ?? 0) + 1);
+      }
+    }
+    for (const [key, leagueCount] of leaguesPerLocation) {
+      const [sport, locationId] = key.split('/') as [Sport, Id<'locations'>];
+      await ctx.db.insert('sportLocations', { organizationId, sport, locationId, leagueCount });
+      sportLocationCounts[sport] = (sportLocationCounts[sport] ?? 0) + 1;
+    }
     await ctx.db.patch('organizations', organizationId, {
       leagueCount: leagues.length,
       locationCount: locations.length,
+      sportLeagueCounts,
+      sportLocationCounts,
     });
     backfilled.organizations++;
   }

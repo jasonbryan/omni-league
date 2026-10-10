@@ -21,15 +21,10 @@ const myTeams = makeFunctionReference<'query', { leagueId: string }, unknown>('t
 const SAVED_AT = Date.UTC(2026, 9, 9, 21, 14);
 const NOW = Date.UTC(2026, 9, 10, 9, 0);
 
-const SAVED = { name: 'Saved name', slug: 'gulf', leagueCount: 0, locationCount: 0, sportCount: 0 };
-const LIVE = { name: 'Live name', slug: 'gulf', leagueCount: 0, locationCount: 0, sportCount: 0 };
-const TRANSFERRED = {
-  name: 'Transferred name',
-  slug: 'gulf',
-  leagueCount: 0,
-  locationCount: 0,
-  sportCount: 0,
-};
+const EMPTY = { slug: 'gulf', leagueCount: 0, locationCount: 0, sportCount: 0, sports: [] };
+const SAVED = { name: 'Saved name', ...EMPTY };
+const LIVE = { name: 'Live name', ...EMPTY };
+const TRANSFERRED = { name: 'Transferred name', ...EMPTY };
 
 function plant(slug: string, value: unknown, savedAt = SAVED_AT): void {
   plantSavedCopy(getPublicPage, { slug }, value, savedAt);

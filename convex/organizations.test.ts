@@ -9,6 +9,14 @@ import schema from './schema';
 import { modules } from './test.setup';
 import organizationsSource from './organizations.ts?raw';
 
+const BEACH = {
+  key: 'beachVolleyball',
+  segment: 'beach-volleyball',
+  name: 'Beach volleyball',
+} as const;
+const SOCCER = { key: 'soccer', segment: 'soccer', name: 'Soccer' } as const;
+const SOFTBALL = { key: 'softball', segment: 'softball', name: 'Softball' } as const;
+
 function setup() {
   return convexTest(schema, modules);
 }
@@ -119,6 +127,11 @@ describe('organizations:getPublicPage', () => {
       leagueCount: 3,
       locationCount: 2,
       sportCount: 3,
+      sports: [
+        { ...BEACH, leagueCount: 1, locationCount: 0 },
+        { ...SOCCER, leagueCount: 1, locationCount: 1 },
+        { ...SOFTBALL, leagueCount: 1, locationCount: 2 },
+      ],
     });
   });
 
@@ -135,6 +148,7 @@ describe('organizations:getPublicPage', () => {
       leagueCount: 0,
       locationCount: 0,
       sportCount: 0,
+      sports: [],
     });
   });
 
@@ -147,6 +161,7 @@ describe('organizations:getPublicPage', () => {
       leagueCount: 0,
       locationCount: 0,
       sportCount: 0,
+      sports: [],
     });
   });
 
@@ -169,6 +184,10 @@ describe('organizations:getPublicPage', () => {
       leagueCount: 236,
       locationCount: 12,
       sportCount: 2,
+      sports: [
+        { ...SOCCER, leagueCount: 118, locationCount: 6 },
+        { ...SOFTBALL, leagueCount: 118, locationCount: 6 },
+      ],
     });
     const leagues = await t.query(api.organizations.listPublicLeagues, { slug: 'big', page: 1 });
     expect(leagues).toMatchObject({ page: 1, pageCount: 40, total: 236 });
@@ -179,6 +198,7 @@ describe('organizations:getPublicPage', () => {
       leagueCount: 1,
       locationCount: 1,
       sportCount: 1,
+      sports: [{ ...SOCCER, leagueCount: 1, locationCount: 1 }],
     });
   });
 
@@ -225,6 +245,7 @@ describe('organizations:getPublicPage', () => {
       'name',
       'slug',
       'sportCount',
+      'sports',
     ]);
     expect(JSON.stringify(page)).not.toMatch(/_id|_creationTime|organizationId/);
   });
@@ -609,5 +630,353 @@ describe('organizations: totals and page bounds against a recount (#100, tester)
       const last = await t.query(fn, { slug: 'drift', page: PUBLIC_LIST_MAX_PAGE });
       expect(last).toMatchObject({ page: 40, pageCount: 40, rows: [] });
     }
+  });
+});
+
+// #101: per-sport league and location counts, and each sport's leagues by page.
+
+/**
+ * 12 beach volleyball leagues at 3 locations (several share one, and one lists its location
+ * twice), 3 soccer leagues at 1 location, and no softball league. A fourth location holds no
+ * beach volleyball league.
+ */
+function seedSports(t: T, slug: string) {
+  const fields = ['Court A', 'Court B', 'Court C', 'Turf'];
+  return seed(t, {
+    organization: { name: `Org ${slug}`, slug },
+    locations: fields.map((name) => ({ name, address: `${name} address` })),
+    leagues: [
+      ...numbered(12).map((name, i) => ({
+        name: `Sand ${name}`,
+        sport: 'beachVolleyball' as const,
+        // Court A holds leagues 0, 3, 6, and 9; the first of them lists it twice.
+        locations: i === 0 ? ['Court A', 'Court A'] : [fields[i % 3]],
+      })),
+      ...numbered(3).map((name) => ({
+        name: `Kick ${name}`,
+        sport: 'soccer' as const,
+        locations: ['Turf'],
+      })),
+    ],
+  });
+}
+
+describe('organizations:getPublicPage sports (#101)', () => {
+  test('lists each sport with a league: key, segment, name, and league and location counts', async () => {
+    const t = setup();
+    await seedSports(t, 'sandy');
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'sandy' })).toEqual({
+      name: 'Org sandy',
+      slug: 'sandy',
+      leagueCount: 15,
+      locationCount: 4,
+      sportCount: 2,
+      sports: [
+        { ...BEACH, leagueCount: 12, locationCount: 3 },
+        { ...SOCCER, leagueCount: 3, locationCount: 1 },
+      ],
+    });
+  });
+
+  test("excludes another organization's leagues and locations", async () => {
+    const t = setup();
+    await seedSports(t, 'sandy');
+    // The other organization has a location named like one of the first organization's.
+    await seed(t, {
+      organization: { name: 'Other', slug: 'other' },
+      locations: [
+        { name: 'Turf', address: 'Elsewhere' },
+        { name: 'Diamond', address: '1 Diamond Rd' },
+      ],
+      leagues: [
+        { name: 'Other Soccer', sport: 'soccer', locations: ['Turf', 'Diamond'] },
+        { name: 'Other Softball', sport: 'softball', locations: ['Diamond'] },
+      ],
+    });
+    expect((await t.query(api.organizations.getPublicPage, { slug: 'sandy' }))?.sports).toEqual([
+      { ...BEACH, leagueCount: 12, locationCount: 3 },
+      { ...SOCCER, leagueCount: 3, locationCount: 1 },
+    ]);
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'other' })).toMatchObject({
+      sportCount: 2,
+      sports: [
+        { ...SOCCER, leagueCount: 1, locationCount: 2 },
+        { ...SOFTBALL, leagueCount: 1, locationCount: 1 },
+      ],
+    });
+  });
+
+  test('lists sports in SPORT_NAMES order whatever order the leagues were inserted in', async () => {
+    const t = setup();
+    await seed(t, {
+      organization: { name: 'Order', slug: 'order' },
+      locations: [],
+      leagues: [
+        { name: 'S', sport: 'softball', locations: [] },
+        { name: 'B', sport: 'beachVolleyball', locations: [] },
+        { name: 'F', sport: 'soccer', locations: [] },
+      ],
+    });
+    const page = await t.query(api.organizations.getPublicPage, { slug: 'order' });
+    expect(page?.sports.map((sport) => sport.key)).toEqual([
+      'beachVolleyball',
+      'soccer',
+      'softball',
+    ]);
+    expect(page?.sports.map((sport) => sport.locationCount)).toEqual([0, 0, 0]);
+  });
+
+  test('an organization with no league has no sports, and sportCount is the length of sports', async () => {
+    const t = setup();
+    await seed(t, { organization: { name: 'Empty', slug: 'empty' }, locations: [], leagues: [] });
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'empty' })).toMatchObject({
+      sportCount: 0,
+      sports: [],
+    });
+  });
+
+  test('reads missing sport counters as no sports (an organization the backfill has not reached)', async () => {
+    const t = setup();
+    await t.run((ctx) => ctx.db.insert('organizations', { name: 'Old Club', slug: 'old' }));
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'old' })).toMatchObject({
+      sportCount: 0,
+      sports: [],
+    });
+  });
+
+  test('a league written to an organization without sport counters leaves them unset and writes no sportLocations row', async () => {
+    const t = setup();
+    const organizationId = await t.run((ctx) =>
+      ctx.db.insert('organizations', { name: 'Old Club', slug: 'old' }),
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.insert('locations', { organizationId, name: 'F', address: 'A' });
+      await insertLeague(ctx, organizationId, { name: 'L', sport: 'soccer', locations: ['F'] });
+    });
+    const state = await t.run(async (ctx) => ({
+      organization: await ctx.db.get('organizations', organizationId),
+      rows: await ctx.db.query('sportLocations').collect(),
+    }));
+    expect(state.rows).toEqual([]);
+    expect(state.organization?.sportLeagueCounts).toBeUndefined();
+    expect(state.organization?.sportLocationCounts).toBeUndefined();
+  });
+
+  test('the counters follow every insertLeague, and a throwing insert rolls them back with the league', async () => {
+    const t = setup();
+    const organizationId = await seed(t, {
+      organization: { name: 'Grow', slug: 'grow' },
+      locations: [
+        { name: 'One', address: '1' },
+        { name: 'Two', address: '2' },
+      ],
+      leagues: [],
+    });
+    const sportsOf = async () =>
+      (await t.query(api.organizations.getPublicPage, { slug: 'grow' }))?.sports.map(
+        ({ key, leagueCount, locationCount }) => [key, leagueCount, locationCount],
+      );
+    expect(await sportsOf()).toEqual([]);
+    await t.run((ctx) =>
+      insertLeague(ctx, organizationId, { name: 'A', sport: 'soccer', locations: ['One'] }),
+    );
+    expect(await sportsOf()).toEqual([['soccer', 1, 1]]);
+    await t.run((ctx) =>
+      insertLeague(ctx, organizationId, { name: 'B', sport: 'soccer', locations: ['One', 'Two'] }),
+    );
+    expect(await sportsOf()).toEqual([['soccer', 2, 2]]);
+    await expect(
+      t.run((ctx) =>
+        insertLeague(ctx, organizationId, {
+          name: 'C',
+          sport: 'soccer',
+          locations: ['One', 'Nope'],
+        }),
+      ),
+    ).rejects.toThrow(/Nope/);
+    expect(await sportsOf()).toEqual([['soccer', 2, 2]]);
+    const rows = await t.run(async (ctx) =>
+      (await ctx.db.query('sportLocations').collect()).map(({ sport, leagueCount }) => [
+        sport,
+        leagueCount,
+      ]),
+    );
+    expect(rows.sort()).toEqual([
+      ['soccer', 1],
+      ['soccer', 2],
+    ]);
+  });
+
+  test('returns only the documented fields of each sport: no ids', async () => {
+    const t = setup();
+    await seedSports(t, 'sandy');
+    const page = await t.query(api.organizations.getPublicPage, { slug: 'sandy' });
+    for (const sport of page?.sports ?? []) {
+      expect(Object.keys(sport).sort()).toEqual([
+        'key',
+        'leagueCount',
+        'locationCount',
+        'name',
+        'segment',
+      ]);
+    }
+    expect(JSON.stringify(page)).not.toMatch(/_id|_creationTime|organizationId|locationId/);
+  });
+});
+
+describe('organizations:listPublicLeagues with a sport (#101)', () => {
+  /** 12 soccer leagues in shuffled insertion order. */
+  const SOCCER_NAMES = THIRTEEN.slice(0, 12);
+  const SOCCER_SORTED = [...SOCCER_NAMES].sort((a, b) =>
+    a.toLowerCase() < b.toLowerCase() ? -1 : 1,
+  );
+
+  /** The 12 soccer leagues among 3 beach volleyball leagues and 1 softball league. */
+  function seedMixed(t: T, slug = 'mixed') {
+    return seed(t, {
+      organization: { name: `Org ${slug}`, slug },
+      locations: [{ name: 'Home Field', address: '1 Home Road' }],
+      leagues: [
+        { name: 'Aaa Sand', sport: 'beachVolleyball', locations: ['Home Field'] },
+        ...SOCCER_NAMES.map((name) => ({
+          name,
+          sport: 'soccer' as const,
+          locations: ['Home Field'],
+        })),
+        { name: 'Bbb Sand', sport: 'beachVolleyball', locations: [] },
+        { name: 'Aaa Softball', sport: 'softball', locations: ['Home Field'] },
+        { name: 'Zzz Sand', sport: 'beachVolleyball', locations: [] },
+      ],
+    });
+  }
+
+  const soccer = (t: T, slug: string, page: number) =>
+    t.query(api.organizations.listPublicLeagues, { slug, page, sport: 'soccer' });
+
+  test('pages 1 to 3 of 12 soccer leagues: 5, 5, and 2 by name ignoring case', async () => {
+    const t = setup();
+    await seedMixed(t);
+    const pages = [await soccer(t, 'mixed', 1), await soccer(t, 'mixed', 2)];
+    pages.push(await soccer(t, 'mixed', 3));
+    expect(pages.map(({ page, pageCount, total }) => ({ page, pageCount, total }))).toEqual([
+      { page: 1, pageCount: 3, total: 12 },
+      { page: 2, pageCount: 3, total: 12 },
+      { page: 3, pageCount: 3, total: 12 },
+    ]);
+    expect(pages.map(names)).toEqual([
+      SOCCER_SORTED.slice(0, 5),
+      SOCCER_SORTED.slice(5, 10),
+      SOCCER_SORTED.slice(10),
+    ]);
+    expect(pages.flatMap((result) => result.rows.map((row) => row.sportName))).toEqual(
+      SOCCER_NAMES.map(() => 'Soccer'),
+    );
+    expect(pages[0].rows[0].locationNames).toEqual(['Home Field']);
+  });
+
+  test.each([0, 4, 41, -1, 2.5, Number.NaN, Number.MAX_SAFE_INTEGER])(
+    'page %d returns page 1',
+    async (page) => {
+      const t = setup();
+      await seedMixed(t);
+      const result = await soccer(t, 'mixed', page);
+      expect(result).toMatchObject({ page: 1, pageCount: 3, total: 12 });
+      expect(names(result)).toEqual(SOCCER_SORTED.slice(0, 5));
+    },
+  );
+
+  test("returns only that organization's leagues of the sport", async () => {
+    const t = setup();
+    await seedMixed(t);
+    await seedMixed(t, 'twin');
+    await seedB(t);
+    const result = await soccer(t, 'mixed', 1);
+    expect(result.total).toBe(12);
+    expect(JSON.stringify(result)).not.toMatch(/B League|Sand|Softball/);
+    const other = await soccer(t, 'other-org', 1);
+    expect(other).toMatchObject({ total: 1 });
+    expect(names(other)).toEqual(['B League']);
+  });
+
+  test('a sport with no league returns an empty page 1 with total 0', async () => {
+    const t = setup();
+    await seedB(t);
+    const softball = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'other-org',
+      page: 1,
+      sport: 'softball',
+    });
+    expect(softball).toEqual({ rows: [], page: 1, pageCount: 0, total: 0 });
+    const farPage = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'other-org',
+      page: 3,
+      sport: 'beachVolleyball',
+    });
+    expect(farPage).toEqual({ rows: [], page: 1, pageCount: 0, total: 0 });
+  });
+
+  test('an unknown slug returns no rows with a sport', async () => {
+    const t = setup();
+    await seedMixed(t);
+    expect(await soccer(t, 'nope', 1)).toEqual({ rows: [], page: 1, pageCount: 0, total: 0 });
+  });
+
+  test.each(['hockey', 'Soccer', 'beach-volleyball', '', 'constructor'])(
+    'refuses the sport %j in argument validation',
+    async (sport) => {
+      const t = setup();
+      await seedMixed(t);
+      await expect(
+        t.query(api.organizations.listPublicLeagues, {
+          slug: 'mixed',
+          page: 1,
+          sport,
+        } as unknown as { slug: string; page: number }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test('without a sport the list is unchanged: every sport, total the league count', async () => {
+    const t = setup();
+    await seedMixed(t);
+    const all = await t.query(api.organizations.listPublicLeagues, { slug: 'mixed', page: 1 });
+    expect(all).toMatchObject({ page: 1, pageCount: 4, total: 16 });
+    expect(names(all)).toEqual(['Aaa Sand', 'Aaa Softball', 'adult league', 'Bbb Sand', 'beta']);
+  });
+
+  test('a sport counter far above the rows still caps the pages at 40, and no page throws', async () => {
+    const t = setup();
+    const organizationId = await seedMixed(t);
+    await t.run((ctx) =>
+      ctx.db.patch('organizations', organizationId, { sportLeagueCounts: { soccer: 1e9 } }),
+    );
+    expect(await soccer(t, 'mixed', 1e6)).toMatchObject({
+      page: 1,
+      pageCount: PUBLIC_LIST_MAX_PAGE,
+    });
+    expect(await soccer(t, 'mixed', PUBLIC_LIST_MAX_PAGE)).toMatchObject({ page: 40, rows: [] });
+  });
+
+  test('a missing sport counter reads as 0 leagues', async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      const organizationId = await ctx.db.insert('organizations', { name: 'Old', slug: 'old' });
+      await ctx.db.insert('leagues', {
+        organizationId,
+        name: 'L',
+        slug: 'l',
+        sport: 'soccer',
+        locationIds: [],
+        sortName: 'l',
+      });
+    });
+    expect(await soccer(t, 'old', 1)).toEqual({ rows: [], page: 1, pageCount: 0, total: 0 });
+  });
+});
+
+describe('organizations module source (#101)', () => {
+  test('the sport list reads through the sport index with the same offset read', () => {
+    expect(organizationsSource).toMatch(/by_organizationId_and_sport_and_sortName/);
+    expect(organizationsSource.match(/\.take\(page \* PUBLIC_LIST_PAGE_SIZE\)/g)).toHaveLength(2);
   });
 });
