@@ -248,9 +248,9 @@ export const backfilledValidator = v.object({
  * Sets the fields #100 and #101 added on rows written before them (a reused staging deployment):
  * `sortName` on each location and league without one, and the four counters (league and location
  * totals, and the per-sport league and location counts with the `sportLocations` rows), from a
- * recount, on each organization missing any. Reads at most `BACKFILL_SCAN_LIMIT` rows per table. Returns the number of rows
- * changed per table; a second run changes none. Run by `seed:demo` under its deployment guard,
- * before its inserts; #104 removes it once the fields are required.
+ * recount, on each organization missing any. Reads at most `BACKFILL_SCAN_LIMIT` rows per table.
+ * Returns the number of rows changed per table; a second run changes none. Run by `seed:demo`
+ * under its deployment guard, before its inserts; #104 removes it once the fields are required.
  */
 export async function backfillTenantFields(
   ctx: MutationCtx,

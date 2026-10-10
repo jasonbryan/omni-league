@@ -182,7 +182,7 @@ async function ensureOrganization(
  * per table, which the build log shows. It throws before reading or writing unless the deployment
  * is a preview or staging deployment (`assertPreviewDeployment`).
  *
- * Before inserting, it backfills the fields #100 added on any row written before them
+ * Before inserting, it backfills the fields #100 and #101 added on any row written before them
  * (`backfillTenantFields`, the only update it makes, on demo and other rows alike) and reports the
  * changed rows as `backfilled`. #104 removes the backfill.
  */
