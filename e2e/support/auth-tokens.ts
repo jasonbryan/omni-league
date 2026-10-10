@@ -3,34 +3,36 @@ import type { Page, Request } from '@playwright/test';
 /** The Convex token endpoint on the deployment's site URL (`@convex-dev/better-auth`). */
 export const TOKEN_PATH = '/api/auth/convex/token';
 
-/** How long no token request may be in flight before the page counts as settled. */
-const QUIET_MS = 750;
+/**
+ * Token requests a signed-in load makes: the first, and the fresh one the Convex client asks for
+ * once the server confirms the first (forceRefreshToken). The Convex client's second setAuth call
+ * shares the first (#62 tester, round 3).
+ */
+const SIGNED_IN_LOAD_TOKENS = 2;
 
 /**
- * Resolves once the page has started at least one Convex token request and none has been in flight
- * for `QUIET_MS`. Call it before the navigation that signs in or loads a signed-in page, and await
- * it before the next navigation: WebKit reports a cross-origin fetch that a navigation aborts as a
- * page error ("Fetch API cannot load … due to access control checks"). It waits on requests in
- * flight, not on a count, so it holds however many token requests a load makes (two today: the
- * first, and the fresh one the Convex client asks for once the server confirms the first).
+ * Resolves once the page has started `expected` Convex token requests and every one has finished
+ * or failed. Call it before the navigation that signs in or loads a signed-in page, and await it
+ * before the next navigation: WebKit reports a cross-origin fetch that a navigation aborts as a
+ * page error ("Fetch API cannot load … due to access control checks"). It counts requests rather
+ * than waiting for a quiet spell, because on a preview the server's confirmation of the first token
+ * can take longer than any fixed quiet window (#62 tester, round 4). If the load makes fewer, the
+ * test times out at the `await`.
  */
-export function tokensSettled(page: Page): Promise<void> {
+export function tokensSettled(page: Page, expected = SIGNED_IN_LOAD_TOKENS): Promise<void> {
   let started = 0;
   let open = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   const isToken = (request: Request) => new URL(request.url()).pathname === TOKEN_PATH;
   return new Promise((resolve) => {
     const onRequest = (request: Request) => {
       if (!isToken(request)) return;
       started += 1;
       open += 1;
-      clearTimeout(timer);
     };
     const onDone = (request: Request) => {
       if (!isToken(request)) return;
       open -= 1;
-      clearTimeout(timer);
-      if (started > 0 && open === 0) timer = setTimeout(finish, QUIET_MS);
+      if (started >= expected && open === 0) finish();
     };
     const finish = () => {
       page.off('request', onRequest);

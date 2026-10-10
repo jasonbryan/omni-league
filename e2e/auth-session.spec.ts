@@ -321,8 +321,8 @@ test.describe('auth session store, round 4', () => {
     ]) {
       events.length = 0;
       await load();
-      // Wait for both, not for a quiet spell: on a preview, the server's confirmation of the first
-      // token can take longer than tokensSettled's quiet window.
+      // Wait for both, then for a spell in which a third request would show: on a preview, the
+      // server's confirmation of the first token can take more than a second.
       await expect.poll(() => events.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(4);
       await page.waitForTimeout(1_500);
       expect(events).toEqual(['start', 'end', 'start', 'end']);
