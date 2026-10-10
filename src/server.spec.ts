@@ -394,7 +394,7 @@ describe('netlifyAppEngineHandler X-Robots-Tag', () => {
     ['the plain 404', '/does-not-exist', () => Promise.resolve(null), 404],
     ['the plain 400', '/%E0%A4%A', () => Promise.resolve(null), 400],
     ['the plain 500', '/x', () => Promise.reject(new Error('render failed')), 500],
-    ['the malformed-query redirect', '/x?q=%', () => Promise.resolve(null), 302],
+    ['a malformed query string', '/x?q=%', () => Promise.resolve(new Response('ok')), 200],
   ] as const)('is noindex on %s', async (_, path, handle, status) => {
     setNoindexForTesting(true);
     useEngine(handle);
@@ -448,7 +448,13 @@ describe('netlifyAppEngineHandler cache key', () => {
     ['the plain 500', '/x?ott=SECRET', () => Promise.reject(new Error('render failed')), 500],
     ['the // redirect', '//x?ott=SECRET', () => Promise.resolve(null), 301],
     ['an unroutable path', '/(//evil.com)?ott=SECRET', () => Promise.resolve(null), 404],
-    ['the malformed-query redirect', '/x?ott=SECRET&q=%', () => Promise.resolve(null), 302],
+    [
+      'a malformed query string',
+      '/x?ott=SECRET&q=%',
+      () =>
+        Promise.resolve(new Response('ok', { headers: { 'Cache-Control': PUBLIC_PAGE_CACHE } })),
+      200,
+    ],
   ] as const)('%s carries Netlify-Vary: query', async (_, path, handle, status) => {
     for (const flag of [false, true]) {
       setNoindexForTesting(flag);
@@ -709,7 +715,9 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
   );
 
   // The router cannot decode the query string, so it would warn NG04018 and render `/` whatever
-  // the path was (#91). The handler redirects to the same path without the query string.
+  // the path was (#91). The handler renders the page as if there were no query string. Not a
+  // redirect: Netlify copies the request's query string into a Location that has none, so a
+  // redirect to the bare path would loop (PR #105).
   it.each([
     ['/x?q=%', '/x'],
     ['/?q=%', '/'],
@@ -720,22 +728,48 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     ['/x/?q=%', '/x/'],
     ['/%E2%82%AC?q=%', '/%E2%82%AC'],
     ['/x?q=a+%', '/x'],
-  ])(
-    'redirects %s, whose query string the router cannot decode, to %s without calling the engine',
-    async (path, location) => {
-      const engine = useEngine(() => Promise.resolve(new Response('ok')));
+  ])('renders %s, whose query string the router cannot decode, as %s', async (path, pathname) => {
+    const engine = useEngine((req) =>
+      Promise.resolve(
+        new Response(`<h1>Page</h1><a href="${req.url}">self</a>`, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public' },
+        }),
+      ),
+    );
 
-      const response = await netlifyAppEngineHandler(request(path));
+    const response = await netlifyAppEngineHandler(request(path));
+    const body = await response.text();
 
-      expect(response.status).toBe(302);
-      expect(response.headers.get('Location')).toBe(location);
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
-      expect(response.headers.get('Netlify-Vary')).toBe('query');
-      expect(await response.text()).toBe('');
-      expect(engine.handle).not.toHaveBeenCalled();
-      expect(console.error).not.toHaveBeenCalled();
-    },
-  );
+    expect(engine.handle).toHaveBeenCalledTimes(1);
+    const seen = engine.handle.mock.calls[0][0];
+    expect(seen.url).toBe(`http://localhost${pathname}`);
+    expect(new URL(seen.url).search).toBe('');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Location')).toBeNull();
+    expect(response.headers.get('Cache-Control')).toBe('public');
+    expect(response.headers.get('Netlify-Vary')).toBe('query');
+    expect(body).toBe(`<h1>Page</h1><a href="http://localhost${pathname}">self</a>`);
+    expect(body).not.toContain('?');
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the method and headers of a request whose query string it drops', async () => {
+    const engine = useEngine(() => Promise.resolve(new Response(null, { status: 200 })));
+
+    await netlifyAppEngineHandler(
+      new Request('http://localhost/o/acme?ref=%', {
+        method: 'HEAD',
+        headers: { 'Accept-Language': 'fr', 'X-Forwarded-Prefix': '/p' },
+      }),
+    );
+
+    const seen = engine.handle.mock.calls[0][0];
+    expect(seen.method).toBe('HEAD');
+    expect(seen.url).toBe('http://localhost/o/acme');
+    expect(seen.headers.get('Accept-Language')).toBe('fr');
+    expect(seen.headers.get('X-Forwarded-Prefix')).toBe('/p');
+  });
 
   it('holds only while no route names an outlet', () => {
     const outlets = (list: readonly Route[]): string[] =>

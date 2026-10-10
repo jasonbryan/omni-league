@@ -95,19 +95,24 @@ test.describe('not-found page', () => {
   });
 
   // The router cannot decode `?q=%` and rendered the home page for any path (#91). The server
-  // redirects to the path without the query string. Netlify may answer before the function: 400.
+  // renders the path without the query string, so an unknown path gets the not-found page. Not a
+  // redirect: Netlify copies the query string into a Location without one, so it would loop
+  // (PR #105). Netlify may answer before the function: 400.
   test(
-    'a query string the router cannot decode redirects to the path without it',
+    'a query string the router cannot decode renders the path without it',
     RAW_HTTP,
     async () => {
       const response = await rawGet('/x?q=%');
-      expect(response.headers['cache-control'] ?? '').not.toContain('s-maxage');
       expect(response.body).not.toMatch(HOME_H1);
       if (remoteBaseUrl && response.status === 400) return;
-      expect(response.status).toBe(302);
-      expect(response.location).toBe('/x');
-      expect(response.headers['cache-control']).toBe('no-store');
-      expect(response.body).toBe('');
+      expect(response.status).toBe(404);
+      expect(response.location).toBeUndefined();
+      expect(response.headers['cache-control']?.replace(/\s+/g, '')).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(response.headers['netlify-vary']).toBe('query');
+      expect(response.body.match(NOT_FOUND_H1)).toHaveLength(1);
+      expect(response.body).not.toContain('q=%');
     },
   );
 

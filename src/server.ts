@@ -59,10 +59,11 @@ function getAppEngine(): AppEngine {
  *   `/` (`/(`, `/()x`): plain 404 without calling the engine, so Angular logs no error for it and
  *   the CDN stores no home page under it (`src/server-unroutable.ts`, #91). It wins over a
  *   malformed query string;
- * - a query string the router cannot decode (`/x?q=%`): `no-store` 302 to the same path without
- *   the query string, without calling the engine. The router would render `/` for it whatever the
- *   path was (#91). The `Location` is the already-checked pathname, so it stays on this site and
- *   carries no query string;
+ * - a query string the router cannot decode (`/x?q=%`): the engine renders the request URL
+ *   without its query string, because the router would render `/` for it whatever the path was
+ *   (#91). Not a redirect to the bare path: Netlify copies the request's query string into a
+ *   `Location` that has none, so that redirect would loop (PR #105). The response is cached like
+ *   any other, under its own query string (`Netlify-Vary: query`), and holds no query string;
  * - no matching route (`null`): plain 404. With the router's `**` route (#23) every path matches,
  *   and an unknown one renders the not-found view with status 404;
  * - a URL the router normalizes (`/x//`, `/x/(y)`): the engine's 302 to the normalized URL, where
@@ -97,12 +98,12 @@ async function render(request: Request): Promise<Response> {
   if (isUnroutablePath(pathname, search)) {
     return notFoundResponse();
   }
-  if (hasUndecodableQuery(pathname, search)) {
-    return queryDroppedRedirect(pathname);
-  }
+  const engineRequest = hasUndecodableQuery(pathname, search)
+    ? withoutQuery(request, url)
+    : request;
 
   try {
-    const result = await getAppEngine().handle(request, getContext());
+    const result = await getAppEngine().handle(engineRequest, getContext());
     return result ?? notFoundResponse();
   } catch (error) {
     console.error(`Error handling ${request.method} ${pathname}:`, redactedErrorText(error));
@@ -110,15 +111,11 @@ async function render(request: Request): Promise<Response> {
   }
 }
 
-/**
- * `no-store` 302 to `pathname` with no query string. `pathname` has passed `isMalformedPath`,
- * `leadingSlashesRedirect`, and `isUnroutablePath`, so it starts with exactly one `/`.
- */
-function queryDroppedRedirect(pathname: string): Response {
-  return new Response(null, {
-    status: 302,
-    headers: { Location: pathname, 'Cache-Control': 'no-store' },
-  });
+/** `request` with the same method, headers, and body, for `url` without its query string. */
+function withoutQuery(request: Request, url: URL): Request {
+  const bare = new URL(url);
+  bare.search = '';
+  return new Request(bare, request);
 }
 
 /** Request handler used by the Angular CLI (dev server and build). */

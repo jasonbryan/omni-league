@@ -17,8 +17,8 @@ import { DefaultUrlSerializer, PRIMARY_OUTLET, type UrlSegmentGroup } from '@ang
  * edge-function log, and the CDN would store the home page under each of the others. The handler
  * answers them with the plain 404 before the engine runs.
  *
- * A query string the router cannot decode (`?q=%`) is not a reason for the 404: the handler
- * redirects to the same path without it (`hasUndecodableQuery`, #91).
+ * A query string the router cannot decode (`?q=%`) is not a reason for the 404: the engine renders
+ * the same path without it (`hasUndecodableQuery`, #91).
  *
  * Web-API-only: bundled into the Netlify edge function (ESLint enforces it for `src/server*.ts`).
  */
@@ -48,7 +48,7 @@ function isUnroutable(path: string, search: string): boolean {
     tree = serializer.parse(path + search);
   } catch (error) {
     // Malformed percent-encoding in the query string (`?q=%`): the path alone decides here, and
-    // `hasUndecodableQuery` redirects a routable path to itself without the query string (#91).
+    // the engine renders a routable path without the query string (`hasUndecodableQuery`, #91).
     return search && error instanceof URIError ? isUnroutable(path, '') : true;
   }
   const serialized = serializer.serialize(tree);

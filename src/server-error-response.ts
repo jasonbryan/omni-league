@@ -29,9 +29,9 @@ export function internalServerErrorResponse(): Response {
 
 /**
  * True when the request path (`URL.pathname`, without the query string) has percent-encoding that
- * `decodeURIComponent` rejects. Only the path counts: a malformed query string gets a redirect
- * without it (`hasUndecodableQuery` in `src/server-unroutable.ts`, #91), and a `URIError` from the
- * engine means app code threw, which is a 500 (#24 / PR #38).
+ * `decodeURIComponent` rejects. Only the path counts: the engine renders a path whose query string
+ * is malformed without that query string (`hasUndecodableQuery` in `src/server-unroutable.ts`,
+ * #91), and a `URIError` from the engine means app code threw, which is a 500 (#24 / PR #38).
  */
 export function isMalformedPath(pathname: string): boolean {
   try {
