@@ -466,6 +466,10 @@ describe('auth not configured (#111)', () => {
       vi.stubEnv('BETTER_AUTH_SECRET', value);
     });
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     test('POST /sign-up/email is 503 AUTH_NOT_CONFIGURED and creates and sets nothing', async () => {
       const t = setup();
       const { status, json, headers } = await signUp(t, valid());
@@ -542,8 +546,7 @@ describe('auth not configured (#111)', () => {
         logged.push(args.map(String).join(' '));
       });
       await signUp(t, valid());
-      expect(logged).toContain('BETTER_AUTH_SECRET is not set');
-      vi.restoreAllMocks();
+      expect(logged).toEqual(['BETTER_AUTH_SECRET is not set']);
     });
   });
 

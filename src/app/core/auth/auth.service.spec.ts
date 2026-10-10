@@ -115,7 +115,20 @@ describe('AuthService', () => {
         JSON.stringify({ [TOKEN]: { value, expires } });
       const HOUR = 60 * 60 * 1000;
 
+      // ADR 0004: unit tests open no network connection. The real client's session store sends
+      // `GET <site>/api/auth/get-session` once subscribed, so `fetch` is stubbed to answer with a
+      // `null` session, and the tests count what reaches it.
+      const SESSION_URL = 'https://happy-otter-123.convex.site/api/auth/get-session';
+      const requestedUrl = (input: Parameters<typeof fetch>[0]) =>
+        input instanceof Request ? input.url : String(input);
+
       async function configureReal(stored: string | null) {
+        const fetchStub = vi.fn<typeof fetch>(() =>
+          Promise.resolve(
+            new Response('null', { status: 200, headers: { 'content-type': 'application/json' } }),
+          ),
+        );
+        vi.stubGlobal('fetch', fetchStub);
         localStorage.removeItem(KEY);
         if (stored !== null) localStorage.setItem(KEY, stored);
         const { makeAuthClient } = await import('./make-auth-client');
@@ -124,10 +137,23 @@ describe('AuthService', () => {
         TestBed.configureTestingModule({
           providers: [{ provide: AUTH_CLIENT, useValue: Promise.resolve(real) }],
         });
-        return { auth: TestBed.inject(AuthService), subscribe };
+        const requests = () => fetchStub.mock.calls.map(([input]) => requestedUrl(input));
+        return { auth: TestBed.inject(AuthService), subscribe, requests };
       }
 
-      afterEach(() => localStorage.removeItem(KEY));
+      afterEach(() => {
+        vi.unstubAllGlobals();
+        localStorage.removeItem(KEY);
+      });
+
+      it('stubs fetch, so the suite makes no real network call', async () => {
+        const { requests } = await configureReal(entry('t', null));
+        await vi.waitFor(() => expect(requests()).toHaveLength(1));
+        expect(vi.isMockFunction(globalThis.fetch)).toBe(true);
+        expect(requests().every((url) => url === SESSION_URL)).toBe(true);
+        vi.unstubAllGlobals();
+        expect(vi.isMockFunction(globalThis.fetch)).toBe(false);
+      });
 
       it.each([
         ['the key is absent', null],
@@ -137,19 +163,25 @@ describe('AuthService', () => {
         ['the token is empty (what sign-out leaves)', entry('', null)],
         ['the token has expired', entry('t', new Date(Date.now() - HOUR).toISOString())],
       ])('when %s, is signed out without subscribing', async (_, stored) => {
-        const { auth, subscribe } = await configureReal(stored);
+        const { auth, subscribe, requests } = await configureReal(stored);
         await expect(auth.isSignedIn()).resolves.toBe(false);
         expect(subscribe).not.toHaveBeenCalled();
         await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+        await loaded();
+        expect(requests()).toEqual([]);
       });
 
       it.each([
         ['an unexpired token', entry('t', new Date(Date.now() + HOUR).toISOString())],
         ['a token with no expiry (a session cookie)', entry('t', null)],
       ])('with %s, subscribes exactly once', async (_, stored) => {
-        const { auth, subscribe } = await configureReal(stored);
+        const { auth, subscribe, requests } = await configureReal(stored);
         await loaded();
         expect(subscribe).toHaveBeenCalledTimes(1);
+        // The request leaves a few ticks after the subscription; wait for it, then for any more.
+        await vi.waitFor(() => expect(requests()).toEqual([SESSION_URL]));
+        await loaded();
+        expect(requests()).toEqual([SESSION_URL]);
         expect(auth.signedIn()).toBe(false);
       });
     });
