@@ -23,6 +23,20 @@ const PREVIEW_NAME = {
   'branch-deploy': String.raw`\"$HEAD\"`,
 };
 
+// The app registers the service worker only when `scripts/ng-convex.mjs` passes
+// `__SERVICE_WORKER__=true` (#81, PR #119); a plain `ng build` keeps angular.json's `false`, so a
+// deploy built that way would ship the worker but never register it, and skip sw-config-check.
+describe('netlify.toml builds through npm run build (#81)', () => {
+  for (const context of ['deploy-preview', 'branch-deploy', 'production']) {
+    it(`${context} builds with npm run build and never with ng build`, () => {
+      const cmd = command(context);
+      assert.ok(cmd, `[context.${context}] has a command`);
+      assert.match(cmd, /--cmd 'npm run build'/);
+      assert.doesNotMatch(cmd, /\bng build\b/);
+    });
+  }
+});
+
 describe('netlify.toml demo seed (#97)', () => {
   for (const [context, name] of Object.entries(PREVIEW_NAME)) {
     it(`${context} runs seed:demo on its preview after the deploy and the environment check`, () => {

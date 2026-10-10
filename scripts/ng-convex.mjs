@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { checkServerBundle } from './edge-bundle.mjs';
 import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
+import { serviceWorkerDefine, swConfigCheck } from './sw-config-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...extraArgs] = process.argv.slice(2);
@@ -88,6 +89,15 @@ if (command === 'build') {
   defines.push(`--define=__NOINDEX__=${noindex}`);
 }
 
+// The service worker (#81, ADR 0013 section 4): the app registers it exactly when angular.json sets
+// the `serviceWorker` build option, so removing that option (the kill switch) turns off both the
+// worker build and its registration. Production builds only: development builds never register.
+const swDefine = serviceWorkerDefine(JSON.parse(readFileSync(join(root, 'angular.json'), 'utf8')));
+console.log(
+  `service worker: ${swDefine.endsWith('=true') ? 'on' : 'off'} (angular.json serviceWorker option)`,
+);
+defines.push(swDefine);
+
 // 5. Spawn the CLI through Node with an argv array: no shell, same quoting on every OS.
 const ngArgs = [command, ...defines, ...extraArgs];
 console.log(`Running: ng ${ngArgs.join(' ')}`);
@@ -117,7 +127,8 @@ child.on('exit', (code, signal) => {
 
 /**
  * After a successful build: the edge-safety check of the server bundle (scripts/edge-bundle.mjs),
- * then the noindex `_headers` file. A failed check fails the build, so Netlify publishes nothing.
+ * the service worker config check (scripts/sw-config-check.mjs), then the noindex `_headers` file.
+ * A failed check fails the build, so Netlify publishes nothing.
  */
 async function afterBuild() {
   const serverDir = join(root, 'dist', 'omni-league', 'server');
@@ -132,6 +143,17 @@ async function afterBuild() {
     );
   }
   console.log('edge-bundle: PASS (no filesystem access in dist/omni-league/server)');
+  // The service worker caches only same-origin build files (ADR 0013 section 1, #81).
+  const sw = await swConfigCheck({
+    angularJsonPath: join(root, 'angular.json'),
+    browserDir: join(root, 'dist', 'omni-league', 'browser'),
+  });
+  for (const line of sw.lines) (sw.status === 'FAIL' ? console.error : console.log)(line);
+  if (sw.status === 'FAIL') {
+    throw new Error(
+      'the built ngsw.json could cache more than same-origin build files (scripts/sw-config-check.mjs)',
+    );
+  }
   if (!noindex) return;
   try {
     await writeNoindexHeaders(join(root, 'dist', 'omni-league', 'browser'));
