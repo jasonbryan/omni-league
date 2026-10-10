@@ -6,6 +6,7 @@ import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
 import { Shell } from '../shell';
+import { YourOrganizations } from './your-organizations';
 
 /** Up to two initials: the first letters of the first and last words of the name. */
 export function initialsOf(name: string): string {
@@ -21,12 +22,13 @@ export function initialsOf(name: string): string {
  * `/app` (#62), the first signed-in route (`RenderMode.Client`, behind `requireSignedIn`), approved
  * in #96 (design/mockups/62-sign-up.html, state 10): "Signed in as <name>" from `users.me`, and
  * Sign out, which deletes the session and goes to `/`. The top bar's account link arrives with #63.
- * Sign out's classes are `buttonVariants` output, unmerged, as the mockup draws it (no visible
- * edge), in a static attribute; account-page.spec.ts checks them.
+ * "Your organizations" (#64) is below the account panel. Sign out's classes are `buttonVariants`
+ * output, unmerged, as the mockup draws it (no visible edge), in a static attribute;
+ * account-page.spec.ts checks them.
  */
 @Component({
   selector: 'app-account-page',
-  imports: [NgIcon, Shell],
+  imports: [NgIcon, Shell, YourOrganizations],
   providers: [provideIcons({ lucideLogOut })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -63,6 +65,7 @@ export function initialsOf(name: string): string {
             </div>
           </section>
         }
+        <app-your-organizations />
       </div>
     </app-shell>
   `,
