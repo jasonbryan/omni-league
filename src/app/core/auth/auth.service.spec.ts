@@ -92,6 +92,68 @@ describe('AuthService', () => {
       await expect(auth.isSignedIn()).resolves.toBe(false);
     });
 
+    // #111: the server revoked or expired the stored session, so its answer is signed out.
+    it('with a stored session the server rejects, asks once and ends signed out', async () => {
+      const auth = configure();
+      await loaded();
+      expect(client.sessionListeners).toBe(1);
+      client.emitSession(null);
+      expect(auth.signedIn()).toBe(false);
+      await expect(auth.isSignedIn()).resolves.toBe(false);
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+      expect(client.tokenRequests).toBe(0);
+    });
+
+    // #111: the stored-session test runs on the crossDomain plugin's real store, not only on the
+    // fake's cookie string. The entry lives in localStorage under `better-auth_cookie`, as
+    // `{ "<cookie name>": { value, expires: ISO date | null } }` (@convex-dev/better-auth,
+    // plugins/cross-domain/client.js), and the plugin's getCookie() drops expired entries.
+    describe('with the real crossDomain store', () => {
+      const KEY = 'better-auth_cookie';
+      const TOKEN = 'better-auth.session_token';
+      const entry = (value: string, expires: string | null) =>
+        JSON.stringify({ [TOKEN]: { value, expires } });
+      const HOUR = 60 * 60 * 1000;
+
+      async function configureReal(stored: string | null) {
+        localStorage.removeItem(KEY);
+        if (stored !== null) localStorage.setItem(KEY, stored);
+        const { makeAuthClient } = await import('./make-auth-client');
+        const real = makeAuthClient('https://happy-otter-123.convex.site');
+        const subscribe = vi.spyOn(real.useSession, 'subscribe');
+        TestBed.configureTestingModule({
+          providers: [{ provide: AUTH_CLIENT, useValue: Promise.resolve(real) }],
+        });
+        return { auth: TestBed.inject(AuthService), subscribe };
+      }
+
+      afterEach(() => localStorage.removeItem(KEY));
+
+      it.each([
+        ['the key is absent', null],
+        ['the entry does not parse', 'not json'],
+        ['the entry is null', 'null'],
+        ['the entry has no session token', JSON.stringify({ 'better-auth.two_factor': {} })],
+        ['the token is empty (what sign-out leaves)', entry('', null)],
+        ['the token has expired', entry('t', new Date(Date.now() - HOUR).toISOString())],
+      ])('when %s, is signed out without subscribing', async (_, stored) => {
+        const { auth, subscribe } = await configureReal(stored);
+        await expect(auth.isSignedIn()).resolves.toBe(false);
+        expect(subscribe).not.toHaveBeenCalled();
+        await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBeNull();
+      });
+
+      it.each([
+        ['an unexpired token', entry('t', new Date(Date.now() + HOUR).toISOString())],
+        ['a token with no expiry (a session cookie)', entry('t', null)],
+      ])('with %s, subscribes exactly once', async (_, stored) => {
+        const { auth, subscribe } = await configureReal(stored);
+        await loaded();
+        expect(subscribe).toHaveBeenCalledTimes(1);
+        expect(auth.signedIn()).toBe(false);
+      });
+    });
+
     it('with no stored session token, follows the session store after a sign-up', async () => {
       client.storedCookie = '';
       const auth = configure();
@@ -544,12 +606,12 @@ describe('AuthService', () => {
       ],
       // Tester (#62, round 2): the server's own messages (convex/auth.test.ts), in its order.
       [
-        '400 validation error, the server message for a missing name and a bad email',
+        '400 validation error, the server message for a missing password and a bad email',
         {
           status: 400,
           code: 'VALIDATION_ERROR',
           message:
-            '[body.name] Invalid input: expected string, received undefined; [body.email] Invalid email address',
+            '[body.email] Invalid email address; [body.password] Invalid input: expected string, received undefined',
         },
         'unexpected',
       ],
@@ -587,6 +649,9 @@ describe('AuthService', () => {
       ['400 too long', { status: 400, code: 'PASSWORD_TOO_LONG' }, 'password-too-long'],
       ['400 no 18+', { status: 400, code: 'ADULT_CONFIRMATION_REQUIRED' }, 'adult-required'],
       ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, 'unexpected'],
+      // #111: no message of their own yet; the dedicated over-long-name text is #117.
+      ['400 name invalid', { status: 400, code: 'NAME_INVALID' }, 'unexpected'],
+      ['503 auth not configured', { status: 503, code: 'AUTH_NOT_CONFIGURED' }, 'unexpected'],
       ['429', { status: 429 }, 'unexpected'],
       ['500 other', { status: 500, message: 'boom' }, 'unexpected'],
     ])('maps %s to %s', async (_, error, expected) => {
