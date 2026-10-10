@@ -3,7 +3,7 @@
 // after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
 // and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
-import { expectAccessible, tabKey } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -105,72 +105,130 @@ async function activate(page: Page, control: Locator): Promise<void> {
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 }
 
+/**
+ * The same-path jump of #95. The page is loaded as `<path>?utm_source=x`; for each row `jump`
+ * follows its sidebar link. The query string stays, the fragment is set, the page does not reload,
+ * the row is in view, history grows by one entry, and Back returns to the URL before the click.
+ */
+async function expectQueryKeepingJumps(
+  page: Page,
+  consoleGuard: { hydrated: boolean },
+  tenant: Tenant,
+  jump: (id: string) => Promise<void>,
+): Promise<void> {
+  const search = '?utm_source=x';
+  const before = `${ORIGIN}${tenant.path}${search}`;
+  for (const id of ['league-2', 'location-3']) {
+    // A goto to the URL the page is on replaces its entry, which would keep the forward entry
+    // that Back left and make the count below grow by zero. A blank page first makes a new entry.
+    await page.goto('about:blank');
+    await page.goto(`${tenant.path}${search}`);
+    await hydrated(consoleGuard);
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+    });
+    await expect.poll(() => scrollY(page)).toBe(0);
+    const lengthBefore = await page.evaluate(() => history.length);
+
+    await jump(id);
+
+    await expect(page, id).toHaveURL(`${before}#${id}`);
+    expect(await page.evaluate(() => history.length), `${id} history.length`).toBe(
+      lengthBefore + 1,
+    );
+    const row = page.locator(`main #${id}`);
+    await expect
+      .poll(
+        async () => {
+          const position = await rowPosition(row);
+          return position.top >= position.headerBottom && position.top < position.viewport;
+        },
+        { message: `${id} is scrolled into view` },
+      )
+      .toBe(true);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+      `${id} no reload`,
+    ).toBe(true);
+
+    await page.goBack();
+    await expect(page, `${id} Back`).toHaveURL(before);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+      `${id} no reload after Back`,
+    ).toBe(true);
+  }
+}
+
 test.describe('organization page: raw server HTML', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  test('200 with the public Cache-Control, content, meta, sidebar links, row ids, and tiles; ?ott= changes nothing', async ({
-    request,
-  }) => {
-    const tenant = await smallTenant();
-    const canonical = `${ORIGIN}${tenant.path}`;
+  test(
+    '200 with the public Cache-Control, content, meta, sidebar links, row ids, and tiles; a query string changes nothing',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await smallTenant();
+      const canonical = `${ORIGIN}${tenant.path}`;
 
-    for (const query of ['', '?ott=x']) {
-      const path = `${tenant.path}${query}`;
-      const { status, headers, html } = await fetchRawHtml(request, path);
-      expect(status, path).toBe(200);
-      // Netlify removes the spaces after the commas.
-      expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
-        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
-      );
-      expect(headers['content-type'], path).toContain('text/html');
+      for (const query of ['', '?ott=x', '?utm_source=x']) {
+        const path = `${tenant.path}${query}`;
+        const { status, headers, html } = await fetchRawHtml(request, path);
+        expect(status, path).toBe(200);
+        // Netlify removes the spaces after the commas.
+        expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
+          PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+        );
+        expect(headers['content-type'], path).toContain('text/html');
 
-      // Content: the h1, both locations with addresses, both leagues with sport display names.
-      expect(html.match(/<h1\b/g), path).toHaveLength(1);
-      expect(html, path).toMatch(new RegExp(`<h1\\b[^>]*>\\s*${tenant.name}\\s*</h1>`));
-      for (const location of tenant.locations) {
-        expect(html, path).toContain(`>${location.name}</h3>`);
-        expect(html, path).toMatch(new RegExp(`>\\s*${location.address}\\s*<`));
+        // Content: the h1, both locations with addresses, both leagues with sport display names.
+        expect(html.match(/<h1\b/g), path).toHaveLength(1);
+        expect(html, path).toMatch(new RegExp(`<h1\\b[^>]*>\\s*${tenant.name}\\s*</h1>`));
+        for (const location of tenant.locations) {
+          expect(html, path).toContain(`>${location.name}</h3>`);
+          expect(html, path).toMatch(new RegExp(`>\\s*${location.address}\\s*<`));
+        }
+        for (const league of tenant.leagues) {
+          expect(html, path).toContain(`>${league.name}</h3>`);
+          expect(html, path).toMatch(new RegExp(`>\\s*${SPORT_NAMES[league.sport]}\\s*</span>`));
+        }
+
+        // Meta, from the query result; og:url and the canonical carry no query string.
+        expect(html, path).toContain(`<title>${tenant.name} | Omni League</title>`);
+        expect(metaContent(html, 'og:title'), path).toBe(tenant.name);
+        expect(metaContent(html, 'og:description'), path).toBe(
+          `Leagues and locations of ${tenant.name} on Omni League.`,
+        );
+        expect(metaContent(html, 'og:type'), path).toBe('website');
+        expect(metaContent(html, 'og:url'), path).toBe(canonical);
+        expect(canonicalHrefs(html), path).toEqual([canonical]);
+
+        // Sidebar: one link per league and location, built from the slug, and no id inside.
+        const nav = sidebarHtml(html, tenant.name);
+        expect(nav, path).not.toMatch(/\sid="/);
+        expect(nav, path).not.toContain('aria-labelledby');
+        expect(hrefs(nav), path).toEqual([
+          tenant.path,
+          `${tenant.path}#league-1`,
+          `${tenant.path}#league-2`,
+          `${tenant.path}#location-1`,
+          `${tenant.path}#location-2`,
+        ]);
+        for (const id of ['league-1', 'league-2', 'location-1', 'location-2']) {
+          expect(html.split(nav).join(''), `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
+        }
+
+        // Tiles: 2 leagues, 2 locations, 2 distinct sports.
+        expect(
+          [...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n),
+          path,
+        ).toEqual(['2', '2', '2']);
+
+        // The query string never reaches the cacheable HTML (PR #90).
+        if (query) expect(html, path).not.toContain(query.slice(1));
       }
-      for (const league of tenant.leagues) {
-        expect(html, path).toContain(`>${league.name}</h3>`);
-        expect(html, path).toMatch(new RegExp(`>\\s*${SPORT_NAMES[league.sport]}\\s*</span>`));
-      }
-
-      // Meta, from the query result; og:url and the canonical carry no query string.
-      expect(html, path).toContain(`<title>${tenant.name} | Omni League</title>`);
-      expect(metaContent(html, 'og:title'), path).toBe(tenant.name);
-      expect(metaContent(html, 'og:description'), path).toBe(
-        `Leagues and locations of ${tenant.name} on Omni League.`,
-      );
-      expect(metaContent(html, 'og:type'), path).toBe('website');
-      expect(metaContent(html, 'og:url'), path).toBe(canonical);
-      expect(canonicalHrefs(html), path).toEqual([canonical]);
-
-      // Sidebar: one link per league and location, built from the slug, and no id inside.
-      const nav = sidebarHtml(html, tenant.name);
-      expect(nav, path).not.toMatch(/\sid="/);
-      expect(nav, path).not.toContain('aria-labelledby');
-      expect(hrefs(nav), path).toEqual([
-        tenant.path,
-        `${tenant.path}#league-1`,
-        `${tenant.path}#league-2`,
-        `${tenant.path}#location-1`,
-        `${tenant.path}#location-2`,
-      ]);
-      for (const id of ['league-1', 'league-2', 'location-1', 'location-2']) {
-        expect(html.split(nav).join(''), `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
-      }
-
-      // Tiles: 2 leagues, 2 locations, 2 distinct sports.
-      expect(
-        [...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n),
-        path,
-      ).toEqual(['2', '2', '2']);
-
-      // The query string never reaches the cacheable HTML (PR #90).
-      expect(html, path).not.toContain('ott');
-    }
-  });
+    },
+  );
 });
 
 test.describe('organization page in the browser', () => {
@@ -255,6 +313,39 @@ test.describe('organization page in the browser', () => {
     ).toBe(true);
   });
 
+  // #95: the sidebar links keep the visitor's query string. A plain click goes through the router
+  // to the current path, the current search, and the link's hash, so there is no reload, history
+  // grows by one entry, and Back returns to the URL before the click.
+  test('1280: a sidebar link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'the sidebar column shows at 1280px only');
+    const tenant = await tallTenant();
+    const nav = page.getByRole('navigation', { name: tenant.name });
+    await expectQueryKeepingJumps(page, consoleGuard, tenant, async (id) => {
+      await nav.locator(`a[href="${tenant.path}#${id}"]`).click();
+    });
+  });
+
+  // #95: the same for the phone sheet, which closes before the link is followed (#75).
+  test('phone sheet (360): its link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
+    const tenant = await tallTenant();
+    const menuButton = page.getByRole('button', { name: 'Open navigation' });
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    await expectQueryKeepingJumps(page, consoleGuard, tenant, async (id) => {
+      await activate(page, menuButton);
+      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+      await activate(page, dialog.locator(`a[href="${tenant.path}#${id}"]`));
+      await expect(dialog).toHaveCount(0);
+      await expect(menuButton).toBeFocused();
+    });
+  });
+
   test('phone sheet (360): 288px, focus on Close, Tab trapped, closes without moving the page, and its link jumps to the row', async ({
     page,
     consoleGuard,
@@ -275,6 +366,11 @@ test.describe('organization page in the browser', () => {
       await activate(page, menuButton);
       await expect(sheet).toBeVisible();
       await expect(close).toBeFocused();
+      // The width is read once the slide-in has finished: mid-animation, WebKit reports a
+      // fractional width (288.0000076) for the translated content.
+      await sheet.evaluate((element) =>
+        Promise.all(element.getAnimations().map((animation) => animation.finished)),
+      );
     }
 
     // Closing by Escape, Close, or the scrim leaves the scrolled page where it was, with focus
@@ -337,6 +433,129 @@ test.describe('organization page in the browser', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await openSheet();
     expect((await sheet.boundingBox())?.width).toBe(272);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  });
+
+  // #94: the first press creates the sheet on the hydrated page. In a development build that
+  // creation logged "no hydration info available for a given TNode" while the shell's template
+  // held a view container; the console fixture fails the test on any warning. The phone-sheet
+  // test above makes its first press at 360, so only 320 is added here.
+  for (const width of [320]) {
+    test(`phone sheet (${width}): the first press on the hydrated page opens it with no console warning`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
+      await page.setViewportSize({ width, height: 800 });
+      const tenant = await smallTenant();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      const dialog = page.getByRole('dialog', { name: 'Navigation' });
+      await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+      // The dialog container has no box of its own: the helm sheet content inside is fixed.
+      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+      // The sheet's host element is not in the document: only the overlay holds its content.
+      expect(await page.locator('app-shell-sheet').count()).toBe(0);
+    });
+  }
+
+  // #94: the sheet is created outside the shell's template. A navigation that replaces the page
+  // while the sheet is open leaves no dialog, scrim, or scroll block on the next page. That the
+  // shell destroys the sheet's ComponentRef is asserted in shell.spec.ts.
+  test('phone sheet (360): a navigation away while it is open leaves no overlay or scroll block', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
+    // The tall tenant's page scrolls, so the open sheet blocks scrolling.
+    const tenant = await tallTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+    await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.classList.contains('cdk-global-scrollblock')),
+      )
+      .toBe(true);
+
+    // The header's home link is under the scrim; a script click starts the client navigation.
+    await page.evaluate(() => {
+      document.querySelector<HTMLAnchorElement>('header a[href="/"]')?.click();
+    });
+    await expect(page).toHaveURL(`${ORIGIN}/`);
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    await expect(page.locator('.cdk-overlay-pane')).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains('cdk-global-scrollblock'),
+      ),
+    ).toBe(false);
+    expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
+  });
+
+  // #94 with #88: the sheet opens and closes while the offline note shows. The sheet's chunk is
+  // loaded by a first press while online, because `setOffline` blocks every request, the chunk's
+  // included. The sheet is created outside the shell's template, so the note above it (a sibling
+  // of the top bar) must stay where it is, and the sheet must still open at 288px with focus on
+  // Close, close on Escape, and return focus to the menu button.
+  test('phone sheet (360): opens and closes while the offline note shows, with no console warning', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
+    const tenant = await smallTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const menuButton = page.getByRole('button', { name: 'Open navigation' });
+    const dialog = page.getByRole('dialog', { name: 'Navigation' });
+    const sheet = dialog.locator('[data-slot="sheet-content"]');
+    const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
+
+    // Online: the first press loads the chunk and creates the sheet; close it again.
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(note).toBeVisible({ timeout: 2_000 });
+    const noteBefore = await note.boundingBox();
+
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
+    await sheet.evaluate((element) =>
+      Promise.all(element.getAnimations().map((animation) => animation.finished)),
+    );
+    expect((await sheet.boundingBox())?.width).toBe(288);
+    // The note is still shown, unmoved, under the scrim.
+    await expect(note).toBeVisible();
+    expect(await note.boundingBox()).toEqual(noteBefore);
+    expect(await page.locator('app-shell-sheet').count()).toBe(0);
+    // The tab walk of expectAccessible does not apply to an open modal: axe only.
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(menuButton).toBeFocused();
+    await expect(note).toBeVisible();
+    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.classList.contains('cdk-global-scrollblock'),
+      ),
+    ).toBe(false);
+
+    // And once more: the second open after the note appeared works as the first one did.
+    await activate(page, menuButton);
+    await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
   });
@@ -424,20 +643,25 @@ test.describe('organization page in the browser', () => {
 test.describe('organization page: unknown slug', () => {
   test.use({ expectedDocumentStatus: 404 });
 
-  test('raw: 404 with the public Cache-Control and the not-found view, top bar only', async ({
-    request,
-  }) => {
-    const { status, headers, html } = await fetchRawHtml(request, '/organizations/does-not-exist');
-    expect(status).toBe(404);
-    expect(headers['cache-control']?.replace(/\s+/g, '')).toBe(
-      PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
-    );
-    expect(html).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
-    expect(html.match(/<h1\b/g)).toHaveLength(1);
-    expect(html).not.toMatch(/<nav\b/);
-    expect(html).not.toContain('aria-label="Open navigation"');
-    expect(html).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
-  });
+  test(
+    'raw: 404 with the public Cache-Control and the not-found view, top bar only',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { status, headers, html } = await fetchRawHtml(
+        request,
+        '/organizations/does-not-exist',
+      );
+      expect(status).toBe(404);
+      expect(headers['cache-control']?.replace(/\s+/g, '')).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(html).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
+      expect(html.match(/<h1\b/g)).toHaveLength(1);
+      expect(html).not.toMatch(/<nav\b/);
+      expect(html).not.toContain('aria-label="Open navigation"');
+      expect(html).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
+    },
+  );
 
   test('browser: the same view, with no console error', async ({ page, consoleGuard }) => {
     const response = await page.goto('/organizations/does-not-exist');
@@ -496,6 +720,34 @@ test.describe('organization page: undecodable query string', () => {
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
     await expect(page).toHaveTitle(`${name} | Omni League`);
     expect(new URL(page.url()).pathname).toBe(path);
+  });
+});
+
+// A fragment the router cannot decode (`#%`) is read as no fragment, as an undecodable query string
+// is (#116). The server never sees a fragment, so only the browser's router can send the visitor
+// to `/` (NG04018). The test collects the console messages itself: the console fixture fails only on
+// NG05xx warnings. Against a preview it uses the demo organization.
+test.describe('organization page: undecodable fragment', () => {
+  test('browser: the organization page stays after the first navigation, with no NG04018', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { path, name } = remoteBaseUrl
+      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+      : await smallTenant();
+    const messages: string[] = [];
+    page.on('console', (message) => messages.push(`${message.type()}: ${message.text()}`));
+
+    const response = await page.goto(`${path}#%`);
+    expect(response?.status()).toBe(200);
+    // The server-rendered HTML shows the page whatever the router does next, so wait until the
+    // client router's first navigation has finished: the app is stable once it has hydrated.
+    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+    else await hydrated(consoleGuard);
+
+    expect(messages.filter((message) => message.includes('NG04018'))).toEqual([]);
+    expect(new URL(page.url()).pathname).toBe(path);
+    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
   });
 });
 

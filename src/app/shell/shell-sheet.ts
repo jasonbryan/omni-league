@@ -1,38 +1,19 @@
-import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  InjectionToken,
   computed,
   inject,
   input,
   viewChild,
   type TemplateRef,
 } from '@angular/core';
-import { Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideX } from '@ng-icons/lucide';
 import { HlmButton } from '../ui/button';
 import { HlmSheet, HlmSheetClose, HlmSheetContent, HlmSheetPortal } from '../ui/sheet';
+import { FollowLink } from './follow-link';
 import { SheetLinks } from './sheet-links';
-
-/** Loads a URL as a full page load (`location.assign`); a token so unit tests can observe it. */
-export const LOAD_PAGE = new InjectionToken<(url: string) => void>('LOAD_PAGE', {
-  factory: () => {
-    const document = inject(DOCUMENT);
-    return (url) => {
-      document.location.assign(url);
-    };
-  },
-});
-
-function decodeFragment(fragment: string): string {
-  try {
-    return decodeURIComponent(fragment);
-  } catch {
-    return fragment;
-  }
-}
 
 /**
  * The app shell's phone sheet (#75): the page's sidebar in a helm sheet from the start edge. The
@@ -97,9 +78,7 @@ function decodeFragment(fragment: string): string {
   `,
 })
 export class ShellSheet {
-  private readonly router = inject(Router);
-  private readonly document = inject(DOCUMENT);
-  private readonly loadPage = inject(LOAD_PAGE);
+  private readonly followLink = inject(FollowLink);
 
   /** The page's `appShellSidebar` template. */
   readonly sidebar = input.required<TemplateRef<unknown>>();
@@ -132,22 +111,6 @@ export class ShellSheet {
     const href = this.pendingLink;
     this.pendingLink = null;
     if (!href) return;
-    const url = new URL(href);
-    if (url.origin !== this.document.location.origin) {
-      this.loadPage(url.href);
-      return;
-    }
-    const fragment = decodeFragment(url.hash.slice(1));
-    // A URL the client router cannot reach loads as a full page, as the link itself would have.
-    // The `**` route (#23) matches every primary path, but the router still rejects a chunk that
-    // fails to load and an auxiliary outlet no route matches (`/(//evil.com)`).
-    this.router.navigateByUrl(url.pathname + url.search + url.hash).then(
-      () => {
-        if (fragment) this.document.getElementById(fragment)?.scrollIntoView();
-      },
-      () => {
-        this.loadPage(url.href);
-      },
-    );
+    this.followLink.follow(href);
   }
 }

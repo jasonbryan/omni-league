@@ -63,9 +63,10 @@ function getAppEngine(): AppEngine {
  * - a query string the router cannot decode (`/x?q=%`): the engine renders the request URL
  *   without its query string, because the router would render `/` for it whatever the path was
  *   (#91). The app's router reads such a URL the same way (`QueryTolerantUrlSerializer` in
- *   `src/app/core/url-serializer.ts`), so the browser stays on the page. Not a redirect to the bare path: Netlify copies the request's query string into a
- *   `Location` that has none, so that redirect would loop (PR #105). The response is cached like
- *   any other, under its own query string (`Netlify-Vary: query`), and holds no query string;
+ *   `src/app/core/url-serializer.ts`), so the browser stays on the page. Not a redirect to the
+ *   bare path: Netlify copies the request's query string into a `Location` that has none, so that
+ *   redirect would loop (PR #105). The response is cached like any other, under its own query
+ *   string (`Netlify-Vary: query`), and holds no query string;
  * - no matching route (`null`): plain 404. With the router's `**` route (#23) every path matches,
  *   and an unknown one renders the not-found view with status 404;
  * - a URL the router normalizes (`/x//`, `/x/(y)`): the engine's 302 to the normalized URL, where
