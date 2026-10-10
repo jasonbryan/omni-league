@@ -37,6 +37,7 @@
               "platform": "neutral"
             },
             "externalDependencies": ["node:process"],
+            "serviceWorker": "ngsw-config.json",
             "define": {
               "__CONVEX_URL__": "null",
               "__CONVEX_SITE_URL__": "null",

@@ -156,6 +156,27 @@ test.describe('smoke: placeholder home', () => {
       .toBe(true);
   });
 
+  // ADR 0013 section 1 (#81): only production builds register the worker. A production build
+  // registers it as soon as the app is stable, so two seconds after hydration a wrongly enabled
+  // worker would have been fetched and registered. e2e/pwa.spec.ts covers the production build.
+  test('the development build registers no service worker', async ({ page, consoleGuard }) => {
+    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+    const workerRequests: string[] = [];
+    page.on('request', (request) => {
+      if (/\/ngsw(?:-worker)?\.js(?:on)?(?:\?|$)/.test(request.url()))
+        workerRequests.push(request.url());
+    });
+    await page.goto('/');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await page.waitForTimeout(2_000);
+    expect(
+      await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
+    ).toBe(0);
+    expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull();
+    expect(workerRequests).toEqual([]);
+    await expect(page.locator('app-update-prompt')).toHaveCount(0);
+  });
+
   test('a malformed URL gets a plain-text 400 with no stack trace or path', async ({ request }) => {
     test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
     const response = await request.get('/%E0%A4%A');
