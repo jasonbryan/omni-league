@@ -13,7 +13,9 @@ export async function signUp(page: Page, user: TestUser): Promise<void> {
   await page.locator('#password').fill(user.password);
   await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
   await page.getByRole('button', { name: /Create account/ }).click();
-  await expect(page).toHaveURL(`${baseURL}/app`);
+  // Under CPU load the request can still be running after the 5 s default ("Creating account…" on
+  // screen), which is not a failure (#167).
+  await expect(page).toHaveURL(`${baseURL}/app`, { timeout: 20_000 });
   await tokens;
 }
 

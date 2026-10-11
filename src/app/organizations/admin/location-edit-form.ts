@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   Injector,
   afterNextRender,
   inject,
@@ -31,7 +32,10 @@ export interface AdminLocation {
  * admin-locations.html, states 13 to 16), starting from the stored values with focus on Name.
  * Save changes sends `locations.update` for the row's own id; errors are as in the add form.
  * Cancel and Escape emit `cancelled` and Save emits `saved` with the stored (trimmed) name; the row
- * then returns focus to its Edit button. Cancel and Escape do nothing while a save is in flight.
+ * then returns focus to its Edit button. Cancel and Escape do nothing while a save is in flight,
+ * and `saving` tells the page to ignore Edit on another row until the save settles (#161), so the
+ * outcome always shows here. A form removed during its save (its row left the list, or the page
+ * was left) shows and emits nothing.
  */
 @Component({
   selector: 'app-location-edit-form',
@@ -93,6 +97,7 @@ export interface AdminLocation {
 })
 export class LocationEditForm implements OnInit {
   private readonly injector = inject(Injector);
+  private destroyed = false;
   private readonly update = injectMutation(api.locations.update);
 
   readonly location = input.required<AdminLocation>();
@@ -109,6 +114,8 @@ export class LocationEditForm implements OnInit {
     address: 'Up to 200 characters.',
   };
   protected readonly form = new LocationForm({ name: '', address: '' });
+  /** True while `locations.update` is in flight. */
+  readonly saving = this.form.submitting.asReadonly();
 
   private readonly locationFields = viewChild.required<LocationFields>('locationFields');
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
@@ -124,6 +131,10 @@ export class LocationEditForm implements OnInit {
     afterNextRender(() => this.locationFields().focus('name'), { injector: this.injector });
   }
 
+  constructor() {
+    inject(DestroyRef).onDestroy(() => (this.destroyed = true));
+  }
+
   protected cancel(): void {
     if (this.form.submitting()) return;
     this.cancelled.emit();
@@ -136,6 +147,7 @@ export class LocationEditForm implements OnInit {
     const outcome = await this.form.submit(this.online(), (values) =>
       this.update.run({ locationId, ...values }),
     );
+    if (this.destroyed) return;
     if (outcome.sent) {
       this.saved.emit(outcome.values.name);
     } else if ('focus' in outcome) {

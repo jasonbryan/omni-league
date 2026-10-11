@@ -69,6 +69,8 @@ export class LocationRow {
   readonly closed = output();
   /** The stored name of the location just saved. */
   readonly saved = output<string>();
+  /** True while this row's edit form has a save in flight. */
+  readonly saving = computed(() => this.editForm()?.saving() ?? false);
 
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly hostClass = computed(() =>
@@ -76,6 +78,7 @@ export class LocationRow {
   );
 
   private readonly editButton = viewChild<ElementRef<HTMLButtonElement>>('editButton');
+  private readonly editForm = viewChild(LocationEditForm);
 
   /** Closes the form and, once the row is back, puts focus on its Edit button. */
   protected finish(): void {
