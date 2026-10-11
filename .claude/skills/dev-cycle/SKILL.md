@@ -3,7 +3,7 @@ name: dev-cycle
 description: Runs the Omni League development cycle by dispatching role agents. Use when the owner asks to build a feature, fix a bug, plan a requirement, work an issue, continue the backlog, or deploy.
 ---
 
-The main session is the **orchestrator**. It dispatches the role agents in `.claude/agents/`, moves issue labels, merges non-gated PRs (gate PRs only on the owner's chat instruction), and reports to the owner. It does not plan, design, write feature code, test, or review itself; each of those goes to its role agent, so every phase gets a fresh, independent context.
+The main session is the **orchestrator**. It dispatches the role agents in `.claude/agents/`, moves issue labels, merges every PR outside the owner-merge scope, and reports to the owner per milestone. The owner merges only gate PRs and changes to secrets or security policy (`docs/process/dev-cycle.md`, Who merges); the orchestrator merges those only on the owner's chat instruction. It does not plan, design, write feature code, test, or review itself; each of those goes to its role agent, so every phase gets a fresh, independent context.
 
 Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria, the labels, and the loop caps used below.
 
@@ -21,12 +21,12 @@ Read `docs/process/dev-cycle.md` first. It defines the phases, the done-criteria
 
 6. **Test, then review.** Dispatch `tester` with the PR number. On `FAIL`, dispatch `implementer` to fix, then `tester` again. On `PASS`, dispatch `pr-reviewer`. On `CHANGES`, run `implementer` → `tester` → `pr-reviewer` again. After three rounds, label `status:blocked` and report.
 
-7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, follow its five steps, one PR at a time: update the branch from `main` while still draft; `gh pr ready <n>`; `gh pr checks <n> --watch` until `ci` passes; `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If `ci` fails, run `gh pr ready <n> --undo` and send it back to `implementer`. Until #12 adds `ci`, merge on `PASS` and `APPROVE` with a one-line merge note (`Merged; CI waived until #12`). The orchestrator never merges a PR carrying any `gate:*` label unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging.
+7. **Merge.** When the merge conditions in Phase 7 of the process doc all hold, follow its five steps, one PR at a time: update the branch from `main` while still draft; `gh pr ready <n>`; `gh pr checks <n> --watch` until `ci` passes; `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If `ci` fails, run `gh pr ready <n> --undo` and send it back to `implementer`. Until #12 adds `ci`, merge on `PASS` and `APPROVE` with a one-line merge note (`Merged; CI waived until #12`). The orchestrator never merges a PR carrying any `gate:*` label, or one that changes secrets or security policy (the owner-merge scope in the process doc, Who merges), unless the owner told it in chat to merge that specific PR; it then comments the owner's words on the PR, quoted exactly, before merging. Every other reviewed PR, including process-doc, `.claude/`, and mockup PRs, it merges itself.
 
 8. **Deploy.** After merges, dispatch `deployer` for preview/staging. Production goes through the deployer's `gate:production` release request.
 
-9. **Report.** Finish with a short owner report, one line per item, following `AGENTS.md` (Writing on GitHub):
-   - **Needs the owner:** gate PRs awaiting approval (with links) and `status:blocked` questions, each with the recommended answer.
+9. **Report.** Report per milestone (a feature merged and live on staging, with its staging link; a release; a set of issues that finished together), not per step. Report immediately, outside that cadence, only when the owner must act: a gate PR or a secrets or security-policy PR waiting to be merged, a `status:blocked` question, or a budget or access problem. Each report is short, one line per item, following `AGENTS.md` (Writing on GitHub):
+   - **Needs the owner:** gate PRs and secrets or security-policy PRs awaiting the owner's merge (with links), and `status:blocked` questions, each with the recommended answer.
    - **Done:** merged PRs and deployments.
    - **In flight:** issues still moving, and their phase.
 

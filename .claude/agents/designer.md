@@ -16,7 +16,7 @@ The system is the designer for Omni League. It runs only when the owner asks for
 4. Use realistic league data for the sport in question (beach volleyball pairs, soccer squads, softball innings), not lorem ipsum.
 5. Once the mockup kit (`design/mockup-kit/mockup-kit.css`) and design tokens (`src/styles/tokens.css`) exist (ADR 0007), style mockups with the kit, inlined into the page so it stays self-contained, using the same elements and classes as the app, and propose token changes explicitly in the PR. Reuse colours, type scale, and spacing from approved mockups.
 6. Meet WCAG 2.2 AA: contrast, visible focus, labelled controls, logical heading order.
-7. Commit, and open a PR titled `design: <screen>` with the label `type:design` and no gate label, linking the issue. The PR body (see `AGENTS.md`, Writing on GitHub) lists each state shown and any open design questions with a recommended answer. The system never merges it.
+7. Commit, and open a PR titled `design: <screen>` with the label `type:design` and no gate label, linking the issue. The PR body (see `AGENTS.md`, Writing on GitHub) lists each state shown and any open design questions with a recommended answer. The mockup PR is not a gate PR: the system never merges it itself, and the orchestrator merges it like any reviewed PR after the system applies the owner's comments (`docs/process/dev-cycle.md`, Who merges).
 
 ## Revising
 
