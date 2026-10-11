@@ -400,3 +400,96 @@ describe('invites.accept', () => {
     ).rejects.toThrow('Sign in required');
   });
 });
+
+describe('invites.accept: probes added by the tester (#70)', () => {
+  /** The `ConvexError` data (or message) a refused promise carries, for comparing refusals. */
+  async function refusal(promise: Promise<unknown>): Promise<unknown> {
+    try {
+      await promise;
+    } catch (e) {
+      return e instanceof ConvexError ? e.data : (e as Error).message;
+    }
+    throw new Error('Expected a refusal');
+  }
+
+  test('unknown, revoked, expired, and accepted tokens are refused with identical data: no oracle', async () => {
+    const s = await setup();
+    const revoked = await invite(s, 'dana@example.test');
+    await s.asAdminA.mutation(api.invites.revoke, { inviteId: revoked.inviteId });
+    const expired = await invite(s, 'eli@example.test');
+    const accepted = await invite(s, 'fran-new@example.test');
+    await s.t.run((ctx) => ctx.db.patch('invites', accepted.inviteId, { status: 'accepted' }));
+    vi.setSystemTime(NOW + INVITE_LIFETIME_MS + 1);
+
+    // Dana is the invited address of the revoked invite; she gets no hint that it is revoked.
+    const refusals = [
+      await refusal(s.asDana.mutation(api.invites.accept, { token: 'unknown-token' })),
+      await refusal(s.asDana.mutation(api.invites.accept, { token: revoked.token })),
+      await refusal(s.asEli.mutation(api.invites.accept, { token: expired.token })),
+      await refusal(s.asDana.mutation(api.invites.accept, { token: accepted.token })),
+    ];
+    for (const r of refusals) expect(r).toStrictEqual({ code: 'invalid' });
+  });
+
+  test('the different-email refusal carries only its code, never the invited address', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test');
+    const data = await refusal(s.asEli.mutation(api.invites.accept, { token }));
+    expect(data).toStrictEqual({ code: 'emailMismatch' });
+  });
+
+  test('the client cannot widen the grant: extra arguments (leagueIds, role, email) are rejected', async () => {
+    const s = await setup();
+    const { token, inviteId } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed]);
+    for (const extra of [
+      { leagueIds: [s.sand] },
+      { role: 'orgAdmin' },
+      { email: 'eli@example.test' },
+    ]) {
+      await expect(s.asDana.mutation(api.invites.accept, { token, ...extra })).rejects.toThrow();
+    }
+    expect(await membershipsOf(s, s.dana.userId)).toHaveLength(0);
+    expect((await inviteRow(s, inviteId))?.status).toBe('pending');
+    await s.asDana.mutation(api.invites.accept, { token });
+    expect((await membershipsOf(s, s.dana.userId))[0]?.leagueIds).toEqual([s.coed]);
+  });
+
+  test('two different callers racing for one invite: only the invited address gets a membership', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test');
+    const results = await Promise.allSettled([
+      s.asEli.mutation(api.invites.accept, { token }),
+      s.asDana.mutation(api.invites.accept, { token }),
+      s.asEli.mutation(api.invites.accept, { token }),
+      s.asDana.mutation(api.invites.accept, { token }),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(await membershipsOf(s, s.eli.userId)).toHaveLength(0);
+    expect(await membershipsOf(s, s.dana.userId)).toHaveLength(1);
+  });
+
+  test('a league moved to another organization since the invite is left out of the grant', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed, s.sand]);
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.sand, { organizationId: s.organizationB }));
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect(result.leagueNames).toEqual(['Coed 7v7']);
+    expect((await membershipsOf(s, s.dana.userId))[0]?.leagueIds).toEqual([s.coed]);
+    await s.asDana.run(async (ctx) => {
+      await expect(requireLeagueOrganizer(ctx, s.sand)).rejects.toThrow('Not allowed');
+    });
+  });
+
+  test('a league organizer whose every invited league is gone holds no league: nothing is widened to the organization', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed]);
+    await s.t.run((ctx) => ctx.db.delete('leagues', s.coed));
+    await s.asDana.mutation(api.invites.accept, { token });
+    const rows = await membershipsOf(s, s.dana.userId);
+    expect(rows[0]).toMatchObject({ role: 'leagueOrganizer', leagueIds: [] });
+    await s.asDana.run(async (ctx) => {
+      await expect(requireLeagueOrganizer(ctx, s.sand)).rejects.toThrow('Not allowed');
+      await expect(requireOrgAdmin(ctx, s.organizationA)).rejects.toThrow('Not allowed');
+    });
+  });
+});
