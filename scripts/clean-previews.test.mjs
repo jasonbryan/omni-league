@@ -581,3 +581,71 @@ describe('the team token is never printed, logged, or written', () => {
     assert.match(source, /Authorization: `Bearer \$\{token\}`/);
   });
 });
+
+describe('the pr-<n> name rule, with identifier and reference agreeing', () => {
+  // The earlier name test pairs each bad name with a disagreeing reference, so the disagreement
+  // rule keeps it and the `^pr-[1-9][0-9]*$` and safe-integer rules are never reached. Here the
+  // identifier and the reference agree, so only the name rules can refuse the name.
+  const considered = (list) =>
+    selectCandidates(list, PROJECT_ID).candidates.map((c) => c.deployment.name);
+  const bad = [
+    'pr-0',
+    'pr-01',
+    'pr-05',
+    'pr-',
+    'pr-1a',
+    'pr-1-2',
+    'PR-1',
+    'xpr-1',
+    'pr-1x',
+    'pr--1',
+    'pr-1 ',
+    ' pr-1',
+    'pr-1\n',
+    'feature-pr-1',
+    'main',
+    'pr-9007199254740993',
+    'pr-99999999999999999999',
+  ];
+
+  it('refuses a bad name given as previewIdentifier with a matching reference', () => {
+    for (const name of bad) {
+      const d = deployment('animal-x', { previewIdentifier: name, reference: `preview/${name}` });
+      assert.deepEqual(considered([d]), [], JSON.stringify(name));
+    }
+  });
+
+  it('refuses a bad name given only as reference', () => {
+    for (const name of bad) {
+      const d = deployment('animal-x', { previewIdentifier: null, reference: `preview/${name}` });
+      assert.deepEqual(considered([d]), [], JSON.stringify(name));
+    }
+  });
+
+  it('still considers a good name the same way, and the largest safe integer', () => {
+    for (const name of ['pr-1', 'pr-12', 'pr-9007199254740991']) {
+      const d = deployment('animal-x', { previewIdentifier: name, reference: `preview/${name}` });
+      assert.deepEqual(considered([d]), ['animal-x'], name);
+    }
+  });
+});
+
+describe('createApi, malformed responses', () => {
+  it('rejects a project lookup with no integer id', async () => {
+    for (const body of [{}, { id: '77' }, { id: 1.5 }, { id: null }]) {
+      const fetchStub = stubFetch({ 'GET /teams/jason-bryan/projects/omni-league': { body } });
+      const api = createApi({ fetch: fetchStub, token: TOKEN });
+      await assert.rejects(api.projectId(), /no id/, JSON.stringify(body));
+    }
+  });
+
+  it('rejects a deployment list that is not an array', async () => {
+    for (const body of [{}, 'abc', null]) {
+      const fetchStub = stubFetch({
+        'GET /projects/77/list_deployments?deploymentType=preview': { body },
+      });
+      const api = createApi({ fetch: fetchStub, token: TOKEN });
+      await assert.rejects(api.listPreviewDeployments(77), /not an array/, JSON.stringify(body));
+    }
+  });
+});
