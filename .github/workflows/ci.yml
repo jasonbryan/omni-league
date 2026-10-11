@@ -55,9 +55,11 @@ jobs:
       # rename, so moving an app file into docs/ is an app change. Any failure to detect runs every check, and
       # the job still concludes success when the checks that did run pass, so the required check `ci` reports.
       # Runs on the Node the runner image ships, before setup-node, so the script uses built-ins only.
+      # pipefail: a failed git diff fails the pipeline, so the warning branch runs.
       - name: scope
         id: scope
         run: |
+          set -o pipefail
           if outputs="$(git diff --no-renames --name-only HEAD^1 HEAD | node scripts/ci-scope.mjs)" && [ -n "$outputs" ]; then
             printf '%s\n' "$outputs" >> "$GITHUB_OUTPUT"
             printf '%s\n' "$outputs"
