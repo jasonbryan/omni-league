@@ -4,6 +4,9 @@ import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
 import { NotFoundPage } from './not-found/not-found-page';
+import { AdminArea } from './organizations/admin/admin-area';
+import { AdminLocations } from './organizations/admin/admin-locations';
+import { AdminOverview } from './organizations/admin/admin-overview';
 import { CreateOrganizationPage } from './organizations/create-organization-page';
 import { OrganizationPage } from './organizations/organization-page';
 import { Placeholder } from './placeholder/placeholder';
@@ -144,18 +147,27 @@ describe('Route tables', () => {
     expect(route?.canActivate).toEqual([redirectSignedIn]);
   });
 
-  it('app has the guarded account page, the guarded create-organization page, and its own not-found route', async () => {
+  it('app has the guarded account page, the guarded create-organization page, the guarded admin area, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
     expect(app?.canActivate).toBeUndefined();
-    const [account, create, notFound, ...rest] = app?.children ?? [];
+    const [account, create, admin, notFound, ...rest] = app?.children ?? [];
     expect(rest).toEqual([]);
     // #64: ahead of the not-found route, so /app/organizations/new is not a 404.
     expect(create?.path).toBe('organizations/new');
     expect(create?.title).toBe('Create an organization | Omni League');
     expect(create?.canActivate).toEqual([requireSignedIn]);
     expect(await create?.loadComponent?.()).toBe(CreateOrganizationPage);
+    // #65: after organizations/new (the reserved slug `new` keeps them apart), ahead of not-found.
+    // Overview is the area's own path; Locations is below it.
+    expect(admin?.path).toBe('organizations/:slug');
+    expect(admin?.canActivate).toEqual([requireSignedIn]);
+    expect(await admin?.loadComponent?.()).toBe(AdminArea);
+    expect(admin?.children?.map((r) => r.path)).toEqual(['', 'locations']);
+    expect(admin?.children?.[0]?.pathMatch).toBe('full');
+    expect(await admin?.children?.[0]?.loadComponent?.()).toBe(AdminOverview);
+    expect(await admin?.children?.[1]?.loadComponent?.()).toBe(AdminLocations);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Your account | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);

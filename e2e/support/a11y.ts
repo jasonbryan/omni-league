@@ -75,6 +75,9 @@ export async function checkReflow(page: Page): Promise<ReflowResult> {
   try {
     const size = await page.evaluate(async () => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      // Measure the settled layout: a `transition-all` control (the top bar's account link, whose
+      // max-width drops at the md breakpoint) is still mid-transition two frames after the resize.
+      await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined)));
       const root = document.documentElement;
       return { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth };
     });

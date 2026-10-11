@@ -3,14 +3,14 @@
 // test signs up its own user through the real form, so each runs against a preview too; the ones
 // that seed a tenant (a taken slug) need the local Convex backend and are skipped with
 // E2E_BASE_URL set.
-import type { Browser, Page, TestInfo } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 import { join } from 'node:path';
 import { expectAccessible } from './support/a11y';
-import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { otherUser, signUp } from './support/session';
 import { seedTenant } from './support/tenant';
-import { newUser, type TestUser } from './support/users';
+import { newUser } from './support/users';
 import { randomBytes } from 'node:crypto';
 
 const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
@@ -48,27 +48,6 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise
   const file = join(testInfo.config.rootDir, 'screenshots', `${name}-${width}.png`);
   const png = await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
   await testInfo.attach(`${name}-${width}.png`, { body: png, contentType: 'image/png' });
-}
-
-/** Signs `user` up through the form and waits for /app. */
-async function signUp(page: Page, user: TestUser): Promise<void> {
-  const tokens = tokensSettled(page);
-  await page.goto('/sign-up');
-  await page.locator('#name').fill(user.name);
-  await page.locator('#email').fill(user.email);
-  await page.locator('#password').fill(user.password);
-  await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
-  await page.getByRole('button', { name: /Create account/ }).click();
-  await expect(page).toHaveURL(`${baseURL}/app`);
-  await tokens;
-}
-
-/** A second signed-in browser context, for a second user. */
-async function otherUser(browser: Browser, user: TestUser): Promise<Page> {
-  const context = await browser.newContext({ baseURL });
-  const page = await context.newPage();
-  await signUp(page, user);
-  return page;
 }
 
 async function openForm(page: Page): Promise<void> {
@@ -257,11 +236,11 @@ test.describe('create an organization', () => {
       await field(page, 'slug').fill(free.slug);
       await expect(fieldError(page, 'slug')).toHaveCount(0);
       await createButton(page).click();
-      await expect(page).toHaveURL(`${baseURL}/organizations/${free.slug}`);
+      await expect(page).toHaveURL(`${baseURL}/app/organizations/${free.slug}`);
     });
   });
 
-  test('creates the organization, lands on its public page, and lists it on /app', async ({
+  test('creates the organization, lands on its admin Overview, and lists it on /app', async ({
     page,
   }, testInfo) => {
     const org = newOrganization('Create');
@@ -271,8 +250,13 @@ test.describe('create an organization', () => {
     await field(page, 'slug').fill(org.slug);
     await createButton(page).click();
 
+    // The admin Overview with its "Get set up" list (#65 decision 5), not the public page.
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/${org.slug}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Get set up' })).toBeVisible();
+
     // The public page, with #60's empty states.
-    await expect(page).toHaveURL(`${baseURL}/organizations/${org.slug}`);
+    await page.goto(`/organizations/${org.slug}`);
     await expect(page.getByRole('heading', { level: 1, name: org.name })).toBeVisible();
     await expect(page.getByText('No leagues yet').first()).toBeVisible();
 
@@ -286,7 +270,11 @@ test.describe('create an organization', () => {
     await expect(
       row.getByRole('link', { name: new RegExp(`^Public page ?: ${org.name}$`) }),
     ).toHaveAttribute('href', `/organizations/${org.slug}`);
-    await expect(row.getByRole('link', { name: /Manage/ })).toHaveCount(0);
+    // "Manage" (#65) leads to the admin area, and its name includes the organization.
+    await expect(row.getByRole('link', { name: `Manage ${org.name}` })).toHaveAttribute(
+      'href',
+      `/app/organizations/${org.slug}`,
+    );
     await expect(panel.getByRole('link', { name: 'Create an organization' })).toBeVisible();
     await screenshot(page, testInfo, '64-app-one');
     await expectAccessible(page);
@@ -300,7 +288,7 @@ test.describe('create an organization', () => {
     await field(page, 'name').fill(a.name);
     await field(page, 'slug').fill(a.slug);
     await createButton(page).click();
-    await expect(page).toHaveURL(`${baseURL}/organizations/${a.slug}`);
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/${a.slug}`);
 
     const second = await otherUser(browser, newUser('UserB'));
     try {
@@ -308,7 +296,7 @@ test.describe('create an organization', () => {
       await field(second, 'name').fill(b.name);
       await field(second, 'slug').fill(b.slug);
       await createButton(second).click();
-      await expect(second).toHaveURL(`${baseURL}/organizations/${b.slug}`);
+      await expect(second).toHaveURL(`${baseURL}/app/organizations/${b.slug}`);
 
       await page.goto('/app');
       await expect(organizations(page).getByRole('listitem')).toHaveCount(1);
@@ -334,7 +322,7 @@ test.describe('create an organization', () => {
       // The slug filled from the name, so the landing page is known (the form's own path also
       // contains "/organizations/").
       await expect(page).toHaveURL(
-        `${baseURL}/organizations/${name.toLowerCase().replaceAll(' ', '-')}`,
+        `${baseURL}/app/organizations/${name.toLowerCase().replaceAll(' ', '-')}`,
       );
     }
     await page.goto('/app');
