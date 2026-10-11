@@ -35,7 +35,7 @@ describe('CreateOrganizationPage', () => {
         provideRouter([
           { path: 'app/organizations/new', component: CreateOrganizationPage },
           { path: 'app', component: Elsewhere },
-          { path: 'organizations/:orgSlug', component: Elsewhere },
+          { path: 'app/organizations/:slug', component: Elsewhere },
         ]),
       ],
     });
@@ -268,7 +268,7 @@ describe('CreateOrganizationPage', () => {
   describe('submitting (mockup state 11)', () => {
     beforeEach(() => open());
 
-    it('sends the trimmed name and the slug, and goes to the public page', async () => {
+    it('sends the trimmed name and the slug, and lands on the admin Overview (#65)', async () => {
       await type('name', `  ${NAME} `);
       await submit();
       expect(convex.calls.map((c) => [c.kind, c.name, c.args])).toEqual([
@@ -276,7 +276,7 @@ describe('CreateOrganizationPage', () => {
       ]);
       convex.calls[0]?.resolve({ slug: SLUG });
       await flush();
-      expect(url()).toBe(`/organizations/${SLUG}`);
+      expect(url()).toBe(`/app/organizations/${SLUG}`);
     });
 
     it('sends a slug edited by hand, as typed', async () => {

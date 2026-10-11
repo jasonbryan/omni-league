@@ -1,10 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideBuilding2, lucideCircleAlert, lucideGlobe, lucidePlus } from '@ng-icons/lucide';
+import {
+  lucideBuilding2,
+  lucideCircleAlert,
+  lucideGlobe,
+  lucidePlus,
+  lucideSettings,
+} from '@ng-icons/lucide';
 import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
+import { adminPath } from '../organizations/admin/admin-path';
 
 /** The first letters of the first two words of the name: "Coastal Bend Rec Club" gives "CB". */
 export function organizationInitials(name: string): string {
@@ -27,15 +34,17 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
 /**
  * "Your organizations" on `/app` (#64; design/mockups/64-create-organization.html states 1 to 4):
  * one row per membership from `organizations.listMine`, sorted by name by the query, with the
- * organization's initials, name, role, and a "Public page" link. #65 adds "Manage" for org
- * admins. Loading shows two placeholder rows and a polite status; none shows the empty state with
+ * organization's initials, name, role, and a "Public page" link, then "Manage" (the admin area, #65)
+ * for org admins only. Loading shows two placeholder rows and a polite status; none shows the empty state with
  * "Create an organization". The query is asked only once Convex has accepted the token, so the
  * first answer is the caller's own.
  */
 @Component({
   selector: 'app-your-organizations',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideBuilding2, lucideCircleAlert, lucideGlobe, lucidePlus })],
+  providers: [
+    provideIcons({ lucideBuilding2, lucideCircleAlert, lucideGlobe, lucidePlus, lucideSettings }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section
@@ -142,6 +151,18 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
                   ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />Public
                   page<span class="sr-only">: {{ row.name }}</span></a
                 >
+                @if (row.managePath; as managePath) {
+                  <a
+                    [routerLink]="managePath"
+                    data-slot="button"
+                    class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 flex-1 sm:flex-none"
+                    ><ng-icon
+                      name="lucideSettings"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Manage<span class="sr-only"> {{ row.name }}</span></a
+                  >
+                }
               </div>
             </li>
           }
@@ -167,6 +188,8 @@ export class YourOrganizations {
       initials: organizationInitials(name),
       roleName: ROLE_NAMES[role],
       publicPath: `/organizations/${slug}`,
+      // Only an org admin manages: the admin area is not for league organizers (#65).
+      managePath: role === 'orgAdmin' ? adminPath(slug) : null,
     })),
   );
 }

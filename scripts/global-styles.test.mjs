@@ -135,8 +135,9 @@ describe('focus treatment in the app shell and the vendored sheet (#75)', () => 
 
 describe('colour literals in src/', () => {
   // The search from #61, run on the source with comments removed: an issue reference such as
-  // `#100` in a comment is not a colour.
-  const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(/;
+  // `#100` in a comment is not a colour. A hex literal is not followed by a hyphen either, so the
+  // fragment `#add-location` (#65, the jump link to the add form) is not one.
+  const COLOUR = /#[0-9a-fA-F]{3,8}(?![\w-])|rgba?\(|hsla?\(|oklch\(/;
   // The install colours (#80) cannot be tokens: the theme-color meta and the manifest are read by
   // the browser and the operating system, which know no CSS variable. These four lines are the only
   // ones allowed. Each entry is an exact file and full trimmed line, allowed at most once.
@@ -235,6 +236,29 @@ describe('colour literals in src/', () => {
     }
     for (const text of ['// see #100', 'a(); // issue #2024', '/* #100 */', '<!-- #100 -->']) {
       assert.doesNotMatch(withoutComments(text), COLOUR, text);
+    }
+  });
+
+  it('still catches every hex form, and does not read a jump-link fragment as a colour (#65)', () => {
+    for (const line of [
+      'color: #FFF;',
+      'color:#abc',
+      'background: #12345678;',
+      'fill="#0af"',
+      "const c = '#add';",
+      'x(#fff)',
+      'border: 1px solid #f00 !important',
+      'a{color:#ABCDEF}',
+    ]) {
+      assert.match(withoutComments(line), COLOUR, line);
+    }
+    for (const line of [
+      '<a href="#add-location">Add location</a>',
+      "this.router.navigate([], { fragment: 'add-location' }); // #add-location",
+      'url(#add-location)',
+      'href="#fade-in"',
+    ]) {
+      assert.doesNotMatch(withoutComments(line), COLOUR, line);
     }
   });
 });

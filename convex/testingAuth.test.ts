@@ -210,3 +210,81 @@ describe('testing:accountByEmail', () => {
     expect(account?.adultConfirmedAt).toBeGreaterThanOrEqual(before);
   }, 30_000);
 });
+
+describe('testing:addMembership (#65)', () => {
+  const MEMBER = { organizationSlug: TENANT.organization.slug, email: USER.email };
+
+  test('throws without IS_TEST', async () => {
+    vi.stubEnv('IS_TEST', undefined);
+    const t = setup();
+    await expect(
+      t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
+    ).rejects.toThrow(/IS_TEST/);
+  });
+
+  test.each([
+    ['"false"', 'false'],
+    ['empty', ''],
+    ['"TRUE"', 'TRUE'],
+  ])(
+    'refuses with IS_TEST %s even for a real organization and account, and adds no membership',
+    async (_, value) => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      vi.stubEnv('IS_TEST', value);
+      await expect(
+        t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
+      ).rejects.toThrow(/IS_TEST/);
+      expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
+    },
+    30_000,
+  );
+
+  test('makes the seeded user a league organizer of the seeded organization, once', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+    await t.mutation(internal.testing.addMembership, {
+      ...MEMBER,
+      email: USER.email.toUpperCase(),
+      role: 'leagueOrganizer',
+    });
+    const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]).toMatchObject({ role: 'leagueOrganizer', leagueIds: [] });
+    // A second membership for the same user and organization is refused: at most one exists.
+    await expect(
+      t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
+    ).rejects.toThrow(/already/);
+  }, 30_000);
+
+  test('makes the seeded user an org admin', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+    await t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' });
+    const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
+    expect(memberships.map((m) => m.role)).toEqual(['orgAdmin']);
+  }, 30_000);
+
+  test('throws for an unknown organization or user', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+    await expect(
+      t.mutation(internal.testing.addMembership, {
+        ...MEMBER,
+        organizationSlug: 'no-such-org',
+        role: 'orgAdmin',
+      }),
+    ).rejects.toThrow(/No organization/);
+    await expect(
+      t.mutation(internal.testing.addMembership, {
+        ...MEMBER,
+        email: 'nobody@example.test',
+        role: 'orgAdmin',
+      }),
+    ).rejects.toThrow(/No account/);
+  }, 30_000);
+});

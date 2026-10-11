@@ -6,6 +6,8 @@ import { type GenericId, v } from 'convex/values';
 import { components, internal } from './_generated/api';
 import { internalAction, internalMutation, internalQuery } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
+import { insertMembership } from './lib/memberships';
+import { roleValidator } from './lib/roles';
 import {
   insertLeague,
   insertTenant,
@@ -142,6 +144,47 @@ export const addLeague = internalMutation({
     }
     const { slug } = await insertLeague(ctx, organization._id, league);
     return { slug };
+  },
+});
+
+/**
+ * Gives the seeded user with this email a role in the organization with this slug (#65 e2e): an org
+ * admin, or a league organizer with no league assigned. Throws, writing nothing, for an unknown
+ * organization or account, or when the user already has a membership there.
+ */
+export const addMembership = internalMutation({
+  args: { organizationSlug: v.string(), email: v.string(), role: roleValidator },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, email, role }) => {
+    assertTestDeployment();
+    const organization = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', organizationSlug))
+      .unique();
+    if (!organization) {
+      throw new Error(`No organization has the slug ${JSON.stringify(organizationSlug)}`);
+    }
+    // Better Auth stores emails in lower case. The component's generated return types are `any`.
+    const authUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: 'user',
+      where: [{ field: 'email', value: email.toLowerCase() }],
+    })) as { _id: string } | null;
+    const user = authUser
+      ? await ctx.db
+          .query('users')
+          .withIndex('by_authUserId', (q) => q.eq('authUserId', authUser._id))
+          .unique()
+      : null;
+    if (!user) throw new Error(`No account has the email ${JSON.stringify(email)}`);
+    const existing = await ctx.db
+      .query('memberships')
+      .withIndex('by_userId_and_organizationId', (q) =>
+        q.eq('userId', user._id).eq('organizationId', organization._id),
+      )
+      .unique();
+    if (existing) throw new Error('This user already has a membership in the organization');
+    await insertMembership(ctx, user._id, organization._id, role);
+    return null;
   },
 });
 

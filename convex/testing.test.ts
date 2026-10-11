@@ -135,6 +135,7 @@ describe('convex/testing.ts exports', () => {
     expect(exports.map(([name]) => name).sort()).toEqual([
       'accountByEmail',
       'addLeague',
+      'addMembership',
       'ping',
       'reset',
       'seedLeague',

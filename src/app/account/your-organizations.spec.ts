@@ -108,7 +108,7 @@ describe('YourOrganizations', () => {
     expect(section.querySelector('ul')).toBeNull();
   });
 
-  it('one organization (state 3): a row with initials, name, role, and Public page, and no Manage', async () => {
+  it('one organization (state 3): a row with initials, name, role, Public page, and Manage', async () => {
     await open();
     await answer([COASTAL]);
     const header = section.querySelector('div.border-b');
@@ -128,9 +128,28 @@ describe('YourOrganizations', () => {
     expect(publicPage.getAttribute('href')).toBe('/organizations/coastal-bend-rec-club');
     expect(text(publicPage)).toBe('Public page: Coastal Bend Rec Club');
     expect(publicPage.querySelector('.sr-only')?.textContent).toBe(': Coastal Bend Rec Club');
-    // #65 adds Manage.
-    expect(link(row, 'Manage')).toBeUndefined();
-    expect(row.querySelectorAll('a')).toHaveLength(1);
+    // #65: Manage, for an org admin, to the admin area. Its name includes the organization.
+    const manage = link(row, 'Manage')!;
+    expect(manage.getAttribute('href')).toBe('/app/organizations/coastal-bend-rec-club');
+    expect(text(manage)).toBe('Manage Coastal Bend Rec Club');
+    expect(manage.querySelector('.sr-only')?.textContent).toBe(' Coastal Bend Rec Club');
+    expect([...manage.classList].sort()).toEqual([...publicPage.classList].sort());
+    expect(row.querySelectorAll('a')).toHaveLength(2);
+    // Public page first, then Manage.
+    expect([...row.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([
+      '/organizations/coastal-bend-rec-club',
+      '/app/organizations/coastal-bend-rec-club',
+    ]);
+  });
+
+  it('a league organizer gets no Manage: the admin area is for org admins', async () => {
+    await open();
+    await answer([COASTAL, RIVERBEND]);
+    expect(rows().map((row) => link(row, 'Manage')?.getAttribute('href') ?? null)).toEqual([
+      '/app/organizations/coastal-bend-rec-club',
+      null,
+    ]);
+    expect(rows()[1].querySelectorAll('a')).toHaveLength(1);
   });
 
   it('several organizations (state 4): one row each, in the order the query gives, with the role names', async () => {
@@ -155,6 +174,11 @@ describe('YourOrganizations', () => {
       '/organizations/coastal-bend-rec-club',
       '/organizations/mustang-island-beach-volleyball',
       '/organizations/riverbend-softball-association',
+    ]);
+    expect(rows().map((row) => link(row, 'Manage')?.getAttribute('href') ?? null)).toEqual([
+      '/app/organizations/coastal-bend-rec-club',
+      '/app/organizations/mustang-island-beach-volleyball',
+      null,
     ]);
   });
 
