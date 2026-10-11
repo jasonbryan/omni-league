@@ -599,6 +599,26 @@ describe('tenantWrites league slugs and status (#66)', () => {
 });
 
 describe('tester probes (#66)', () => {
+  test('two creates of the same slug at once leave one league and one refusal', async () => {
+    const s = await setup();
+    const results = await Promise.allSettled([
+      s.adminA.mutation(api.leagues.create, valid(s)),
+      s.adminA.mutation(api.leagues.create, { ...valid(s), name: 'Other Name' }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    const taken = results.find((r) => r.status === 'rejected');
+    expect(taken?.status === 'rejected' && taken.reason).toBeInstanceOf(ConvexError);
+    const rows = await s.t.run((ctx) =>
+      ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_slug', (q) =>
+          q.eq('organizationId', s.organizationA).eq('slug', 'sunday-reverse-coed-4s'),
+        )
+        .collect(),
+    );
+    expect(rows).toHaveLength(1);
+  });
+
   test('a name that slugifies to a reserved or unchoosable slug gets the next free suffix', async () => {
     const s = await setup();
     const slugs = await s.t.run(async (ctx) => {
