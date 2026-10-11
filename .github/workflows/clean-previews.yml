@@ -1,0 +1,122 @@
+# Deletes the Convex preview deployments of closed and merged PRs (#158), so the Convex team cap of
+# 40 deployments never blocks a new PR preview (`DeploymentQuotaReached`).
+#
+# - A push to main (a merge): deletes the preview of each PR whose number appears in a pushed
+#   commit subject as `(#<n>)`, the form a squash merge writes. Each goes through `--pr <n>`, which
+#   still requires the PR to be CLOSED or MERGED.
+# - Daily (schedule): sweeps every `pr-<n>` whose PR is CLOSED or MERGED, which also catches PRs
+#   closed without a merge and any push run that was skipped or failed.
+# - By hand (workflow_dispatch): the same sweep, but the `dry_run` input defaults to true, so a
+#   manual run only lists what it would delete. Untick it to delete (only the exact value false
+#   deletes). Run it once as a dry run after the secret is added, to check the list.
+#
+# The engine is scripts/clean-previews.mjs; its safety rules (preview type, the `pr-<n>` name, the
+# omni-league project, PR state from `gh`) apply here unchanged.
+#
+# SECRET (owner decision 2026-10-10, docs/process/hosting.md "Where secrets live"): CONVEX_TEAM_TOKEN
+# is an ENVIRONMENT secret of the `preview-cleanup` environment, whose deployment branches are
+# limited to `main`. The token can mint deploy keys, deploy, delete projects, and change environment
+# defaults, so no branch or PR run may read it: this workflow has no `pull_request` trigger, and the
+# environment refuses any other branch. The token is used only in the env of the one step that runs
+# the script. It is never echoed and never in a `run:` script. When the secret is not set, the job
+# skips with a notice instead of failing. Setup and policy: docs/process/hosting.md, "Cleanup".
+name: Clean previews
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be deleted and delete nothing (untick to delete)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# No concurrency group: a group lets GitHub replace a pending run, which would drop a push's delete,
+# and every delete is idempotent (a 404 counts as already deleted), so overlapping runs are safe.
+
+jobs:
+  clean:
+    name: clean
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # The token lives in this environment, which only `main` may deploy to (hosting.md, Cleanup).
+    environment: preview-cleanup
+    # `gh pr view` needs pull-requests: read; checkout needs contents: read.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The reviewed script on the default branch on every trigger: this job holds the token.
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      # The script uses only Node built-ins, so nothing is installed. Node comes from package.json.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      # Only whether the secret is set is read here, never its value.
+      - name: secret
+        id: secret
+        env:
+          HAS_TOKEN: ${{ secrets.CONVEX_TEAM_TOKEN != '' }}
+        run: |
+          echo "present=${HAS_TOKEN}" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice title=Convex previews not cleaned::The environment secret CONVEX_TEAM_TOKEN of preview-cleanup is not set, so no preview was deleted. See docs/process/hosting.md, Cleanup."
+          fi
+      - name: delete previews
+        if: steps.secret.outputs.present == 'true'
+        env:
+          CONVEX_TEAM_TOKEN: ${{ secrets.CONVEX_TEAM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              # Only the first line of each commit message, and only digits from it, are used.
+              nums="$(jq -r '(.commits // [])[].message | split("\n")[0]' "$GITHUB_EVENT_PATH" \
+                | grep -oE '\(#[1-9][0-9]*\)' | tr -d '(#)' || true)"
+              # A number of 10 or more digits is no PR number: skip it with a notice, never fail.
+              for big in $(printf '%s\n' "$nums" | grep -E '^[0-9]{10,}$' || true); do
+                echo "::notice title=Skipped an oversized number::(#${big:0:12}...) in a commit subject is too long to be a PR number, so it was skipped."
+              done
+              # Each number once (at its last place), at most 20. A squash subject names its own PR
+              # last, so tail keeps it. sort -n only sets the run order.
+              prs="$(printf '%s\n' "$nums" | grep -E '^[0-9]{1,9}$' \
+                | awk '{ a[NR] = $0; l[$0] = NR } END { for (i = 1; i <= NR; i++) if (l[a[i]] == i) print a[i] }' \
+                | tail -n 20 | sort -n || true)"
+              if [ -z "$prs" ]; then
+                echo "No (#<n>) in the pushed commit subjects; the daily sweep covers any preview."
+                exit 0
+              fi
+              status=0
+              for pr in $prs; do
+                node scripts/clean-previews.mjs --yes --pr "$pr" || status=1
+              done
+              exit "$status"
+              ;;
+            schedule)
+              node scripts/clean-previews.mjs --yes
+              ;;
+            workflow_dispatch)
+              # Fail safe: only the exact value false deletes.
+              if [ "$DRY_RUN" = "false" ]; then
+                node scripts/clean-previews.mjs --yes
+              else
+                node scripts/clean-previews.mjs --dry-run
+              fi
+              ;;
+            *)
+              echo "Unexpected event $GITHUB_EVENT_NAME; nothing deleted."
+              exit 1
+              ;;
+          esac
