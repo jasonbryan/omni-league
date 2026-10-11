@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { roleValidator } from './lib/roles';
 import { sportCountsValidator, sportValidator } from './lib/sports';
@@ -66,6 +67,26 @@ export default defineSchema({
   })
     .index('by_organizationId', ['organizationId'])
     .index('by_userId_and_organizationId', ['userId', 'organizationId']),
+
+  // An invitation to join an organization's staff (#67, ADR 0008, glossary: Invite). A pending
+  // invite grants nothing; accepting it (#70) creates the membership. `email` is normalised
+  // (trimmed, lower case). Only the SHA-256 hash of the token is stored, as lower-case hex: the
+  // token is made in the `invites.create` action, shown once in the invite link, and never read
+  // back. `expiresAt` is 14 days after creation; an invite that has expired keeps status
+  // `pending` until it is revoked, and blocks a new invite to the address until then.
+  // `leagueIds` are the leagues of a `leagueOrganizer` invite (empty for an `orgAdmin`).
+  invites: defineTable({
+    organizationId: v.id('organizations'),
+    email: v.string(),
+    role: roleValidator,
+    leagueIds: v.array(v.id('leagues')),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+    status: inviteStatusValidator,
+  })
+    .index('by_organizationId_and_status', ['organizationId', 'status'])
+    .index('by_organizationId_and_email_and_status', ['organizationId', 'email', 'status'])
+    .index('by_tokenHash', ['tokenHash']),
 
   locations: defineTable({
     organizationId: v.id('organizations'),

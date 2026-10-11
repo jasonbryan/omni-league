@@ -295,7 +295,7 @@ test.describe('Leagues: no locations', () => {
 });
 
 test.describe('Overview: the Leagues tile and the checklist', () => {
-  test('a new organization shows 0 and "None yet" and the three steps; the sidebar lists Leagues', async ({
+  test('a new organization shows 0 and "None yet" and the four steps; the sidebar lists Leagues', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
@@ -307,13 +307,21 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       'Add a location',
       'Create a league',
       'Publish the league',
+      'Invite staff (optional)',
     ]);
     await screenshot(page, testInfo, '66-overview-new');
     await expectAccessible(page);
     if ((page.viewportSize()?.width ?? 0) >= 1024) {
       await expect(
         page.getByRole('navigation', { name: `${tenant.name} admin` }).getByRole('link'),
-      ).toHaveText(['Overview', 'Locations', 'Leagues', 'Public page', 'Your organizations']);
+      ).toHaveText([
+        'Overview',
+        'Locations',
+        'Leagues',
+        'Staff',
+        'Public page',
+        'Your organizations',
+      ]);
     }
     await setup.getByRole('link', { name: 'Create a league' }).click();
     await expect(page).toHaveURL(`${baseURL}${base}/leagues`);
