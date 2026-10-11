@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { insertLeague, insertLocation, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import * as seed from './seed';
@@ -151,6 +152,16 @@ describe('seed:demo', () => {
     const t = setup();
     await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual(FULL);
     expect(await counts(t)).toEqual(ROWS);
+  });
+
+  test('every demo organization slug is a valid slug and reserved, so a created organization never gets demo rows (#64)', () => {
+    expect(seed.DEMO.map((tenant) => tenant.organization.slug).sort()).toEqual(
+      [...DEMO_ORGANIZATION_SLUGS].sort(),
+    );
+    for (const { organization } of seed.DEMO) {
+      expect(isSlug(organization.slug), organization.slug).toBe(true);
+      expect(isReservedSlug(organization.slug), organization.slug).toBe(true);
+    }
   });
 
   test('keeps the two mockup organizations (#73) exactly as the mockup shows them', async () => {

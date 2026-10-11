@@ -1,13 +1,24 @@
-import { v } from 'convex/values';
+import { ConvexError, v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
-import { query, type QueryCtx } from './_generated/server';
+import { mutation, query, type QueryCtx } from './_generated/server';
+import { requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import { insertOrgAdminMembership } from './lib/memberships';
+import {
+  checkOrganizationName,
+  checkOrganizationSlug,
+  ORGANIZATION_MESSAGES,
+  type OrganizationInputError,
+} from './lib/organizationInput';
 import {
   getPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
 } from './lib/publicPage';
+import { roleValidator } from './lib/roles';
 import { isSlug } from './lib/slugs';
 import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from './lib/sports';
+import { insertOrganization, organizationSlugTaken, sortName } from './lib/tenantWrites';
+import { getCurrentUser } from './lib/users';
 
 /** Rows per page of a public list (owner, #106). Never taken from args. */
 export const PUBLIC_LIST_PAGE_SIZE = 5;
@@ -175,5 +186,96 @@ export const listPublicLeagues = query({
       rows.push({ name: league.name, sportName: sportName(league.sport), locationNames });
     }
     return { rows, page, pageCount, total };
+  },
+});
+
+/**
+ * The admin area's first query (#65), asked before anything else in it: the organization with this
+ * slug as `{ organizationId, name, slug }` when the caller is one of its org admins, `null` for an
+ * unknown slug (whoever asks: the organization's public page already shows it exists), and a
+ * `FORBIDDEN` `ConvexError` (`lib/forbidden.ts`) for every other caller, including a league
+ * organizer, a member of none, and a caller who is not signed in. The app shows the not-found view
+ * for `null` and the no-access view for `FORBIDDEN`, and requests nothing else until it passes.
+ */
+export const getAdminContext = query({
+  args: { slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({ organizationId: v.id('organizations'), name: v.string(), slug: v.string() }),
+  ),
+  handler: async (ctx, { slug }) => {
+    const organization = await organizationBySlug(ctx, slug);
+    if (!organization) return null;
+    await requireOrgAdminOrForbidden(ctx, organization._id);
+    return { organizationId: organization._id, name: organization.name, slug: organization.slug };
+  },
+});
+
+/** Memberships `listMine` reads. A user is rarely in more than a few organizations. */
+export const LIST_MINE_LIMIT = 100;
+
+/**
+ * "Your organizations" on `/app` (#64): the caller's own memberships as `{ name, slug, role }`,
+ * sorted by organization name ignoring case. It takes no argument, so no caller can name another
+ * user; with no identity, or an identity with no `users` row, it returns `[]`. Reads at most
+ * `LIST_MINE_LIMIT` memberships.
+ */
+// eslint-disable-next-line @convex-dev/require-access-control -- the caller's own memberships only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
+export const listMine = query({
+  args: {},
+  returns: v.array(v.object({ name: v.string(), slug: v.string(), role: roleValidator })),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    const memberships = await ctx.db
+      .query('memberships')
+      .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
+      .take(LIST_MINE_LIMIT);
+    const rows = [];
+    for (const { organizationId, role } of memberships) {
+      const organization = await ctx.db.get('organizations', organizationId);
+      if (organization) rows.push({ name: organization.name, slug: organization.slug, role });
+    }
+    return rows.sort((x, y) => {
+      const a = sortName(x.name);
+      const b = sortName(y.name);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+  },
+});
+
+function refuse(error: OrganizationInputError): never {
+  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
+  throw new ConvexError({ ...error });
+}
+
+/**
+ * Creates an organization and makes the caller its first org admin, in one transaction (#64). Any
+ * signed-in user may call it (owner, 2026-10-09). The name is trimmed and must be 1 to 100
+ * characters; the slug must be valid, not reserved, and free (`convex/lib/organizationInput.ts`,
+ * the rules and messages the form checks too). A refusal about a field is a `ConvexError` whose
+ * data is the `OrganizationInputError`; nothing is written. The organization is inserted through
+ * `tenantWrites`, so its counters exist from the first write. Returns the slug, where the public
+ * page is.
+ */
+export const create = mutation({
+  args: { name: v.string(), slug: v.string() },
+  returns: v.object({ slug: v.string() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const name = checkOrganizationName(args.name);
+    if (!name.ok) refuse(name.error);
+    const slugError = checkOrganizationSlug(args.slug);
+    if (slugError) refuse(slugError);
+    if (await organizationSlugTaken(ctx, args.slug)) {
+      refuse({
+        field: 'slug',
+        code: 'slugTaken',
+        message: ORGANIZATION_MESSAGES.slugTaken(args.slug),
+      });
+    }
+    const organizationId = await insertOrganization(ctx, { name: name.name, slug: args.slug });
+    await insertOrgAdminMembership(ctx, user._id, organizationId);
+    return { slug: args.slug };
   },
 });

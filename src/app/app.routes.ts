@@ -33,6 +33,36 @@ export const routes: Routes = [
         loadComponent: () => import('./account/account-page').then((m) => m.AccountPage),
       },
       {
+        // Create an organization (#64). Ahead of the admin area's `organizations/:slug` (#65), and
+        // the reserved slug `new` keeps the two apart.
+        path: 'organizations/new',
+        title: 'Create an organization | Omni League',
+        canActivate: [requireSignedIn],
+        loadComponent: () =>
+          import('./organizations/create-organization-page').then((m) => m.CreateOrganizationPage),
+      },
+      {
+        // The organization admin area (#65). The parent asks organizations.getAdminContext first
+        // and renders a child only for an org admin; the no-access and not-found views take the
+        // place of every child. Overview is the area's own path. #66 and #67 add Leagues and Staff.
+        path: 'organizations/:slug',
+        canActivate: [requireSignedIn],
+        loadComponent: () => import('./organizations/admin/admin-area').then((m) => m.AdminArea),
+        children: [
+          {
+            path: '',
+            pathMatch: 'full',
+            loadComponent: () =>
+              import('./organizations/admin/admin-overview').then((m) => m.AdminOverview),
+          },
+          {
+            path: 'locations',
+            loadComponent: () =>
+              import('./organizations/admin/admin-locations').then((m) => m.AdminLocations),
+          },
+        ],
+      },
+      {
         path: '**',
         loadComponent: () => import('./not-found/not-found-page').then((m) => m.NotFoundPage),
       },
