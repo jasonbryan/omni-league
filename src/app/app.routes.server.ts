@@ -20,6 +20,12 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
   },
   {
+    // Sign-in (#63): the same, so no auth code runs on the server.
+    path: 'sign-in',
+    renderMode: RenderMode.Client,
+    headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
+  },
+  {
     path: 'app',
     renderMode: RenderMode.Client, // signed-in app (#62): the guard runs in the browser only
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },

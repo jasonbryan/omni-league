@@ -72,9 +72,13 @@ test.describe('auth session store', () => {
       page.getByRole('heading', { level: 1, name: 'Create your account' }),
     ).toBeVisible();
     await settle(page);
+    // The sign-in page (#63) asks nothing either: the top bar's account link is for signed-in visitors.
+    await page.goto('/sign-in');
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await settle(page);
     // The guard needs the answer, so this proves the auth chunk loaded and answered signed out.
     await page.goto('/app');
-    await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
     await settle(page);
     expect(seen).toEqual([]);
   });
@@ -113,7 +117,7 @@ test.describe('auth session store', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
     await settle(page);
     await page.goto('/app');
-    await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
     await settle(page);
     expect(seen).toEqual([]);
   });
@@ -126,7 +130,7 @@ test.describe('auth session store', () => {
     }, STORE_KEY);
     const seen = authRequests(page);
     await page.goto('/app');
-    await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
     await settle(page);
     expect(seen).toEqual([]);
   });
@@ -141,7 +145,7 @@ test.describe('auth session store', () => {
     }, STORE_KEY);
     const seen = authRequests(page);
     await page.goto('/app');
-    await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
     await settle(page);
     // The server clears the unknown token, which changes the stored value; the crossDomain plugin
     // then notifies the session signal, so a second get-session may follow.
@@ -164,7 +168,7 @@ test.describe('auth session store', () => {
       await page.goto('/');
       await page.evaluate(([key, value]) => localStorage.setItem(key, value), [STORE_KEY, raw]);
       await page.goto('/app');
-      await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+      await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
       await settle(page);
     });
   }
@@ -283,7 +287,7 @@ test.describe('auth session store, round 4', () => {
       await page.evaluate(([key, value]) => localStorage.setItem(key, value), [STORE_KEY, raw]);
       const seen = authRequests(page);
       await page.goto('/app');
-      await expect(page).toHaveURL(`${baseURL}/sign-up?returnTo=%2Fapp`);
+      await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
       await settle(page);
       expect(count(seen, TOKEN)).toBe(0);
       expect(count(seen, GET_SESSION)).toBeLessThanOrEqual(2);

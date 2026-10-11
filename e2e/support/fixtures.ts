@@ -30,6 +30,18 @@ export interface ConsoleFixtures {
 }
 
 /**
+ * The value for `test.use({ expectedFailedRequests: failedRequests(a, b) })` with two or more
+ * entries. Playwright reads a fixture value that is an array whose second element is an object as
+ * a `[value, options]` pair, so a plain list of two entries would silently become its first entry
+ * and break the guard (#63). One entry needs no helper.
+ */
+export function failedRequests(
+  ...entries: ExpectedFailedRequest[]
+): ConsoleFixtureOptions['expectedFailedRequests'] {
+  return [entries, {}] as unknown as ConsoleFixtureOptions['expectedFailedRequests'];
+}
+
+/**
  * Shared `test` for every spec: the console fixture runs automatically on every page the test
  * opens and fails the test at teardown (ADR 0005 rules; see `console-guard.ts`). With
  * `E2E_BASE_URL` set, the Netlify Drawer script is stubbed in every test's browser context.

@@ -17,16 +17,18 @@ import { accountByEmail, newUser, seedUser, type TestUser } from './support/user
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
 
-/** Sign-up form order (mockup "Focus order", without #63's two Sign in links). */
+/** Sign-up form order (mockup 62 "Focus order"): the top bar's Sign in, then the panel footer's. */
 const SIGN_UP_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
+  'header a[href^="/sign-in"]',
   '#name',
   '#email',
   '#password',
   'button[aria-controls="password"]',
   '#adult',
   'button[type="submit"]',
+  'main p a[href^="/sign-in"]',
 ];
 
 const password = (page: Page) => page.locator('#password');
@@ -86,15 +88,15 @@ test.describe('sign-up', () => {
     },
   );
 
-  test('a signed-out visitor opening /app goes to /sign-up?returnTo=/app', async ({ page }) => {
+  test('a signed-out visitor opening /app goes to /sign-in?returnTo=/app (#63)', async ({
+    page,
+  }) => {
     await page.goto('/app');
-    await expect(page).toHaveURL(/\/sign-up\?/);
-    expect(new URL(page.url()).pathname).toBe('/sign-up');
+    await expect(page).toHaveURL(/\/sign-in\?/);
+    expect(new URL(page.url()).pathname).toBe('/sign-in');
     expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/app');
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Create your account' }),
-    ).toBeVisible();
-    await expect(page).toHaveTitle('Create an account | Omni League');
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await expect(page).toHaveTitle('Sign in | Omni League');
   });
 
   test('the empty form: fields, policy text, Show password, axe, and Tab order', async ({
@@ -115,6 +117,14 @@ test.describe('sign-up', () => {
     for (const absent of [/Forgot password/i, /Google/, /verif/i]) {
       await expect(page.getByText(absent)).toHaveCount(0);
     }
+    // The two links to /sign-in (#63): the top bar's and the panel footer's, both with returnTo.
+    await expect(page.locator('header').getByRole('link', { name: 'Sign in' })).toHaveAttribute(
+      'href',
+      '/sign-in?returnTo=%2Fapp',
+    );
+    await expect(
+      page.getByText('Already have an account?').locator('a', { hasText: 'Sign in' }),
+    ).toHaveAttribute('href', '/sign-in?returnTo=%2Fapp');
     // 36px controls, and 16px input text on phones so iOS does not zoom (PR #96 decision 5).
     const show = page.getByRole('button', { name: 'Show password' });
     for (const control of [field(page, 'name'), password(page), show, createAccount(page)]) {
@@ -229,6 +239,7 @@ test.describe('sign-up', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
+        'header a[href="/app"]',
         'main button',
         'main a[href="/app/organizations/new"]',
       ],
@@ -247,7 +258,7 @@ test.describe('sign-up', () => {
 
     // The session is gone in this browser too.
     await page.goto('/app');
-    await expect(page).toHaveURL(/\/sign-up\?returnTo=%2Fapp$/);
+    await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fapp$/);
   });
 
   test('returnTo=//evil.example/x lands on /', async ({ page }) => {
@@ -256,9 +267,9 @@ test.describe('sign-up', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
   });
 
-  // Tester (#62): every unsafe returnTo, including encoded and dot-segment forms, lands on / and
-  // the browser never leaves this site, after sign-up and for a signed-in visitor opening
-  // /sign-up (the redirectSignedIn guard).
+  // Tester (#62): every unsafe returnTo, including encoded and dot-segment forms, lands on / after
+  // sign-up, and on /app for a signed-in visitor opening /sign-up (the redirectSignedIn guard,
+  // #63), and the browser never leaves this site.
   for (const raw of [
     'https://evil.example/x',
     '/\\evil.example/x',
@@ -267,7 +278,7 @@ test.describe('sign-up', () => {
     '/.//evil.example/x',
     '/%2e%2e//evil.example/x',
   ]) {
-    test(`returnTo=${JSON.stringify(raw)} lands on / after sign-up and when signed in`, async ({
+    test(`returnTo=${JSON.stringify(raw)} lands on / after sign-up and on /app when signed in`, async ({
       page,
     }) => {
       const query = `?returnTo=${encodeURIComponent(raw)}`;
@@ -278,8 +289,8 @@ test.describe('sign-up', () => {
       await tokens;
 
       await page.goto(`/sign-up${query}`);
-      await expect(page).toHaveURL(`${baseURL}/`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+      await expect(page).toHaveURL(`${baseURL}/app`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
     });
   }
 
@@ -297,13 +308,13 @@ test.describe('sign-up', () => {
     await expect(page).toHaveURL(`${baseURL}/app`);
     await first;
     const cases: [raw: string, landing: string | null][] = [
-      ['/..//evil.example/x', '/'],
+      ['/..//evil.example/x', '/app'],
       ['/%2e%2e%2f%2fevil.example', null],
       ['/%2e%2e%5c%5cevil.example', null],
-      ['/..\\\\evil.example', '/'],
-      ['/.\\/evil.example', '/'],
-      ['/\t/evil.example', '/'],
-      ['/.\n.//evil.example', '/'],
+      ['/..\\\\evil.example', '/app'],
+      ['/.\\/evil.example', '/app'],
+      ['/\t/evil.example', '/app'],
+      ['/.\n.//evil.example', '/app'],
       ['/%2F%2Fevil.example', null],
       ['/%5Cevil.example', null],
       ['/／／evil.example', null],
@@ -311,11 +322,11 @@ test.describe('sign-up', () => {
       ['/x#//evil.example', null],
       ['/app?next=//evil.example', null],
       ['/@evil.example', null],
-      ['javascript:alert(1)', '/'],
-      ['data:text/html,<script>alert(1)</script>', '/'],
-      ['//evil.example', '/'],
-      ['https://evil.example/app', '/'],
-      [`${baseURL}/app`, '/'],
+      ['javascript:alert(1)', '/app'],
+      ['data:text/html,<script>alert(1)</script>', '/app'],
+      ['//evil.example', '/app'],
+      ['https://evil.example/app', '/app'],
+      [`${baseURL}/app`, '/app'],
       [`/${'a'.repeat(4_000)}`, null],
     ];
     for (const [raw, landing] of cases) {
@@ -391,13 +402,18 @@ test.describe('sign-up', () => {
       );
       await expect(field(page, 'email')).toHaveAttribute('aria-invalid', 'true');
       await expect(field(page, 'email')).toHaveAttribute('aria-describedby', 'email-error');
-      // Plain text until #63 adds /sign-in.
-      await expect(fieldError(page, 'email').getByRole('link')).toHaveCount(0);
+      // "Sign in instead" links to /sign-in with the same returnTo (#63).
+      await expect(
+        fieldError(page, 'email').getByRole('link', { name: 'Sign in instead' }),
+      ).toHaveAttribute('href', '/sign-in?returnTo=%2Fapp');
       await expect(field(page, 'email')).toBeFocused();
       await expect(page).toHaveURL(`${baseURL}/sign-up`);
       expect((await accountByEmail(existing.email))?.name).toBe(existing.name);
       await screenshot(page, testInfo, '62-sign-up-exists');
-      await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+      // The error's link follows the Email field it describes.
+      const order = [...SIGN_UP_ORDER];
+      order.splice(order.indexOf('#email') + 1, 0, '#email-error a');
+      await expectAccessible(page, { expectedOrder: order });
     });
   });
 });

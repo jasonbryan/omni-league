@@ -36,10 +36,13 @@ test.describe('not-found page', () => {
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(HOME_LINK);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
-        // Top bar only (#73 decisions 2 and 5): no menu button, no sidebar, no Sign in.
+        // Top bar only (#73 decisions 2 and 5): no menu button and no sidebar, and the top bar's
+        // "Sign in" (#63), which every public page carries.
         expect(html, path).not.toContain('aria-label="Open navigation"');
         expect(html, path).not.toMatch(/<nav\b/);
-        expect(html, path).not.toContain('Sign in');
+        expect(html.slice(html.indexOf('<header'), html.indexOf('</header>')), path).toMatch(
+          />Sign in<\/a>/,
+        );
       }
 
       // Regression: the catch-all does not capture the home route.
@@ -366,9 +369,14 @@ test.describe('not-found page', () => {
     await expect(page.getByRole('navigation')).toHaveCount(0);
     await expect(page.getByRole('button')).toHaveCount(0);
 
-    // Tab order while Sign in is absent: skip link, "Omni League", "Go to the home page".
+    // Tab order: skip link, "Omni League", the top bar's "Sign in" (#63), "Go to the home page".
     await expectAccessible(page, {
-      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]', 'main a[href="/"]'],
+      expectedOrder: [
+        'a[href$="#main"]',
+        'header a[href="/"]',
+        'header a[href^="/sign-in"]',
+        'main a[href="/"]',
+      ],
     });
 
     // The Tab walk ends on the skip link: Enter, Tab, Enter follows the home link.

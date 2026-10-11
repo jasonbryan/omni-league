@@ -27,6 +27,7 @@ import { filter, map } from 'rxjs';
 import { OfflineNote } from './offline-note';
 import type { ShellSheet } from './shell-sheet';
 import { ShellSidebar } from './shell-sidebar';
+import { TopBarAccount } from './top-bar-account';
 
 /**
  * The skip link's `href`: the router's current URL with its fragment set to `main`. A bare `#main`
@@ -55,9 +56,10 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
 );
 
 /**
- * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar, the
- * offline note (#88), the page's sidebar when it supplies an `<ng-template appShellSidebar>` (a
- * column from 1024px, a sheet behind the menu button below), and `<main>`. Each routed page wraps its content column in it.
+ * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar (with
+ * the visitor's "Sign in" or account link, #63), the offline note (#88), the page's sidebar when it
+ * supplies an `<ng-template appShellSidebar>` (a column from 1024px, a sheet behind the menu button
+ * below), and `<main>`. Each routed page wraps its content column in it.
  * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
  *
  * The menu button is plain markup, rendered on the server and hydrated as is. The sheet
@@ -75,7 +77,7 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
  */
 @Component({
   selector: 'app-shell',
-  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink],
+  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink, TopBarAccount],
   providers: [provideIcons({ lucideMenu, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'dropPendingOpen()' },
@@ -113,6 +115,7 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
         <a routerLink="/" class="flex items-center gap-2 rounded-md text-base font-semibold">
           <ng-container [ngTemplateOutlet]="brand" />
         </a>
+        <app-top-bar-account />
       </header>
       <app-offline-note />
       <div class="flex flex-1">

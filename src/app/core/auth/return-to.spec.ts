@@ -1,4 +1,4 @@
-import { AFTER_AUTH_DEFAULT, afterAuthUrl, safeReturnTo } from './return-to';
+import { AFTER_AUTH_DEFAULT, afterAuthUrl, safeReturnTo, returnToOrApp } from './return-to';
 
 // ADR 0008 "Return-to-registration URL": `returnTo` is accepted only when it starts with `/`, does
 // not start with `//` or `/\`, and keeps a placeholder origin when parsed against it; anything else
@@ -59,6 +59,41 @@ describe('afterAuthUrl', () => {
     expect(afterAuthUrl('/leagues/x/register')).toBe('/leagues/x/register');
     expect(afterAuthUrl('//evil.example/x')).toBe('/');
     expect(afterAuthUrl('')).toBe('/');
+  });
+});
+
+// #63: a visitor who is already signed in and opens /sign-in or /sign-up goes to a valid returnTo,
+// and to /app when there is none or it is not valid. The same value is the returnTo that the links
+// between the two pages and the top bar's Sign in carry. After a sign-in or sign-up an unsafe
+// returnTo still lands on / (afterAuthUrl).
+describe('returnToOrApp', () => {
+  it.each([
+    [null, '/app'],
+    [undefined, '/app'],
+    ['/app', '/app'],
+    ['/', '/'],
+    ['/leagues/x/register?team=1#top', '/leagues/x/register?team=1#top'],
+    ['/a/../app', '/app'],
+  ])('sends returnTo %j to %j', (raw, expected) => {
+    expect(returnToOrApp(raw)).toBe(expected);
+  });
+
+  it.each([
+    '//evil.example/x',
+    '/\\evil.example',
+    'https://evil.example',
+    'javascript:alert(1)',
+    '',
+    'app',
+    '/..//evil.example/x',
+    '/%2e%2e//evil.example/x',
+    '/\t/evil.example',
+  ])('sends the unsafe returnTo %j to /app', (raw) => {
+    expect(returnToOrApp(raw)).toBe('/app');
+  });
+
+  it('keeps a returnTo that is valid but resolves to /', () => {
+    for (const raw of ['/.', '/./', '/..', '/a/..']) expect(returnToOrApp(raw)).toBe('/');
   });
 });
 

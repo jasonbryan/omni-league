@@ -22,6 +22,13 @@ export const routes: Routes = [
     loadComponent: () => import('./sign-up/sign-up-page').then((m) => m.SignUpPage),
   },
   {
+    // Sign-in (#63), a Client route. A signed-in visitor goes on to `returnTo`, else /app.
+    path: 'sign-in',
+    title: 'Sign in | Omni League',
+    canActivate: [redirectSignedIn],
+    loadComponent: () => import('./sign-in/sign-in-page').then((m) => m.SignInPage),
+  },
+  {
     // The signed-in app (#62): Client routes only (app.routes.server.ts), so the guards never run
     // on the server. Unknown /app paths get the not-found view in the client shell.
     path: 'app',

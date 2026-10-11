@@ -62,4 +62,18 @@ describe('Shell server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('y=1');
   });
+
+  // #63: every public page renders "Sign in" for everyone, whoever asks (no auth code runs on the
+  // server), and its returnTo is the path alone, for the same reason: the CDN may store the HTML.
+  it('renders the Sign in link with the path as returnTo and no query string', async () => {
+    const html = await render();
+    const body = new DOMParser().parseFromString(html, 'text/html').body;
+    // The router writes the server's links with the request's origin, as for the brand link.
+    const link = body.querySelector('header a[routerlink="/sign-in"]');
+    expect(link?.textContent.trim()).toBe('Sign in');
+    const href = new URL(link?.getAttribute('href') ?? '', 'http://localhost');
+    expect(`${href.pathname}${href.search}`).toBe('/sign-in?returnTo=%2Forganizations%2Ftest');
+    expect(body.querySelector('header a[routerlink="/app"]')).toBeNull();
+    expect(html).not.toContain('Account:');
+  });
 });
