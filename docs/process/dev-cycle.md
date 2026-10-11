@@ -172,7 +172,7 @@ The owner merges only:
 
 The owner may also tell the orchestrator in chat to merge one of these PRs; the orchestrator then merges it and comments the owner's words on it, quoted exactly, as the record of approval. Only the owner's own chat message counts; no agent's message is an approval.
 
-Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` and `APPROVE` where those phases apply (a docs-only PR has no tester `PASS`) and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
+Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` and `APPROVE` where those phases apply and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
 
 ## Reporting to the owner
 

@@ -8,8 +8,12 @@
 //   and typecheck when a TypeScript file changed. Skips the build-dependent steps: audit
 //   signatures, test, test:convex, build, e2e.
 // - `app`: anything else, an empty list, a path that is not plainly relative, a script the build,
-//   e2e, or deploy runs, a non-PR event, or a release PR into production. Runs every step.
+//   e2e, or deploy runs, the CI files themselves (see CI_FILES), a docs file a Convex or Vitest
+//   test reads, a non-PR event, or a release PR into production. Runs every step.
 //   Detection that fails, including failing to derive the script list, is `app`.
+//
+// Files under docs/ and design/ that a test reads are not docs: a change to one must run the test
+// that reads it. See APP_TEST_INPUTS and TOOLING_TEST_INPUTS.
 //
 // The scripts that count as app are derived, not listed: every `scripts/<file>` that package.json,
 // netlify.toml, angular.json, playwright.config.ts, or a file under e2e/ names, plus every file those
@@ -30,6 +34,32 @@ const CODE_FILE = /\.[cm]?[jt]s$/;
 const TYPESCRIPT_FILE = /\.[cm]?ts$/;
 const ROOT_MARKDOWN = /^[^/]+\.md$/;
 
+/**
+ * The files that define this classifier and the job. A change to one is `app`, so the full suite
+ * runs: the PR's own copy of the classifier decides its scope, and an edit to a build or e2e step
+ * must not merge without those steps running. This narrows #165's `.github/**` rule, for safety.
+ * The imports of the scripts listed here are followed by deriveAppScripts.
+ */
+const CI_FILES = ['.github/workflows/ci.yml', 'scripts/ci-scope.mjs'];
+
+/**
+ * Files under docs/ that `test:convex` or `test` reads (convex/lib/slugs.test.ts reads the
+ * glossary, convex/lib/previewOrigin.test.ts reads hosting.md). A change to one is `app`.
+ */
+export const APP_TEST_INPUTS = ['docs/glossary.md', 'docs/process/hosting.md'];
+
+/**
+ * Files under design/ that `test:scripts` reads (scripts/build-icons.test.mjs reads the icon
+ * mockup and design/icons/, scripts/global-styles.test.mjs and scripts/inline-mockup-kit.test.mjs
+ * read design/mockup-kit/mockup-kit.css). A change to one is `tooling`, so `test:scripts` runs.
+ * An entry ending in `/` is a directory.
+ */
+export const TOOLING_TEST_INPUTS = [
+  'design/icons/',
+  'design/mockup-kit/',
+  'design/mockups/80-app-icon.html',
+];
+
 /** A plain repo-relative path: no quotes (git quotes non-ASCII names), backslashes, or dot segments. */
 function isPlainPath(path) {
   return (
@@ -44,14 +74,17 @@ function isPlainPath(path) {
 const REFERENCE_FILES = ['package.json', 'netlify.toml', 'angular.json', 'playwright.config.ts'];
 const REFERENCE_DIRS = ['e2e'];
 const SCRIPT_EXTENSIONS = 'mjs|cjs|js|mts|cts|ts|sh';
-/** `scripts/name.mjs` in a command line or a path string. */
-const SCRIPT_PATH = new RegExp(`(?<![\\w./-])scripts/([\\w.-]+\\.(?:${SCRIPT_EXTENSIONS}))`, 'g');
-/** `'scripts', 'name.mjs'`, the form `path.join` takes. */
+/** A scripts/<name> path in a command line or a path string, with or without a `./` or `../` prefix. */
+const SCRIPT_PATH = new RegExp(
+  `(?<![\\w/-])(?:\\.{1,2}/)*scripts/([\\w.-]+\\.(?:${SCRIPT_EXTENSIONS}))`,
+  'g',
+);
+/** The directory and file name as two string arguments, the form path.join takes. */
 const SCRIPT_JOIN = new RegExp(
   `['"]scripts['"],\\s*['"]([\\w.-]+\\.(?:${SCRIPT_EXTENSIONS}))['"]`,
   'g',
 );
-/** `from './x.mjs'`, `import('./x.mjs')`, `require('./x.cjs')`. */
+/** A relative import: a from clause, a dynamic import call, or a require call. */
 const RELATIVE_IMPORT = /(?:from\s*|import\s*\(\s*|require\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g;
 
 /** @param {string} dir @returns {string[]} Every file below dir, as paths relative to dir's parent. */
@@ -77,11 +110,12 @@ export function deriveAppScripts(root) {
   ];
   const found = new Set();
   const queue = [];
+  // A referenced path counts whether or not it exists: deleting or renaming a script that the
+  // build still names is an app change. Only the files that exist are read.
   const add = (path) => {
-    if (found.has(path) || /\.test\.[cm]?[jt]s$/.test(path) || !existsSync(join(root, path)))
-      return;
+    if (found.has(path) || /\.test\.[cm]?[jt]s$/.test(path)) return;
     found.add(path);
-    queue.push(path);
+    if (existsSync(join(root, path))) queue.push(path);
   };
   for (const source of sources) {
     const text = readFileSync(join(root, source), 'utf8');
@@ -90,6 +124,8 @@ export function deriveAppScripts(root) {
   }
   if (found.size === 0)
     throw new Error('no script is referenced; the reference files are unreadable');
+  // The classifier itself, so what it imports counts as app too.
+  for (const file of CI_FILES) if (file.startsWith('scripts/')) add(file);
   // The scripts those scripts run or import, transitively.
   while (queue.length > 0) {
     const path = /** @type {string} */ (queue.pop());
@@ -125,8 +161,12 @@ export function classify(files, { event, base, appScripts = [] } = {}) {
     const inToolingDir = TOOLING_DIRS.some((dir) => file.startsWith(dir));
     const rootMarkdown = ROOT_MARKDOWN.test(file);
     if (!inDocDir && !inToolingDir && !rootMarkdown) return everything;
-    if (appOnly.has(file)) return everything;
-    if (inToolingDir || CODE_FILE.test(file)) docsOnly = false;
+    if (appOnly.has(file) || CI_FILES.includes(file) || APP_TEST_INPUTS.includes(file))
+      return everything;
+    const toolingInput = TOOLING_TEST_INPUTS.some((input) =>
+      input.endsWith('/') ? file.startsWith(input) : file === input,
+    );
+    if (inToolingDir || toolingInput || CODE_FILE.test(file)) docsOnly = false;
     if (TYPESCRIPT_FILE.test(file)) typecheck = true;
   }
   return { scope: docsOnly ? 'docs' : 'tooling', typecheck };

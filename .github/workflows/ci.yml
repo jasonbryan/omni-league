@@ -49,7 +49,8 @@ jobs:
       # tooling     also .github/ and scripts/ that the build, e2e and deploy do not run (derived by ci-scope.mjs from
       #             package.json, netlify.toml, angular.json, playwright.config.ts, e2e/): adds lint, test:scripts,
       #             actionlint (typecheck when a .ts file changed);
-      # app         anything else, workflow_dispatch, and release PRs into production: every step.
+      # app         anything else, ci.yml and ci-scope.mjs themselves, docs that test:convex reads, workflow_dispatch,
+      #             and release PRs into production: every step.
       # HEAD is the PR merge commit; its first parent is the base branch. --no-renames lists both paths of a
       # rename, so moving an app file into docs/ is an app change. Any failure to detect runs every check, and
       # the job still concludes success when the checks that did run pass, so the required check `ci` reports.

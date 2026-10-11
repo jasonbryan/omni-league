@@ -163,7 +163,7 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
   - **Deployer:** ships merged work to preview or production and verifies it with smoke tests ([deployer](../.claude/agents/deployer.md)).
   - **Designer:** builds a mockup when the owner asks for one ([designer](../.claude/agents/designer.md)).
   - **Implementer:** writes the tests and code on a branch and opens the draft PR ([implementer](../.claude/agents/implementer.md)).
-  - **Orchestrator:** the main session running `/dev-cycle`. It dispatches role agents, moves labels, and merges non-gated PRs, but does no role's work itself ([dev-cycle skill](../.claude/skills/dev-cycle/SKILL.md)).
+  - **Orchestrator:** the main session running `/dev-cycle`. It dispatches role agents, moves labels, and merges every PR outside the owner-merge scope, but does no role's work itself ([dev-cycle skill](../.claude/skills/dev-cycle/SKILL.md)).
   - **Plan reviewer:** challenges an issue before code is written and returns `Plan review: APPROVE` or `Plan review: CHANGES` ([plan-reviewer](../.claude/agents/plan-reviewer.md)).
   - **Planner:** turns a requirement into slice issues and writes ADRs ([planner](../.claude/agents/planner.md)).
   - **PR reviewer:** reviews the diff and returns `Review: APPROVE` or `Review: CHANGES` as a comment ([pr-reviewer](../.claude/agents/pr-reviewer.md)).
