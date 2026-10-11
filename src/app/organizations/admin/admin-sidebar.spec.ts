@@ -44,7 +44,7 @@ describe('AdminSidebar', () => {
     expect(text(nav.querySelector('p.text-xs'))).toBe('Admin area');
   });
 
-  it('lists Overview, Locations, and Leagues, then Public page and Your organizations, in two lists', async () => {
+  it('lists Overview, Locations, Leagues, and Staff, then Public page and Your organizations, in two lists', async () => {
     const { host } = await render(BASE);
     const lists = [...host.querySelectorAll('nav ul')];
     expect(lists).toHaveLength(2);
@@ -55,6 +55,7 @@ describe('AdminSidebar', () => {
       ['Overview', BASE],
       ['Locations', `${BASE}/locations`],
       ['Leagues', `${BASE}/leagues`],
+      ['Staff', `${BASE}/staff`],
     ]);
     expect(links(lists[1])).toEqual([
       ['Public page', `/organizations/${COASTAL.slug}`],
@@ -89,6 +90,14 @@ describe('AdminSidebar', () => {
     expect(classes(current[0])).toEqual(tokens(CURRENT));
   });
 
+  it('marks Staff current on the staff path, and ignores a query string and a fragment', async () => {
+    const { host } = await render(`${BASE}/staff?x=1#invite`);
+    const current = host.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(text(current[0])).toBe('Staff');
+    expect(classes(current[0])).toEqual(tokens(CURRENT));
+  });
+
   it('follows navigation without being re-created', async () => {
     const { fixture, router, host } = await render(BASE);
     await router.navigateByUrl(`${BASE}/locations`);
@@ -97,7 +106,7 @@ describe('AdminSidebar', () => {
   });
 
   it('marks nothing current on a path of its own organization it has no entry for', async () => {
-    const { host } = await render(`${BASE}/staff`);
+    const { host } = await render(`${BASE}/billing`);
     expect(host.querySelector('[aria-current]')).toBeNull();
   });
 

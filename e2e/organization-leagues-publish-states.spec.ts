@@ -183,7 +183,11 @@ for (const width of [375, 1280]) {
         await shot(page, '69t-publishing');
         expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
         await page.keyboard.press('Escape');
-        await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+        // Cancel is aria-disabled while the call is out, so the press is forced past Playwright's
+        // enabled check.
+        const cancel = dialog(page).getByRole('button', { name: 'Cancel' });
+        await expect(cancel).toHaveAttribute('aria-disabled', 'true');
+        await cancel.click({ force: true });
         await expect(dialog(page)).toBeVisible();
         // A second press while publishing sends nothing more.
         await dialog(page)
@@ -307,7 +311,8 @@ for (const width of [375, 1280]) {
     const { tenant, base } = await admin(page);
     const tile = page.getByRole('main').locator('dl > div').filter({ hasText: 'Leagues' });
     await page.goto(base);
-    await expect(tile.locator('dd').first()).toHaveText('1');
+    await expect(tile.locator('dd').first()).toHaveText('3');
+    await expect(tile.locator('dd').nth(1)).toHaveText('1 published, 2 drafts');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
 
     await page.goto(`${base}/leagues`);
@@ -326,8 +331,8 @@ for (const width of [375, 1280]) {
     await expect(result(page).getByRole('link', { name: 'View public page' })).toBeFocused();
 
     await page.goto(base);
-    await expect(tile.locator('dd').first()).toHaveText('2');
-    await expect(tile.locator('dd').nth(1)).toHaveText('On your public page');
+    await expect(tile.locator('dd').first()).toHaveText('3');
+    await expect(tile.locator('dd').nth(1)).toHaveText('2 published, 1 draft');
     expect(tenant.name).toContain('States Publish');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
   });

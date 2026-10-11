@@ -299,25 +299,33 @@ test.describe('Leagues: no locations', () => {
 });
 
 test.describe('Overview: the Leagues tile and the checklist', () => {
-  test('a new organization shows 0 and "None published yet" and the three steps; the sidebar lists Leagues', async ({
+  test('a new organization shows 0 and "None yet" and the four steps; the sidebar lists Leagues', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
     await page.goto(base);
     await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None published yet');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None yet');
     const setup = page.getByRole('region', { name: 'Get set up' });
     await expect(setup.getByRole('heading', { level: 3 })).toHaveText([
       'Add a location',
       'Create a league',
       'Publish the league',
+      'Invite staff (optional)',
     ]);
     await screenshot(page, testInfo, '66-overview-new');
     await expectAccessible(page);
     if ((page.viewportSize()?.width ?? 0) >= 1024) {
       await expect(
         page.getByRole('navigation', { name: `${tenant.name} admin` }).getByRole('link'),
-      ).toHaveText(['Overview', 'Locations', 'Leagues', 'Public page', 'Your organizations']);
+      ).toHaveText([
+        'Overview',
+        'Locations',
+        'Leagues',
+        'Staff',
+        'Public page',
+        'Your organizations',
+      ]);
     }
     await setup.getByRole('link', { name: 'Create a league' }).click();
     await expect(page).toHaveURL(`${baseURL}${base}/leagues`);
@@ -344,8 +352,8 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       ],
     });
     await page.goto(drafts.base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None published yet');
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('2 drafts');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
 
     const mixed = await seedTenant({
@@ -374,14 +382,16 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       role: 'orgAdmin',
     });
     await page.goto(`/app/organizations/${mixed.slug}`);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('On your public page');
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('4');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('2 published, 2 drafts');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
     await screenshot(page, testInfo, '66-overview-published');
     await expectAccessible(page);
   });
 
-  test('a league created on the Leagues page is a draft: the tile stays at 0', async ({ page }) => {
+  test('a league created on the Leagues page is a draft: the tile reads "1 draft" and the checklist stays', async ({
+    page,
+  }) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.goto(`${base}/leagues`);
     await createDraft(page, {
@@ -403,9 +413,9 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
         .getByRole('link', { name: 'Overview' })
         .click();
     }
-    // A draft is not on the public page, so the tile does not count it.
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None published yet');
+    // A draft is not on the public page: the tile counts it as a draft, and the list stays.
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 draft');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
   });
 });

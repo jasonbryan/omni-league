@@ -139,6 +139,7 @@ const FOOTER =
             type="button"
             data-slot="button"
             [class]="cancelClass"
+            [attr.aria-disabled]="publishing() ? 'true' : null"
             (click)="cancel()"
           >
             Cancel

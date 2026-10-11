@@ -51,7 +51,7 @@ export const routes: Routes = [
       {
         // The organization admin area (#65). The parent asks organizations.getAdminContext first
         // and renders a child only for an org admin; the no-access and not-found views take the
-        // place of every child. Overview is the area's own path. #67 adds Staff.
+        // place of every child. Overview is the area's own path.
         path: 'organizations/:slug',
         canActivate: [requireSignedIn],
         loadComponent: () => import('./organizations/admin/admin-area').then((m) => m.AdminArea),
@@ -71,6 +71,11 @@ export const routes: Routes = [
             path: 'leagues',
             loadComponent: () =>
               import('./organizations/admin/admin-leagues').then((m) => m.AdminLeagues),
+          },
+          {
+            path: 'staff',
+            loadComponent: () =>
+              import('./organizations/admin/admin-staff').then((m) => m.AdminStaff),
           },
         ],
       },

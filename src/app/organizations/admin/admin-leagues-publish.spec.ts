@@ -180,7 +180,7 @@ describe('AdminLeagues: publishing (#69)', () => {
   });
 
   describe('publishing (state 10)', () => {
-    it('Publish league calls leagues.publish with the league id; the button reads "Publishing…" and is aria-disabled, and the dialog stays open', async () => {
+    it('Publish league calls leagues.publish with the league id; the button reads "Publishing…", it and Cancel are aria-disabled, and the dialog stays open', async () => {
       await open();
       await pressPublish(1);
       dialogButton('Publish league').click();
@@ -191,6 +191,11 @@ describe('AdminLeagues: publishing (#69)', () => {
       expect(busy.getAttribute('aria-disabled')).toBe('true');
       expect(busy.hasAttribute('disabled')).toBe(false);
       expect(dialog()).not.toBeNull();
+      // Cancel reads as disabled too, and does nothing, while the call is out.
+      const cancel = dialogButton('Cancel');
+      expect(cancel.getAttribute('aria-disabled')).toBe('true');
+      expect(cancel.hasAttribute('disabled')).toBe(false);
+      cancel.click();
       // A second press, and Escape, do nothing while the call is out.
       busy.click();
       document.activeElement!.dispatchEvent(

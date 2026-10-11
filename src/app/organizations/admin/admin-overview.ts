@@ -1,7 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideArrowRight, lucideGlobe, lucideMapPin, lucideTrophy } from '@ng-icons/lucide';
+import {
+  lucideArrowRight,
+  lucideGlobe,
+  lucideMapPin,
+  lucideTrophy,
+  lucideUsers,
+} from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
 import { injectQuery, skipToken } from '../../core/data/convex';
 import { AdminContext, bindAdminTitle } from './admin-context';
@@ -12,16 +18,20 @@ import { OUTLINE_BUTTON } from './button-classes';
  * Overview, `/app/organizations/:slug` (#65, #66;
  * design/mockups/65-organization-admin-locations.html states 1 and 2): the organization, a "View
  * public page" link, a count tile for each section, and the "Get set up" list. The Locations tile
- * counts what `locations.listForAdmin` returns. The Leagues tile is the organization's counter of
- * published leagues (`leagues.publishedCount`, #172), not the league list, which stops at 200
- * rows; drafts are on the Leagues page. The list hides once any league is published, and is not
- * drawn while the counter loads, so an established organization never sees it flash. #67 adds the
- * Staff tile and step.
+ * counts what `locations.listForAdmin` returns. The Leagues tile splits "N published, M drafts":
+ * the published count is the organization's counter (`leagues.publishedCount`, #172), which holds
+ * past the 200 rows the league list stops at, and the drafts are counted from that list, so a
+ * draft past row 200 is not counted. The list hides once any league is published (by the counter),
+ * and is not drawn while the counter loads, so an established organization never sees it flash.
+ * The Staff tile (#67) counts `memberships.listForOrganization` and `invites.listPending`, the
+ * staff screen's own queries.
  */
 @Component({
   selector: 'app-admin-overview',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideArrowRight, lucideGlobe, lucideMapPin, lucideTrophy })],
+  providers: [
+    provideIcons({ lucideArrowRight, lucideGlobe, lucideMapPin, lucideTrophy, lucideUsers }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
@@ -70,6 +80,27 @@ import { OUTLINE_BUTTON } from './button-classes';
             >Leagues
           </dt>
           @if (leagueTile(); as tile) {
+            <dd class="mt-1 text-2xl font-semibold tabular-nums md:mt-2">{{ tile.count }}</dd>
+            <dd class="mt-0.5 text-sm text-muted-foreground">{{ tile.note }}</dd>
+          } @else {
+            <dd class="mt-1 md:mt-2">
+              <span
+                aria-hidden="true"
+                class="block h-8 w-8 rounded-md bg-muted motion-safe:animate-pulse"
+              ></span>
+            </dd>
+          }
+        </div>
+        <div
+          class="rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 px-3 py-3 md:px-4 md:py-4"
+        >
+          <dt class="flex items-center gap-2 text-xs font-medium text-muted-foreground md:text-sm">
+            <span
+              class="hidden size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground md:flex"
+              ><ng-icon name="lucideUsers" class="text-base" aria-hidden="true" /></span
+            >Staff
+          </dt>
+          @if (staffTile(); as tile) {
             <dd class="mt-1 text-2xl font-semibold tabular-nums md:mt-2">{{ tile.count }}</dd>
             <dd class="mt-0.5 text-sm text-muted-foreground">{{ tile.note }}</dd>
           } @else {
@@ -149,6 +180,27 @@ import { OUTLINE_BUTTON } from './button-classes';
                   </p>
                 </div>
               </li>
+              <li class="flex gap-3 px-4 py-3.5 md:px-5">
+                <span
+                  aria-hidden="true"
+                  class="flex size-7 shrink-0 items-center justify-center rounded-full border border-input text-sm font-semibold tabular-nums"
+                  >4</span
+                >
+                <div class="min-w-0 flex-1">
+                  <h3 class="font-medium">Invite staff (optional)</h3>
+                  <p class="mt-0.5 text-sm text-muted-foreground">
+                    Add another org admin, or a league organizer for the leagues you choose.
+                  </p>
+                  <a
+                    [routerLink]="staffPath()"
+                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4"
+                    >Invite staff<ng-icon
+                      name="lucideArrowRight"
+                      class="text-base"
+                      aria-hidden="true"
+                  /></a>
+                </div>
+              </li>
             </ol>
           </section>
         </div>
@@ -172,21 +224,71 @@ export class AdminOverview {
   );
   protected readonly locationsPath = computed(() => adminPath(this.context.slug(), 'locations'));
   protected readonly leaguesPath = computed(() => adminPath(this.context.slug(), 'leagues'));
+  protected readonly staffPath = computed(() => adminPath(this.context.slug(), 'staff'));
 
   private readonly published = injectQuery(api.leagues.publishedCount, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
-  /** The Leagues tile, or `null` while the counter loads: the leagues on the public page. */
+  private readonly leagues = injectQuery(api.leagues.listForAdmin, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  /**
+   * The Leagues tile, or `null` while either source loads: the published leagues (the counter)
+   * plus the drafts (counted from the admin list), split as "N published, M drafts" with a part
+   * that is 0 left out. A failed counter reads "–"; a failed list keeps the published count and
+   * says the drafts could not be loaded.
+   */
   protected readonly leagueTile = computed(() => {
     if (this.published.error()) return { count: '–', note: 'Could not be loaded' };
-    const count = this.published.value();
-    if (count === undefined) return null;
+    const published = this.published.value();
+    if (published === undefined) return null;
+    if (this.leagues.error()) {
+      return { count: String(published), note: 'Drafts could not be loaded' };
+    }
+    const rows = this.leagues.value();
+    if (rows === undefined) return null;
+    const drafts = rows.filter((row) => row.status !== 'published').length;
+    const parts = [
+      published > 0 ? `${published} published` : null,
+      drafts > 0 ? `${drafts} ${drafts === 1 ? 'draft' : 'drafts'}` : null,
+    ].filter((part) => part !== null);
     return {
-      count: String(count),
-      note: count > 0 ? 'On your public page' : 'None published yet',
+      count: String(published + drafts),
+      note: parts.length > 0 ? parts.join(', ') : 'None yet',
     };
+  });
+
+  private readonly members = injectQuery(api.memberships.listForOrganization, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  private readonly invites = injectQuery(api.invites.listPending, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
+  /**
+   * The Staff tile, or `null` while either list loads: the members and "N pending invites". A
+   * failed member list reads "–"; a failed pending list keeps the member count and says so.
+   */
+  protected readonly staffTile = computed(() => {
+    if (this.members.error()) return { count: '–', note: 'Could not be loaded' };
+    const members = this.members.value();
+    if (members === undefined) return null;
+    const count = String(members.length);
+    if (this.invites.error()) return { count, note: 'Pending invites could not be loaded' };
+    const invites = this.invites.value();
+    if (invites === undefined) return null;
+    const note =
+      invites.length === 0
+        ? 'No pending invites'
+        : `${invites.length} pending ${invites.length === 1 ? 'invite' : 'invites'}`;
+    return { count, note };
   });
 
   /**

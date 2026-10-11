@@ -205,7 +205,7 @@ test.describe('Leagues: publishing a draft (#69)', () => {
     await expect(status(page, 'Sunday Reverse Coed 4s')).toHaveText('Draft');
   });
 
-  test('publishing the first league moves the Overview tile to 1 and hides "Get set up"', async ({
+  test('publishing the first league moves the Overview tile from "1 draft" to "1 published" and hides "Get set up"', async ({
     page,
   }) => {
     const { tenant, base } = await orgAdmin(page, {
@@ -213,7 +213,8 @@ test.describe('Leagues: publishing a draft (#69)', () => {
       leagues: [LEAGUES[1]],
     });
     await page.goto(base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 draft');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
 
     // Through the navigation, so the page keeps its live connection.
@@ -237,7 +238,7 @@ test.describe('Leagues: publishing a draft (#69)', () => {
     await expect(result(page)).toBeFocused();
     await open('Overview');
     await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('On your public page');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 published');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
   });
 });
