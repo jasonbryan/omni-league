@@ -597,3 +597,78 @@ describe('tenantWrites league slugs and status (#66)', () => {
     });
   });
 });
+
+describe('tester probes (#66)', () => {
+  test('a name that slugifies to a reserved or unchoosable slug gets the next free suffix', async () => {
+    const s = await setup();
+    const slugs = await s.t.run(async (ctx) => {
+      const made: Record<string, string> = {};
+      for (const name of ['New', 'A', '5k', 'Gulf Coast Sport Social']) {
+        made[name] = (
+          await insertLeague(ctx, s.organizationA, {
+            name,
+            sport: 'soccer',
+            locations: ['Alpha Field'],
+          })
+        ).slug;
+      }
+      // A second "New" skips new and new-2.
+      made['New again'] = (
+        await insertLeague(ctx, s.organizationA, {
+          name: 'New',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+        })
+      ).slug;
+      return made;
+    });
+    expect(slugs).toEqual({
+      New: 'new-2',
+      A: 'a-2',
+      '5k': '5k-2',
+      'Gulf Coast Sport Social': 'gulf-coast-sport-social-2',
+      'New again': 'new-3',
+    });
+  });
+
+  test('listPublicLeagues pages by sport and by status with drafts interleaved', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      for (let n = 1; n <= 7; n++) {
+        await insertLeague(ctx, s.organizationA, {
+          name: `Soft ${n}`,
+          sport: 'softball',
+          locations: ['bravo Beach'],
+        });
+        // A draft softball league sorting just before each published one.
+        await insertLeague(ctx, s.organizationA, {
+          name: `Soft ${n} draft`,
+          sport: 'softball',
+          locations: ['bravo Beach'],
+          status: 'draft',
+        });
+      }
+    });
+    const list = (sport?: 'softball' | 'soccer', page = 1) =>
+      s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page, sport });
+    const names = (r: { rows: { name: string }[] }) => r.rows.map((row) => row.name);
+
+    const p1 = await list('softball', 1);
+    const p2 = await list('softball', 2);
+    expect(names(p1)).toEqual(['Soft 1', 'Soft 2', 'Soft 3', 'Soft 4', 'Soft 5']);
+    expect(names(p2)).toEqual(['Soft 6', 'Soft 7']);
+    expect([p1.total, p1.pageCount, p2.total, p2.pageCount]).toEqual([7, 2, 7, 2]);
+    expect(await list('soccer')).toMatchObject({ total: 1, pageCount: 1 });
+
+    const all = [...names(await list(undefined, 1)), ...names(await list(undefined, 2))];
+    expect(all).toEqual(['Coed 7v7', ...[1, 2, 3, 4, 5, 6, 7].map((n) => `Soft ${n}`)]);
+    expect((await list(undefined, 1)).total).toBe(8);
+    const page = await s.t.query(api.organizations.getPublicPage, { slug: 'org-a' });
+    expect(page).toMatchObject({ leagueCount: 8 });
+    const admin = await s.adminA.query(api.leagues.listForAdmin, {
+      organizationId: s.organizationA,
+    });
+    expect(admin).toHaveLength(15);
+    expect(admin.filter((row) => row.status === 'draft')).toHaveLength(7);
+  });
+});

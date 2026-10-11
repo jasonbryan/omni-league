@@ -733,3 +733,110 @@ describe('seed:demo backfill against a recount (#100, tester)', () => {
     ).toMatchObject({ leagueCount: 6, locationCount: 3, sportCount: 3 });
   });
 });
+
+describe('seed:demo and league status (#66, tester probes)', () => {
+  test('a legacy league without a status becomes published before the recount, a draft stays out of it, and a second run changes nothing', async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      // No counters at all (a deployment from before #100): the recount counts published leagues.
+      const bare = await ctx.db.insert('organizations', { name: 'Bare Club', slug: 'bare-club' });
+      const field = await ctx.db.insert('locations', {
+        organizationId: bare,
+        name: 'Bare Field',
+        address: '1 Road',
+      });
+      await ctx.db.insert('leagues', {
+        organizationId: bare,
+        name: 'Legacy One',
+        slug: 'legacy-one',
+        sport: 'soccer',
+        locationIds: [field],
+      });
+      await ctx.db.insert('leagues', {
+        organizationId: bare,
+        name: 'Legacy Draft',
+        slug: 'legacy-draft',
+        sport: 'softball',
+        locationIds: [field],
+        status: 'draft',
+      });
+      // Counters already set, as on a deployment after #100/#101 but before #66.
+      const counted = await ctx.db.insert('organizations', {
+        name: 'Counted Club',
+        slug: 'counted-club',
+        leagueCount: 1,
+        locationCount: 1,
+        sportLeagueCounts: { soccer: 1 },
+        sportLocationCounts: { soccer: 1 },
+      });
+      const cf = await ctx.db.insert('locations', {
+        organizationId: counted,
+        name: 'Counted Field',
+        address: '2 Road',
+        sortName: 'counted field',
+      });
+      await ctx.db.insert('leagues', {
+        organizationId: counted,
+        name: 'Counted League',
+        slug: 'counted-league',
+        sport: 'soccer',
+        locationIds: [cf],
+        sortName: 'counted league',
+      });
+      await ctx.db.insert('sportLocations', {
+        organizationId: counted,
+        sport: 'soccer',
+        locationId: cf,
+        leagueCount: 1,
+      });
+    });
+
+    const first = await t.mutation(internal.seed.demo, {});
+    expect(first.backfilled.leagues).toBe(3);
+    const statuses = await t.run(async (ctx) =>
+      Object.fromEntries((await ctx.db.query('leagues').collect()).map((l) => [l.slug, l.status])),
+    );
+    expect(statuses).toMatchObject({
+      'legacy-one': 'published',
+      'legacy-draft': 'draft',
+      'counted-league': 'published',
+    });
+    const bare = await t.query(api.organizations.getPublicPage, { slug: 'bare-club' });
+    expect(bare).toMatchObject({ leagueCount: 1, sportCount: 1 });
+    expect(bare?.sports.map((sport) => sport.key)).toEqual(['soccer']);
+    expect(
+      await t.query(api.organizations.listPublicLeagues, { slug: 'bare-club', page: 1 }),
+    ).toMatchObject({
+      rows: [{ name: 'Legacy One' }],
+      total: 1,
+    });
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'counted-club' })).toMatchObject({
+      leagueCount: 1,
+    });
+    await expectCountersMatchRecountPublished(t);
+
+    const before = await snapshot(t);
+    const rowsBefore = await t.run((ctx) => ctx.db.query('sportLocations').collect());
+    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+      ...NONE,
+      backfilled: NONE,
+    });
+    expect(await snapshot(t)).toEqual(before);
+    expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
+  });
+});
+
+/** The organization counters equal a recount of the published leagues only. */
+async function expectCountersMatchRecountPublished(t: T) {
+  await t.run(async (ctx) => {
+    for (const organization of await ctx.db.query('organizations').collect()) {
+      const published = (await ctx.db.query('leagues').collect()).filter(
+        (l) => l.organizationId === organization._id && l.status === 'published',
+      );
+      expect(organization.leagueCount, organization.slug).toBe(published.length);
+      const perSport: Record<string, number> = {};
+      for (const l of published) perSport[l.sport] = (perSport[l.sport] ?? 0) + 1;
+      expect(organization.sportLeagueCounts ?? {}, organization.slug).toEqual(perSport);
+    }
+  });
+}
