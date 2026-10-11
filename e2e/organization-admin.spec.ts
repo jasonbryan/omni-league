@@ -123,6 +123,7 @@ test.describe('the admin area: entry and navigation', () => {
         'Overview',
         'Locations',
         'Leagues',
+        'Staff',
         'Public page',
         'Your organizations',
       ]);
@@ -187,6 +188,7 @@ test.describe('Overview', () => {
       'Add a location',
       'Create a league',
       'Publish the league',
+      'Invite staff (optional)',
     ]);
     await expect(main(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
       'href',

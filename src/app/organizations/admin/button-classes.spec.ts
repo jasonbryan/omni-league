@@ -1,5 +1,5 @@
 import { buttonVariants } from '../../ui/button/hlm-button';
-import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -9,5 +9,8 @@ describe('the admin area button classes', () => {
       tokens(buttonVariants({ variant: 'outline', size: 'lg' })),
     );
     expect(tokens(PRIMARY_BUTTON)).toEqual(tokens(buttonVariants({ size: 'lg' })));
+    expect(tokens(DESTRUCTIVE_BUTTON)).toEqual(
+      tokens(buttonVariants({ variant: 'destructive', size: 'lg' })),
+    );
   });
 });

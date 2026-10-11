@@ -13,3 +13,6 @@ export const OUTLINE_BUTTON = `${BASE} border-border bg-background hover:bg-mute
 
 /** `hlmBtn` (the default variant). */
 export const PRIMARY_BUTTON = `${BASE} bg-primary text-primary-foreground [a]:hover:bg-primary/90 ${SIZE}`;
+
+/** `hlmBtn variant="destructive"`: Revoke on the staff screen (#67). */
+export const DESTRUCTIVE_BUTTON = `${BASE} bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30 ${SIZE}`;

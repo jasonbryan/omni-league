@@ -6,6 +6,8 @@ import { type GenericId, v } from 'convex/values';
 import { components, internal } from './_generated/api';
 import { internalAction, internalMutation, internalQuery } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
+import { normaliseInviteEmail } from './lib/inviteInput';
+import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 import {
@@ -206,6 +208,55 @@ export const addMembership = internalMutation({
       .unique();
     if (existing) throw new Error('This user already has a membership in the organization');
     await insertMembership(ctx, user._id, organization._id, role);
+    return null;
+  },
+});
+
+/**
+ * Adds a pending staff invite to the organization with this slug (#67 e2e), written straight to
+ * the table so a test can have one whose `expiresAt` has passed, or two pending ones at once,
+ * without waiting 14 days or going through the form. A `leagueOrganizer` invite names its leagues
+ * of that organization. The token hash is random: no token opens it. Throws, writing nothing, for
+ * an unknown organization or league.
+ */
+export const addInvite = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    email: v.string(),
+    role: roleValidator,
+    leagueNames: v.optional(v.array(v.string())),
+    expiresAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, email, role, leagueNames = [], expiresAt }) => {
+    assertTestDeployment();
+    const organization = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', organizationSlug))
+      .unique();
+    if (!organization) {
+      throw new Error(`No organization has the slug ${JSON.stringify(organizationSlug)}`);
+    }
+    const leagueIds = [];
+    for (const name of leagueNames) {
+      const league = await ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_name', (q) =>
+          q.eq('organizationId', organization._id).eq('name', name),
+        )
+        .first();
+      if (!league) throw new Error(`No league named ${JSON.stringify(name)}`);
+      leagueIds.push(league._id);
+    }
+    await ctx.db.insert('invites', {
+      organizationId: organization._id,
+      email: normaliseInviteEmail(email),
+      role,
+      leagueIds,
+      tokenHash: await hashInviteToken(generateInviteToken()),
+      expiresAt,
+      status: 'pending',
+    });
     return null;
   },
 });

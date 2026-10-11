@@ -7,15 +7,23 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideCircleCheck, lucideWifiOff } from '@ng-icons/lucide';
+import {
+  lucideCircleAlert,
+  lucideCircleCheck,
+  lucideEyeOff,
+  lucideWifiOff,
+} from '@ng-icons/lucide';
 
 const BASE =
   "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
 const NEUTRAL = `${BASE} bg-card text-card-foreground`;
 const DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90`;
 
-/** What an alert says: a success message, a failure, or the offline refusal. */
-export type AdminAlertKind = 'success' | 'error' | 'offline';
+/**
+ * What an alert says: a success message, a failure, the offline refusal, or a `note` (#67): fixed
+ * information in a `role="note"` box that announces nothing.
+ */
+export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note';
 
 /**
  * The admin forms' message box (design/mockups/65-organization-admin-locations.html, states 11,
@@ -27,17 +35,11 @@ export type AdminAlertKind = 'success' | 'error' | 'offline';
 @Component({
   selector: 'app-admin-alert',
   imports: [NgIcon],
-  providers: [provideIcons({ lucideCircleAlert, lucideCircleCheck, lucideWifiOff })],
+  providers: [provideIcons({ lucideCircleAlert, lucideCircleCheck, lucideEyeOff, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
-    <div
-      #box
-      data-slot="alert"
-      [attr.role]="kind() === 'success' ? 'status' : 'alert'"
-      tabindex="-1"
-      [class]="classes()"
-    >
+    <div #box data-slot="alert" [attr.role]="role()" tabindex="-1" [class]="classes()">
       <ng-icon [name]="icon()" aria-hidden="true" />
       <div
         data-slot="alert-title"
@@ -63,12 +65,19 @@ export class AdminAlert {
 
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
 
-  protected readonly classes = computed(() => (this.kind() === 'success' ? NEUTRAL : DESTRUCTIVE));
+  protected readonly role = computed(() => {
+    const kind = this.kind();
+    return kind === 'success' ? 'status' : kind === 'note' ? 'note' : 'alert';
+  });
+  protected readonly classes = computed(() =>
+    this.kind() === 'success' || this.kind() === 'note' ? NEUTRAL : DESTRUCTIVE,
+  );
   protected readonly icon = computed(() => {
     const icons = {
       success: 'lucideCircleCheck',
       error: 'lucideCircleAlert',
       offline: 'lucideWifiOff',
+      note: 'lucideEyeOff',
     } as const;
     return icons[this.kind()];
   });
