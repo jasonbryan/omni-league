@@ -7,7 +7,12 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideCircleCheck, lucideInfo, lucideWifiOff } from '@ng-icons/lucide';
+import {
+  lucideCircleAlert,
+  lucideCircleCheck,
+  lucideEyeOff,
+  lucideWifiOff,
+} from '@ng-icons/lucide';
 
 const BASE =
   "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
@@ -30,7 +35,7 @@ export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note';
 @Component({
   selector: 'app-admin-alert',
   imports: [NgIcon],
-  providers: [provideIcons({ lucideCircleAlert, lucideCircleCheck, lucideInfo, lucideWifiOff })],
+  providers: [provideIcons({ lucideCircleAlert, lucideCircleCheck, lucideEyeOff, lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -72,7 +77,7 @@ export class AdminAlert {
       success: 'lucideCircleCheck',
       error: 'lucideCircleAlert',
       offline: 'lucideWifiOff',
-      note: 'lucideInfo',
+      note: 'lucideEyeOff',
     } as const;
     return icons[this.kind()];
   });
