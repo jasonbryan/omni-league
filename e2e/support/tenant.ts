@@ -13,7 +13,8 @@ export interface TenantSeed {
   /** Display name before the unique suffix; default "E2E Org". */
   name?: string;
   locations?: { name: string; address: string }[];
-  leagues?: { name: string; sport: Sport; locations: string[] }[];
+  /** A league is `published` unless the seed says `draft` (#66). */
+  leagues?: { name: string; sport: Sport; locations: string[]; status?: 'draft' | 'published' }[];
 }
 
 export interface Tenant {
@@ -24,7 +25,7 @@ export interface Tenant {
   path: string;
   /** Sorted by name, as the page lists them. */
   locations: { name: string; address: string }[];
-  leagues: { name: string; sport: Sport; locations: string[] }[];
+  leagues: { name: string; sport: Sport; locations: string[]; status?: 'draft' | 'published' }[];
 }
 
 const byName = <T extends { name: string }>(items: T[]): T[] =>

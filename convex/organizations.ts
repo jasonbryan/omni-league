@@ -73,8 +73,8 @@ function pageRows<D>(read: D[], page: number): D[] {
  * and the server render calls it anonymously. It reads no identity, so every caller gets the same
  * result, and returns only the fields of `publicPageValidator` (`lib/publicPage.ts`). Every count
  * is one of the organization's counters (a counter not yet backfilled reads as 0), so the query
- * reads one document. #66 adds the draft filter: leagues stay off this page until they are
- * published.
+ * reads one document. Only published leagues are counted (#66): a draft changes no counter, so it
+ * stays off this page until it is published.
  */
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (ADR 0002): an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
@@ -140,7 +140,9 @@ export const listPublicLocations = query({
 
 /**
  * One page of the leagues of the organization with this slug, sorted by name ignoring case, with
- * each league's sport display name and location names (#100). Pages, totals, and access are as for
+ * each league's sport display name and location names (#100). Only published leagues are listed
+ * and counted (#66): the indexes include the status and the query reads `published`, so drafts never take a place in
+ * the 200-row reach. Pages, totals, and access are as for
  * `listPublicLocations`. With `sport` (#101) it lists only that sport's leagues, from the sport
  * index, and its total is the organization's `sportLeagueCounts` for the sport (0 when it has no
  * league of that sport: an empty page 1). The page size, the page cap, and the effective-page
@@ -166,13 +168,13 @@ export const listPublicLeagues = query({
       sport === undefined
         ? ctx.db
             .query('leagues')
-            .withIndex('by_organizationId_and_sortName', (q) =>
-              q.eq('organizationId', organization._id),
+            .withIndex('by_organizationId_and_status_and_sortName', (q) =>
+              q.eq('organizationId', organization._id).eq('status', 'published'),
             )
         : ctx.db
             .query('leagues')
-            .withIndex('by_organizationId_and_sport_and_sortName', (q) =>
-              q.eq('organizationId', organization._id).eq('sport', sport),
+            .withIndex('by_organizationId_and_sport_and_status_and_sortName', (q) =>
+              q.eq('organizationId', organization._id).eq('sport', sport).eq('status', 'published'),
             );
     const read = await leagues.take(page * PUBLIC_LIST_PAGE_SIZE);
     const rows = [];

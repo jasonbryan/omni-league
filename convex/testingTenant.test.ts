@@ -365,3 +365,53 @@ describe('sport counters and sportLocations (#101)', () => {
     expect(await t.run((ctx) => ctx.db.query('organizations').collect())).toEqual([]);
   }, 30_000);
 });
+
+describe('the optional seed status (#66, tester probes)', () => {
+  test('a seeded draft is neither counted nor listed publicly, and a seed without status is published', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, {
+      ...TENANT,
+      leagues: [
+        ...TENANT.leagues,
+        {
+          name: 'League Draft',
+          sport: 'beachVolleyball' as const,
+          locations: ['Field One'],
+          status: 'draft' as const,
+        },
+      ],
+    });
+    const list = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'e2e-org-a1b2',
+      page: 1,
+    });
+    expect(list.rows.map((league) => league.name)).toEqual(['League A', 'League B']);
+    expect(await t.query(api.organizations.getPublicPage, { slug: 'e2e-org-a1b2' })).toMatchObject({
+      leagueCount: 2,
+      sportCount: 2,
+    });
+    const statuses = await t.run(async (ctx) =>
+      (await ctx.db.query('leagues').collect()).map((l) => [l.name, l.status]).sort(),
+    );
+    expect(statuses).toEqual([
+      ['League A', 'published'],
+      ['League B', 'published'],
+      ['League Draft', 'draft'],
+    ]);
+  });
+
+  test('the status field is refused unless IS_TEST is true, like the rest of the seed', async () => {
+    vi.stubEnv('IS_TEST', undefined);
+    const t = setup();
+    await expect(
+      t.mutation(internal.testing.addLeague, {
+        organizationSlug: 'nowhere',
+        name: 'X',
+        sport: 'soccer',
+        locations: [],
+        status: 'draft',
+      }),
+    ).rejects.toThrow(/IS_TEST/);
+  });
+});

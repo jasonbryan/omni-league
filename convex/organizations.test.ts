@@ -976,7 +976,7 @@ describe('organizations:listPublicLeagues with a sport (#101)', () => {
 
 describe('organizations module source (#101)', () => {
   test('the sport list reads through the sport index with the same offset read', () => {
-    expect(organizationsSource).toMatch(/by_organizationId_and_sport_and_sortName/);
+    expect(organizationsSource).toMatch(/by_organizationId_and_sport_and_status_and_sortName/);
     expect(organizationsSource.match(/\.take\(page \* PUBLIC_LIST_PAGE_SIZE\)/g)).toHaveLength(2);
   });
 });
