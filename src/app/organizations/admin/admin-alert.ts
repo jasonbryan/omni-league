@@ -22,7 +22,8 @@ export type AdminAlertKind = 'success' | 'error' | 'offline';
  * 12, and 16; design/mockups/88-offline-note.html state 3): helm's alert in the mockup's classes.
  * A success is a `role="status"` region and a failure is a `role="alert"`. The box takes focus
  * through `focus()` (`tabindex="-1"`), for a failure that moves the user's attention to it. The
- * caller sets the margin with a class on the `app-admin-alert` element.
+ * caller sets the margin with a class on the `app-admin-alert` element. Content inside the element
+ * (a link) follows the description, inside it, so an alert with content needs a description.
  */
 @Component({
   selector: 'app-admin-alert',
@@ -51,6 +52,7 @@ export type AdminAlertKind = 'success' | 'error' | 'offline';
           class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
         >
           {{ description }}
+          <ng-content />
         </div>
       }
     </div>

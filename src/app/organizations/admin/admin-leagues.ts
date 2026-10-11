@@ -2,8 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  afterNextRender,
   computed,
   inject,
+  Injector,
+  signal,
   viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -11,6 +14,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCircleCheck,
   lucideCircleDashed,
+  lucideGlobe,
   lucideMapPin,
   lucideMapPinOff,
   lucidePlus,
@@ -25,23 +29,32 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from './field-classes';
 import { LeagueCreateForm } from './league-create-form';
+import {
+  PublishLeagueDialog,
+  type PublishOutcome,
+  type PublishTarget,
+} from './publish-league-dialog';
 
 /**
- * Leagues, `/app/organizations/:slug/leagues` (#66; design/mockups/66-69-organization-
- * leagues.html states 1 to 8, without #69's Publish buttons): the organization's leagues from
+ * Leagues, `/app/organizations/:slug/leagues` (#66, #69; design/mockups/66-69-organization-
+ * leagues.html): the organization's leagues from
  * `leagues.listForAdmin` (live, sorted by name, drafts included), each with its status, sport, and
  * locations, and the create form beside the list from 1024px and after it below. Below 1024px the
  * header's "Create a league" link jumps to the form and puts focus on its first field. An
  * organization with no locations sees "Add a location first" in place of the form, because a
- * league needs at least one.
+ * league needs at least one. Each Draft row has a Publish button (#69) that opens
+ * `PublishLeagueDialog`; once the league is published a status above the list says so, with a
+ * link to the public page, and takes focus, because the button that had it is gone. The page
+ * behind the dialog is inert while it is open.
  */
 @Component({
   selector: 'app-admin-leagues',
-  imports: [AdminAlert, LeagueCreateForm, NgIcon, RouterLink],
+  imports: [AdminAlert, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
   providers: [
     provideIcons({
       lucideCircleCheck,
       lucideCircleDashed,
+      lucideGlobe,
       lucideMapPin,
       lucideMapPinOff,
       lucidePlus,
@@ -49,7 +62,10 @@ import { LeagueCreateForm } from './league-create-form';
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
+  host: {
+    class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8',
+    '[attr.inert]': 'publishOpen() ? "" : null',
+  },
   template: `
     @if (organization(); as organization) {
       <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
@@ -80,6 +96,17 @@ import { LeagueCreateForm } from './league-create-form';
           >
             <h2 id="leagues-heading" class="font-semibold">Leagues</h2>
           </div>
+          @if (published(); as published) {
+            <div class="border-b border-border px-4 py-3 md:px-5">
+              <app-admin-alert
+                #publishedNotice
+                kind="success"
+                [title]="published.name + ' is published.'"
+                description="It’s on your public page now."
+                ><a [routerLink]="publicPath()">View public page</a></app-admin-alert
+              >
+            </div>
+          }
           @if (failed()) {
             <div class="px-4 py-4 md:px-5">
               <app-admin-alert
@@ -130,6 +157,22 @@ import { LeagueCreateForm } from './league-create-form';
                         >
                       </p>
                     </div>
+                    @if (row.status !== 'published') {
+                      <button
+                        type="button"
+                        data-slot="button"
+                        aria-haspopup="dialog"
+                        [attr.data-league-id]="row.leagueId"
+                        [class]="outlineButton"
+                        (click)="publish(row)"
+                      >
+                        <ng-icon
+                          name="lucideGlobe"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />Publish<span class="sr-only"> {{ row.name }}</span>
+                      </button>
+                    }
                   </li>
                 }
               </ul>
@@ -214,11 +257,14 @@ import { LeagueCreateForm } from './league-create-form';
           }
         </section>
       </div>
+      <app-publish-league-dialog (dismissed)="publishDismissed($event)" />
     }
   `,
 })
 export class AdminLeagues {
   private readonly context = inject(AdminContext);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly organization = this.context.organization;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
@@ -248,9 +294,44 @@ export class AdminLeagues {
   protected readonly locationsPath = computed(() => adminPath(this.context.slug(), 'locations'));
 
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
+  private readonly publishDialog = viewChild(PublishLeagueDialog);
+  private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
+
+  /** The league just published, for the status above the list; cleared by the next dialog. */
+  protected readonly published = signal<PublishTarget | null>(null);
+  protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
+  protected readonly publicPath = computed(
+    () => `/organizations/${encodeURIComponent(this.context.slug())}`,
+  );
 
   constructor() {
     bindAdminTitle('Leagues');
+  }
+
+  /** The row's Publish button: asks to confirm, and clears the last result. */
+  protected publish(row: PublishTarget): void {
+    this.published.set(null);
+    this.publishDialog()?.open({ leagueId: row.leagueId, name: row.name });
+  }
+
+  /**
+   * The dialog has left the page and the page is no longer inert. A published league moves focus
+   * to the status, because the button that had it is gone; a dialog that was cancelled puts focus
+   * back on that row's Publish button.
+   */
+  protected publishDismissed(outcome: PublishOutcome): void {
+    if (outcome.published) {
+      this.published.set({ leagueId: outcome.leagueId, name: outcome.name });
+      afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLElement>(`button[data-league-id="${outcome.leagueId}"]`)
+          ?.focus(),
+      { injector: this.injector },
+    );
   }
 
   /** A plain click on "Create a league" (phones): scroll to the form and focus its first field. */

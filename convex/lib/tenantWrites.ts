@@ -1,5 +1,6 @@
 // Writers for an organization with its locations and leagues: `organizations.create` (#64),
-// `locations.create` and `locations.update` (#65), and the seeds, `seed:demo` (previews and
+// `locations.create` and `locations.update` (#65), `leagues.create` (#66) and `leagues.publish`
+// (#69), and the seeds, `seed:demo` (previews and
 // staging) and the IS_TEST tenant seeds in `convex/testing.ts`. These are the only writers of these
 // tables.
 //
@@ -10,7 +11,7 @@
 // elsewhere makes the public page's totals, sports, and page count disagree with its rows. Only
 // published leagues count (#66): `insertLeague` counts a published league, and a draft
 // (`insertDraftLeague`, `leagues.create`) changes no counter and writes no `sportLocations` row.
-// #69's `publish` counts the league once. The first writer that unpublishes or deletes a league, or
+// `publishLeague` (#69) counts a draft once, when it becomes `published`. The first writer that unpublishes or deletes a league, or
 // changes its locations, decrements what `insertLeague` incremented: `leagueCount`,
 // `sportLeagueCounts[sport]`, and the `sportLocations` row of each location the league leaves,
 // deleting that row at 0 and decrementing `sportLocationCounts[sport]`.
@@ -236,7 +237,7 @@ export interface NewLeague {
 /**
  * Inserts a `draft` league (#66): the writer of `leagues.create`. A draft is on no public list and
  * in no counter, so it adds nothing to `leagueCount`, `sportLeagueCounts`, `sportLocations`, or
- * `sportLocationCounts`; #69's `publish` does. The caller has checked access, trimmed the name,
+ * `sportLocationCounts`; `publishLeague` (#69) does. The caller has checked access, trimmed the name,
  * validated the slug and `leagueSlugTaken`, and checked that every location belongs to the
  * organization.
  */
@@ -246,6 +247,21 @@ export async function insertDraftLeague(
   league: NewLeague,
 ): Promise<Id<'leagues'>> {
   return insertLeagueRow(ctx, organizationId, league, 'draft');
+}
+
+/**
+ * Publishes a draft league (#69): sets its `status` to `published` and counts it once, as
+ * `insertLeague` counts a published league: adds 1 to the organization's `leagueCount` and
+ * `sportLeagueCounts[sport]`, and to the `sportLocations` row of each distinct location (a new
+ * row starts at 1 and adds 1 to `sportLocationCounts[sport]`). A league that is already
+ * `published` is left alone and changes no counter or row. A league stored without a status
+ * (written before #66) counts as a draft. The caller has checked access (`requireLeagueOrganizer`).
+ */
+export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
+  if (league.status === 'published') return;
+  await ctx.db.patch('leagues', league._id, { status: 'published' });
+  await increment(ctx, league.organizationId, 'leagueCount');
+  await countLeagueInSport(ctx, league.organizationId, league.sport, league.locationIds);
 }
 
 async function insertLeagueRow(

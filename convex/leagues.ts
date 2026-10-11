@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
-import { requireOrgAdmin } from './lib/access';
+import { requireLeagueOrganizer, requireOrgAdmin } from './lib/access';
 import {
   checkLeagueLocations,
   checkLeagueName,
@@ -11,7 +11,7 @@ import {
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { sportName, sportValidator } from './lib/sports';
-import { insertDraftLeague, leagueSlugTaken } from './lib/tenantWrites';
+import { insertDraftLeague, leagueSlugTaken, publishLeague } from './lib/tenantWrites';
 
 /**
  * Leagues `listForAdmin` returns at most. The admin list is one page with no paging (#66), and the
@@ -87,7 +87,7 @@ export const listForAdmin = query({
  * a refusal about a field is a `ConvexError` whose data is the `LeagueInputError`, and nothing is
  * written. A location of another organization is refused with `Not allowed`, as the form never
  * offers one. The league is inserted through `tenantWrites` as a draft, which changes no counter
- * and writes no `sportLocations` row; #69 publishes it.
+ * and writes no `sportLocations` row; `publish` (#69) counts it.
  */
 export const create = mutation({
   args: {
@@ -125,5 +125,41 @@ export const create = mutation({
       locationIds,
     });
     return { leagueId };
+  },
+});
+
+/**
+ * Publishes a draft league (#69): it appears on the organization's public pages and is counted in
+ * `leagueCount`, `sportLeagueCounts`, and the `sportLocations` rows, once, through `tenantWrites`
+ * (`publishLeague`). Org admins of the league's organization and the league organizers assigned to
+ * the league may publish it (`requireLeagueOrganizer`, which takes the organization from the
+ * stored league and refuses an unknown league with `Not allowed`). Publishing a published league
+ * succeeds and changes nothing. There is no unpublish.
+ */
+export const publish = mutation({
+  args: { leagueId: v.id('leagues') },
+  returns: v.null(),
+  handler: async (ctx, { leagueId }) => {
+    await requireLeagueOrganizer(ctx, leagueId);
+    const league = await ctx.db.get('leagues', leagueId);
+    if (!league) throw new Error('Not allowed');
+    await publishLeague(ctx, league);
+    return null;
+  },
+});
+
+/**
+ * How many leagues the organization has published (#69, #172): its `leagueCount` counter, which
+ * `tenantWrites` keeps, so the number holds past `ADMIN_LEAGUES_LIMIT` and moves on its own when a
+ * league is published. A counter not set yet (a row written before #100) reads 0. Org admins of the
+ * organization only (`requireOrgAdmin`). The Overview's Leagues tile and "Get set up" list read it.
+ */
+export const publishedCount = query({
+  args: { organizationId: v.id('organizations') },
+  returns: v.number(),
+  handler: async (ctx, { organizationId }) => {
+    await requireOrgAdmin(ctx, organizationId);
+    const organization = await ctx.db.get('organizations', organizationId);
+    return organization?.leagueCount ?? 0;
   },
 });

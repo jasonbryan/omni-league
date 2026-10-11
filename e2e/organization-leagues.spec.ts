@@ -1,6 +1,7 @@
 // The Leagues page of the admin area and the Overview's league tile (#66):
 // `/app/organizations/:slug/leagues`, a Client route behind sign-in (approved design
-// design/mockups/66-69-organization-leagues.html, without the Publish buttons). Every test signs
+// design/mockups/66-69-organization-leagues.html; publishing is in organization-leagues-
+// publish.spec.ts). Every test signs
 // up its own user through the real form, then gives it a role in a seeded organization
 // (`testing:addMembership`), so the tests need the local Convex backend and are skipped with
 // E2E_BASE_URL set.
@@ -136,7 +137,10 @@ test.describe('Leagues: creating a draft', () => {
     await expect(leagueRows(page).nth(1)).toContainText(
       'Redfish Flats Fields, Pelican Shoals Sand Courts',
     );
-    await expect(page.getByRole('button', { name: /^Publish/ })).toHaveCount(0);
+    await expect(leagueRows(page).nth(0).getByRole('button')).toHaveCount(0);
+    await expect(leagueRows(page).nth(1).getByRole('button')).toHaveText(
+      'Publish Wednesday Coed Slow-Pitch',
+    );
     await screenshot(page, testInfo, '66-leagues-populated');
     await expectAccessible(page);
   });
@@ -295,13 +299,13 @@ test.describe('Leagues: no locations', () => {
 });
 
 test.describe('Overview: the Leagues tile and the checklist', () => {
-  test('a new organization shows 0 and "None yet" and the three steps; the sidebar lists Leagues', async ({
+  test('a new organization shows 0 and "None published yet" and the three steps; the sidebar lists Leagues', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
     await page.goto(base);
     await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None yet');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None published yet');
     const setup = page.getByRole('region', { name: 'Get set up' });
     await expect(setup.getByRole('heading', { level: 3 })).toHaveText([
       'Add a location',
@@ -319,7 +323,7 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
     await expect(page).toHaveURL(`${baseURL}${base}/leagues`);
   });
 
-  test('with only drafts the tile counts them and the list stays; with a published league the list is hidden', async ({
+  test('with only drafts the tile reads 0 and the list stays; with published leagues the tile counts them and the list is hidden', async ({
     page,
   }, testInfo) => {
     const drafts = await memberOf(page, 'orgAdmin', {
@@ -340,8 +344,8 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       ],
     });
     await page.goto(drafts.base);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('2 drafts');
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None published yet');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
 
     const mixed = await seedTenant({
@@ -370,14 +374,14 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       role: 'orgAdmin',
     });
     await page.goto(`/app/organizations/${mixed.slug}`);
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('4');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('2 published, 2 drafts');
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('On your public page');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
     await screenshot(page, testInfo, '66-overview-published');
     await expectAccessible(page);
   });
 
-  test('the tile follows a league created on the Leagues page', async ({ page }) => {
+  test('a league created on the Leagues page is a draft: the tile stays at 0', async ({ page }) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.goto(`${base}/leagues`);
     await createDraft(page, {
@@ -399,8 +403,10 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
         .getByRole('link', { name: 'Overview' })
         .click();
     }
-    await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
-    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 draft');
+    // A draft is not on the public page, so the tile does not count it.
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('0');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('None published yet');
+    await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
   });
 });
 
