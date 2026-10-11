@@ -33,6 +33,33 @@ test.describe('axe helper checks', () => {
     expect(page.viewportSize()).toEqual(before);
   });
 
+  // `checkReflow` waits for running animations to finish, so a control that is still transitioning
+  // two frames after the resize is measured settled (#63). The waiting must not hide an overflow.
+  const slowShrink =
+    '<style>.t{width:600px;height:10px;transition:width 600ms linear}' +
+    '@media (max-width:400px){.t{width:100px}}</style>';
+
+  test('1.4.10: a transition that settles inside 320px passes, measured after it ends', async ({
+    page,
+  }) => {
+    await page.setContent(fixture('<h1>Shrinking</h1><div class="t"></div>', slowShrink));
+    const reflow = await checkReflow(page);
+    expect(reflow).toMatchObject({ width: 320, clientWidth: 320, passed: true });
+  });
+
+  test('1.4.10: a transition that settles wider than 320px still fails', async ({ page }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Growing</h1><div class="t"></div>',
+        '<style>.t{width:100px;height:10px;transition:width 600ms linear}' +
+          '@media (max-width:400px){.t{width:700px}}</style>',
+      ),
+    );
+    const reflow = await checkReflow(page);
+    expect(reflow).toMatchObject({ width: 320, clientWidth: 320, passed: false });
+    expect(reflow.scrollWidth).toBeGreaterThanOrEqual(700);
+  });
+
   test('2.4.7: outline: none with no other focus style fails', async ({ page }) => {
     await page.setContent(
       fixture('<h1>Outline</h1><button type="button" style="outline:none">No ring</button>'),
