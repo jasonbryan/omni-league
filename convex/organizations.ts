@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireUser } from './lib/access';
+import { requireOrgAdminOrForbidden, requireUser } from './lib/access';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
   checkOrganizationName,
@@ -186,6 +186,28 @@ export const listPublicLeagues = query({
       rows.push({ name: league.name, sportName: sportName(league.sport), locationNames });
     }
     return { rows, page, pageCount, total };
+  },
+});
+
+/**
+ * The admin area's first query (#65), asked before anything else in it: the organization with this
+ * slug as `{ organizationId, name, slug }` when the caller is one of its org admins, `null` for an
+ * unknown slug (whoever asks: the organization's public page already shows it exists), and a
+ * `FORBIDDEN` `ConvexError` (`lib/forbidden.ts`) for every other caller, including a league
+ * organizer, a member of none, and a caller who is not signed in. The app shows the not-found view
+ * for `null` and the no-access view for `FORBIDDEN`, and requests nothing else until it passes.
+ */
+export const getAdminContext = query({
+  args: { slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({ organizationId: v.id('organizations'), name: v.string(), slug: v.string() }),
+  ),
+  handler: async (ctx, { slug }) => {
+    const organization = await organizationBySlug(ctx, slug);
+    if (!organization) return null;
+    await requireOrgAdminOrForbidden(ctx, organization._id);
+    return { organizationId: organization._id, name: organization.name, slug: organization.slug };
   },
 });
 

@@ -135,8 +135,9 @@ describe('focus treatment in the app shell and the vendored sheet (#75)', () => 
 
 describe('colour literals in src/', () => {
   // The search from #61, run on the source with comments removed: an issue reference such as
-  // `#100` in a comment is not a colour.
-  const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|oklch\(/;
+  // `#100` in a comment is not a colour. A hex literal is not followed by a hyphen either, so the
+  // fragment `#add-location` (#65, the jump link to the add form) is not one.
+  const COLOUR = /#[0-9a-fA-F]{3,8}(?![\w-])|rgba?\(|hsla?\(|oklch\(/;
   // The install colours (#80) cannot be tokens: the theme-color meta and the manifest are read by
   // the browser and the operating system, which know no CSS variable. These four lines are the only
   // ones allowed. Each entry is an exact file and full trimmed line, allowed at most once.
