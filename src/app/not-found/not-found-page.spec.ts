@@ -19,6 +19,10 @@ describe('NotFoundPage', () => {
     expect(main?.children).toHaveLength(1);
     expect(main?.children[0].tagName).toBe('APP-NOT-FOUND-VIEW');
     expect(host.querySelectorAll('h1')).toHaveLength(1);
-    expect(host.textContent).not.toContain('Sign in');
+    // The top bar's own links only: the brand and "Sign in" (#63).
+    expect([...host.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
+      'Omni League',
+      'Sign in',
+    ]);
   });
 });

@@ -21,6 +21,34 @@ export interface SignUpInput {
   password: string;
 }
 
+/**
+ * Why a sign-in was refused, as the sign-in page shows it (design/mockups/63-sign-in.html).
+ * `incorrect` is the answer for a wrong password and for an email with no account alike.
+ */
+export type SignInFailure = 'incorrect' | 'throttled' | 'locked' | 'invalid-email' | 'unexpected';
+
+export type SignInResult =
+  | { ok: true }
+  | { ok: false; error: Exclude<SignInFailure, 'throttled'> }
+  | { ok: false; error: 'throttled'; retryAfterSeconds: number };
+
+export interface SignInInput {
+  email: string;
+  password: string;
+}
+
+/** The wait shown when a throttled answer carries none. */
+const DEFAULT_RETRY_AFTER_SECONDS = 60;
+
+/** What Better Auth's client reports for a refused request. */
+interface AuthError {
+  status: number;
+  code?: string;
+  message?: string;
+  /** Sent with convex/auth.ts's TOO_MANY_ATTEMPTS: the seconds until the next attempt may go. */
+  retryAfterSeconds?: unknown;
+}
+
 type SessionState = 'unknown' | 'signed-in' | 'signed-out';
 
 /**
@@ -166,7 +194,7 @@ export class AuthService implements ConvexAuthSource {
   async signUp({ name, email, password }: SignUpInput): Promise<SignUpResult> {
     const client = await this.client;
     if (!client) return { ok: false, error: 'unexpected' };
-    let error: { status: number; code?: string; message?: string } | null;
+    let error: AuthError | null;
     try {
       // `adultConfirmed` is this app's field, which Better Auth's types do not know.
       const body = { name, email: email.trim(), password, adultConfirmed: true };
@@ -176,6 +204,28 @@ export class AuthService implements ConvexAuthSource {
     }
     if (error) return { ok: false, error: failureOf(error) };
     // The response set the session; the store refetches it, but the answer is already known.
+    this.forgetToken();
+    this.setSession('signed-in');
+    this.watchSession(client);
+    return { ok: true };
+  }
+
+  /**
+   * Signs in with email and password (ADR 0008). Never throws: a refusal or a network failure is a
+   * `SignInFailure`. A wrong password and an unknown email are both `incorrect`, so the page cannot
+   * tell them apart. Like `signUp`, a success is known at once from the response, and only then is
+   * the session store watched, so a page with no stored session makes no get-session request.
+   */
+  async signIn({ email, password }: SignInInput): Promise<SignInResult> {
+    const client = await this.client;
+    if (!client) return { ok: false, error: 'unexpected' };
+    let error: AuthError | null;
+    try {
+      ({ error } = await client.signIn.email({ email: email.trim(), password }));
+    } catch {
+      return { ok: false, error: 'unexpected' };
+    }
+    if (error) return signInFailureOf(error);
     this.forgetToken();
     this.setSession('signed-in');
     this.watchSession(client);
@@ -232,7 +282,31 @@ function isEmailValidationError(message: string | undefined): boolean {
   return message.split(/; (?=\[)/).every((issue) => issue.startsWith('[body.email] '));
 }
 
-function failureOf(error: { status: number; code?: string; message?: string }): SignUpFailure {
+function signInFailureOf(error: AuthError): SignInResult {
+  if (error.status === 401) return { ok: false, error: 'incorrect' };
+  if (error.status === 429 && error.code === 'SIGN_IN_LOCKED')
+    return { ok: false, error: 'locked' };
+  if (error.status === 429 && error.code === 'TOO_MANY_ATTEMPTS') {
+    const seconds = error.retryAfterSeconds;
+    return {
+      ok: false,
+      error: 'throttled',
+      retryAfterSeconds:
+        typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+          ? seconds
+          : DEFAULT_RETRY_AFTER_SECONDS,
+    };
+  }
+  if (
+    error.code === 'INVALID_EMAIL' ||
+    (error.code === 'VALIDATION_ERROR' && isEmailValidationError(error.message))
+  ) {
+    return { ok: false, error: 'invalid-email' };
+  }
+  return { ok: false, error: 'unexpected' };
+}
+
+function failureOf(error: AuthError): SignUpFailure {
   const byCode = error.code === undefined ? undefined : FAILURE_BY_CODE[error.code];
   if (byCode) return byCode;
   if (error.code === 'VALIDATION_ERROR' && isEmailValidationError(error.message)) {

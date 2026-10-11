@@ -10,6 +10,7 @@ import { AdminOverview } from './organizations/admin/admin-overview';
 import { CreateOrganizationPage } from './organizations/create-organization-page';
 import { OrganizationPage } from './organizations/organization-page';
 import { Placeholder } from './placeholder/placeholder';
+import { SignInPage } from './sign-in/sign-in-page';
 import { SignUpPage } from './sign-up/sign-up-page';
 
 // ADR 0006's public-page header: the not-found render is anonymous and the same for every visitor.
@@ -36,12 +37,18 @@ function directives(value: string): Map<string, string | true> {
 // `app/**` shell header from ADR 0010 item 4 (#37), the `**` not-found header (#23), the public
 // organization page (#60), and sign-up and the signed-in app (#62).
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, app, app/** Client, organizations/:orgSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, app, app/** Client, organizations/:orgSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       // #62: no auth code runs on the server, so these render in the browser only.
       {
         path: 'sign-up',
+        renderMode: RenderMode.Client,
+        headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
+      },
+      {
+        // #63: the same, for sign-in.
+        path: 'sign-in',
         renderMode: RenderMode.Client,
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
       },
@@ -92,14 +99,15 @@ describe('Route tables', () => {
   it('has Client routes for the bound above to check', () => {
     expect(
       serverRoutes.filter((route) => route.renderMode === RenderMode.Client).map((r) => r.path),
-    ).toEqual(['sign-up', 'app', 'app/**']);
+    ).toEqual(['sign-up', 'sign-in', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, sign-up, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, sign-up, sign-in, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'organizations/:orgSlug',
       'sign-up',
+      'sign-in',
       'app',
       '**',
     ]);
@@ -128,6 +136,14 @@ describe('Route tables', () => {
     expect(route?.component).toBeUndefined();
     expect(await route?.loadComponent?.()).toBe(SignUpPage);
     expect(route?.title).toBe('Create an account | Omni League');
+    expect(route?.canActivate).toEqual([redirectSignedIn]);
+  });
+
+  it('sign-in lazy-loads the sign-in page, titled, and sends a signed-in visitor on', async () => {
+    const route = routes.find((r) => r.path === 'sign-in');
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(SignInPage);
+    expect(route?.title).toBe('Sign in | Omni League');
     expect(route?.canActivate).toEqual([redirectSignedIn]);
   });
 

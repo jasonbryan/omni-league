@@ -22,7 +22,7 @@ function routeSlug(route: string): string {
 
 /** `/sign-up` and everything under `/app` are `RenderMode.Client` (app.routes.server.ts). */
 function isClientRoute(route: string): boolean {
-  return /^\/(?:sign-up|app)(?:[/?#]|$)/.test(route);
+  return /^\/(?:sign-up|sign-in|app)(?:[/?#]|$)/.test(route);
 }
 
 test.describe('screenshots', () => {

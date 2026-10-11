@@ -1,7 +1,7 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AUTH_BASE_URL, AUTH_CLIENT } from './auth-client';
-import { AuthService, type SignUpFailure } from './auth.service';
+import { AuthService, type SignInResult, type SignUpFailure } from './auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from './testing/fake-auth-client';
 
 const INPUT = {
@@ -703,6 +703,115 @@ describe('AuthService', () => {
     it('is unexpected without a client', async () => {
       const auth = configure(null);
       await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: false, error: 'unexpected' });
+    });
+  });
+
+  describe('signIn', () => {
+    const CREDENTIALS = { email: 'maya.okafor@example.com', password: 'sandbar sunset spike 2026' };
+
+    it('sends the trimmed email and the password, and is signed in on success', async () => {
+      const auth = configure();
+      client.emitSession(null);
+      await expect(
+        auth.signIn({ ...CREDENTIALS, email: '  maya.okafor@example.com ' }),
+      ).resolves.toEqual({ ok: true });
+      expect(client.signIns).toEqual([CREDENTIALS]);
+      // Known at once, before the session store refetches, so the /app guard lets it through.
+      expect(auth.signedIn()).toBe(true);
+      await expect(auth.isSignedIn()).resolves.toBe(true);
+    });
+
+    // #111: no get-session request on a page with no stored session, and the response sets the
+    // state, as sign-up does. Only after the sign-in does the service watch the session store.
+    it('makes no session request before it, then follows the session store', async () => {
+      client.storedCookie = '';
+      const auth = configure();
+      await expect(auth.isSignedIn()).resolves.toBe(false);
+      expect(client.sessionListeners).toBe(0);
+      await auth.signIn(CREDENTIALS);
+      expect(client.sessionListeners).toBe(1);
+      client.emitSession(null);
+      expect(auth.signedIn()).toBe(false);
+    });
+
+    it('drops a token fetched before it, so the next one is the new session’s', async () => {
+      const auth = configure();
+      client.emitSession({ id: 's1' });
+      client.nextToken = 'old';
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('old');
+      client.nextToken = 'new';
+      await auth.signIn(CREDENTIALS);
+      await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('new');
+    });
+
+    it.each<
+      [
+        string,
+        { status: number; code?: string; message?: string; retryAfterSeconds?: number },
+        SignInResult,
+      ]
+    >([
+      [
+        '401 wrong password or unknown email',
+        { status: 401, code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' },
+        { ok: false, error: 'incorrect' },
+      ],
+      ['401 without a code', { status: 401 }, { ok: false, error: 'incorrect' }],
+      [
+        '429 inside the wait, with the seconds left',
+        { status: 429, code: 'TOO_MANY_ATTEMPTS', retryAfterSeconds: 240 },
+        { ok: false, error: 'throttled', retryAfterSeconds: 240 },
+      ],
+      [
+        '429 inside the wait, without the seconds',
+        { status: 429, code: 'TOO_MANY_ATTEMPTS' },
+        { ok: false, error: 'throttled', retryAfterSeconds: 60 },
+      ],
+      [
+        '429 at the hard limit',
+        { status: 429, code: 'SIGN_IN_LOCKED' },
+        { ok: false, error: 'locked' },
+      ],
+      ['429 from the per-IP limiter', { status: 429 }, { ok: false, error: 'unexpected' }],
+      [
+        '400 invalid email',
+        { status: 400, code: 'INVALID_EMAIL' },
+        { ok: false, error: 'invalid-email' },
+      ],
+      [
+        '400 validation error on the email',
+        { status: 400, code: 'VALIDATION_ERROR', message: '[body.email] Invalid email address' },
+        { ok: false, error: 'invalid-email' },
+      ],
+      [
+        '400 validation error on the password',
+        { status: 400, code: 'VALIDATION_ERROR', message: '[body.password] Invalid input' },
+        { ok: false, error: 'unexpected' },
+      ],
+      ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, { ok: false, error: 'unexpected' }],
+      [
+        '503 auth not configured',
+        { status: 503, code: 'AUTH_NOT_CONFIGURED' },
+        { ok: false, error: 'unexpected' },
+      ],
+      ['500', { status: 500, message: 'boom' }, { ok: false, error: 'unexpected' }],
+    ])('maps %s', async (_, error, expected) => {
+      const auth = configure();
+      client.emitSession(null);
+      client.nextSignInError = error;
+      await expect(auth.signIn(CREDENTIALS)).resolves.toEqual(expected);
+      expect(auth.signedIn()).toBe(false);
+    });
+
+    it('maps a network failure to unexpected', async () => {
+      const auth = configure();
+      client.signInThrows = new TypeError('Failed to fetch');
+      await expect(auth.signIn(CREDENTIALS)).resolves.toEqual({ ok: false, error: 'unexpected' });
+    });
+
+    it('is unexpected without a client', async () => {
+      const auth = configure(null);
+      await expect(auth.signIn(CREDENTIALS)).resolves.toEqual({ ok: false, error: 'unexpected' });
     });
   });
 

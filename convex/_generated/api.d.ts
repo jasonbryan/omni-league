@@ -21,6 +21,7 @@ import type * as lib_password from "../lib/password.js";
 import type * as lib_previewOrigin from "../lib/previewOrigin.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
 import type * as lib_roles from "../lib/roles.js";
+import type * as lib_signInThrottle from "../lib/signInThrottle.js";
 import type * as lib_slugs from "../lib/slugs.js";
 import type * as lib_sports from "../lib/sports.js";
 import type * as lib_tenantWrites from "../lib/tenantWrites.js";
@@ -29,6 +30,7 @@ import type * as lib_users from "../lib/users.js";
 import type * as locations from "../locations.js";
 import type * as organizations from "../organizations.js";
 import type * as seed from "../seed.js";
+import type * as signInThrottle from "../signInThrottle.js";
 import type * as testing from "../testing.js";
 import type * as users from "../users.js";
 
@@ -52,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "lib/previewOrigin": typeof lib_previewOrigin;
   "lib/publicPage": typeof lib_publicPage;
   "lib/roles": typeof lib_roles;
+  "lib/signInThrottle": typeof lib_signInThrottle;
   "lib/slugs": typeof lib_slugs;
   "lib/sports": typeof lib_sports;
   "lib/tenantWrites": typeof lib_tenantWrites;
@@ -60,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   locations: typeof locations;
   organizations: typeof organizations;
   seed: typeof seed;
+  signInThrottle: typeof signInThrottle;
   testing: typeof testing;
   users: typeof users;
 }>;

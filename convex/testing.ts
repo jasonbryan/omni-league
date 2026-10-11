@@ -14,6 +14,7 @@ import {
   leagueSeedValidator,
   tenantValidator,
 } from './lib/tenantWrites';
+import { throttleKey } from './lib/signInThrottle';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES } from './lib/testOnly';
 import schema from './schema';
 
@@ -144,6 +145,27 @@ export const addLeague = internalMutation({
     }
     const { slug } = await insertLeague(ctx, organization._id, league);
     return { slug };
+  },
+});
+
+/**
+ * Sets the per-address sign-in throttle's row for `email` to `failures` consecutive failures with
+ * no wait left (#63 e2e), so a test reaches the 100-failure hard limit without making 100 attempts
+ * and the waits between them. Replaces the address's row, if there is one. `reset` clears it.
+ */
+export const seedSignInFailures = internalMutation({
+  args: { email: v.string(), failures: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { email, failures }) => {
+    assertTestDeployment();
+    const key = await throttleKey(email);
+    const row = await ctx.db
+      .query('signInFailures')
+      .withIndex('by_email', (q) => q.eq('email', key))
+      .unique();
+    if (row) await ctx.db.patch('signInFailures', row._id, { failures, blockedUntil: 0 });
+    else await ctx.db.insert('signInFailures', { email: key, failures, blockedUntil: 0 });
+    return null;
   },
 });
 

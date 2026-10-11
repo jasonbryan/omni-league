@@ -19,6 +19,8 @@ const EDGE_PATHS = [
   '/organizations/cache-key-sample',
   // #62: a Client route whose query string carries `returnTo`; the shell holds none of it.
   '/sign-up',
+  // #63: the same for sign-in.
+  '/sign-in',
 ];
 /** Prerendered pages: static files, the same bytes for every request. */
 const STATIC_PATHS = ['/'];
@@ -57,7 +59,13 @@ test.describe('query strings and the CDN', () => {
     async () => {
       const unique = `/cache-key-${randomUUID()}`;
       const [a, b] = [canary(), canary()];
-      for (const path of [unique, `/app${unique}`, `/organizations${unique}`, `/sign-up`]) {
+      for (const path of [
+        unique,
+        `/app${unique}`,
+        `/organizations${unique}`,
+        `/sign-up`,
+        `/sign-in`,
+      ]) {
         const first = await rawGet(`${path}?token=${a}`);
         expect(sharedCacheable(first.headers['cache-control']), path).toBe(true);
         await rawGet(`${path}?token=${a}`);

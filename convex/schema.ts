@@ -20,6 +20,21 @@ export default defineSchema({
     adultConfirmedAt: v.number(),
   }).index('by_authUserId', ['authUserId']),
 
+  // The per-address sign-in throttle (#63, ADR 0008 "Rate limits and lockout"): one row for each
+  // email address with consecutive password failures, known or not, so an unknown address
+  // behaves exactly like a known one. `email` is the key from `throttleKey` (convex/lib/
+  // signInThrottle.ts). `failures` counts the consecutive attempts that have not yet signed in:
+  // an attempt is counted when it starts, so parallel guesses are counted before any is checked,
+  // and a success deletes the row. Attempts before `blockedUntil` (ms since the epoch) are
+  // refused, and at 100 `failures` the address stays refused until the owner deletes the row in
+  // the Convex dashboard (a password reset does after #26). Only the internal functions in
+  // convex/signInThrottle.ts read or write it; no public function exposes it.
+  signInFailures: defineTable({
+    email: v.string(),
+    failures: v.number(),
+    blockedUntil: v.number(),
+  }).index('by_email', ['email']),
+
   // Created by `organizations.create` (#64) and the seeds, through convex/lib/tenantWrites.ts. The
   // slug is unique (enforced by the writers) and names the public page.
   organizations: defineTable({

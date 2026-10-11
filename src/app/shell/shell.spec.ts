@@ -166,7 +166,16 @@ describe('Shell', () => {
       expect(home?.getAttribute('href')).toBe('/');
       expect(home?.textContent.trim()).toBe('Omni League');
       expect(home?.querySelector('ng-icon[aria-hidden="true"] svg')).not.toBeNull();
-      expect(host(harness).textContent).not.toContain('Sign in');
+      // The visitor's own link follows the brand (#63; top-bar-account.spec.ts covers it).
+      expect(
+        [...header!.querySelectorAll('a')].map((a) => [
+          a.textContent.trim(),
+          a.getAttribute('href'),
+        ]),
+      ).toEqual([
+        ['Omni League', '/'],
+        ['Sign in', '/sign-in?returnTo=%2F'],
+      ]);
     });
   });
 

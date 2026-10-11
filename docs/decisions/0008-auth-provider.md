@@ -5,6 +5,7 @@
 - **Issue:** #7
 - **Date:** 2026-10-08 (accepted by the owner, who chose Better Auth after asking for Convex Auth to be re-analysed. Proposed 2026-10-07, revised the same day for the owner's email + password answer, and again to re-run Option A, Convex Auth, at the owner's request)
 - **Amended:** 2026-10-09, by #62 (PR #102): `returnTo` is validated on the parsed path, and a skipped test is exempt from the unused-allowance check. See "Amendment: return-to parsed path (2026-10-09)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-10-10, by #63: the per-address throttle counts an attempt when it starts, not when it ends, and the hard limit has its own answer. See "Amendment: sign-in throttle (2026-10-10)" at the end.
 
 ## Context
 
@@ -650,3 +651,19 @@ The #62 tester found that ADR 0008's `returnTo` rule, which checks the raw input
 **Why.** A same-site check has to run on the value the router receives, not on the string the user typed. #63 shares the validator and inherits the rule.
 
 **Sources.** [PR #102 test report](https://github.com/jasonbryan/omni-league/pull/102#issuecomment-6092160741), [PR #102 review](https://github.com/jasonbryan/omni-league/pull/102#issuecomment-6092463987).
+
+## Amendment: sign-in throttle (2026-10-10)
+
+#63 builds the per-address throttle of "Rate limits and lockout". These details differ from that section's wording; the schedule, the 100-failure limit, and the identical answers for unknown addresses do not.
+
+| Point                      | Was                                                                         | Now                                                                                                                                                                                                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| When an attempt is counted | `hooks.after` records a 401 as a failure                                    | `hooks.before` counts the attempt at once, in the same transaction that checks the wait, and `hooks.after` deletes the row when the sign-in returned a session. Any other outcome leaves the count                                                                                   |
+| Why                        | Not stated                                                                  | A password check takes about 0.4 s, so a burst of parallel guesses would all pass a check made before any of them is recorded. Convex runs the mutations one after another, so counting first lets at most 5 guesses reach the password: a test sends 9 at once and 5 get 401        |
+| The wait's anchor          | The end of the failed attempt                                               | The start of the attempt, under a second earlier                                                                                                                                                                                                                                     |
+| Answers                    | `429 TOO_MANY_ATTEMPTS` while throttled; the hard limit's answer not stated | While waiting: `429 TOO_MANY_ATTEMPTS` with `retryAfterSeconds` in the body and a `Retry-After` header. At the hard limit: `429 SIGN_IN_LOCKED`. A refused attempt changes nothing, so asking again cannot extend the wait                                                           |
+| The key                    | The normalised email                                                        | The email lowercased, exactly as Better Auth looks the user up, so every spelling of one address shares a row. An address past 254 characters is replaced by its SHA-256 digest, so a row stays small. A body with no string `email` is not counted: Better Auth answers it with 400 |
+
+**Reset.** `testing:reset` clears `signInFailures` with the other tables of `convex/schema.ts`. `testing:seedSignInFailures` (internal, `IS_TEST` only) sets one row, so an e2e test reaches the hard limit without 100 attempts.
+
+**Not yet done.** The per-IP limiter ships off (`rateLimit.enabled: false`), as #62 shipped it, until the `cf-connecting-ip` probe of #163 shows that the header is the caller's address. Rows for addresses with fewer than 5 failures are never deleted except by a successful sign-in; a cleanup job is a later issue.

@@ -19,10 +19,11 @@ const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 const FORMAT_MESSAGE =
   'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.';
 
-/** Form order (mockup "Focus order"), without #63's Account link. */
+/** Form order (mockup "Focus order"), with the top bar's account link (#63). */
 const FORM_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
+  'header a[href="/app"]',
   'main a[href="/app"]',
   '#name',
   '#slug',
@@ -70,6 +71,7 @@ test.describe('create an organization', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
+        'header a[href="/app"]',
         'main button',
         'main a[href="/app/organizations/new"]',
       ],
@@ -79,9 +81,9 @@ test.describe('create an organization', () => {
     await expect(page).toHaveTitle('Create an organization | Omni League');
   });
 
-  test('a signed-out visitor opening the form goes to sign-up with returnTo', async ({ page }) => {
+  test('a signed-out visitor opening the form goes to sign-in with returnTo', async ({ page }) => {
     await page.goto('/app/organizations/new');
-    await expect(page).toHaveURL(/\/sign-up\?/);
+    await expect(page).toHaveURL(/\/sign-in\?/);
     expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/app/organizations/new');
   });
 

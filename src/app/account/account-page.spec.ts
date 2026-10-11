@@ -37,8 +37,11 @@ describe('AccountPage', () => {
     return harness.routeNativeElement!;
   }
 
-  const emitMe = () =>
-    convex.activeSubscriptions.find((s) => s.name === 'users:me')?.emit({ name: 'Maya Okafor' });
+  const emitMe = () => {
+    for (const sub of convex.activeSubscriptions.filter((s) => s.name === 'users:me')) {
+      sub.emit({ name: 'Maya Okafor' });
+    }
+  };
 
   it('asks users.me only once Convex has accepted the token', async () => {
     const page = await open();
@@ -49,8 +52,10 @@ describe('AccountPage', () => {
 
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
+    // The page and the top bar's account link (#63) each ask for the caller's own row.
     expect(convex.activeSubscriptions.map((s) => [s.name, s.args]).sort()).toEqual([
       ['organizations:listMine', {}],
+      ['users:me', {}],
       ['users:me', {}],
     ]);
   });
