@@ -44,20 +44,28 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
-      # Docs-only PRs (docs/, design/, .claude/, root *.md) run only release age, install and format:check.
-      # HEAD is the PR merge commit; its first parent is the base branch.
-      # --no-renames lists both paths of a rename, so moving an app file into docs/ is an app change.
-      # Any file ESLint lints (.js .mjs .cjs .ts .mts .cts) is an app file wherever it lives.
+      # What the PR changes decides how much of the job runs (#165, scripts/ci-scope.mjs, docs/process/ci.md):
+      # docs        only docs/, design/, .claude/, root *.md: release age, install, format:check;
+      # tooling     also .github/ and scripts/ that the build, e2e and deploy do not run (derived by ci-scope.mjs from
+      #             package.json, netlify.toml, angular.json, playwright.config.ts, e2e/): adds lint, test:scripts,
+      #             actionlint (typecheck when a .ts file changed);
+      # app         anything else, ci.yml and ci-scope.mjs themselves, docs that test:convex reads, workflow_dispatch,
+      #             and release PRs into production: every step.
+      # HEAD is the PR merge commit; its first parent is the base branch. --no-renames lists both paths of a
+      # rename, so moving an app file into docs/ is an app change. Any failure to detect runs every check, and
+      # the job still concludes success when the checks that did run pass, so the required check `ci` reports.
+      # Runs on the Node the runner image ships, before setup-node, so the script uses built-ins only.
+      # pipefail: a failed git diff fails the pipeline, so the warning branch runs.
       - name: scope
         id: scope
         run: |
-          changed="$(git diff --no-renames --name-only HEAD^1 HEAD)"
-          app_files="$(printf '%s\n' "$changed" | grep -vE '^(docs/|design/|\.claude/|[^/]+\.md$)' || true)"
-          code_files="$(printf '%s\n' "$changed" | grep -E '\.[cm]?[jt]s$' || true)"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$changed" ] && [ -z "$app_files" ] && [ -z "$code_files" ]; then
-            echo "app=false" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          if outputs="$(git diff --no-renames --name-only HEAD^1 HEAD | node scripts/ci-scope.mjs)" && [ -n "$outputs" ]; then
+            printf '%s\n' "$outputs" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$outputs"
           else
-            echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::scope detection failed; running every check"
+            printf 'scope=app\napp=true\nchecks=true\ntypecheck=true\n' >> "$GITHUB_OUTPUT"
           fi
       # Every npm Dependabot cooldown window must equal .npmrc min-release-age (ADR 0003, ADR 0009 amendment, #47).
       # Reads only the package-ecosystem: npm block. POSIX sh, grep, awk, sed; needs no install.
@@ -118,10 +126,10 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
         run: npm audit signatures
       - name: lint
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.checks == 'true' }}
         run: npm run lint
       - name: typecheck
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.typecheck == 'true' }}
         run: npm run typecheck
       - name: test
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
@@ -134,7 +142,7 @@ jobs:
         run: npm run build
       # Checksum-verified binary, no action (ADR 0009). Version and hash are bumped by hand.
       - name: actionlint
-        if: ${{ !cancelled() && steps.scope.outputs.app == 'true' }}
+        if: ${{ !cancelled() && steps.scope.outputs.checks == 'true' }}
         run: |
           curl -fsSL -o actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
@@ -155,7 +163,7 @@ jobs:
       # check failed (no Chromium is installed then, and that re-render check skips as before), and a
       # failure here skips the e2e steps below, as before.
       - name: test:scripts
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.app == 'true' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.checks == 'true' }}
         run: npm run test:scripts
       # Anonymous local Convex backend, no secrets (ADR 0005, #59): `convex dev --once` downloads the
       # pinned backend (e2e/support/convex-backend.json), pushes the functions, and runs codegen.
