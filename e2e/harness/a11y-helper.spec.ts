@@ -60,6 +60,40 @@ test.describe('axe helper checks', () => {
     expect(reflow.scrollWidth).toBeGreaterThanOrEqual(700);
   });
 
+  test('1.4.10: an infinite animation (animate-pulse, animate-spin) does not hang reflow or expectAccessible (#167)', async ({
+    page,
+  }) => {
+    test.setTimeout(15_000);
+    await page.setContent(
+      fixture(
+        '<h1>Pulse</h1><div class="pulse" style="width:100px;height:10px;background:#444"></div>' +
+          '<p>Loading the list.</p>',
+        '<style>@keyframes pulse{50%{opacity:.5}}.pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}</style>',
+      ),
+    );
+    expect(await page.evaluate(() => document.getAnimations().length)).toBeGreaterThan(0);
+    expect(await checkReflow(page)).toMatchObject({ width: 320, passed: true });
+    await expectAccessible(page);
+  });
+
+  test('1.4.10: a real overflow still fails while an infinite animation runs beside it (#167)', async ({
+    page,
+  }) => {
+    test.setTimeout(15_000);
+    await page.setContent(
+      fixture(
+        '<h1>Growing and pulsing</h1><div class="pulse" style="width:100px;height:10px;background:#444"></div>' +
+          '<div class="t"></div>',
+        '<style>@keyframes pulse{50%{opacity:.5}}.pulse{animation:pulse 2s linear infinite}' +
+          '.t{width:100px;height:10px;transition:width 600ms linear}' +
+          '@media (max-width:400px){.t{width:700px}}</style>',
+      ),
+    );
+    const reflow = await checkReflow(page);
+    expect(reflow).toMatchObject({ width: 320, clientWidth: 320, passed: false });
+    expect(reflow.scrollWidth).toBeGreaterThanOrEqual(700);
+  });
+
   test('2.4.7: outline: none with no other focus style fails', async ({ page }) => {
     await page.setContent(
       fixture('<h1>Outline</h1><button type="button" style="outline:none">No ring</button>'),

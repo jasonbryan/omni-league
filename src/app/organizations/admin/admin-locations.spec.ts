@@ -556,6 +556,76 @@ describe('AdminLocations', () => {
       expect(text(editButton(1))).toBe('Edit Redfish Flats Soccer Fields');
     });
 
+    describe('Edit on another row while a save is in flight', () => {
+      const panel = () => page.querySelector('section[aria-labelledby="locations-heading"]')!;
+
+      /** Row 1 is saving (the call is pending), and Edit is pressed on row 0. */
+      async function pressOtherEditWhileSaving() {
+        await open(COASTAL_LOCATIONS);
+        await startEdit();
+        await type('edit-name', 'Redfish Flats Soccer Fields');
+        editSave().click();
+        await flushNow();
+        editButton(0).click();
+        await flushNow();
+      }
+
+      it('is ignored: the saving form stays where it is', async () => {
+        await pressOtherEditWhileSaving();
+        expect(page.querySelectorAll('#locations-list form')).toHaveLength(1);
+        expect(rows()[1].querySelector('form')).not.toBeNull();
+        expect(rows()[0].querySelector('form')).toBeNull();
+        expect(text(editSave())).toBe('Saving…');
+        expect(input('edit-name').value).toBe('Redfish Flats Soccer Fields');
+      });
+
+      it('a success is reported as "<name> saved." and the pressed Edit works afterwards', async () => {
+        await pressOtherEditWhileSaving();
+        o.convex.calls[0].resolve(null);
+        await flushNow();
+        expect(page.querySelector('#locations-list form')).toBeNull();
+        expect(text(panel().querySelector('[data-slot="alert-title"]'))).toBe(
+          'Redfish Flats Soccer Fields saved.',
+        );
+        expect(document.activeElement).toBe(editButton(1));
+        await startEdit(0);
+        expect(rows()[0].querySelector('form')).not.toBeNull();
+        expect(panel().querySelector('[data-slot="alert"]')).toBeNull();
+      });
+
+      it('a failure is reported in the form, which keeps the typed values, and the pressed Edit works afterwards', async () => {
+        await pressOtherEditWhileSaving();
+        o.convex.calls[0].reject(new Error('Connection lost'));
+        await flushNow();
+        expect(rows()[1].querySelector('form')).not.toBeNull();
+        expect(text(editForm().querySelector('[data-slot="alert-title"]'))).toBe(
+          'The location could not be saved.',
+        );
+        expect(input('edit-name').value).toBe('Redfish Flats Soccer Fields');
+        expect(text(panel())).not.toContain('Fields saved.');
+        await startEdit(0);
+        expect(page.querySelectorAll('#locations-list form')).toHaveLength(1);
+        expect(rows()[0].querySelector('form')).not.toBeNull();
+      });
+
+      it('a row that leaves the list during its save reports nothing and raises no error', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        await open(COASTAL_LOCATIONS);
+        await startEdit();
+        editSave().click();
+        await flushNow();
+        o.subscription(LIST_FOR_ADMIN)!.emit([COASTAL_LOCATIONS[0], COASTAL_LOCATIONS[2]]);
+        await flushNow();
+        expect(rows()).toHaveLength(2);
+        o.convex.calls[0].resolve(null);
+        await flushNow();
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
+        await startEdit(0);
+        expect(rows()[0].querySelector('form')).not.toBeNull();
+      });
+    });
+
     it('the saved message goes when the next edit starts', async () => {
       await open(COASTAL_LOCATIONS);
       await startEdit();

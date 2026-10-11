@@ -6,6 +6,7 @@ import {
   inject,
   signal,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideMapPinOff, lucidePlus } from '@ng-icons/lucide';
@@ -26,7 +27,8 @@ import { LocationRow } from './location-row';
  * (live, sorted by name), each with an Edit button that turns the row into a form in place, and
  * the add form beside the list from 1024px and after it below. Below 1024px the header's "Add
  * location" link jumps to the form and puts focus on its first field. After a save, "<name>
- * saved." is a status above the list.
+ * saved." is a status above the list. Edit is ignored while a row's save is in flight (#161): that
+ * form stays until the save settles, so its outcome ("<name> saved." or the form's alert) shows.
  */
 @Component({
   selector: 'app-admin-locations',
@@ -165,12 +167,17 @@ export class AdminLocations {
   protected readonly savedName = signal<string | null>(null);
 
   private readonly addSection = viewChild<ElementRef<HTMLElement>>('addSection');
+  private readonly rowViews = viewChildren(LocationRow);
+  /** A row's save is in flight: its form stays until the save settles and shows the outcome. */
+  private readonly saving = computed(() => this.rowViews().some((row) => row.saving()));
 
   constructor() {
     bindAdminTitle('Locations');
   }
 
+  /** Ignored while a save runs, so the form that is saving is not replaced before it shows the outcome. */
   protected startEdit(id: Id<'locations'>): void {
+    if (this.saving()) return;
     this.savedName.set(null);
     this.editing.set(id);
   }
