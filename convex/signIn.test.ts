@@ -10,7 +10,6 @@ import { components } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
 import { createAuth } from './auth';
 import { HARD_LIMIT } from './lib/signInThrottle';
-import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -328,9 +327,9 @@ describe('only internal functions read or write signInFailures (ADR 0008)', () =
   });
 });
 
-describe('per-IP limiter and the cf-connecting-ip probe (ADR 0008, #63)', () => {
-  test('the limiter ships off until the probe shows the header is the caller’s address', () => {
-    // The probe (see the PR) decides this. Off, a shared bucket cannot block every user after
+describe('per-IP limiter (ADR 0008, #63)', () => {
+  test('the limiter ships off until #163 shows the header is the caller’s address', () => {
+    // The probe in #163 decides this. Off, a shared bucket cannot block every user after
     // three sign-ins in ten seconds.
     const options = createAuth({} as GenericCtx<DataModel>).options;
     expect(options.rateLimit).toEqual({ enabled: false, storage: 'database' });
@@ -344,37 +343,4 @@ describe('per-IP limiter and the cf-connecting-ip probe (ADR 0008, #63)', () => 
     for (let i = 0; i < 4; i++)
       expect((await signIn(t, EMAIL, PASSWORD, headers)).status).toBe(200);
   }, 60_000);
-
-  describe('the probe log line (removed before the PR is marked ready)', () => {
-    const log = () => vi.spyOn(console, 'log').mockImplementation(() => undefined);
-
-    test.each([
-      ['sign-in', 'sign-in/email'],
-      ['sign-up', 'sign-up/email'],
-    ])('on a preview, a %s request logs the cf-connecting-ip header', async (_, path) => {
-      vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
-      const spy = log();
-      const t = setup();
-      await post(
-        t,
-        path,
-        { email: UNKNOWN, password: WRONG },
-        { 'cf-connecting-ip': '203.0.113.9' },
-      );
-      expect(spy).toHaveBeenCalledWith(`[ip-probe] ${path} cf-connecting-ip=203.0.113.9`);
-    });
-
-    test('a request without the header logs "none"', async () => {
-      vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
-      const spy = log();
-      await signIn(setup(), UNKNOWN, WRONG);
-      expect(spy).toHaveBeenCalledWith('[ip-probe] sign-in/email cf-connecting-ip=none');
-    });
-
-    test('off a preview (production, local) nothing is logged', async () => {
-      const spy = log();
-      await signIn(setup(), UNKNOWN, WRONG, { 'cf-connecting-ip': '203.0.113.9' });
-      expect(spy).not.toHaveBeenCalledWith(expect.stringContaining('[ip-probe]'));
-    });
-  });
 });

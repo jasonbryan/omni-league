@@ -14,7 +14,6 @@ import { env } from './_generated/server';
 import authConfig from './auth.config';
 import { trustedOrigins } from './lib/authOrigins';
 import { hashPassword, verifyPassword } from './lib/password';
-import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { throttleKey, tooManyAttemptsMessage } from './lib/signInThrottle';
 import { deleteUserRecord, insertUserRecord } from './lib/users';
 
@@ -134,31 +133,17 @@ async function beginSignIn(ctx: GenericCtx<DataModel>, body: unknown): Promise<v
 }
 
 /**
- * Probe for ADR 0008 "Rate limits and lockout" (#63), on a preview only: logs the
- * `cf-connecting-ip` header of a sign-in or sign-up request, so the owner can read in the Convex
- * logs whether it carries the caller's address and ignores a forged one. Removed before the PR is
- * marked ready.
- */
-function probeClientIp(path: string, headers: Headers | undefined): void {
-  if (env.PREVIEW_ORIGIN_PATTERN !== PREVIEW_ORIGIN_PATTERN) return;
-  if (path !== '/sign-in/email' && path !== '/sign-up/email') return;
-  const value = headers?.get('cf-connecting-ip')?.slice(0, 100) ?? 'none';
-  console.log(`[ip-probe] ${path.slice(1)} cf-connecting-ip=${value}`);
-}
-
-/**
  * The `before` hook for every endpoint, over HTTP and through `auth.api.*`, so a direct request
  * cannot skip it. In order:
  * 1. While the secret is unset (`configured` false), refuses with 503 AUTH_NOT_CONFIGURED. The body
  *    never names the variable; the server log does. It runs first, so it also wins over the
  *    sign-up checks.
- * 2. On a preview, logs `cf-connecting-ip` for sign-in and sign-up (`probeClientIp`).
- * 3. On `/sign-in/email`, starts the attempt in the per-address throttle (`beginSignIn`).
- * 4. On `/sign-up/email`, refuses a `name` that is not a string, is blank, or is longer than
+ * 2. On `/sign-in/email`, starts the attempt in the per-address throttle (`beginSignIn`).
+ * 3. On `/sign-up/email`, refuses a `name` that is not a string, is blank, or is longer than
  *    NAME_MAX_LENGTH after `trim()` (NAME_INVALID). The stored name is the trimmed one
  *    (`databaseHooks` in createAuth): a before hook cannot change the body, because the plugins'
  *    before hooks return the original context, which replaces the change.
- * 5. On `/sign-up/email`, refuses a body whose `adultConfirmed` is not `true` (accounts are adults
+ * 4. On `/sign-up/email`, refuses a body whose `adultConfirmed` is not `true` (accounts are adults
  *    only, ADR 0008 "Ages"). Better Auth ignores the field itself.
  */
 function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
@@ -167,7 +152,6 @@ function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
       console.error('BETTER_AUTH_SECRET is not set');
       return Promise.reject(APIError.from('SERVICE_UNAVAILABLE', AUTH_NOT_CONFIGURED));
     }
-    probeClientIp(ctx.path, ctx.headers);
     if (ctx.path === '/sign-in/email') return beginSignIn(fnCtx, ctx.body);
     if (ctx.path !== '/sign-up/email') return Promise.resolve();
     const body: unknown = ctx.body;
@@ -235,8 +219,8 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
     },
     account: { accountLinking: { enabled: true, trustedProviders: [] } },
     user: { deleteUser: { enabled: true } },
-    // Ships off (#62): #63 runs ADR 0008's `cf-connecting-ip` probe and turns it on (`!IS_TEST`)
-    // only if the probe passes. A shared bucket would block everyone after three sign-ups in 10 s.
+    // Ships off (#62): #163 probes `cf-connecting-ip` and turns it on (`!IS_TEST`) only if the
+    // header is the caller's address. A shared bucket would block everyone after three sign-ups in 10 s.
     rateLimit: { enabled: false, storage: 'database' },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },

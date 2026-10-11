@@ -666,4 +666,4 @@ The #62 tester found that ADR 0008's `returnTo` rule, which checks the raw input
 
 **Reset.** `testing:reset` clears `signInFailures` with the other tables of `convex/schema.ts`. `testing:seedSignInFailures` (internal, `IS_TEST` only) sets one row, so an e2e test reaches the hard limit without 100 attempts.
 
-**Not yet done.** The per-IP limiter ships off (`rateLimit.enabled: false`), as #62 shipped it, until the `cf-connecting-ip` probe of #63 runs on a preview and the owner reads its log. Rows for addresses with fewer than 5 failures are never deleted except by a successful sign-in; a cleanup job is a later issue.
+**Not yet done.** The per-IP limiter ships off (`rateLimit.enabled: false`), as #62 shipped it, until the `cf-connecting-ip` probe of #163 shows that the header is the caller's address. Rows for addresses with fewer than 5 failures are never deleted except by a successful sign-in; a cleanup job is a later issue.
