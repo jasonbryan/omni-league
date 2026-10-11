@@ -19,6 +19,23 @@ import {
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
 const URL = `/app/organizations/${COASTAL.slug}`;
 const LIST_LEAGUES = 'leagues:listForAdmin';
+const LIST_MEMBERS = 'memberships:listForOrganization';
+const LIST_PENDING = 'invites:listPending';
+
+const member = (name: string) => ({
+  name,
+  email: `${name}@example.com`,
+  role: 'orgAdmin',
+  leagueNames: [],
+  isYou: false,
+});
+const invite = (id: string) => ({
+  inviteId: id,
+  email: `${id}@example.com`,
+  role: 'orgAdmin',
+  leagueNames: [],
+  expiresAt: 1,
+});
 
 const league = (id: string, status: 'draft' | 'published') => ({
   leagueId: id,
@@ -63,6 +80,8 @@ describe('AdminOverview', () => {
       [ME, {}],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
       [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
+      [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
+      [LIST_PENDING, { organizationId: COASTAL.organizationId }],
     ]);
     expect(subscription(LIST_FOR_ADMIN)).toBeDefined();
   });
@@ -72,7 +91,11 @@ describe('AdminOverview', () => {
     subscription(LIST_FOR_ADMIN)!.emit([]);
     await flush();
     const tiles = [...page.querySelectorAll('main dl > div')];
-    expect(tiles.map((tile) => text(tile.querySelector('dt')))).toEqual(['Locations', 'Leagues']);
+    expect(tiles.map((tile) => text(tile.querySelector('dt')))).toEqual([
+      'Locations',
+      'Leagues',
+      'Staff',
+    ]);
     const [count, note] = [...tiles[0].querySelectorAll('dd')].map(text);
     expect([count, note]).toEqual(['0', 'None yet']);
   });
@@ -129,6 +152,55 @@ describe('AdminOverview', () => {
     });
   });
 
+  describe('the Staff tile (#67, decision 2)', () => {
+    const tile = (page: HTMLElement) =>
+      [...page.querySelectorAll('main dl > div')][2].querySelectorAll('dd');
+
+    it('reads the member count and "N pending invites", from the two staff-screen queries', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_MEMBERS)!.emit([member('a'), member('b'), member('c')]);
+      subscription(LIST_PENDING)!.emit([invite('x'), invite('y')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['3', '2 pending invites']);
+    });
+
+    it('uses the singular for one pending invite, and "No pending invites" for none', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_MEMBERS)!.emit([member('a')]);
+      subscription(LIST_PENDING)!.emit([invite('x')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['1', '1 pending invite']);
+      subscription(LIST_PENDING)!.emit([]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['1', 'No pending invites']);
+    });
+
+    it('draws a placeholder while either list loads', async () => {
+      const { page, subscription, flush } = await open();
+      expect(text(tile(page)[0])).toBe('');
+      expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
+      subscription(LIST_MEMBERS)!.emit([member('a')]);
+      await flush();
+      expect(text(tile(page)[0])).toBe('');
+    });
+
+    it('shows "–" and a note when a list fails, never the error message', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_MEMBERS)!.fail(new Error('Server Error: secret'));
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['–', 'Could not be loaded']);
+      expect(page.textContent).not.toContain('secret');
+    });
+
+    it('a failing pending list does not hide the member count', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_MEMBERS)!.emit([member('a'), member('b')]);
+      subscription(LIST_PENDING)!.fail(new Error('x'));
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['2', 'Pending invites could not be loaded']);
+    });
+  });
+
   it('draws a placeholder in place of the count while the list loads, and no number', async () => {
     const { page } = await open();
     const dd = page.querySelector('main dl dd')!;
@@ -158,18 +230,20 @@ describe('AdminOverview', () => {
       return opened;
     }
 
-    it('with no league lists the steps: Add a location and Create a league link on, Publish the league does not', async () => {
+    it('with no league lists the steps: Add a location, Create a league, and Invite staff link on, Publish the league does not', async () => {
       const { page } = await openWith([]);
       expect(text(section(page)!.querySelector('h2#setup-heading'))).toBe('Get set up');
       expect(steps(page).map((li) => text(li.querySelector('h3')))).toEqual([
         'Add a location',
         'Create a league',
         'Publish the league',
+        'Invite staff (optional)',
       ]);
       expect(steps(page).map((li) => text(li.querySelector('[aria-hidden="true"]')))).toEqual([
         '1',
         '2',
         '3',
+        '4',
       ]);
       expect(text(steps(page)[0].querySelector('p'))).toBe(
         'Where your leagues play. Visitors see it on your public page.',
@@ -180,6 +254,9 @@ describe('AdminOverview', () => {
       expect(text(steps(page)[2].querySelector('p'))).toBe(
         'Publishing puts it on your public page.',
       );
+      expect(text(steps(page)[3].querySelector('p'))).toBe(
+        'Add another org admin, or a league organizer for the leagues you choose.',
+      );
       const links = steps(page).map((li) => {
         const a = li.querySelector('a');
         return a ? [text(a), a.getAttribute('href')] : null;
@@ -188,6 +265,7 @@ describe('AdminOverview', () => {
         ['Add a location', `/app/organizations/${COASTAL.slug}/locations`],
         ['Create a league', `/app/organizations/${COASTAL.slug}/leagues`],
         null,
+        ['Invite staff', `/app/organizations/${COASTAL.slug}/staff`],
       ]);
     });
 

@@ -6,6 +6,7 @@ import { serverRoutes } from './app.routes.server';
 import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
+import { AdminStaff } from './organizations/admin/admin-staff';
 import { AdminLocations } from './organizations/admin/admin-locations';
 import { AdminOverview } from './organizations/admin/admin-overview';
 import { CreateOrganizationPage } from './organizations/create-organization-page';
@@ -161,15 +162,16 @@ describe('Route tables', () => {
     expect(create?.canActivate).toEqual([requireSignedIn]);
     expect(await create?.loadComponent?.()).toBe(CreateOrganizationPage);
     // #65: after organizations/new (the reserved slug `new` keeps them apart), ahead of not-found.
-    // Overview is the area's own path; Locations and Leagues (#66) are below it.
+    // Overview is the area's own path; Locations, Leagues (#66), and Staff (#67) are below it.
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);
-    expect(admin?.children?.map((r) => r.path)).toEqual(['', 'locations', 'leagues']);
+    expect(admin?.children?.map((r) => r.path)).toEqual(['', 'locations', 'leagues', 'staff']);
     expect(admin?.children?.[0]?.pathMatch).toBe('full');
     expect(await admin?.children?.[0]?.loadComponent?.()).toBe(AdminOverview);
     expect(await admin?.children?.[1]?.loadComponent?.()).toBe(AdminLocations);
     expect(await admin?.children?.[2]?.loadComponent?.()).toBe(AdminLeagues);
+    expect(await admin?.children?.[3]?.loadComponent?.()).toBe(AdminStaff);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Your account | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);

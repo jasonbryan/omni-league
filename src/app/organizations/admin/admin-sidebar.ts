@@ -8,6 +8,7 @@ import {
   lucideLayoutDashboard,
   lucideMapPin,
   lucideTrophy,
+  lucideUsers,
 } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
 import { initials } from '../organization-sidebar';
@@ -28,7 +29,7 @@ function pathOf(url: string): string {
 /**
  * The admin area's sidebar (#65; design/mockups/65-organization-admin-locations.html, "Admin
  * sidebar"), rendered in the app shell's sidebar slot: the organization, then Overview and
- * Locations and Leagues (#67 adds Staff), then Public page and Your organizations. The
+ * Locations, Leagues, and Staff (#67), then Public page and Your organizations. The
  * current section carries `aria-current="page"`.
  *
  * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
@@ -44,6 +45,7 @@ function pathOf(url: string): string {
       lucideLayoutDashboard,
       lucideMapPin,
       lucideTrophy,
+      lucideUsers,
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -129,6 +131,7 @@ export class AdminSidebar {
       { label: 'Overview', icon: 'lucideLayoutDashboard', path: adminPath(slug) },
       { label: 'Locations', icon: 'lucideMapPin', path: adminPath(slug, 'locations') },
       { label: 'Leagues', icon: 'lucideTrophy', path: adminPath(slug, 'leagues') },
+      { label: 'Staff', icon: 'lucideUsers', path: adminPath(slug, 'staff') },
     ].map((link) => ({ ...link, current: here === link.path }));
   });
 }
