@@ -255,11 +255,14 @@ export async function insertDraftLeague(
  * `sportLeagueCounts[sport]`, and to the `sportLocations` row of each distinct location (a new
  * row starts at 1 and adds 1 to `sportLocationCounts[sport]`). A league that is already
  * `published` is left alone and changes no counter or row. A league stored without a status
- * (written before #66) counts as a draft. The caller has checked access (`requireLeagueOrganizer`).
+ * (written before #66) was public and `insertLeague` already counted it, so it gets the
+ * `published` status and no counter or row changes. The caller has checked access
+ * (`requireLeagueOrganizer`).
  */
 export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
   if (league.status === 'published') return;
   await ctx.db.patch('leagues', league._id, { status: 'published' });
+  if (league.status === undefined) return;
   await increment(ctx, league.organizationId, 'leagueCount');
   await countLeagueInSport(ctx, league.organizationId, league.sport, league.locationIds);
 }

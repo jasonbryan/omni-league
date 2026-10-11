@@ -168,6 +168,25 @@ describe('leagues.publish', () => {
     expect(await snapshot(s.t)).toEqual(before);
   });
 
+  test('a league stored without a status was already counted: publishing it sets the status and increments nothing', async () => {
+    const s = await setup();
+    const live = (await s.t.run((ctx) => ctx.db.query('leagues').first()))!;
+    await s.t.run((ctx) => ctx.db.patch('leagues', live._id, { status: undefined }));
+    const stored = await s.t.run((ctx) => ctx.db.get('leagues', live._id));
+    expect(stored).not.toHaveProperty('status');
+    const before = await snapshot(s.t);
+    await expect(s.adminA.mutation(api.leagues.publish, { leagueId: live._id })).resolves.toBe(
+      null,
+    );
+    expect(await statusOf(s.t, live._id)).toBe('published');
+    const after = await snapshot(s.t);
+    expect(after.organizations).toEqual(before.organizations);
+    expect(after.sportLocations).toEqual(before.sportLocations);
+    expect(after.leagues.map((league) => ({ ...league, status: undefined }))).toEqual(
+      before.leagues.map((league) => ({ ...league, status: undefined })),
+    );
+  });
+
   test('the league appears on the public pages and in the public queries at once, and only then', async () => {
     const s = await setup();
     const page = () => s.t.query(api.organizations.getPublicPage, { slug: 'org-a' });

@@ -331,7 +331,7 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
     await expect(page).toHaveURL(`${baseURL}${base}/leagues`);
   });
 
-  test('with only drafts the tile reads 0 and the list stays; with published leagues the tile counts them and the list is hidden', async ({
+  test('with only drafts the tile reads 2 and 2 drafts and the list stays; with published leagues it reads the published count and the list is hidden', async ({
     page,
   }, testInfo) => {
     const drafts = await memberOf(page, 'orgAdmin', {
