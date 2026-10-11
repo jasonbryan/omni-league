@@ -33,6 +33,7 @@ import {
 import { slugify } from '../../../convex/lib/slugs';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../core/data/convex';
 import { Shell } from '../shell';
+import { adminPath } from './admin/admin-path';
 
 /** Every message the page adds to the shared ones (design/mockups/64-create-organization.html). */
 export const MESSAGES = {
@@ -87,7 +88,8 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
  * after a submit, under their field, and clear once the field is valid; focus goes to the first
  * invalid field, or to the form alert for a failure that is not about one field. The first form
  * that calls a Convex mutation, so it carries the offline refusal of design/mockups/88-offline-note.html
- * (angular.md, State and data). After success the browser lands on the public page.
+ * (angular.md, State and data). After success the browser lands on the new organization's admin Overview, with its "Get set up" list
+ * (#65, decision 5), not on the public page.
  */
 @Component({
   selector: 'app-create-organization-page',
@@ -427,7 +429,7 @@ export class CreateOrganizationPage {
       this.showFailure(failure, slug);
       return;
     }
-    await this.router.navigateByUrl(`/organizations/${slug}`);
+    await this.router.navigateByUrl(adminPath(slug));
     this.submitting.set(false);
   }
 
