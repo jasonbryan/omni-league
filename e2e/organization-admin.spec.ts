@@ -122,6 +122,7 @@ test.describe('the admin area: entry and navigation', () => {
       await expect(nav.getByRole('link')).toHaveText([
         'Overview',
         'Locations',
+        'Leagues',
         'Public page',
         'Your organizations',
       ]);
@@ -182,7 +183,11 @@ test.describe('Overview', () => {
     await expect(locationTile(page).locator('dd').first()).toHaveText('0');
     await expect(locationTile(page).locator('dd').nth(1)).toHaveText('None yet');
     const setup = page.getByRole('region', { name: 'Get set up' });
-    await expect(setup.getByRole('heading', { level: 3 })).toHaveText(['Add a location']);
+    await expect(setup.getByRole('heading', { level: 3 })).toHaveText([
+      'Add a location',
+      'Create a league',
+      'Publish the league',
+    ]);
     await expect(main(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
       'href',
       `/organizations/${tenant.slug}`,

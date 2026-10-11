@@ -7,22 +7,29 @@
 // league, or `sportLocations` row goes through this module, which keeps each row's `sortName`, the
 // organization's `leagueCount` and `locationCount`, its per-sport `sportLeagueCounts` and
 // `sportLocationCounts`, and the `sportLocations` rows in the same mutation as the row. A write
-// elsewhere makes the public page's totals, sports, and page count disagree with its rows. #66 and
-// #69 extend it. The first writer that unpublishes or deletes a league, or changes
-// its locations, decrements what `insertLeague` incremented: `leagueCount`,
+// elsewhere makes the public page's totals, sports, and page count disagree with its rows. Only
+// published leagues count (#66): `insertLeague` counts a published league, and a draft
+// (`insertDraftLeague`, `leagues.create`) changes no counter and writes no `sportLocations` row.
+// #69's `publish` counts the league once. The first writer that unpublishes or deletes a league, or
+// changes its locations, decrements what `insertLeague` incremented: `leagueCount`,
 // `sportLeagueCounts[sport]`, and the `sportLocations` row of each location the league leaves,
 // deleting that row at 0 and decrementing `sportLocationCounts[sport]`.
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
-import { isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
+import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
+import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
 import { sportValidator, type Sport, type SportCounts } from './sports';
 
-/** A league to create; `locations` names locations of the same organization. */
+/**
+ * A league to create; `locations` names locations of the same organization. `status` is
+ * `published` when left out, so a seed's pages are public; only the e2e seeds ask for a `draft`.
+ */
 export const leagueSeedValidator = v.object({
   name: v.string(),
   sport: sportValidator,
   locations: v.array(v.string()),
+  status: v.optional(leagueStatusValidator),
 });
 
 /** An organization with its locations and leagues. */
@@ -183,9 +190,10 @@ export async function updateLocation(
 
 /**
  * Inserts a league of `organizationId` at the named locations of that organization, with a slug
- * from its name that is unique within the organization (`name`, `name-2`, ...) and its
- * `sortName`, and adds 1 to the organization's `leagueCount`. Throws when a location name is
- * unknown. Returns the new league's id and slug.
+ * from its name that is unique within the organization (`name`, `name-2`, ...) and one a user
+ * could choose, and its `sortName`. The league is `published` unless the seed says `draft`, and
+ * only a published league is counted (`insertLeagueRow`). Throws when a location name is unknown.
+ * Returns the new league's id and slug.
  */
 export async function insertLeague(
   ctx: MutationCtx,
@@ -208,17 +216,73 @@ export async function insertLeague(
     locationIds.push(location._id);
   }
   const slug = await uniqueLeagueSlug(ctx, organizationId, slugify(league.name));
+  const leagueId = await insertLeagueRow(
+    ctx,
+    organizationId,
+    { name: league.name, slug, sport: league.sport, locationIds },
+    league.status ?? 'published',
+  );
+  return { leagueId, slug };
+}
+
+/** A league to insert: its slug is final and its locations are ids of the organization's. */
+export interface NewLeague {
+  name: string;
+  slug: string;
+  sport: Sport;
+  locationIds: Id<'locations'>[];
+}
+
+/**
+ * Inserts a `draft` league (#66): the writer of `leagues.create`. A draft is on no public list and
+ * in no counter, so it adds nothing to `leagueCount`, `sportLeagueCounts`, `sportLocations`, or
+ * `sportLocationCounts`; #69's `publish` does. The caller has checked access, trimmed the name,
+ * validated the slug and `leagueSlugTaken`, and checked that every location belongs to the
+ * organization.
+ */
+export async function insertDraftLeague(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  league: NewLeague,
+): Promise<Id<'leagues'>> {
+  return insertLeagueRow(ctx, organizationId, league, 'draft');
+}
+
+async function insertLeagueRow(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  league: NewLeague,
+  status: LeagueStatus,
+): Promise<Id<'leagues'>> {
   const leagueId = await ctx.db.insert('leagues', {
     organizationId,
     name: league.name,
-    slug,
+    slug: league.slug,
     sport: league.sport,
-    locationIds,
+    locationIds: league.locationIds,
     sortName: sortName(league.name),
+    status,
   });
-  await increment(ctx, organizationId, 'leagueCount');
-  await countLeagueInSport(ctx, organizationId, league.sport, locationIds);
-  return { leagueId, slug };
+  if (status === 'published') {
+    await increment(ctx, organizationId, 'leagueCount');
+    await countLeagueInSport(ctx, organizationId, league.sport, league.locationIds);
+  }
+  return leagueId;
+}
+
+/** Whether a league of the organization already has this slug, drafts included. */
+export async function leagueSlugTaken(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  slug: string,
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_slug', (q) =>
+      q.eq('organizationId', organizationId).eq('slug', slug),
+    )
+    .first();
+  return existing !== null;
 }
 
 /**
@@ -263,6 +327,11 @@ async function countLeagueInSport(
   });
 }
 
+/**
+ * The first of `base`, `base-2`, `base-3`, ... that a user could choose (`isChoosableSlug`: not
+ * reserved, 3 to 60 characters) and no league of the organization has. A name such as `New`, `A`,
+ * or `5k` therefore gets `new-2`, `a-2`, or `5k-2`.
+ */
 async function uniqueLeagueSlug(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
@@ -271,13 +340,8 @@ async function uniqueLeagueSlug(
   for (let n = 1; ; n++) {
     const suffix = n === 1 ? '' : `-${n}`;
     const slug = `${base.slice(0, MAX_SLUG_LENGTH - suffix.length).replace(/-+$/, '')}${suffix}`;
-    const existing = await ctx.db
-      .query('leagues')
-      .withIndex('by_organizationId_and_slug', (q) =>
-        q.eq('organizationId', organizationId).eq('slug', slug),
-      )
-      .first();
-    if (!existing) return slug;
+    if (!isChoosableSlug(slug)) continue;
+    if (!(await leagueSlugTaken(ctx, organizationId, slug))) return slug;
   }
 }
 
@@ -292,12 +356,15 @@ export const backfilledValidator = v.object({
 });
 
 /**
- * Sets the fields #100 and #101 added on rows written before them (a reused staging deployment):
- * `sortName` on each location and league without one, and the four counters (league and location
- * totals, and the per-sport league and location counts with the `sportLocations` rows), from a
- * recount, on each organization missing any. Reads at most `BACKFILL_SCAN_LIMIT` rows per table.
- * Returns the number of rows changed per table; a second run changes none. Run by `seed:demo`
- * under its deployment guard, before its inserts; #104 removes it once the fields are required.
+ * Sets the fields #100, #101, and #66 added on rows written before them (a reused staging
+ * deployment): `sortName` on each location and league without one, `status` `published` on each
+ * league without one (every league written before #66 was public), and the four counters (league
+ * and location totals, and the per-sport league and location counts with the `sportLocations`
+ * rows), from a recount of the published leagues, on each organization missing any. The league
+ * pass runs first, so the recount sees every status. Reads at most `BACKFILL_SCAN_LIMIT` rows per
+ * table. Returns the number of rows changed per table; a second run changes none. Run by
+ * `seed:demo` under its deployment guard, before its inserts; #104 removes it once the fields are
+ * required.
  */
 export async function backfillTenantFields(
   ctx: MutationCtx,
@@ -309,8 +376,11 @@ export async function backfillTenantFields(
     backfilled.locations++;
   }
   for (const league of await ctx.db.query('leagues').take(BACKFILL_SCAN_LIMIT)) {
-    if (league.sortName !== undefined) continue;
-    await ctx.db.patch('leagues', league._id, { sortName: sortName(league.name) });
+    if (league.sortName !== undefined && league.status !== undefined) continue;
+    await ctx.db.patch('leagues', league._id, {
+      sortName: league.sortName ?? sortName(league.name),
+      status: league.status ?? 'published',
+    });
     backfilled.leagues++;
   }
   for (const organization of await ctx.db.query('organizations').take(BACKFILL_SCAN_LIMIT)) {
@@ -344,6 +414,8 @@ export async function backfillTenantFields(
     const sportLocationCounts: SportCounts = {};
     const leaguesPerLocation = new Map<string, number>();
     for (const league of leagues) {
+      // A draft is in no counter and has no row (#66); #69's publish counts it.
+      if (league.status !== 'published') continue;
       sportLeagueCounts[league.sport] = (sportLeagueCounts[league.sport] ?? 0) + 1;
       for (const locationId of new Set(league.locationIds)) {
         const key = `${league.sport}/${locationId}`;
@@ -356,7 +428,7 @@ export async function backfillTenantFields(
       sportLocationCounts[sport] = (sportLocationCounts[sport] ?? 0) + 1;
     }
     await ctx.db.patch('organizations', organizationId, {
-      leagueCount: leagues.length,
+      leagueCount: leagues.filter((league) => league.status === 'published').length,
       locationCount: locations.length,
       sportLeagueCounts,
       sportLocationCounts,

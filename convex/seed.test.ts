@@ -587,9 +587,10 @@ describe('seed:demo', () => {
       }
     });
 
+    // The three leagues were written before #66, so the backfill also sets their status.
     await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
       ...ROWS,
-      backfilled: { ...NONE, organizations: 1 },
+      backfilled: { ...NONE, organizations: 1, leagues: 3 },
     });
     expect((await sportStored(t))['mid-club']).toEqual({
       leagues: { soccer: 2, softball: 1 },
