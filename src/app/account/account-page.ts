@@ -6,22 +6,16 @@ import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
 import { Shell } from '../shell';
+import { initialsOf } from '../shell/initials';
 import { YourOrganizations } from './your-organizations';
 
-/** Up to two initials: the first letters of the first and last words of the name. */
-export function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const first = words[0];
-  if (!first) return '';
-  const last = words.length > 1 ? words[words.length - 1] : undefined;
-  const letter = (word: string | undefined) => (word ? (Array.from(word)[0] ?? '') : '');
-  return `${letter(first)}${letter(last)}`.toUpperCase();
-}
+// The top bar's account link (#63) shares it.
+export { initialsOf };
 
 /**
  * `/app` (#62), the first signed-in route (`RenderMode.Client`, behind `requireSignedIn`), approved
  * in #96 (design/mockups/62-sign-up.html, state 10): "Signed in as <name>" from `users.me`, and
- * Sign out, which deletes the session and goes to `/`. The top bar's account link arrives with #63.
+ * Sign out, which deletes the session and goes to `/`.
  * "Your organizations" (#64) is below the account panel. Sign out's classes are `buttonVariants`
  * output, unmerged, as the mockup draws it (no visible edge), in a static attribute;
  * account-page.spec.ts checks them.

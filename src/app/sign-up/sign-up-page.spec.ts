@@ -28,6 +28,7 @@ describe('SignUpPage', () => {
         provideFakeAuthClient(client),
         provideRouter([
           { path: 'sign-up', component: SignUpPage },
+          { path: 'sign-in', component: Elsewhere },
           { path: 'app', component: Elsewhere },
           { path: 'leagues/x/register', component: Elsewhere },
           { path: '', component: Elsewhere },
@@ -79,14 +80,23 @@ describe('SignUpPage', () => {
   describe('fields (mockup "Sign-up field attributes")', () => {
     beforeEach(() => open());
 
-    it('has the heading, the required note, and no sign-in, reset, verification, or Google UI', () => {
+    it('has the heading, the required note, and no reset, verification, or Google UI', () => {
       expect(page.querySelector('h1')?.textContent?.trim()).toBe('Create your account');
       expect(page.querySelector('form')?.getAttribute('aria-labelledby')).toBe('sign-up-heading');
       expect(page.querySelector('form')?.hasAttribute('novalidate')).toBe(true);
       expect(page.textContent).toContain('All fields are required.');
-      for (const absent of ['Forgot password', 'verify', 'Google', 'Sign in']) {
+      for (const absent of ['Forgot password', 'verify', 'Google']) {
         expect(page.textContent).not.toContain(absent);
       }
+    });
+
+    it('has the panel footer "Already have an account? Sign in", linking to /sign-in', () => {
+      const footer = page.querySelector('main form ~ p');
+      expect(footer?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+        'Already have an account? Sign in',
+      );
+      // No returnTo: sign-up lands on /app, so sign-in does too (mockup 62).
+      expect(footer?.querySelector('a')?.getAttribute('href')).toBe('/sign-in?returnTo=%2Fapp');
     });
 
     it('labels each field and sets its type, autocomplete, and description', () => {
@@ -178,6 +188,20 @@ describe('SignUpPage', () => {
       button.click();
       await harness.fixture.whenStable();
       expect(input('password').type).toBe('password');
+    });
+  });
+
+  describe('the links to sign-in keep a valid returnTo (#63)', () => {
+    it.each([
+      [
+        '/sign-up?returnTo=%2Fleagues%2Fx%2Fregister',
+        '/sign-in?returnTo=%2Fleagues%2Fx%2Fregister',
+      ],
+      ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/sign-in?returnTo=%2Fapp'],
+      ['/sign-up?returnTo=https%3A%2F%2Fevil.example', '/sign-in?returnTo=%2Fapp'],
+    ])('from %s the footer link goes to %s', async (from, href) => {
+      await open(from);
+      expect(page.querySelector('main form ~ p a')?.getAttribute('href')).toBe(href);
     });
   });
 
@@ -295,6 +319,10 @@ describe('SignUpPage', () => {
       expect(input('email').getAttribute('aria-invalid')).toBe('true');
       expect(document.activeElement).toBe(input('email'));
       expect(url()).toBe('/sign-up');
+      // "Sign in instead" is a link to /sign-in with the same returnTo (#63).
+      const link = page.querySelector<HTMLAnchorElement>('#email-error a');
+      expect(link?.textContent?.trim()).toBe('Sign in instead');
+      expect(link?.getAttribute('href')).toBe('/sign-in?returnTo=%2Fapp');
       // Values stay.
       expect(input('name').value).toBe(NAME);
       expect(input('password').value).toBe(PASSWORD);

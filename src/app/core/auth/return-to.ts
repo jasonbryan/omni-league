@@ -22,18 +22,34 @@ function namesAnotherHost(path: string): boolean {
  * resolves to this site's origin against any base.
  */
 export function safeReturnTo(raw: string): string {
-  if (!raw.startsWith('/') || namesAnotherHost(raw)) return '/';
+  return validReturnTo(raw) ?? '/';
+}
+
+/** `raw` as `safeReturnTo` would return it, or `null` when `safeReturnTo` would refuse it. */
+function validReturnTo(raw: string): string | null {
+  if (!raw.startsWith('/') || namesAnotherHost(raw)) return null;
   let url: URL;
   try {
     url = new URL(raw, PLACEHOLDER_ORIGIN);
   } catch {
-    return '/';
+    return null;
   }
-  if (url.origin !== PLACEHOLDER_ORIGIN || namesAnotherHost(url.pathname)) return '/';
+  if (url.origin !== PLACEHOLDER_ORIGIN || namesAnotherHost(url.pathname)) return null;
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /** The validated `returnTo`, or `/app` when the page was opened without one. */
 export function afterAuthUrl(returnTo: string | null | undefined): string {
   return returnTo === null || returnTo === undefined ? AFTER_AUTH_DEFAULT : safeReturnTo(returnTo);
+}
+
+/**
+ * The validated `returnTo`, and `/app` when there is none or it is not valid (#63). It is where a
+ * visitor who is already signed in goes from /sign-in or /sign-up, and the `returnTo` the links
+ * between those two pages and the top bar's "Sign in" carry. After a sign-in or sign-up itself an
+ * unsafe `returnTo` lands on `/` instead (`afterAuthUrl`).
+ */
+export function returnToOrApp(returnTo: string | null | undefined): string {
+  if (returnTo === null || returnTo === undefined) return AFTER_AUTH_DEFAULT;
+  return validReturnTo(returnTo) ?? AFTER_AUTH_DEFAULT;
 }

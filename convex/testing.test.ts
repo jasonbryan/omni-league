@@ -139,6 +139,7 @@ describe('convex/testing.ts exports', () => {
       'ping',
       'reset',
       'seedLeague',
+      'seedSignInFailures',
       'seedTenant',
     ]);
     for (const [name, fn] of exports) {

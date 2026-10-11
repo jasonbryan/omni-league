@@ -44,6 +44,8 @@ export const COASTAL_LOCATIONS = [
 
 export const GET_ADMIN_CONTEXT = 'organizations:getAdminContext';
 export const LIST_FOR_ADMIN = 'locations:listForAdmin';
+/** The top bar's account link (#63) asks this in every signed-in shell. */
+export const ME = 'users:me';
 
 /** The error `organizations.getAdminContext` throws for a caller who may not manage. */
 export function forbiddenError(): ConvexError<{ code: string }> {

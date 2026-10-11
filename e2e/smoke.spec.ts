@@ -30,8 +30,9 @@ test.describe('smoke: placeholder home', () => {
     expect(main).toBeGreaterThan(home);
     expect(heading).toBeGreaterThan(main);
     expect(html.indexOf('</main>')).toBeGreaterThan(heading);
-    // No Sign in until the sign-in route exists, and no sidebar on the home page (#73 decisions).
-    expect(html).not.toContain('Sign in');
+    // The top bar's "Sign in" (#63) is in the server HTML, and there is no sidebar on the home page
+    // (#73 decisions).
+    expect(html.slice(html.indexOf('<header'), html.indexOf('</header>'))).toMatch(/>Sign in<\/a>/);
     expect(html).not.toContain('aria-label="Open navigation"');
     expect(html).not.toMatch(/<nav\b/);
   });
@@ -115,7 +116,7 @@ test.describe('smoke: placeholder home', () => {
     expect(thirdPartyRequests).toEqual([]);
 
     await expectAccessible(page, {
-      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]'],
+      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]', 'header a[href^="/sign-in"]'],
     });
 
     // Focusing a top bar control on a scrolled page leaves the page where it is (#75): the sticky

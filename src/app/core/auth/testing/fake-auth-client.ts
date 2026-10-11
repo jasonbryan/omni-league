@@ -35,6 +35,19 @@ export class FakeAuthClient {
   holdSignUp = false;
   private release: (() => void) | null = null;
   readonly signUps: Record<string, unknown>[] = [];
+  /** The next `signIn.email` error; `null` makes it succeed. */
+  nextSignInError: {
+    status: number;
+    code?: string;
+    message?: string;
+    retryAfterSeconds?: number;
+  } | null = null;
+  /** When set, `signIn.email` throws it (a network failure). */
+  signInThrows: Error | null = null;
+  /** When true, `signIn.email` waits for `releaseSignIn()`. */
+  holdSignIn = false;
+  private releaseHeldSignIn: (() => void) | null = null;
+  readonly signIns: Record<string, unknown>[] = [];
   signOuts = 0;
   /**
    * What the crossDomain plugin's `getCookie()` returns: the unexpired cookies stored in
@@ -114,6 +127,25 @@ export class FakeAuthClient {
         : { data: { token: 't', user: { id: 'u1' } }, error: null };
     },
   };
+
+  readonly signIn = {
+    email: async (body: Record<string, unknown>) => {
+      this.signIns.push(body);
+      if (this.holdSignIn) await new Promise<void>((resolve) => (this.releaseHeldSignIn = resolve));
+      if (this.signInThrows) throw this.signInThrows;
+      const error = this.nextSignInError;
+      if (!error) this.storedCookie = 'better-auth.session_token=t';
+      return error
+        ? { data: null, error: { statusText: '', ...error } }
+        : { data: { token: 't', user: { id: 'u1' } }, error: null };
+    },
+  };
+
+  /** Lets a held `signIn.email` finish. */
+  releaseSignIn(): void {
+    this.releaseHeldSignIn?.();
+    this.releaseHeldSignIn = null;
+  }
 
   /** Lets a held `signUp.email` finish. */
   releaseSignUp(): void {

@@ -48,6 +48,18 @@ async function appCounts(t: T) {
   }));
 }
 
+/** A failure row of the per-address sign-in throttle (#63), which `reset` clears too. */
+const seedSignInFailure = (t: T) =>
+  t.run((ctx) =>
+    ctx.db.insert('signInFailures', {
+      email: 'locked@example.test',
+      failures: 100,
+      blockedUntil: 0,
+    }),
+  );
+const signInFailureCount = (t: T) =>
+  t.run(async (ctx) => (await ctx.db.query('signInFailures').collect()).length);
+
 /** One document in each of the auth tables a run leaves behind, `jwks` among them. */
 async function seedAuthDocs(t: T) {
   await t.run(async (ctx) => {
@@ -120,9 +132,12 @@ describe('IS_TEST guard on the auth additions', () => {
       vi.stubEnv('IS_TEST', value);
       const t = setup();
       await seedAuthDocs(t);
+      await seedSignInFailure(t);
       await expect(t.mutation(internal.testing.reset, {})).rejects.toThrow(/IS_TEST/);
       expect(await authDocs(t, 'jwks')).toHaveLength(1);
       expect(await authDocs(t, 'user')).toHaveLength(1);
+      // The signInFailures step throws before touching data too (#63).
+      expect(await signInFailureCount(t)).toBe(1);
     },
   );
 });
@@ -163,6 +178,7 @@ describe('testing:reset and the auth component', () => {
     const t = setup();
     await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
     await seedAuthDocs(t);
+    await seedSignInFailure(t);
     // The sign-up's JWT already created a signing key; seedAuthDocs added another.
     expect((await authDocs(t, 'jwks')).length).toBeGreaterThanOrEqual(2);
     let before = 0;
@@ -171,8 +187,9 @@ describe('testing:reset and the auth component', () => {
     expect(before).toBeGreaterThanOrEqual(8);
 
     const result = await t.mutation(internal.testing.reset, {});
-    // The app documents are the users row and the organization.
-    expect(result).toMatchObject({ documents: 2, authDocuments: before });
+    // The app documents are the users row, the organization, and the sign-in failure row (#63).
+    expect(result).toMatchObject({ documents: 3, authDocuments: before });
+    expect(await signInFailureCount(t)).toBe(0);
     for (const model of AUTH_COMPONENT_TABLES) expect(await authDocs(t, model), model).toEqual([]);
     expect(await appCounts(t)).toEqual({ users: 0, organizations: 0 });
 
@@ -180,6 +197,42 @@ describe('testing:reset and the auth component', () => {
     await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
     expect(await authDocs(t, 'user')).toHaveLength(1);
   }, 30_000);
+});
+
+describe('testing:seedSignInFailures (#63 e2e: reach the hard limit without 100 attempts)', () => {
+  const failureRows = (t: T) => t.run((ctx) => ctx.db.query('signInFailures').collect());
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+    ['empty', ''],
+  ])('throws with IS_TEST %s and writes nothing', async (_, value) => {
+    vi.stubEnv('IS_TEST', value);
+    const t = setup();
+    await expect(
+      t.mutation(internal.testing.seedSignInFailures, { email: 'a@example.test', failures: 100 }),
+    ).rejects.toThrow(/IS_TEST/);
+    expect(await failureRows(t)).toEqual([]);
+  });
+
+  test('sets the row of the lowercase address, none waiting, and replaces it on a second call', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.mutation(internal.testing.seedSignInFailures, {
+      email: 'Locked.User@Example.test',
+      failures: 100,
+    });
+    expect(await failureRows(t)).toMatchObject([
+      { email: 'locked.user@example.test', failures: 100, blockedUntil: 0 },
+    ]);
+    await t.mutation(internal.testing.seedSignInFailures, {
+      email: 'locked.user@example.test',
+      failures: 7,
+    });
+    expect(await failureRows(t)).toMatchObject([
+      { email: 'locked.user@example.test', failures: 7, blockedUntil: 0 },
+    ]);
+  });
 });
 
 describe('testing:accountByEmail', () => {

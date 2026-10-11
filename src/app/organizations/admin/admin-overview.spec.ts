@@ -8,6 +8,7 @@ import {
   COASTAL_LOCATIONS,
   GET_ADMIN_CONTEXT,
   LIST_FOR_ADMIN,
+  ME,
   openAdmin,
   text,
 } from './testing/admin-harness';
@@ -48,6 +49,7 @@ describe('AdminOverview', () => {
     const { convex, subscription } = await open();
     expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
+      [ME, {}],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
     ]);
     expect(subscription(LIST_FOR_ADMIN)).toBeDefined();

@@ -13,11 +13,11 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { FormField, form, required, validate } from '@angular/forms/signals';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
-import { afterAuthUrl } from '../core/auth/return-to';
+import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
 import { Shell } from '../shell';
 import { Checkbox } from '../ui/checkbox';
 
@@ -42,7 +42,9 @@ export const MESSAGES = {
   passwordShort: (n: number) => `Use at least ${MIN_PASSWORD} characters. This password has ${n}.`,
   passwordLong: (n: number) => `Use ${MAX_PASSWORD} characters or fewer. This password has ${n}.`,
   adult: 'Confirm that you are 18 or older to create an account.',
-  // #63 makes "Sign in instead" a link to /sign-in with the same returnTo.
+  // "Sign in instead" is a link to /sign-in with the same returnTo (#63), drawn by the template. The
+  // link does not wrap (whitespace-nowrap, which the mockup lacks): a link split over two lines has
+  // its centre between them, where a pointer or a focus check lands on the text around it.
   exists: 'An account with this email already exists. Sign in instead.',
   breached:
     'This password has appeared in a data breach, so it is not safe to use. Choose a different one.',
@@ -81,7 +83,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
  */
 @Component({
   selector: 'app-sign-up-page',
-  imports: [Checkbox, FormField, NgIcon, Shell],
+  imports: [Checkbox, FormField, NgIcon, RouterLink, Shell],
   providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -234,7 +236,19 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                       class="mt-0.5 shrink-0 text-base"
                       aria-hidden="true"
                     />
-                    <span>{{ error }}</span>
+                    <span>
+                      @if (error === messages.exists) {
+                        An account with this email already exists.
+                        <a
+                          routerLink="/sign-in"
+                          [queryParams]="{ returnTo: signInReturnTo }"
+                          class="font-medium whitespace-nowrap underline underline-offset-4"
+                          >Sign in instead</a
+                        >.
+                      } @else {
+                        {{ error }}
+                      }
+                    </span>
                   </div>
                 }
               </div>
@@ -389,6 +403,15 @@ type FormAlert = 'check-unavailable' | 'unexpected';
             </button>
             <p role="status" class="sr-only">{{ submitting() ? 'Creating your account.' : '' }}</p>
           </form>
+          <p class="border-t border-border bg-muted/50 px-5 py-4 text-center text-sm md:px-8">
+            Already have an account?
+            <a
+              routerLink="/sign-in"
+              [queryParams]="{ returnTo: signInReturnTo }"
+              class="font-medium text-primary underline underline-offset-4"
+              >Sign in</a
+            >
+          </p>
         </div>
       </div>
     </app-shell>
@@ -399,6 +422,9 @@ export class SignUpPage {
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
+
+  /** The sign-in links keep a valid `returnTo`; one that is not valid becomes `/app` (#63). */
+  protected readonly signInReturnTo = returnToOrApp(this.returnTo);
 
   protected readonly messages = MESSAGES;
 

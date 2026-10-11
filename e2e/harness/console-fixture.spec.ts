@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConsoleGuard, type ConsoleGuardOptions } from '../support/console-guard';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from '../support/env';
-import { expect, test } from '../support/fixtures';
+import { expect, failedRequests, test } from '../support/fixtures';
 
 // The expected-failure probes would otherwise write a failure screenshot into the report. Playwright
 // allows `screenshot` only at file level (a describe-level `use` would force a new worker).
@@ -454,6 +454,45 @@ test.describe('console fixture wiring (real fixture)', () => {
     test('an unused entry fails the test at teardown', async ({ page }) => {
       test.fail(true, 'the unused allowance 409 /probe-conflict must fail this test');
       await page.setContent('<p>ok</p>');
+    });
+  });
+
+  // #63 tester: `failedRequests(...)` keeps every entry of a list of two or more. A plain array of
+  // two entries is read by Playwright as `[value, options]` and loses the second entry.
+  test.describe('with failedRequests(a, b)', () => {
+    test.use({
+      expectedFailedRequests: failedRequests(
+        { status: 409, path: '/probe-conflict' },
+        { status: 429, path: '/probe-limit' },
+      ),
+    });
+
+    async function failRequest(page: Page, path: string, status: number): Promise<void> {
+      await page.route(`**${path}`, (route) => route.fulfill({ status, body: '' }));
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate((p) => fetch(p).then(() => undefined), path),
+      ]);
+    }
+
+    test('allows both listed requests', async ({ page }) => {
+      await page.goto('/');
+      await failRequest(page, '/probe-conflict', 409);
+      await failRequest(page, '/probe-limit', 429);
+    });
+
+    test('an unused second entry fails the test at teardown', async ({ page }) => {
+      test.fail(true, 'the unused allowance 429 /probe-limit must fail this test');
+      await page.goto('/');
+      await failRequest(page, '/probe-conflict', 409);
+    });
+
+    test('an unlisted request still fails the test', async ({ page }) => {
+      test.fail(true, 'a 500 on /probe-limit is not allowed');
+      await page.goto('/');
+      await failRequest(page, '/probe-conflict', 409);
+      await failRequest(page, '/probe-limit', 429);
+      await failRequest(page, '/probe-limit', 500);
     });
   });
 

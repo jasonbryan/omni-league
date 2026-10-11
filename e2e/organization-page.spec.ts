@@ -338,6 +338,7 @@ test.describe('organization page in the browser', () => {
           'a[href$="#main"]',
           'header button[aria-label="Open navigation"]',
           'header a[href="/"]',
+          'header a[href^="/sign-in"]',
         ],
       });
       return;
@@ -362,6 +363,7 @@ test.describe('organization page in the browser', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
+        'header a[href^="/sign-in"]',
         'nav a[aria-current="page"]',
         ...tenant.leagues.map((_, i) => `nav a[href="${tenant.path}#league-${i + 1}"]`),
         ...tenant.locations.map((_, i) => `nav a[href="${tenant.path}#location-${i + 1}"]`),

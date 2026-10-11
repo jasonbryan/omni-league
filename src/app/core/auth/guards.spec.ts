@@ -19,6 +19,7 @@ describe('auth guards', () => {
         provideRouter([
           { path: '', component: Page },
           { path: 'sign-up', component: Page, canActivate: [redirectSignedIn] },
+          { path: 'sign-in', component: Page, canActivate: [redirectSignedIn] },
           { path: 'app', component: Page, canActivate: [requireSignedIn] },
           { path: 'leagues/x/register', component: Page },
         ]),
@@ -30,10 +31,10 @@ describe('auth guards', () => {
   }
 
   describe('requireSignedIn (/app)', () => {
-    it('sends a signed-out visitor to /sign-up?returnTo=/app', async () => {
+    it('sends a signed-out visitor to /sign-in?returnTo=/app', async () => {
       const { harness, router } = await setup(null);
       await harness.navigateByUrl('/app');
-      expect(router.url).toBe('/sign-up?returnTo=%2Fapp');
+      expect(router.url).toBe('/sign-in?returnTo=%2Fapp');
       expect(router.parseUrl(router.url).queryParams).toEqual({ returnTo: '/app' });
     });
 
@@ -49,7 +50,7 @@ describe('auth guards', () => {
         providers: [
           provideFakeAuthClient(client),
           provideRouter([
-            { path: 'sign-up', component: Page },
+            { path: 'sign-in', component: Page },
             { path: 'app', component: Page, canActivate: [requireSignedIn] },
           ]),
         ],
@@ -63,18 +64,22 @@ describe('auth guards', () => {
     });
   });
 
-  describe('redirectSignedIn (/sign-up)', () => {
+  describe.each(['/sign-up', '/sign-in'])('redirectSignedIn (%s)', (page) => {
     it('shows the page to a signed-out visitor', async () => {
       const { harness, router } = await setup(null);
-      await harness.navigateByUrl('/sign-up?returnTo=%2Fleagues%2Fx%2Fregister');
-      expect(router.url).toBe('/sign-up?returnTo=%2Fleagues%2Fx%2Fregister');
+      await harness.navigateByUrl(`${page}?returnTo=%2Fleagues%2Fx%2Fregister`);
+      expect(router.url).toBe(`${page}?returnTo=%2Fleagues%2Fx%2Fregister`);
     });
 
     it.each([
-      ['/sign-up', '/app'],
-      ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
-      ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/'],
-    ])('sends a signed-in visitor from %s to %s', async (from, to) => {
+      ['', '/app'],
+      ['?returnTo=%2Fapp', '/app'],
+      ['?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
+      ['?returnTo=%2F%2Fevil.example%2Fx', '/app'],
+      ['?returnTo=https%3A%2F%2Fevil.example', '/app'],
+      ['?returnTo=%2F%5Cevil.example', '/app'],
+    ])('sends a signed-in visitor from %s%s to %s', async (query, to) => {
+      const from = `${page}${query}`;
       const { harness, router } = await setup({ id: 's1' });
       await harness.navigateByUrl(from);
       expect(router.url).toBe(to);

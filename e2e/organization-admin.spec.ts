@@ -1,5 +1,5 @@
 // The organization admin area and its Locations page (#65): `/app/organizations/:slug` and
-// `/app/organizations/:slug/locations`, Client routes behind sign-up (approved design
+// `/app/organizations/:slug/locations`, Client routes behind sign-in (approved design
 // design/mockups/65-organization-admin-locations.html). Every test signs up its own user through
 // the real form, then gives it a role in a seeded organization (`testing:addMembership`), so the
 // tests need the local Convex backend and are skipped with E2E_BASE_URL set. The tests that create
@@ -163,10 +163,10 @@ test.describe('the admin area: entry and navigation', () => {
     await expect(page).toHaveURL(`${baseURL}${base}/locations`);
   });
 
-  test('a signed-out visitor is sent to sign-up with returnTo', async ({ page }) => {
+  test('a signed-out visitor is sent to sign-in with returnTo', async ({ page }) => {
     const slug = `e2e-${randomBytes(4).toString('hex')}`;
     await page.goto(`/app/organizations/${slug}/locations`);
-    await expect(page).toHaveURL(/\/sign-up\?/);
+    await expect(page).toHaveURL(/\/sign-in\?/);
     expect(new URL(page.url()).searchParams.get('returnTo')).toBe(
       `/app/organizations/${slug}/locations`,
     );

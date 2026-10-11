@@ -8,7 +8,7 @@ export type AuthClient = ReturnType<typeof makeAuthClient>;
 /** The part of the client `AuthService` uses; unit tests substitute a fake. */
 export type AuthClientLike = Pick<
   AuthClient,
-  'useSession' | 'signUp' | 'signOut' | 'convex' | 'getCookie'
+  'useSession' | 'signUp' | 'signIn' | 'signOut' | 'convex' | 'getCookie'
 >;
 
 /** The deployment's HTTP-action URL (`*.convex.site`), compiled in by `scripts/ng-convex.mjs`. */
