@@ -60,6 +60,22 @@ test.describe('axe helper checks', () => {
     expect(reflow.scrollWidth).toBeGreaterThanOrEqual(700);
   });
 
+  test('1.4.10: an infinite animation (animate-pulse, animate-spin) does not hang reflow or expectAccessible (#167)', async ({
+    page,
+  }) => {
+    test.setTimeout(15_000);
+    await page.setContent(
+      fixture(
+        '<h1>Pulse</h1><div class="pulse" style="width:100px;height:10px;background:#444"></div>' +
+          '<p>Loading the list.</p>',
+        '<style>@keyframes pulse{50%{opacity:.5}}.pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}</style>',
+      ),
+    );
+    expect(await page.evaluate(() => document.getAnimations().length)).toBeGreaterThan(0);
+    expect(await checkReflow(page)).toMatchObject({ width: 320, passed: true });
+    await expectAccessible(page);
+  });
+
   test('2.4.7: outline: none with no other focus style fails', async ({ page }) => {
     await page.setContent(
       fixture('<h1>Outline</h1><button type="button" style="outline:none">No ring</button>'),

@@ -323,6 +323,9 @@ test.describe('Locations', () => {
     await addButton(page).click();
     await expect(page.locator('#name-error')).toHaveText('Enter the location’s name.');
     await expect(page.locator('#address-error')).toHaveText('Enter the location’s address.');
+    // The form moves focus to Name once it has rendered (#167). Filling before then lets that focus
+    // land between two fills, and the second value goes into Name.
+    await expect(nameField(page)).toBeFocused();
 
     await nameField(page).fill('n'.repeat(101));
     await addressField(page).fill('a'.repeat(201));
@@ -391,6 +394,8 @@ test.describe('Locations', () => {
     await expect(edit).toBeFocused();
 
     await edit.click();
+    // Fill only once the form has taken focus: it would land between the two fills (#167).
+    await expect(page.locator('#edit-name')).toBeFocused();
     await page.locator('#edit-name').fill(' ');
     await page.locator('#edit-address').fill('');
     await page.getByRole('button', { name: 'Save changes' }).click();
