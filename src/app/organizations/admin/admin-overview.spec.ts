@@ -13,10 +13,21 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Overview (#65), design/mockups/65-organization-admin-locations.html states 1 and 2.
+// Overview (#65, #66), design/mockups/65-organization-admin-locations.html states 1 and 2 and
+// design/mockups/66-69-organization-leagues.html (decision 2).
 
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
 const URL = `/app/organizations/${COASTAL.slug}`;
+const LIST_LEAGUES = 'leagues:listForAdmin';
+
+const league = (id: string, status: 'draft' | 'published') => ({
+  leagueId: id,
+  name: id,
+  slug: id,
+  sportName: 'Soccer',
+  status,
+  locationNames: [],
+});
 
 async function open() {
   const opened = await openAdmin(ROUTES, URL);
@@ -45,12 +56,13 @@ describe('AdminOverview', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
   });
 
-  it('counts locations from locations.listForAdmin, asked with the organization id and no new query', async () => {
+  it('counts from the sections’ own list queries, asked with the organization id and no new query', async () => {
     const { convex, subscription } = await open();
     expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
       [ME, {}],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
+      [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
     ]);
     expect(subscription(LIST_FOR_ADMIN)).toBeDefined();
   });
@@ -60,8 +72,7 @@ describe('AdminOverview', () => {
     subscription(LIST_FOR_ADMIN)!.emit([]);
     await flush();
     const tiles = [...page.querySelectorAll('main dl > div')];
-    expect(tiles).toHaveLength(1);
-    expect(text(tiles[0].querySelector('dt'))).toBe('Locations');
+    expect(tiles.map((tile) => text(tile.querySelector('dt')))).toEqual(['Locations', 'Leagues']);
     const [count, note] = [...tiles[0].querySelectorAll('dd')].map(text);
     expect([count, note]).toEqual(['0', 'None yet']);
   });
@@ -72,6 +83,50 @@ describe('AdminOverview', () => {
     await flush();
     const [count, note] = [...page.querySelectorAll('main dl dd')].map(text);
     expect([count, note]).toEqual(['2', 'All on your public page']);
+  });
+
+  describe('the Leagues tile', () => {
+    const tile = (page: HTMLElement) =>
+      [...page.querySelectorAll('main dl > div')][1].querySelectorAll('dd');
+
+    it('with none, reads 0 and "None yet"', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_LEAGUES)!.emit([]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['0', 'None yet']);
+    });
+
+    it('counts every league, and splits published from drafts', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_LEAGUES)!.emit([
+        league('a', 'published'),
+        league('b', 'draft'),
+        league('c', 'published'),
+        league('d', 'draft'),
+      ]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['4', '2 published, 2 drafts']);
+    });
+
+    it('uses the singular for one, and leaves out a part that is 0', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(LIST_LEAGUES)!.emit([league('a', 'draft')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
+      subscription(LIST_LEAGUES)!.emit([league('a', 'published'), league('b', 'published')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['2', '2 published']);
+    });
+
+    it('draws a placeholder while the list loads, and "–" with a note when it fails', async () => {
+      const { page, subscription, flush } = await open();
+      expect(text(tile(page)[0])).toBe('');
+      expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
+      subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['–', 'Could not be loaded']);
+      expect(page.textContent).not.toContain('secret');
+    });
   });
 
   it('draws a placeholder in place of the count while the list loads, and no number', async () => {
@@ -91,29 +146,79 @@ describe('AdminOverview', () => {
   });
 
   describe('"Get set up" (state 2)', () => {
-    it('lists the step whose page exists, linking Add a location to Locations', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(LIST_FOR_ADMIN)!.emit([]);
-      await flush();
-      const section = page.querySelector('section[aria-labelledby="setup-heading"]')!;
-      expect(text(section.querySelector('h2#setup-heading'))).toBe('Get set up');
-      const steps = [...section.querySelectorAll('ol > li')];
-      expect(steps).toHaveLength(1);
-      expect(text(steps[0].querySelector('h3'))).toBe('Add a location');
-      expect(text(steps[0].querySelector('p'))).toBe(
+    const section = (page: HTMLElement) =>
+      page.querySelector('section[aria-labelledby="setup-heading"]');
+    const steps = (page: HTMLElement) => [...section(page)!.querySelectorAll('ol > li')];
+
+    async function openWith(leagues: unknown[] | undefined) {
+      const opened = await open();
+      opened.subscription(LIST_FOR_ADMIN)!.emit([]);
+      if (leagues) opened.subscription(LIST_LEAGUES)!.emit(leagues);
+      await opened.flush();
+      return opened;
+    }
+
+    it('with no league lists the steps: Add a location and Create a league link on, Publish the league does not', async () => {
+      const { page } = await openWith([]);
+      expect(text(section(page)!.querySelector('h2#setup-heading'))).toBe('Get set up');
+      expect(steps(page).map((li) => text(li.querySelector('h3')))).toEqual([
+        'Add a location',
+        'Create a league',
+        'Publish the league',
+      ]);
+      expect(steps(page).map((li) => text(li.querySelector('[aria-hidden="true"]')))).toEqual([
+        '1',
+        '2',
+        '3',
+      ]);
+      expect(text(steps(page)[0].querySelector('p'))).toBe(
         'Where your leagues play. Visitors see it on your public page.',
       );
-      const link = steps[0].querySelector('a')!;
-      expect(text(link)).toBe('Add a location');
-      expect(link.getAttribute('href')).toBe(`/app/organizations/${COASTAL.slug}/locations`);
-      expect(text(steps[0].querySelector('[aria-hidden="true"]'))).toBe('1');
+      expect(text(steps(page)[1].querySelector('p'))).toBe(
+        'Choose its sport and locations. It starts as a draft, so only your staff see it.',
+      );
+      expect(text(steps(page)[2].querySelector('p'))).toBe(
+        'Publishing puts it on your public page.',
+      );
+      const links = steps(page).map((li) => {
+        const a = li.querySelector('a');
+        return a ? [text(a), a.getAttribute('href')] : null;
+      });
+      expect(links).toEqual([
+        ['Add a location', `/app/organizations/${COASTAL.slug}/locations`],
+        ['Create a league', `/app/organizations/${COASTAL.slug}/leagues`],
+        null,
+      ]);
     });
 
-    it('is shown with locations too: #66 adds the rule that hides it', async () => {
-      const { page, subscription, flush } = await open();
-      subscription(LIST_FOR_ADMIN)!.emit(COASTAL_LOCATIONS);
+    it('with only drafts the list is still shown', async () => {
+      const { page } = await openWith([league('a', 'draft'), league('b', 'draft')]);
+      expect(section(page)).not.toBeNull();
+    });
+
+    it('hides once any league is published', async () => {
+      const { page } = await openWith([league('a', 'draft'), league('b', 'published')]);
+      expect(section(page)).toBeNull();
+    });
+
+    it('appears again if the published league goes away, and hides as one is published (live)', async () => {
+      const { page, subscription, flush } = await openWith([league('a', 'draft')]);
+      expect(section(page)).not.toBeNull();
+      subscription(LIST_LEAGUES)!.emit([league('a', 'published')]);
       await flush();
-      expect(page.querySelector('section[aria-labelledby="setup-heading"]')).not.toBeNull();
+      expect(section(page)).toBeNull();
+    });
+
+    it('is not drawn while the leagues load, so an established organization never flashes it', async () => {
+      const { page } = await openWith(undefined);
+      expect(section(page)).toBeNull();
+    });
+
+    it('is shown when the leagues fail to load', async () => {
+      const { page, subscription, flush } = await openWith(undefined);
+      subscription(LIST_LEAGUES)!.fail(new Error('x'));
+      await flush();
+      expect(section(page)).not.toBeNull();
     });
   });
 });

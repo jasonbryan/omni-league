@@ -7,6 +7,7 @@ import {
   lucideGlobe,
   lucideLayoutDashboard,
   lucideMapPin,
+  lucideTrophy,
 } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
 import { initials } from '../organization-sidebar';
@@ -27,7 +28,7 @@ function pathOf(url: string): string {
 /**
  * The admin area's sidebar (#65; design/mockups/65-organization-admin-locations.html, "Admin
  * sidebar"), rendered in the app shell's sidebar slot: the organization, then Overview and
- * Locations (#66 and #67 add Leagues and Staff), then Public page and Your organizations. The
+ * Locations and Leagues (#67 adds Staff), then Public page and Your organizations. The
  * current section carries `aria-current="page"`.
  *
  * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
@@ -36,7 +37,15 @@ function pathOf(url: string): string {
 @Component({
   selector: 'app-admin-sidebar',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideArrowLeft, lucideGlobe, lucideLayoutDashboard, lucideMapPin })],
+  providers: [
+    provideIcons({
+      lucideArrowLeft,
+      lucideGlobe,
+      lucideLayoutDashboard,
+      lucideMapPin,
+      lucideTrophy,
+    }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <nav [attr.aria-label]="organization().name + ' admin'" class="flex flex-col gap-6">
@@ -119,6 +128,7 @@ export class AdminSidebar {
     return [
       { label: 'Overview', icon: 'lucideLayoutDashboard', path: adminPath(slug) },
       { label: 'Locations', icon: 'lucideMapPin', path: adminPath(slug, 'locations') },
+      { label: 'Leagues', icon: 'lucideTrophy', path: adminPath(slug, 'leagues') },
     ].map((link) => ({ ...link, current: here === link.path }));
   });
 }

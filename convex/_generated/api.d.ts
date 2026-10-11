@@ -11,9 +11,12 @@
 import type * as auth from "../auth.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
+import type * as leagues from "../leagues.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_authOrigins from "../lib/authOrigins.js";
 import type * as lib_forbidden from "../lib/forbidden.js";
+import type * as lib_leagueInput from "../lib/leagueInput.js";
+import type * as lib_leagueStatus from "../lib/leagueStatus.js";
 import type * as lib_locationInput from "../lib/locationInput.js";
 import type * as lib_memberships from "../lib/memberships.js";
 import type * as lib_organizationInput from "../lib/organizationInput.js";
@@ -44,9 +47,12 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   health: typeof health;
   http: typeof http;
+  leagues: typeof leagues;
   "lib/access": typeof lib_access;
   "lib/authOrigins": typeof lib_authOrigins;
   "lib/forbidden": typeof lib_forbidden;
+  "lib/leagueInput": typeof lib_leagueInput;
+  "lib/leagueStatus": typeof lib_leagueStatus;
   "lib/locationInput": typeof lib_locationInput;
   "lib/memberships": typeof lib_memberships;
   "lib/organizationInput": typeof lib_organizationInput;

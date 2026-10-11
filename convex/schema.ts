@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { leagueStatusValidator } from './lib/leagueStatus';
 import { roleValidator } from './lib/roles';
 import { sportCountsValidator, sportValidator } from './lib/sports';
 
@@ -86,11 +87,26 @@ export default defineSchema({
     locationIds: v.array(v.id('locations')),
     /** `name` lowercased, so the indexes sort by name ignoring case. */
     sortName: v.optional(v.string()),
+    /**
+     * `draft` until an organizer publishes the league (#66, #69); only `published` leagues reach the
+     * public pages and their counters. Optional only until every existing row is backfilled
+     * (`seed:demo` sets `published`); #104 or a named follow-up makes it required. A row without
+     * one is on no public index and is listed to staff as a draft.
+     */
+    status: v.optional(leagueStatusValidator),
   })
     .index('by_organizationId_and_name', ['organizationId', 'name'])
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
+    // Every league of the organization, drafts included, for its admin area.
     .index('by_organizationId_and_sortName', ['organizationId', 'sortName'])
-    .index('by_organizationId_and_sport_and_sortName', ['organizationId', 'sport', 'sortName']),
+    // The public lists read `status` = `published`, so drafts never take a place in a page.
+    .index('by_organizationId_and_status_and_sortName', ['organizationId', 'status', 'sortName'])
+    .index('by_organizationId_and_sport_and_status_and_sortName', [
+      'organizationId',
+      'sport',
+      'status',
+      'sortName',
+    ]),
 
   // How many leagues of one sport are held at one location (#101). A row exists while that number
   // is at least 1, so the rows of a sport are its distinct locations: the count a delete can keep
