@@ -222,6 +222,25 @@ describe('testing:addMembership (#65)', () => {
     ).rejects.toThrow(/IS_TEST/);
   });
 
+  test.each([
+    ['"false"', 'false'],
+    ['empty', ''],
+    ['"TRUE"', 'TRUE'],
+  ])(
+    'refuses with IS_TEST %s even for a real organization and account, and adds no membership',
+    async (_, value) => {
+      vi.stubEnv('IS_TEST', 'true');
+      const t = setup();
+      await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
+      vi.stubEnv('IS_TEST', value);
+      await expect(
+        t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
+      ).rejects.toThrow(/IS_TEST/);
+      expect(await t.run((ctx) => ctx.db.query('memberships').collect())).toEqual([]);
+    },
+    30_000,
+  );
+
   test('makes the seeded user a league organizer of the seeded organization, once', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();

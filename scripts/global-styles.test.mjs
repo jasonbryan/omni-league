@@ -238,4 +238,27 @@ describe('colour literals in src/', () => {
       assert.doesNotMatch(withoutComments(text), COLOUR, text);
     }
   });
+
+  it('still catches every hex form, and does not read a jump-link fragment as a colour (#65)', () => {
+    for (const line of [
+      'color: #FFF;',
+      'color:#abc',
+      'background: #12345678;',
+      'fill="#0af"',
+      "const c = '#add';",
+      'x(#fff)',
+      'border: 1px solid #f00 !important',
+      'a{color:#ABCDEF}',
+    ]) {
+      assert.match(withoutComments(line), COLOUR, line);
+    }
+    for (const line of [
+      '<a href="#add-location">Add location</a>',
+      "this.router.navigate([], { fragment: 'add-location' }); // #add-location",
+      'url(#add-location)',
+      'href="#fade-in"',
+    ]) {
+      assert.doesNotMatch(withoutComments(line), COLOUR, line);
+    }
+  });
 });

@@ -4,7 +4,7 @@ import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { insertTenant } from './lib/tenantWrites';
+import { insertLocation, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -462,5 +462,84 @@ describe('locations.update', () => {
         address: 'Nowhere',
       }),
     ).rejects.toThrow('Not allowed');
+  });
+});
+
+describe('locations edge cases (#65 tester)', () => {
+  test('allows two locations with the same name in one organization, each its own row and count', async () => {
+    const s = await setup();
+    const input = { organizationId: s.organizationA, name: 'Twin Courts', address: '5 Twin St' };
+    const first = await s.adminA.mutation(api.locations.create, input);
+    const second = await s.adminA.mutation(api.locations.create, input);
+    expect(second.locationId).not.toBe(first.locationId);
+    const rows = await s.adminA.query(api.locations.listForAdmin, {
+      organizationId: s.organizationA,
+    });
+    expect(rows.filter((row) => row.name === 'Twin Courts')).toHaveLength(2);
+    const organization = await s.t.run((ctx) => ctx.db.get('organizations', s.organizationA));
+    expect(organization?.locationCount).toBe(4);
+    const publicList = await s.t.query(api.organizations.listPublicLocations, {
+      slug: 'org-a',
+      page: 1,
+    });
+    expect(publicList.total).toBe(4);
+  });
+
+  test('listForAdmin returns at most 200 rows, the first 200 by name', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      for (let i = 0; i < 205; i += 1) {
+        await insertLocation(ctx, s.organizationB, {
+          name: `Field ${String(i).padStart(3, '0')}`,
+          address: `${i} Row St`,
+        });
+      }
+    });
+    const rows = await s.adminB.query(api.locations.listForAdmin, {
+      organizationId: s.organizationB,
+    });
+    expect(rows).toHaveLength(200);
+    expect(rows[0]?.name).toBe('B Field');
+    expect(rows.map((row) => row.name)).toEqual(
+      [...rows.map((row) => row.name)].sort((a, b) =>
+        a.toLowerCase().localeCompare(b.toLowerCase()),
+      ),
+    );
+  });
+
+  test('two edits of one location in turn leave the last one stored and every counter unchanged', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    await Promise.all([
+      s.adminA.mutation(api.locations.update, {
+        locationId: s.alpha,
+        name: 'First Edit',
+        address: '1 First St',
+      }),
+      s.adminA.mutation(api.locations.update, {
+        locationId: s.alpha,
+        name: 'Second Edit',
+        address: '2 Second St',
+      }),
+    ]);
+    const after = await snapshot(s.t);
+    const stored = after.locations.find((l) => l._id === s.alpha);
+    expect(['first edit', 'second edit']).toContain(stored?.sortName);
+    expect(stored?.sortName).toBe(stored?.name.toLowerCase());
+    expect(after.organizations).toEqual(before.organizations);
+    expect(after.sportLocations).toEqual(before.sportLocations);
+  });
+
+  test('a rejected update by another organization admin leaves the stored name', async () => {
+    const s = await setup();
+    await expect(
+      s.adminB.mutation(api.locations.update, {
+        locationId: s.alpha,
+        name: 'Hijacked',
+        address: 'X',
+      }),
+    ).rejects.toThrow('Not allowed');
+    const stored = await s.t.run((ctx) => ctx.db.get('locations', s.alpha));
+    expect(stored?.name).toBe('Alpha Field');
   });
 });
