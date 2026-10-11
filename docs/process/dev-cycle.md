@@ -6,17 +6,17 @@ In Claude Code, the main session orchestrates the cycle with the `/dev-cycle` sk
 
 ## Roles
 
-| Role          | Agent                       | Owns                                                                                                                                                   |
-| ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Orchestrator  | main session (`/dev-cycle`) | Picks the next issue, dispatches role agents, moves labels, merges non-gated PRs (gate PRs only on the owner's chat instruction), reports to the owner |
-| Planner       | `planner`                   | Turns a requirement into sliced, testable issues; drafts ADRs for `gate:technology`                                                                    |
-| Plan reviewer | `plan-reviewer`             | Challenges an issue before any code is written                                                                                                         |
-| Designer      | `designer`                  | Builds an HTML mockup when the owner asks for one                                                                                                      |
-| Implementer   | `implementer`               | Writes code and tests on a branch, opens the PR                                                                                                        |
-| Tester        | `tester`                    | Independently verifies the PR against the acceptance criteria                                                                                          |
-| PR reviewer   | `pr-reviewer`               | Reviews the diff for correctness, security, and conventions                                                                                            |
-| Deployer      | `deployer`                  | Ships merged work to preview/production and verifies it                                                                                                |
-| Owner         | the human                   | Approves gates by merging gate PRs or telling the orchestrator in chat to merge them; reviews UI on staging; answers blocked questions                 |
+| Role          | Agent                       | Owns                                                                                                                                                                     |
+| ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Orchestrator  | main session (`/dev-cycle`) | Picks the next issue, dispatches role agents, moves labels, merges every PR outside the owner-merge scope, reports to the owner per [Reporting](#reporting-to-the-owner) |
+| Planner       | `planner`                   | Turns a requirement into sliced, testable issues; drafts ADRs for `gate:technology`                                                                                      |
+| Plan reviewer | `plan-reviewer`             | Challenges an issue before any code is written                                                                                                                           |
+| Designer      | `designer`                  | Builds an HTML mockup when the owner asks for one                                                                                                                        |
+| Implementer   | `implementer`               | Writes code and tests on a branch, opens the PR                                                                                                                          |
+| Tester        | `tester`                    | Independently verifies the PR against the acceptance criteria                                                                                                            |
+| PR reviewer   | `pr-reviewer`               | Reviews the diff for correctness, security, and conventions                                                                                                              |
+| Deployer      | `deployer`                  | Ships merged work to preview/production and verifies it                                                                                                                  |
+| Owner         | the human                   | Merges gate PRs and changes to secrets or security policy ([Who merges](#who-merges)); reviews UI on staging; answers blocked questions                                  |
 
 ### Model and effort
 
@@ -87,9 +87,9 @@ Otherwise it moves to `status:needs-approval`, and one gate PR is opened per gat
 
 - **`gate:technology`:** the planner writes `docs/decisions/NNNN-<slug>.md` from `docs/decisions/0000-template.md` with status `Accepted`, comparing at least two options. PR title `decision: <topic>`.
 
-New screens and visible UI changes need no gate and no mockup (owner, 2026-10-10). When the owner asks for a mockup, the designer writes `design/mockups/<issue>-<slug>.html`, a self-contained static page showing every state (empty, loading, error, populated) at mobile and desktop widths, in an ordinary `type:design` PR titled `design: <screen>` with no gate label.
+New screens and visible UI changes need no gate and no mockup (owner, 2026-10-10). When the owner asks for a mockup, the designer writes `design/mockups/<issue>-<slug>.html`, a self-contained static page showing every state (empty, loading, error, populated) at mobile and desktop widths, in an ordinary `type:design` PR titled `design: <screen>` with no gate label, which the orchestrator merges like any reviewed PR after the designer applies the owner's comments.
 
-Gate PRs carry the `gate:*` label, link the issue, and are never merged by an agent on its own judgement. The owner merges to approve, or comments with changes, which the authoring agent applies. On merge, the issue moves to `status:ready`.
+Gate PRs carry the `gate:*` label, link the issue, and are never merged by an agent on its own judgement (see [Who merges](#who-merges)). The owner merges to approve, or comments with changes, which the authoring agent applies. On merge, the issue moves to `status:ready`.
 
 **ADR status.** The planner writes `Status: Accepted` in the gate PR itself. An open, unmerged PR is by definition a proposal, and merging it is the owner's acceptance, so no follow-up commit is needed to change the status after merge. If the owner rejects the decision, the PR is closed unmerged and the ADR never reaches `main`.
 
@@ -137,7 +137,7 @@ On `CHANGES`, the implementer fixes it, then the tester re-runs, then the review
 
 ### 7. Merge
 
-A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commit, it has no `gate:*` label, and every gate on the linked issue is approved. The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
+A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commit, it has no `gate:*` label, it is outside the owner-merge scope ([Who merges](#who-merges)), and every gate on the linked issue is approved. The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
 
 1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS` and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
 2. **Mark ready.** `gh pr ready <n>` starts the `ci` run.
@@ -145,7 +145,7 @@ A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commi
 4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
 5. **On failure.** If `ci` fails, `gh pr ready <n> --undo` and send the PR back to the implementer.
 
-The branch is deleted and the issue closes through `Closes #n`.
+The branch is deleted and the issue closes through `Closes #n`. Merging (or closing) the PR also deletes its Convex preview deployment `pr-<n>` automatically ([Phase 8](#8-deploy)); nobody deletes it by hand.
 
 Until #12 adds the `ci` workflow, the orchestrator merges on `PASS` and `APPROVE` alone, with a one-line merge note on the PR saying CI was waived (as on PR #30).
 
@@ -156,12 +156,35 @@ The deployer runs after merges to `main`:
 - **Preview/staging:** deploy, run smoke tests against it, report the URL on the issue.
 - **Production:** behind `gate:production`. The deployer opens a release PR or deploy request listing the merged changes since the last release, any Convex schema migrations, and any Stripe configuration changes. After the owner approves, the deployer ships, runs smoke tests, and on failure rolls back and opens a `type:bug` issue.
 
-Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub.
+Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub. The one exception is the Convex team token for preview cleanup, held as a secret of the `preview-cleanup` environment that only `main` can read ([hosting, Where secrets live](hosting.md#where-secrets-live)).
 
-- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. No cleanup job runs: Convex deletes preview backends after 5 days, and Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans).
+- **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. **Merging a PR deletes its Convex preview deployment automatically** (`.github/workflows/clean-previews.yml` runs on the push to `main`; a daily sweep deletes the preview of a PR closed without a merge and any the push run missed; [hosting, Cleanup](hosting.md#cleanup)), so the team's 40-deployment cap is not reached. The orchestrator checks the daily run's result (`gh run list --workflow clean-previews.yml`) and reports a failure to the owner. Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans); Convex also deletes preview backends after 5 days.
 - **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app`. The deployer smoke-tests it and reports the URL. The owner reviews UI changes there and requests changes as new issues.
 - **Production.** The deployer opens a release PR from `main` into the `production` branch. The owner's merge approves and ships it: Netlify builds with the owner-held production key, then the deployer smoke-tests the production URL.
 - **Rollback.** If the production smoke tests fail, the deployer opens a `type:bug` issue with the rollback steps, and the owner runs them: Netlify **Publish deploy** of the previous build, then merging a revert on `production` to redeploy the previous Convex functions.
+
+## Who merges
+
+The owner merges only:
+
+- **Gate PRs** (`gate:technology`, `gate:production`), as in [Phase 3](#3-gates) and [Phase 8](#8-deploy).
+- **Changes to secrets or security policy:** the secrets sections of [hosting.md](hosting.md) (Owner setup, Where secrets live), the Secrets and Approval gates sections of [AGENTS.md](../../AGENTS.md), and anything else that changes who holds a secret or who may approve what.
+
+The owner may also tell the orchestrator in chat to merge one of these PRs; the orchestrator then merges it and comments the owner's words on it, quoted exactly, as the record of approval. Only the owner's own chat message counts; no agent's message is an approval.
+
+Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` and `APPROVE` where those phases apply and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
+
+## Reporting to the owner
+
+The orchestrator reports **per milestone**, not per step. A milestone is a feature merged and live on staging (with its staging link), a release, or a set of issues that finished together. Between milestones it keeps working and does not report.
+
+It reports **immediately**, outside that cadence, only when the owner must act:
+
+- a gate PR waiting for approval, or a PR in the owner-merge scope;
+- a `status:blocked` question, with the options and a recommendation;
+- a budget or access problem only the owner can fix.
+
+Each report follows [AGENTS.md, Writing on GitHub](../../AGENTS.md#writing-on-github): the outcome or ask first, one screen, one line per item, grouped as needs the owner, done, and in flight.
 
 ## Parallel work
 
@@ -185,4 +208,4 @@ When a decision belongs to the owner (an ambiguous requirement, a gate, a loop t
 
 ## Changing this process
 
-This file is the single source of truth for the cycle. Changes to it, to `AGENTS.md`, or to `.claude/agents/` go through a normal PR that the owner merges.
+This file is the single source of truth for the cycle. Changes to it, to `.claude/`, and to the parts of `AGENTS.md` outside the owner-merge scope go through a normal PR, reviewed and merged like any other. The owner merges only the PRs listed in [Who merges](#who-merges).
