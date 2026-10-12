@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
+import { captureInviteToken } from './invites/capture-invite-token';
 
 export const routes: Routes = [
   {
@@ -27,6 +28,17 @@ export const routes: Routes = [
     title: 'Sign in | Omni League',
     canActivate: [redirectSignedIn],
     loadComponent: () => import('./sign-in/sign-in-page').then((m) => m.SignInPage),
+  },
+  {
+    // Accepting a staff invite (#70), a Client route. The link is `/invites/accept#<token>`; the
+    // guard moves the token into sessionStorage and redirects to the path alone, so no URL holds it.
+    // Open to a signed-out visitor, who signs up or in and comes back here.
+    path: 'invites/accept',
+    title: 'Staff invite | Omni League',
+    canActivate: [captureInviteToken],
+    // A link opened on the open page changes only the fragment, so the guard must run again.
+    runGuardsAndResolvers: 'always',
+    loadComponent: () => import('./invites/accept-invite-page').then((m) => m.AcceptInvitePage),
   },
   {
     // The signed-in app (#62): Client routes only (app.routes.server.ts), so the guards never run

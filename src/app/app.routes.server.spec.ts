@@ -1,5 +1,7 @@
 import { RenderMode } from '@angular/ssr';
 import { AccountPage } from './account/account-page';
+import { AcceptInvitePage } from './invites/accept-invite-page';
+import { captureInviteToken } from './invites/capture-invite-token';
 import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
@@ -39,7 +41,7 @@ function directives(value: string): Map<string, string | true> {
 // `app/**` shell header from ADR 0010 item 4 (#37), the `**` not-found header (#23), the public
 // organization page (#60), and sign-up and the signed-in app (#62).
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, app, app/** Client, organizations/:orgSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, organizations/:orgSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       // #62: no auth code runs on the server, so these render in the browser only.
@@ -53,6 +55,12 @@ describe('Route tables', () => {
         path: 'sign-in',
         renderMode: RenderMode.Client,
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
+      },
+      {
+        // #70: the invite link's token is a bearer secret, so the page is never given a referrer.
+        path: 'invites/accept',
+        renderMode: RenderMode.Client,
+        headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
       },
       {
         path: 'app',
@@ -101,15 +109,16 @@ describe('Route tables', () => {
   it('has Client routes for the bound above to check', () => {
     expect(
       serverRoutes.filter((route) => route.renderMode === RenderMode.Client).map((r) => r.path),
-    ).toEqual(['sign-up', 'sign-in', 'app', 'app/**']);
+    ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, sign-up, sign-in, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, sign-up, sign-in, invites/accept, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'organizations/:orgSlug',
       'sign-up',
       'sign-in',
+      'invites/accept',
       'app',
       '**',
     ]);
@@ -147,6 +156,20 @@ describe('Route tables', () => {
     expect(await route?.loadComponent?.()).toBe(SignInPage);
     expect(route?.title).toBe('Sign in | Omni League');
     expect(route?.canActivate).toEqual([redirectSignedIn]);
+  });
+
+  it('invites/accept lazy-loads the invite page, behind the guard that takes the token out of the URL', async () => {
+    const route = routes.find((r) => r.path === 'invites/accept');
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(AcceptInvitePage);
+    expect(route?.title).toBe('Staff invite | Omni League');
+    expect(route?.canActivate).toEqual([captureInviteToken]);
+  });
+
+  it("the invite page's response sends no referrer", () => {
+    const invite = serverRoutes.find((r) => r.path === 'invites/accept');
+    const headers = new Headers(invite?.renderMode === RenderMode.Client ? invite.headers : {});
+    expect(headers.get('Referrer-Policy')).toBe('no-referrer');
   });
 
   it('app has the guarded account page, the guarded create-organization page, the guarded admin area, and its own not-found route', async () => {

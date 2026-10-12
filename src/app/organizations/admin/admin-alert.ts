@@ -16,8 +16,9 @@ import {
 
 const BASE =
   "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
-const NEUTRAL = `${BASE} bg-card text-card-foreground`;
-const DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90`;
+/** The classes of the neutral and the destructive alert box, shared with the invite page's alert. */
+export const ALERT_NEUTRAL = `${BASE} bg-card text-card-foreground`;
+export const ALERT_DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90`;
 
 /**
  * What an alert says: a success message, a failure, the offline refusal, or a `note` (#67): fixed
@@ -72,7 +73,7 @@ export class AdminAlert {
     return kind === 'success' ? 'status' : kind === 'note' ? 'note' : 'alert';
   });
   protected readonly classes = computed(() =>
-    this.kind() === 'success' || this.kind() === 'note' ? NEUTRAL : DESTRUCTIVE,
+    this.kind() === 'success' || this.kind() === 'note' ? ALERT_NEUTRAL : ALERT_DESTRUCTIVE,
   );
   protected readonly icon = computed(() => {
     const icons = {

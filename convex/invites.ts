@@ -1,9 +1,9 @@
 import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
-import { action, internalMutation, mutation, query } from './_generated/server';
+import { action, internalMutation, mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdmin, requireUser } from './lib/access';
-import { authUserIdByEmail } from './lib/authUsers';
+import { authEmailOf, authUserIdByEmail } from './lib/authUsers';
 import {
   checkInviteEmail,
   checkInviteLeagues,
@@ -11,7 +11,9 @@ import {
   INVITE_MESSAGES,
   type InviteInputError,
 } from './lib/inviteInput';
-import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
+import { findUsableInvite } from './lib/inviteLookup';
+import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
+import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 
 /**
@@ -223,5 +225,120 @@ export const listPending = query({
       });
     }
     return rows;
+  },
+});
+
+/** What a visitor may see of an invite: never the address, an id, or the hash. */
+const inviteSummaryFields = {
+  organizationName: v.string(),
+  role: roleValidator,
+  leagueNames: v.array(v.string()),
+};
+
+/**
+ * Why `accept` refused, as the `code` of its `ConvexError` data (#70): `invalid` for an unknown,
+ * revoked, expired, or already accepted token (not told apart), `emailMismatch` when the caller's
+ * account email is not the invited one, `alreadyMember` when the caller already has a membership
+ * in the organization. Nothing is written for any of them.
+ */
+export type AcceptRefusal = 'invalid' | 'emailMismatch' | 'alreadyMember';
+
+function refuseAccept(code: AcceptRefusal): never {
+  throw new ConvexError({ code });
+}
+
+/** The organization's name and the names of the invite's leagues that still exist in it. */
+async function summarise(
+  ctx: Pick<QueryCtx, 'db'>,
+  invite: Doc<'invites'>,
+): Promise<{
+  organizationName: string;
+  leagueIds: Id<'leagues'>[];
+  leagueNames: string[];
+}> {
+  const organization = await ctx.db.get('organizations', invite.organizationId);
+  const leagueIds: Id<'leagues'>[] = [];
+  const leagueNames: string[] = [];
+  for (const id of invite.leagueIds) {
+    const league = await ctx.db.get('leagues', id);
+    if (league?.organizationId === invite.organizationId) {
+      leagueIds.push(id);
+      leagueNames.push(league.name);
+    }
+  }
+  return { organizationName: organization?.name ?? '', leagueIds, leagueNames };
+}
+
+/**
+ * What the invite page shows for the token in the link (#70). Deliberately public: the token is
+ * the bearer secret, and a visitor opens the link before they have an account. The token is hashed
+ * here and looked up by `by_tokenHash`. A pending, unexpired invite answers `{ status: 'valid',
+ * organizationName, role, leagueNames, expiresAt }`; an unknown, revoked, expired, or accepted one
+ * answers exactly `{ status: 'invalid' }`, so the answer says nothing about which. No address, id,
+ * or hash is returned.
+ */
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (convex.md, Functions): the visitor has no account yet, the argument is a 256-bit bearer token that is hashed and looked up, and the answer holds no address, id, or hash.
+export const getByToken = query({
+  args: { token: v.string() },
+  returns: v.union(
+    v.object({ status: v.literal('valid'), ...inviteSummaryFields, expiresAt: v.number() }),
+    v.object({ status: v.literal('invalid') }),
+  ),
+  handler: async (ctx, { token }) => {
+    const invite = await findUsableInvite(ctx, token, Date.now());
+    if (!invite) return { status: 'invalid' as const };
+    const { organizationName, leagueNames } = await summarise(ctx, invite);
+    return {
+      status: 'valid' as const,
+      organizationName,
+      role: invite.role,
+      leagueNames,
+      expiresAt: invite.expiresAt,
+    };
+  },
+});
+
+/**
+ * Accepts the invite for the signed-in caller (#70). The caller's account email (kept by Better
+ * Auth, never an argument) must be the invited address, compared in constant time; the invite must
+ * be pending and unexpired; and the caller must not already be a member of the organization (one
+ * membership per user per organization, and changing a role is a later slice). It then creates the
+ * membership (an org admin, or a league organizer with the invite's leagues that still exist) and
+ * marks the invite accepted in the same transaction. A concurrent second accept sees the invite
+ * accepted and is refused, so the membership is never created twice. Refusals are a
+ * `ConvexError` whose data is `{ code: AcceptRefusal }`; a caller who is not signed in gets
+ * `Sign in required`.
+ */
+export const accept = mutation({
+  args: { token: v.string() },
+  returns: v.object(inviteSummaryFields),
+  handler: async (ctx, { token }) => {
+    const user = await requireUser(ctx);
+    const invite = await findUsableInvite(ctx, token, Date.now());
+    if (!invite) refuseAccept('invalid');
+
+    const accountEmail = (await authEmailOf(ctx, user.authUserId)) ?? '';
+    if (accountEmail === '' || !timingSafeEqual(accountEmail, invite.email)) {
+      refuseAccept('emailMismatch');
+    }
+
+    const existing = await ctx.db
+      .query('memberships')
+      .withIndex('by_userId_and_organizationId', (q) =>
+        q.eq('userId', user._id).eq('organizationId', invite.organizationId),
+      )
+      .unique();
+    if (existing) refuseAccept('alreadyMember');
+
+    const { organizationName, leagueIds, leagueNames } = await summarise(ctx, invite);
+    await insertMembership(
+      ctx,
+      user._id,
+      invite.organizationId,
+      invite.role,
+      invite.role === 'orgAdmin' ? [] : leagueIds,
+    );
+    await ctx.db.patch('invites', invite._id, { status: 'accepted' });
+    return { organizationName, role: invite.role, leagueNames };
   },
 });
