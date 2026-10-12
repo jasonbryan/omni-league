@@ -58,7 +58,7 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps an admin leagues file to the three league specs, not the staff or mockup specs', () => {
+  it('maps the publish dialog to the three league specs, not the staff or mockup specs', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/publish-league-dialog.ts']),
       want(
@@ -67,6 +67,22 @@ describe('selectSpecs: mapped areas', () => {
         'e2e/organization-leagues.spec.ts',
       ),
     );
+  });
+
+  it('maps the leagues page and forms to the league specs and the mockup spec', () => {
+    // organization-leagues-mockup compares the real page text with the approved mockup.
+    for (const file of ['admin-leagues', 'league-create-form', 'league-form']) {
+      assert.deepEqual(
+        specsFor([`src/app/organizations/admin/${file}.ts`]),
+        want(
+          'e2e/organization-leagues-mockup.spec.ts',
+          'e2e/organization-leagues-publish-states.spec.ts',
+          'e2e/organization-leagues-publish.spec.ts',
+          'e2e/organization-leagues.spec.ts',
+        ),
+        file,
+      );
+    }
   });
 
   it('maps an admin staff file to the staff and accept-invite specs', () => {
@@ -172,6 +188,9 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(specsFor(['convex/locations.ts']).includes('e2e/organization-page.spec.ts'));
     assert.ok(specsFor(['convex/seed.ts']).includes('e2e/pwa.spec.ts'));
     assert.ok(specsFor(['convex/organizations.ts']).includes('e2e/organization-page.spec.ts'));
+    for (const file of sessionSpecs) {
+      assert.ok(specsFor(['convex/organizations.ts']).includes(file), file);
+    }
     assert.ok(specsFor(['convex/memberships.ts']).includes('e2e/organization-staff.spec.ts'));
   });
 
@@ -486,19 +505,41 @@ describe('the specs that sign a user up or in', () => {
   const read = (file) => readFileSync(join(repoRoot, file), 'utf8');
 
   // Written separately from deriveSessionSpecs, from the review that found the gap (#188): a spec
-  // that imports a helper from e2e/support/session.ts drives the real sign-up form.
+  // that drives the sign-up form through a support helper. A support file is a helper when its
+  // source uses `signUp`, `otherUser`, `newUser`, or `seedUser`, or imports a helper, directly or
+  // through other support files; a spec is a user of it when it imports it by path.
+  const supportDir = join(repoRoot, 'e2e', 'support');
+  const supportSources = new Map(
+    readdirSync(supportDir)
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => [name.slice(0, -3), readFileSync(join(supportDir, name), 'utf8')]),
+  );
+  const helperNames = new Set(
+    [...supportSources]
+      .filter(([, text]) => /\b(?:signUp|otherUser|newUser|seedUser)\b/.test(text))
+      .map(([name]) => name),
+  );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, text] of supportSources) {
+      const importsHelper = [...helperNames].some((helper) => text.includes(`'./${helper}'`));
+      if (!helperNames.has(name) && importsHelper) {
+        helperNames.add(name);
+        grew = true;
+      }
+    }
+  }
   const importsSessionHelper = onDisk.filter((file) =>
-    /import\s*\{[^}]*\b(?:signUp|otherUser)\b[^}]*\}\s*from\s*'[^']*support\/session'/.test(
-      read(file),
-    ),
+    [...helperNames].some((name) => new RegExp(`from '[^']*support/${name}'`).test(read(file))),
   );
 
-  it('finds the specs that import signUp or otherUser', () => {
+  it('finds the specs that import a sign-up helper', () => {
+    assert.ok(helperNames.has('session') && helperNames.has('users'), [...helperNames].join(', '));
     assert.ok(importsSessionHelper.length >= 9, importsSessionHelper.join(', '));
     assert.ok(importsSessionHelper.includes('e2e/sign-in-admin.spec.ts'));
   });
 
-  it('derives every spec that imports signUp or otherUser, and the specs that open the sign-in or sign-up page', () => {
+  it('derives every spec that imports a sign-up helper, and the specs that open the sign-in or sign-up page', () => {
     for (const file of importsSessionHelper) assert.ok(sessionSpecs.includes(file), file);
     for (const file of ['e2e/sign-in.spec.ts', 'e2e/sign-up.spec.ts', 'e2e/auth-session.spec.ts']) {
       assert.ok(sessionSpecs.includes(file), file);
@@ -528,6 +569,7 @@ describe('the specs that sign a user up or in', () => {
     const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
     try {
       mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      mkdirSync(join(root, 'e2e', 'support'), { recursive: true });
       writeFileSync(
         join(root, 'e2e', 'new.spec.ts'),
         "import { signUp } from './support/session';\n",
@@ -554,11 +596,38 @@ describe('the specs that sign a user up or in', () => {
     }
   });
 
+  it('derives a spec that imports only a support helper wrapping signUp, however deeply', () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
+    try {
+      mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      mkdirSync(join(root, 'e2e', 'support'), { recursive: true });
+      const support = (name, text) => writeFileSync(join(root, 'e2e', 'support', name), text);
+      support('session.ts', 'export async function signUp() {}\n');
+      support('users.ts', 'export function newUser() {}\n');
+      support('wrapper.ts', "import { signUp } from './session';\n");
+      support('outer.ts', "import { wrap } from './wrapper';\n");
+      support('plain.ts', "import { x } from './env';\n");
+      const spec = (path, text) => writeFileSync(join(root, 'e2e', path), text);
+      spec('via-wrapper.spec.ts', "import { wrap } from './support/wrapper';\n");
+      spec('via-outer.spec.ts', "import { outer } from './support/outer';\n");
+      spec('harness/via-outer.spec.ts', "import { outer } from '../support/outer';\n");
+      spec('unrelated.spec.ts', "import { x } from './support/plain';\n");
+      assert.deepEqual(deriveSessionSpecs(root), [
+        'e2e/harness/via-outer.spec.ts',
+        'e2e/via-outer.spec.ts',
+        'e2e/via-wrapper.spec.ts',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('throws, so the step runs the full suite, when no spec signs in or e2e/ is missing', () => {
     const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
     try {
       assert.throws(() => deriveSessionSpecs(root));
       mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      mkdirSync(join(root, 'e2e', 'support'), { recursive: true });
       assert.throws(() => deriveSessionSpecs(root), /no e2e spec signs a user in/);
     } finally {
       rmSync(root, { recursive: true, force: true });

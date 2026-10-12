@@ -75,27 +75,63 @@ const PUBLIC_PAGE = [
 export const SESSION = '@session';
 
 /**
- * The e2e specs that sign a user up or in: those that import the session or users helpers
- * (`signUp`/`otherUser`, `newUser`/`seedUser`) or open the sign-in or sign-up page. Derived from
- * the spec files, so a new spec that signs in is selected without a change here. Throws when
+ * The names (no extension) of the e2e/support modules that sign a user up or in: `session` and
+ * `users` (`signUp`/`otherUser`, `newUser`/`seedUser`), and any support module that imports one of
+ * them, directly or through other support modules.
+ * @param {string} root Repository root.
+ * @returns {Set<string>}
+ */
+function sessionHelpers(root) {
+  const dir = join(root, 'e2e', 'support');
+  /** @type {Map<string, string[]>} Support module name -> the support modules it imports. */
+  const imports = new Map();
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+    const text = readFileSync(join(dir, entry.name), 'utf8');
+    const names = [...text.matchAll(SUPPORT_SIBLING_IMPORT)].map((match) => match[1]);
+    imports.set(entry.name.slice(0, -'.ts'.length), names);
+  }
+  const helpers = new Set(['session', 'users']);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, names] of imports) {
+      if (!helpers.has(name) && names.some((imported) => helpers.has(imported))) {
+        helpers.add(name);
+        grew = true;
+      }
+    }
+  }
+  return helpers;
+}
+/** An import of a sibling module from a file in e2e/support: `from './session'`. */
+const SUPPORT_SIBLING_IMPORT = /from '\.\/([\w-]+)'/g;
+/** An import of a support module from a spec: `from './support/session'` or `'../support/users'`. */
+const SPEC_SUPPORT_IMPORT = /from '\.{1,2}\/support\/([\w-]+)'/g;
+
+/**
+ * The e2e specs that sign a user up or in: those that import a session helper (see
+ * sessionHelpers) or open the sign-in or sign-up page. Derived from the spec and support files, so
+ * a new spec, or a new helper that wraps `signUp`, is selected without a change here. Throws when
  * e2e/ cannot be read or no spec matches, so the caller runs the full suite.
  * @param {string} root Repository root.
  * @returns {string[]} Repo-relative spec paths, sorted.
  */
 export function deriveSessionSpecs(root) {
+  const helpers = sessionHelpers(root);
   const found = [];
   for (const dir of ['e2e', 'e2e/harness']) {
     for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith('.spec.ts')) continue;
       const text = readFileSync(join(root, dir, entry.name), 'utf8');
-      if (SESSION_HELPER.test(text) || SIGN_IN_OR_UP_PAGE.test(text))
-        found.push(`${dir}/${entry.name}`);
+      const usesHelper = [...text.matchAll(SPEC_SUPPORT_IMPORT)].some((match) =>
+        helpers.has(match[1]),
+      );
+      if (usesHelper || SIGN_IN_OR_UP_PAGE.test(text)) found.push(`${dir}/${entry.name}`);
     }
   }
   if (found.length === 0) throw new Error('no e2e spec signs a user in; the specs are unreadable');
   return found.sort();
 }
-const SESSION_HELPER = /from '\.{1,2}\/support\/(?:session|users)'/;
 const SIGN_IN_OR_UP_PAGE = /goto\([^)]*\/sign-(?:in|up)\b/;
 
 /**
@@ -168,13 +204,20 @@ export const AREAS = [
     specs: LOCATION_ADMIN,
   },
   {
-    name: 'admin leagues',
+    // The mockup spec compares the real leagues page text with the approved mockup, so a changed
+    // label, hint, or error in these files must run it. It strips the Publish buttons, so the
+    // publish dialog is not here.
+    name: 'admin leagues page',
     test: named('src/app/organizations/admin/', [
       'admin-leagues',
       'league-create-form',
       'league-form',
-      'publish-league-dialog',
     ]),
+    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup'],
+  },
+  {
+    name: 'admin leagues publish dialog',
+    test: named('src/app/organizations/admin/', ['publish-league-dialog']),
     specs: LEAGUE_ADMIN,
   },
   {
@@ -234,7 +277,7 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    specs: [...PUBLIC_PAGE, ...ADMIN],
+    specs: [...PUBLIC_PAGE, ...ADMIN, SESSION],
   },
   {
     name: 'convex locations',
