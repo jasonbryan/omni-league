@@ -577,3 +577,152 @@ test.describe('Accept invite: the invite could not be loaded (round 2)', () => {
     expect(urls.navigations.slice(1).filter((url) => url.includes(token))).toEqual([]);
   });
 });
+
+test.describe('Accept invite: offline and a spent token (round 3)', () => {
+  test('offline, Accept invite is aria-disabled at half opacity and still focusable; a press shows the offline alert and sends nothing; back online it accepts', async ({
+    page,
+    context,
+  }, testInfo) => {
+    // As e2e/pwa.spec.ts: while offline the Convex socket is closed at once, so Chromium logs no
+    // connection error for it.
+    let offline = false;
+    await context.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+      if (offline) void ws.close();
+      else ws.connectToServer();
+    });
+    const tenant = await seedOrganization();
+    const user = newUser('Offline');
+    await signUp(page, user);
+    const token = await seedInvite(tenant, { email: user.email });
+    const urls = watchUrls(page);
+
+    await openLink(page, token);
+    const accept = main(page).getByRole('button', { name: 'Accept invite' });
+    await expect(accept).toBeVisible();
+    await expect(accept).not.toHaveAttribute('aria-disabled', /.*/);
+    await expect(accept).toHaveCSS('opacity', '1');
+
+    offline = true;
+    await context.setOffline(true);
+    await expect(accept).toHaveAttribute('aria-disabled', 'true', { timeout: 2_000 });
+    await expect(accept).toHaveCSS('opacity', '0.5');
+    // Still focusable: aria-disabled, not the disabled attribute.
+    await expect(accept).not.toHaveAttribute('disabled', /.*/);
+    await accept.focus();
+    await expect(accept).toBeFocused();
+    await screenshot(page, testInfo, '70-offline-ready');
+
+    const sentBefore = urls.sent.length;
+    const requestsBefore = urls.requests.length;
+    await page.keyboard.press('Enter');
+    const alert = main(page).getByRole('alert');
+    await expect(alert).toContainText("You're offline. Nothing was sent.");
+    await expect(alert).toBeFocused();
+    await screenshot(page, testInfo, '70-offline-alert');
+    await expectAccessible(page);
+    // A second press (mouse) behaves the same and still sends nothing. `force`: Playwright treats
+    // aria-disabled as not actionable, and the page must answer the press regardless.
+    await accept.click({ force: true });
+    await expect(alert).toBeFocused();
+    await page.waitForTimeout(500);
+    expect(urls.sent.slice(sentBefore).filter((frame) => frame.includes('invites:accept'))).toEqual(
+      [],
+    );
+    expect(urls.requests.length).toBe(requestsBefore);
+    expect(await storedToken(page)).toBe(token);
+
+    // Back online the same press sends the token.
+    offline = false;
+    await context.setOffline(false);
+    await expect(accept).not.toHaveAttribute('aria-disabled', /.*/, { timeout: 20_000 });
+    await expect(accept).toHaveCSS('opacity', '1');
+    await accept.click();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      `You’re on the staff of ${tenant.name}`,
+    );
+    expect(await storedToken(page)).toBeNull();
+    urls.expectNone(token);
+  });
+
+  test('an invalid link reopened on the open page clears sessionStorage each time', async ({
+    page,
+  }) => {
+    const tenant = await seedOrganization();
+    const token = await seedInvite(tenant, {
+      email: newUser('Late').email,
+      expiresAt: Date.now() - 1000,
+    });
+    await openLink(page, token);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'This invite link can’t be used',
+    );
+    await expect.poll(() => storedToken(page)).toBeNull();
+    for (let i = 0; i < 2; i += 1) {
+      await page.evaluate((value) => {
+        location.hash = value;
+      }, token);
+      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        'This invite link can’t be used',
+      );
+      await expect.poll(() => storedToken(page)).toBeNull();
+    }
+  });
+
+  test('a spent (accepted) link reopened in the same tab shows the invalid view and clears sessionStorage', async ({
+    page,
+  }) => {
+    const tenant = await seedOrganization();
+    const user = newUser('Spent');
+    await signUp(page, user);
+    const token = await seedInvite(tenant, { email: user.email });
+    await openLink(page, token);
+    await main(page).getByRole('button', { name: 'Accept invite' }).click();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      `You’re on the staff of ${tenant.name}`,
+    );
+    expect(await storedToken(page)).toBeNull();
+    // Reopened on a fresh load of the page: the invalid view, and nothing kept.
+    await page.goto('/app');
+    await openLink(page, token);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'This invite link can’t be used',
+    );
+    await expect.poll(() => storedToken(page)).toBeNull();
+    await page.evaluate((value) => {
+      location.hash = value;
+    }, token);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'This invite link can’t be used',
+    );
+    await expect.poll(() => storedToken(page)).toBeNull();
+  });
+
+  test.describe('refused as already a member', () => {
+    test.use({ expectedConvexErrors: ['invites:accept'] });
+
+    test('an already-a-member refusal clears sessionStorage, and the link reopened on the open page does not store it again', async ({
+      page,
+    }) => {
+      const tenant = await seedOrganization();
+      const user = newUser('Twice');
+      await signUp(page, user);
+      await convexRun('testing:addMembership', {
+        organizationSlug: tenant.slug,
+        email: user.email,
+        role: 'leagueOrganizer',
+      });
+      const token = await seedInvite(tenant, { email: user.email, role: 'orgAdmin' });
+      await openLink(page, token);
+      await main(page).getByRole('button', { name: 'Accept invite' }).click();
+      await expect(main(page).getByRole('alert')).toContainText('already on the staff');
+      await expect.poll(() => storedToken(page)).toBeNull();
+      await page.evaluate((value) => {
+        location.hash = value;
+      }, token);
+      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+      await page.waitForTimeout(500);
+      await expect.poll(() => storedToken(page)).toBeNull();
+    });
+  });
+});
