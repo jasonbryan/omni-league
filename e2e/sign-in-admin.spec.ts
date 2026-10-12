@@ -9,6 +9,7 @@ import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
 import { seedTenant } from './support/tenant';
 import { newUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -17,7 +18,7 @@ const accountLink = (page: import('@playwright/test').Page) =>
 const signInLink = (page: import('@playwright/test').Page) =>
   page.locator('header a[href^="/sign-in"]');
 
-test.describe('sign-in and the admin area together', () => {
+test.describe('sign-in and the admin area together', VIEWPORT_AGNOSTIC, () => {
   test('admin pages carry the account link, and sign-out then a deep link signs in back to the page', async ({
     page,
   }) => {

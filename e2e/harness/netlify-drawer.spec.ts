@@ -6,6 +6,7 @@ import { ConsoleGuard } from '../support/console-guard';
 import { baseURL, remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
 import { NETLIFY_DRAWER_SCRIPT_PATH, stubNetlifyDrawer } from '../support/netlify-drawer';
+import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
 async function fetchFromPage(page: Page, path: string): Promise<{ status: number; body: string }> {
   return page.evaluate(async (p) => {
@@ -25,7 +26,7 @@ async function pageAtRoot(browser: Browser, stub: boolean) {
   return { page, close: () => context.close() };
 }
 
-test.describe('Netlify Drawer stub', () => {
+test.describe('Netlify Drawer stub', VIEWPORT_AGNOSTIC, () => {
   test('answers the Drawer script with an empty script', async ({ browser }) => {
     const { page, close } = await pageAtRoot(browser, true);
     expect(await fetchFromPage(page, NETLIFY_DRAWER_SCRIPT_PATH)).toEqual({

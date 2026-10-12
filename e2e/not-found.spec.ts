@@ -8,6 +8,7 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 const UNKNOWN = '/this-page-does-not-exist';
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
@@ -140,18 +141,19 @@ test.describe('not-found page', () => {
 
   // The browser's router parses the same URL after hydration. If it cannot decode the query string
   // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
-  test('a query string the router cannot decode: the browser stays on the not-found page', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const response = await page.goto('/x?q=%');
-    expect(response?.status()).toBe(404);
-    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
-    else await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-    await expect(page).toHaveTitle('Page not found | Omni League');
-    expect(new URL(page.url()).pathname).toBe('/x');
-  });
+  test(
+    'a query string the router cannot decode: the browser stays on the not-found page',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const response = await page.goto('/x?q=%');
+      expect(response?.status()).toBe(404);
+      if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+      else await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+      await expect(page).toHaveTitle('Page not found | Omni League');
+      expect(new URL(page.url()).pathname).toBe('/x');
+    },
+  );
 
   // The real engine, not a stub: encoded, mixed-slash, CR/LF, unicode, and long variants either
   // redirect on this site (Location starts with exactly one `/`, query kept) or get a 4xx, never a
@@ -407,23 +409,25 @@ test.describe('not-found page', () => {
     },
   );
 
-  test('/app/x shows the not-found view in the client shell, and the home link goes home', async ({
-    page,
-  }) => {
-    const response = await page.goto('/app/x?ref=1');
-    expect(response?.status()).toBe(200);
-    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-    await expect(page).toHaveTitle(/Page not found/);
-    // The shell holds no query string; the browser renders the skip link with it.
-    expect(await response?.text()).not.toContain('ref=1');
-    await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
-      'href',
-      '/app/x?ref=1#main',
-    );
+  test(
+    '/app/x shows the not-found view in the client shell, and the home link goes home',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const response = await page.goto('/app/x?ref=1');
+      expect(response?.status()).toBe(200);
+      await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+      await expect(page).toHaveTitle(/Page not found/);
+      // The shell holds no query string; the browser renders the skip link with it.
+      expect(await response?.text()).not.toContain('ref=1');
+      await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
+        'href',
+        '/app/x?ref=1#main',
+      );
 
-    await page.getByRole('main').getByRole('link', { name: 'Go to the home page' }).click();
-    await expect(page).toHaveURL(`${baseURL}/`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
-    await expect(page).toHaveTitle('Omni League');
-  });
+      await page.getByRole('main').getByRole('link', { name: 'Go to the home page' }).click();
+      await expect(page).toHaveURL(`${baseURL}/`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+      await expect(page).toHaveTitle('Omni League');
+    },
+  );
 });
