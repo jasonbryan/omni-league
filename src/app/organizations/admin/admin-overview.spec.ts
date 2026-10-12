@@ -18,6 +18,9 @@ import {
 
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
 const URL = `/app/organizations/${COASTAL.slug}`;
+// The "Get set up" rule and the published part of the Leagues tile read the organization's counter
+// (#172), not the admin list, which stops at 200 rows; the drafts are counted from that list.
+const PUBLISHED_COUNT = 'leagues:publishedCount';
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const LIST_MEMBERS = 'memberships:listForOrganization';
 const LIST_PENDING = 'invites:listPending';
@@ -73,12 +76,13 @@ describe('AdminOverview', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
   });
 
-  it('counts from the sections’ own list queries, asked with the organization id and no new query', async () => {
+  it('asks the location list, the published-league counter, the league list, and the staff lists with the organization id', async () => {
     const { convex, subscription } = await open();
     expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
       [ME, {}],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
+      [PUBLISHED_COUNT, { organizationId: COASTAL.organizationId }],
       [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
       [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
       [LIST_PENDING, { organizationId: COASTAL.organizationId }],
@@ -112,15 +116,17 @@ describe('AdminOverview', () => {
     const tile = (page: HTMLElement) =>
       [...page.querySelectorAll('main dl > div')][1].querySelectorAll('dd');
 
-    it('with none, reads 0 and "None yet"', async () => {
+    it('with none at all, reads 0 and "None yet"', async () => {
       const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(0);
       subscription(LIST_LEAGUES)!.emit([]);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['0', 'None yet']);
     });
 
-    it('counts every league, and splits published from drafts', async () => {
+    it('adds the published counter to the drafts and splits them: "N published, M drafts"', async () => {
       const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(2);
       subscription(LIST_LEAGUES)!.emit([
         league('a', 'published'),
         league('b', 'draft'),
@@ -131,23 +137,64 @@ describe('AdminOverview', () => {
       expect([...tile(page)].map(text)).toEqual(['4', '2 published, 2 drafts']);
     });
 
-    it('uses the singular for one, and leaves out a part that is 0', async () => {
+    it('takes the published part from the counter, past the list’s 200 rows', async () => {
       const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(450);
+      subscription(LIST_LEAGUES)!.emit([league('a', 'published'), league('b', 'draft')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['451', '450 published, 1 draft']);
+    });
+
+    it('uses the singular for one draft, and leaves out a part that is 0', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(0);
       subscription(LIST_LEAGUES)!.emit([league('a', 'draft')]);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
+      subscription(PUBLISHED_COUNT)!.emit(2);
       subscription(LIST_LEAGUES)!.emit([league('a', 'published'), league('b', 'published')]);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['2', '2 published']);
     });
 
-    it('draws a placeholder while the list loads, and "–" with a note when it fails', async () => {
+    it('follows both live as a league is published', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(0);
+      subscription(LIST_LEAGUES)!.emit([league('a', 'draft')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
+      subscription(PUBLISHED_COUNT)!.emit(1);
+      subscription(LIST_LEAGUES)!.emit([league('a', 'published')]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['1', '1 published']);
+    });
+
+    it('draws a placeholder until both the counter and the list have loaded', async () => {
       const { page, subscription, flush } = await open();
       expect(text(tile(page)[0])).toBe('');
       expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
-      subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+      subscription(PUBLISHED_COUNT)!.emit(1);
+      await flush();
+      expect(text(tile(page)[0])).toBe('');
+      subscription(LIST_LEAGUES)!.emit([]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['1', '1 published']);
+    });
+
+    it('reads "–" with a note when the counter fails, never the error message', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.fail(new Error('Server Error: secret'));
       await flush();
       expect([...tile(page)].map(text)).toEqual(['–', 'Could not be loaded']);
+      expect(page.textContent).not.toContain('secret');
+    });
+
+    it('keeps the published count and says the drafts could not be loaded when the list fails', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(PUBLISHED_COUNT)!.emit(3);
+      subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['3', 'Drafts could not be loaded']);
       expect(page.textContent).not.toContain('secret');
     });
   });
@@ -222,16 +269,16 @@ describe('AdminOverview', () => {
       page.querySelector('section[aria-labelledby="setup-heading"]');
     const steps = (page: HTMLElement) => [...section(page)!.querySelectorAll('ol > li')];
 
-    async function openWith(leagues: unknown[] | undefined) {
+    async function openWith(published: number | undefined) {
       const opened = await open();
       opened.subscription(LIST_FOR_ADMIN)!.emit([]);
-      if (leagues) opened.subscription(LIST_LEAGUES)!.emit(leagues);
+      if (published !== undefined) opened.subscription(PUBLISHED_COUNT)!.emit(published);
       await opened.flush();
       return opened;
     }
 
     it('with no league lists the steps: Add a location, Create a league, and Invite staff link on, Publish the league does not', async () => {
-      const { page } = await openWith([]);
+      const { page } = await openWith(0);
       expect(text(section(page)!.querySelector('h2#setup-heading'))).toBe('Get set up');
       expect(steps(page).map((li) => text(li.querySelector('h3')))).toEqual([
         'Add a location',
@@ -269,32 +316,37 @@ describe('AdminOverview', () => {
       ]);
     });
 
-    it('with only drafts the list is still shown', async () => {
-      const { page } = await openWith([league('a', 'draft'), league('b', 'draft')]);
+    it('with only drafts (none published) the list is still shown', async () => {
+      const { page } = await openWith(0);
       expect(section(page)).not.toBeNull();
     });
 
     it('hides once any league is published', async () => {
-      const { page } = await openWith([league('a', 'draft'), league('b', 'published')]);
+      const { page } = await openWith(1);
       expect(section(page)).toBeNull();
     });
 
-    it('appears again if the published league goes away, and hides as one is published (live)', async () => {
-      const { page, subscription, flush } = await openWith([league('a', 'draft')]);
+    it('hides on the counter alone, however many leagues the admin list could hold', async () => {
+      const { page } = await openWith(450);
+      expect(section(page)).toBeNull();
+    });
+
+    it('hides as a league is published (live)', async () => {
+      const { page, subscription, flush } = await openWith(0);
       expect(section(page)).not.toBeNull();
-      subscription(LIST_LEAGUES)!.emit([league('a', 'published')]);
+      subscription(PUBLISHED_COUNT)!.emit(1);
       await flush();
       expect(section(page)).toBeNull();
     });
 
-    it('is not drawn while the leagues load, so an established organization never flashes it', async () => {
+    it('is not drawn while the counter loads, so an established organization never flashes it', async () => {
       const { page } = await openWith(undefined);
       expect(section(page)).toBeNull();
     });
 
-    it('is shown when the leagues fail to load', async () => {
+    it('is shown when the counter fails to load', async () => {
       const { page, subscription, flush } = await openWith(undefined);
-      subscription(LIST_LEAGUES)!.fail(new Error('x'));
+      subscription(PUBLISHED_COUNT)!.fail(new Error('x'));
       await flush();
       expect(section(page)).not.toBeNull();
     });
