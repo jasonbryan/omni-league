@@ -216,8 +216,9 @@ export const addMembership = internalMutation({
  * Adds a pending staff invite to the organization with this slug (#67 e2e), written straight to
  * the table so a test can have one whose `expiresAt` has passed, or two pending ones at once,
  * without waiting 14 days or going through the form. A `leagueOrganizer` invite names its leagues
- * of that organization. The token hash is random: no token opens it. Throws, writing nothing, for
- * an unknown organization or league.
+ * of that organization. With `token`, its hash is stored, so a test (#70) can open the invite by
+ * the link `/invites/accept#<token>`; without one the hash is random and no token opens it. Throws,
+ * writing nothing, for an unknown organization or league.
  */
 export const addInvite = internalMutation({
   args: {
@@ -226,9 +227,10 @@ export const addInvite = internalMutation({
     role: roleValidator,
     leagueNames: v.optional(v.array(v.string())),
     expiresAt: v.number(),
+    token: v.optional(v.string()),
   },
   returns: v.null(),
-  handler: async (ctx, { organizationSlug, email, role, leagueNames = [], expiresAt }) => {
+  handler: async (ctx, { organizationSlug, email, role, leagueNames = [], expiresAt, token }) => {
     assertTestDeployment();
     const organization = await ctx.db
       .query('organizations')
@@ -253,7 +255,7 @@ export const addInvite = internalMutation({
       email: normaliseInviteEmail(email),
       role,
       leagueIds,
-      tokenHash: await hashInviteToken(generateInviteToken()),
+      tokenHash: await hashInviteToken(token ?? generateInviteToken()),
       expiresAt,
       status: 'pending',
     });

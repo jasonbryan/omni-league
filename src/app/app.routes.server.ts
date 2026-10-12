@@ -26,6 +26,15 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
   },
   {
+    // Accepting a staff invite (#70): the link's token is a bearer secret, so the page is rendered
+    // in the browser only, and `Referrer-Policy: no-referrer` keeps even the page's own URL out of
+    // any Referer. The token is in the fragment, which no request carries, and the page moves it
+    // to sessionStorage and out of the URL before anything else.
+    path: 'invites/accept',
+    renderMode: RenderMode.Client,
+    headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
+  },
+  {
     path: 'app',
     renderMode: RenderMode.Client, // signed-in app (#62): the guard runs in the browser only
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },

@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { generateInviteToken, hashInviteToken, INVITE_TOKEN_BYTES } from './inviteToken';
+import {
+  generateInviteToken,
+  hashInviteToken,
+  INVITE_TOKEN_BYTES,
+  MAX_INVITE_TOKEN_LENGTH,
+  timingSafeEqual,
+} from './inviteToken';
 
 describe('inviteToken (#67)', () => {
   test('a token is 256 bits as 43 base64url characters', () => {
@@ -18,5 +24,19 @@ describe('inviteToken (#67)', () => {
     expect(await hashInviteToken('abc')).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
+  });
+
+  test('timingSafeEqual is true for equal text only', () => {
+    expect(timingSafeEqual('abc', 'abc')).toBe(true);
+    expect(timingSafeEqual('', '')).toBe(true);
+    expect(timingSafeEqual('abc', 'abd')).toBe(false);
+    expect(timingSafeEqual('abc', 'abcd')).toBe(false);
+    expect(timingSafeEqual('abcd', 'abc')).toBe(false);
+    expect(timingSafeEqual('', 'a')).toBe(false);
+  });
+
+  test('a token longer than the limit is never a real token', () => {
+    expect(MAX_INVITE_TOKEN_LENGTH).toBeGreaterThanOrEqual(43);
+    expect(generateInviteToken().length).toBeLessThanOrEqual(MAX_INVITE_TOKEN_LENGTH);
   });
 });

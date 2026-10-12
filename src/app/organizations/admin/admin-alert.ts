@@ -16,8 +16,9 @@ import {
 
 const BASE =
   "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
-const NEUTRAL = `${BASE} bg-card text-card-foreground`;
-const DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90`;
+/** The classes of the neutral and the destructive alert box, shared with the invite page's alert. */
+export const ALERT_NEUTRAL = `${BASE} bg-card text-card-foreground`;
+export const ALERT_DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90`;
 
 /**
  * What an alert says: a success message, a failure, the offline refusal, or a `note` (#67): fixed
@@ -30,7 +31,8 @@ export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note';
  * 12, and 16; design/mockups/88-offline-note.html state 3): helm's alert in the mockup's classes.
  * A success is a `role="status"` region and a failure is a `role="alert"`. The box takes focus
  * through `focus()` (`tabindex="-1"`), for a failure that moves the user's attention to it. The
- * caller sets the margin with a class on the `app-admin-alert` element.
+ * caller sets the margin with a class on the `app-admin-alert` element. Content inside the element
+ * (a link) follows the description, inside it, so an alert with content needs a description.
  */
 @Component({
   selector: 'app-admin-alert',
@@ -53,6 +55,7 @@ export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note';
           class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
         >
           {{ description }}
+          <ng-content />
         </div>
       }
     </div>
@@ -70,7 +73,7 @@ export class AdminAlert {
     return kind === 'success' ? 'status' : kind === 'note' ? 'note' : 'alert';
   });
   protected readonly classes = computed(() =>
-    this.kind() === 'success' || this.kind() === 'note' ? NEUTRAL : DESTRUCTIVE,
+    this.kind() === 'success' || this.kind() === 'note' ? ALERT_NEUTRAL : ALERT_DESTRUCTIVE,
   );
   protected readonly icon = computed(() => {
     const icons = {
