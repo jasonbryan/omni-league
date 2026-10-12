@@ -482,7 +482,10 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
           return {
             code: 1,
             stdout: '',
-            stderr: stderr ?? `cannot set ${args.slice(2, 4).join('=')}`,
+            // The default prints the `NAME=value` pair twice, to prove every occurrence is redacted.
+            stderr:
+              stderr ??
+              `cannot set ${args.slice(2, 4).join('=')}\nretry: ${args.slice(2, 4).join('=')}`,
           };
         }
         const reset = { documents: 0, authDocuments: 3, scheduledFunctions: 0, files: 0 };
@@ -490,7 +493,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
       },
       log: (line) => lines.push(line),
       error: (line) => lines.push(line),
-      wait: { timeoutMs: 60_000, ...clock },
+      wait: { ...clock },
     });
     return { code, calls, output: lines.join('\n'), clock };
   }
@@ -578,9 +581,13 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     const clock = fakeClock();
     const { calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET', clock });
     const secret = calls.find((args) => args[2] === 'BETTER_AUTH_SECRET')[3];
-    // The stub's stderr repeats the value: `cannot set BETTER_AUTH_SECRET=<value>`.
-    assert.match(output, /last error:[\s\S]*cannot set BETTER_AUTH_SECRET=<secret>/);
+    // The stub's stderr prints `BETTER_AUTH_SECRET=<value>` twice; each one must end at the label.
+    assert.match(output, /last error:[\s\S]*cannot set BETTER_AUTH_SECRET=<secret>$/m);
+    assert.equal(output.match(/BETTER_AUTH_SECRET=<secret>$/gm)?.length, 2, 'both are redacted');
     assert.ok(!output.includes(secret), 'the secret is printed');
+    for (let i = 0; i + 8 <= secret.length; i++) {
+      assert.ok(!output.includes(secret.slice(i, i + 8)), `part of the secret is printed at ${i}`);
+    }
   });
 
   it('shows the last CLI error of a non-secret call on timeout', async () => {
