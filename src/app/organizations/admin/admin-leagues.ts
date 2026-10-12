@@ -23,6 +23,7 @@ import {
 import { api } from '../../../../convex/_generated/api';
 import { injectQuery, skipToken } from '../../core/data/convex';
 import { isPlainClick } from '../../shell/follow-link';
+import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
@@ -45,7 +46,8 @@ import {
  * league needs at least one. Each Draft row has a Publish button (#69) that opens
  * `PublishLeagueDialog`; once the league is published a status above the list says so, with a
  * link to the public page, and takes focus, because the button that had it is gone. The page
- * behind the dialog is inert while it is open.
+ * behind the dialog is inert while it is open. Each league's name links to its management page
+ * (#125; design/mockups/125-126-seasons.html state 16).
  */
 @Component({
   selector: 'app-admin-leagues',
@@ -122,7 +124,13 @@ import {
                   <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <h3 class="me-1 font-medium">{{ row.name }}</h3>
+                        <h3 class="me-1 font-medium">
+                          <a
+                            [routerLink]="leaguePath(row.slug)"
+                            class="underline underline-offset-4 hover:text-primary"
+                            >{{ row.name }}</a
+                          >
+                        </h3>
                         @if (row.status === 'published') {
                           <span data-slot="badge" data-variant="default" [class]="defaultBadge"
                             ><ng-icon
@@ -292,6 +300,11 @@ export class AdminLeagues {
     () => `${adminPath(this.context.slug(), 'leagues')}#create-league`,
   );
   protected readonly locationsPath = computed(() => adminPath(this.context.slug(), 'locations'));
+
+  /** The league's management page (#125), from the route's organization slug and the row's. */
+  protected leaguePath(leagueSlug: string): string {
+    return leaguePath(this.context.slug(), leagueSlug);
+  }
 
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
   private readonly publishDialog = viewChild(PublishLeagueDialog);

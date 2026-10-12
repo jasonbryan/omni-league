@@ -2,12 +2,16 @@ import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { env, internalMutation, type MutationCtx } from './_generated/server';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { findLeagueBySlugs } from './lib/seasonLookup';
 import {
   backfilledValidator,
   backfillTenantFields,
   insertLeague,
   insertLocation,
+  insertSeason,
   insertTenant,
+  seasonSlugTaken,
+  type NewSeason,
   type Tenant,
 } from './lib/tenantWrites';
 
@@ -127,11 +131,53 @@ export const DEMO: readonly Tenant[] = [
   },
 ];
 
+/**
+ * The demo seasons (#125): draft seasons of demo leagues, by the organization's and the league's
+ * slug. Only drafts are seeded here; #126 inserts the published ones under other slugs
+ * (`summer-2027`), so on a reused staging an insert-only seed never leaves a stale draft under a
+ * published season's slug. Never rename or remove an entry (hosting.md, Demo data).
+ *
+ * A plain value, not a Convex function, so it adds nothing to the API.
+ */
+export const DEMO_SEASONS: readonly {
+  organizationSlug: string;
+  leagueSlug: string;
+  season: NewSeason;
+}[] = [
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'sunday-reverse-coed-4s',
+    season: {
+      name: 'Fall 2027',
+      slug: 'fall-2027',
+      startDate: '2027-09-12',
+      endDate: '2027-11-14',
+      registrationDeadline: '2027-08-29',
+      format: '4v4',
+      minimumRosterSize: 4,
+    },
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'coed-7v7-rec',
+    season: {
+      name: 'Fall 2027',
+      slug: 'fall-2027',
+      startDate: '2027-09-08',
+      endDate: '2027-11-10',
+      registrationDeadline: '2027-08-25',
+      format: '7v7',
+      minimumRosterSize: 7,
+    },
+  },
+];
+
 /** Rows inserted by one run, per table, and the rows its backfill changed (#100). */
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
   leagues: v.number(),
+  seasons: v.number(),
   backfilled: backfilledValidator,
 });
 
@@ -182,6 +228,9 @@ async function ensureOrganization(
  * per table, which the build log shows. It throws before reading or writing unless the deployment
  * is a preview or staging deployment (`assertPreviewDeployment`).
  *
+ * It also inserts the draft demo seasons (`DEMO_SEASONS`, #125) of the demo leagues, by slug within
+ * the league, through `insertSeason`.
+ *
  * Before inserting, it backfills the fields #100, #101, and #66 added on any row written before
  * them (`backfillTenantFields`, the only update it makes, on demo and other rows alike): `sortName`,
  * the counters, and `status` `published` on a league without one, before the recount that counts
@@ -194,7 +243,7 @@ export const demo = internalMutation({
   handler: async (ctx) => {
     assertPreviewDeployment();
     const backfilled = await backfillTenantFields(ctx);
-    const inserted = { organizations: 0, locations: 0, leagues: 0 };
+    const inserted = { organizations: 0, locations: 0, leagues: 0, seasons: 0 };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
@@ -224,6 +273,17 @@ export const demo = internalMutation({
         await insertLeague(ctx, organizationId, league);
         inserted.leagues++;
       }
+    }
+
+    // The seasons last, so every demo league exists. A season is inserted when its league has none
+    // under the slug, whatever that one's status; a league that is missing (a slug collision made
+    // the stored slug differ) is skipped.
+    for (const { organizationSlug, leagueSlug, season } of DEMO_SEASONS) {
+      const found = await findLeagueBySlugs(ctx, { orgSlug: organizationSlug, leagueSlug });
+      if (!found) continue;
+      if (await seasonSlugTaken(ctx, found.league._id, season.slug)) continue;
+      await insertSeason(ctx, found.league, season);
+      inserted.seasons++;
     }
     return { ...inserted, backfilled };
   },

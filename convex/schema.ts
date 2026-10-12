@@ -3,9 +3,10 @@ import { v } from 'convex/values';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { roleValidator } from './lib/roles';
-import { sportCountsValidator, sportValidator } from './lib/sports';
+import { seasonStatusValidator } from './lib/seasonStatus';
+import { formatValidator, sportCountsValidator, sportValidator } from './lib/sports';
 
-// Every write to organizations, locations, leagues, and sportLocations goes through
+// Every write to organizations, locations, leagues, sportLocations, and seasons goes through
 // convex/lib/tenantWrites.ts, which keeps `sortName`, the organization's counters, and the
 // sportLocations rows in the same mutation as the row (#100, #101).
 // Those fields are optional only until every existing row is backfilled (`seed:demo`); #104 makes
@@ -138,4 +139,31 @@ export default defineSchema({
     locationId: v.id('locations'),
     leagueCount: v.number(),
   }).index('by_organizationId_and_sport_and_locationId', ['organizationId', 'sport', 'locationId']),
+
+  // A season of a league (#125, glossary: Season): registration, teams, the schedule, standings,
+  // and fees belong to a season. Inserted only by `insertSeason` in convex/lib/tenantWrites.ts.
+  // `organizationId` is the league's organization, copied at insert. The dates are calendar
+  // dates written `YYYY-MM-DD` with no time zone (convex/lib/seasonInput.ts). Registration closes
+  // at the end of `registrationDeadline` and when the season starts, so the deadline is before
+  // `startDate`; `seasons.create` checks that, and `insertSeason` does not. A season is a `draft`
+  // until an organizer publishes it (#126); only a `published` one reaches public pages. There is
+  // no price: ADR 0012's payment slice 2 adds prices.
+  seasons: defineTable({
+    organizationId: v.id('organizations'),
+    leagueId: v.id('leagues'),
+    name: v.string(),
+    slug: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    format: formatValidator,
+    minimumRosterSize: v.number(),
+    status: seasonStatusValidator,
+  })
+    // The slug is unique within the league (`seasonSlugTaken`); every season route resolves it here.
+    .index('by_leagueId_and_slug', ['leagueId', 'slug'])
+    // Every season of the league, drafts included, newest start date first: the organizer's list.
+    .index('by_leagueId_and_startDate', ['leagueId', 'startDate'])
+    // The public league page reads `status` = `published`, so drafts never take a place in it.
+    .index('by_leagueId_and_status_and_startDate', ['leagueId', 'status', 'startDate']),
 });

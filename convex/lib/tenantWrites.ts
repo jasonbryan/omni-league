@@ -1,6 +1,6 @@
-// Writers for an organization with its locations and leagues: `organizations.create` (#64),
-// `locations.create` and `locations.update` (#65), `leagues.create` (#66) and `leagues.publish`
-// (#69), and the seeds, `seed:demo` (previews and
+// Writers for an organization with its locations, leagues, and seasons: `organizations.create`
+// (#64), `locations.create` and `locations.update` (#65), `leagues.create` (#66) and
+// `leagues.publish` (#69), `seasons.create` (#125), and the seeds, `seed:demo` (previews and
 // staging) and the IS_TEST tenant seeds in `convex/testing.ts`. These are the only writers of these
 // tables.
 //
@@ -11,7 +11,9 @@
 // elsewhere makes the public page's totals, sports, and page count disagree with its rows. Only
 // published leagues count (#66): `insertLeague` counts a published league, and a draft
 // (`insertDraftLeague`, `leagues.create`) changes no counter and writes no `sportLocations` row.
-// `publishLeague` (#69) counts a draft once, when it becomes `published`. The first writer that unpublishes or deletes a league, or
+// `publishLeague` (#69) counts a draft once, when it becomes `published`. Every season insert goes
+// through `insertSeason` (#125), which writes only the `seasons` row; #126 adds `publishSeason`
+// here, and #127 keeps its counter in both. The first writer that unpublishes or deletes a league, or
 // changes its locations, decrements what `insertLeague` incremented: `leagueCount`,
 // `sportLeagueCounts[sport]`, and the `sportLocations` row of each location the league leaves,
 // deleting that row at 0 and decrementing `sportLocationCounts[sport]`.
@@ -19,8 +21,9 @@ import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
+import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
-import { sportValidator, type Sport, type SportCounts } from './sports';
+import { sportValidator, type Format, type Sport, type SportCounts } from './sports';
 
 /**
  * A league to create; `locations` names locations of the same organization. `status` is
@@ -265,6 +268,59 @@ export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): P
   if (league.status === undefined) return;
   await increment(ctx, league.organizationId, 'leagueCount');
   await countLeagueInSport(ctx, league.organizationId, league.sport, league.locationIds);
+}
+
+/** A season to insert: its slug is final, and its dates and format have been checked. */
+export interface NewSeason {
+  name: string;
+  slug: string;
+  startDate: string;
+  endDate: string;
+  registrationDeadline: string;
+  format: Format;
+  minimumRosterSize: number;
+}
+
+/**
+ * Inserts a season of `league` (#125): the one writer of the `seasons` table, used by
+ * `seasons.create`, `seed:demo`, and the IS_TEST seeds. The organization is the league's own, so a
+ * season never names another organization. A `draft` unless the caller says `published` (only the
+ * seeds do; `publishSeason` is #126's). It checks nothing about the values: the name, slug, date,
+ * format, and minimum rules live in `seasons.create` (`convex/lib/seasonInput.ts`), so a seed can
+ * hold a deadline on or after the start date, which #129's start-date case needs. It writes no
+ * counter and no other row.
+ */
+export async function insertSeason(
+  ctx: MutationCtx,
+  league: Doc<'leagues'>,
+  season: NewSeason,
+  status: SeasonStatus = 'draft',
+): Promise<Id<'seasons'>> {
+  return ctx.db.insert('seasons', {
+    organizationId: league.organizationId,
+    leagueId: league._id,
+    name: season.name,
+    slug: season.slug,
+    startDate: season.startDate,
+    endDate: season.endDate,
+    registrationDeadline: season.registrationDeadline,
+    format: season.format,
+    minimumRosterSize: season.minimumRosterSize,
+    status,
+  });
+}
+
+/** Whether a season of the league already has this slug, drafts included. */
+export async function seasonSlugTaken(
+  ctx: Pick<MutationCtx, 'db'>,
+  leagueId: Id<'leagues'>,
+  slug: string,
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query('seasons')
+    .withIndex('by_leagueId_and_slug', (q) => q.eq('leagueId', leagueId).eq('slug', slug))
+    .first();
+  return existing !== null;
 }
 
 async function insertLeagueRow(

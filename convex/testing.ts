@@ -4,14 +4,23 @@
 import type { GenericDatabaseWriter, GenericDataModel } from 'convex/server';
 import { type GenericId, v } from 'convex/values';
 import { components, internal } from './_generated/api';
-import { internalAction, internalMutation, internalQuery } from './_generated/server';
+import type { Doc } from './_generated/dataModel';
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { normaliseInviteEmail } from './lib/inviteInput';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
+import { seasonStatusValidator } from './lib/seasonStatus';
+import { formatValidator } from './lib/sports';
 import {
   insertLeague,
+  insertSeason,
   insertTenant,
   leagueSeedValidator,
   tenantValidator,
@@ -181,36 +190,127 @@ export const addMembership = internalMutation({
   returns: v.null(),
   handler: async (ctx, { organizationSlug, email, role }) => {
     assertTestDeployment();
-    const organization = await ctx.db
-      .query('organizations')
-      .withIndex('by_slug', (q) => q.eq('slug', organizationSlug))
-      .unique();
-    if (!organization) {
-      throw new Error(`No organization has the slug ${JSON.stringify(organizationSlug)}`);
-    }
-    // Better Auth stores emails in lower case. The component's generated return types are `any`.
-    const authUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-      model: 'user',
-      where: [{ field: 'email', value: email.toLowerCase() }],
-    })) as { _id: string } | null;
-    const user = authUser
-      ? await ctx.db
-          .query('users')
-          .withIndex('by_authUserId', (q) => q.eq('authUserId', authUser._id))
-          .unique()
-      : null;
-    if (!user) throw new Error(`No account has the email ${JSON.stringify(email)}`);
-    const existing = await ctx.db
-      .query('memberships')
-      .withIndex('by_userId_and_organizationId', (q) =>
-        q.eq('userId', user._id).eq('organizationId', organization._id),
-      )
-      .unique();
-    if (existing) throw new Error('This user already has a membership in the organization');
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const user = await userByEmail(ctx, email);
+    await assertNoMembership(ctx, user, organization);
     await insertMembership(ctx, user._id, organization._id, role);
     return null;
   },
 });
+
+/**
+ * Makes the seeded user with this email a league organizer of the leagues with these slugs in the
+ * organization with this slug (#125 e2e), so a test has an assigned league organizer without the
+ * invite flow. Like `addMembership`, which gives none. Throws, writing nothing, for an unknown
+ * organization, account, or league (a league of another organization is unknown), or when the user
+ * already has a membership there.
+ */
+export const addLeagueOrganizer = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    email: v.string(),
+    leagueSlugs: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, email, leagueSlugs }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const user = await userByEmail(ctx, email);
+    await assertNoMembership(ctx, user, organization);
+    const leagueIds = [];
+    for (const slug of leagueSlugs) {
+      const league = await ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_slug', (q) =>
+          q.eq('organizationId', organization._id).eq('slug', slug),
+        )
+        .unique();
+      if (!league) throw new Error(`No league has the slug ${JSON.stringify(slug)}`);
+      leagueIds.push(league._id);
+    }
+    await insertMembership(ctx, user._id, organization._id, 'leagueOrganizer', leagueIds);
+    return null;
+  },
+});
+
+/**
+ * Adds a season to the league with `leagueSlug` of the organization with `organizationSlug` (#125
+ * e2e), through `insertSeason`. A `draft` unless `status` says `published`. None of
+ * `seasons.create`'s rules apply, so a test can seed a registration deadline on or after the start
+ * date (#129). Throws, writing nothing, for an unknown organization or league.
+ */
+export const seedSeason = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    leagueSlug: v.string(),
+    name: v.string(),
+    slug: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    format: formatValidator,
+    minimumRosterSize: v.number(),
+    status: v.optional(seasonStatusValidator),
+  },
+  returns: v.object({ slug: v.string() }),
+  handler: async (ctx, { organizationSlug, leagueSlug, status, ...season }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const league = await ctx.db
+      .query('leagues')
+      .withIndex('by_organizationId_and_slug', (q) =>
+        q.eq('organizationId', organization._id).eq('slug', leagueSlug),
+      )
+      .unique();
+    if (!league) throw new Error(`No league has the slug ${JSON.stringify(leagueSlug)}`);
+    await insertSeason(ctx, league, season, status);
+    return { slug: season.slug };
+  },
+});
+
+async function organizationBySlug(
+  ctx: Pick<MutationCtx, 'db'>,
+  slug: string,
+): Promise<Doc<'organizations'>> {
+  const organization = await ctx.db
+    .query('organizations')
+    .withIndex('by_slug', (q) => q.eq('slug', slug))
+    .unique();
+  if (!organization) throw new Error(`No organization has the slug ${JSON.stringify(slug)}`);
+  return organization;
+}
+
+/** The `users` row of the seeded account with this email. */
+async function userByEmail(ctx: MutationCtx, email: string): Promise<Doc<'users'>> {
+  // Better Auth stores emails in lower case. The component's generated return types are `any`.
+  const authUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: 'user',
+    where: [{ field: 'email', value: email.toLowerCase() }],
+  })) as { _id: string } | null;
+  const user = authUser
+    ? await ctx.db
+        .query('users')
+        .withIndex('by_authUserId', (q) => q.eq('authUserId', authUser._id))
+        .unique()
+    : null;
+  if (!user) throw new Error(`No account has the email ${JSON.stringify(email)}`);
+  return user;
+}
+
+/** Throws when the user already has a membership in the organization: at most one exists. */
+async function assertNoMembership(
+  ctx: Pick<MutationCtx, 'db'>,
+  user: Doc<'users'>,
+  organization: Doc<'organizations'>,
+): Promise<void> {
+  const existing = await ctx.db
+    .query('memberships')
+    .withIndex('by_userId_and_organizationId', (q) =>
+      q.eq('userId', user._id).eq('organizationId', organization._id),
+    )
+    .unique();
+  if (existing) throw new Error('This user already has a membership in the organization');
+}
 
 /**
  * Adds a pending staff invite to the organization with this slug (#67 e2e), written straight to

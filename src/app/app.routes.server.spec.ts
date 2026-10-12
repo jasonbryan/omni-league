@@ -9,6 +9,7 @@ import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminStaff } from './organizations/admin/admin-staff';
+import { LeaguePage } from './organizations/league/league-page';
 import { AdminLocations } from './organizations/admin/admin-locations';
 import { AdminOverview } from './organizations/admin/admin-overview';
 import { CreateOrganizationPage } from './organizations/create-organization-page';
@@ -172,18 +173,23 @@ describe('Route tables', () => {
     expect(headers.get('Referrer-Policy')).toBe('no-referrer');
   });
 
-  it('app has the guarded account page, the guarded create-organization page, the guarded admin area, and its own not-found route', async () => {
+  it('app has the guarded account page, the guarded create-organization page, the guarded league management page, the guarded admin area, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
     expect(app?.canActivate).toBeUndefined();
-    const [account, create, admin, notFound, ...rest] = app?.children ?? [];
+    const [account, create, league, admin, notFound, ...rest] = app?.children ?? [];
     expect(rest).toEqual([]);
     // #64: ahead of the not-found route, so /app/organizations/new is not a 404.
     expect(create?.path).toBe('organizations/new');
     expect(create?.title).toBe('Create an organization | Omni League');
     expect(create?.canActivate).toEqual([requireSignedIn]);
     expect(await create?.loadComponent?.()).toBe(CreateOrganizationPage);
+    // #125: the league management page, a Client route like the rest of /app/** (so no shared cache
+    // keeps its shell). Ahead of the admin area, whose `organizations/:slug` is a shorter prefix.
+    expect(league?.path).toBe('organizations/:orgSlug/leagues/:leagueSlug');
+    expect(league?.canActivate).toEqual([requireSignedIn]);
+    expect(await league?.loadComponent?.()).toBe(LeaguePage);
     // #65: after organizations/new (the reserved slug `new` keeps them apart), ahead of not-found.
     // Overview is the area's own path; Locations, Leagues (#66), and Staff (#67) are below it.
     expect(admin?.path).toBe('organizations/:slug');

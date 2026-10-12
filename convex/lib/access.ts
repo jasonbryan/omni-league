@@ -85,24 +85,51 @@ export async function requireLocationAdmin(
 }
 
 /**
+ * Whether a membership in the league's organization may organize the league: an org admin, or a
+ * league organizer to whom the league is assigned.
+ */
+function mayOrganizeLeague(membership: Doc<'memberships'>, leagueId: Id<'leagues'>): boolean {
+  return membership.role === 'orgAdmin' || membership.leagueIds.includes(leagueId);
+}
+
+/**
+ * For the query a league page asks first (#125, `leagues.getOrganizerContext`): passes an org
+ * admin of the league's organization and a league organizer to whom the league is assigned, as
+ * `requireLeagueOrganizer` does, but answers by who is asking:
+ *
+ * - `null` when the league is a draft (or has no status) and the caller is not staff of its
+ *   organization, whether signed in or not, so nobody outside the staff learns that a draft's
+ *   slug exists. The caller answers `null` as for an unknown league.
+ * - A `FORBIDDEN` `ConvexError` (`forbidden.ts`) for every other caller who may not organize the
+ *   league: not signed in, a member of none, an org admin of another organization, or a league
+ *   organizer of another league (also of a draft, because they are staff of the organization).
+ */
+export async function requireLeagueOrganizerOrForbidden(
+  ctx: Ctx,
+  league: Doc<'leagues'>,
+): Promise<Authorized | null> {
+  const user = await getCurrentUser(ctx);
+  const membership = user ? await membershipOf(ctx, user._id, league.organizationId) : null;
+  if (league.status !== 'published' && !membership) return null;
+  if (!user || !membership || !mayOrganizeLeague(membership, league._id)) throw forbidden();
+  return { user, membership };
+}
+
+/**
  * Passes an org admin of the league's organization, and a league organizer to whom the league is
  * assigned. It loads the league and looks up the caller's membership in that league's
  * organization, so a membership elsewhere never counts. Throws `Sign in required` for a caller who
- * is not signed in, and `Not allowed` for anyone else, also when the league does not exist.
+ * is not signed in, and `Not allowed` for anyone else, also when the league does not exist. It
+ * returns the stored league, so the caller need not read it again.
  */
 export async function requireLeagueOrganizer(
   ctx: Ctx,
   leagueId: Id<'leagues'>,
-): Promise<Authorized> {
+): Promise<Authorized & { league: Doc<'leagues'> }> {
   const user = await requireUser(ctx);
   const league = await ctx.db.get('leagues', leagueId);
   if (!league) throw new Error('Not allowed');
   const membership = await membershipOf(ctx, user._id, league.organizationId);
-  if (
-    !membership ||
-    (membership.role === 'leagueOrganizer' && !membership.leagueIds.includes(leagueId))
-  ) {
-    throw new Error('Not allowed');
-  }
-  return { user, membership };
+  if (!membership || !mayOrganizeLeague(membership, leagueId)) throw new Error('Not allowed');
+  return { user, membership, league };
 }
