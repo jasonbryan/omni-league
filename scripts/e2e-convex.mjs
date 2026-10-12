@@ -4,7 +4,9 @@
 //   node scripts/e2e-convex.mjs push             `convex dev --once`: push functions, run codegen
 //   node scripts/e2e-convex.mjs serve            `convex dev`: the backend (Playwright webServer)
 //   node scripts/e2e-convex.mjs setup            globalSetup: `env set` IS_TEST, SITE_URL, and a new
-//                                                random BETTER_AUTH_SECRET; `run testing:reset`
+//                                                random BETTER_AUTH_SECRET; `run testing:reset`.
+//                                                Each `env set` retries with backoff for up to 60 s
+//                                                while the backend does not accept admin requests (#156)
 //   node scripts/e2e-convex.mjs run <fn> [json]  `run` one test function; prints its JSON result
 //   node scripts/e2e-convex.mjs seed-demo        `env set PREVIEW_ORIGIN_PATTERN`, `run seed:demo`:
 //                                                the demo data of a production-build PWA run (#82)
@@ -48,6 +50,10 @@ export const DEPLOYMENT_NAME = 'anonymous-agent';
 
 const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
+/** How long `setup` waits for the backend to accept an `env set` (#156), and the backoff steps. */
+export const READY_TIMEOUT_MS = 60_000;
+const BACKOFF_FIRST_MS = 250;
+const BACKOFF_MAX_MS = 5_000;
 /** Under the home directory, where an older CLI kept every checkout's anonymous deployments. */
 export const SHARED_STATE_DIRNAME = Object.freeze(['.convex', 'anonymous-convex-backend-state']);
 const USAGE =
@@ -141,6 +147,52 @@ export function assertNoSharedState({ homeDir = homedir(), projectDir = PROJECT_
   }
 }
 
+/**
+ * An error a retry cannot fix (a refused target, a missing deployment config). `retryUntilReady`
+ * rethrows it at once; any other error may be a backend that is still starting.
+ */
+function permanent(message) {
+  return Object.assign(new Error(message), { permanent: true });
+}
+
+/**
+ * Runs `attempt` until it succeeds, retrying any non-permanent failure with exponential backoff
+ * until `timeoutMs` has passed. On timeout it throws one error naming `label` and the wait, then
+ * the last failure's text with every occurrence of `redact` (a secret the call was setting) removed.
+ */
+export async function retryUntilReady(
+  attempt,
+  { label, redact = '', timeoutMs = READY_TIMEOUT_MS, sleep = defaultSleep, now = Date.now },
+) {
+  const start = now();
+  let delay = BACKOFF_FIRST_MS;
+  for (;;) {
+    let failure;
+    try {
+      return await attempt();
+    } catch (caught) {
+      failure = caught;
+    }
+    if (failure?.permanent) throw failure;
+    const remaining = timeoutMs - (now() - start);
+    if (remaining <= 0) {
+      // No `cause`: only the redacted text may reach the output.
+      const text = failure instanceof Error ? failure.message : String(failure);
+      const last = redact ? text.split(redact).join('<secret>') : text;
+      throw new Error(
+        `e2e-convex: ${label} failed after ${Math.round(timeoutMs / 1000)} s: the local backend ` +
+          `is not accepting admin requests\nlast error: ${last}`,
+      );
+    }
+    await sleep(Math.min(delay, remaining));
+    delay = Math.min(delay * 2, BACKOFF_MAX_MS);
+  }
+}
+
+function defaultSleep(ms) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
 /** Writes the CLI's project files into `dir` (idempotent). */
 export function prepareProjectDir(dir = PROJECT_DIR) {
   mkdirSync(dir, { recursive: true });
@@ -168,7 +220,7 @@ export function assertLocalTarget({ url, deploymentName, projectDir }, expectedD
     problems.push(`project directory ${projectDir} is not ${expectedDir}`);
   }
   if (problems.length > 0) {
-    throw new Error(
+    throw permanent(
       `e2e-convex: refused: ${problems.join('; ')}. The e2e run targets only the anonymous local backend.`,
     );
   }
@@ -178,13 +230,13 @@ export function assertLocalTarget({ url, deploymentName, projectDir }, expectedD
 export function readLocalDeployment(projectDir) {
   const file = join(projectDir, '.convex', 'local', 'default', 'config.json');
   if (!existsSync(file)) {
-    throw new Error(
+    throw permanent(
       `e2e-convex: no local deployment in ${file}; run \`node scripts/e2e-convex.mjs push\` first`,
     );
   }
   const config = JSON.parse(readFileSync(file, 'utf8'));
   if (typeof config.adminKey !== 'string' || !Number.isInteger(config.ports?.cloud)) {
-    throw new Error(`e2e-convex: ${file} has no admin key or cloud port`);
+    throw permanent(`e2e-convex: ${file} has no admin key or cloud port`);
   }
   return {
     url: `http://127.0.0.1:${config.ports.cloud}`,
@@ -215,7 +267,7 @@ export async function resolveTarget({
   assertLocalTarget({ ...deployment, projectDir }, expectedProjectDir);
   const running = await instanceName(deployment.url);
   if (running !== deployment.deploymentName) {
-    throw new Error(
+    throw permanent(
       `e2e-convex: refused: the backend at ${deployment.url} is ${running}, not ${deployment.deploymentName}`,
     );
   }
@@ -277,7 +329,7 @@ export async function runConvex(
   } = {},
 ) {
   if (!((args[0] === 'env' && args[1] === 'set') || args[0] === 'run')) {
-    throw new Error('e2e-convex: only `env set` and `run` go through runConvex');
+    throw permanent('e2e-convex: only `env set` and `run` go through runConvex');
   }
   const target = await resolveTarget({ projectDir, expectedProjectDir, instanceName });
   // One file per call: concurrent calls (parallel Playwright workers) never share or truncate one.
@@ -347,6 +399,7 @@ export async function main(
     projectDir = PROJECT_DIR,
     instanceName,
     portsFree = assertPortsFree,
+    wait = {},
   } = {},
 ) {
   const target = { env, spawnCli, projectDir, expectedProjectDir: projectDir, instanceName };
@@ -374,17 +427,21 @@ export async function main(
         });
       }
       case 'setup': {
-        await runConvex(['env', 'set', 'IS_TEST', 'true'], target);
-        await runConvex(['env', 'set', 'SITE_URL', E2E_SITE_URL], target);
+        // The webServer is up once `/version` answers, but the backend can still refuse admin
+        // requests for a moment (#156), so each `env set` retries until it accepts one.
+        const setEnv = (name, value, { redact = '' } = {}) =>
+          retryUntilReady(() => runConvex(['env', 'set', name, value], target), {
+            ...wait,
+            label: `convex env set ${name}`,
+            redact,
+          });
+        await setEnv('IS_TEST', 'true');
+        await setEnv('SITE_URL', E2E_SITE_URL);
         // A new secret every run (ADR 0005, ADR 0008), so none is stored anywhere. It is never
         // printed: on failure only its name is. `testing:reset` then clears the component's
         // `jwks`, whose signing key the previous run's secret encrypted.
         const secret = randomBytes(32).toString('base64url');
-        try {
-          await runConvex(['env', 'set', 'BETTER_AUTH_SECRET', secret], target);
-        } catch {
-          throw new Error('e2e-convex: convex env set BETTER_AUTH_SECRET failed');
-        }
+        await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
         const reset = await runConvex(['run', 'testing:reset'], target);
         log(
           `e2e-convex: IS_TEST=true, SITE_URL=${E2E_SITE_URL}, and a new BETTER_AUTH_SECRET on ` +
