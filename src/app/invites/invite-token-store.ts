@@ -1,5 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import { Injectable, PLATFORM_ID, inject } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 
 /** The `sessionStorage` key that holds the token of the invite link being accepted (#70). */
 export const INVITE_TOKEN_KEY = 'omni.invite-token';
@@ -22,6 +22,14 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{1,128}$/;
 @Injectable({ providedIn: 'root' })
 export class InviteTokenStore {
   private readonly inBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly saves = signal(0);
+
+  /**
+   * Counts the links captured so far. A page that is already open watches it to read the token
+   * again, because opening a link on the open page (`/invites/accept#<new token>`) changes the
+   * stored token without creating the page again.
+   */
+  readonly captured = this.saves.asReadonly();
 
   /**
    * Keeps `raw` as the token to accept and returns true, when it has the shape of a token. Anything
@@ -29,6 +37,7 @@ export class InviteTokenStore {
    * older invite for a link that is broken.
    */
   save(raw: string): boolean {
+    this.saves.update((count) => count + 1);
     this.clear();
     if (!this.inBrowser || !TOKEN_SHAPE.test(raw)) return false;
     try {

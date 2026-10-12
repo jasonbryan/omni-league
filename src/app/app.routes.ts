@@ -36,6 +36,8 @@ export const routes: Routes = [
     path: 'invites/accept',
     title: 'Staff invite | Omni League',
     canActivate: [captureInviteToken],
+    // A link opened on the open page changes only the fragment, so the guard must run again.
+    runGuardsAndResolvers: 'always',
     loadComponent: () => import('./invites/accept-invite-page').then((m) => m.AcceptInvitePage),
   },
   {

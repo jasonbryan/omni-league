@@ -21,7 +21,7 @@ import {
   lucideLink2Off,
   lucideLoaderCircle,
   lucideLogOut,
-  lucideMail,
+  lucideMailOpen,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { api } from '../../../convex/_generated/api';
@@ -31,6 +31,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { ConvexOfflineError, injectMutation, injectQuery, skipToken } from '../core/data/convex';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
 import { formatDay } from '../organizations/admin/format-day';
+import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
 import { ACCEPT_INVITE_PATH } from './capture-invite-token';
 import { InviteAlert } from './invite-alert';
@@ -86,11 +87,12 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
  * `returnTo=/invites/accept` alone. A signed-in one sees Accept invite; `invites.accept` checks
  * the account email, so a refusal shows the different-email, already-a-member, or error alert,
  * which takes focus. "Sign in with a different account" signs out and opens sign-in with the
- * token still stored. The token is deleted once the invite is accepted or turns out to be unusable.
+ * token still stored. The token is deleted once the invite is accepted, turns out to be unusable, or
+ * is refused because the visitor is already a member.
  */
 @Component({
   selector: 'app-accept-invite-page',
-  imports: [InviteAlert, NgIcon, RouterLink, Shell],
+  imports: [InviteAlert, NgIcon, RouterLink, ServerErrorView, Shell],
   providers: [
     provideIcons({
       lucideCheck,
@@ -99,226 +101,216 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
       lucideLink2Off,
       lucideLoaderCircle,
       lucideLogOut,
-      lucideMail,
+      lucideMailOpen,
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-shell>
-      <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
-        @switch (view()) {
-          @case ('checking') {
-            <div
-              class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-            >
-              <div class="flex flex-col items-center px-6 py-12 text-center">
-                <ng-icon
-                  name="lucideLoaderCircle"
-                  class="text-2xl text-muted-foreground motion-safe:animate-spin"
-                  aria-hidden="true"
-                />
-                <p role="status" class="mt-3 text-sm text-muted-foreground">
-                  Checking your invite…
-                </p>
-              </div>
-            </div>
-          }
-          @case ('loadFailed') {
-            <div
-              class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-            >
-              <div class="px-5 py-6 md:px-8 md:py-8">
-                <app-invite-alert
-                  #alert
-                  kind="error"
-                  title="The invite could not be loaded."
-                  description="Check your connection and try again."
-                />
-              </div>
-            </div>
-          }
-          @case ('invalid') {
-            <div
-              class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-            >
-              <span
-                class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
-              >
-                <ng-icon name="lucideLink2Off" class="text-2xl" aria-hidden="true" />
-              </span>
-              <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-                This invite link can’t be used
-              </h1>
-              <p class="mt-3 text-balance text-muted-foreground">
-                It may have expired, been revoked, or already been accepted. Ask the org admin who
-                invited you for a new link.
-              </p>
-              <a routerLink="/" data-slot="button" [class]="primaryButton + ' mt-8'"
-                ><ng-icon name="lucideHouse" data-icon="inline-start" aria-hidden="true" />Go to the
-                home page</a
-              >
-            </div>
-          }
-          @case ('accepted') {
-            <div
-              class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-            >
-              <span
-                class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
-              >
-                <ng-icon name="lucideCircleCheck" class="text-2xl" aria-hidden="true" />
-              </span>
-              <h1
-                #heading
-                tabindex="-1"
-                class="mt-6 rounded-md text-2xl font-semibold tracking-tight text-balance md:text-3xl focus:outline-2 focus:outline-offset-2 focus:outline-ring"
-              >
-                You’re on the staff of {{ accepted()?.organizationName }}
-              </h1>
-              <p class="mt-3 text-balance text-muted-foreground">{{ acceptedLine() }}</p>
-              <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
-                >Go to your organizations</a
-              >
-            </div>
-          }
-          @default {
-            @if (summary(); as invite) {
+      @if (view() === 'loadFailed') {
+        <app-server-error-view [retryHref]="path" />
+      } @else {
+        <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
+          @switch (view()) {
+            @case ('checking') {
               <div
                 class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
               >
-                <div class="px-5 pt-6 md:px-8 md:pt-8">
-                  <span
-                    class="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground"
-                  >
-                    <ng-icon name="lucideMail" class="text-xl" aria-hidden="true" />
-                  </span>
-                  <p class="mt-4 text-sm font-medium text-muted-foreground">Staff invite</p>
-                  <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance">
-                    Join {{ invite.organizationName }}
-                  </h1>
-                  <p class="mt-2 text-sm text-muted-foreground">{{ lead() }}</p>
-                </div>
-                <dl
-                  class="mx-5 mt-5 divide-y divide-border rounded-lg border border-border text-sm md:mx-8"
-                >
-                  <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
-                    <dt class="text-muted-foreground">Organization</dt>
-                    <dd class="font-medium sm:text-end">{{ invite.organizationName }}</dd>
-                  </div>
-                  <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
-                    <dt class="text-muted-foreground">Role</dt>
-                    <dd class="font-medium sm:text-end">{{ roleName(invite.role) }}</dd>
-                  </div>
-                  @if (invite.leagueNames.length > 0) {
-                    <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
-                      <dt class="text-muted-foreground">
-                        {{ invite.leagueNames.length === 1 ? 'League' : 'Leagues' }}
-                      </dt>
-                      <dd class="font-medium sm:text-end">{{ leagueList() }}</dd>
-                    </div>
-                  }
-                  @if (expires(); as expires) {
-                    <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
-                      <dt class="text-muted-foreground">Expires</dt>
-                      <dd class="font-medium sm:text-end">{{ expires }}</dd>
-                    </div>
-                  }
-                </dl>
-                <div class="px-5 pt-5 pb-6 md:px-8 md:pb-8">
-                  @if (view() === 'signedOut') {
-                    <p class="text-sm text-muted-foreground">
-                      To accept, create an account or sign in with the email address this invite was
-                      sent to.
-                    </p>
-                    <a
-                      routerLink="/sign-up"
-                      [queryParams]="returnToParams"
-                      data-slot="button"
-                      [class]="primaryButton + ' mt-4 w-full'"
-                      >Create an account</a
-                    >
-                    <a
-                      routerLink="/sign-in"
-                      [queryParams]="returnToParams"
-                      data-slot="button"
-                      [class]="outlineButton + ' mt-2 w-full'"
-                      >Sign in</a
-                    >
-                  } @else {
-                    @if (refusal(); as refusal) {
-                      <app-invite-alert
-                        #alert
-                        [kind]="
-                          refusal === 'alreadyMember'
-                            ? 'info'
-                            : refusal === 'offline'
-                              ? 'offline'
-                              : 'error'
-                        "
-                        [title]="refusalTitle(refusal, invite.organizationName)"
-                        [description]="refusalDescription(refusal)"
-                        class="mb-4"
-                      />
-                    }
-                    @if (refusal() === 'alreadyMember') {
-                      <a routerLink="/app" data-slot="button" [class]="primaryButton + ' w-full'"
-                        >Go to your organizations</a
-                      >
-                    } @else {
-                      <p class="text-sm text-muted-foreground">
-                        Signed in{{ name() ? ' as ' : ''
-                        }}<span class="font-medium text-foreground">{{ name() }}</span
-                        >.
-                      </p>
-                      @if (refusal() === 'emailMismatch') {
-                        <button
-                          type="button"
-                          data-slot="button"
-                          [class]="outlineButton + ' mt-4 w-full'"
-                          [attr.aria-disabled]="switching() ? 'true' : null"
-                          (click)="switchAccount()"
-                        >
-                          <ng-icon
-                            name="lucideLogOut"
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                          />Sign in with a different account
-                        </button>
-                      } @else {
-                        <button
-                          type="button"
-                          data-slot="button"
-                          [class]="primaryButton + ' mt-4 w-full'"
-                          [attr.aria-disabled]="accepting() ? 'true' : null"
-                          (click)="accept()"
-                        >
-                          @if (accepting()) {
-                            <ng-icon
-                              name="lucideLoaderCircle"
-                              class="motion-safe:animate-spin"
-                              data-icon="inline-start"
-                              aria-hidden="true"
-                            />Accepting…
-                          } @else {
-                            <ng-icon
-                              name="lucideCheck"
-                              data-icon="inline-start"
-                              aria-hidden="true"
-                            />Accept invite
-                          }
-                        </button>
-                        <p role="status" class="sr-only">
-                          {{ accepting() ? 'Accepting the invite.' : '' }}
-                        </p>
-                      }
-                    }
-                  }
+                <div class="flex flex-col items-center px-6 py-12 text-center">
+                  <ng-icon
+                    name="lucideLoaderCircle"
+                    class="text-2xl text-muted-foreground motion-safe:animate-spin"
+                    aria-hidden="true"
+                  />
+                  <p role="status" class="mt-3 text-sm text-muted-foreground">
+                    Checking your invite…
+                  </p>
                 </div>
               </div>
             }
+            @case ('invalid') {
+              <div
+                class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+              >
+                <span
+                  class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
+                >
+                  <ng-icon name="lucideLink2Off" class="text-2xl" aria-hidden="true" />
+                </span>
+                <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+                  This invite link can’t be used
+                </h1>
+                <p class="mt-3 text-balance text-muted-foreground">
+                  It may have expired, been revoked, or already been accepted. Ask the org admin who
+                  invited you for a new link.
+                </p>
+                <a routerLink="/" data-slot="button" [class]="primaryButton + ' mt-8'"
+                  ><ng-icon name="lucideHouse" data-icon="inline-start" aria-hidden="true" />Go to
+                  the home page</a
+                >
+              </div>
+            }
+            @case ('accepted') {
+              <div
+                class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+              >
+                <span
+                  class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
+                >
+                  <ng-icon name="lucideCircleCheck" class="text-2xl" aria-hidden="true" />
+                </span>
+                <h1
+                  #heading
+                  tabindex="-1"
+                  class="mt-6 rounded-md text-2xl font-semibold tracking-tight text-balance md:text-3xl focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+                >
+                  You’re on the staff of {{ accepted()?.organizationName }}
+                </h1>
+                <p class="mt-3 text-balance text-muted-foreground">{{ acceptedLine() }}</p>
+                <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
+                  >Go to your organizations</a
+                >
+              </div>
+            }
+            @default {
+              @if (summary(); as invite) {
+                <div
+                  class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                >
+                  <div class="px-5 pt-6 md:px-8 md:pt-8">
+                    <span
+                      class="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground"
+                    >
+                      <ng-icon name="lucideMailOpen" class="text-xl" aria-hidden="true" />
+                    </span>
+                    <p class="mt-4 text-sm font-medium text-muted-foreground">Staff invite</p>
+                    <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance">
+                      Join {{ invite.organizationName }}
+                    </h1>
+                    <p class="mt-2 text-sm text-muted-foreground">{{ lead() }}</p>
+                  </div>
+                  <dl
+                    class="mx-5 mt-5 divide-y divide-border rounded-lg border border-border text-sm md:mx-8"
+                  >
+                    <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
+                      <dt class="text-muted-foreground">Organization</dt>
+                      <dd class="font-medium sm:text-end">{{ invite.organizationName }}</dd>
+                    </div>
+                    <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
+                      <dt class="text-muted-foreground">Role</dt>
+                      <dd class="font-medium sm:text-end">{{ roleName(invite.role) }}</dd>
+                    </div>
+                    @if (invite.leagueNames.length > 0) {
+                      <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
+                        <dt class="text-muted-foreground">
+                          {{ invite.leagueNames.length === 1 ? 'League' : 'Leagues' }}
+                        </dt>
+                        <dd class="font-medium sm:text-end">{{ leagueList() }}</dd>
+                      </div>
+                    }
+                    @if (expires(); as expires) {
+                      <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
+                        <dt class="text-muted-foreground">Expires</dt>
+                        <dd class="font-medium sm:text-end">{{ expires }}</dd>
+                      </div>
+                    }
+                  </dl>
+                  <div class="px-5 pt-5 pb-6 md:px-8 md:pb-8">
+                    @if (view() === 'signedOut') {
+                      <p class="text-sm text-muted-foreground">
+                        To accept, create an account or sign in with the email address this invite
+                        was sent to.
+                      </p>
+                      <a
+                        routerLink="/sign-up"
+                        [queryParams]="returnToParams"
+                        data-slot="button"
+                        [class]="primaryButton + ' mt-4 w-full'"
+                        >Create an account</a
+                      >
+                      <a
+                        routerLink="/sign-in"
+                        [queryParams]="returnToParams"
+                        data-slot="button"
+                        [class]="outlineButton + ' mt-2 w-full'"
+                        >Sign in</a
+                      >
+                    } @else {
+                      @if (refusal(); as refusal) {
+                        <app-invite-alert
+                          #alert
+                          [kind]="
+                            refusal === 'alreadyMember'
+                              ? 'info'
+                              : refusal === 'offline'
+                                ? 'offline'
+                                : 'error'
+                          "
+                          [title]="refusalTitle(refusal, invite.organizationName)"
+                          [description]="refusalDescription(refusal)"
+                          class="mb-4"
+                        />
+                      }
+                      @if (refusal() === 'alreadyMember') {
+                        <a routerLink="/app" data-slot="button" [class]="outlineButton + ' w-full'"
+                          >Go to your organizations</a
+                        >
+                      } @else {
+                        <p class="text-sm text-muted-foreground">
+                          Signed in{{ name() ? ' as ' : ''
+                          }}<span class="font-medium text-foreground">{{ name() }}</span
+                          >.
+                        </p>
+                        @if (refusal() === 'emailMismatch') {
+                          <button
+                            type="button"
+                            data-slot="button"
+                            [class]="primaryButton + ' mt-4 w-full'"
+                            [attr.aria-disabled]="switching() ? 'true' : null"
+                            (click)="switchAccount()"
+                          >
+                            <ng-icon
+                              name="lucideLogOut"
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />Sign in with a different account
+                          </button>
+                        } @else {
+                          <button
+                            type="button"
+                            data-slot="button"
+                            [class]="primaryButton + ' mt-4 w-full'"
+                            [attr.aria-disabled]="accepting() ? 'true' : null"
+                            (click)="accept()"
+                          >
+                            @if (accepting()) {
+                              <ng-icon
+                                name="lucideLoaderCircle"
+                                class="motion-safe:animate-spin"
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                              />Accepting…
+                            } @else {
+                              <ng-icon
+                                name="lucideCheck"
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                              />Accept invite
+                            }
+                          </button>
+                          <p role="status" class="sr-only">
+                            {{ accepting() ? 'Accepting the invite.' : '' }}
+                          </p>
+                        }
+                      }
+                    }
+                  </div>
+                </div>
+              }
+            }
           }
-        }
-      </div>
+        </div>
+      }
     </app-shell>
   `,
 })
@@ -333,13 +325,23 @@ export class AcceptInvitePage {
   protected readonly outlineButton = OUTLINE_BUTTON;
   /** The only query sign-up and sign-in get: the page's own path, which holds no token. */
   protected readonly returnToParams = { returnTo: ACCEPT_INVITE_PATH };
+  /** Where "Try again" on the load-failure view goes: the page itself, which holds no token. */
+  protected readonly path = ACCEPT_INVITE_PATH;
 
-  /** The stored token, read once: the route guard has already moved it out of the URL. */
-  private readonly token = this.store.read();
+  /**
+   * The stored token: the route guard has already moved it out of the URL. It is read again only
+   * when the guard captures another link while the page is open, and a new token starts the page
+   * over (the signals below follow it).
+   */
+  private readonly token = linkedSignal({
+    source: this.store.captured,
+    computation: () => this.store.read(),
+  });
 
-  private readonly invite = injectQuery(api.invites.getByToken, () =>
-    this.token ? { token: this.token } : skipToken,
-  );
+  private readonly invite = injectQuery(api.invites.getByToken, () => {
+    const token = this.token();
+    return token ? { token } : skipToken;
+  });
   // Asked only once Convex has accepted the token, so the first answer is the caller's own row.
   private readonly me = injectQuery(api.users.me, () =>
     this.auth.convexAuthenticated() ? {} : skipToken,
@@ -349,10 +351,20 @@ export class AcceptInvitePage {
   private readonly sessionKnown = signal(false);
   protected readonly accepting = signal(false);
   protected readonly switching = signal(false);
-  protected readonly refusal = signal<Refusal | null>(null);
+  // What happened to the current token; a different token starts over.
+  protected readonly refusal = linkedSignal<string | null, Refusal | null>({
+    source: this.token,
+    computation: () => null,
+  });
   /** `invites.accept` found the invite unusable (another answer than `getByToken`'s). */
-  private readonly refusedAsInvalid = signal(false);
-  protected readonly accepted = signal<InviteSummary | null>(null);
+  private readonly refusedAsInvalid = linkedSignal<string | null, boolean>({
+    source: this.token,
+    computation: () => false,
+  });
+  protected readonly accepted = linkedSignal<string | null, InviteSummary | null>({
+    source: this.token,
+    computation: () => null,
+  });
 
   protected readonly name = computed(() => this.me.value()?.name ?? null);
 
@@ -371,7 +383,7 @@ export class AcceptInvitePage {
 
   protected readonly view = computed<View>(() => {
     if (this.accepted()) return 'accepted';
-    if (!this.token || this.refusedAsInvalid()) return 'invalid';
+    if (!this.token() || this.refusedAsInvalid()) return 'invalid';
     if (this.accepting() || this.refusal() !== null) return 'ready';
     const answer = this.invite.value();
     if (answer === undefined) return this.invite.error() ? 'loadFailed' : 'checking';
@@ -408,16 +420,18 @@ export class AcceptInvitePage {
     void this.auth.isSignedIn().then(() => this.sessionKnown.set(true));
     effect(() => {
       const view = this.view();
-      this.title.setTitle(
-        view === 'accepted'
-          ? 'Invite accepted | Omni League'
-          : view === 'invalid' || view === 'loadFailed'
-            ? 'Invite unavailable | Omni League'
-            : 'Staff invite | Omni League',
-      );
+      // The load-failure view sets its own title.
+      if (view !== 'loadFailed') {
+        this.title.setTitle(
+          view === 'accepted'
+            ? 'Invite accepted | Omni League'
+            : view === 'invalid'
+              ? 'Invite unavailable | Omni League'
+              : 'Staff invite | Omni League',
+        );
+      }
       // An unusable invite is refused for good: nothing more to accept with this token.
       if (view === 'invalid') this.store.clear();
-      if (view === 'loadFailed') this.focusAfterRender('alert');
     });
   }
 
@@ -438,7 +452,7 @@ export class AcceptInvitePage {
   }
 
   protected async accept(): Promise<void> {
-    const token = this.token;
+    const token = this.token();
     if (this.accepting() || !token) return;
     this.refusal.set(null);
     this.accepting.set(true);
@@ -452,6 +466,8 @@ export class AcceptInvitePage {
       if (code === 'invalid') {
         this.refusedAsInvalid.set(true);
       } else {
+        // An invite that cannot change the role has nothing more to offer: forget its token.
+        if (code === 'alreadyMember') this.store.clear();
         this.refusal.set(code ?? (failure instanceof ConvexOfflineError ? 'offline' : 'failed'));
         this.focusAfterRender('alert');
       }

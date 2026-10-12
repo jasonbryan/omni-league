@@ -313,6 +313,44 @@ test.describe('Accept invite: links that cannot be used', () => {
     expect(await storedToken(page)).toBeNull();
   });
 
+  test('a fragment opened on the invite page that is already open is captured too: the address bar and returnTo never hold the token', async ({
+    page,
+  }) => {
+    const tenant = await seedOrganization();
+    const token = await seedInvite(tenant, { email: newUser('Again').email });
+    const urls = watchUrls(page);
+
+    // The page is open with nothing stored: the invalid view.
+    await page.goto('/invites/accept');
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'This invite link can’t be used',
+    );
+
+    // The same tab opens the link: a navigation to the same path with a fragment only.
+    await page.goto(`/invites/accept#${token}`);
+    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
+    expect(await storedToken(page)).toBe(token);
+    expect(page.url()).not.toContain(token);
+    expect(page.url()).not.toContain('#');
+    // The navigation to the link held the fragment, as the visitor opened it; none after it may.
+    const afterCapture = urls.navigations.length;
+
+    // Neither sign-in link carries it: the top bar's and the page's.
+    const links = page.locator('a[href^="/sign-in"], a[href^="/sign-up"]');
+    expect(await links.count()).toBeGreaterThan(0);
+    for (const href of await links.evaluateAll((all) => all.map((a) => a.getAttribute('href')))) {
+      expect(href).not.toContain(token);
+      expect(href).not.toContain('#');
+      expect(href).not.toContain('%23');
+    }
+    await page.locator('header a[href^="/sign-in"]').click();
+    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Finvites%2Faccept`);
+    expect(urls.requests.filter((url) => url.includes(token))).toEqual([]);
+    expect(urls.navigations.slice(afterCapture).filter((url) => url.includes('#'))).toEqual([]);
+    expect(urls.navigations.slice(afterCapture).filter((url) => url.includes(token))).toEqual([]);
+  });
+
   test('a token in the query string is never read, and is dropped from the URL', async ({
     page,
   }) => {

@@ -48,7 +48,12 @@ async function open(options: { token?: string | null; signedIn?: boolean } = {})
       provideFakeAuthClient(auth),
       { provide: CONVEX_CLIENT, useValue: convex },
       provideRouter([
-        { path: 'invites/accept', component: AcceptInvitePage, canActivate: [captureInviteToken] },
+        {
+          path: 'invites/accept',
+          component: AcceptInvitePage,
+          canActivate: [captureInviteToken],
+          runGuardsAndResolvers: 'always',
+        },
         { path: 'app', component: Elsewhere },
         { path: 'sign-in', component: Elsewhere },
         { path: 'sign-up', component: Elsewhere },
@@ -106,6 +111,21 @@ describe('AcceptInvitePage', () => {
       const status = page.querySelector('main [role="status"]');
       expect(text(status)).toBe('Checking your invite…');
       expect(page.querySelector('h1')).toBeNull();
+    });
+
+    it('a link opened on the open page is captured: the page reads the new token and the URL stays clean', async () => {
+      const { page, flush, sub, emitInvite, harness } = await open({ token: null });
+      await flush();
+      expect(text(page.querySelector('h1'))).toBe('This invite link can’t be used');
+      await harness.navigateByUrl(`/invites/accept#${TOKEN}`);
+      await flush();
+      expect(TestBed.inject(Router).url).toBe('/invites/accept');
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
+      expect(sub(GET_BY_TOKEN)?.args).toEqual({ token: TOKEN });
+      await emitInvite(ORGANIZER);
+      expect(text(page.querySelector('h1'))).toBe('Join Coastal Bend Rec Club');
+      const hrefs = [...page.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '');
+      expect(hrefs.filter((href) => href.includes(TOKEN) || href.includes('%23'))).toEqual([]);
     });
 
     it('the URL and the stored token carry the fragment nowhere', async () => {
@@ -301,6 +321,9 @@ describe('AcceptInvitePage', () => {
       expect(text(page.querySelector('h1'))).toBe('Join Coastal Bend Rec Club');
       const buttons = [...page.querySelectorAll('button')].map((b) => text(b));
       expect(buttons).toEqual(['Sign in with a different account']);
+      const switchButton = page.querySelector('button');
+      expect(switchButton?.className).toContain('bg-primary');
+      expect(switchButton?.className).not.toContain('bg-background');
       expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
     });
 
@@ -334,6 +357,9 @@ describe('AcceptInvitePage', () => {
         (a) => text(a) === 'Go to your organizations',
       );
       expect(link?.getAttribute('href')).toBe('/app');
+      expect(link?.className).toContain('bg-background');
+      expect(link?.className).not.toContain('bg-primary');
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
     });
 
     it('the invite became invalid: the invalid view, and the token is deleted', async () => {
@@ -391,16 +417,15 @@ describe('AcceptInvitePage', () => {
   });
 
   describe('the invite could not be loaded', () => {
-    it('shows an error alert that takes focus', async () => {
+    it('shows the temporarily-unavailable view with a heading and a Try again link back to the page', async () => {
       const { page, flush, sub } = await open();
       await flush();
       sub(GET_BY_TOKEN)?.fail(new Error('down'));
       await flush();
-      const alert = page.querySelector('[role="alert"]');
-      expect(text(alert?.querySelector('[data-slot="alert-title"]'))).toBe(
-        'The invite could not be loaded.',
-      );
-      expect(document.activeElement).toBe(alert);
+      expect(text(page.querySelector('h1'))).toBe('This page is temporarily unavailable');
+      const retry = [...page.querySelectorAll('main a')].find((a) => text(a) === 'Try again');
+      expect(retry?.getAttribute('href')).toBe('/invites/accept');
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
     });
   });
 });

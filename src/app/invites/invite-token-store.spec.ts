@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Component } from '@angular/core';
+import { routes } from '../app.routes';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY, InviteTokenStore } from './invite-token-store';
 
@@ -87,6 +88,32 @@ describe('captureInviteToken', () => {
     await open('/invites/accept');
     expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
     expect(TestBed.inject(Router).url).toBe('/invites/accept');
+  });
+
+  it('a fragment on the page that is already open is captured and leaves the URL clean', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          {
+            path: 'invites/accept',
+            component: Accept,
+            canActivate: [captureInviteToken],
+            runGuardsAndResolvers: 'always',
+          },
+        ]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create('/invites/accept');
+    expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
+    await harness.navigateByUrl(`/invites/accept#${TOKEN}`);
+    expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
+    expect(TestBed.inject(Router).url).toBe('/invites/accept');
+  });
+
+  it('the app route re-runs the guard on every navigation, so a fragment-only one is captured', () => {
+    const route = routes.find((candidate) => candidate.path === 'invites/accept');
+    expect(route?.canActivate).toContain(captureInviteToken);
+    expect(route?.runGuardsAndResolvers).toBe('always');
   });
 
   it('a new link replaces the token of an earlier one', async () => {
