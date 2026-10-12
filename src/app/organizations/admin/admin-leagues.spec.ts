@@ -17,8 +17,8 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Leagues (#66), design/mockups/66-69-organization-leagues.html states 1 to 8 (without the Publish
-// buttons) and "League messages" and "League attributes", plus design/mockups/88-offline-note.html
+// Leagues (#66), design/mockups/66-69-organization-leagues.html states 1 to 8 (#69's publishing
+// states are in admin-leagues-publish.spec.ts) and "League messages" and "League attributes", plus design/mockups/88-offline-note.html
 // states 2 and 3.
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
@@ -161,7 +161,7 @@ describe('AdminLeagues', () => {
       expect(panel.querySelector('ul')).toBeNull();
     });
 
-    it('populated (state 3): a row per league with name, status, sport, and locations, and no Publish button', async () => {
+    it('populated (state 3): a row per league with name, status, sport, and locations, and a Publish button on each draft only', async () => {
       await open(LEAGUES);
       expect(items().map((li) => text(li.querySelector('h3')))).toEqual(LEAGUES.map((l) => l.name));
       const badges = (li: HTMLElement) =>
@@ -182,7 +182,7 @@ describe('AdminLeagues', () => {
         'Locations: Tern Point Softball Complex, Redfish Flats Fields',
       );
       expect(items()[0].querySelector('.sr-only')?.textContent).toBe('Location: ');
-      expect(page.querySelector('#leagues-list button')).toBeNull();
+      expect(items().map((li) => li.querySelector('button') !== null)).toEqual([false, true, true]);
     });
 
     it('a failed list shows the destructive alert, never the error message', async () => {
