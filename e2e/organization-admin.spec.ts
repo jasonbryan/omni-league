@@ -14,6 +14,7 @@ import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -165,14 +166,18 @@ test.describe('the admin area: entry and navigation', () => {
     await expect(page).toHaveURL(`${baseURL}${base}/locations`);
   });
 
-  test('a signed-out visitor is sent to sign-in with returnTo', async ({ page }) => {
-    const slug = `e2e-${randomBytes(4).toString('hex')}`;
-    await page.goto(`/app/organizations/${slug}/locations`);
-    await expect(page).toHaveURL(/\/sign-in\?/);
-    expect(new URL(page.url()).searchParams.get('returnTo')).toBe(
-      `/app/organizations/${slug}/locations`,
-    );
-  });
+  test(
+    'a signed-out visitor is sent to sign-in with returnTo',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const slug = `e2e-${randomBytes(4).toString('hex')}`;
+      await page.goto(`/app/organizations/${slug}/locations`);
+      await expect(page).toHaveURL(/\/sign-in\?/);
+      expect(new URL(page.url()).searchParams.get('returnTo')).toBe(
+        `/app/organizations/${slug}/locations`,
+      );
+    },
+  );
 });
 
 test.describe('Overview', () => {
@@ -293,24 +298,28 @@ test.describe('Locations', () => {
     await expect(publicLocation).toContainText('1 Mustang Way, Port Aransas, TX 78373');
   });
 
-  test('a location added on one tab appears live on another', async ({ page }) => {
-    const { base } = await memberOf(page, 'orgAdmin');
-    await page.goto(`${base}/locations`);
-    await expect(page.getByText('No locations yet')).toBeVisible();
-    // The same user in a second tab (sign-in is #63, so a second page of the same context stands
-    // in for a second device).
-    const second = await page.context().newPage();
-    await second.goto(`${base}/locations`);
-    await second.locator('#name').fill('Second Tab Field');
-    await second.locator('#address').fill('2 Tab Way');
-    await second
-      .locator('#add-location')
-      .getByRole('button', { name: /^Add location/ })
-      .click();
-    await expect(listRows(page)).toHaveCount(1);
-    await expect(listRows(page).first()).toContainText('Second Tab Field');
-    await second.close();
-  });
+  test(
+    'a location added on one tab appears live on another',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/locations`);
+      await expect(page.getByText('No locations yet')).toBeVisible();
+      // The same user in a second tab (sign-in is #63, so a second page of the same context stands
+      // in for a second device).
+      const second = await page.context().newPage();
+      await second.goto(`${base}/locations`);
+      await second.locator('#name').fill('Second Tab Field');
+      await second.locator('#address').fill('2 Tab Way');
+      await second
+        .locator('#add-location')
+        .getByRole('button', { name: /^Add location/ })
+        .click();
+      await expect(listRows(page)).toHaveCount(1);
+      await expect(listRows(page).first()).toContainText('Second Tab Field');
+      await second.close();
+    },
+  );
 
   test('refuses empty, whitespace-only, and too-long values with the field messages, and adds nothing', async ({
     page,
@@ -430,75 +439,108 @@ test.describe('who may open the admin area', () => {
     ['a league organizer of the organization', 'leagueOrganizer'],
     ['a signed-in user with no membership', null],
   ] as const) {
-    test(`${label} sees the no-access view on every admin path, and no location data is requested`, async ({
-      page,
-    }, testInfo) => {
-      const user = newUser('Outsider');
-      await signUp(page, user);
-      const { tenant, base } = await seedFor(user.email, role, LOCATIONS);
-      const frames = sentFrames(page);
-      for (const path of [`${base}/locations`, base]) {
-        await page.goto(path);
-        await expect(
-          main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
-        ).toBeVisible();
-        await expect(page).toHaveTitle('You can’t manage this organization | Omni League');
-        await expect(main(page)).toContainText(
-          'Only its org admins can open the admin area. If you should have access, ask one of them to invite you as an org admin.',
-        );
-        await expect(page.getByRole('navigation', { name: `${tenant.name} admin` })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
-        // Nothing about the organization is on the page.
-        await expect(page.locator('body')).not.toContainText(LOCATIONS[0].name);
-        await expect(page.locator('body')).not.toContainText(tenant.name);
-      }
-      expect(frames.join('\n')).toContain('organizations:getAdminContext');
-      expect(frames.join('\n')).not.toContain('locations:listForAdmin');
-      await screenshot(page, testInfo, '65-no-access');
-      await expectAccessible(page);
-      await main(page).getByRole('link', { name: 'Go to your organizations' }).click();
-      await expect(page).toHaveURL(`${baseURL}/app`);
-    });
+    test(
+      `${label} sees the no-access view on every admin path, and no location data is requested`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const user = newUser('Outsider');
+        await signUp(page, user);
+        const { tenant, base } = await seedFor(user.email, role, LOCATIONS);
+        const frames = sentFrames(page);
+        for (const path of [`${base}/locations`, base]) {
+          await page.goto(path);
+          await expect(
+            main(page).getByRole('heading', {
+              level: 1,
+              name: 'You can’t manage this organization',
+            }),
+          ).toBeVisible();
+          await expect(page).toHaveTitle('You can’t manage this organization | Omni League');
+          await expect(main(page)).toContainText(
+            'Only its org admins can open the admin area. If you should have access, ask one of them to invite you as an org admin.',
+          );
+          await expect(page.getByRole('navigation', { name: `${tenant.name} admin` })).toHaveCount(
+            0,
+          );
+          await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
+          // Nothing about the organization is on the page.
+          await expect(page.locator('body')).not.toContainText(LOCATIONS[0].name);
+          await expect(page.locator('body')).not.toContainText(tenant.name);
+        }
+        expect(frames.join('\n')).toContain('organizations:getAdminContext');
+        expect(frames.join('\n')).not.toContain('locations:listForAdmin');
+        await main(page).getByRole('link', { name: 'Go to your organizations' }).click();
+        await expect(page).toHaveURL(`${baseURL}/app`);
+      },
+    );
   }
 
-  test('an unknown slug shows #23’s not-found view with no other request', async ({
+  // The view is the same for every role, so one run of it is saved as a screenshot and scanned.
+  test('the no-access view is saved as a screenshot and passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    const user = newUser('Outsider');
+    await signUp(page, user);
+    const { base } = await seedFor(user.email, null, LOCATIONS);
+    await page.goto(`${base}/locations`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, '65-no-access');
+    await expectAccessible(page);
+  });
+
+  test(
+    'an unknown slug shows #23’s not-found view with no other request',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await signUp(page, newUser('Lost'));
+      const frames = sentFrames(page);
+      await page.goto('/app/organizations/does-not-exist/locations');
+      await expect(
+        main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
+      ).toBeVisible();
+      await expect(main(page).getByRole('link', { name: 'Go to the home page' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: /admin$/ })).toHaveCount(0);
+      expect(frames.join('\n')).toContain('organizations:getAdminContext');
+      expect(frames.join('\n')).not.toContain('locations:listForAdmin');
+    },
+  );
+
+  test('the not-found view is saved as a screenshot and passes the axe helper', async ({
     page,
   }, testInfo) => {
     await signUp(page, newUser('Lost'));
-    const frames = sentFrames(page);
     await page.goto('/app/organizations/does-not-exist/locations');
     await expect(
       main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
     ).toBeVisible();
-    await expect(main(page).getByRole('link', { name: 'Go to the home page' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: /admin$/ })).toHaveCount(0);
-    expect(frames.join('\n')).toContain('organizations:getAdminContext');
-    expect(frames.join('\n')).not.toContain('locations:listForAdmin');
     await screenshot(page, testInfo, '65-not-found');
     await expectAccessible(page);
   });
 
-  test('an org admin of another organization is refused: no access, nothing written', async ({
-    page,
-    browser,
-  }) => {
-    const owner = await memberOf(page, 'orgAdmin', LOCATIONS);
-    const user = newUser('Intruder');
-    const intruder = await otherUser(browser, user);
-    try {
-      // An org admin, but of an organization of their own.
-      const mine = await seedFor(user.email, 'orgAdmin', []);
-      expect(mine.base).not.toBe(owner.base);
-      await intruder.goto(`${owner.base}/locations`);
-      await expect(
-        intruder.getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
-      ).toBeVisible();
-      await expect(intruder.locator('body')).not.toContainText(LOCATIONS[0].name);
-    } finally {
-      await intruder.context().close();
-    }
-    // The owner still sees its own list.
-    await page.goto(`${owner.base}/locations`);
-    await expect(listRows(page)).toHaveCount(2);
-  });
+  test(
+    'an org admin of another organization is refused: no access, nothing written',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, browser }) => {
+      const owner = await memberOf(page, 'orgAdmin', LOCATIONS);
+      const user = newUser('Intruder');
+      const intruder = await otherUser(browser, user);
+      try {
+        // An org admin, but of an organization of their own.
+        const mine = await seedFor(user.email, 'orgAdmin', []);
+        expect(mine.base).not.toBe(owner.base);
+        await intruder.goto(`${owner.base}/locations`);
+        await expect(
+          intruder.getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(intruder.locator('body')).not.toContainText(LOCATIONS[0].name);
+      } finally {
+        await intruder.context().close();
+      }
+      // The owner still sees its own list.
+      await page.goto(`${owner.base}/locations`);
+      await expect(listRows(page)).toHaveCount(2);
+    },
+  );
 });

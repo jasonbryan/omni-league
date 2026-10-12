@@ -3,8 +3,7 @@
 // empty shell and no auth code runs there. Checks of what sign-up wrote run on local runs only
 // (they read the local backend through `testing:accountByEmail`); against a preview the browser
 // flow still runs, which is the "sign-up from the deploy-preview origin" check.
-import type { Page, TestInfo } from '@playwright/test';
-import { join } from 'node:path';
+import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -13,6 +12,8 @@ import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
+import { screenshot } from './support/screenshot';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
@@ -51,15 +52,6 @@ async function signUp(page: Page, user: TestUser, path = '/sign-up'): Promise<vo
   await createAccount(page).click();
 }
 
-/** A full-page PNG for the tester's mockup comparison, at this project's width. */
-async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  const width = page.viewportSize()?.width ?? 0;
-  const file = join(testInfo.config.rootDir, 'screenshots', `${name}-${width}.png`);
-  const png = await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
-  await testInfo.attach(`${name}-${width}.png`, { body: png, contentType: 'image/png' });
-}
-
 test.describe('sign-up', () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
   // intercept and count (e2e/support/no-service-worker.ts).
@@ -88,16 +80,18 @@ test.describe('sign-up', () => {
     },
   );
 
-  test('a signed-out visitor opening /app goes to /sign-in?returnTo=/app (#63)', async ({
-    page,
-  }) => {
-    await page.goto('/app');
-    await expect(page).toHaveURL(/\/sign-in\?/);
-    expect(new URL(page.url()).pathname).toBe('/sign-in');
-    expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/app');
-    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
-    await expect(page).toHaveTitle('Sign in | Omni League');
-  });
+  test(
+    'a signed-out visitor opening /app goes to /sign-in?returnTo=/app (#63)',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await page.goto('/app');
+      await expect(page).toHaveURL(/\/sign-in\?/);
+      expect(new URL(page.url()).pathname).toBe('/sign-in');
+      expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/app');
+      await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+      await expect(page).toHaveTitle('Sign in | Omni League');
+    },
+  );
 
   test('the empty form: fields, policy text, Show password, axe, and Tab order', async ({
     page,
@@ -261,7 +255,7 @@ test.describe('sign-up', () => {
     await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fapp$/);
   });
 
-  test('returnTo=//evil.example/x lands on /', async ({ page }) => {
+  test('returnTo=//evil.example/x lands on /', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, newUser('Return'), '/sign-up?returnTo=%2F%2Fevil.example%2Fx');
     await expect(page).toHaveURL(`${baseURL}/`);
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
@@ -278,75 +272,81 @@ test.describe('sign-up', () => {
     '/.//evil.example/x',
     '/%2e%2e//evil.example/x',
   ]) {
-    test(`returnTo=${JSON.stringify(raw)} lands on / after sign-up and on /app when signed in`, async ({
-      page,
-    }) => {
-      const query = `?returnTo=${encodeURIComponent(raw)}`;
-      const tokens = tokensSettled(page);
-      await signUp(page, newUser('Variant'), `/sign-up${query}`);
-      await expect(page).toHaveURL(`${baseURL}/`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
-      await tokens;
+    test(
+      `returnTo=${JSON.stringify(raw)} lands on / after sign-up and on /app when signed in`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const query = `?returnTo=${encodeURIComponent(raw)}`;
+        const tokens = tokensSettled(page);
+        await signUp(page, newUser('Variant'), `/sign-up${query}`);
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+        await tokens;
 
-      await page.goto(`/sign-up${query}`);
-      await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
-    });
+        await page.goto(`/sign-up${query}`);
+        await expect(page).toHaveURL(`${baseURL}/app`);
+        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+      },
+    );
   }
 
   // Tester (#62, round 2): a signed-in visitor opening /sign-up goes to the validated returnTo
   // (redirectSignedIn). For each value the browser stays on this site with a path that starts
   // with exactly one `/`, and no request ever goes to another host named in the value.
-  test('every returnTo keeps a signed-in visitor on this site', async ({ page, context }) => {
-    test.setTimeout(120_000);
-    const offSite: string[] = [];
-    context.on('request', (request) => {
-      if (new URL(request.url()).hostname.includes('evil')) offSite.push(request.url());
-    });
-    const first = tokensSettled(page);
-    await signUp(page, newUser('Fuzz'));
-    await expect(page).toHaveURL(`${baseURL}/app`);
-    await first;
-    const cases: [raw: string, landing: string | null][] = [
-      ['/..//evil.example/x', '/app'],
-      ['/%2e%2e%2f%2fevil.example', null],
-      ['/%2e%2e%5c%5cevil.example', null],
-      ['/..\\\\evil.example', '/app'],
-      ['/.\\/evil.example', '/app'],
-      ['/\t/evil.example', '/app'],
-      ['/.\n.//evil.example', '/app'],
-      ['/%2F%2Fevil.example', null],
-      ['/%5Cevil.example', null],
-      ['/／／evil.example', null],
-      ['/．．//evil.example', null],
-      ['/x#//evil.example', null],
-      ['/app?next=//evil.example', null],
-      ['/@evil.example', null],
-      ['javascript:alert(1)', '/app'],
-      ['data:text/html,<script>alert(1)</script>', '/app'],
-      ['//evil.example', '/app'],
-      ['https://evil.example/app', '/app'],
-      [`${baseURL}/app`, '/app'],
-      [`/${'a'.repeat(4_000)}`, null],
-    ];
-    for (const [raw, landing] of cases) {
-      const tokens = tokensSettled(page);
-      await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
-      await page.waitForURL((url) => url.pathname !== '/sign-up');
-      await tokens;
-      const url = new URL(page.url());
-      expect(url.origin, raw).toBe(new URL(baseURL).origin);
-      expect(url.pathname.startsWith('//'), `${raw} -> ${url.pathname}`).toBe(false);
-      if (landing) expect(url.pathname, raw).toBe(landing);
-    }
-    expect(offSite).toEqual([]);
-  });
+  test(
+    'every returnTo keeps a signed-in visitor on this site',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, context }) => {
+      test.setTimeout(120_000);
+      const offSite: string[] = [];
+      context.on('request', (request) => {
+        if (new URL(request.url()).hostname.includes('evil')) offSite.push(request.url());
+      });
+      const first = tokensSettled(page);
+      await signUp(page, newUser('Fuzz'));
+      await expect(page).toHaveURL(`${baseURL}/app`);
+      await first;
+      const cases: [raw: string, landing: string | null][] = [
+        ['/..//evil.example/x', '/app'],
+        ['/%2e%2e%2f%2fevil.example', null],
+        ['/%2e%2e%5c%5cevil.example', null],
+        ['/..\\\\evil.example', '/app'],
+        ['/.\\/evil.example', '/app'],
+        ['/\t/evil.example', '/app'],
+        ['/.\n.//evil.example', '/app'],
+        ['/%2F%2Fevil.example', null],
+        ['/%5Cevil.example', null],
+        ['/／／evil.example', null],
+        ['/．．//evil.example', null],
+        ['/x#//evil.example', null],
+        ['/app?next=//evil.example', null],
+        ['/@evil.example', null],
+        ['javascript:alert(1)', '/app'],
+        ['data:text/html,<script>alert(1)</script>', '/app'],
+        ['//evil.example', '/app'],
+        ['https://evil.example/app', '/app'],
+        [`${baseURL}/app`, '/app'],
+        [`/${'a'.repeat(4_000)}`, null],
+      ];
+      for (const [raw, landing] of cases) {
+        const tokens = tokensSettled(page);
+        await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
+        await page.waitForURL((url) => url.pathname !== '/sign-up');
+        await tokens;
+        const url = new URL(page.url());
+        expect(url.origin, raw).toBe(new URL(baseURL).origin);
+        expect(url.pathname.startsWith('//'), `${raw} -> ${url.pathname}`).toBe(false);
+        if (landing) expect(url.pathname, raw).toBe(landing);
+      }
+      expect(offSite).toEqual([]);
+    },
+  );
 
   // Tester (#62, round 2): Better Auth 1.6 refuses a malformed email with 400 VALIDATION_ERROR
   // (convex/auth.test.ts pins the message). The page cannot send one today, so the response is
   // replaced: an email-only refusal shows on Email; one that also names another field is the
   // generic alert.
-  test.describe('a VALIDATION_ERROR refusal', () => {
+  test.describe('a VALIDATION_ERROR refusal', VIEWPORT_AGNOSTIC, () => {
     test.use({ expectedFailedRequests: [{ status: 400, path: '/api/auth/sign-up/email' }] });
 
     for (const [message, onEmail] of [

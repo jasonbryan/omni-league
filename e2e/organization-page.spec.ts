@@ -11,6 +11,7 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import {
   numberedLocations,
   seedTenant,
@@ -664,96 +665,98 @@ test.describe('organization page in the browser', () => {
     });
   });
 
-  test('a league added after load appears without a reload in its panel, sidebar group, and tile', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const tenant = await smallTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
-    await page.evaluate(() => {
-      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
-    });
-    const main = page.getByRole('main');
-    await expect(main.locator('dl dd').first()).toHaveText('2');
+  test(
+    'a league added after load appears without a reload in its panel, sidebar group, and tile',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const tenant = await smallTenant();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await page.evaluate(() => {
+        (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+      });
+      const main = page.getByRole('main');
+      await expect(main.locator('dl dd').first()).toHaveText('2');
 
-    await convexRun('testing:addLeague', {
-      organizationSlug: tenant.slug,
-      name: 'Zulu League',
-      sport: 'softball',
-      locations: ['Beta Courts'],
-    });
+      await convexRun('testing:addLeague', {
+        organizationSlug: tenant.slug,
+        name: 'Zulu League',
+        sport: 'softball',
+        locations: ['Beta Courts'],
+      });
 
-    await expect(main.locator('#league-3 h3')).toHaveText('Zulu League');
-    await expect(main.locator('#league-3')).toContainText('Softball');
-    await expect(main.locator('#league-3')).toContainText('Beta Courts');
-    // The sidebar column is hidden at 360px, so not by role.
-    await expect(
-      page.locator(`nav[aria-label="${tenant.name}"] a[href="${tenant.path}#league-3"]`),
-    ).toHaveText('Zulu League');
-    await expect(main.locator('dl dd')).toHaveText(['3', '2', '3']);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-    ).toBe(true);
-  });
+      await expect(main.locator('#league-3 h3')).toHaveText('Zulu League');
+      await expect(main.locator('#league-3')).toContainText('Softball');
+      await expect(main.locator('#league-3')).toContainText('Beta Courts');
+      // The sidebar column is hidden at 360px, so not by role.
+      await expect(
+        page.locator(`nav[aria-label="${tenant.name}"] a[href="${tenant.path}#league-3"]`),
+      ).toHaveText('Zulu League');
+      await expect(main.locator('dl dd')).toHaveText(['3', '2', '3']);
+      expect(
+        await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+      ).toBe(true);
+    },
+  );
 
   // #82: a saved copy never takes part in hydration. The server-rendered first load carries a
   // TransferState entry, which wins over the saved copy (ADR 0013 section 3), so the page hydrates
   // the server HTML unchanged, and the live result then replaces the saved copy in storage.
-  test('hydrates the transferred value over a saved copy with no console error, then saves the live result', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const tenant = await smallTenant();
-    const key = `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug: tenant.slug })}`;
-    const savedAt = Date.now() - 60_000;
-    const saved = JSON.stringify({
-      v: {
-        name: 'Saved Copy Name',
-        slug: tenant.slug,
-        leagueCount: 0,
-        locationCount: 0,
-        sportCount: 0,
-        sports: [],
-      },
-      savedAt,
-      usedAt: savedAt,
-      version: OFFLINE_SAVED_QUERIES[0].version,
-    });
-    // Before any app script: plant the saved copy and record every h1 text the page ever shows.
-    await page.addInitScript(
-      ([savedKey, savedValue]) => {
-        localStorage.setItem(savedKey, savedValue);
-        const seen: string[] = [];
-        (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
-        new MutationObserver(() => {
-          for (const h1 of document.querySelectorAll('h1')) {
-            const text = h1.textContent.trim();
-            if (text && !seen.includes(text)) seen.push(text);
-          }
-        }).observe(document, { subtree: true, childList: true, characterData: true });
-      },
-      [key, saved] as const,
-    );
+  test(
+    'hydrates the transferred value over a saved copy with no console error, then saves the live result',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const tenant = await smallTenant();
+      const key = `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug: tenant.slug })}`;
+      const savedAt = Date.now() - 60_000;
+      const saved = JSON.stringify({
+        v: {
+          name: 'Saved Copy Name',
+          slug: tenant.slug,
+          leagueCount: 0,
+          locationCount: 0,
+          sportCount: 0,
+          sports: [],
+        },
+        savedAt,
+        usedAt: savedAt,
+        version: OFFLINE_SAVED_QUERIES[0].version,
+      });
+      // Before any app script: plant the saved copy and record every h1 text the page ever shows.
+      await page.addInitScript(
+        ([savedKey, savedValue]) => {
+          localStorage.setItem(savedKey, savedValue);
+          const seen: string[] = [];
+          (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
+          new MutationObserver(() => {
+            for (const h1 of document.querySelectorAll('h1')) {
+              const text = h1.textContent.trim();
+              if (text && !seen.includes(text)) seen.push(text);
+            }
+          }).observe(document, { subtree: true, childList: true, characterData: true });
+        },
+        [key, saved] as const,
+      );
 
-    await page.goto(tenant.path);
-    await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
-    await hydrated(consoleGuard);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (savedKey) =>
-            (JSON.parse(localStorage.getItem(savedKey) ?? 'null') as { v?: { name?: string } })?.v
-              ?.name,
-          key,
-        ),
-      )
-      .toBe(tenant.name);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eH1s?: string[] }).e2eH1s ?? []),
-    ).not.toContain('Saved Copy Name');
-    await expect(page.locator('[data-saved-copy-note]')).toHaveCount(0);
-  });
+      await page.goto(tenant.path);
+      await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
+      await hydrated(consoleGuard);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (savedKey) =>
+              (JSON.parse(localStorage.getItem(savedKey) ?? 'null') as { v?: { name?: string } })?.v
+                ?.name,
+            key,
+          ),
+        )
+        .toBe(tenant.name);
+      expect(
+        await page.evaluate(() => (window as Window & { e2eH1s?: string[] }).e2eH1s ?? []),
+      ).not.toContain('Saved Copy Name');
+      await expect(page.locator('[data-saved-copy-note]')).toHaveCount(0);
+    },
+  );
 
   test('an organization with no leagues and no locations shows the empty states, "None yet", and 0, 0, 0', async ({
     page,
@@ -804,15 +807,19 @@ test.describe('organization page: unknown slug', () => {
     },
   );
 
-  test('browser: the same view, with no console error', async ({ page, consoleGuard }) => {
-    const response = await page.goto('/organizations/does-not-exist');
-    expect(response?.status()).toBe(404);
-    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
-    if (!remoteBaseUrl) await hydrated(consoleGuard);
-    await expect(page.getByRole('navigation')).toHaveCount(0);
-    await expect(page.getByRole('button')).toHaveCount(0);
-    await expect(page).toHaveTitle('Page not found | Omni League');
-  });
+  test(
+    'browser: the same view, with no console error',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const response = await page.goto('/organizations/does-not-exist');
+      expect(response?.status()).toBe(404);
+      await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+      if (!remoteBaseUrl) await hydrated(consoleGuard);
+      await expect(page.getByRole('navigation')).toHaveCount(0);
+      await expect(page.getByRole('button')).toHaveCount(0);
+      await expect(page).toHaveTitle('Page not found | Omni League');
+    },
+  );
 });
 
 // A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page
@@ -846,22 +853,23 @@ test.describe('organization page: undecodable query string', () => {
 
   // The browser's router parses the same URL after hydration. If it cannot decode the query string
   // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
-  test('browser: the organization page stays after hydration, at the same path', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const { path, name } = remoteBaseUrl
-      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
-      : await smallTenant();
+  test(
+    'browser: the organization page stays after hydration, at the same path',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const { path, name } = remoteBaseUrl
+        ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+        : await smallTenant();
 
-    const response = await page.goto(`${path}?ref=%`);
-    expect(response?.status()).toBe(200);
-    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
-    else await hydrated(consoleGuard);
-    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
-    await expect(page).toHaveTitle(`${name} | Omni League`);
-    expect(new URL(page.url()).pathname).toBe(path);
-  });
+      const response = await page.goto(`${path}?ref=%`);
+      expect(response?.status()).toBe(200);
+      if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+      else await hydrated(consoleGuard);
+      await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+      await expect(page).toHaveTitle(`${name} | Omni League`);
+      expect(new URL(page.url()).pathname).toBe(path);
+    },
+  );
 });
 
 // A fragment the router cannot decode (`#%`) is read as no fragment, as an undecodable query string
@@ -869,32 +877,33 @@ test.describe('organization page: undecodable query string', () => {
 // to `/` (NG04018). The test collects the console messages itself: the console fixture fails only on
 // NG05xx warnings. Against a preview it uses the demo organization.
 test.describe('organization page: undecodable fragment', () => {
-  test('browser: the organization page stays after the first navigation, with no NG04018', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const { path, name } = remoteBaseUrl
-      ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
-      : await smallTenant();
-    const messages: string[] = [];
-    page.on('console', (message) => messages.push(`${message.type()}: ${message.text()}`));
+  test(
+    'browser: the organization page stays after the first navigation, with no NG04018',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const { path, name } = remoteBaseUrl
+        ? { path: '/organizations/gulf-coast-sport-social', name: 'Gulf Coast Sport & Social' }
+        : await smallTenant();
+      const messages: string[] = [];
+      page.on('console', (message) => messages.push(`${message.type()}: ${message.text()}`));
 
-    const response = await page.goto(`${path}#%`);
-    expect(response?.status()).toBe(200);
-    // The server-rendered HTML shows the page whatever the router does next, so wait until the
-    // client router's first navigation has finished: the app is stable once it has hydrated.
-    if (remoteBaseUrl) await page.waitForLoadState('networkidle');
-    else await hydrated(consoleGuard);
+      const response = await page.goto(`${path}#%`);
+      expect(response?.status()).toBe(200);
+      // The server-rendered HTML shows the page whatever the router does next, so wait until the
+      // client router's first navigation has finished: the app is stable once it has hydrated.
+      if (remoteBaseUrl) await page.waitForLoadState('networkidle');
+      else await hydrated(consoleGuard);
 
-    expect(messages.filter((message) => message.includes('NG04018'))).toEqual([]);
-    expect(new URL(page.url()).pathname).toBe(path);
-    await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
-  });
+      expect(messages.filter((message) => message.includes('NG04018'))).toEqual([]);
+      expect(new URL(page.url()).pathname).toBe(path);
+      await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
+    },
+  );
 });
 
 // ADR 0005: each test seeds its own tenant and sees only its own data, whatever else the shared
 // backend holds (other tests' tenants run in parallel).
-test.describe('tenant isolation', () => {
+test.describe('tenant isolation', VIEWPORT_AGNOSTIC, () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
   for (const label of ['first', 'second']) {

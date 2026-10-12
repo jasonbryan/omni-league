@@ -4,40 +4,48 @@ import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
+import { RAW_HTTP } from './support/raw-http';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 const HEADING = /<h1\b[^>]*>\s*Omni League\s*<\/h1>/;
 
 test.describe('smoke: placeholder home', () => {
-  test('raw server HTML of / is 200 and has the app shell around the h1', async ({ request }) => {
-    const { status, headers, html } = await fetchRawHtml(request, '/');
-    expect(status).toBe(200);
-    expect(headers['content-type']).toContain('text/html');
-    expect(html).toMatch(HEADING);
+  test(
+    'raw server HTML of / is 200 and has the app shell around the h1',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { status, headers, html } = await fetchRawHtml(request, '/');
+      expect(status).toBe(200);
+      expect(headers['content-type']).toContain('text/html');
+      expect(html).toMatch(HEADING);
 
-    // App shell (#75), in DOM order: skip link, top bar with the home link, main holding the h1.
-    const at = (pattern: RegExp): number => html.search(pattern);
-    const skipLink = at(/<a\b[^>]*\bhref="[^"]*#main"[^>]*>\s*Skip to main content\s*<\/a>/);
-    const header = at(/<header\b/);
-    // The link's only text is "Omni League"; Angular may leave comment nodes beside it.
-    const home = at(
-      /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*>\s*Omni League\s*(?:<!--[^>]*-->\s*)*<\/a>/,
-    );
-    const main = at(/<main\b[^>]*\bid="main"[^>]*\btabindex="-1"/);
-    const heading = at(HEADING);
-    expect(skipLink).toBeGreaterThanOrEqual(0);
-    expect(header).toBeGreaterThan(skipLink);
-    expect(home).toBeGreaterThan(header);
-    expect(main).toBeGreaterThan(home);
-    expect(heading).toBeGreaterThan(main);
-    expect(html.indexOf('</main>')).toBeGreaterThan(heading);
-    // The top bar's "Sign in" (#63) is in the server HTML, and there is no sidebar on the home page
-    // (#73 decisions).
-    expect(html.slice(html.indexOf('<header'), html.indexOf('</header>'))).toMatch(/>Sign in<\/a>/);
-    expect(html).not.toContain('aria-label="Open navigation"');
-    expect(html).not.toMatch(/<nav\b/);
-  });
+      // App shell (#75), in DOM order: skip link, top bar with the home link, main holding the h1.
+      const at = (pattern: RegExp): number => html.search(pattern);
+      const skipLink = at(/<a\b[^>]*\bhref="[^"]*#main"[^>]*>\s*Skip to main content\s*<\/a>/);
+      const header = at(/<header\b/);
+      // The link's only text is "Omni League"; Angular may leave comment nodes beside it.
+      const home = at(
+        /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*>\s*Omni League\s*(?:<!--[^>]*-->\s*)*<\/a>/,
+      );
+      const main = at(/<main\b[^>]*\bid="main"[^>]*\btabindex="-1"/);
+      const heading = at(HEADING);
+      expect(skipLink).toBeGreaterThanOrEqual(0);
+      expect(header).toBeGreaterThan(skipLink);
+      expect(home).toBeGreaterThan(header);
+      expect(main).toBeGreaterThan(home);
+      expect(heading).toBeGreaterThan(main);
+      expect(html.indexOf('</main>')).toBeGreaterThan(heading);
+      // The top bar's "Sign in" (#63) is in the server HTML, and there is no sidebar on the home page
+      // (#73 decisions).
+      expect(html.slice(html.indexOf('<header'), html.indexOf('</header>'))).toMatch(
+        />Sign in<\/a>/,
+      );
+      expect(html).not.toContain('aria-label="Open navigation"');
+      expect(html).not.toMatch(/<nav\b/);
+    },
+  );
 
-  test.describe('with JavaScript disabled', () => {
+  test.describe('with JavaScript disabled', VIEWPORT_AGNOSTIC, () => {
     test.use({ javaScriptEnabled: false });
 
     test('/ shows the h1 and has a non-empty title (2.4.2)', async ({ page }) => {
@@ -144,49 +152,58 @@ test.describe('smoke: placeholder home', () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(600);
   });
 
-  test('/ hydrates (dev-mode "Angular hydrated <n> component(s)" log)', async ({
-    page,
-    consoleGuard,
-  }) => {
-    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
-    await page.goto('/');
-    await expect
-      .poll(() => consoleGuard.hydrated, {
-        message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
-      })
-      .toBe(true);
-  });
+  test(
+    '/ hydrates (dev-mode "Angular hydrated <n> component(s)" log)',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+      await page.goto('/');
+      await expect
+        .poll(() => consoleGuard.hydrated, {
+          message: 'expected the dev-mode log "Angular hydrated <n> component(s)"',
+        })
+        .toBe(true);
+    },
+  );
 
   // ADR 0013 section 1 (#81): only production builds register the worker. A production build
   // registers it as soon as the app is stable, so two seconds after hydration a wrongly enabled
   // worker would have been fetched and registered. e2e/pwa.spec.ts covers the production build.
-  test('the development build registers no service worker', async ({ page, consoleGuard }) => {
-    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
-    const workerRequests: string[] = [];
-    page.on('request', (request) => {
-      if (/\/ngsw(?:-worker)?\.js(?:on)?(?:\?|$)/.test(request.url()))
-        workerRequests.push(request.url());
-    });
-    await page.goto('/');
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await page.waitForTimeout(2_000);
-    expect(
-      await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
-    ).toBe(0);
-    expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull();
-    expect(workerRequests).toEqual([]);
-    await expect(page.locator('app-update-prompt')).toHaveCount(0);
-  });
+  test(
+    'the development build registers no service worker',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+      const workerRequests: string[] = [];
+      page.on('request', (request) => {
+        if (/\/ngsw(?:-worker)?\.js(?:on)?(?:\?|$)/.test(request.url()))
+          workerRequests.push(request.url());
+      });
+      await page.goto('/');
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await page.waitForTimeout(2_000);
+      expect(
+        await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
+      ).toBe(0);
+      expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull();
+      expect(workerRequests).toEqual([]);
+      await expect(page.locator('app-update-prompt')).toHaveCount(0);
+    },
+  );
 
-  test('a malformed URL gets a plain-text 400 with no stack trace or path', async ({ request }) => {
-    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
-    const response = await request.get('/%E0%A4%A');
-    const body = await response.text();
-    expect(response.status()).toBe(400);
-    expect(response.headers()['content-type']).toMatch(/^text\/plain\b/);
-    expect(body).toContain('Bad Request');
-    expect(body).not.toMatch(/\bat /); // stack frame
-    expect(body).not.toMatch(/\w+Error\b|stack/i);
-    expect(body).not.toMatch(/(?:\/[\w.@-]+){2,}|[A-Za-z]:\\|node_modules|\.m?[jt]s\b/); // file path
-  });
+  test(
+    'a malformed URL gets a plain-text 400 with no stack trace or path',
+    RAW_HTTP,
+    async ({ request }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+      const response = await request.get('/%E0%A4%A');
+      const body = await response.text();
+      expect(response.status()).toBe(400);
+      expect(response.headers()['content-type']).toMatch(/^text\/plain\b/);
+      expect(body).toContain('Bad Request');
+      expect(body).not.toMatch(/\bat /); // stack frame
+      expect(body).not.toMatch(/\w+Error\b|stack/i);
+      expect(body).not.toMatch(/(?:\/[\w.@-]+){2,}|[A-Za-z]:\\|node_modules|\.m?[jt]s\b/); // file path
+    },
+  );
 });
