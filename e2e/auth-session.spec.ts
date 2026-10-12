@@ -10,6 +10,7 @@ import { stubNetlifyDrawer } from './support/netlify-drawer';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { seedTenant } from './support/tenant';
 import { newUser, type TestUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 /** The crossDomain plugin's store in `localStorage` (`@convex-dev/better-auth`). */
 const STORE_KEY = 'better-auth_cookie';
@@ -53,7 +54,7 @@ async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle');
 }
 
-test.describe('auth session store', () => {
+test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
   // intercept and count (e2e/support/no-service-worker.ts).
   test.beforeEach(async ({ context }) => {
@@ -178,7 +179,7 @@ test.describe('auth session store', () => {
  * Failure injection: an aborted request logs a resource error that the console fixture would
  * report, so these use the plain `test` and check page errors and console errors themselves.
  */
-base.describe('auth token failures', () => {
+base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
   base.beforeEach(async ({ context }) => {
     if (!remoteBaseUrl) return;
     await stubNetlifyDrawer(context);
@@ -260,7 +261,7 @@ base.describe('auth token failures', () => {
  * fetchToken; a signed-in load makes exactly 2 token requests, one after the other; a token
  * request in flight at sign-out never authenticates Convex, before or after another user signs in.
  */
-test.describe('auth session store, round 4', () => {
+test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
   // intercept and count (e2e/support/no-service-worker.ts).
   test.beforeEach(async ({ context }) => {
@@ -458,7 +459,7 @@ test.describe('auth session store, round 4', () => {
   });
 });
 
-base.describe('auth token failures, round 4', () => {
+base.describe('auth token failures, round 4', VIEWPORT_AGNOSTIC, () => {
   base.beforeEach(async ({ context }) => {
     if (!remoteBaseUrl) return;
     await stubNetlifyDrawer(context);
@@ -510,7 +511,7 @@ base.describe('auth token failures, round 4', () => {
   }
 });
 
-test.describe('auth token refresh, round 4', () => {
+test.describe('auth token refresh, round 4', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
   // intercept and count (e2e/support/no-service-worker.ts).
   test.beforeEach(async ({ context }) => {
