@@ -218,7 +218,7 @@ test.describe('Leagues: publishing a draft (#69)', () => {
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
 
     // Through the navigation, so the page keeps its live connection.
-    const open = async (section: string) => {
+    const openSection = async (section: string) => {
       if ((page.viewportSize()?.width ?? 0) >= 1024) {
         await page
           .getByRole('navigation', { name: `${tenant.name} admin` })
@@ -232,11 +232,11 @@ test.describe('Leagues: publishing a draft (#69)', () => {
           .click();
       }
     };
-    await open('Leagues');
+    await openSection('Leagues');
     await publishButton(page, 'Sunday Reverse Coed 4s').click();
     await dialog(page).getByRole('button', { name: 'Publish league' }).click();
     await expect(result(page)).toBeFocused();
-    await open('Overview');
+    await openSection('Overview');
     await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
     await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 published');
     await expect(page.getByRole('region', { name: 'Get set up' })).toHaveCount(0);
