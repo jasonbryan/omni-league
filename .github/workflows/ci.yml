@@ -1,5 +1,6 @@
 # CI pipeline (ADR 0009). One required check, `ci`, run once per mergeable tree:
-# ready PRs only; drafts get a skipped job (0 billed minutes); nothing re-runs on main.
+# ready PRs only; drafts get a skipped job (0 billed minutes); nothing re-runs on main except the
+# nightly full run (ADR 0009, "Amendment: affected e2e specs on PRs, full suite nightly", #186).
 # Required check, merge procedure, and minutes: docs/process/ci.md.
 name: CI
 
@@ -10,6 +11,11 @@ on:
   push:
     branches: [main]
     paths: [package-lock.json, .github/workflows/ci.yml]
+  # The nightly full run on main (#186). Schedules run on the default branch only, never on a PR
+  # branch. Every step of `ci` runs, with the whole e2e suite (both Chromium projects); a failure
+  # opens or updates one `type:bug` issue (job `nightly-issue`).
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       webkit:
@@ -29,12 +35,44 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
+  # Quiet nights (#186): a scheduled run skips `ci` when main is the commit the last successful scheduled
+  # run tested. Scheduled runs only; on every other event this job is skipped and does not hold up `ci`.
+  # Any failure to look the run up leaves `skip` empty, and `ci` runs the full suite.
+  nightly-gate:
+    name: nightly-gate
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      skip: ${{ steps.last-green.outputs.skip }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.sha }}
+    steps:
+      - name: last green night
+        id: last-green
+        run: |
+          if last="$(gh run list --workflow ci.yml --event schedule --status success --branch main --limit 1 --json headSha --jq '.[0].headSha // empty')" && [ -n "$last" ] && [ "$last" = "$HEAD_SHA" ]; then
+            echo "::notice::main is still ${HEAD_SHA:0:7}, the commit the last successful nightly run tested; skipping tonight's run"
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+          fi
+
   ci:
     name: ci
-    # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes.
-    if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
+    needs: nightly-gate
+    # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes. So does a scheduled run on
+    # a main that the last successful nightly run already tested (nightly-gate). !cancelled() lets `ci` run
+    # when nightly-gate was skipped (every event but a schedule) or failed (fail safe: run everything).
+    if: ${{ !cancelled() && github.event_name != 'push' && !github.event.pull_request.draft && needs.nightly-gate.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    outputs:
+      e2e_failures: ${{ steps.failures.outputs.failures }}
     env:
       # 1 on release PRs into production and on workflow_dispatch with webkit: true (ADR 0009);
       # the Playwright config adds the webkit-mobile project only then.
@@ -66,6 +104,23 @@ jobs:
           else
             echo "::warning::scope detection failed; running every check"
             printf 'scope=app\napp=true\nchecks=true\ntypecheck=true\n' >> "$GITHUB_OUTPUT"
+          fi
+      # Which e2e specs run (#186, scripts/e2e-affected.mjs, docs/process/ci.md): on a PR into main, the
+      # specs the changed files map to plus the smoke and harness specs; the full suite for shared or
+      # unmapped files, release PRs, workflow_dispatch, and the nightly schedule. Any failure to detect
+      # runs the full suite: the e2e step narrows the run only when this step says `affected`.
+      # Same diff and same runner Node as `scope`, built-ins only.
+      - name: e2e specs
+        id: specs
+        if: ${{ steps.scope.outputs.app == 'true' }}
+        run: |
+          set -o pipefail
+          if outputs="$(git diff --no-renames --name-only HEAD^1 HEAD | node scripts/e2e-affected.mjs)" && [ -n "$outputs" ]; then
+            printf '%s\n' "$outputs" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$outputs"
+          else
+            echo "::warning::e2e spec selection failed; running the full suite"
+            printf 'e2e_scope=full\ne2e_specs=\n' >> "$GITHUB_OUTPUT"
           fi
       # Every npm Dependabot cooldown window must equal .npmrc min-release-age (ADR 0003, ADR 0009 amendment, #47).
       # Reads only the package-ecosystem: npm block. POSIX sh, grep, awk, sed; needs no install.
@@ -187,11 +242,27 @@ jobs:
           exit "$drift"
       # Push again, development build with CONVEX_URL=http://127.0.0.1:3210, then the specs against
       # the local backend and `npm run serve:ssr` (scripts/e2e.mjs). Runs after a drift failure
-      # too, so one run reports both.
+      # too, so one run reports both. Only an `affected` selection narrows the run, to those spec
+      # filters; an empty, missing, or any other value runs every spec.
       - name: e2e
         id: e2e
         if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
-        run: npm run e2e
+        env:
+          E2E_SCOPE: ${{ steps.specs.outputs.e2e_scope }}
+          E2E_SPECS: ${{ steps.specs.outputs.e2e_specs }}
+        run: |
+          specs=()
+          if [ "$E2E_SCOPE" = "affected" ]; then
+            read -r -a specs <<< "$E2E_SPECS"
+          fi
+          echo "e2e: ${#specs[@]} spec filter(s); none means every spec"
+          npm run e2e -- "${specs[@]}"
+      # The nightly run lists its failing tests for the issue (job `nightly-issue`); the Playwright
+      # config writes the JSON report. Always exits 0.
+      - name: e2e failures
+        id: failures
+        if: ${{ !cancelled() && github.event_name == 'schedule' && steps.e2e.outcome == 'failure' }}
+        run: node scripts/e2e-failures.mjs >> "$GITHUB_OUTPUT"
       - name: e2e report
         if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -203,6 +274,41 @@ jobs:
             e2e/screenshots/
           retention-days: 7
           if-no-files-found: ignore
+
+  # The nightly run's failure report (#186): one open `type:bug` issue, commented on again by each
+  # failing night. GITHUB_TOKEN with issues: write for this job only; no checkout, no other secret.
+  nightly-issue:
+    name: nightly-issue
+    needs: ci
+    if: ${{ !cancelled() && needs.ci.result == 'failure' && github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      FAILURES: ${{ needs.ci.outputs.e2e_failures }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      COMMIT: ${{ github.sha }}
+      ISSUE_TITLE: Nightly e2e failed on main
+    steps:
+      - name: open or update the issue
+        run: |
+          failures="$(printf '%s' "${FAILURES:-[]}" | jq -c 'if type == "array" then . else [] end' 2>/dev/null)" || failures='[]'
+          [ -n "$failures" ] || failures='[]'
+          body="$(jq -rn --arg run "$RUN_URL" --arg commit "${COMMIT:0:7}" --argjson failures "$failures" '
+            "Nightly e2e: FAIL (main \($commit))\n\nRun: \($run)\n\n"
+            + (if ($failures | length) > 0
+               then "Failing tests:\n" + ($failures | map("- `" + gsub("`"; "\u0027") + "`") | join("\n"))
+               else "No failing test was recorded: a step before or after the e2e step failed. See the run." end)')"
+          number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
+            | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$ISSUE_TITLE" --label type:bug --label status:ready --body "$body"
+          fi
 
   warm-cache:
     name: warm-cache
