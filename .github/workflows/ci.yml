@@ -34,7 +34,7 @@ jobs:
     # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes.
     if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       # 1 on release PRs into production and on workflow_dispatch with webkit: true (ADR 0009);
       # the Playwright config adds the webkit-mobile project only then.
