@@ -1,0 +1,636 @@
+// Unit tests for scripts/e2e-affected.mjs (#186). Run with `npm run test:scripts` (node:test).
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it } from 'node:test';
+import {
+  ALWAYS,
+  AREAS,
+  SESSION,
+  deriveSessionSpecs,
+  formatOutputs,
+  selectSpecs,
+} from './e2e-affected.mjs';
+
+const script = join(import.meta.dirname, 'e2e-affected.mjs');
+const repoRoot = join(import.meta.dirname, '..');
+const sessionSpecs = deriveSessionSpecs(repoRoot);
+const pr = { event: 'pull_request', base: 'main' };
+
+/** Every e2e spec file on disk, repo-relative (`e2e/smoke.spec.ts`, `e2e/harness/a11y-helper.spec.ts`). */
+function specFilesOnDisk() {
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(join(repoRoot, dir), { withFileTypes: true })) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith('.spec.ts')) found.push(path);
+    }
+  };
+  walk('e2e');
+  return found.sort();
+}
+
+/** The spec files a Playwright filter selects: it is a case-insensitive regex on the file path. */
+function filesSelectedBy(filter, files) {
+  const pattern = new RegExp(filter, 'i');
+  return files.filter((file) => pattern.test(file));
+}
+
+/** @param {string[]} files @returns {string[]} The filters selected, or ['FULL']. */
+function specsFor(files, context = pr) {
+  const selection = selectSpecs(files, { sessionSpecs, ...context });
+  return selection.scope === 'full' ? ['FULL'] : selection.specs;
+}
+
+const smokeAndHarness = ['e2e/harness/', 'e2e/smoke.spec.ts'];
+
+/** The expected selection: the given filters and the always-on ones, sorted, as the script prints. */
+const want = (...filters) => [...new Set([...filters, ...smokeAndHarness])].sort();
+
+describe('selectSpecs: mapped areas', () => {
+  it('maps an admin locations file to the specs that open the locations page', () => {
+    assert.deepEqual(
+      specsFor(['src/app/organizations/admin/location-row.ts']),
+      want('e2e/organization-admin.spec.ts', 'e2e/sign-in-admin.spec.ts'),
+    );
+  });
+
+  it('maps the publish dialog to the three league specs, not the staff or mockup specs', () => {
+    assert.deepEqual(
+      specsFor(['src/app/organizations/admin/publish-league-dialog.ts']),
+      want(
+        'e2e/organization-leagues-publish-states.spec.ts',
+        'e2e/organization-leagues-publish.spec.ts',
+        'e2e/organization-leagues.spec.ts',
+      ),
+    );
+  });
+
+  it('maps the leagues page and forms to the league specs and the mockup spec', () => {
+    // organization-leagues-mockup compares the real page text with the approved mockup.
+    for (const file of ['admin-leagues', 'league-create-form', 'league-form']) {
+      assert.deepEqual(
+        specsFor([`src/app/organizations/admin/${file}.ts`]),
+        want(
+          'e2e/organization-leagues-mockup.spec.ts',
+          'e2e/organization-leagues-publish-states.spec.ts',
+          'e2e/organization-leagues-publish.spec.ts',
+          'e2e/organization-leagues.spec.ts',
+        ),
+        file,
+      );
+    }
+  });
+
+  it('maps an admin staff file to the staff and accept-invite specs', () => {
+    assert.deepEqual(
+      specsFor(['src/app/organizations/admin/invite-form.ts']),
+      want('e2e/accept-invite.spec.ts', 'e2e/organization-staff.spec.ts'),
+    );
+  });
+
+  it('maps a shared admin file to every spec that opens the admin area', () => {
+    const specs = specsFor(['src/app/organizations/admin/admin-area.ts']);
+    for (const name of [
+      'organization-admin',
+      'organization-leagues',
+      'organization-leagues-publish',
+      'organization-leagues-publish-states',
+      'organization-staff',
+      'sign-in-admin',
+      'accept-invite',
+      'create-organization',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.ok(specs.includes('e2e/organization-leagues-mockup.spec.ts'));
+    assert.ok(!specs.includes('e2e/sign-in.spec.ts'));
+  });
+
+  it('maps an invites file to accept-invite.spec.ts only', () => {
+    assert.deepEqual(
+      specsFor(['src/app/invites/accept-invite-page.ts']),
+      want('e2e/accept-invite.spec.ts'),
+    );
+  });
+
+  it('maps the sign-in, sign-up, account, and users code to every spec that signs a user up or in', () => {
+    const expected = want(...sessionSpecs);
+    for (const file of [
+      'src/app/sign-in/sign-in-page.ts',
+      'src/app/sign-up/sign-up-page.ts',
+      'src/app/account/account-page.ts',
+      'src/app/account/your-organizations.ts',
+      'convex/users.ts',
+    ]) {
+      assert.deepEqual(specsFor([file]), expected, file);
+    }
+    for (const name of ['sign-in', 'sign-in-admin', 'sign-up', 'auth-session', 'top-bar']) {
+      assert.ok(sessionSpecs.includes(`e2e/${name}.spec.ts`), name);
+    }
+  });
+
+  it('maps the home page to the session specs and the specs that open /', () => {
+    const specs = specsFor(['src/app/placeholder/placeholder.ts']);
+    for (const name of ['install', 'pwa', 'pwa-kill-switch', 'auth-session', 'sign-in-admin']) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+  });
+
+  it('runs the full suite for a session area when the session specs are not known', () => {
+    for (const file of ['src/app/sign-up/sign-up-page.ts', 'convex/users.ts']) {
+      assert.deepEqual(specsFor([file], { ...pr, sessionSpecs: undefined }), ['FULL']);
+      assert.deepEqual(specsFor([file], { ...pr, sessionSpecs: [] }), ['FULL']);
+    }
+  });
+
+  it('maps the public organization page files to the specs that open that page', () => {
+    const specs = specsFor(['src/app/organizations/organization-overview.ts']);
+    for (const name of ['organization-page', 'organization-page-links', 'offline', 'pwa']) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.ok(!specs.includes('FULL'));
+  });
+
+  it('maps the leagues mockup to its spec, and every other design file to nothing', () => {
+    assert.deepEqual(
+      specsFor(['design/mockups/66-69-organization-leagues.html']),
+      want('e2e/organization-leagues-mockup.spec.ts'),
+    );
+    assert.deepEqual(
+      specsFor(['design/mockups/80-app-icon.html', 'design/mockup-kit/x.css']),
+      want(),
+    );
+  });
+
+  it('maps Convex modules to the specs that exercise them', () => {
+    const admin = [
+      'organization-admin',
+      'organization-leagues',
+      'organization-leagues-mockup',
+      'organization-leagues-publish',
+      'organization-leagues-publish-states',
+      'organization-staff',
+      'sign-in-admin',
+      'accept-invite',
+      'create-organization',
+    ];
+    // The admin overview queries invites, leagues, and locations, so each runs every admin spec.
+    for (const file of ['convex/invites.ts', 'convex/leagues.ts', 'convex/locations.ts']) {
+      const specs = specsFor([file]);
+      for (const name of admin)
+        assert.ok(specs.includes(`e2e/${name}.spec.ts`), `${file}: ${name}`);
+    }
+    assert.ok(specsFor(['convex/leagues.ts']).includes('e2e/organization-page.spec.ts'));
+    assert.ok(specsFor(['convex/locations.ts']).includes('e2e/organization-page.spec.ts'));
+    assert.ok(specsFor(['convex/seed.ts']).includes('e2e/pwa.spec.ts'));
+    assert.ok(specsFor(['convex/organizations.ts']).includes('e2e/organization-page.spec.ts'));
+    for (const file of sessionSpecs) {
+      assert.ok(specsFor(['convex/organizations.ts']).includes(file), file);
+    }
+    assert.ok(specsFor(['convex/memberships.ts']).includes('e2e/organization-staff.spec.ts'));
+  });
+
+  it('maps the offline views to the public-page specs', () => {
+    const specs = specsFor(['src/app/offline/saved-copy-note.ts']);
+    for (const name of ['offline', 'organization-page', 'organization-page-links', 'top-bar']) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+  });
+
+  it('runs a changed spec itself, in the harness directory too', () => {
+    assert.deepEqual(specsFor(['e2e/sign-up.spec.ts']), want('e2e/sign-up.spec.ts'));
+    assert.deepEqual(
+      specsFor(['e2e/harness/netlify-drawer.spec.ts']),
+      want('e2e/harness/netlify-drawer.spec.ts'),
+    );
+  });
+
+  it('unions the specs of several changed files and lists each once, sorted', () => {
+    const specs = specsFor([
+      'src/app/invites/invite-token-store.ts',
+      'convex/invites.ts',
+      'src/app/sign-up/sign-up-page.ts',
+    ]);
+    assert.deepEqual(specs, [...specs].sort());
+    assert.equal(new Set(specs).size, specs.length);
+    assert.deepEqual(
+      specs,
+      want('e2e/accept-invite.spec.ts', 'e2e/organization-staff.spec.ts', ...sessionSpecs),
+    );
+  });
+
+  it('keeps the smoke and harness specs on every affected run', () => {
+    for (const files of [
+      ['src/app/invites/capture-invite-token.ts'],
+      ['src/app/organizations/admin/admin-staff.spec.ts'],
+      ['docs/process/ci.md'],
+      ['convex/invites.test.ts'],
+    ]) {
+      const specs = specsFor(files);
+      for (const always of ALWAYS) assert.ok(specs.includes(always), `${files} lacks ${always}`);
+    }
+  });
+});
+
+describe('selectSpecs: files that cannot change an e2e result', () => {
+  const quiet = [
+    'src/app/invites/accept-invite-page.spec.ts',
+    'src/app/core/auth/guards.spec.ts',
+    'src/app/shell/shell.spec.ts',
+    'src/app/shell/testing/test-pages.ts',
+    'src/app/organizations/admin/testing/admin-harness.ts',
+    'src/app/core/data/convex/testing/fake-convex-client.ts',
+    'convex/invites.test.ts',
+    'convex/lib/slugs.test.ts',
+    'convex/test.setup.ts',
+    'scripts/ci-scope.test.mjs',
+    'docs/process/ci.md',
+    'docs/decisions/0009-ci-pipeline.md',
+    '.claude/agents/implementer.md',
+    'README.md',
+    'AGENTS.md',
+    'convex/README.md',
+    'design/mockups/12-roster.html',
+    '.github/pull_request_template.md',
+    '.github/dependabot.yml',
+    '.github/workflows/clean-previews.yml',
+    '.github/ISSUE_TEMPLATE/feature.yml',
+    'e2e/harness/probes/skipped.probe.ts',
+  ];
+  for (const file of quiet) {
+    it(`runs only the smoke and harness specs for ${file}`, () => {
+      assert.deepEqual(specsFor([file]), want());
+    });
+  }
+});
+
+describe('selectSpecs: the full suite', () => {
+  const shared = [
+    'src/app/shell/shell.ts',
+    'src/app/core/auth/auth.service.ts',
+    'src/app/core/data/convex/inject-query.ts',
+    'src/app/core/service-worker/app-updates.ts',
+    'src/app/core/url-serializer.ts',
+    'src/app/ui/button/button.ts',
+    'src/app/app.routes.ts',
+    'src/app/app.routes.server.ts',
+    'src/app/app.config.ts',
+    'src/server.ts',
+    'src/main.ts',
+    'src/index.html',
+    'src/styles.css',
+    'src/styles/tokens.css',
+    'public/manifest.webmanifest',
+    'convex/schema.ts',
+    'convex/lib/access.ts',
+    'convex/lib/slugs.ts',
+    'convex/auth.ts',
+    'convex/http.ts',
+    'convex/testing.ts',
+    'convex/signInThrottle.ts',
+    'convex/_generated/api.d.ts',
+    'convex/convex.config.ts',
+    'e2e/support/fixtures.ts',
+    'e2e/support/convex.ts',
+    'e2e/global-setup.ts',
+    'playwright.config.ts',
+    'package.json',
+    'package-lock.json',
+    'angular.json',
+    'netlify.toml',
+    'tsconfig.json',
+    '.github/workflows/ci.yml',
+    'scripts/ci-scope.mjs',
+    'scripts/e2e-affected.mjs',
+    'scripts/e2e.mjs',
+    'scripts/serve-ssr.mjs',
+  ];
+  for (const file of shared) {
+    it(`is full for ${file}`, () => {
+      assert.deepEqual(specsFor([file]), ['FULL']);
+    });
+  }
+
+  it('is full when one shared file is among mapped ones', () => {
+    assert.deepEqual(
+      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell.ts']),
+      ['FULL'],
+    );
+  });
+
+  it('is full for a source file that no rule names', () => {
+    assert.deepEqual(specsFor(['src/app/standings/standings-page.ts']), ['FULL']);
+    assert.deepEqual(specsFor(['convex/registrations.ts']), ['FULL']);
+    assert.deepEqual(specsFor(['something-new.txt']), ['FULL']);
+  });
+
+  it('is full for a file in a mapped directory that only looks mapped', () => {
+    assert.deepEqual(specsFor(['src/app/organizations/standings.ts']), ['FULL']);
+    assert.deepEqual(specsFor(['convex/lib/invites.ts']), ['FULL']);
+    assert.deepEqual(specsFor(['e2e/support/invites.spec.ts']), ['FULL']);
+  });
+
+  it('is full for every event but a pull request', () => {
+    const files = ['src/app/invites/accept-invite-page.ts'];
+    for (const event of ['schedule', 'workflow_dispatch', 'push', undefined]) {
+      assert.deepEqual(specsFor(files, { event, base: 'main' }), ['FULL'], String(event));
+    }
+  });
+
+  it('is full for a release PR into production', () => {
+    assert.deepEqual(
+      specsFor(['src/app/invites/accept-invite-page.ts'], { ...pr, base: 'production' }),
+      ['FULL'],
+    );
+  });
+
+  it('is full when detection has nothing to go on', () => {
+    assert.deepEqual(specsFor(undefined), ['FULL']);
+    assert.deepEqual(specsFor([]), ['FULL']);
+    assert.deepEqual(specsFor(/** @type {any} */ ('src/app/invites/x.ts')), ['FULL']);
+    assert.deepEqual(specsFor(/** @type {any} */ ([null])), ['FULL']);
+  });
+
+  const odd = [
+    '/etc/passwd',
+    '../outside.ts',
+    'src/../convex/schema.ts',
+    'src//app/invites/x.ts',
+    './src/app/invites/x.ts',
+    '"src/app/invites/caf\\303\\251.ts"',
+    'src\\app\\invites\\x.ts',
+    '',
+  ];
+  for (const file of odd) {
+    it(`is full for the path ${JSON.stringify(file)}`, () => {
+      assert.deepEqual(specsFor(['src/app/invites/accept-invite-page.ts', file]), ['FULL']);
+    });
+  }
+});
+
+describe('the mapping', () => {
+  const onDisk = specFilesOnDisk();
+
+  it('finds the specs on disk', () => {
+    assert.ok(onDisk.includes('e2e/smoke.spec.ts'), onDisk.join(', '));
+    assert.ok(onDisk.length > 20);
+  });
+
+  it('selects, with every filter it can emit, exactly the files it names', () => {
+    const filters = new Set(ALWAYS);
+    for (const area of AREAS) {
+      for (const name of area.specs) {
+        if (name !== 'self' && name !== SESSION) filters.add(`e2e/${name}.spec.ts`);
+      }
+    }
+    for (const file of sessionSpecs) {
+      filters.add(file);
+    }
+    for (const filter of filters) {
+      const selected = filesSelectedBy(filter, onDisk);
+      if (filter.endsWith('/')) {
+        assert.ok(selected.length > 0, `${filter} selects nothing`);
+        assert.ok(
+          selected.every((file) => file.startsWith(filter)),
+          `${filter} selects ${selected.join(', ')}`,
+        );
+      } else {
+        assert.deepEqual(selected, [filter], `${filter} selects ${selected.join(', ')}`);
+      }
+    }
+  });
+
+  it('selects every spec of a changed spec file, and only that spec', () => {
+    for (const file of onDisk) {
+      const selection = selectSpecs([file], pr);
+      assert.equal(selection.scope, 'affected', file);
+      const own = selection.specs.filter((filter) => !ALWAYS.includes(filter));
+      assert.ok(
+        selection.specs.some((filter) => filesSelectedBy(filter, onDisk).includes(file)),
+        file,
+      );
+      assert.ok(own.length <= 1, `${file} selects ${own.join(', ')}`);
+    }
+  });
+
+  // These specs run in no source-area rule. They run when changed, in the nightly full run, and
+  // whenever a shared file changes. A new spec fails here until it is mapped or added on purpose.
+  const FULL_SUITE_ONLY = [
+    'e2e/cache-key.spec.ts',
+    'e2e/convex-backend.spec.ts',
+    'e2e/screenshot.spec.ts',
+  ];
+
+  it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
+    const mapped = new Set();
+    for (const area of AREAS) {
+      for (const name of area.specs) {
+        if (name !== 'self' && name !== SESSION) mapped.add(`e2e/${name}.spec.ts`);
+      }
+    }
+    for (const file of sessionSpecs) mapped.add(file);
+    for (const always of ALWAYS)
+      for (const file of filesSelectedBy(always, onDisk)) mapped.add(file);
+    const unowned = onDisk.filter((file) => !mapped.has(file)).sort();
+    assert.deepEqual(unowned, [...FULL_SUITE_ONLY].sort());
+  });
+
+  it('names every area once', () => {
+    const names = AREAS.map((area) => area.name);
+    assert.equal(new Set(names).size, names.length);
+  });
+});
+
+describe('formatOutputs', () => {
+  it('prints the full scope with no specs', () => {
+    assert.equal(formatOutputs({ scope: 'full' }), 'e2e_scope=full\ne2e_specs=\n');
+  });
+
+  it('prints the affected specs on one space-separated line', () => {
+    assert.equal(
+      formatOutputs({ scope: 'affected', specs: ['e2e/a.spec.ts', 'e2e/harness/'] }),
+      'e2e_scope=affected\ne2e_specs=e2e/a.spec.ts e2e/harness/\n',
+    );
+  });
+});
+
+describe('the command line', () => {
+  /** @param {string} input @param {Record<string, string>} env */
+  function run(input, env = { GITHUB_EVENT_NAME: 'pull_request', GITHUB_BASE_REF: 'main' }) {
+    const result = spawnSync(process.execPath, [script], {
+      input,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, ...env },
+    });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  it('prints the affected specs for a PR into main', () => {
+    const result = run('src/app/invites/accept-invite-page.ts\n');
+    assert.equal(result.status, 0);
+    assert.equal(
+      result.stdout,
+      'e2e_scope=affected\ne2e_specs=e2e/accept-invite.spec.ts e2e/harness/ e2e/smoke.spec.ts\n',
+    );
+  });
+
+  it('prints every session spec for a sign-up change, derived from the real specs', () => {
+    const result = run('src/app/sign-up/sign-up-page.ts\n');
+    assert.equal(result.status, 0);
+    for (const file of sessionSpecs) assert.ok(result.stdout.includes(file), file);
+  });
+
+  it('prints the full scope for an empty list', () => {
+    assert.equal(run('').stdout, 'e2e_scope=full\ne2e_specs=\n');
+  });
+
+  it('prints the full scope without the PR environment', () => {
+    assert.equal(
+      run('src/app/invites/accept-invite-page.ts\n', {}).stdout,
+      'e2e_scope=full\ne2e_specs=\n',
+    );
+  });
+
+  it('prints the full scope for a shared file', () => {
+    assert.equal(run('src/app/shell/shell.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
+  });
+});
+
+describe('the specs that sign a user up or in', () => {
+  const onDisk = specFilesOnDisk();
+  const read = (file) => readFileSync(join(repoRoot, file), 'utf8');
+
+  // Written separately from deriveSessionSpecs, from the review that found the gap (#188): a spec
+  // that drives the sign-up form through a support helper. A support file is a helper when its
+  // source uses `signUp`, `otherUser`, `newUser`, or `seedUser`, or imports a helper, directly or
+  // through other support files; a spec is a user of it when it imports it by path.
+  const supportDir = join(repoRoot, 'e2e', 'support');
+  const supportSources = new Map(
+    readdirSync(supportDir)
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => [name.slice(0, -3), readFileSync(join(supportDir, name), 'utf8')]),
+  );
+  const helperNames = new Set(
+    [...supportSources]
+      .filter(([, text]) => /\b(?:signUp|otherUser|newUser|seedUser)\b/.test(text))
+      .map(([name]) => name),
+  );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, text] of supportSources) {
+      const importsHelper = [...helperNames].some((helper) => text.includes(`'./${helper}'`));
+      if (!helperNames.has(name) && importsHelper) {
+        helperNames.add(name);
+        grew = true;
+      }
+    }
+  }
+  const importsSessionHelper = onDisk.filter((file) =>
+    [...helperNames].some((name) => new RegExp(`from '[^']*support/${name}'`).test(read(file))),
+  );
+
+  it('finds the specs that import a sign-up helper', () => {
+    assert.ok(helperNames.has('session') && helperNames.has('users'), [...helperNames].join(', '));
+    assert.ok(importsSessionHelper.length >= 9, importsSessionHelper.join(', '));
+    assert.ok(importsSessionHelper.includes('e2e/sign-in-admin.spec.ts'));
+  });
+
+  it('derives every spec that imports a sign-up helper, and the specs that open the sign-in or sign-up page', () => {
+    for (const file of importsSessionHelper) assert.ok(sessionSpecs.includes(file), file);
+    for (const file of ['e2e/sign-in.spec.ts', 'e2e/sign-up.spec.ts', 'e2e/auth-session.spec.ts']) {
+      assert.ok(sessionSpecs.includes(file), file);
+    }
+  });
+
+  for (const area of [
+    'src/app/sign-up/sign-up-page.ts',
+    'src/app/sign-in/sign-in-page.ts',
+    'src/app/account/account-page.ts',
+    'convex/users.ts',
+    'src/app/placeholder/placeholder.ts',
+  ]) {
+    it(`selects every one of them for ${area}`, () => {
+      const selection = selectSpecs([area], { ...pr, sessionSpecs });
+      assert.equal(selection.scope, 'affected');
+      for (const file of importsSessionHelper) {
+        assert.ok(
+          selection.specs.some((filter) => filesSelectedBy(filter, onDisk).includes(file)),
+          `${area} does not select ${file}`,
+        );
+      }
+    });
+  }
+
+  it('derives a new spec that signs in without a change to the mapping', () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
+    try {
+      mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      mkdirSync(join(root, 'e2e', 'support'), { recursive: true });
+      writeFileSync(
+        join(root, 'e2e', 'new.spec.ts'),
+        "import { signUp } from './support/session';\n",
+      );
+      writeFileSync(
+        join(root, 'e2e', 'plain.spec.ts'),
+        "import { test } from './support/fixtures';\n",
+      );
+      writeFileSync(
+        join(root, 'e2e', 'page.spec.ts'),
+        "await page.goto('/sign-in?returnTo=%2Fapp');\n",
+      );
+      writeFileSync(
+        join(root, 'e2e', 'harness', 'h.spec.ts'),
+        "import { newUser } from '../support/users';\n",
+      );
+      assert.deepEqual(deriveSessionSpecs(root), [
+        'e2e/harness/h.spec.ts',
+        'e2e/new.spec.ts',
+        'e2e/page.spec.ts',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('derives a spec that imports only a support helper wrapping signUp, however deeply', () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
+    try {
+      mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      mkdirSync(join(root, 'e2e', 'support'), { recursive: true });
+      const support = (name, text) => writeFileSync(join(root, 'e2e', 'support', name), text);
+      support('session.ts', 'export async function signUp() {}\n');
+      support('users.ts', 'export function newUser() {}\n');
+      support('wrapper.ts', "import { signUp } from './session';\n");
+      support('outer.ts', "import { wrap } from './wrapper';\n");
+      support('plain.ts', "import { x } from './env';\n");
+      const spec = (path, text) => writeFileSync(join(root, 'e2e', path), text);
+      spec('via-wrapper.spec.ts', "import { wrap } from './support/wrapper';\n");
+      spec('via-outer.spec.ts', "import { outer } from './support/outer';\n");
+      spec('harness/via-outer.spec.ts', "import { outer } from '../support/outer';\n");
+      spec('unrelated.spec.ts', "import { x } from './support/plain';\n");
+      assert.deepEqual(deriveSessionSpecs(root), [
+        'e2e/harness/via-outer.spec.ts',
+        'e2e/via-outer.spec.ts',
+        'e2e/via-wrapper.spec.ts',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('throws, so the step runs the full suite, when no spec signs in or e2e/ is missing', () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
+    try {
+      assert.throws(() => deriveSessionSpecs(root));
+      mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      mkdirSync(join(root, 'e2e', 'support'), { recursive: true });
+      assert.throws(() => deriveSessionSpecs(root), /no e2e spec signs a user in/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

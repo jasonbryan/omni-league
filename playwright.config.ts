@@ -52,7 +52,12 @@ export default defineConfig({
   // independent of order and of each other.
   workers: ci ? 2 : undefined,
   retries: ci ? 1 : 0,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // The JSON report names the failing tests in the nightly run's issue (#186).
+  reporter: [
+    ['list'],
+    ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/results.json' }],
+  ],
   use: {
     baseURL,
     trace: 'on-first-retry',
