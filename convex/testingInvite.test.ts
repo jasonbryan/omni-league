@@ -4,7 +4,8 @@
 // unless IS_TEST is exactly `true`.
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { internal } from './_generated/api';
+import { api, internal } from './_generated/api';
+import { hashInviteToken } from './lib/inviteToken';
 import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -58,6 +59,24 @@ describe('testing:addInvite', () => {
     });
     expect(rows[0].leagueIds).toHaveLength(1);
     expect(rows[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test('with a token, its hash is stored, so the token opens the invite (#70 e2e)', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    await t.mutation(internal.testing.addInvite, {
+      ...INVITE,
+      expiresAt: Date.now() + 60_000,
+      token,
+    });
+    const rows = await t.run((ctx) => ctx.db.query('invites').collect());
+    expect(rows[0]?.tokenHash).toBe(await hashInviteToken(token));
+    expect(await t.query(api.invites.getByToken, { token })).toMatchObject({
+      status: 'valid',
+      organizationName: 'Org A',
+      leagueNames: ['Coed 7v7'],
+    });
   });
 
   test('refuses an unknown organization or league', async () => {

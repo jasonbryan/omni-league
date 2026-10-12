@@ -18,6 +18,7 @@ import type * as lib_authOrigins from "../lib/authOrigins.js";
 import type * as lib_authUsers from "../lib/authUsers.js";
 import type * as lib_forbidden from "../lib/forbidden.js";
 import type * as lib_inviteInput from "../lib/inviteInput.js";
+import type * as lib_inviteLookup from "../lib/inviteLookup.js";
 import type * as lib_inviteStatus from "../lib/inviteStatus.js";
 import type * as lib_inviteToken from "../lib/inviteToken.js";
 import type * as lib_leagueInput from "../lib/leagueInput.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authUsers": typeof lib_authUsers;
   "lib/forbidden": typeof lib_forbidden;
   "lib/inviteInput": typeof lib_inviteInput;
+  "lib/inviteLookup": typeof lib_inviteLookup;
   "lib/inviteStatus": typeof lib_inviteStatus;
   "lib/inviteToken": typeof lib_inviteToken;
   "lib/leagueInput": typeof lib_leagueInput;
