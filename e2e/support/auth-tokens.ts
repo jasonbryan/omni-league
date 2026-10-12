@@ -21,18 +21,18 @@ const SIGNED_IN_LOAD_TOKENS = 2;
  */
 export function tokensSettled(page: Page, expected = SIGNED_IN_LOAD_TOKENS): Promise<void> {
   let started = 0;
-  let open = 0;
+  let inFlight = 0;
   const isToken = (request: Request) => new URL(request.url()).pathname === TOKEN_PATH;
   return new Promise((resolve) => {
     const onRequest = (request: Request) => {
       if (!isToken(request)) return;
       started += 1;
-      open += 1;
+      inFlight += 1;
     };
     const onDone = (request: Request) => {
       if (!isToken(request)) return;
-      open -= 1;
-      if (started >= expected && open === 0) finish();
+      inFlight -= 1;
+      if (started >= expected && inFlight === 0) finish();
     };
     const finish = () => {
       page.off('request', onRequest);

@@ -15,6 +15,7 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedTenant, type Tenant } from './support/tenant';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -300,7 +301,7 @@ test.describe('Accept invite: links that cannot be used', () => {
     );
   });
 
-  test('an expired invite shows the same invalid view', async ({ page }) => {
+  test('an expired invite shows the same invalid view', VIEWPORT_AGNOSTIC, async ({ page }) => {
     const tenant = await seedOrganization();
     const token = await seedInvite(tenant, {
       email: newUser('Late').email,
@@ -313,55 +314,59 @@ test.describe('Accept invite: links that cannot be used', () => {
     expect(await storedToken(page)).toBeNull();
   });
 
-  test('a fragment opened on the invite page that is already open is captured too: the address bar and returnTo never hold the token', async ({
-    page,
-  }) => {
-    const tenant = await seedOrganization();
-    const token = await seedInvite(tenant, { email: newUser('Again').email });
-    const urls = watchUrls(page);
+  test(
+    'a fragment opened on the invite page that is already open is captured too: the address bar and returnTo never hold the token',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedOrganization();
+      const token = await seedInvite(tenant, { email: newUser('Again').email });
+      const urls = watchUrls(page);
 
-    // The page is open with nothing stored: the invalid view.
-    await page.goto('/invites/accept');
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
+      // The page is open with nothing stored: the invalid view.
+      await page.goto('/invites/accept');
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        'This invite link can’t be used',
+      );
 
-    // The same tab opens the link: a navigation to the same path with a fragment only.
-    await page.goto(`/invites/accept#${token}`);
-    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
-    expect(await storedToken(page)).toBe(token);
-    expect(page.url()).not.toContain(token);
-    expect(page.url()).not.toContain('#');
-    // The navigation to the link held the fragment, as the visitor opened it; none after it may.
-    const afterCapture = urls.navigations.length;
+      // The same tab opens the link: a navigation to the same path with a fragment only.
+      await page.goto(`/invites/accept#${token}`);
+      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
+      expect(await storedToken(page)).toBe(token);
+      expect(page.url()).not.toContain(token);
+      expect(page.url()).not.toContain('#');
+      // The navigation to the link held the fragment, as the visitor opened it; none after it may.
+      const afterCapture = urls.navigations.length;
 
-    // Neither sign-in link carries it: the top bar's and the page's.
-    const links = page.locator('a[href^="/sign-in"], a[href^="/sign-up"]');
-    expect(await links.count()).toBeGreaterThan(0);
-    for (const href of await links.evaluateAll((all) => all.map((a) => a.getAttribute('href')))) {
-      expect(href).not.toContain(token);
-      expect(href).not.toContain('#');
-      expect(href).not.toContain('%23');
-    }
-    await page.locator('header a[href^="/sign-in"]').click();
-    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Finvites%2Faccept`);
-    expect(urls.requests.filter((url) => url.includes(token))).toEqual([]);
-    expect(urls.navigations.slice(afterCapture).filter((url) => url.includes('#'))).toEqual([]);
-    expect(urls.navigations.slice(afterCapture).filter((url) => url.includes(token))).toEqual([]);
-  });
+      // Neither sign-in link carries it: the top bar's and the page's.
+      const links = page.locator('a[href^="/sign-in"], a[href^="/sign-up"]');
+      expect(await links.count()).toBeGreaterThan(0);
+      for (const href of await links.evaluateAll((all) => all.map((a) => a.getAttribute('href')))) {
+        expect(href).not.toContain(token);
+        expect(href).not.toContain('#');
+        expect(href).not.toContain('%23');
+      }
+      await page.locator('header a[href^="/sign-in"]').click();
+      await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Finvites%2Faccept`);
+      expect(urls.requests.filter((url) => url.includes(token))).toEqual([]);
+      expect(urls.navigations.slice(afterCapture).filter((url) => url.includes('#'))).toEqual([]);
+      expect(urls.navigations.slice(afterCapture).filter((url) => url.includes(token))).toEqual([]);
+    },
+  );
 
-  test('a token in the query string is never read, and is dropped from the URL', async ({
-    page,
-  }) => {
-    const tenant = await seedOrganization();
-    const token = await seedInvite(tenant, { email: newUser('Query').email });
-    await page.goto(`/invites/accept?token=${token}`);
-    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
-  });
+  test(
+    'a token in the query string is never read, and is dropped from the URL',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedOrganization();
+      const token = await seedInvite(tenant, { email: newUser('Query').email });
+      await page.goto(`/invites/accept?token=${token}`);
+      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        'This invite link can’t be used',
+      );
+    },
+  );
 });
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
@@ -384,156 +389,168 @@ async function expectNoTokenShown(page: Page, tokens: string[]) {
 }
 
 test.describe('Accept invite: a link opened on the page that is already open (round 2)', () => {
-  test('two links in sequence, then back and forward: the second replaces the first and neither token is ever in the address bar, a link, or a request', async ({
-    page,
-  }) => {
-    const first = await seedOrganization();
-    const second = await seedOrganization();
-    const tokenA = await seedInvite(first, { email: newUser('SeqA').email });
-    const tokenB = await seedInvite(second, { email: newUser('SeqB').email });
-    const urls = watchUrls(page);
+  test(
+    'two links in sequence, then back and forward: the second replaces the first and neither token is ever in the address bar, a link, or a request',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const first = await seedOrganization();
+      const second = await seedOrganization();
+      const tokenA = await seedInvite(first, { email: newUser('SeqA').email });
+      const tokenB = await seedInvite(second, { email: newUser('SeqB').email });
+      const urls = watchUrls(page);
 
-    await openLink(page, tokenA);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${first.name}`);
-    await expectNoTokenShown(page, [tokenA, tokenB]);
-
-    // A fragment-only navigation on the open page, twice in a row.
-    await page.goto(`/invites/accept#${tokenB}`);
-    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${second.name}`);
-    expect(await storedToken(page)).toBe(tokenB);
-    await expectNoTokenShown(page, [tokenA, tokenB]);
-    const afterSecond = urls.navigations.length;
-
-    await page.goto(`/invites/accept#${tokenA}`);
-    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${first.name}`);
-    expect(await storedToken(page)).toBe(tokenA);
-    await expectNoTokenShown(page, [tokenA, tokenB]);
-    const afterThird = urls.navigations.length;
-
-    // Back and forward never put a token back in the address bar or re-capture an older one.
-    for (const move of ['back', 'forward', 'back', 'back', 'forward', 'forward'] as const) {
-      if (move === 'back') await page.goBack();
-      else await page.goForward();
-      await page.waitForTimeout(300);
+      await openLink(page, tokenA);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${first.name}`);
       await expectNoTokenShown(page, [tokenA, tokenB]);
+
+      // A fragment-only navigation on the open page, twice in a row.
+      await page.goto(`/invites/accept#${tokenB}`);
+      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${second.name}`);
+      expect(await storedToken(page)).toBe(tokenB);
+      await expectNoTokenShown(page, [tokenA, tokenB]);
+      const afterSecond = urls.navigations.length;
+
+      await page.goto(`/invites/accept#${tokenA}`);
+      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${first.name}`);
       expect(await storedToken(page)).toBe(tokenA);
-    }
-    expect(urls.navigations.slice(afterThird).filter((url) => url.includes('#'))).toEqual([]);
-    expect(
-      urls.navigations
-        .slice(afterSecond)
-        .filter((url) => url.includes(tokenA) && !url.includes('#')),
-    ).toEqual([]);
+      await expectNoTokenShown(page, [tokenA, tokenB]);
+      const afterThird = urls.navigations.length;
 
-    await page.locator('header a[href^="/sign-in"]').click();
-    await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Finvites%2Faccept`);
-    expect(urls.requests.filter((url) => url.includes(tokenA) || url.includes(tokenB))).toEqual([]);
-  });
+      // Back and forward never put a token back in the address bar or re-capture an older one.
+      for (const move of ['back', 'forward', 'back', 'back', 'forward', 'forward'] as const) {
+        if (move === 'back') await page.goBack();
+        else await page.goForward();
+        await page.waitForTimeout(300);
+        await expectNoTokenShown(page, [tokenA, tokenB]);
+        expect(await storedToken(page)).toBe(tokenA);
+      }
+      expect(urls.navigations.slice(afterThird).filter((url) => url.includes('#'))).toEqual([]);
+      expect(
+        urls.navigations
+          .slice(afterSecond)
+          .filter((url) => url.includes(tokenA) && !url.includes('#')),
+      ).toEqual([]);
 
-  test('assigning location.hash and pressing a hash link on the open page are captured too', async ({
-    page,
-  }) => {
-    const tenant = await seedOrganization();
-    const token = await seedInvite(tenant, { email: newUser('Hash').email });
-    const urls = watchUrls(page);
-    await page.goto('/invites/accept');
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
+      await page.locator('header a[href^="/sign-in"]').click();
+      await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Finvites%2Faccept`);
+      expect(urls.requests.filter((url) => url.includes(tokenA) || url.includes(tokenB))).toEqual(
+        [],
+      );
+    },
+  );
 
-    await page.evaluate((t) => {
-      location.hash = t;
-    }, token);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
-    await expectNoTokenShown(page, [token]);
-    expect(await storedToken(page)).toBe(token);
+  test(
+    'assigning location.hash and pressing a hash link on the open page are captured too',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedOrganization();
+      const token = await seedInvite(tenant, { email: newUser('Hash').email });
+      const urls = watchUrls(page);
+      await page.goto('/invites/accept');
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        'This invite link can’t be used',
+      );
 
-    // A second assignment of the same token, and an empty one, leave no token behind.
-    await page.evaluate((t) => {
-      location.hash = t;
-    }, token);
-    await page.waitForTimeout(300);
-    await expectNoTokenShown(page, [token]);
-    expect(urls.requests.filter((url) => url.includes(token))).toEqual([]);
-    expect(
-      urls.navigations.filter((url) => url.includes(token) && url.split('#').length > 2),
-    ).toEqual([]);
-  });
+      await page.evaluate((t) => {
+        location.hash = t;
+      }, token);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
+      await expectNoTokenShown(page, [token]);
+      expect(await storedToken(page)).toBe(token);
+
+      // A second assignment of the same token, and an empty one, leave no token behind.
+      await page.evaluate((t) => {
+        location.hash = t;
+      }, token);
+      await page.waitForTimeout(300);
+      await expectNoTokenShown(page, [token]);
+      expect(urls.requests.filter((url) => url.includes(token))).toEqual([]);
+      expect(
+        urls.navigations.filter((url) => url.includes(token) && url.split('#').length > 2),
+      ).toEqual([]);
+    },
+  );
 
   test.describe('signed in', () => {
     test.use({ expectedConvexErrors: ['invites:accept'] });
 
-    test('a link opened on the open page replaces a refused invite with the new one, which can be accepted', async ({
-      page,
-    }) => {
-      const first = await seedOrganization();
-      const second = await seedOrganization();
-      const user = newUser('Live');
-      await signUp(page, user);
-      const stranger = await seedInvite(first, { email: newUser('Else').email });
-      const mine = await seedInvite(second, { email: user.email });
-      const urls = watchUrls(page);
+    test(
+      'a link opened on the open page replaces a refused invite with the new one, which can be accepted',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const first = await seedOrganization();
+        const second = await seedOrganization();
+        const user = newUser('Live');
+        await signUp(page, user);
+        const stranger = await seedInvite(first, { email: newUser('Else').email });
+        const mine = await seedInvite(second, { email: user.email });
+        const urls = watchUrls(page);
 
-      await openLink(page, stranger);
-      await main(page).getByRole('button', { name: 'Accept invite' }).click();
-      await expect(main(page).getByRole('alert')).toContainText(
-        'This invite was sent to a different email address.',
-      );
+        await openLink(page, stranger);
+        await main(page).getByRole('button', { name: 'Accept invite' }).click();
+        await expect(main(page).getByRole('alert')).toContainText(
+          'This invite was sent to a different email address.',
+        );
 
-      await page.goto(`/invites/accept#${mine}`);
+        await page.goto(`/invites/accept#${mine}`);
+        await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+        await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+          `Join ${second.name}`,
+        );
+        await expect(main(page).getByRole('alert')).toHaveCount(0);
+        await expect(
+          main(page).getByRole('button', { name: 'Sign in with a different account' }),
+        ).toHaveCount(0);
+        expect(await storedToken(page)).toBe(mine);
+        await expectNoTokenShown(page, [stranger, mine]);
+
+        await main(page).getByRole('button', { name: 'Accept invite' }).click();
+        await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+          `You’re on the staff of ${second.name}`,
+        );
+        expect(await storedToken(page)).toBeNull();
+
+        // The same link opened again on the accepted page: no token in any URL; a reload then shows
+        // the invalid view and leaves nothing stored.
+        await page.goto(`/invites/accept#${mine}`);
+        await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+        await page.waitForTimeout(500);
+        test.info().annotations.push({
+          type: 'after-reopen',
+          description: `heading=${await main(page).getByRole('heading', { level: 1 }).textContent()} stored=${(await storedToken(page)) === null ? 'null' : 'token'}`,
+        });
+        await expectNoTokenShown(page, [stranger, mine]);
+        await page.reload();
+        await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+          'This invite link can’t be used',
+        );
+        expect(await storedToken(page)).toBeNull();
+        expect(urls.requests.filter((url) => url.includes(stranger) || url.includes(mine))).toEqual(
+          [],
+        );
+      },
+    );
+  });
+
+  test(
+    'a malformed fragment on the open page is dropped and shows the invalid view',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedOrganization();
+      const token = await seedInvite(tenant, { email: newUser('Bad').email });
+      await openLink(page, token);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
+      await page.goto('/invites/accept#not%20a%20token!');
       await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${second.name}`);
-      await expect(main(page).getByRole('alert')).toHaveCount(0);
-      await expect(
-        main(page).getByRole('button', { name: 'Sign in with a different account' }),
-      ).toHaveCount(0);
-      expect(await storedToken(page)).toBe(mine);
-      await expectNoTokenShown(page, [stranger, mine]);
-
-      await main(page).getByRole('button', { name: 'Accept invite' }).click();
-      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-        `You’re on the staff of ${second.name}`,
-      );
-      expect(await storedToken(page)).toBeNull();
-
-      // The same link opened again on the accepted page: no token in any URL; a reload then shows
-      // the invalid view and leaves nothing stored.
-      await page.goto(`/invites/accept#${mine}`);
-      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-      await page.waitForTimeout(500);
-      test.info().annotations.push({
-        type: 'after-reopen',
-        description: `heading=${await main(page).getByRole('heading', { level: 1 }).textContent()} stored=${(await storedToken(page)) === null ? 'null' : 'token'}`,
-      });
-      await expectNoTokenShown(page, [stranger, mine]);
-      await page.reload();
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
         'This invite link can’t be used',
       );
       expect(await storedToken(page)).toBeNull();
-      expect(urls.requests.filter((url) => url.includes(stranger) || url.includes(mine))).toEqual(
-        [],
-      );
-    });
-  });
-
-  test('a malformed fragment on the open page is dropped and shows the invalid view', async ({
-    page,
-  }) => {
-    const tenant = await seedOrganization();
-    const token = await seedInvite(tenant, { email: newUser('Bad').email });
-    await openLink(page, token);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
-    await page.goto('/invites/accept#not%20a%20token!');
-    await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
-    expect(await storedToken(page)).toBeNull();
-    await expectNoTokenShown(page, [token]);
-  });
+      await expectNoTokenShown(page, [token]);
+    },
+  );
 });
 
 test.describe('Accept invite: the invite could not be loaded (round 2)', () => {
@@ -644,85 +661,91 @@ test.describe('Accept invite: offline and a spent token (round 3)', () => {
     urls.expectNone(token);
   });
 
-  test('an invalid link reopened on the open page clears sessionStorage each time', async ({
-    page,
-  }) => {
-    const tenant = await seedOrganization();
-    const token = await seedInvite(tenant, {
-      email: newUser('Late').email,
-      expiresAt: Date.now() - 1000,
-    });
-    await openLink(page, token);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
-    await expect.poll(() => storedToken(page)).toBeNull();
-    for (let i = 0; i < 2; i += 1) {
-      await page.evaluate((value) => {
-        location.hash = value;
-      }, token);
-      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+  test(
+    'an invalid link reopened on the open page clears sessionStorage each time',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const tenant = await seedOrganization();
+      const token = await seedInvite(tenant, {
+        email: newUser('Late').email,
+        expiresAt: Date.now() - 1000,
+      });
+      await openLink(page, token);
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
         'This invite link can’t be used',
       );
       await expect.poll(() => storedToken(page)).toBeNull();
-    }
-  });
+      for (let i = 0; i < 2; i += 1) {
+        await page.evaluate((value) => {
+          location.hash = value;
+        }, token);
+        await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+        await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+          'This invite link can’t be used',
+        );
+        await expect.poll(() => storedToken(page)).toBeNull();
+      }
+    },
+  );
 
-  test('a spent (accepted) link reopened in the same tab shows the invalid view and clears sessionStorage', async ({
-    page,
-  }) => {
-    const tenant = await seedOrganization();
-    const user = newUser('Spent');
-    await signUp(page, user);
-    const token = await seedInvite(tenant, { email: user.email });
-    await openLink(page, token);
-    await main(page).getByRole('button', { name: 'Accept invite' }).click();
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      `You’re on the staff of ${tenant.name}`,
-    );
-    expect(await storedToken(page)).toBeNull();
-    // Reopened on a fresh load of the page: the invalid view, and nothing kept.
-    await page.goto('/app');
-    await openLink(page, token);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
-    await expect.poll(() => storedToken(page)).toBeNull();
-    await page.evaluate((value) => {
-      location.hash = value;
-    }, token);
-    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
-      'This invite link can’t be used',
-    );
-    await expect.poll(() => storedToken(page)).toBeNull();
-  });
-
-  test.describe('refused as already a member', () => {
-    test.use({ expectedConvexErrors: ['invites:accept'] });
-
-    test('an already-a-member refusal clears sessionStorage, and the link reopened on the open page does not store it again', async ({
-      page,
-    }) => {
+  test(
+    'a spent (accepted) link reopened in the same tab shows the invalid view and clears sessionStorage',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
       const tenant = await seedOrganization();
-      const user = newUser('Twice');
+      const user = newUser('Spent');
       await signUp(page, user);
-      await convexRun('testing:addMembership', {
-        organizationSlug: tenant.slug,
-        email: user.email,
-        role: 'leagueOrganizer',
-      });
-      const token = await seedInvite(tenant, { email: user.email, role: 'orgAdmin' });
+      const token = await seedInvite(tenant, { email: user.email });
       await openLink(page, token);
       await main(page).getByRole('button', { name: 'Accept invite' }).click();
-      await expect(main(page).getByRole('alert')).toContainText('already on the staff');
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        `You’re on the staff of ${tenant.name}`,
+      );
+      expect(await storedToken(page)).toBeNull();
+      // Reopened on a fresh load of the page: the invalid view, and nothing kept.
+      await page.goto('/app');
+      await openLink(page, token);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        'This invite link can’t be used',
+      );
       await expect.poll(() => storedToken(page)).toBeNull();
       await page.evaluate((value) => {
         location.hash = value;
       }, token);
-      await expect(page).toHaveURL(`${baseURL}/invites/accept`);
-      await page.waitForTimeout(500);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+        'This invite link can’t be used',
+      );
       await expect.poll(() => storedToken(page)).toBeNull();
-    });
+    },
+  );
+
+  test.describe('refused as already a member', () => {
+    test.use({ expectedConvexErrors: ['invites:accept'] });
+
+    test(
+      'an already-a-member refusal clears sessionStorage, and the link reopened on the open page does not store it again',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const tenant = await seedOrganization();
+        const user = newUser('Twice');
+        await signUp(page, user);
+        await convexRun('testing:addMembership', {
+          organizationSlug: tenant.slug,
+          email: user.email,
+          role: 'leagueOrganizer',
+        });
+        const token = await seedInvite(tenant, { email: user.email, role: 'orgAdmin' });
+        await openLink(page, token);
+        await main(page).getByRole('button', { name: 'Accept invite' }).click();
+        await expect(main(page).getByRole('alert')).toContainText('already on the staff');
+        await expect.poll(() => storedToken(page)).toBeNull();
+        await page.evaluate((value) => {
+          location.hash = value;
+        }, token);
+        await expect(page).toHaveURL(`${baseURL}/invites/accept`);
+        await page.waitForTimeout(500);
+        await expect.poll(() => storedToken(page)).toBeNull();
+      },
+    );
   });
 });

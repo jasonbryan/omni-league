@@ -14,6 +14,7 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser, seedUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -130,25 +131,27 @@ test.describe('Staff: inviting', () => {
     void base;
   });
 
-  test('Role defaults to League organizer; Org admin removes the Leagues group and League organizer brings it back with the choices kept', async ({
-    page,
-  }) => {
-    await openStaff(page);
-    const organizer = page.getByRole('radio', { name: 'League organizer' });
-    const admin = page.getByRole('radio', { name: 'Org admin' });
-    const leagues = page.getByRole('group', { name: 'Leagues' });
-    await expect(organizer).toBeChecked();
-    await expect(leagues).toBeVisible();
-    await page.getByRole('checkbox', { name: 'Coed 7v7 Rec' }).click();
-    await admin.check();
-    await expect(leagues).toHaveCount(0);
-    await organizer.check();
-    await expect(leagues).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: 'Coed 7v7 Rec' })).toBeChecked();
-    await expect(
-      page.getByRole('checkbox', { name: 'Wednesday Coed Slow-Pitch' }),
-    ).not.toBeChecked();
-  });
+  test(
+    'Role defaults to League organizer; Org admin removes the Leagues group and League organizer brings it back with the choices kept',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await openStaff(page);
+      const organizer = page.getByRole('radio', { name: 'League organizer' });
+      const admin = page.getByRole('radio', { name: 'Org admin' });
+      const leagues = page.getByRole('group', { name: 'Leagues' });
+      await expect(organizer).toBeChecked();
+      await expect(leagues).toBeVisible();
+      await page.getByRole('checkbox', { name: 'Coed 7v7 Rec' }).click();
+      await admin.check();
+      await expect(leagues).toHaveCount(0);
+      await organizer.check();
+      await expect(leagues).toBeVisible();
+      await expect(page.getByRole('checkbox', { name: 'Coed 7v7 Rec' })).toBeChecked();
+      await expect(
+        page.getByRole('checkbox', { name: 'Wednesday Coed Slow-Pitch' }),
+      ).not.toBeChecked();
+    },
+  );
 
   test('an org admin invite lists as Org admin and carries no leagues', async ({ page }) => {
     await openStaff(page);
@@ -296,7 +299,7 @@ test.describe('Staff: copying the link', () => {
       await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible();
       await expect(linkField(page)).toHaveValue(link);
       await expect(linkField(page)).toBeVisible();
-      await screenshot(page, testInfo, '67-staff-copy-blocked');
+      await screenshot(page, testInfo, `67-staff-copy-blocked-${label.replace(/\W+/g, '-')}`);
       await expectAccessible(page);
     });
   }
@@ -538,72 +541,94 @@ test.describe('Staff: who may open it', () => {
     ['a league organizer of the organization', 'leagueOrganizer'],
     ['a signed-in user with no membership', null],
   ] as const) {
-    test(`${label} sees the no-access view, and no staff data is requested`, async ({
-      page,
-    }, testInfo) => {
-      const user = newUser('Outsider');
-      await signUp(page, user);
-      const tenant = await seedTenant({
-        name: 'E2E Closed',
-        locations: LOCATIONS,
-        leagues: LEAGUES,
-      });
+    test(
+      `${label} sees the no-access view, and no staff data is requested`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const user = newUser('Outsider');
+        await signUp(page, user);
+        const tenant = await seedTenant({
+          name: 'E2E Closed',
+          locations: LOCATIONS,
+          leagues: LEAGUES,
+        });
+        await convexRun('testing:addInvite', {
+          organizationSlug: tenant.slug,
+          email: 'secret.invitee@example.com',
+          role: 'orgAdmin',
+          expiresAt: Date.now() + 14 * DAY,
+        });
+        if (role) {
+          await convexRun('testing:addMembership', {
+            organizationSlug: tenant.slug,
+            email: user.email,
+            role,
+          });
+        }
+        const frames = sentFrames(page);
+        await page.goto(`/app/organizations/${tenant.slug}/staff`);
+        await expect(
+          main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(page.locator('body')).not.toContainText('secret.invitee@example.com');
+        const sent = frames.join('\n');
+        expect(sent).toContain('organizations:getAdminContext');
+        expect(sent).not.toContain('invites:listPending');
+        expect(sent).not.toContain('memberships:listForOrganization');
+      },
+    );
+  }
+
+  // The view is the same for every role, so one run of it is saved as a screenshot and scanned.
+  test('the no-access view is saved as a screenshot and passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    await signUp(page, newUser('Outsider'));
+    const tenant = await seedTenant({ name: 'E2E Closed', locations: LOCATIONS, leagues: LEAGUES });
+    await page.goto(`/app/organizations/${tenant.slug}/staff`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, '67-staff-no-access');
+    await expectAccessible(page);
+  });
+
+  test(
+    'an org admin of another organization is refused',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, browser }) => {
+      const owner = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
       await convexRun('testing:addInvite', {
-        organizationSlug: tenant.slug,
-        email: 'secret.invitee@example.com',
+        organizationSlug: owner.tenant.slug,
+        email: 'hidden.invitee@example.com',
         role: 'orgAdmin',
         expiresAt: Date.now() + 14 * DAY,
       });
-      if (role) {
-        await convexRun('testing:addMembership', {
-          organizationSlug: tenant.slug,
-          email: user.email,
-          role,
-        });
+      const intruder = await browser.newPage({ baseURL });
+      try {
+        await memberOf(intruder, 'orgAdmin');
+        await intruder.goto(`${owner.base}/staff`);
+        await expect(
+          intruder.getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(intruder.locator('body')).not.toContainText('hidden.invitee@example.com');
+      } finally {
+        await intruder.context().close();
       }
+    },
+  );
+
+  test(
+    'an unknown slug shows the not-found view and requests no staff data',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await signUp(page, newUser('Lost'));
       const frames = sentFrames(page);
-      await page.goto(`/app/organizations/${tenant.slug}/staff`);
+      await page.goto(`/app/organizations/does-not-exist-${randomBytes(3).toString('hex')}/staff`);
       await expect(
-        main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
       ).toBeVisible();
-      await expect(page.locator('body')).not.toContainText('secret.invitee@example.com');
-      const sent = frames.join('\n');
-      expect(sent).toContain('organizations:getAdminContext');
-      expect(sent).not.toContain('invites:listPending');
-      expect(sent).not.toContain('memberships:listForOrganization');
-      await screenshot(page, testInfo, '67-staff-no-access');
-      await expectAccessible(page);
-    });
-  }
-
-  test('an org admin of another organization is refused', async ({ page, browser }) => {
-    const owner = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
-    await convexRun('testing:addInvite', {
-      organizationSlug: owner.tenant.slug,
-      email: 'hidden.invitee@example.com',
-      role: 'orgAdmin',
-      expiresAt: Date.now() + 14 * DAY,
-    });
-    const intruder = await browser.newPage({ baseURL });
-    try {
-      await memberOf(intruder, 'orgAdmin');
-      await intruder.goto(`${owner.base}/staff`);
-      await expect(
-        intruder.getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
-      ).toBeVisible();
-      await expect(intruder.locator('body')).not.toContainText('hidden.invitee@example.com');
-    } finally {
-      await intruder.context().close();
-    }
-  });
-
-  test('an unknown slug shows the not-found view and requests no staff data', async ({ page }) => {
-    await signUp(page, newUser('Lost'));
-    const frames = sentFrames(page);
-    await page.goto(`/app/organizations/does-not-exist-${randomBytes(3).toString('hex')}/staff`);
-    await expect(
-      main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
-    ).toBeVisible();
-    expect(frames.join('\n')).not.toContain('invites:listPending');
-  });
+      expect(frames.join('\n')).not.toContain('invites:listPending');
+    },
+  );
 });

@@ -3,8 +3,7 @@
 // no auth code runs there. Every test that signs in a seeded user, or reads or seeds the throttle,
 // needs the local Convex backend and is skipped with E2E_BASE_URL set (a preview has no seeded user
 // and no test functions); the cases that need neither also run against a preview.
-import type { Page, TestInfo } from '@playwright/test';
-import { join } from 'node:path';
+import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { tokensSettled } from './support/auth-tokens';
@@ -14,6 +13,8 @@ import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
+import { screenshot } from './support/screenshot';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 const LOCAL_ONLY = 'seeds a user or the throttle on the local Convex backend';
 const SIGN_IN_PATH = '/api/auth/sign-in/email';
@@ -52,15 +53,6 @@ async function signInAs(page: Page, user: TestUser, path = '/sign-in'): Promise<
   await expect(heading(page)).toBeVisible();
   await fillForm(page, user.email, user.password);
   await submit(page).click();
-}
-
-/** A full-page PNG for the tester's mockup comparison, at this project's width. */
-async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  const width = page.viewportSize()?.width ?? 0;
-  const file = join(testInfo.config.rootDir, 'screenshots', `${name}-${width}.png`);
-  const png = await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
-  await testInfo.attach(`${name}-${width}.png`, { body: png, contentType: 'image/png' });
 }
 
 test.describe('sign-in', () => {
@@ -155,84 +147,96 @@ test.describe('sign-in', () => {
     expect(requests).toEqual([]);
   });
 
-  test('a seeded user signs in at /sign-in?returnTo=/app and lands on /app signed in', async ({
-    page,
-  }) => {
-    test.skip(!!remoteBaseUrl, LOCAL_ONLY);
-    const user = await seedUser();
-    const tokens = tokensSettled(page);
-    await signInAs(page, user, '/sign-in?returnTo=%2Fapp');
-    await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Signed-in account' })).toContainText(user.name);
-    await tokens;
-    expect((await accountByEmail(user.email))?.sessions).toBeGreaterThanOrEqual(1);
+  test(
+    'a seeded user signs in at /sign-in?returnTo=/app and lands on /app signed in',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      const user = await seedUser();
+      const tokens = tokensSettled(page);
+      await signInAs(page, user, '/sign-in?returnTo=%2Fapp');
+      await expect(page).toHaveURL(`${baseURL}/app`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Signed-in account' })).toContainText(
+        user.name,
+      );
+      await tokens;
+      expect((await accountByEmail(user.email))?.sessions).toBeGreaterThanOrEqual(1);
 
-    // Signed in, /sign-in goes straight on to /app.
-    await page.goto('/sign-in');
-    await expect(page).toHaveURL(`${baseURL}/app`);
-  });
+      // Signed in, /sign-in goes straight on to /app.
+      await page.goto('/sign-in');
+      await expect(page).toHaveURL(`${baseURL}/app`);
+    },
+  );
 
-  test('with no returnTo, sign-in lands on /app', async ({ page }) => {
+  test('with no returnTo, sign-in lands on /app', VIEWPORT_AGNOSTIC, async ({ page }) => {
     test.skip(!!remoteBaseUrl, LOCAL_ONLY);
     const user = await seedUser();
     await signInAs(page, user);
     await expect(page).toHaveURL(`${baseURL}/app`);
   });
 
-  test('a returnTo to a public page lands there, with the account link in the top bar', async ({
-    page,
-  }) => {
-    test.skip(!!remoteBaseUrl, LOCAL_ONLY);
-    const user = await seedUser();
-    await signInAs(page, user, '/sign-in?returnTo=%2Fno-such-page');
-    await expect(page).toHaveURL(`${baseURL}/no-such-page`);
-    await expect(page.getByRole('link', { name: `Account: ${user.name}` })).toBeVisible();
-  });
+  test(
+    'a returnTo to a public page lands there, with the account link in the top bar',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      const user = await seedUser();
+      await signInAs(page, user, '/sign-in?returnTo=%2Fno-such-page');
+      await expect(page).toHaveURL(`${baseURL}/no-such-page`);
+      await expect(page.getByRole('link', { name: `Account: ${user.name}` })).toBeVisible();
+    },
+  );
 
   for (const raw of ['//evil.example/x', '/\\evil.example', 'https://evil.example']) {
-    test(`returnTo=${JSON.stringify(raw)} lands on / after sign-in`, async ({ page, context }) => {
-      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
-      const offSite: string[] = [];
-      context.on('request', (request) => {
-        if (new URL(request.url()).hostname.includes('evil')) offSite.push(request.url());
-      });
-      const user = await seedUser();
-      const tokens = tokensSettled(page);
-      await signInAs(page, user, `/sign-in?returnTo=${encodeURIComponent(raw)}`);
-      await expect(page).toHaveURL(`${baseURL}/`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
-      await tokens;
-      expect(offSite).toEqual([]);
-    });
+    test(
+      `returnTo=${JSON.stringify(raw)} lands on / after sign-in`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page, context }) => {
+        test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+        const offSite: string[] = [];
+        context.on('request', (request) => {
+          if (new URL(request.url()).hostname.includes('evil')) offSite.push(request.url());
+        });
+        const user = await seedUser();
+        const tokens = tokensSettled(page);
+        await signInAs(page, user, `/sign-in?returnTo=${encodeURIComponent(raw)}`);
+        await expect(page).toHaveURL(`${baseURL}/`);
+        await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+        await tokens;
+        expect(offSite).toEqual([]);
+      },
+    );
   }
 
   // A signed-in visitor opening /sign-in or /sign-up goes to the valid returnTo, else /app.
   for (const page of ['/sign-in', '/sign-up']) {
-    test(`a signed-in visitor opening ${page} goes to the valid returnTo, else /app`, async ({
-      page: browser,
-    }) => {
-      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
-      const user = await seedUser();
-      const first = tokensSettled(browser);
-      await signInAs(browser, user, '/sign-in?returnTo=%2Fapp');
-      await expect(browser).toHaveURL(`${baseURL}/app`);
-      await first;
-      const cases: [query: string, landing: string][] = [
-        ['?returnTo=%2Fapp', '/app'],
-        ['', '/app'],
-        ['?returnTo=%2F%2Fevil.example%2Fx', '/app'],
-        ['?returnTo=https%3A%2F%2Fevil.example', '/app'],
-        ['?returnTo=%2Fno-such-page', '/no-such-page'],
-      ];
-      for (const [query, landing] of cases) {
-        const tokens = tokensSettled(browser);
-        await browser.goto(`${page}${query}`);
-        await browser.waitForURL((url) => url.pathname === landing);
-        await tokens;
-        expect(new URL(browser.url()).pathname, query).toBe(landing);
-      }
-    });
+    test(
+      `a signed-in visitor opening ${page} goes to the valid returnTo, else /app`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page: browser }) => {
+        test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+        const user = await seedUser();
+        const first = tokensSettled(browser);
+        await signInAs(browser, user, '/sign-in?returnTo=%2Fapp');
+        await expect(browser).toHaveURL(`${baseURL}/app`);
+        await first;
+        const cases: [query: string, landing: string][] = [
+          ['?returnTo=%2Fapp', '/app'],
+          ['', '/app'],
+          ['?returnTo=%2F%2Fevil.example%2Fx', '/app'],
+          ['?returnTo=https%3A%2F%2Fevil.example', '/app'],
+          ['?returnTo=%2Fno-such-page', '/no-such-page'],
+        ];
+        for (const [query, landing] of cases) {
+          const tokens = tokensSettled(browser);
+          await browser.goto(`${page}${query}`);
+          await browser.waitForURL((url) => url.pathname === landing);
+          await tokens;
+          expect(new URL(browser.url()).pathname, query).toBe(landing);
+        }
+      },
+    );
   }
 
   test.describe('a wrong password', () => {
@@ -283,70 +287,92 @@ test.describe('sign-in', () => {
       ),
     });
 
-    for (const known of [true, false]) {
-      test(`${known ? 'a known' : 'an unknown'} address: five 401s, then 429 with the wait, even for the correct password`, async ({
-        page,
-      }, testInfo) => {
-        test.skip(!!remoteBaseUrl, LOCAL_ONLY);
-        const user = await seedUser();
-        const email = known ? user.email : newUser('Ghost').email;
-        await page.goto('/sign-in');
-        await expect(heading(page)).toBeVisible();
-        await fillForm(page, email, 'wrong password number one');
-        for (let attempt = 1; attempt <= 5; attempt++) {
-          expect(await press(page), `attempt ${attempt}`).toBe(401);
-        }
-        // The sixth attempt carries the correct password for the known address.
-        await field(page, 'password').fill(user.password);
-        expect(await press(page)).toBe(429);
-        await expect(alert(page)).toContainText('Too many attempts. Try again in 1 minute.');
-        await expect(alert(page)).toContainText(
-          'Sign-in for this email address is paused after several incorrect passwords.',
-        );
-        await expect(alert(page)).toBeFocused();
-        await expect(page).toHaveURL(`${baseURL}/sign-in`);
-        await expect(field(page, 'email')).toHaveValue(email);
-        // No countdown and no disabled button: the text states the wait.
-        await expect(submit(page)).not.toHaveAttribute('aria-disabled', 'true');
-        if (known) {
-          expect((await accountByEmail(user.email))?.sessions).toBe(1);
-          await screenshot(page, testInfo, '63-sign-in-throttled');
-          await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
-        }
-      });
+    /** Five 401s, then a sixth attempt with the correct password that gets 429 and the wait. */
+    async function fiveWrongThenCorrect(page: Page, known: boolean): Promise<TestUser> {
+      const user = await seedUser();
+      const email = known ? user.email : newUser('Ghost').email;
+      await page.goto('/sign-in');
+      await expect(heading(page)).toBeVisible();
+      await fillForm(page, email, 'wrong password number one');
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        expect(await press(page), `attempt ${attempt}`).toBe(401);
+      }
+      // The sixth attempt carries the correct password for the known address.
+      await field(page, 'password').fill(user.password);
+      expect(await press(page)).toBe(429);
+      await expect(alert(page)).toContainText('Too many attempts. Try again in 1 minute.');
+      await expect(alert(page)).toContainText(
+        'Sign-in for this email address is paused after several incorrect passwords.',
+      );
+      await expect(page).toHaveURL(`${baseURL}/sign-in`);
+      await expect(field(page, 'email')).toHaveValue(email);
+      // No countdown and no disabled button: the text states the wait.
+      await expect(submit(page)).not.toHaveAttribute('aria-disabled', 'true');
+      return user;
     }
+
+    // The unknown address gets the same answer and needs no screenshot, focus or accessibility
+    // check, so it runs in one project; the known address runs at both widths with those checks.
+    test(
+      'an unknown address: five 401s, then 429 with the wait, even for the correct password',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+        await fiveWrongThenCorrect(page, false);
+      },
+    );
+
+    test('a known address: five 401s, then 429 with the wait, even for the correct password', async ({
+      page,
+    }, testInfo) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      const user = await fiveWrongThenCorrect(page, true);
+      await expect(alert(page)).toBeFocused();
+      expect((await accountByEmail(user.email))?.sessions).toBe(1);
+      await screenshot(page, testInfo, '63-sign-in-throttled');
+      await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+    });
   });
 
   test.describe('the hard limit', () => {
     test.use({ expectedFailedRequests: [{ status: 429, path: SIGN_IN_PATH }] });
 
-    for (const known of [true, false]) {
-      test(`${known ? 'a known' : 'an unknown'} address at 100 failures: the lock text, with the correct password`, async ({
-        page,
-      }, testInfo) => {
-        test.skip(!!remoteBaseUrl, LOCAL_ONLY);
-        const user = await seedUser();
-        const email = known ? user.email : newUser('Ghost').email;
-        await convexRun('testing:seedSignInFailures', { email, failures: 100 });
-        await page.goto('/sign-in');
-        await expect(heading(page)).toBeVisible();
-        await fillForm(page, email, user.password);
-        expect(await press(page)).toBe(429);
-        await expect(alert(page)).toContainText(
-          'Password sign-in is locked for this email address.',
-        );
-        await expect(alert(page)).toContainText(
-          'There have been too many incorrect attempts. Contact the Omni League team to unlock it.',
-        );
-        await expect(alert(page)).toBeFocused();
-        await expect(field(page, 'password')).toHaveValue(user.password);
-        if (known) {
-          expect((await accountByEmail(user.email))?.sessions).toBe(1);
-          await screenshot(page, testInfo, '63-sign-in-locked');
-          await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
-        }
-      });
+    /** An address with 100 failures: the correct password still gets 429 and the lock text. */
+    async function lockedWithCorrectPassword(page: Page, known: boolean): Promise<TestUser> {
+      const user = await seedUser();
+      const email = known ? user.email : newUser('Ghost').email;
+      await convexRun('testing:seedSignInFailures', { email, failures: 100 });
+      await page.goto('/sign-in');
+      await expect(heading(page)).toBeVisible();
+      await fillForm(page, email, user.password);
+      expect(await press(page)).toBe(429);
+      await expect(alert(page)).toContainText('Password sign-in is locked for this email address.');
+      await expect(alert(page)).toContainText(
+        'There have been too many incorrect attempts. Contact the Omni League team to unlock it.',
+      );
+      await expect(field(page, 'password')).toHaveValue(user.password);
+      return user;
     }
+
+    test(
+      'an unknown address at 100 failures: the lock text, with the correct password',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+        await lockedWithCorrectPassword(page, false);
+      },
+    );
+
+    test('a known address at 100 failures: the lock text, with the correct password', async ({
+      page,
+    }, testInfo) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      const user = await lockedWithCorrectPassword(page, true);
+      await expect(alert(page)).toBeFocused();
+      expect((await accountByEmail(user.email))?.sessions).toBe(1);
+      await screenshot(page, testInfo, '63-sign-in-locked');
+      await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+    });
   });
 
   test.describe('a server error', () => {

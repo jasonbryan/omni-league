@@ -16,6 +16,7 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -145,7 +146,7 @@ test.describe('Leagues: creating a draft', () => {
     await expectAccessible(page);
   });
 
-  test('Slug follows the name until it is edited', async ({ page }) => {
+  test('Slug follows the name until it is edited', VIEWPORT_AGNOSTIC, async ({ page }) => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
@@ -235,31 +236,35 @@ test.describe('Leagues: creating a draft', () => {
     });
   });
 
-  test('the same slug in another organization is allowed', async ({ page, browser }) => {
-    const first = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
-    await page.goto(`${first.base}/leagues`);
-    await createDraft(page, {
-      name: 'Shared Name',
-      sport: 'Soccer',
-      locations: ['Redfish Flats Fields'],
-    });
-    await expect(leagueRows(page)).toHaveCount(1);
-
-    const other = await browser.newPage({ baseURL });
-    try {
-      const second = await memberOf(other, 'orgAdmin', { locations: LOCATIONS });
-      await other.goto(`${second.base}/leagues`);
-      await createDraft(other, {
+  test(
+    'the same slug in another organization is allowed',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, browser }) => {
+      const first = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+      await page.goto(`${first.base}/leagues`);
+      await createDraft(page, {
         name: 'Shared Name',
         sport: 'Soccer',
         locations: ['Redfish Flats Fields'],
       });
-      await expect(leagueRows(other)).toHaveCount(1);
-      await expect(other.locator('#slug-error')).toHaveCount(0);
-    } finally {
-      await other.context().close();
-    }
-  });
+      await expect(leagueRows(page)).toHaveCount(1);
+
+      const other = await browser.newPage({ baseURL });
+      try {
+        const second = await memberOf(other, 'orgAdmin', { locations: LOCATIONS });
+        await other.goto(`${second.base}/leagues`);
+        await createDraft(other, {
+          name: 'Shared Name',
+          sport: 'Soccer',
+          locations: ['Redfish Flats Fields'],
+        });
+        await expect(leagueRows(other)).toHaveCount(1);
+        await expect(other.locator('#slug-error')).toHaveCount(0);
+      } finally {
+        await other.context().close();
+      }
+    },
+  );
 
   test('"Create a league" in the header jumps to the form and focuses it (360)', async ({
     page,
@@ -436,80 +441,112 @@ test.describe('who may open Leagues', () => {
     ['a league organizer of the organization', 'leagueOrganizer'],
     ['a signed-in user with no membership', null],
   ] as const) {
-    test(`${label} sees the no-access view, and no league data is requested`, async ({
-      page,
-    }, testInfo) => {
-      const user = newUser('Outsider');
-      await signUp(page, user);
-      const tenant = await seedTenant({
-        name: 'E2E Closed',
+    test(
+      `${label} sees the no-access view, and no league data is requested`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        const user = newUser('Outsider');
+        await signUp(page, user);
+        const tenant = await seedTenant({
+          name: 'E2E Closed',
+          locations: LOCATIONS,
+          leagues: [
+            {
+              name: 'Secret Draft',
+              sport: 'soccer',
+              locations: ['Redfish Flats Fields'],
+              status: 'draft',
+            },
+          ],
+        });
+        if (role) {
+          await convexRun('testing:addMembership', {
+            organizationSlug: tenant.slug,
+            email: user.email,
+            role,
+          });
+        }
+        const frames = sentFrames(page);
+        await page.goto(`/app/organizations/${tenant.slug}/leagues`);
+        await expect(
+          main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(page.locator('body')).not.toContainText('Secret Draft');
+        expect(frames.join('\n')).toContain('organizations:getAdminContext');
+        expect(frames.join('\n')).not.toContain('leagues:listForAdmin');
+      },
+    );
+  }
+
+  // The view is the same for every role, so one run of it is saved as a screenshot and scanned.
+  test('the no-access view is saved as a screenshot and passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    await signUp(page, newUser('Outsider'));
+    const tenant = await seedTenant({ name: 'E2E Closed', locations: LOCATIONS });
+    await page.goto(`/app/organizations/${tenant.slug}/leagues`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, '66-leagues-no-access');
+    await expectAccessible(page);
+  });
+
+  test(
+    'an unknown slug shows the not-found view and requests no league data',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await signUp(page, newUser('Lost'));
+      const frames = sentFrames(page);
+      await page.goto(
+        `/app/organizations/does-not-exist-${randomBytes(3).toString('hex')}/leagues`,
+      );
+      await expect(
+        main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
+      ).toBeVisible();
+      expect(frames.join('\n')).toContain('organizations:getAdminContext');
+      expect(frames.join('\n')).not.toContain('leagues:listForAdmin');
+    },
+  );
+
+  test('the not-found view is saved as a screenshot and passes the axe helper', async ({
+    page,
+  }, testInfo) => {
+    await signUp(page, newUser('Lost'));
+    await page.goto(`/app/organizations/does-not-exist-${randomBytes(3).toString('hex')}/leagues`);
+    await expect(
+      main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
+    ).toBeVisible();
+    await screenshot(page, testInfo, '66-leagues-not-found');
+    await expectAccessible(page);
+  });
+
+  test(
+    'an org admin of another organization is refused',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, browser }) => {
+      const owner = await memberOf(page, 'orgAdmin', {
         locations: LOCATIONS,
         leagues: [
           {
-            name: 'Secret Draft',
+            name: 'Hidden Draft',
             sport: 'soccer',
             locations: ['Redfish Flats Fields'],
             status: 'draft',
           },
         ],
       });
-      if (role) {
-        await convexRun('testing:addMembership', {
-          organizationSlug: tenant.slug,
-          email: user.email,
-          role,
-        });
+      const intruder = await browser.newPage({ baseURL });
+      try {
+        await memberOf(intruder, 'orgAdmin');
+        await intruder.goto(`${owner.base}/leagues`);
+        await expect(
+          intruder.getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
+        ).toBeVisible();
+        await expect(intruder.locator('body')).not.toContainText('Hidden Draft');
+      } finally {
+        await intruder.context().close();
       }
-      const frames = sentFrames(page);
-      await page.goto(`/app/organizations/${tenant.slug}/leagues`);
-      await expect(
-        main(page).getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
-      ).toBeVisible();
-      await expect(page.locator('body')).not.toContainText('Secret Draft');
-      expect(frames.join('\n')).toContain('organizations:getAdminContext');
-      expect(frames.join('\n')).not.toContain('leagues:listForAdmin');
-      await screenshot(page, testInfo, '66-leagues-no-access');
-      await expectAccessible(page);
-    });
-  }
-
-  test('an unknown slug shows the not-found view and requests no league data', async ({
-    page,
-  }, testInfo) => {
-    await signUp(page, newUser('Lost'));
-    const frames = sentFrames(page);
-    await page.goto(`/app/organizations/does-not-exist-${randomBytes(3).toString('hex')}/leagues`);
-    await expect(
-      main(page).getByRole('heading', { level: 1, name: 'Page not found' }),
-    ).toBeVisible();
-    expect(frames.join('\n')).toContain('organizations:getAdminContext');
-    expect(frames.join('\n')).not.toContain('leagues:listForAdmin');
-    await screenshot(page, testInfo, '66-leagues-not-found');
-    await expectAccessible(page);
-  });
-
-  test('an org admin of another organization is refused', async ({ page, browser }) => {
-    const owner = await memberOf(page, 'orgAdmin', {
-      locations: LOCATIONS,
-      leagues: [
-        {
-          name: 'Hidden Draft',
-          sport: 'soccer',
-          locations: ['Redfish Flats Fields'],
-          status: 'draft',
-        },
-      ],
-    });
-    const intruder = await browser.newPage({ baseURL });
-    try {
-      await memberOf(intruder, 'orgAdmin');
-      await intruder.goto(`${owner.base}/leagues`);
-      await expect(
-        intruder.getByRole('heading', { level: 1, name: 'You can’t manage this organization' }),
-      ).toBeVisible();
-      await expect(intruder.locator('body')).not.toContainText('Hidden Draft');
-    } finally {
-      await intruder.context().close();
-    }
-  });
+    },
+  );
 });

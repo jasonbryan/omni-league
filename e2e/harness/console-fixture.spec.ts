@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { ConsoleGuard, type ConsoleGuardOptions } from '../support/console-guard';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from '../support/env';
 import { expect, failedRequests, test } from '../support/fixtures';
+import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
 // The expected-failure probes would otherwise write a failure screenshot into the report. Playwright
 // allows `screenshot` only at file level (a describe-level `use` would force a new worker).
@@ -39,7 +40,7 @@ async function logInPage(
   ]);
 }
 
-test.describe('console fixture rules', () => {
+test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
   test('fails on an uncaught page error', async ({ browser }) => {
     const { page, guard, close } = await guardedPage(browser);
     await Promise.all([
@@ -385,7 +386,7 @@ test.describe('console fixture rules', () => {
   });
 });
 
-test.describe('console fixture wiring (real fixture)', () => {
+test.describe('console fixture wiring (real fixture)', VIEWPORT_AGNOSTIC, () => {
   test('passes on log and info', async ({ page }) => {
     await page.setContent('<p>ok</p>');
     await logInPage(page, 'log', 'just a log');

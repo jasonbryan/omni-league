@@ -8,7 +8,7 @@ import {
   remoteBaseUrl,
   webkitEnabled,
 } from './e2e/support/env';
-import { rawHttpProjectFilter } from './e2e/support/raw-http';
+import { projectFilter } from './e2e/support/viewport-agnostic';
 
 const ci = !!process.env['CI'];
 
@@ -58,11 +58,9 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  // Raw-HTTP tests (tagged `RAW_HTTP`) run in `chromium-desktop` only (e2e/support/raw-http.ts).
-  projects: projects.map((project) => ({
-    ...project,
-    ...rawHttpProjectFilter(project.name ?? ''),
-  })),
+  // Tagged tests run in fewer projects (e2e/support/viewport-agnostic.ts): `RAW_HTTP` tests in
+  // `chromium-desktop` only, `VIEWPORT_AGNOSTIC` tests in every project but `chromium-mobile`.
+  projects: projects.map((project) => ({ ...project, ...projectFilter(project.name ?? '') })),
   // The push and the build run before Playwright (`npm run e2e`), so a failure there is its own
   // step, not a server-start timeout. With E2E_BASE_URL set, no local server or backend starts.
   webServer: remoteBaseUrl

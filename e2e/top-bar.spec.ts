@@ -1,8 +1,7 @@
 // The top bar's "Sign in" link and its signed-in account link (#63; PR #96 decisions 1 and 2;
 // design/mockups/63-sign-in.html states 10 to 12). Public pages are rendered on the server for
 // everyone, so they carry "Sign in"; the browser swaps it for the account link after hydration.
-import type { Page, TestInfo } from '@playwright/test';
-import { join } from 'node:path';
+import type { Page } from '@playwright/test';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -11,6 +10,8 @@ import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { seedTenant } from './support/tenant';
 import { newUser, seedUser } from './support/users';
+import { screenshot } from './support/screenshot';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 const LOCAL_ONLY = 'seeds a tenant or a user on the local Convex backend';
 
@@ -34,15 +35,6 @@ async function signInAs(page: Page, user: { email: string; password: string }): 
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(`${baseURL}/app`);
   await tokens;
-}
-
-/** A full-page PNG for the tester's mockup comparison, at this project's width. */
-async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  const width = page.viewportSize()?.width ?? 0;
-  const file = join(testInfo.config.rootDir, 'screenshots', `${name}-${width}.png`);
-  const png = await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
-  await testInfo.attach(`${name}-${width}.png`, { body: png, contentType: 'image/png' });
 }
 
 test.describe('top bar', () => {
@@ -108,28 +100,30 @@ test.describe('top bar', () => {
       await expect(page.locator('header')).not.toContainText('Sign in');
     });
 
-    test('on /sign-up the link carries that page’s own returnTo, and drops one that is off-site', async ({
-      page,
-    }) => {
-      await page.goto('/sign-up?returnTo=%2Fleagues%2Fx%2Fregister');
-      await expect(
-        page.getByRole('heading', { level: 1, name: 'Create your account' }),
-      ).toBeVisible();
-      await expect(signInLink(page).first()).toHaveAttribute(
-        'href',
-        '/sign-in?returnTo=%2Fleagues%2Fx%2Fregister',
-      );
-      for (const raw of ['//evil.example/x', '/\\evil.example', 'https://evil.example']) {
-        await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
+    test(
+      'on /sign-up the link carries that page’s own returnTo, and drops one that is off-site',
+      VIEWPORT_AGNOSTIC,
+      async ({ page }) => {
+        await page.goto('/sign-up?returnTo=%2Fleagues%2Fx%2Fregister');
         await expect(
           page.getByRole('heading', { level: 1, name: 'Create your account' }),
         ).toBeVisible();
-        const hrefs = await page
-          .locator('a[href^="/sign-in"]')
-          .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
-        expect(hrefs, raw).toEqual(['/sign-in?returnTo=%2Fapp', '/sign-in?returnTo=%2Fapp']);
-      }
-    });
+        await expect(signInLink(page).first()).toHaveAttribute(
+          'href',
+          '/sign-in?returnTo=%2Fleagues%2Fx%2Fregister',
+        );
+        for (const raw of ['//evil.example/x', '/\\evil.example', 'https://evil.example']) {
+          await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
+          await expect(
+            page.getByRole('heading', { level: 1, name: 'Create your account' }),
+          ).toBeVisible();
+          const hrefs = await page
+            .locator('a[href^="/sign-in"]')
+            .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
+          expect(hrefs, raw).toEqual(['/sign-in?returnTo=%2Fapp', '/sign-in?returnTo=%2Fapp']);
+        }
+      },
+    );
   });
 
   test.describe('signed in', () => {

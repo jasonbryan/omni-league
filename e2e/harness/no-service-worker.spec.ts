@@ -4,8 +4,9 @@
 import { remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
 import { holdServiceWorkerRegistration } from '../support/no-service-worker';
+import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
-test.describe('holdServiceWorkerRegistration', () => {
+test.describe('holdServiceWorkerRegistration', VIEWPORT_AGNOSTIC, () => {
   test('a register call never settles and installs nothing', async ({ context, page }) => {
     await holdServiceWorkerRegistration(context);
     await page.goto('/');

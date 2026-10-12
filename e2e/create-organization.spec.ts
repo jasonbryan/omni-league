@@ -3,14 +3,15 @@
 // test signs up its own user through the real form, so each runs against a preview too; the ones
 // that seed a tenant (a taken slug) need the local Convex backend and are skipped with
 // E2E_BASE_URL set.
-import type { Page, TestInfo } from '@playwright/test';
-import { join } from 'node:path';
+import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { otherUser, signUp } from './support/session';
 import { seedTenant } from './support/tenant';
 import { newUser } from './support/users';
+import { screenshot } from './support/screenshot';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import { randomBytes } from 'node:crypto';
 
 const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
@@ -39,15 +40,6 @@ const organizations = (page: Page) => page.getByRole('region', { name: 'Your org
 function newOrganization(label = 'Org') {
   const id = randomBytes(4).toString('hex');
   return { name: `E2E ${label} ${id}`, slug: `e2e-${label.toLowerCase()}-${id}` };
-}
-
-/** A full-page PNG for the tester's mockup comparison, at this project's width. */
-async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  const width = page.viewportSize()?.width ?? 0;
-  const file = join(testInfo.config.rootDir, 'screenshots', `${name}-${width}.png`);
-  const png = await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
-  await testInfo.attach(`${name}-${width}.png`, { body: png, contentType: 'image/png' });
 }
 
 async function openForm(page: Page): Promise<void> {
@@ -81,11 +73,15 @@ test.describe('create an organization', () => {
     await expect(page).toHaveTitle('Create an organization | Omni League');
   });
 
-  test('a signed-out visitor opening the form goes to sign-in with returnTo', async ({ page }) => {
-    await page.goto('/app/organizations/new');
-    await expect(page).toHaveURL(/\/sign-in\?/);
-    expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/app/organizations/new');
-  });
+  test(
+    'a signed-out visitor opening the form goes to sign-in with returnTo',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await page.goto('/app/organizations/new');
+      await expect(page).toHaveURL(/\/sign-in\?/);
+      expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/app/organizations/new');
+    },
+  );
 
   test('the empty form: labels, the address under Slug, axe, and Tab order', async ({
     page,
@@ -110,24 +106,26 @@ test.describe('create an organization', () => {
     await expectAccessible(page, { expectedOrder: FORM_ORDER });
   });
 
-  test('Slug follows the name until it is edited; the address follows the slug', async ({
-    page,
-  }) => {
-    await signUp(page, newUser('Follow'));
-    await openForm(page);
-    const host = new URL(baseURL).host;
-    await field(page, 'name').fill('Coastal Bend Rec Club');
-    await expect(field(page, 'slug')).toHaveValue('coastal-bend-rec-club');
-    await expect(page.locator('#slug-description')).toContainText(
-      `${host}/organizations/coastal-bend-rec-club`,
-    );
-    await field(page, 'slug').fill('my-own-slug');
-    await expect(page.locator('#slug-description')).toContainText(
-      `${host}/organizations/my-own-slug`,
-    );
-    await field(page, 'name').fill('A Different Name');
-    await expect(field(page, 'slug')).toHaveValue('my-own-slug');
-  });
+  test(
+    'Slug follows the name until it is edited; the address follows the slug',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      await signUp(page, newUser('Follow'));
+      await openForm(page);
+      const host = new URL(baseURL).host;
+      await field(page, 'name').fill('Coastal Bend Rec Club');
+      await expect(field(page, 'slug')).toHaveValue('coastal-bend-rec-club');
+      await expect(page.locator('#slug-description')).toContainText(
+        `${host}/organizations/coastal-bend-rec-club`,
+      );
+      await field(page, 'slug').fill('my-own-slug');
+      await expect(page.locator('#slug-description')).toContainText(
+        `${host}/organizations/my-own-slug`,
+      );
+      await field(page, 'name').fill('A Different Name');
+      await expect(field(page, 'slug')).toHaveValue('my-own-slug');
+    },
+  );
 
   test('submitted empty, the field errors show and nothing is created', async ({
     page,
@@ -280,36 +278,40 @@ test.describe('create an organization', () => {
     await expectAccessible(page);
   });
 
-  test("each user's list holds only their own organization", async ({ page, browser }) => {
-    const a = newOrganization('A');
-    const b = newOrganization('B');
-    await signUp(page, newUser('UserA'));
-    await openForm(page);
-    await field(page, 'name').fill(a.name);
-    await field(page, 'slug').fill(a.slug);
-    await createButton(page).click();
-    await expect(page).toHaveURL(`${baseURL}/app/organizations/${a.slug}`);
+  test(
+    "each user's list holds only their own organization",
+    VIEWPORT_AGNOSTIC,
+    async ({ page, browser }) => {
+      const a = newOrganization('A');
+      const b = newOrganization('B');
+      await signUp(page, newUser('UserA'));
+      await openForm(page);
+      await field(page, 'name').fill(a.name);
+      await field(page, 'slug').fill(a.slug);
+      await createButton(page).click();
+      await expect(page).toHaveURL(`${baseURL}/app/organizations/${a.slug}`);
 
-    const second = await otherUser(browser, newUser('UserB'));
-    try {
-      await openForm(second);
-      await field(second, 'name').fill(b.name);
-      await field(second, 'slug').fill(b.slug);
-      await createButton(second).click();
-      await expect(second).toHaveURL(`${baseURL}/app/organizations/${b.slug}`);
+      const second = await otherUser(browser, newUser('UserB'));
+      try {
+        await openForm(second);
+        await field(second, 'name').fill(b.name);
+        await field(second, 'slug').fill(b.slug);
+        await createButton(second).click();
+        await expect(second).toHaveURL(`${baseURL}/app/organizations/${b.slug}`);
 
-      await page.goto('/app');
-      await expect(organizations(page).getByRole('listitem')).toHaveCount(1);
-      await expect(organizations(page)).toContainText(a.name);
-      await expect(organizations(page)).not.toContainText(b.name);
-      await second.goto('/app');
-      await expect(organizations(second).getByRole('listitem')).toHaveCount(1);
-      await expect(organizations(second)).toContainText(b.name);
-      await expect(organizations(second)).not.toContainText(a.name);
-    } finally {
-      await second.context().close();
-    }
-  });
+        await page.goto('/app');
+        await expect(organizations(page).getByRole('listitem')).toHaveCount(1);
+        await expect(organizations(page)).toContainText(a.name);
+        await expect(organizations(page)).not.toContainText(b.name);
+        await second.goto('/app');
+        await expect(organizations(second).getByRole('listitem')).toHaveCount(1);
+        await expect(organizations(second)).toContainText(b.name);
+        await expect(organizations(second)).not.toContainText(a.name);
+      } finally {
+        await second.context().close();
+      }
+    },
+  );
 
   test('several organizations are listed by name', async ({ page }, testInfo) => {
     const id = randomBytes(3).toString('hex');
