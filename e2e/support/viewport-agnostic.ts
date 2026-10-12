@@ -16,7 +16,9 @@
  * headers, harness self-tests. Keep it untagged, so it runs at both widths, when it checks
  * layout, accessibility (axe, Tab order, reflow), screenshots, focus, or responsive behaviour.
  * `scripts/e2e-viewport-agnostic.test.mjs` fails a tagged test that calls axe, a screenshot,
- * `checkReflow`, a viewport size, or a focus check, directly or through a helper.
+ * `checkReflow`, a viewport size, an element position (`boundingBox`, `toBeInViewport`), or a
+ * focus check (`toBeFocused`, `document.activeElement`, a `'Tab'` key press), directly, through a
+ * helper, or in a hook that runs around the test.
  *
  * Tests that open no page at all use `RAW_HTTP` instead (e2e/support/raw-http.ts), which runs in
  * `chromium-desktop` only.

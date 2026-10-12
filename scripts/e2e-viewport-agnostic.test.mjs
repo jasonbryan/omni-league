@@ -44,6 +44,11 @@ describe('the viewport-agnostic guard', () => {
       ['isMobile', 'test.skip(isMobile, "x");'],
       ['toBeFocused', 'await expect(field).toBeFocused();'],
       ['tabKey', 'await page.keyboard.press(tabKey);'],
+      ['boundingBox', 'const box = await field.boundingBox();'],
+      ['toBeInViewport', 'await expect(field).toBeInViewport();'],
+      ['activeElement', 'const id = await page.evaluate(() => document.activeElement?.id);'],
+      ["'Tab'", "await page.keyboard.press('Tab');"],
+      ["'Shift+Tab'", "await page.keyboard.press('Shift+Tab');"],
     ];
     for (const [name, line] of cases) {
       const violations = check(`test('t', VIEWPORT_AGNOSTIC, async ({ page }) => {\n${line}\n});`);
@@ -84,6 +89,67 @@ describe('the viewport-agnostic guard', () => {
       base('inner', async ({ page }) => { await checkReflow(page); });
     });`);
     assert.deepEqual(names(violations), ['checkReflow']);
+  });
+
+  it('flags a screen-dependent call in a hook that runs around a tagged test', () => {
+    const outer = check(`
+      test.describe('group', () => {
+        test.beforeEach(async ({ page }) => { await expectAccessible(page); });
+        test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await page.goto('/'); });
+      });`);
+    assert.deepEqual(names(outer), ['expectAccessible']);
+    assert.ok(outer[0].hook);
+    assert.match(describeViolation(outer[0], root), /in a hook that runs around it/);
+
+    const fileLevel = check(`
+      test.afterEach(async ({ page }) => { await page.keyboard.press('Tab'); });
+      test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await page.goto('/'); });`);
+    assert.deepEqual(names(fileLevel), ["'Tab'"]);
+  });
+
+  it('ignores a hook of a sibling describe or of an untagged test', () => {
+    assert.deepEqual(
+      check(`
+        test.describe('other', () => {
+          test.beforeEach(async ({ page }) => { await expectAccessible(page); });
+          test('u', async ({ page }) => { await page.goto('/'); });
+        });
+        test.describe('group', () => {
+          test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await page.goto('/'); });
+        });`),
+      [],
+    );
+  });
+
+  it('flags a call through an import alias or an object-method helper', () => {
+    const aliased = check(`
+      import { expectAccessible as a11y } from './support/a11y';
+      test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await a11y(page); });`);
+    assert.deepEqual(names(aliased), ['expectAccessible']);
+
+    const method = check(`
+      const helpers = { async scan(page) { await axeScan(page); } };
+      test('t', VIEWPORT_AGNOSTIC, async ({ page }) => { await helpers.scan(page); });`);
+    assert.deepEqual(names(method), ['scan']);
+  });
+
+  it('reads a tag passed through a variable, an alias, or the title', () => {
+    const body = 'async ({ page }) => { await expectAccessible(page); }';
+    for (const source of [
+      `const tag = VIEWPORT_AGNOSTIC;\ntest('t', tag, ${body});`,
+      `const tag = { ...VIEWPORT_AGNOSTIC };\nconst again = tag;\ntest('t', again, ${body});`,
+      `import { VIEWPORT_AGNOSTIC as AGNOSTIC } from './support/viewport-agnostic';\ntest('t', AGNOSTIC, ${body});`,
+      `test('t @viewport-agnostic', ${body});`,
+      `test('t', { tag: '@viewport-agnostic' }, ${body});`,
+    ]) {
+      assert.deepEqual(names(check(source)), ['expectAccessible'], source);
+    }
+    assert.deepEqual(
+      check(
+        `const tag = { tag: '@other' };\ntest('t', tag, async ({ page }) => { await expectAccessible(page); });`,
+      ),
+      [],
+    );
   });
 
   it('flags a tag passed through a spread or a condition', () => {
