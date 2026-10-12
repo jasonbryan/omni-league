@@ -446,27 +446,53 @@ describe('main', () => {
 });
 
 describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
-  /** Runs `setup` against a stub CLI; returns the CLI calls and everything printed. */
-  async function setup({ fail } = {}) {
+  /** A fake clock: `sleep` advances `now`, so a retry loop runs instantly and deterministically. */
+  function fakeClock() {
+    let time = 0;
+    const sleeps = [];
+    return {
+      sleeps,
+      now: () => time,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        time += ms;
+      },
+    };
+  }
+
+  /**
+   * Runs `setup` against a stub CLI; returns the CLI calls and everything printed. `failures`
+   * maps an `env set` name to how many of its first attempts fail; `fail` is shorthand for
+   * `{ [fail]: Infinity }`.
+   */
+  async function setup({ fail, failures = {}, stderr, clock = fakeClock() } = {}) {
     const dir = projectDir({ config: LOCAL_CONFIG });
     const calls = [];
     const lines = [];
+    const remaining = new Map(Object.entries(fail ? { ...failures, [fail]: Infinity } : failures));
     const code = await main(['setup'], {
       env: {},
       projectDir: dir,
       instanceName: async () => 'anonymous-agent',
       spawnCli: async (args) => {
         calls.push(args.slice(0, -2)); // without `--env-file <target>`
-        if (fail && args[2] === fail) {
-          return { code: 1, stdout: '', stderr: `cannot set ${args.slice(2, 4).join('=')}` };
+        const left = remaining.get(args[2]) ?? 0;
+        if (left > 0) {
+          remaining.set(args[2], left - 1);
+          return {
+            code: 1,
+            stdout: '',
+            stderr: stderr ?? `cannot set ${args.slice(2, 4).join('=')}`,
+          };
         }
         const reset = { documents: 0, authDocuments: 3, scheduledFunctions: 0, files: 0 };
         return { code: 0, stdout: args[0] === 'run' ? JSON.stringify(reset) : '', stderr: '' };
       },
       log: (line) => lines.push(line),
       error: (line) => lines.push(line),
+      wait: { timeoutMs: 60_000, ...clock },
     });
-    return { code, calls, output: lines.join('\n') };
+    return { code, calls, output: lines.join('\n'), clock };
   }
 
   it('sets IS_TEST, SITE_URL, and a new random BETTER_AUTH_SECRET, then resets', async () => {
@@ -491,16 +517,106 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.ok(!first.output.includes(secret), 'the secret is printed');
     const second = await setup();
     assert.notEqual(second.calls[2][3], secret);
+    assert.deepEqual(first.clock.sleeps, [], 'a backend that is ready costs no wait');
   });
 
   it('fails without printing the secret when setting it fails', async () => {
     const { code, calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET' });
     assert.equal(code, 1);
-    const secret = calls[2][3];
+    const secret = calls.find((args) => args[2] === 'BETTER_AUTH_SECRET')[3];
     assert.ok(!output.includes(secret), 'the secret is printed');
     assert.match(output, /BETTER_AUTH_SECRET/);
     // The reset never runs with the old secret's signing key left in place.
-    assert.equal(calls.length, 3);
+    assert.ok(calls.every((args) => args[0] !== 'run'));
+  });
+
+  it('retries `env set` while the backend is not ready: fails twice, then succeeds (#156)', async () => {
+    const { code, calls, output, clock } = await setup({
+      failures: { IS_TEST: 2, BETTER_AUTH_SECRET: 2 },
+    });
+    assert.equal(code, 0, output);
+    assert.deepEqual(
+      calls.map((args) => args.slice(0, 3).join(' ')),
+      [
+        ...Array(3).fill('env set IS_TEST'),
+        'env set SITE_URL',
+        ...Array(3).fill('env set BETTER_AUTH_SECRET'),
+        'run testing:reset',
+      ],
+    );
+    // One value for every attempt of a call: the secret is generated once, never printed.
+    const secrets = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET').map((args) => args[3]);
+    assert.equal(new Set(secrets).size, 1);
+    assert.ok(!output.includes(secrets[0]), 'the secret is printed');
+    // Backoff: each wait is longer than the last, and none is zero.
+    assert.equal(clock.sleeps.length, 4);
+    assert.ok(clock.sleeps.every((ms) => ms > 0));
+    assert.ok(clock.sleeps[1] > clock.sleeps[0]);
+  });
+
+  it('times out with a clear message, naming the call and the wait, never the secret (#156)', async () => {
+    const clock = fakeClock();
+    const { code, calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET', clock });
+    assert.equal(code, 1);
+    assert.match(output, /convex env set BETTER_AUTH_SECRET failed/);
+    assert.match(output, /after 60 s/);
+    assert.match(output, /not accepting admin requests/);
+    const attempts = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET');
+    assert.ok(attempts.length > 2, 'it retried');
+    assert.ok(clock.sleeps.reduce((sum, ms) => sum + ms, 0) <= 60_000, 'it waits at most 60 s');
+    assert.ok(!output.includes(attempts[0][3]), 'the secret is printed');
+    assert.ok(calls.every((args) => args[0] !== 'run'));
+  });
+
+  it('shows the last CLI error of a non-secret call on timeout', async () => {
+    const { code, output } = await setup({ fail: 'IS_TEST', stderr: 'backend is starting' });
+    assert.equal(code, 1);
+    assert.match(output, /convex env set IS_TEST failed/);
+    assert.match(output, /backend is starting/);
+  });
+
+  it('does not retry a refused target (another deployment): it fails at once', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const clock = fakeClock();
+    const lines = [];
+    const code = await main(['setup'], {
+      env: {},
+      projectDir: dir,
+      instanceName: async () => 'some-other-deployment',
+      spawnCli: async () => assert.fail('the CLI must not run against another backend'),
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+      wait: { timeoutMs: 60_000, ...clock },
+    });
+    assert.equal(code, 1);
+    assert.match(lines.join('\n'), /refused/);
+    assert.deepEqual(clock.sleeps, []);
+  });
+
+  it('retries while no backend answers yet', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const clock = fakeClock();
+    let probes = 0;
+    const lines = [];
+    const code = await main(['setup'], {
+      env: {},
+      projectDir: dir,
+      instanceName: async () => {
+        if (++probes <= 3)
+          throw new Error('e2e-convex: no backend answers at http://127.0.0.1:3210');
+        return 'anonymous-agent';
+      },
+      spawnCli: async (args) => ({
+        code: 0,
+        stdout: args[0] === 'run' ? '{"documents":0}' : '',
+        stderr: '',
+      }),
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+      wait: { timeoutMs: 60_000, ...clock },
+    });
+    assert.equal(code, 0, lines.join('\n'));
+    assert.equal(clock.sleeps.length, 3);
   });
 });
 
