@@ -144,6 +144,20 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(/^2\.1\.2 No keyboard trap: /)]);
   });
 
+  test('2.1.2: a native date field takes one Tab press per segment and is not a trap (#125)', async ({
+    page,
+  }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Dates</h1><label for="d">Start</label><input id="d" type="date">' +
+          '<button type="button">After</button>',
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([]);
+    expect(walk.order).toEqual(['input#d ""', 'button "After"']);
+  });
+
   test('2.4.3: an order different from the expected order fails; the matching order passes', async ({
     page,
   }) => {

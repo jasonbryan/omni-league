@@ -148,6 +148,11 @@ describe('SeasonCreateForm', () => {
       expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
         'Set when you choose a format. You can raise it, never lower it.',
       );
+      // After a format is chosen, the description names the minimum it sets.
+      await chooseFormat('11v11');
+      expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
+        'At least 11 for 11 v 11. Raise it if teams need more players.',
+      );
       expect(input('end-date').getAttribute('aria-describedby')).toBe('end-date-description');
     });
 
@@ -181,7 +186,7 @@ describe('SeasonCreateForm', () => {
       ).toEqual(['2v2', '4v4', '6v6']);
     });
 
-    it('has no limits fieldset: the maximum teams and roster size are #143 and #144', async () => {
+    it('has no limits fieldset: the maximum teams and roster size come later', async () => {
       await open();
       expect(page.querySelector('fieldset#limits')).toBeNull();
       expect(page.querySelector('#maximum-teams')).toBeNull();

@@ -364,7 +364,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             id="minimum-roster-size-description"
             [class]="descriptionClass"
           >
-            Set when you choose a format. You can raise it, never lower it.
+            {{ form.minimumHint() }}
           </p>
           @if (form.errors.minimumRosterSize(); as error) {
             <div

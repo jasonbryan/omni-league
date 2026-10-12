@@ -90,7 +90,7 @@ describe('AdminSidebar', () => {
     expect(classes(current[0])).toEqual(tokens(CURRENT));
   });
 
-  it('marks Leagues as the section of a league management page (#125): aria-current="true", the same classes', async () => {
+  it('marks Leagues as the section of a league management page: aria-current="true", the same classes', async () => {
     const { host } = await render(`${BASE}/leagues/coed-7v7-rec?x=1#create-season`);
     expect(host.querySelector('[aria-current="page"]')).toBeNull();
     const current = host.querySelectorAll('[aria-current="true"]');

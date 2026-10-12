@@ -127,6 +127,13 @@ export class SeasonForm {
   /** The formats of the league's sport, with the minimum each sets. */
   readonly formats: Signal<readonly { key: Format; name: string; minimumRosterSize: number }[]>;
 
+  /**
+   * The description under Minimum roster size: before a format is chosen it says the format sets
+   * it, and after, it names the minimum the format sets (design/mockups/125-126-seasons.html,
+   * states 4 and 6).
+   */
+  readonly minimumHint: Signal<string>;
+
   constructor(sport: () => Sport) {
     // `required` puts the attribute on the inputs; the messages are ours (`seasonInput.ts`), so the
     // form and `seasons.create` agree.
@@ -139,6 +146,12 @@ export class SeasonForm {
       required(path.minimumRosterSize);
     });
     this.formats = computed(() => SPORT_FORMATS[sport()]);
+    this.minimumHint = computed(() => {
+      const chosen = this.formats().find((candidate) => candidate.key === this.format());
+      return chosen
+        ? `At least ${chosen.minimumRosterSize} for ${chosen.name}. Raise it if teams need more players.`
+        : 'Set when you choose a format. You can raise it, never lower it.';
+    });
     this.clientErrors = computed(() => {
       const m = this.model();
       return checkSeasonFields(sport(), {

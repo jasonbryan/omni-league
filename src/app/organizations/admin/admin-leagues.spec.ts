@@ -185,7 +185,7 @@ describe('AdminLeagues', () => {
       expect(items().map((li) => li.querySelector('button') !== null)).toEqual([false, true, true]);
     });
 
-    it('links each league’s name to its management page (#125, design/mockups/125-126-seasons.html state 16)', async () => {
+    it('links each league’s name to its management page (design/mockups/125-126-seasons.html state 16)', async () => {
       await open(LEAGUES);
       const links = items().map((li) => li.querySelector<HTMLAnchorElement>('h3 a')!);
       expect(links.map((a) => [text(a), a.getAttribute('href')])).toEqual(

@@ -115,6 +115,12 @@ interface StepInfo {
   /** Index in the DOM-order focusable list, or -1 for an element outside it. */
   index: number;
   description: string;
+  /**
+   * How many Tab presses in a row one element takes before focus moves on: 1 for an ordinary
+   * element, more for a native date or time field, whose segments (and picker button) each take a
+   * Tab press inside the one element (#125).
+   */
+  parts: number;
   focusVisible: boolean | null;
   inViewport: boolean;
   unobscured: boolean;
@@ -198,6 +204,15 @@ async function readStep(key: string): Promise<StepInfo> {
       .replace(/\s+/g, ' ');
     return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} "${name.slice(0, 40)}"`;
   };
+  // Tab stops inside one native date or time input: its segments, then its picker button. This
+  // runs in the page, so the table is local.
+  const inputParts: Record<string, number> = {
+    date: 4,
+    month: 3,
+    week: 3,
+    time: 4,
+    'datetime-local': 6,
+  };
   const active = document.activeElement;
   if (
     !active ||
@@ -209,6 +224,7 @@ async function readStep(key: string): Promise<StepInfo> {
       where: active && active === state.sentinel ? 'start' : 'outside',
       index: -1,
       description: '',
+      parts: 1,
       focusVisible: null,
       inViewport: true,
       unobscured: true,
@@ -229,6 +245,7 @@ async function readStep(key: string): Promise<StepInfo> {
     where: 'element',
     index,
     description: describe(active),
+    parts: active instanceof HTMLInputElement ? (inputParts[active.type] ?? 1) : 1,
     focusVisible: index >= 0 ? now !== state.unfocused[index] : null,
     inViewport,
     unobscured,
@@ -280,7 +297,15 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
   const domOrder = await page.evaluate(setUpWalk, WALK_KEY);
   const failures: string[] = [];
   const tab = tabKey(page);
-  const maxSteps = options.maxSteps ?? domOrder.length * 2 + 5;
+  // A native date or time field takes up to 5 more Tab presses per round than another element.
+  const multiPartFields = await page.evaluate(
+    () =>
+      document.querySelectorAll(
+        'input[type="date"], input[type="month"], input[type="week"], input[type="time"], ' +
+          'input[type="datetime-local"]',
+      ).length,
+  );
+  const maxSteps = options.maxSteps ?? domOrder.length * 2 + 5 + multiPartFields * 10;
   const same = (a: StepInfo | undefined, b: StepInfo): boolean =>
     !!a && a.where === 'element' && a.index === b.index && a.description === b.description;
   // Phase "before": from the start marker until focus first leaves the page. A fresh Tab sequence
@@ -293,6 +318,8 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
   const before: StepInfo[] = [];
   let cycle: StepInfo[] = [];
   let previous: StepInfo | undefined;
+  // Consecutive Tab presses that landed on `previous`.
+  let stays = 0;
   let done = false;
   const trap = (message: string): void => {
     failures.push(`2.1.2 No keyboard trap: ${message}`);
@@ -307,9 +334,15 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
         break;
       }
       if (info.where === 'element' && same(previous, info)) {
-        trap(`focus stayed on ${info.description} after Tab`);
-        break;
+        // A date field takes one Tab press per segment (#125); any other element, one.
+        stays++;
+        if (stays > info.parts) {
+          trap(`focus stayed on ${info.description} after Tab`);
+          break;
+        }
+        continue;
       }
+      stays = 1;
       previous = info;
       if (phase === 'before') {
         if (info.where === 'outside') {

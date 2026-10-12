@@ -205,7 +205,7 @@ describe('LeaguePage', () => {
       expect(rows()[0].querySelector('.sr-only')?.textContent).toBe('Dates: ');
     });
 
-    it('has no Publish button and no link in a row: publishing is #126 and the season page #134', async () => {
+    it('has no Publish button and no link in a row: publishing and the season page come later', async () => {
       await open(COED, SEASONS);
       expect(page.querySelector('#seasons-list button')).toBeNull();
       expect(page.querySelector('#seasons-list a')).toBeNull();
