@@ -124,10 +124,12 @@ import {
                   <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                        <!-- inline-block: a name that wraps keeps the link's box over both lines, so
+                             the focused link is not "covered" by the heading at its centre (2.4.11). -->
                         <h3 class="me-1 font-medium">
                           <a
                             [routerLink]="leaguePath(row.slug)"
-                            class="underline underline-offset-4 hover:text-primary"
+                            class="inline-block underline underline-offset-4 hover:text-primary"
                             >{{ row.name }}</a
                           >
                         </h3>

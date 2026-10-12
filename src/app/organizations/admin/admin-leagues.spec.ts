@@ -192,7 +192,7 @@ describe('AdminLeagues', () => {
         LEAGUES.map((l) => [l.name, `/app/organizations/${COASTAL.slug}/leagues/${l.slug}`]),
       );
       expect(tokens(links[0].className)).toEqual(
-        tokens('underline underline-offset-4 hover:text-primary'),
+        tokens('inline-block underline underline-offset-4 hover:text-primary'),
       );
       // The Publish button is still the only button of a draft's row.
       expect(items()[1].querySelectorAll('button')).toHaveLength(1);
