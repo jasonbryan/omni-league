@@ -35,10 +35,40 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
+  # Quiet nights (#186): a scheduled run skips `ci` when main is the commit the last successful scheduled
+  # run tested. Scheduled runs only; on every other event this job is skipped and does not hold up `ci`.
+  # Any failure to look the run up leaves `skip` empty, and `ci` runs the full suite.
+  nightly-gate:
+    name: nightly-gate
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      skip: ${{ steps.last-green.outputs.skip }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.sha }}
+    steps:
+      - name: last green night
+        id: last-green
+        run: |
+          if last="$(gh run list --workflow ci.yml --event schedule --status success --branch main --limit 1 --json headSha --jq '.[0].headSha // empty')" && [ -n "$last" ] && [ "$last" = "$HEAD_SHA" ]; then
+            echo "::notice::main is still ${HEAD_SHA:0:7}, the commit the last successful nightly run tested; skipping tonight's run"
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+          fi
+
   ci:
     name: ci
-    # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes.
-    if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
+    needs: nightly-gate
+    # Draft PRs and the cache-warming push get a skipped job: 0 billed minutes. So does a scheduled run on
+    # a main that the last successful nightly run already tested (nightly-gate). !cancelled() lets `ci` run
+    # when nightly-gate was skipped (every event but a schedule) or failed (fail safe: run everything).
+    if: ${{ !cancelled() && github.event_name != 'push' && !github.event.pull_request.draft && needs.nightly-gate.outputs.skip != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -250,7 +280,7 @@ jobs:
   nightly-issue:
     name: nightly-issue
     needs: ci
-    if: ${{ failure() && github.event_name == 'schedule' }}
+    if: ${{ !cancelled() && needs.ci.result == 'failure' && github.event_name == 'schedule' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

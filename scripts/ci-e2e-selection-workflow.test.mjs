@@ -62,7 +62,7 @@ describe('the nightly full run', () => {
   it('runs the ci job for a schedule: only a push and a draft PR are skipped', () => {
     assert.match(
       job('ci'),
-      /^ {4}if: \$\{\{ github\.event_name != 'push' && !github\.event\.pull_request\.draft \}\}$/m,
+      /^ {4}if: \$\{\{ !cancelled\(\) && github\.event_name != 'push' && !github\.event\.pull_request\.draft && needs\.nightly-gate\.outputs\.skip != 'true' \}\}$/m,
     );
   });
 
@@ -73,7 +73,10 @@ describe('the nightly full run', () => {
   it('opens the issue in a job after ci, only for a failed scheduled run', () => {
     const issue = job('nightly-issue');
     assert.match(issue, /^ {4}needs: ci$/m);
-    assert.match(issue, /^ {4}if: \$\{\{ failure\(\) && github\.event_name == 'schedule' \}\}$/m);
+    assert.match(
+      issue,
+      /^ {4}if: \$\{\{ !cancelled\(\) && needs\.ci\.result == 'failure' && github\.event_name == 'schedule' \}\}$/m,
+    );
   });
 
   it('gives the issue job issues: write and nothing else, with the workflow token only', () => {
@@ -97,7 +100,7 @@ describe('the nightly full run', () => {
   });
 
   it('puts a timeout on every job', () => {
-    for (const name of ['ci', 'nightly-issue', 'warm-cache']) {
+    for (const name of ['ci', 'nightly-gate', 'nightly-issue', 'warm-cache']) {
       assert.match(job(name), /^ {4}timeout-minutes: \d+$/m, name);
     }
   });
@@ -376,6 +379,113 @@ describe('the nightly issue step', () => {
       assert.match(calls, /\[create\]/, failures);
       assert.match(calls, /No failing test was recorded/, failures);
       assert.match(calls, /Run: https:\/\/github\.com\/o\/r\/actions\/runs\/7/, failures);
+    }
+  });
+});
+
+describe('skipping a quiet night', () => {
+  it('gates ci behind a job that runs for a schedule only', () => {
+    const gate = job('nightly-gate');
+    assert.match(gate, /^ {4}if: \$\{\{ github\.event_name == 'schedule' \}\}$/m);
+    assert.match(job('ci'), /^ {4}needs: nightly-gate$/m);
+  });
+
+  it('lets ci run when the gate was skipped or failed, and skips it only on skip=true', () => {
+    const condition = /^ {4}if: (.+)$/m.exec(job('ci'))?.[1] ?? '';
+    assert.match(condition, /^\$\{\{ !cancelled\(\) && /, 'a skipped gate does not skip ci');
+    assert.match(condition, /needs\.nightly-gate\.outputs\.skip != 'true'/);
+    assert.doesNotMatch(condition, /needs\.nightly-gate\.result/, 'a failed gate runs the suite');
+    assert.match(condition, /github\.event_name != 'push' && !github\.event\.pull_request\.draft/);
+  });
+
+  it('opens no nightly issue because the gate failed or ci was skipped', () => {
+    assert.match(job('nightly-issue'), /needs\.ci\.result == 'failure'/);
+  });
+
+  it('gives the gate actions: read and nothing else, with the workflow token only', () => {
+    const gate = job('nightly-gate');
+    assert.match(gate, /^ {4}permissions:\n {6}actions: read\n(?! {6}\S)/m, 'only actions: read');
+    assert.match(gate, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+    assert.match(gate, /HEAD_SHA: \$\{\{ github\.sha \}\}/);
+    assert.doesNotMatch(gate, /uses:/, 'no checkout and no action');
+    assert.match(gate, /skip: \$\{\{ steps\.last-green\.outputs\.skip \}\}/);
+  });
+
+  /**
+   * Runs the gate step's script with a fake `gh`.
+   * @param {{ output?: string, exit?: number }} lookup What `gh run list` prints and its exit code.
+   * @param {string} head The commit the scheduled run is for.
+   */
+  function runGate({ output = '', exit = 0 }, head = 'abcdef0123456789') {
+    const dir = mkdtempSync(join(tmpdir(), 'nightly-gate-'));
+    try {
+      const log = join(dir, 'args');
+      writeFileSync(
+        join(dir, 'gh'),
+        [
+          '#!/bin/sh',
+          'for a in "$@"; do echo "$a"; done > "$GH_LOG"',
+          'printf \'%s\' "$GH_OUTPUT"',
+          'exit "$GH_EXIT"',
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const outputFile = join(dir, 'github-output');
+      writeFileSync(outputFile, '');
+      const result = spawnSync('bash', ['-e', '-c', stepScript('last green night')], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: {
+          PATH: `${dir}:${process.env.PATH}`,
+          GH_LOG: log,
+          GH_OUTPUT: output,
+          GH_EXIT: String(exit),
+          HEAD_SHA: head,
+          GITHUB_OUTPUT: outputFile,
+        },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      return {
+        outputs: readFileSync(outputFile, 'utf8'),
+        stdout: result.stdout,
+        args: readFileSync(log, 'utf8').split('\n').filter(Boolean),
+      };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('skips with a notice when main is the commit the last successful nightly run tested', () => {
+    const run = runGate({ output: 'abcdef0123456789' });
+    assert.equal(run.outputs, 'skip=true\n');
+    assert.match(run.stdout, /^::notice::main is still abcdef0, the commit the last successful/m);
+  });
+
+  it('asks for the last successful scheduled run of ci.yml on main', () => {
+    const { args } = runGate({ output: 'abcdef0123456789' });
+    assert.deepEqual(args.slice(0, 2), ['run', 'list']);
+    for (const [flag, value] of [
+      ['--workflow', 'ci.yml'],
+      ['--event', 'schedule'],
+      ['--status', 'success'],
+      ['--branch', 'main'],
+      ['--limit', '1'],
+    ]) {
+      assert.equal(args[args.indexOf(flag) + 1], value, flag);
+    }
+  });
+
+  it('runs the suite when main has moved, when there was no green night, or when the lookup fails', () => {
+    for (const lookup of [
+      { output: '1111111222222233333' },
+      { output: '' },
+      { output: 'abcdef0123456789', exit: 1 },
+      { output: 'garbage that is not a sha', exit: 4 },
+    ]) {
+      const run = runGate(lookup);
+      assert.equal(run.outputs, 'skip=false\n', JSON.stringify(lookup));
+      assert.doesNotMatch(run.stdout, /::notice::/);
     }
   });
 });
