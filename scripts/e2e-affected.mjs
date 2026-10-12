@@ -12,6 +12,10 @@
 // - detection throws or prints nothing (the workflow step falls back to the full suite).
 // The nightly run on `main` (the `schedule` event) is the full suite by the same rule.
 //
+// A rule's spec list may hold `@session`: the specs that sign a user up or in, derived from the
+// e2e sources (see deriveSessionSpecs), not listed by hand. A change to the sign-up, sign-in,
+// account, or `users` code, or to the home page, runs all of them, because they drive those pages.
+//
 // A rule names the specs it adds. A rule with no specs says the file cannot change an e2e result
 // (documentation, unit specs and their test doubles); `ALWAYS` still runs.
 //
@@ -22,7 +26,8 @@
 // Usage: `git diff --no-renames --name-only HEAD^1 HEAD | node scripts/e2e-affected.mjs`, with
 // GITHUB_EVENT_NAME and GITHUB_BASE_REF in the environment. It prints `key=value` lines for
 // $GITHUB_OUTPUT: `e2e_scope=full|affected` and `e2e_specs=<space-separated filters>`.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /** A spec file name under e2e/ (`organization-staff` is e2e/organization-staff.spec.ts). */
@@ -39,7 +44,7 @@ const LEAGUE_ADMIN = [
 ];
 const LOCATION_ADMIN = ['organization-admin', 'sign-in-admin'];
 const STAFF = ['organization-staff', 'accept-invite'];
-/** Every spec that opens the admin area (not the static mockup page). */
+/** Every spec that opens the admin area. */
 const ADMIN = [
   ...new Set([
     'organization-admin',
@@ -48,6 +53,7 @@ const ADMIN = [
     'sign-in-admin',
     'accept-invite',
     'create-organization',
+    'organization-leagues-mockup',
   ]),
 ];
 /** Every spec that opens the public organization page. */
@@ -64,15 +70,33 @@ const PUBLIC_PAGE = [
   'top-bar',
   'auth-session',
 ];
-const SIGNED_IN_USER = [
-  'sign-in',
-  'sign-in-admin',
-  'sign-up',
-  'auth-session',
-  'top-bar',
-  'accept-invite',
-  'create-organization',
-];
+
+/** The token in a rule's `specs` for the specs that sign a user up or in (deriveSessionSpecs). */
+export const SESSION = '@session';
+
+/**
+ * The e2e specs that sign a user up or in: those that import the session or users helpers
+ * (`signUp`/`otherUser`, `newUser`/`seedUser`) or open the sign-in or sign-up page. Derived from
+ * the spec files, so a new spec that signs in is selected without a change here. Throws when
+ * e2e/ cannot be read or no spec matches, so the caller runs the full suite.
+ * @param {string} root Repository root.
+ * @returns {string[]} Repo-relative spec paths, sorted.
+ */
+export function deriveSessionSpecs(root) {
+  const found = [];
+  for (const dir of ['e2e', 'e2e/harness']) {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.spec.ts')) continue;
+      const text = readFileSync(join(root, dir, entry.name), 'utf8');
+      if (SESSION_HELPER.test(text) || SIGN_IN_OR_UP_PAGE.test(text))
+        found.push(`${dir}/${entry.name}`);
+    }
+  }
+  if (found.length === 0) throw new Error('no e2e spec signs a user in; the specs are unreadable');
+  return found.sort();
+}
+const SESSION_HELPER = /from '\.{1,2}\/support\/(?:session|users)'/;
+const SIGN_IN_OR_UP_PAGE = /goto\([^)]*\/sign-(?:in|up)\b/;
 
 /**
  * @typedef {{ name: string, test: (file: string) => boolean, specs: string[] }} Rule
@@ -181,12 +205,12 @@ export const AREAS = [
     specs: [...PUBLIC_PAGE, ...ADMIN],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
-  { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: ['sign-in', 'sign-in-admin'] },
-  { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: ['sign-up'] },
+  { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
+  { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: [SESSION] },
   {
     name: 'account page',
     test: inDir('src/app/account/'),
-    specs: ['create-organization', 'sign-up', 'accept-invite', 'auth-session'],
+    specs: [SESSION],
   },
   {
     name: 'not-found view',
@@ -196,12 +220,12 @@ export const AREAS = [
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    specs: ['offline', 'offline-note-height', 'pwa', 'organization-page'],
+    specs: ['offline', 'offline-note-height', 'pwa', ...PUBLIC_PAGE],
   },
   {
     name: 'placeholder home',
     test: inDir('src/app/placeholder/'),
-    specs: ['install', 'pwa', 'pwa-kill-switch'],
+    specs: ['install', 'pwa', 'pwa-kill-switch', SESSION],
   },
 
   // Convex modules that e2e specs exercise through the app or through `convexRun`. Anything else
@@ -215,20 +239,20 @@ export const AREAS = [
   {
     name: 'convex locations',
     test: named('convex/', ['locations']),
-    specs: [...LOCATION_ADMIN, ...PUBLIC_PAGE],
+    specs: [...ADMIN, ...LOCATION_ADMIN, ...PUBLIC_PAGE],
   },
   {
     name: 'convex leagues',
     test: named('convex/', ['leagues']),
-    specs: [...LEAGUE_ADMIN, ...PUBLIC_PAGE],
+    specs: [...ADMIN, ...LEAGUE_ADMIN, ...PUBLIC_PAGE],
   },
-  { name: 'convex invites', test: named('convex/', ['invites']), specs: STAFF },
+  { name: 'convex invites', test: named('convex/', ['invites']), specs: [...ADMIN, ...STAFF] },
   {
     name: 'convex memberships',
     test: named('convex/', ['memberships']),
     specs: ADMIN,
   },
-  { name: 'convex users', test: named('convex/', ['users']), specs: SIGNED_IN_USER },
+  { name: 'convex users', test: named('convex/', ['users']), specs: [SESSION] },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];
 
@@ -243,16 +267,21 @@ function isPlainPath(path) {
 }
 
 /** The filters a rule adds for `file`: spec names become paths, `self` is the changed spec. */
-function filtersFor(rule, file) {
-  return rule.specs.map((name) => (name === 'self' ? file : spec(name)));
+function filtersFor(rule, file, sessionSpecs) {
+  return rule.specs.flatMap((name) => {
+    if (name === 'self') return [file];
+    if (name === SESSION) return sessionSpecs;
+    return [spec(name)];
+  });
 }
 
 /**
  * @param {string[] | undefined} files Changed paths, one entry per path.
- * @param {{ event?: string, base?: string }} [context]
+ * @param {{ event?: string, base?: string, sessionSpecs?: string[] | (() => string[]) }} [context]
+ * `sessionSpecs` is a list, or a function that derives it, called only when a changed file needs it.
  * @returns {{ scope: 'full' } | { scope: 'affected', specs: string[] }}
  */
-export function selectSpecs(files, { event, base } = {}) {
+export function selectSpecs(files, { event, base, sessionSpecs } = {}) {
   const full = { scope: /** @type {const} */ ('full') };
   if (event !== 'pull_request' || base === 'production') return full;
   if (!Array.isArray(files) || files.length === 0) return full;
@@ -261,7 +290,13 @@ export function selectSpecs(files, { event, base } = {}) {
     if (typeof file !== 'string' || !isPlainPath(file)) return full;
     const rule = AREAS.find((area) => area.test(file));
     if (!rule) return full;
-    for (const filter of filtersFor(rule, file)) selected.add(filter);
+    // A rule that needs the derived session specs runs everything when they are not known.
+    let session = [];
+    if (rule.specs.includes(SESSION)) {
+      session = (typeof sessionSpecs === 'function' ? sessionSpecs() : sessionSpecs) ?? [];
+      if (session.length === 0) return full;
+    }
+    for (const filter of filtersFor(rule, file, session)) selected.add(filter);
   }
   return { scope: 'affected', specs: [...selected].sort() };
 }
@@ -278,7 +313,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   let selection;
   try {
     const files = readFileSync(0, 'utf8').split('\n').filter(Boolean);
-    selection = selectSpecs(files, context);
+    selection = selectSpecs(files, {
+      ...context,
+      sessionSpecs: () => deriveSessionSpecs(join(import.meta.dirname, '..')),
+    });
   } catch (error) {
     // Cannot tell what changed: the full suite runs.
     process.stderr.write(`e2e-affected: ${error instanceof Error ? error.message : error}\n`);

@@ -300,14 +300,14 @@ jobs:
           body="$(jq -rn --arg run "$RUN_URL" --arg commit "${COMMIT:0:7}" --argjson failures "$failures" '
             "Nightly e2e: FAIL (main \($commit))\n\nRun: \($run)\n\n"
             + (if ($failures | length) > 0
-               then "Failing tests:\n" + ($failures | map("- " + .) | join("\n"))
+               then "Failing tests:\n" + ($failures | map("- `" + gsub("`"; "\u0027") + "`") | join("\n"))
                else "No failing test was recorded: a step before or after the e2e step failed. See the run." end)')"
           number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
             | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
           if [ -n "$number" ]; then
             gh issue comment "$number" --body "$body"
           else
-            gh issue create --title "$ISSUE_TITLE" --label type:bug --body "$body"
+            gh issue create --title "$ISSUE_TITLE" --label type:bug --label status:ready --body "$body"
           fi
 
   warm-cache:

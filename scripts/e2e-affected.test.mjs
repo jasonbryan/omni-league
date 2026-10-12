@@ -1,13 +1,22 @@
 // Unit tests for scripts/e2e-affected.mjs (#186). Run with `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { ALWAYS, AREAS, formatOutputs, selectSpecs } from './e2e-affected.mjs';
+import {
+  ALWAYS,
+  AREAS,
+  SESSION,
+  deriveSessionSpecs,
+  formatOutputs,
+  selectSpecs,
+} from './e2e-affected.mjs';
 
 const script = join(import.meta.dirname, 'e2e-affected.mjs');
 const repoRoot = join(import.meta.dirname, '..');
+const sessionSpecs = deriveSessionSpecs(repoRoot);
 const pr = { event: 'pull_request', base: 'main' };
 
 /** Every e2e spec file on disk, repo-relative (`e2e/smoke.spec.ts`, `e2e/harness/a11y-helper.spec.ts`). */
@@ -32,7 +41,7 @@ function filesSelectedBy(filter, files) {
 
 /** @param {string[]} files @returns {string[]} The filters selected, or ['FULL']. */
 function specsFor(files, context = pr) {
-  const selection = selectSpecs(files, context);
+  const selection = selectSpecs(files, { sessionSpecs, ...context });
   return selection.scope === 'full' ? ['FULL'] : selection.specs;
 }
 
@@ -81,7 +90,7 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
     }
-    assert.ok(!specs.includes('e2e/organization-leagues-mockup.spec.ts'));
+    assert.ok(specs.includes('e2e/organization-leagues-mockup.spec.ts'));
     assert.ok(!specs.includes('e2e/sign-in.spec.ts'));
   });
 
@@ -92,12 +101,34 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the sign-in and sign-up pages to their own specs', () => {
-    assert.deepEqual(
-      specsFor(['src/app/sign-in/sign-in-page.ts']),
-      want('e2e/sign-in-admin.spec.ts', 'e2e/sign-in.spec.ts'),
-    );
-    assert.deepEqual(specsFor(['src/app/sign-up/sign-up-page.ts']), want('e2e/sign-up.spec.ts'));
+  it('maps the sign-in, sign-up, account, and users code to every spec that signs a user up or in', () => {
+    const expected = want(...sessionSpecs);
+    for (const file of [
+      'src/app/sign-in/sign-in-page.ts',
+      'src/app/sign-up/sign-up-page.ts',
+      'src/app/account/account-page.ts',
+      'src/app/account/your-organizations.ts',
+      'convex/users.ts',
+    ]) {
+      assert.deepEqual(specsFor([file]), expected, file);
+    }
+    for (const name of ['sign-in', 'sign-in-admin', 'sign-up', 'auth-session', 'top-bar']) {
+      assert.ok(sessionSpecs.includes(`e2e/${name}.spec.ts`), name);
+    }
+  });
+
+  it('maps the home page to the session specs and the specs that open /', () => {
+    const specs = specsFor(['src/app/placeholder/placeholder.ts']);
+    for (const name of ['install', 'pwa', 'pwa-kill-switch', 'auth-session', 'sign-in-admin']) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+  });
+
+  it('runs the full suite for a session area when the session specs are not known', () => {
+    for (const file of ['src/app/sign-up/sign-up-page.ts', 'convex/users.ts']) {
+      assert.deepEqual(specsFor([file], { ...pr, sessionSpecs: undefined }), ['FULL']);
+      assert.deepEqual(specsFor([file], { ...pr, sessionSpecs: [] }), ['FULL']);
+    }
   });
 
   it('maps the public organization page files to the specs that open that page', () => {
@@ -120,20 +151,35 @@ describe('selectSpecs: mapped areas', () => {
   });
 
   it('maps Convex modules to the specs that exercise them', () => {
-    assert.deepEqual(
-      specsFor(['convex/invites.ts']),
-      want(
-        'e2e/accept-invite.spec.ts',
-
-        'e2e/organization-staff.spec.ts',
-      ),
-    );
-    assert.ok(specsFor(['convex/leagues.ts']).includes('e2e/organization-leagues-publish.spec.ts'));
-    assert.ok(specsFor(['convex/locations.ts']).includes('e2e/organization-admin.spec.ts'));
-    assert.ok(specsFor(['convex/users.ts']).includes('e2e/sign-in.spec.ts'));
+    const admin = [
+      'organization-admin',
+      'organization-leagues',
+      'organization-leagues-mockup',
+      'organization-leagues-publish',
+      'organization-leagues-publish-states',
+      'organization-staff',
+      'sign-in-admin',
+      'accept-invite',
+      'create-organization',
+    ];
+    // The admin overview queries invites, leagues, and locations, so each runs every admin spec.
+    for (const file of ['convex/invites.ts', 'convex/leagues.ts', 'convex/locations.ts']) {
+      const specs = specsFor([file]);
+      for (const name of admin)
+        assert.ok(specs.includes(`e2e/${name}.spec.ts`), `${file}: ${name}`);
+    }
+    assert.ok(specsFor(['convex/leagues.ts']).includes('e2e/organization-page.spec.ts'));
+    assert.ok(specsFor(['convex/locations.ts']).includes('e2e/organization-page.spec.ts'));
     assert.ok(specsFor(['convex/seed.ts']).includes('e2e/pwa.spec.ts'));
     assert.ok(specsFor(['convex/organizations.ts']).includes('e2e/organization-page.spec.ts'));
     assert.ok(specsFor(['convex/memberships.ts']).includes('e2e/organization-staff.spec.ts'));
+  });
+
+  it('maps the offline views to the public-page specs', () => {
+    const specs = specsFor(['src/app/offline/saved-copy-note.ts']);
+    for (const name of ['offline', 'organization-page', 'organization-page-links', 'top-bar']) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
   });
 
   it('runs a changed spec itself, in the harness directory too', () => {
@@ -154,7 +200,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.equal(new Set(specs).size, specs.length);
     assert.deepEqual(
       specs,
-      want('e2e/accept-invite.spec.ts', 'e2e/organization-staff.spec.ts', 'e2e/sign-up.spec.ts'),
+      want('e2e/accept-invite.spec.ts', 'e2e/organization-staff.spec.ts', ...sessionSpecs),
     );
   });
 
@@ -318,7 +364,12 @@ describe('the mapping', () => {
   it('selects, with every filter it can emit, exactly the files it names', () => {
     const filters = new Set(ALWAYS);
     for (const area of AREAS) {
-      for (const name of area.specs) if (name !== 'self') filters.add(`e2e/${name}.spec.ts`);
+      for (const name of area.specs) {
+        if (name !== 'self' && name !== SESSION) filters.add(`e2e/${name}.spec.ts`);
+      }
+    }
+    for (const file of sessionSpecs) {
+      filters.add(file);
     }
     for (const filter of filters) {
       const selected = filesSelectedBy(filter, onDisk);
@@ -358,8 +409,11 @@ describe('the mapping', () => {
   it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
     const mapped = new Set();
     for (const area of AREAS) {
-      for (const name of area.specs) if (name !== 'self') mapped.add(`e2e/${name}.spec.ts`);
+      for (const name of area.specs) {
+        if (name !== 'self' && name !== SESSION) mapped.add(`e2e/${name}.spec.ts`);
+      }
     }
+    for (const file of sessionSpecs) mapped.add(file);
     for (const always of ALWAYS)
       for (const file of filesSelectedBy(always, onDisk)) mapped.add(file);
     const unowned = onDisk.filter((file) => !mapped.has(file)).sort();
@@ -405,6 +459,12 @@ describe('the command line', () => {
     );
   });
 
+  it('prints every session spec for a sign-up change, derived from the real specs', () => {
+    const result = run('src/app/sign-up/sign-up-page.ts\n');
+    assert.equal(result.status, 0);
+    for (const file of sessionSpecs) assert.ok(result.stdout.includes(file), file);
+  });
+
   it('prints the full scope for an empty list', () => {
     assert.equal(run('').stdout, 'e2e_scope=full\ne2e_specs=\n');
   });
@@ -418,5 +478,90 @@ describe('the command line', () => {
 
   it('prints the full scope for a shared file', () => {
     assert.equal(run('src/app/shell/shell.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
+  });
+});
+
+describe('the specs that sign a user up or in', () => {
+  const onDisk = specFilesOnDisk();
+  const read = (file) => readFileSync(join(repoRoot, file), 'utf8');
+
+  // Written separately from deriveSessionSpecs, from the review that found the gap (#188): a spec
+  // that imports a helper from e2e/support/session.ts drives the real sign-up form.
+  const importsSessionHelper = onDisk.filter((file) =>
+    /import\s*\{[^}]*\b(?:signUp|otherUser)\b[^}]*\}\s*from\s*'[^']*support\/session'/.test(
+      read(file),
+    ),
+  );
+
+  it('finds the specs that import signUp or otherUser', () => {
+    assert.ok(importsSessionHelper.length >= 9, importsSessionHelper.join(', '));
+    assert.ok(importsSessionHelper.includes('e2e/sign-in-admin.spec.ts'));
+  });
+
+  it('derives every spec that imports signUp or otherUser, and the specs that open the sign-in or sign-up page', () => {
+    for (const file of importsSessionHelper) assert.ok(sessionSpecs.includes(file), file);
+    for (const file of ['e2e/sign-in.spec.ts', 'e2e/sign-up.spec.ts', 'e2e/auth-session.spec.ts']) {
+      assert.ok(sessionSpecs.includes(file), file);
+    }
+  });
+
+  for (const area of [
+    'src/app/sign-up/sign-up-page.ts',
+    'src/app/sign-in/sign-in-page.ts',
+    'src/app/account/account-page.ts',
+    'convex/users.ts',
+    'src/app/placeholder/placeholder.ts',
+  ]) {
+    it(`selects every one of them for ${area}`, () => {
+      const selection = selectSpecs([area], { ...pr, sessionSpecs });
+      assert.equal(selection.scope, 'affected');
+      for (const file of importsSessionHelper) {
+        assert.ok(
+          selection.specs.some((filter) => filesSelectedBy(filter, onDisk).includes(file)),
+          `${area} does not select ${file}`,
+        );
+      }
+    });
+  }
+
+  it('derives a new spec that signs in without a change to the mapping', () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
+    try {
+      mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      writeFileSync(
+        join(root, 'e2e', 'new.spec.ts'),
+        "import { signUp } from './support/session';\n",
+      );
+      writeFileSync(
+        join(root, 'e2e', 'plain.spec.ts'),
+        "import { test } from './support/fixtures';\n",
+      );
+      writeFileSync(
+        join(root, 'e2e', 'page.spec.ts'),
+        "await page.goto('/sign-in?returnTo=%2Fapp');\n",
+      );
+      writeFileSync(
+        join(root, 'e2e', 'harness', 'h.spec.ts'),
+        "import { newUser } from '../support/users';\n",
+      );
+      assert.deepEqual(deriveSessionSpecs(root), [
+        'e2e/harness/h.spec.ts',
+        'e2e/new.spec.ts',
+        'e2e/page.spec.ts',
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('throws, so the step runs the full suite, when no spec signs in or e2e/ is missing', () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-specs-'));
+    try {
+      assert.throws(() => deriveSessionSpecs(root));
+      mkdirSync(join(root, 'e2e', 'harness'), { recursive: true });
+      assert.throws(() => deriveSessionSpecs(root), /no e2e spec signs a user in/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

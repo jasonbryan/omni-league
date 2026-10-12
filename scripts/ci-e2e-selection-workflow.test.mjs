@@ -209,6 +209,12 @@ describe('the e2e specs step', () => {
     assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
   });
 
+  it('writes the full scope for a sign-up change when the e2e specs cannot be read', () => {
+    // The scratch repository has no e2e/ directory, so the session specs cannot be derived.
+    const run = runSpecsStep(changeFile('src/app/sign-up/sign-up-page.ts'));
+    assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
+  });
+
   it('writes the full scope for a scheduled run, whatever changed', () => {
     const run = runSpecsStep(changeFile('src/app/invites/accept-invite-page.ts'), 'schedule');
     assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
@@ -354,11 +360,22 @@ describe('the nightly issue step', () => {
       FAILURES: JSON.stringify(['chromium-desktop: e2e/a.spec.ts:3: boom']),
     });
     assert.match(calls, /ARGS: \[issue\] \[create\] \[--title\] \[Nightly e2e failed on main\]/);
-    assert.match(calls, /\[--label\] \[type:bug\]/);
+    assert.match(calls, /\[--label\] \[type:bug\] \[--label\] \[status:ready\]/);
     assert.match(calls, /Nightly e2e: FAIL \(main abcdef0\)/);
     assert.match(calls, /Run: https:\/\/github\.com\/o\/r\/actions\/runs\/7/);
-    assert.match(calls, /- chromium-desktop: e2e\/a\.spec\.ts:3: boom/);
+    assert.match(calls, /- `chromium-desktop: e2e\/a\.spec\.ts:3: boom`/);
   });
+
+  it(
+    'wraps each failing test in backticks so a mention or issue number does not link',
+    { skip },
+    () => {
+      const calls = runIssueStep({
+        FAILURES: JSON.stringify(['chromium-desktop: e2e/a.spec.ts:3: ping @owner about #12 `x`']),
+      });
+      assert.match(calls, /- `chromium-desktop: e2e\/a\.spec\.ts:3: ping @owner about #12 'x'`/);
+    },
+  );
 
   it('comments on the open issue instead of opening a second one', { skip }, () => {
     const calls = runIssueStep(
