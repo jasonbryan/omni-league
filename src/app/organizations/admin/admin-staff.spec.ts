@@ -361,6 +361,60 @@ describe('AdminStaff', () => {
       expect(scrolled).toHaveBeenCalledTimes(1);
       expect(document.activeElement).toBe(input('email'));
     });
+
+    // #180: the press came before the leagues answered, so the form (and Email) did not exist yet.
+    describe('pressed while the leagues are still loading', () => {
+      const jump = () => page.querySelector<HTMLAnchorElement>('main a[data-slot="button"]')!;
+
+      it('focuses Email as soon as the form appears, and scrolls only once', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        expect(page.querySelector('#invite form')).toBeNull();
+        const scrolled = vi.fn();
+        page.querySelector<HTMLElement>('#invite')!.scrollIntoView = scrolled;
+        jump().click();
+        await o.flush();
+        expect(scrolled).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).not.toBe(document.querySelector('#email'));
+
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        expect(document.activeElement).toBe(input('email'));
+        expect(scrolled).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps focus on Email when the leagues change afterwards', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        page.querySelector<HTMLElement>('#invite')!.scrollIntoView = vi.fn();
+        jump().click();
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        await type('email', 'jordan@example.com');
+        o.subscription(LIST_LEAGUES)!.emit([...LEAGUES]);
+        await o.flush();
+        expect(document.activeElement).toBe(input('email'));
+        expect(input('email').value).toBe('jordan@example.com');
+      });
+
+      it('the leagues fail: the alert shows and nothing takes focus', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        page.querySelector<HTMLElement>('#invite')!.scrollIntoView = vi.fn();
+        jump().click();
+        await o.flush();
+        o.subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+        await o.flush();
+        expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
+          'The leagues could not be loaded. Check your connection and try again.',
+        );
+        expect(document.activeElement).not.toBe(document.querySelector('#email'));
+      });
+
+      it('a form that appears without a press takes no focus', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        expect(document.activeElement).not.toBe(input('email'));
+      });
+    });
   });
 
   describe('the form (states 1, 3, and 4)', () => {
