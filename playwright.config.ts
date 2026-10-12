@@ -47,7 +47,10 @@ export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   forbidOnly: ci,
-  workers: ci ? 1 : undefined,
+  // 2 on CI: one worker ran the ~500 tests past the 25-minute job timeout (#178). Specs share one
+  // local Convex backend and SSR server and each seeds its own uniquely named data, so they are
+  // independent of order and of each other.
+  workers: ci ? 2 : undefined,
   retries: ci ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {

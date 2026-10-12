@@ -7,6 +7,7 @@
 - **Amends:** ADR 0005 (WebKit trigger and the Convex backend cache; see "Amendment" at the end of ADR 0005)
 - **Amended:** 2026-10-08, wording only: the `scope` step's rename handling and code-extension rule, as shipped in #12 (PR #39). See "Amendment: scope step (2026-10-08)" at the end.
 - **Amended:** 2026-10-08 (#47): every npm cooldown window (default, patch, minor, major) equals ADR 0003's `min-release-age` of 3 days, TypeScript majors are ignored, and two statements about security updates are corrected. See "Amendment: release age and Dependabot cooldown (2026-10-08)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-10-12 (#178): Playwright `workers: 2` in CI and `timeout-minutes: 45` on `ci`, because the suite outgrew one worker and 25 minutes. See "Amendment: e2e workers and job timeout (2026-10-12)" at the end. Where the sections above say `workers: 1` or `timeout-minutes: 25`, the amendment applies.
 
 ## Context
 
@@ -764,3 +765,14 @@ Issue #47. The first Dependabot npm version-update run after #12 failed with `ET
 **Implementation.** A separate PR for #47, after this amendment is merged, changes `.npmrc`, `.github/dependabot.yml`, `ci.yml` (the equality check, a shell step with no new package), and the Dependabot paragraph of `docs/process/ci.md`. Test evidence 5 (a Dependabot lockfile accepted by `npm ci` on Node 26 in `ci`) stays open until the first Dependabot npm PR after that fix; #47 records the run.
 
 **Sources.** [#47](https://github.com/jasonbryan/omni-league/issues/47) (run log, local reproduction, owner decision), [PR #48, owner decision](https://github.com/jasonbryan/omni-league/pull/48#issuecomment-6064409997) (`semver-major-days` 3), [dependabot-core PR #15485](https://github.com/dependabot/dependabot-core/pull/15485), [dependabot-core PR #15940](https://github.com/dependabot/dependabot-core/pull/15940), [`file_updater.rb`, `selection_cooldown_days`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater.rb), [`npm_lockfile_updater.rb`](https://github.com/dependabot/dependabot-core/blob/main/npm_and_yarn/lib/dependabot/npm_and_yarn/file_updater/npm_lockfile_updater.rb), [GitHub changelog, 2021-05-21: ignore major, minor, patch](https://github.blog/changelog/2021-05-21-dependabot-version-updates-can-now-ignore-major-minor-patch-releases/), [Dependabot options reference (`cooldown`, `ignore`)](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
+
+## Amendment: e2e workers and job timeout (2026-10-12)
+
+Issue #178. PR #173's `ci` run [38187377584](https://github.com/jasonbryan/omni-league/actions/runs/38187377584) was cancelled at the 25-minute job timeout during e2e: the suite has grown to about 500 tests, and CI ran Playwright with `workers: 1`.
+
+| Setting                    | Accepted | Now |
+| -------------------------- | -------- | --- |
+| Playwright `workers` on CI | 1        | 2   |
+| `timeout-minutes` on `ci`  | 25       | 45  |
+
+Two workers fit the 4 vCPUs of `ubuntu-24.04`. They share one local Convex backend and one SSR server, which is safe because every spec seeds its own uniquely named organization or user, the per-address sign-in throttle is keyed on that unique email, Better Auth's rate limit is off, and `testing:reset` runs once in `globalSetup`, not between tests. The `warm-cache` timeout stays at 10. Sharding across jobs is the next step if the suite keeps growing. Measured times are in [`docs/process/ci.md`](../process/ci.md#minutes).
