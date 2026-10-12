@@ -362,7 +362,8 @@ describe('AdminStaff', () => {
       expect(document.activeElement).toBe(input('email'));
     });
 
-    describe('pressed while the leagues are still loading (#180)', () => {
+    // #180: the press came before the leagues answered, so the form (and Email) did not exist yet.
+    describe('pressed while the leagues are still loading', () => {
       const jump = () => page.querySelector<HTMLAnchorElement>('main a[data-slot="button"]')!;
 
       it('focuses Email as soon as the form appears, and scrolls only once', async () => {
