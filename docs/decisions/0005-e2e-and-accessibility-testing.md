@@ -6,6 +6,7 @@
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
 - **Amended:** by ADR 0009 (PR #31, CI pipeline): CI run conditions, the `webkit-mobile` trigger, and the Convex backend cache. See "Amendment: CI usage (ADR 0009)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** by #94 (PR #107): the console fixture fails on every `console.warn`, not only `NG05xx`, with a per-test `expectedConsoleWarnings` opt-in. See "Amendment: console warnings (#94)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** by #178: `workers: 2` in CI, not 1 (ADR 0009, "Amendment: e2e workers and job timeout"). Where the sections below say `workers: 1`, the amendment applies.
 
 ## Context
 
