@@ -28,7 +28,13 @@ import { api } from '../../../convex/_generated/api';
 import type { AcceptRefusal } from '../../../convex/invites';
 import type { Role } from '../../../convex/lib/roles';
 import { AuthService } from '../core/auth/auth.service';
-import { ConvexOfflineError, injectMutation, injectQuery, skipToken } from '../core/data/convex';
+import {
+  ConvexOfflineError,
+  injectMutation,
+  injectOnline,
+  injectQuery,
+  skipToken,
+} from '../core/data/convex';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { ServerErrorView } from '../server-error/server-error-view';
@@ -279,8 +285,12 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                           <button
                             type="button"
                             data-slot="button"
-                            [class]="primaryButton + ' mt-4 w-full'"
-                            [attr.aria-disabled]="accepting() ? 'true' : null"
+                            [class]="
+                              online()
+                                ? primaryButton + ' mt-4 w-full'
+                                : primaryButton + ' mt-4 w-full opacity-50'
+                            "
+                            [attr.aria-disabled]="accepting() || !online() ? 'true' : null"
                             (click)="accept()"
                           >
                             @if (accepting()) {
@@ -350,6 +360,7 @@ export class AcceptInvitePage {
 
   private readonly sessionKnown = signal(false);
   protected readonly accepting = signal(false);
+  protected readonly online = injectOnline();
   protected readonly switching = signal(false);
   // What happened to the current token; a different token starts over.
   protected readonly refusal = linkedSignal<string | null, Refusal | null>({
@@ -430,8 +441,10 @@ export class AcceptInvitePage {
               : 'Staff invite | Omni League',
         );
       }
-      // An unusable invite is refused for good: nothing more to accept with this token.
-      if (view === 'invalid') this.store.clear();
+      // An unusable invite is refused for good: nothing more to accept with this token. The link
+      // may be opened again on this page (`captured` changes), which stores the token again.
+      this.store.captured();
+      if (view === 'invalid' || this.refusal() === 'alreadyMember') this.store.clear();
     });
   }
 
@@ -454,6 +467,12 @@ export class AcceptInvitePage {
   protected async accept(): Promise<void> {
     const token = this.token();
     if (this.accepting() || !token) return;
+    // Offline, the button looks disabled but stays focusable: a press explains and sends nothing.
+    if (!this.online()) {
+      this.refusal.set('offline');
+      this.focusAfterRender('alert');
+      return;
+    }
     this.refusal.set(null);
     this.accepting.set(true);
     try {

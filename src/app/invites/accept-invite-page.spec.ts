@@ -391,12 +391,95 @@ describe('AcceptInvitePage', () => {
       expect(accept()).toBeDefined();
     });
 
+    describe('offline before the press (design/mockups/88-offline-note.html states 2 and 3)', () => {
+      async function goOffline(flush: () => Promise<void>) {
+        vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+        window.dispatchEvent(new Event('offline'));
+        await flush();
+      }
+
+      it('Accept invite looks disabled but stays focusable', async () => {
+        const { accept, emitInvite, signIn, flush } = await open({ signedIn: true });
+        await emitInvite(ORGANIZER);
+        await signIn();
+        expect(accept()?.getAttribute('aria-disabled')).toBeNull();
+        expect(accept()?.classList.contains('opacity-50')).toBe(false);
+        await goOffline(flush);
+        expect(accept()?.getAttribute('aria-disabled')).toBe('true');
+        expect(accept()?.classList.contains('opacity-50')).toBe(true);
+        expect(accept()?.hasAttribute('disabled')).toBe(false);
+      });
+
+      it('a press shows the offline alert, takes focus to it, and sends nothing', async () => {
+        const { page, accept, emitInvite, signIn, flush, convex } = await open({ signedIn: true });
+        await emitInvite(ORGANIZER);
+        await signIn();
+        await goOffline(flush);
+        accept()?.click();
+        await flush();
+        expect(convex.calls.filter((c) => c.name === ACCEPT)).toEqual([]);
+        const alert = page.querySelector('[role="alert"]');
+        expect(text(alert?.querySelector('[data-slot="alert-title"]'))).toBe(
+          "You're offline. Nothing was sent.",
+        );
+        expect(document.activeElement).toBe(alert);
+        expect(accept()).toBeDefined();
+        expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
+      });
+
+      it('back online, the press sends the token and clears the alert', async () => {
+        const { page, accept, emitInvite, signIn, flush, call } = await open({ signedIn: true });
+        await emitInvite(ORGANIZER);
+        await signIn();
+        await goOffline(flush);
+        accept()?.click();
+        await flush();
+        vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+        window.dispatchEvent(new Event('online'));
+        await flush();
+        expect(accept()?.getAttribute('aria-disabled')).toBeNull();
+        accept()?.click();
+        await flush();
+        expect(call()?.args).toEqual({ token: TOKEN });
+        expect(page.querySelector('[role="alert"]')).toBeNull();
+      });
+    });
+
     it('a retry after an error sends the token again and clears the alert', async () => {
       const { page, accept, flush, convex } = await refuse(new Error('boom'));
       accept()?.click();
       await flush();
       expect(convex.calls.filter((c) => c.name === ACCEPT)).toHaveLength(2);
       expect(page.querySelector('[role="alert"]')).toBeNull();
+    });
+  });
+
+  describe('a spent link opened again on the open page', () => {
+    it('an invalid link clears the stored token again', async () => {
+      const { page, emitInvite, flush, harness } = await open();
+      await emitInvite({ status: 'invalid' });
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
+      await harness.navigateByUrl(`/invites/accept#${TOKEN}`);
+      await flush();
+      expect(text(page.querySelector('h1'))).toBe('This invite link can’t be used');
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
+    });
+
+    it('an already-member link clears the stored token again', async () => {
+      const { page, emitInvite, signIn, accept, flush, call, harness } = await open({
+        signedIn: true,
+      });
+      await emitInvite(ORGANIZER);
+      await signIn();
+      accept()?.click();
+      await flush();
+      call()?.reject(new ConvexError({ code: 'alreadyMember' }));
+      await flush();
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
+      await harness.navigateByUrl(`/invites/accept#${TOKEN}`);
+      await flush();
+      expect(page.querySelector('[role="alert"]')).not.toBeNull();
+      expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
     });
   });
 

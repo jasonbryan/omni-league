@@ -8,11 +8,7 @@ import {
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideInfo, lucideWifiOff } from '@ng-icons/lucide';
-
-const BASE =
-  "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
-const NEUTRAL = `${BASE} bg-card text-card-foreground`;
-const DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90`;
+import { ALERT_DESTRUCTIVE, ALERT_NEUTRAL } from '../organizations/admin/admin-alert';
 
 /** What an invite-page alert says: a failure, the offline refusal, or plain information. */
 export type InviteAlertKind = 'error' | 'offline' | 'info';
@@ -56,7 +52,7 @@ export class InviteAlert {
 
   protected readonly classes = computed(
     () =>
-      `${this.kind() === 'info' ? NEUTRAL : DESTRUCTIVE} outline-offset-2 focus:outline-2 focus:outline-ring`,
+      `${this.kind() === 'info' ? ALERT_NEUTRAL : ALERT_DESTRUCTIVE} outline-offset-2 focus:outline-2 focus:outline-ring`,
   );
   protected readonly icon = computed(() => {
     const icons = {
