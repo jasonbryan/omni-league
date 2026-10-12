@@ -157,12 +157,12 @@ function permanent(message) {
 
 /**
  * Runs `attempt` until it succeeds, retrying any non-permanent failure with exponential backoff
- * until `timeoutMs` has passed. On timeout it throws one error naming `label` and the wait. The
- * last failure's text follows unless `quiet` is set (for a call whose output could hold a secret).
+ * until `timeoutMs` has passed. On timeout it throws one error naming `label` and the wait, then
+ * the last failure's text with every occurrence of `redact` (a secret the call was setting) removed.
  */
 export async function retryUntilReady(
   attempt,
-  { label, quiet = false, timeoutMs = READY_TIMEOUT_MS, sleep = defaultSleep, now = Date.now },
+  { label, redact = '', timeoutMs = READY_TIMEOUT_MS, sleep = defaultSleep, now = Date.now },
 ) {
   const start = now();
   let delay = BACKOFF_FIRST_MS;
@@ -176,11 +176,12 @@ export async function retryUntilReady(
     if (failure?.permanent) throw failure;
     const remaining = timeoutMs - (now() - start);
     if (remaining <= 0) {
-      // No `cause`: the CLI's output may repeat the value being set.
-      const last = failure instanceof Error ? failure.message : String(failure);
+      // No `cause`: only the redacted text may reach the output.
+      const text = failure instanceof Error ? failure.message : String(failure);
+      const last = redact ? text.split(redact).join('<secret>') : text;
       throw new Error(
         `e2e-convex: ${label} failed after ${Math.round(timeoutMs / 1000)} s: the local backend ` +
-          `is not accepting admin requests${quiet ? '' : `\nlast error: ${last}`}`,
+          `is not accepting admin requests\nlast error: ${last}`,
       );
     }
     await sleep(Math.min(delay, remaining));
@@ -428,11 +429,11 @@ export async function main(
       case 'setup': {
         // The webServer is up once `/version` answers, but the backend can still refuse admin
         // requests for a moment (#156), so each `env set` retries until it accepts one.
-        const setEnv = (name, value, { quiet = false } = {}) =>
+        const setEnv = (name, value, { redact = '' } = {}) =>
           retryUntilReady(() => runConvex(['env', 'set', name, value], target), {
             ...wait,
             label: `convex env set ${name}`,
-            quiet,
+            redact,
           });
         await setEnv('IS_TEST', 'true');
         await setEnv('SITE_URL', E2E_SITE_URL);
@@ -440,7 +441,7 @@ export async function main(
         // printed: on failure only its name is. `testing:reset` then clears the component's
         // `jwks`, whose signing key the previous run's secret encrypted.
         const secret = randomBytes(32).toString('base64url');
-        await setEnv('BETTER_AUTH_SECRET', secret, { quiet: true });
+        await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
         const reset = await runConvex(['run', 'testing:reset'], target);
         log(
           `e2e-convex: IS_TEST=true, SITE_URL=${E2E_SITE_URL}, and a new BETTER_AUTH_SECRET on ` +

@@ -563,9 +563,24 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.match(output, /not accepting admin requests/);
     const attempts = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET');
     assert.ok(attempts.length > 2, 'it retried');
-    assert.ok(clock.sleeps.reduce((sum, ms) => sum + ms, 0) <= 60_000, 'it waits at most 60 s');
+    // The whole 60 s window is used (a shorter deadline would bring #156 back), in waits of at most 5 s.
+    assert.equal(
+      clock.sleeps.reduce((sum, ms) => sum + ms, 0),
+      60_000,
+      'it waits the full 60 s',
+    );
+    assert.ok(Math.max(...clock.sleeps) <= 5_000, 'no single wait is longer than 5 s');
     assert.ok(!output.includes(attempts[0][3]), 'the secret is printed');
     assert.ok(calls.every((args) => args[0] !== 'run'));
+  });
+
+  it('shows the last CLI error of the secret call on timeout, with the secret redacted', async () => {
+    const clock = fakeClock();
+    const { calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET', clock });
+    const secret = calls.find((args) => args[2] === 'BETTER_AUTH_SECRET')[3];
+    // The stub's stderr repeats the value: `cannot set BETTER_AUTH_SECRET=<value>`.
+    assert.match(output, /last error:[\s\S]*cannot set BETTER_AUTH_SECRET=<secret>/);
+    assert.ok(!output.includes(secret), 'the secret is printed');
   });
 
   it('shows the last CLI error of a non-secret call on timeout', async () => {
@@ -687,6 +702,9 @@ describe('main with the backend port held by another process', () => {
       );
       server.listen(port, '127.0.0.1', () => resolve(true));
     });
+    // `close` waits for open connections, so any client that connects while the port is held would
+    // hang the release; destroy them.
+    server.on('connection', (socket) => socket.destroy());
     return () => (held ? new Promise((resolve) => server.close(resolve)) : Promise.resolve());
   }
 
