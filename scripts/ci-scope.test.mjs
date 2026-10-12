@@ -42,12 +42,13 @@ function fakeRepo(files) {
 }
 
 /**
- * deriveAppScripts without the classifier itself, which it always adds (CI_FILES).
+ * deriveAppScripts without the CI scripts, which it always adds (CI_FILES).
  * @param {string} root
  */
 function deriveWithoutClassifier(root) {
   const derived = deriveAppScripts(root);
   derived.delete('scripts/ci-scope.mjs');
+  derived.delete('scripts/e2e-affected.mjs');
   return derived;
 }
 
@@ -111,6 +112,7 @@ describe('classify: PR into main', () => {
     // The CI files: the full suite runs, because the PR's own copy of the classifier decides its scope.
     ['.github/workflows/ci.yml'],
     ['scripts/ci-scope.mjs'],
+    ['scripts/e2e-affected.mjs'],
     ['scripts/ci-scope.mjs', 'scripts/ci-scope.test.mjs'],
     ['docs/a.md', '.github/workflows/ci.yml'],
     // Docs that a Convex or Vitest test reads.

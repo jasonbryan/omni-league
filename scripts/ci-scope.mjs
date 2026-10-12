@@ -40,7 +40,12 @@ const ROOT_MARKDOWN = /^[^/]+\.md$/;
  * must not merge without those steps running. This narrows #165's `.github/**` rule, for safety.
  * The imports of the scripts listed here are followed by deriveAppScripts.
  */
-const CI_FILES = ['.github/workflows/ci.yml', 'scripts/ci-scope.mjs'];
+const CI_FILES = [
+  '.github/workflows/ci.yml',
+  'scripts/ci-scope.mjs',
+  // Picks the e2e specs of a PR (#186): an edit to its mapping must run the suite it selects from.
+  'scripts/e2e-affected.mjs',
+];
 
 /**
  * Files under docs/ that `test:convex` or `test` reads (convex/lib/slugs.test.ts reads the

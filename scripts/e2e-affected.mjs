@@ -1,0 +1,288 @@
+// Which e2e specs a `ci` run executes (#186, docs/process/ci.md). Node built-ins only: the
+// `e2e specs` step runs before setup-node, on the Node the runner image ships.
+//
+// A PR into `main` runs the specs its changed files map to (see AREAS), plus the smoke and harness
+// specs (ALWAYS). The full suite runs when:
+// - the event is not a pull request, or the PR targets `production` (a release);
+// - the changed-file list is empty or holds a path that is not plainly relative;
+// - any changed file is shared code (src/app/shell, src/app/core, src/app/ui, the server entry
+//   points, styles, tokens), shared Convex code (convex/schema.ts, convex/lib, auth, testing.ts),
+//   e2e/support, the Playwright config, package files, angular.json, the CI files, or anything
+//   else no rule below names. A path with no rule is never skipped.
+// - detection throws or prints nothing (the workflow step falls back to the full suite).
+// The nightly run on `main` (the `schedule` event) is the full suite by the same rule.
+//
+// A rule names the specs it adds. A rule with no specs says the file cannot change an e2e result
+// (documentation, unit specs and their test doubles); `ALWAYS` still runs.
+//
+// Spec names are Playwright file filters (regular expressions matched against the test file
+// path), so `e2e/sign-in.spec.ts` selects that file only; scripts/e2e-affected.test.mjs checks
+// every entry selects exactly the files it names.
+//
+// Usage: `git diff --no-renames --name-only HEAD^1 HEAD | node scripts/e2e-affected.mjs`, with
+// GITHUB_EVENT_NAME and GITHUB_BASE_REF in the environment. It prints `key=value` lines for
+// $GITHUB_OUTPUT: `e2e_scope=full|affected` and `e2e_specs=<space-separated filters>`.
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+
+/** A spec file name under e2e/ (`organization-staff` is e2e/organization-staff.spec.ts). */
+const spec = (name) => `e2e/${name}.spec.ts`;
+
+/** Specs that run on every PR: the smoke test and the harness self-tests (a directory filter). */
+export const ALWAYS = [spec('smoke'), 'e2e/harness/'];
+
+// Spec groups, by the part of the product they exercise. The same spec can be in several.
+const LEAGUE_ADMIN = [
+  'organization-leagues',
+  'organization-leagues-publish',
+  'organization-leagues-publish-states',
+];
+const LOCATION_ADMIN = ['organization-admin', 'sign-in-admin'];
+const STAFF = ['organization-staff', 'accept-invite'];
+/** Every spec that opens the admin area (not the static mockup page). */
+const ADMIN = [
+  ...new Set([
+    'organization-admin',
+    ...LEAGUE_ADMIN,
+    'organization-staff',
+    'sign-in-admin',
+    'accept-invite',
+    'create-organization',
+  ]),
+];
+/** Every spec that opens the public organization page. */
+const PUBLIC_PAGE = [
+  'organization-page',
+  'organization-page-links',
+  'organization-admin',
+  'organization-leagues-publish',
+  'organization-leagues-publish-states',
+  'create-organization',
+  'offline',
+  'offline-note-height',
+  'pwa',
+  'top-bar',
+  'auth-session',
+];
+const SIGNED_IN_USER = [
+  'sign-in',
+  'sign-in-admin',
+  'sign-up',
+  'auth-session',
+  'top-bar',
+  'accept-invite',
+  'create-organization',
+];
+
+/**
+ * @typedef {{ name: string, test: (file: string) => boolean, specs: string[] }} Rule
+ * The first rule whose `test` is true decides a file. `specs` are spec names (no directory or
+ * extension) or, for a rule that lists full paths, already-formed filters starting `e2e/`.
+ */
+
+const inDir =
+  (...dirs) =>
+  (file) =>
+    dirs.some((dir) => file.startsWith(dir));
+const named = (dir, names) => (file) => names.some((name) => file === `${dir}${name}.ts`);
+const matching = (pattern) => (file) => pattern.test(file);
+
+/** @type {Rule[]} */
+export const AREAS = [
+  // Cannot change an e2e result: unit specs, their test doubles (imported by specs only), and files
+  // no test or build reads.
+  { name: 'unit specs', test: matching(/^(?:src|convex)\/.+\.(?:spec|test)\.ts$/), specs: [] },
+  { name: 'convex test setup', test: (file) => file === 'convex/test.setup.ts', specs: [] },
+  { name: 'script tests', test: matching(/^scripts\/[^/]+\.test\.mjs$/), specs: [] },
+  { name: 'unit test doubles', test: matching(/^src\/app\/.*\/testing\/[^/]+\.ts$/), specs: [] },
+  {
+    name: 'markdown outside the app',
+    test: (file) => /\.md$/.test(file) && !inDir('src/', 'public/', 'e2e/')(file),
+    specs: [],
+  },
+  { name: 'docs and agent files', test: inDir('docs/', '.claude/'), specs: [] },
+  {
+    name: 'GitHub files other than ci.yml',
+    test: (file) =>
+      inDir('.github/ISSUE_TEMPLATE/')(file) ||
+      [
+        '.github/pull_request_template.md',
+        '.github/dependabot.yml',
+        '.github/workflows/clean-previews.yml',
+      ].includes(file),
+    specs: [],
+  },
+
+  // The one design file an e2e spec opens; every other file under design/ is read by no spec.
+  {
+    name: 'leagues mockup',
+    test: (file) => file === 'design/mockups/66-69-organization-leagues.html',
+    specs: ['organization-leagues-mockup'],
+  },
+  { name: 'design files', test: inDir('design/'), specs: [] },
+
+  // A changed spec runs itself. The harness probes run inside console-fixture.spec.ts.
+  {
+    name: 'harness probes',
+    test: inDir('e2e/harness/probes/'),
+    specs: [],
+  },
+  { name: 'e2e spec', test: matching(/^e2e\/(?:harness\/)?[\w-]+\.spec\.ts$/), specs: ['self'] },
+
+  // Source areas.
+  {
+    name: 'admin locations',
+    test: (file) =>
+      named('src/app/organizations/admin/', [
+        'add-location-form',
+        'admin-locations',
+        'location-edit-form',
+        'location-fields',
+        'location-form',
+        'location-row',
+      ])(file),
+    specs: LOCATION_ADMIN,
+  },
+  {
+    name: 'admin leagues',
+    test: named('src/app/organizations/admin/', [
+      'admin-leagues',
+      'league-create-form',
+      'league-form',
+      'publish-league-dialog',
+    ]),
+    specs: LEAGUE_ADMIN,
+  },
+  {
+    name: 'admin staff',
+    test: named('src/app/organizations/admin/', [
+      'admin-staff',
+      'invite-form',
+      'staff-invite-panel',
+      'format-day',
+    ]),
+    specs: STAFF,
+  },
+  { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
+  {
+    name: 'create organization',
+    test: named('src/app/organizations/', ['create-organization-page']),
+    specs: ['create-organization'],
+  },
+  {
+    name: 'public organization page',
+    test: named('src/app/organizations/', [
+      'organization-page',
+      'organization-overview',
+      'organization-path',
+      'organization-sidebar',
+    ]),
+    // The admin area imports `initials` from organization-sidebar.
+    specs: [...PUBLIC_PAGE, ...ADMIN],
+  },
+  { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
+  { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: ['sign-in', 'sign-in-admin'] },
+  { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: ['sign-up'] },
+  {
+    name: 'account page',
+    test: inDir('src/app/account/'),
+    specs: ['create-organization', 'sign-up', 'accept-invite', 'auth-session'],
+  },
+  {
+    name: 'not-found view',
+    test: inDir('src/app/not-found/'),
+    specs: ['not-found', 'organization-page', ...ADMIN],
+  },
+  {
+    name: 'offline views',
+    test: inDir('src/app/offline/'),
+    specs: ['offline', 'offline-note-height', 'pwa', 'organization-page'],
+  },
+  {
+    name: 'placeholder home',
+    test: inDir('src/app/placeholder/'),
+    specs: ['install', 'pwa', 'pwa-kill-switch'],
+  },
+
+  // Convex modules that e2e specs exercise through the app or through `convexRun`. Anything else
+  // under convex/ (schema, lib, auth, http, testing, health, _generated, config) is shared or
+  // unmapped and runs the full suite.
+  {
+    name: 'convex organizations',
+    test: named('convex/', ['organizations']),
+    specs: [...PUBLIC_PAGE, ...ADMIN],
+  },
+  {
+    name: 'convex locations',
+    test: named('convex/', ['locations']),
+    specs: [...LOCATION_ADMIN, ...PUBLIC_PAGE],
+  },
+  {
+    name: 'convex leagues',
+    test: named('convex/', ['leagues']),
+    specs: [...LEAGUE_ADMIN, ...PUBLIC_PAGE],
+  },
+  { name: 'convex invites', test: named('convex/', ['invites']), specs: STAFF },
+  {
+    name: 'convex memberships',
+    test: named('convex/', ['memberships']),
+    specs: ADMIN,
+  },
+  { name: 'convex users', test: named('convex/', ['users']), specs: SIGNED_IN_USER },
+  { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
+];
+
+/** @param {string} path */
+function isPlainPath(path) {
+  return (
+    path !== '' &&
+    !/["\\\0]/.test(path) &&
+    !path.startsWith('/') &&
+    !path.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+  );
+}
+
+/** The filters a rule adds for `file`: spec names become paths, `self` is the changed spec. */
+function filtersFor(rule, file) {
+  return rule.specs.map((name) => (name === 'self' ? file : spec(name)));
+}
+
+/**
+ * @param {string[] | undefined} files Changed paths, one entry per path.
+ * @param {{ event?: string, base?: string }} [context]
+ * @returns {{ scope: 'full' } | { scope: 'affected', specs: string[] }}
+ */
+export function selectSpecs(files, { event, base } = {}) {
+  const full = { scope: /** @type {const} */ ('full') };
+  if (event !== 'pull_request' || base === 'production') return full;
+  if (!Array.isArray(files) || files.length === 0) return full;
+  const selected = new Set(ALWAYS);
+  for (const file of files) {
+    if (typeof file !== 'string' || !isPlainPath(file)) return full;
+    const rule = AREAS.find((area) => area.test(file));
+    if (!rule) return full;
+    for (const filter of filtersFor(rule, file)) selected.add(filter);
+  }
+  return { scope: 'affected', specs: [...selected].sort() };
+}
+
+/** The lines the `e2e specs` step appends to $GITHUB_OUTPUT. */
+export function formatOutputs(selection) {
+  return selection.scope === 'full'
+    ? 'e2e_scope=full\ne2e_specs=\n'
+    : `e2e_scope=affected\ne2e_specs=${selection.specs.join(' ')}\n`;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const context = { event: process.env.GITHUB_EVENT_NAME, base: process.env.GITHUB_BASE_REF };
+  let selection;
+  try {
+    const files = readFileSync(0, 'utf8').split('\n').filter(Boolean);
+    selection = selectSpecs(files, context);
+  } catch (error) {
+    // Cannot tell what changed: the full suite runs.
+    process.stderr.write(`e2e-affected: ${error instanceof Error ? error.message : error}\n`);
+    selection = { scope: 'full' };
+  }
+  process.stdout.write(formatOutputs(selection));
+}
