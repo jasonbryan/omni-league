@@ -374,7 +374,7 @@ describe('AdminStaff', () => {
         jump().click();
         await o.flush();
         expect(scrolled).toHaveBeenCalledTimes(1);
-        expect(document.activeElement).not.toBe(document.querySelector('#email'));
+        expect(page.querySelector('#email')).toBeNull();
 
         o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
         await o.flush();
@@ -405,7 +405,30 @@ describe('AdminStaff', () => {
         expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
           'The leagues could not be loaded. Check your connection and try again.',
         );
-        expect(document.activeElement).not.toBe(document.querySelector('#email'));
+        expect(page.querySelector('#email')).toBeNull();
+
+        // A later successful answer renders the form: the failed press must not steal focus then.
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        expect(input('email')).not.toBeNull();
+        expect(document.activeElement).not.toBe(input('email'));
+      });
+
+      it('drops the press when focus moved elsewhere before the form appeared', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        const scrolled = vi.fn();
+        page.querySelector<HTMLElement>('#invite')!.scrollIntoView = scrolled;
+        jump().click();
+        await o.flush();
+        const elsewhere = page.querySelector<HTMLElement>('main button')!;
+        expect(elsewhere.closest('#invite')).toBeNull();
+        elsewhere.focus();
+        expect(document.activeElement).toBe(elsewhere);
+
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        expect(input('email')).not.toBeNull();
+        expect(document.activeElement).toBe(elsewhere);
       });
 
       it('a form that appears without a press takes no focus', async () => {
