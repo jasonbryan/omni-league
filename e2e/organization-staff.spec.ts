@@ -467,6 +467,59 @@ test.describe('Staff: members and the Overview tile', () => {
     await expect(page.locator('#email')).toBeFocused();
     await expect(page.locator('#email')).toBeInViewport();
   });
+
+  test('"Invite staff" pressed while the leagues load focuses Email once the form appears (360, #180)', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+    // Holds the answer to the leagues query, and every frame after it (Convex applies
+    // transitions in order), until released: the form is not rendered while the leagues load.
+    let leaguesQuery: number | undefined;
+    let holding = false;
+    const held: string[] = [];
+    let release: () => void = () => undefined;
+    interface Change {
+      type: string;
+      queryId: number;
+      udfPath?: string;
+    }
+    const changes = (message: string | Buffer): Change[] =>
+      (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
+    await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((message) => {
+        for (const change of changes(message)) {
+          if (change.type === 'Add' && change.udfPath === 'leagues:listForAdmin') {
+            leaguesQuery = change.queryId;
+          }
+        }
+        server.send(message);
+      });
+      release = () => {
+        holding = false;
+        for (const frame of held.splice(0)) ws.send(frame);
+      };
+      server.onMessage((message) => {
+        const answersLeagues = changes(message).some(
+          (change) => change.type === 'QueryUpdated' && change.queryId === leaguesQuery,
+        );
+        if (answersLeagues) holding = true;
+        if (holding) held.push(String(message));
+        else ws.send(message);
+      });
+    });
+    await page.goto(`${org.base}/staff`);
+    await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
+    await expect(page.getByText('Loading the leagues.')).toBeAttached();
+    await expect.poll(() => holding).toBe(true);
+
+    await main(page).getByRole('link', { name: 'Invite staff' }).click();
+    await expect(form(page)).toHaveCount(0);
+    release();
+    await expect(page.locator('#email')).toBeFocused();
+    await expect(page.locator('#email')).toBeInViewport();
+  });
 });
 
 test.describe('Staff: who may open it', () => {

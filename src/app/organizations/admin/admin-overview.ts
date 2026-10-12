@@ -17,12 +17,14 @@ import { OUTLINE_BUTTON } from './button-classes';
 /**
  * Overview, `/app/organizations/:slug` (#65, #66;
  * design/mockups/65-organization-admin-locations.html states 1 and 2): the organization, a "View
- * public page" link, a count tile for each section, and the "Get set up" list. The tiles count
- * what each section's own list query returns, so this page asks for no data of its own: the
- * Locations tile is `locations.listForAdmin` and the Leagues tile is `leagues.listForAdmin`. The
- * list hides once any league is published, and is not drawn while the leagues load, so an
- * established organization never sees it flash. The Staff tile (#67) counts
- * `memberships.listForOrganization` and `invites.listPending`, the staff screen's own queries.
+ * public page" link, a count tile for each section, and the "Get set up" list. The Locations tile
+ * counts what `locations.listForAdmin` returns. The Leagues tile splits "N published, M drafts":
+ * the published count is the organization's counter (`leagues.publishedCount`, #172), which holds
+ * past the 200 rows the league list stops at, and the drafts are counted from that list, so a
+ * draft past row 200 is not counted. The list hides once any league is published (by the counter),
+ * and is not drawn while the counter loads, so an established organization never sees it flash.
+ * The Staff tile (#67) counts `memberships.listForOrganization` and `invites.listPending`, the
+ * staff screen's own queries.
  */
 @Component({
   selector: 'app-admin-overview',
@@ -224,26 +226,40 @@ export class AdminOverview {
   protected readonly leaguesPath = computed(() => adminPath(this.context.slug(), 'leagues'));
   protected readonly staffPath = computed(() => adminPath(this.context.slug(), 'staff'));
 
+  private readonly published = injectQuery(api.leagues.publishedCount, () => {
+    const organization = this.context.organization();
+    return organization ? { organizationId: organization.organizationId } : skipToken;
+  });
+
   private readonly leagues = injectQuery(api.leagues.listForAdmin, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
   /**
-   * The Leagues tile, or `null` while the list loads: every league counted, split into published
-   * and drafts (a part that is 0 is left out).
+   * The Leagues tile, or `null` while either source loads: the published leagues (the counter)
+   * plus the drafts (counted from the admin list), split as "N published, M drafts" with a part
+   * that is 0 left out. A failed counter reads "–"; a failed list keeps the published count and
+   * says the drafts could not be loaded.
    */
   protected readonly leagueTile = computed(() => {
-    if (this.leagues.error()) return { count: '–', note: 'Could not be loaded' };
+    if (this.published.error()) return { count: '–', note: 'Could not be loaded' };
+    const published = this.published.value();
+    if (published === undefined) return null;
+    if (this.leagues.error()) {
+      return { count: String(published), note: 'Drafts could not be loaded' };
+    }
     const rows = this.leagues.value();
     if (rows === undefined) return null;
-    const published = rows.filter((row) => row.status === 'published').length;
-    const drafts = rows.length - published;
+    const drafts = rows.filter((row) => row.status !== 'published').length;
     const parts = [
       published > 0 ? `${published} published` : null,
       drafts > 0 ? `${drafts} ${drafts === 1 ? 'draft' : 'drafts'}` : null,
     ].filter((part) => part !== null);
-    return { count: String(rows.length), note: parts.length > 0 ? parts.join(', ') : 'None yet' };
+    return {
+      count: String(published + drafts),
+      note: parts.length > 0 ? parts.join(', ') : 'None yet',
+    };
   });
 
   private readonly members = injectQuery(api.memberships.listForOrganization, () => {
@@ -276,13 +292,14 @@ export class AdminOverview {
   });
 
   /**
-   * Whether the "Get set up" list shows: not while the leagues load, and not once any league is
-   * published (decision 2). A failed list shows it, because it cannot say a league is published.
+   * Whether the "Get set up" list shows: not while the counter loads, and not once any league is
+   * published (decision 2). A failed counter shows it, because it cannot say a league is
+   * published.
    */
   protected readonly showSetup = computed(() => {
-    if (this.leagues.error()) return true;
-    const rows = this.leagues.value();
-    return rows !== undefined && !rows.some((row) => row.status === 'published');
+    if (this.published.error()) return true;
+    const count = this.published.value();
+    return count !== undefined && count < 1;
   });
 
   /** The Locations tile, or `null` while the list loads. */
