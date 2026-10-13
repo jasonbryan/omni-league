@@ -641,12 +641,18 @@ describe('invites.restore: tester probes (#211)', () => {
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     const gone = await revokedInvite(s, 'erin@example.com');
     await s.t.run((ctx) => ctx.db.delete('invites', gone.inviteId));
-    const other = await s.asAdminB.mutation(api.invites.restore, { inviteId }).catch((e) => e);
-    const unknown = await s.asAdminB
-      .mutation(api.invites.restore, { inviteId: gone.inviteId })
-      .catch((e) => e);
-    expect(String(other.message)).toContain('Not allowed');
-    expect(String(unknown.message)).toContain('Not allowed');
+    const failure = async (id: Id<'invites'>): Promise<{ message: string; data?: unknown }> => {
+      try {
+        await s.asAdminB.mutation(api.invites.restore, { inviteId: id });
+      } catch (error) {
+        return error as { message: string; data?: unknown };
+      }
+      throw new Error('restore should have been refused');
+    };
+    const other = await failure(inviteId);
+    const unknown = await failure(gone.inviteId);
+    expect(other.message).toContain('Not allowed');
+    expect(unknown.message).toContain('Not allowed');
     expect(other.data).toBeUndefined();
     expect(unknown.data).toBeUndefined();
   });
