@@ -12,6 +12,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
@@ -19,6 +20,7 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
 import { injectMutation, injectOnline } from '../../core/data/convex';
 import { Checkbox } from '../../ui/checkbox';
+import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import {
@@ -38,6 +40,7 @@ import {
   RADIO_INPUT,
   RADIO_ITEM,
 } from './field-classes';
+import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
 
 export interface LeagueLocationChoice {
@@ -47,7 +50,7 @@ export interface LeagueLocationChoice {
 
 @Component({
   selector: 'app-league-create-form',
-  imports: [AdminAlert, Checkbox, FormField, NgIcon],
+  imports: [AdminAlert, Checkbox, FormField, NgIcon, RouterLink],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -59,13 +62,14 @@ export interface LeagueLocationChoice {
       class="px-4 py-4 md:px-5 md:py-5"
       (submit)="submit($event)"
     >
-      @if (created(); as name) {
+      @if (created(); as created) {
         <app-admin-alert
           kind="success"
-          [title]="name + ' created as a draft.'"
+          [title]="created.name + ' created as a draft.'"
           description="Publish it when it’s ready for players to see."
           class="mb-5"
-        />
+          ><a [routerLink]="leaguePath(created.slug)">Add seasons to {{ created.name }}</a>
+        </app-admin-alert>
       }
       @if (form.alert(); as kind) {
         <app-admin-alert
@@ -79,7 +83,7 @@ export interface LeagueLocationChoice {
       <p id="create-league-note" class="mb-5 text-sm text-muted-foreground">
         New leagues start as drafts, which only your staff see.
       </p>
-      <div data-slot="field-group" [class]="fieldGroupClass">
+      <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
         <div
           role="group"
           data-slot="field"
@@ -298,26 +302,28 @@ export interface LeagueLocationChoice {
           }
         </fieldset>
       </div>
-      <button
-        #submitButton
-        type="submit"
-        data-slot="button"
-        [class]="buttonClass"
-        [class.opacity-50]="!online() && !form.submitting()"
-        [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
-      >
-        @if (form.submitting()) {
-          <ng-icon
-            name="lucideLoaderCircle"
-            class="motion-safe:animate-spin"
-            data-icon="inline-start"
-            aria-hidden="true"
-          />Creating league…
-        } @else {
-          <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
-          league
-        }
-      </button>
+      <div data-slot="form-footer" [class]="footerClass">
+        <button
+          #submitButton
+          type="submit"
+          data-slot="button"
+          [class]="buttonClass"
+          [class.opacity-50]="!online() && !form.submitting()"
+          [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
+        >
+          @if (form.submitting()) {
+            <ng-icon
+              name="lucideLoaderCircle"
+              class="motion-safe:animate-spin"
+              data-icon="inline-start"
+              aria-hidden="true"
+            />Creating league…
+          } @else {
+            <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
+            league
+          }
+        </button>
+      </div>
       <p role="status" class="sr-only">{{ form.submitting() ? 'Creating the league.' : '' }}</p>
     </form>
   `,
@@ -328,6 +334,8 @@ export class LeagueCreateForm {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
+  /** The organization's slug, for the link to the new league's management page. */
+  readonly organizationSlug = input.required<string>();
   readonly locations = input.required<readonly LeagueLocationChoice[]>();
 
   protected readonly online = injectOnline();
@@ -350,13 +358,19 @@ export class LeagueCreateForm {
   protected readonly contentClass = FIELD_CONTENT;
   protected readonly radioInputClass = RADIO_INPUT;
   protected readonly radioIndicatorClass = RADIO_INDICATOR;
-  protected readonly buttonClass = `${PRIMARY_BUTTON} mt-6 w-full`;
+  protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
+  protected readonly footerClass = STICKY_FOOTER;
+  protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
 
   protected readonly radioClass = computed(
     () => `${RADIO_ITEM} ${this.form.errors.sport() ? RADIO_EDGE_INVALID : RADIO_EDGE}`,
   );
 
-  protected readonly created = signal<string | null>(null);
+  protected readonly created = signal<{ name: string; slug: string } | null>(null);
+
+  protected leaguePath(leagueSlug: string): string {
+    return leaguePath(this.organizationSlug(), leagueSlug);
+  }
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
@@ -383,7 +397,7 @@ export class LeagueCreateForm {
       this.create.run({ organizationId, ...values }),
     );
     if (outcome.sent) {
-      this.created.set(outcome.values.name);
+      this.created.set({ name: outcome.values.name, slug: outcome.values.slug });
       this.form.clear();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {

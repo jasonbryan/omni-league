@@ -86,6 +86,21 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
+  it('maps the shared sticky form footer to the league specs and the organizer league page specs', () => {
+    assert.deepEqual(
+      specsFor(['src/app/organizations/admin/sticky-footer.ts']),
+      want(
+        'e2e/league-management-mockup.spec.ts',
+        'e2e/league-management-publish.spec.ts',
+        'e2e/league-management.spec.ts',
+        'e2e/organization-leagues-mockup.spec.ts',
+        'e2e/organization-leagues-publish-states.spec.ts',
+        'e2e/organization-leagues-publish.spec.ts',
+        'e2e/organization-leagues.spec.ts',
+      ),
+    );
+  });
+
   it('maps an admin staff file to the staff and accept-invite specs', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/invite-form.ts']),

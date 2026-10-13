@@ -71,13 +71,14 @@ export class LeagueForm {
   readonly model: WritableSignal<LeagueTextModel> = signal({ name: '', slug: '' });
   readonly fields: FieldTree<LeagueTextModel>;
   readonly sport = signal<Sport | null>(null);
-  readonly selected = signal<ReadonlySet<Id<'locations'>>>(new Set());
+  readonly selected: WritableSignal<ReadonlySet<Id<'locations'>>>;
   readonly slugEdited = signal(false);
   readonly submitting = signal(false);
   readonly alert = signal<LeagueFormAlertKind | null>(null);
 
   readonly chosen: Signal<Id<'locations'>[]>;
 
+  private readonly defaultSelected: () => ReadonlySet<Id<'locations'>>;
   private readonly clientErrors: Record<LeagueField, Signal<string | null>>;
   private readonly shown: Record<LeagueField, ShownUntilValid>;
   private readonly locationsChanged = changedSince(() => this.selected());
@@ -95,6 +96,21 @@ export class LeagueForm {
     this.fields = form(this.model, (path) => {
       required(path.name);
       required(path.slug);
+    });
+    // The source is the only location's id, not the list, so a list that emits again with the same
+    // single location does not undo the user's choice.
+    const onlyLocation = computed(() => {
+      const ids = available();
+      return ids.length === 1 ? ids[0] : null;
+    });
+    this.defaultSelected = (): ReadonlySet<Id<'locations'>> => {
+      const only = onlyLocation();
+      return new Set(only === null ? [] : [only]);
+    };
+    this.selected = linkedSignal<Id<'locations'> | null, ReadonlySet<Id<'locations'>>>({
+      source: onlyLocation,
+      computation: (only, previous) =>
+        only === null ? (previous?.value ?? new Set()) : new Set([only]),
     });
     this.chosen = computed(() => available().filter((id) => this.selected().has(id)));
     this.clientErrors = {
@@ -162,7 +178,7 @@ export class LeagueForm {
     this.model.set({ name: '', slug: '' });
     this.slugEdited.set(false);
     this.sport.set(null);
-    this.selected.set(new Set());
+    this.selected.set(this.defaultSelected());
     this.fields().reset();
     this.locationsChanged.set(false);
   }

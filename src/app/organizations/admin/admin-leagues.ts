@@ -24,6 +24,7 @@ import { api } from '../../../../convex/_generated/api';
 import { injectQuery, skipToken } from '../../core/data/convex';
 import { isPlainClick } from '../../shell/follow-link';
 import { leaguePath } from '../league/league-path';
+import { publicLeaguePath } from '../public-league/public-league-path';
 import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
@@ -207,7 +208,7 @@ import {
           #createSection
           id="create-league"
           aria-labelledby="create-league-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -219,6 +220,7 @@ import {
               <app-league-create-form
                 [organizationId]="organization.organizationId"
                 [organizationName]="organization.name"
+                [organizationSlug]="organization.slug"
                 [locations]="locations"
               />
             } @else {
@@ -298,9 +300,11 @@ export class AdminLeagues {
 
   protected readonly published = signal<PublishTarget | null>(null);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
-  protected readonly publicPath = computed(
-    () => `/organizations/${encodeURIComponent(this.context.slug())}`,
-  );
+  /** The published league's own public page (#127), not the organization's. */
+  protected readonly publicPath = computed(() => {
+    const league = this.published();
+    return league ? publicLeaguePath(this.context.slug(), league.slug) : '';
+  });
 
   constructor() {
     bindAdminTitle('Leagues');
@@ -308,13 +312,17 @@ export class AdminLeagues {
 
   protected publish(row: PublishTarget): void {
     this.published.set(null);
-    this.publishDialog()?.open({ leagueId: row.leagueId, name: row.name });
+    this.publishDialog()?.open({ leagueId: row.leagueId, name: row.name, slug: row.slug });
   }
 
   /** A published league moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on that row's Publish button. */
   protected publishDismissed(outcome: PublishOutcome): void {
     if (outcome.published) {
-      this.published.set({ leagueId: outcome.leagueId, name: outcome.name });
+      this.published.set({
+        leagueId: outcome.leagueId,
+        name: outcome.name,
+        slug: outcome.slug,
+      });
       afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
       return;
     }

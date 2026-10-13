@@ -6,6 +6,7 @@ import { ConvexOfflineError } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import {
   adminRoutes,
   COASTAL,
@@ -248,6 +249,91 @@ describe('AdminLeagues', () => {
     });
   });
 
+  describe('the sticky footer', () => {
+    it('holds the submit button in the shared sticky footer, below the fields, and the card clips instead of hiding overflow', async () => {
+      await open([]);
+      const footer = submitButton().parentElement!;
+      expect(footer.getAttribute('data-slot')).toBe('form-footer');
+      expect(tokens(footer.className)).toEqual(tokens(STICKY_FOOTER));
+      expect(tokens(footer.className)).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
+      expect(footer.parentElement).toBe(form());
+      expect(
+        form().querySelector('[data-slot="field-group"]')!.compareDocumentPosition(footer) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // `overflow-hidden` would make the card the footer's scroll container, so it never sticks.
+      const card = page.querySelector('#create-league')!;
+      expect(tokens(card.className)).toContain('overflow-clip');
+      expect(tokens(card.className)).not.toContain('overflow-hidden');
+    });
+
+    it('keeps its fields clear of the footer when they take focus (WCAG 2.4.11)', async () => {
+      await open([]);
+      const group = form().querySelector('[data-slot="field-group"]')!;
+      expect(tokens(group.className)).toEqual(
+        expect.arrayContaining(tokens(STICKY_FOOTER_CLEARANCE)),
+      );
+    });
+  });
+
+  describe('one location', () => {
+    const ONLY = [COASTAL_LOCATIONS[0]];
+
+    it('shows the only location checked, so a valid form needs no tick', async () => {
+      await open([], ONLY);
+      expect(location(1).getAttribute('aria-checked')).toBe('true');
+      await type('name', 'Sunday Reverse Coed 4s');
+      await chooseSport('beachVolleyball');
+      await submit();
+      expect(calls()).toEqual([
+        [
+          CREATE,
+          {
+            organizationId: COASTAL.organizationId,
+            name: 'Sunday Reverse Coed 4s',
+            slug: 'sunday-reverse-coed-4s',
+            sport: 'beachVolleyball',
+            locationIds: ['loc_pelican'],
+          },
+        ],
+      ]);
+    });
+
+    it('checks it again after a successful create', async () => {
+      await open([], ONLY);
+      await type('name', 'Sunday Reverse Coed 4s');
+      await chooseSport('beachVolleyball');
+      await submit();
+      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+      await o.flush();
+      expect(input('name').value).toBe('');
+      expect(location(1).getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('keeps a location the user unchecked unchecked, and refuses a submit without one', async () => {
+      await open([], ONLY);
+      await toggleLocation(1);
+      expect(location(1).getAttribute('aria-checked')).toBe('false');
+      await type('name', 'Sunday Reverse Coed 4s');
+      await chooseSport('beachVolleyball');
+      await submit();
+      expect(o.convex.calls).toHaveLength(0);
+      expect(error('locations')).toBe('Choose at least one location.');
+    });
+
+    it('with two or more locations none is checked, after a create too', async () => {
+      await open([], COASTAL_LOCATIONS);
+      expect(
+        [...page.querySelectorAll('[role="checkbox"]')].map((b) => b.getAttribute('aria-checked')),
+      ).toEqual(['false', 'false', 'false']);
+      await fill();
+      await submit();
+      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+      await o.flush();
+      expect(location(1).getAttribute('aria-checked')).toBe('false');
+    });
+  });
+
   describe('the form (states 4 to 8)', () => {
     it('is a labelled section and form with the mockup attributes', async () => {
       await open([]);
@@ -276,7 +362,7 @@ describe('AdminLeagues', () => {
         '3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coastal Bend Rec Club.',
       );
       expect(text(submitButton())).toBe('Create draft league');
-      expect(tokens(submitButton().className)).toEqual(tokens(`${PRIMARY_BUTTON} mt-6 w-full`));
+      expect(tokens(submitButton().className)).toEqual(tokens(`${PRIMARY_BUTTON} w-full`));
       expect(text(formStatus())).toBe('');
     });
 
@@ -536,7 +622,7 @@ describe('AdminLeagues', () => {
         'Sunday Reverse Coed 4s created as a draft.',
       );
       expect(text(status.querySelector('[data-slot="alert-description"]'))).toBe(
-        'Publish it when it’s ready for players to see.',
+        'Publish it when it’s ready for players to see. Add seasons to Sunday Reverse Coed 4s',
       );
       expect(
         status.compareDocumentPosition(input('name')) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -552,6 +638,31 @@ describe('AdminLeagues', () => {
       expect(input('slug').value).toBe('next-one');
       await submit();
       expect(form().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
+    });
+
+    it('the success status links "Add seasons to <league>" to the league’s management page', async () => {
+      await open([]);
+      await fill();
+      await submit();
+      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+      await o.flush();
+      const link = form().querySelector<HTMLAnchorElement>('[data-slot="alert"] a')!;
+      expect(text(link)).toBe('Add seasons to Sunday Reverse Coed 4s');
+      expect(link.getAttribute('href')).toBe(
+        `/app/organizations/${COASTAL.slug}/leagues/sunday-reverse-coed-4s`,
+      );
+    });
+
+    it('the link names the slug as sent, even after the fields were cleared', async () => {
+      await open([]);
+      await fill();
+      await type('slug', 'sunday-4s');
+      await submit();
+      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
+      await o.flush();
+      expect(form().querySelector('[data-slot="alert"] a')!.getAttribute('href')).toBe(
+        `/app/organizations/${COASTAL.slug}/leagues/sunday-4s`,
+      );
     });
 
     it('the server saying the slug is taken (state 6) shows the message with the slug in bold, and focus on Slug', async () => {
