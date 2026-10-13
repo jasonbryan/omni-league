@@ -45,9 +45,10 @@ Accepted decisions live in `docs/decisions/` (ADRs). Use only accepted technolog
 - **Frontend:** Angular, latest stable major, using its current APIs. Conventions: [docs/conventions/angular.md](docs/conventions/angular.md).
 - **Backend:** Convex. Conventions: [docs/conventions/convex.md](docs/conventions/convex.md).
 - **Payments:** Stripe. Conventions: [docs/conventions/stripe.md](docs/conventions/stripe.md).
+- **UX (task flows and UI):** Conventions: [docs/conventions/ux.md](docs/conventions/ux.md).
 - **Source control, issues, PRs:** GitHub, via the `gh` CLI.
 
-Read the matching conventions file before writing or reviewing code in that layer.
+Read the matching conventions file before writing or reviewing code in that layer, and `docs/conventions/ux.md` as well for any change to a screen or task flow.
 
 ## Secrets
 
