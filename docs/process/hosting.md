@@ -4,11 +4,11 @@ How per-PR previews and staging are set up and checked on Netlify with Convex pr
 
 The Netlify project (site name, `<site>` below) is **`charming-longma-28c00d`**. The site name is not a secret.
 
-| Deploy     | URL                                                                            | Convex deployment                   | Netlify context  |
-| ---------- | ------------------------------------------------------------------------------ | ----------------------------------- | ---------------- |
-| PR preview | `https://deploy-preview-<n>--charming-longma-28c00d.netlify.app`               | preview `pr-<n>`, new on every push | `deploy-preview` |
-| Staging    | `https://main--charming-longma-28c00d.netlify.app`                             | preview `main`, new on every merge  | `branch-deploy`  |
-| Production | `https://charming-longma-28c00d.netlify.app` (private until the first release) | production (US East)                | `production`     |
+| Deploy     | URL                                                                            | Convex deployment                                                                                       | Netlify context  |
+| ---------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| PR preview | `https://deploy-preview-<n>--charming-longma-28c00d.netlify.app`               | preview `pr-<n>`, new on every push                                                                     | `deploy-preview` |
+| Staging    | `https://main--charming-longma-28c00d.netlify.app`                             | preview `main`, kept between merges until Convex deletes it 5 days after creation ([Cleanup](#cleanup)) | `branch-deploy`  |
+| Production | `https://charming-longma-28c00d.netlify.app` (private until the first release) | production (US East)                                                                                    | `production`     |
 
 ## Owner setup (one time)
 
@@ -45,6 +45,8 @@ Every preview deployment (`pr-<n>` and staging `main`) gets these Convex default
 | `BETTER_AUTH_SECRET`     | a preview-only value (never the production one)    | yes    |
 | `AUTH_EMAIL_DISABLED`    | `true`                                             | no     |
 
+**Changing a default.** Convex applies the defaults only when it creates a deployment, so a changed default reaches staging's `main` only when `main` is recreated or the value is set on it by hand (`--preview-name` reuses it, [Cleanup](#cleanup)). The [deploy check](#deploy-environment-check) reads names only, so it catches a missing variable but not a changed `SITE_URL` or `PREVIEW_ORIGIN_PATTERN` value. The Convex dashboard flags deployments whose variables differ from the defaults.
+
 `SITE_URL` cannot differ per preview (ADR 0008), so every preview shares the staging origin, and `PREVIEW_ORIGIN_PATTERN` admits each preview's own origin.
 
 `PREVIEW_ORIGIN_PATTERN` comes from the exported constant in `convex/lib/previewOrigin.ts`, its single source; `convex/lib/previewOrigin.test.ts` tests it and checks that this page quotes it. Copy it exactly:
@@ -59,7 +61,7 @@ Every preview deployment (`pr-<n>` and staging `main`) gets these Convex default
 
 ## Demo data
 
-Every build of a preview (`pr-<n>`) and of staging (`main`) runs the internal mutation `seed:demo` (`convex/seed.ts`, #97), so each merged feature is visible on staging with demo data. In `netlify.toml`'s `deploy-preview` and `branch-deploy` contexts it is the last step, `npx convex run seed:demo --preview-name <name>`, with the same name as `--preview-create` (`pr-$REVIEW_ID`, `$HEAD`). It runs after `npx convex deploy` and after the [deploy environment check](#deploy-environment-check), so a deployment that fails the check is not seeded. It replaces `--preview-run seed:demo` (#60), which runs only when the deploy creates a new deployment: after the #93 merge, staging had no demo data (#97). The build log shows the run and the rows it inserted per table: 5 organizations, 10 locations, 15 leagues, and 4 seasons on a new deployment, and zeros on a deployment that already has them, followed by `backfilled` (see below).
+Every build of a preview (`pr-<n>`) and of staging (`main`) runs the internal mutation `seed:demo` (`convex/seed.ts`, #97), so each merged feature is visible on staging with demo data. In `netlify.toml`'s `deploy-preview` and `branch-deploy` contexts it is the last step, `npx convex run seed:demo --preview-name <name>`, with the same name as the deploy's `--preview-create` (previews, `pr-$REVIEW_ID`) or `--preview-name` (staging, `$HEAD`). It runs after `npx convex deploy` and after the [deploy environment check](#deploy-environment-check), so a deployment that fails the check is not seeded. It replaces `--preview-run seed:demo` (#60), which runs only when the deploy creates a new deployment: after the #93 merge, staging had no demo data (#97). The build log shows the run and the rows it inserted per table: 5 organizations, 10 locations, 15 leagues, and 4 seasons on a new deployment, and zeros on a deployment that already has them, followed by `backfilled` (see below).
 
 **What it creates.** Fictional organizations in US cities, covering every sport in at least two organizations, with one organization running more than one sport:
 
@@ -86,7 +88,7 @@ Every build of a preview (`pr-<n>`) and of staging (`main`) runs the internal mu
 
 **Required variables (#111).** Both modes also fail when `BETTER_AUTH_SECRET` or `SITE_URL` is not set, from the names alone. Production fails until the owner sets both on the production deployment (ADR 0008 already requires them before the first production release); previews and staging already have both. An empty value is invisible to `--names-only`, so `convex/auth.ts` refuses every auth request with 503 `AUTH_NOT_CONFIGURED` while the secret is unset or empty.
 
-**Targeting.** `--preview-name <name>` selects the preview deployment with the preview deploy key; it is the same name `npx convex deploy --preview-create` used (`pr-$REVIEW_ID`, or `$HEAD` = `main` for staging). Convex 1.46's `env` commands accept `--preview-name` but hide it from `--help`. If a Convex upgrade drops it, the CLI call fails and so does the build; it never passes silently. Without `--preview-name`, the CLI acts on the deployment that `CONVEX_DEPLOY_KEY` names (a production key).
+**Targeting.** `--preview-name <name>` selects the preview deployment with the preview deploy key; it is the same name `npx convex deploy` used with `--preview-create` for a preview (`pr-$REVIEW_ID`) or `--preview-name` for staging (`$HEAD` = `main`). Convex 1.46's `env` commands accept `--preview-name` but hide it from `--help`. If a Convex upgrade drops it, the CLI call fails and so does the build; it never passes silently. Without `--preview-name`, the CLI acts on the deployment that `CONVEX_DEPLOY_KEY` names (a production key).
 
 **Ordering.**
 
@@ -171,7 +173,9 @@ E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts --project
 
 ## Cleanup
 
-A workflow deletes the Convex preview deployment of a PR after the PR merges, and a daily sweep deletes those of closed PRs (below). Without it, Convex deletes preview deployments 5 days after creation. Convex 1.46 documents `--preview-create` as deleting and recreating a preview deployment with the same name, so a build may start from an empty backend; `seed:demo` runs on every build, so the demo data is there either way. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Staging stops working if `main` gets no merge for 5 days, until the next merge recreates its backend.
+A workflow deletes the Convex preview deployment of a PR after the PR merges, and a daily sweep deletes those of closed PRs (below). Without it, Convex deletes preview deployments 5 days after creation. Convex 1.46 documents `--preview-create` as deleting and recreating a preview deployment with the same name, so a PR preview build starts from an empty backend; `seed:demo` runs on every build, so the demo data is there either way. Staging uses `--preview-name` instead (#222, [ADR 0010 amendment](../decisions/0010-hosting-and-deployment.md#amendment-staging-keeps-its-convex-data-2026-10-13)): it reuses the deployment `main` and its data, and creates it when none exists, so the owner's test accounts and organizations survive a merge. Netlify deletes non-published deploys after 30 days on Free, or 90 days on paid plans. Until then a closed PR's preview URL keeps serving test data. Reusing the deployment does not extend its life: Convex deletes a preview deployment 5 days after it is created, whatever deploys it receives. Staging therefore stops working 5 days after `main` was created, merges or not, until the next merge creates it again with fresh data (re-seeded by that build), and the owner's test accounts go with it. Convex's preview deployments page says the expiration of an existing deployment can be changed in the dashboard deployment settings; whether that applies on the Free plan is unconfirmed, and the choice is the owner's.
+
+**Schema changes meet staging's data.** Because `main` is reused, `npx convex deploy` validates `convex/schema.ts` against staging's stored rows, which a fresh PR preview never has. A PR that tightens the schema (a new required field, a narrowed union) without a backfill passes its own preview and `ci`, then fails the staging build after merge. `seed:demo`'s backfill runs after the deploy and cannot repair those rows. Staging then stays on the old build, and every later merge fails the same way. Each PR's Migration section therefore covers staging's stored data, and the deployer treats a schema-validation failure on staging as a missing migration.
 
 ### Freeing Convex preview slots (#158)
 
