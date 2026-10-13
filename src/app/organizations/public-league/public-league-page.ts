@@ -107,18 +107,25 @@ export class PublicLeaguePage {
   private readonly online = injectOnline();
 
   /**
-   * The seasons to show: the query's result, or the previous page's result of the same league
-   * while the next page loads (args change: `value()` returns to `undefined` until the first
-   * result). Another league's seasons are never kept.
+   * The seasons to show: the query's result, or, only while online, the previous page's result of
+   * the same league while the next page loads (args change: `value()` returns to `undefined` until
+   * the first result). Offline, a page that has no saved copy shows nothing, so the not-saved view
+   * takes its place (design/mockups/82-offline-pages.html state 2): the previous rows would sit
+   * under another page's URL, and the load would never end. Another league's seasons are never
+   * kept.
    */
   private readonly shownSeasons = linkedSignal<
-    { key: string; value: PublicLeagueSeasons | undefined },
+    { key: string; value: PublicLeagueSeasons | undefined; online: boolean },
     { key: string; value: PublicLeagueSeasons } | undefined
   >({
-    source: () => ({ key: `${this.orgSlug()}/${this.leagueSlug()}`, value: this.seasons.value() }),
-    computation: ({ key, value }, previous) => {
+    source: () => ({
+      key: `${this.orgSlug()}/${this.leagueSlug()}`,
+      value: this.seasons.value(),
+      online: this.online(),
+    }),
+    computation: ({ key, value, online }, previous) => {
       if (value) return { key, value };
-      return previous?.value?.key === key ? previous.value : undefined;
+      return online && previous?.value?.key === key ? previous.value : undefined;
     },
   });
 

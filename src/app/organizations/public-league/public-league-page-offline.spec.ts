@@ -203,6 +203,64 @@ describe('PublicLeaguePage offline', () => {
     expect(note(harness)).toBeNull();
   });
 
+  describe('a page link while offline (82-offline-pages.html state 2)', () => {
+    const nextLink = (harness: RouterTestingHarness) =>
+      host(harness).querySelector<HTMLAnchorElement>(
+        'nav[aria-label="Seasons pages"] a[href$="?page=2#seasons"]',
+      )!;
+
+    it('to a page with no saved copy shows the not-saved view, never the previous rows, and nothing stays busy', async () => {
+      plant();
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      expect(host(harness).querySelector('section#seasons > ul')).not.toBeNull();
+      nextLink(harness).click();
+      await settle(harness);
+      expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+      expect(host(harness).querySelector('section#seasons')).toBeNull();
+      expect(host(harness).querySelector('[aria-busy="true"]')).toBeNull();
+      expect(host(harness).querySelector('nav[aria-label="Seasons pages"]')).toBeNull();
+      const retry = host(harness).querySelector('main a');
+      expect(retry?.getAttribute('href')).toBe(`${PATH}?page=2`);
+    });
+
+    it('to a page with its own saved copy opens it with the note', async () => {
+      plant();
+      plantSavedCopy(
+        api.seasons.listPublic,
+        { orgSlug: ORG_SLUG, leagueSlug: LEAGUE_SLUG, page: 2 },
+        leagueQueryResults({ page: 2 })[SEASONS],
+        SAVED_AT,
+      );
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      nextLink(harness).click();
+      await settle(harness);
+      expect(host(harness).querySelector('app-not-saved-view')).toBeNull();
+      expect([...host(harness).querySelectorAll('section#seasons > ul > li h3')].map(text)).toEqual(
+        ['Fall 2025', 'Summer 2025'],
+      );
+      expect(note(harness)).not.toBeNull();
+    });
+
+    it('online, the previous rows stay with aria-busy until the page arrives; going offline then shows the not-saved view', async () => {
+      stubOnLine(true);
+      const harness = await open();
+      emit();
+      await settle(harness);
+      nextLink(harness).click();
+      await settle(harness);
+      expect(host(harness).querySelector('section#seasons > ul')?.getAttribute('aria-busy')).toBe(
+        'true',
+      );
+      stubOnLine(false);
+      window.dispatchEvent(new Event('offline'));
+      await settle(harness);
+      expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+      expect(host(harness).querySelector('[aria-busy="true"]')).toBeNull();
+    });
+  });
+
   it('a saved empty list shows the empty state with the note', async () => {
     plant(leagueQueryResults({ seasons: NO_SEASONS }));
     stubOnLine(false);

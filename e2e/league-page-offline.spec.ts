@@ -39,8 +39,9 @@ test.describe('public league page offline', () => {
         body: JSON.stringify({
           url: page.url(),
           rows: await rows.allInnerTexts(),
-          busy: await page.locator('section#seasons > ul').getAttribute('aria-busy'),
-          range: await pages.locator('p').innerText(),
+          // The not-saved view has no list or control, so read them only when they are there.
+          busy: await page.locator('[aria-busy="true"]').count(),
+          range: (await pages.count()) > 0 ? await pages.locator('p').innerText() : null,
           note: await note.count(),
           notSaved: await page.locator('app-not-saved-view').count(),
           h1: await page.locator('main h1').allInnerTexts(),
