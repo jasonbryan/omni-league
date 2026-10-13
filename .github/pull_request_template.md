@@ -26,7 +26,7 @@ What changed and why, in one to three sentences.
 
 ## UX checklist
 
-For UI changes, copy the list under "UX checklist" in [docs/conventions/ux.md](../docs/conventions/ux.md#ux-checklist) here and tick it, or write `no UI changed`.
+For UI changes, copy the list under "UX checklist" in [docs/conventions/ux.md](https://github.com/jasonbryan/omni-league/blob/main/docs/conventions/ux.md#ux-checklist) here and tick it, or write `no UI changed`.
 
 <details><summary>Evidence</summary>
 
