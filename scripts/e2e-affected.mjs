@@ -78,10 +78,11 @@ const PUBLIC_PAGE = [
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
 /**
  * Every spec that opens the sport view (#114), directly or from the organization or league page: its
- * own spec and the cache-key samples of its `?page=N` parameter. The league page links to it from
+ * own spec, the tester's focus, sheet, and offline probes, and the cache-key samples of its
+ * `?page=N` parameter. The league page links to it from
  * its sidebar and breadcrumb, and the organization page lists the sports in its sidebar.
  */
-const SPORT_VIEW = ['sport-view', 'cache-key'];
+const SPORT_VIEW = ['sport-view', 'sport-view-tester', 'cache-key'];
 /** Every spec that opens the organizer's league page (#125, #126), where seasons are created and published. */
 const LEAGUE_MANAGEMENT = [
   'league-management',

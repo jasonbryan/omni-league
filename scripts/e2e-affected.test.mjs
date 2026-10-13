@@ -182,6 +182,7 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/cache-key.spec.ts',
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
+          'e2e/sport-view-tester.spec.ts',
           'e2e/sport-view.spec.ts',
         ),
         file,
@@ -197,7 +198,7 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/sport-view.spec.ts'),
+        want('e2e/cache-key.spec.ts', 'e2e/sport-view-tester.spec.ts', 'e2e/sport-view.spec.ts'),
         file,
       );
     }
