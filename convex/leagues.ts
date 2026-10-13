@@ -14,6 +14,7 @@ import {
   type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { leagueLocationNames } from './lib/publicLeague';
 import { getLeaguePublicPageReturns } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
@@ -250,17 +251,12 @@ export const getPublicPage = query({
     const found = await findLeagueBySlugs(ctx, args);
     if (found?.league.status !== 'published') return null;
     const { organization, league } = found;
-    const locationNames: string[] = [];
-    for (const id of league.locationIds) {
-      const location = await ctx.db.get('locations', id);
-      if (location?.organizationId === organization._id) locationNames.push(location.name);
-    }
     return {
       organization: { name: organization.name, slug: organization.slug },
       name: league.name,
       slug: league.slug,
       sportName: sportName(league.sport),
-      locationNames,
+      locationNames: await leagueLocationNames(ctx, organization, league),
     };
   },
 });

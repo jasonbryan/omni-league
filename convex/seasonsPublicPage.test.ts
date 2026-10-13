@@ -1,0 +1,211 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test';
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
+import { api } from './_generated/api';
+import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
+import schema from './schema';
+import { modules } from './test.setup';
+
+// `seasons.getPublicPage` (#128): the public season page's data, for a published season of a
+// published league only.
+
+const seasonsSource = readFileSync(new URL('./seasons.ts', import.meta.url), 'utf8');
+
+const SUMMER: NewSeason = {
+  name: 'Summer 2027',
+  slug: 'summer-2027',
+  startDate: '2027-06-06',
+  endDate: '2027-08-29',
+  registrationDeadline: '2027-05-30',
+  format: '4v4',
+  minimumRosterSize: 5,
+};
+
+/**
+ * Organization A (`org-a`) with locations "Alpha Field" and "Beta Courts", a published beach
+ * volleyball league `sand-4s` at both with a published season `summer-2027` and a draft season
+ * `draft-season`, a draft league `draft-league` with a published season `summer-2027` (written
+ * directly: the season publisher refuses it), and a published league `coed-7v7` with a season
+ * `summer-2027` of its own. Organization B (`org-b`) has a published league `sand-4s` with a
+ * published season `b-season`.
+ */
+async function setup() {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    await insertTenant(ctx, {
+      organization: { name: 'Org A', slug: 'org-a' },
+      locations: [
+        { name: 'Alpha Field', address: '1 Alpha St' },
+        { name: 'Beta Courts', address: '2 Beta St' },
+      ],
+      leagues: [
+        { name: 'Sand 4s', sport: 'beachVolleyball', locations: ['Beta Courts', 'Alpha Field'] },
+        { name: 'Draft League', sport: 'soccer', locations: ['Alpha Field'], status: 'draft' },
+        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
+      ],
+    });
+    await insertTenant(ctx, {
+      organization: { name: 'Org B', slug: 'org-b' },
+      locations: [{ name: 'B Field', address: '9 B St' }],
+      leagues: [{ name: 'Sand 4s', sport: 'beachVolleyball', locations: ['B Field'] }],
+    });
+    const orgIds = new Map(
+      (await ctx.db.query('organizations').collect()).map((o) => [o.slug, o._id]),
+    );
+    const leagues = await ctx.db.query('leagues').collect();
+    const league = (slug: string, org: string) => {
+      const found = leagues.find(
+        (candidate) => candidate.slug === slug && candidate.organizationId === orgIds.get(org),
+      );
+      if (!found) throw new Error(`no league ${org}/${slug}`);
+      return found;
+    };
+    await insertSeason(ctx, league('sand-4s', 'org-a'), SUMMER, 'published');
+    await insertSeason(
+      ctx,
+      league('sand-4s', 'org-a'),
+      { ...SUMMER, name: 'Draft Season', slug: 'draft-season' },
+      'draft',
+    );
+    await insertSeason(ctx, league('draft-league', 'org-a'), SUMMER, 'published');
+    await insertSeason(
+      ctx,
+      league('coed-7v7', 'org-a'),
+      { ...SUMMER, name: 'Coed Summer', slug: 'coed-summer', format: '7v7', minimumRosterSize: 7 },
+      'published',
+    );
+    await insertSeason(
+      ctx,
+      league('sand-4s', 'org-b'),
+      { ...SUMMER, name: 'B Season', slug: 'b-season' },
+      'published',
+    );
+  });
+  return t;
+}
+
+type T = Awaited<ReturnType<typeof setup>>;
+
+const get = (t: T, orgSlug: string, leagueSlug: string, seasonSlug: string) =>
+  t.query(api.seasons.getPublicPage, { orgSlug, leagueSlug, seasonSlug });
+
+describe('seasons.getPublicPage', () => {
+  test('returns the organization, the league with its sport name and location names in its own order, and the season’s dates, format name, and minimum roster size', async () => {
+    const t = await setup();
+    const page = await get(t, 'org-a', 'sand-4s', 'summer-2027');
+    expect(page).toEqual({
+      organization: { name: 'Org A', slug: 'org-a' },
+      league: {
+        name: 'Sand 4s',
+        slug: 'sand-4s',
+        sportName: 'Beach volleyball',
+        locationNames: ['Beta Courts', 'Alpha Field'],
+      },
+      name: 'Summer 2027',
+      slug: 'summer-2027',
+      startDate: '2027-06-06',
+      endDate: '2027-08-29',
+      formatName: '4 v 4',
+      minimumRosterSize: 5,
+    });
+  });
+
+  test('holds no id, creation time, status, registration deadline, or counter', async () => {
+    const t = await setup();
+    const page = await get(t, 'org-a', 'sand-4s', 'summer-2027');
+    expect(JSON.stringify(page)).not.toMatch(
+      /_id|_creationTime|Id"|status|registration|Count|deadline/i,
+    );
+  });
+
+  test('is null for a draft season, even when the league is published', async () => {
+    const t = await setup();
+    expect(await get(t, 'org-a', 'sand-4s', 'draft-season')).toBeNull();
+  });
+
+  test('is null for a published season of a draft league', async () => {
+    const t = await setup();
+    expect(await get(t, 'org-a', 'draft-league', 'summer-2027')).toBeNull();
+  });
+
+  test('is null for a league stored without a status', async () => {
+    const t = await setup();
+    await t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (candidate) => candidate.slug === 'coed-7v7',
+      )!;
+      await ctx.db.replace('leagues', league._id, {
+        organizationId: league.organizationId,
+        name: league.name,
+        slug: league.slug,
+        sport: league.sport,
+        locationIds: league.locationIds,
+        sortName: league.sortName,
+      });
+    });
+    expect(await get(t, 'org-a', 'coed-7v7', 'coed-summer')).toBeNull();
+  });
+
+  test('is null for an unknown season, league, and organization, and for text that is not a slug', async () => {
+    const t = await setup();
+    expect(await get(t, 'org-a', 'sand-4s', 'no-such-season')).toBeNull();
+    expect(await get(t, 'org-a', 'no-such-league', 'summer-2027')).toBeNull();
+    expect(await get(t, 'no-such-org', 'sand-4s', 'summer-2027')).toBeNull();
+    expect(await get(t, 'Not A Slug', 'sand-4s', 'summer-2027')).toBeNull();
+    expect(await get(t, 'org-a', 'sand-4s', 'Not A Slug')).toBeNull();
+    expect(await get(t, 'org-a', 'sand-4s', '')).toBeNull();
+  });
+
+  test('is null for a season slug of another league, and for a league slug of another organization', async () => {
+    const t = await setup();
+    // `coed-summer` belongs to `coed-7v7`, `b-season` to organization B's `sand-4s`.
+    expect(await get(t, 'org-a', 'sand-4s', 'coed-summer')).toBeNull();
+    expect(await get(t, 'org-a', 'sand-4s', 'b-season')).toBeNull();
+    expect(await get(t, 'org-b', 'sand-4s', 'summer-2027')).toBeNull();
+    expect(await get(t, 'org-b', 'coed-7v7', 'coed-summer')).toBeNull();
+  });
+
+  test('the same season slug in two leagues answers each league’s own season', async () => {
+    const t = await setup();
+    const sand = await get(t, 'org-a', 'sand-4s', 'summer-2027');
+    expect(sand?.formatName).toBe('4 v 4');
+    // Another league's slug, `coed-7v7`, has only `coed-summer`: no `summer-2027`.
+    expect(await get(t, 'org-a', 'coed-7v7', 'summer-2027')).toBeNull();
+    const coed = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
+    expect(coed).toMatchObject({
+      league: { sportName: 'Soccer' },
+      formatName: '7 v 7',
+      minimumRosterSize: 7,
+    });
+  });
+
+  test('a location of another organization is left out of the names', async () => {
+    const t = await setup();
+    await t.run(async (ctx) => {
+      const foreign = (await ctx.db.query('locations').collect()).find(
+        (location) => location.name === 'B Field',
+      )!;
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (candidate) => candidate.slug === 'coed-7v7',
+      )!;
+      await ctx.db.patch('leagues', league._id, {
+        locationIds: [...league.locationIds, foreign._id],
+      });
+    });
+    const page = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
+    expect(page?.league.locationNames).toEqual(['Alpha Field']);
+  });
+
+  test('is public: an anonymous caller reads it, and no argument names an id', async () => {
+    const t = await setup();
+    // No identity is set on `t`.
+    expect(await get(t, 'org-a', 'sand-4s', 'summer-2027')).not.toBeNull();
+  });
+
+  test('looks the season up through findSeasonBySlugs and declares the shared returns validator', () => {
+    expect(seasonsSource).toContain('findSeasonBySlugs');
+    expect(seasonsSource).toContain('getSeasonPublicPageReturns');
+    expect(seasonsSource).not.toMatch(/\.filter\(/);
+  });
+});

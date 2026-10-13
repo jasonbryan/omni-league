@@ -29,8 +29,7 @@ export function publicLeaguePath(orgSlug: string, leagueSlug: string): string {
 }
 
 /**
- * The season page's path, `/organizations/<org>/leagues/<league>/seasons/<season>` (#128 adds the
- * route; until it merges the link is a 404, which #127 accepts).
+ * The season page's path, `/organizations/<org>/leagues/<league>/seasons/<season>` (#128).
  */
 export function publicSeasonPath(orgSlug: string, leagueSlug: string, seasonSlug: string): string {
   return `${publicLeaguePath(orgSlug, leagueSlug)}/seasons/${encodeURIComponent(seasonSlug)}`;

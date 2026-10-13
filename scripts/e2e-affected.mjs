@@ -83,6 +83,11 @@ const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
  * its sidebar and breadcrumb, and the organization page lists the sports in its sidebar.
  */
 const SPORT_VIEW = ['sport-view', 'sport-view-tester', 'cache-key'];
+/**
+ * Every spec that opens the public season page (#128), directly or from the league page: its own
+ * spec (raw HTML, time zone, the link from the league page) and the cache-key samples of its route.
+ */
+const SEASON_PAGE = ['season-page', 'cache-key'];
 /** Every spec that opens the organizer's league page (#125, #126), where seasons are created and published. */
 const LEAGUE_MANAGEMENT = [
   'league-management',
@@ -264,22 +269,30 @@ export const AREAS = [
       'organization-sidebar',
     ]),
     // The admin area imports `initials` from organization-sidebar, and the league rows link to the
-    // public league page (#127), which league-page.spec.ts reaches from here.
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SPORT_VIEW],
+    // public league page (#127), which league-page.spec.ts reaches from here. The season page
+    // (#128) shows the same sidebar, and its sports link to the sport view (#114).
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW],
   },
   {
-    // The public league page (#127): its page, content, sidebar, paths, and test data. Its sidebar
-    // and breadcrumb link to the sport view (#114).
+    // The public league page (#127): its page, content, sidebar, paths, and test data. The season
+    // page (#128) shows the league page's sidebar and builds its links from its paths, and the
+    // league page's rows link to it. Its sidebar and breadcrumb link to the sport view (#114).
     name: 'public league page',
     test: inDir('src/app/organizations/public-league/'),
-    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW],
   },
   {
-    // `sport-view-path.ts` builds the `/sports/` hrefs that the organization page's and the league
-    // page's raw HTML specs assert (their sidebars link to the sport view).
+    // The public season page (#128): its page, content, paths, and test data.
+    name: 'public season page',
+    test: inDir('src/app/organizations/public-season/'),
+    specs: SEASON_PAGE,
+  },
+  {
+    // `sport-view-path.ts` builds the `/sports/` hrefs that the organization page's, the league
+    // page's, and the season page's raw HTML specs assert (their sidebars link to the sport view).
     name: 'sport view paths',
     test: named('src/app/organizations/sport-view/', ['sport-view-path']),
-    specs: ['organization-page', ...LEAGUE_PAGE, ...SPORT_VIEW],
+    specs: ['organization-page', ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW],
   },
   {
     // The sport view (#114): its page, content, paths, and test data. The organization sidebar it
@@ -296,11 +309,16 @@ export const AREAS = [
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
-    // `parseListPage` and the page query (#127) and the focus move after a route change (#127,
-    // #114).
-    name: 'list page and focus helpers',
-    test: named('src/app/core/', ['list-page', 'focus-main']),
+    // `parseListPage` and the page query (#127), also read by the sport view (#114).
+    name: 'list page helper',
+    test: named('src/app/core/', ['list-page']),
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
+  },
+  {
+    // The focus move after a route change (#127), also asserted on the season page (#128).
+    name: 'focus helper',
+    test: named('src/app/core/', ['focus-main']),
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
@@ -313,15 +331,15 @@ export const AREAS = [
   {
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
-    // league-page.spec.ts asserts the league page's 404 (#127), sport-view.spec.ts the sport
-    // view's (#114).
-    specs: ['not-found', 'organization-page', 'league-page', 'sport-view', ...ADMIN],
+    // league-page.spec.ts and season-page.spec.ts assert the league and season pages' 404
+    // (#127, #128), sport-view.spec.ts the sport view's (#114).
+    specs: ['not-found', 'organization-page', 'league-page', 'season-page', 'sport-view', ...ADMIN],
   },
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    // The league page's saved-copy note and not-saved view (#127), and the sport view's, which
-    // sport-view-tester.spec.ts asserts (#114).
+    // The league page's (#127) and the season page's (#128) saved-copy note and not-saved view, and
+    // the sport view's, which sport-view-tester.spec.ts asserts (#114).
     specs: [
       'offline',
       'offline-note-height',
@@ -329,6 +347,7 @@ export const AREAS = [
       ...PUBLIC_PAGE,
       'league-page',
       'league-page-offline',
+      'season-page',
       'sport-view-tester',
     ],
   },
@@ -344,7 +363,8 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SPORT_VIEW, SESSION],
+    // The season page (#128) reads the organization's header for its sidebar.
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW, SESSION],
   },
   {
     name: 'convex locations',
@@ -364,11 +384,11 @@ export const AREAS = [
     ],
   },
   {
-    // `seasons.create`, `publish`, `listForOrganizer` (the organizer's league page) and
-    // `listPublic` (the public league page).
+    // `seasons.create`, `publish`, `listForOrganizer` (the organizer's league page), `listPublic`
+    // (the public league page), and `getPublicPage` (the public season page, #128).
     name: 'convex seasons',
     test: named('convex/', ['seasons']),
-    specs: [...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...LEAGUE_MANAGEMENT],
   },
   { name: 'convex invites', test: named('convex/', ['invites']), specs: [...ADMIN, ...STAFF] },
   {
