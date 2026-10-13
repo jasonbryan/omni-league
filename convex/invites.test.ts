@@ -570,6 +570,113 @@ describe('invites.restore', () => {
   });
 });
 
+describe('invites.restore: tester probes (#211)', () => {
+  test('an expired pending invite to the address blocks both create and restore', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(s, 'dana@example.com');
+    const stale = await s.t.run((ctx) =>
+      ctx.db.insert('invites', {
+        organizationId: s.organizationA,
+        email: 'dana@example.com',
+        role: 'orgAdmin',
+        leagueIds: [],
+        tokenHash: 'stale',
+        expiresAt: NOW - 1,
+        status: 'pending',
+      }),
+    );
+    vi.setSystemTime(NOW + 1000);
+    await expect(invite(s, 'dana@example.com')).rejects.toMatchObject({
+      data: { code: 'alreadyInvited' },
+    });
+    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'alreadyInvited' } });
+    const rows = await allInvites(s);
+    expect(rows.find((row) => row._id === stale)?.status).toBe('pending');
+    expect(rows.find((row) => row._id === inviteId)?.status).toBe('revoked');
+  });
+
+  test('concurrent restore and create for the same address leave exactly one pending invite', async () => {
+    for (let round = 0; round < 5; round++) {
+      const s = await setup();
+      const { inviteId } = await revokedInvite(s, 'dana@example.com');
+      const results = await Promise.allSettled([
+        restore(s, inviteId),
+        invite(s, 'dana@example.com'),
+      ]);
+      const pending = (await allInvites(s)).filter((row) => row.status === 'pending');
+      expect(pending).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      const refused = results.find((result) => result.status === 'rejected');
+      expect(refused).toMatchObject({ reason: { data: { code: 'alreadyInvited' } } });
+    }
+  });
+
+  test('concurrent restores of two revoked invites to one address leave exactly one pending invite', async () => {
+    const s = await setup();
+    const first = await revokedInvite(s, 'dana@example.com');
+    const second = await revokedInvite(s, 'dana@example.com');
+    const results = await Promise.allSettled([
+      restore(s, first.inviteId),
+      restore(s, second.inviteId),
+    ]);
+    expect((await allInvites(s)).filter((row) => row.status === 'pending')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  });
+
+  test('a second restore of the same invite is refused and a refused restore keeps revokedAt', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(s, 'dana@example.com');
+    await restore(s, inviteId);
+    await expect(restore(s, inviteId)).rejects.toThrow(/revoked/);
+    await s.asAdminA.mutation(api.invites.revoke, { inviteId });
+    await invite(s, 'dana@example.com');
+    const before = await allInvites(s);
+    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'alreadyInvited' } });
+    expect(await allInvites(s)).toEqual(before);
+    expect(before.find((row) => row._id === inviteId)?.revokedAt).toBe(NOW);
+  });
+
+  test('the same error for an unknown invite and another organization’s invite (no existence oracle)', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(s, 'dana@example.com');
+    const gone = await revokedInvite(s, 'erin@example.com');
+    await s.t.run((ctx) => ctx.db.delete('invites', gone.inviteId));
+    const other = await s.asAdminB.mutation(api.invites.restore, { inviteId }).catch((e) => e);
+    const unknown = await s.asAdminB
+      .mutation(api.invites.restore, { inviteId: gone.inviteId })
+      .catch((e) => e);
+    expect(String(other.message)).toContain('Not allowed');
+    expect(String(unknown.message)).toContain('Not allowed');
+    expect(other.data).toBeUndefined();
+    expect(unknown.data).toBeUndefined();
+  });
+
+  test('revoke then accept is refused; restore then accept joins the organization with the original token', async () => {
+    const s = await setup();
+    const { inviteId, token } = await revokedInvite(s, 'stranger@example.test');
+    await expect(s.asStranger.mutation(api.invites.accept, { token })).rejects.toMatchObject({
+      data: { code: 'invalid' },
+    });
+    await restore(s, inviteId);
+    await expect(s.asStranger.mutation(api.invites.accept, { token })).resolves.toMatchObject({
+      organizationName: 'Org A',
+      role: 'orgAdmin',
+    });
+    expect((await allInvites(s))[0].status).toBe('accepted');
+    await expect(restore(s, inviteId)).rejects.toThrow(/revoked/);
+  });
+
+  test('a restored league organizer invite keeps all its leagues', async () => {
+    const s = await setup();
+    const { inviteId } = await revokedInvite(s, 'dana@example.com', 'leagueOrganizer', [
+      s.coed,
+      s.sand,
+    ]);
+    await restore(s, inviteId);
+    expect((await allInvites(s))[0].leagueIds).toEqual([s.coed, s.sand]);
+  });
+});
+
 describe('invites.listPending', () => {
   test('lists pending invites with league names and expiry, and no token or hash', async () => {
     const s = await setup();
