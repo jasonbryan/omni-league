@@ -20,17 +20,19 @@ export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
 };
 
 /**
- * What the coverage rule finds wrong: the tables with no rows and no exception, and the exception
- * keys that name no table.
+ * What the coverage rule finds wrong: the tables with no rows and no exception, the exception keys
+ * that name no table, and the excepted tables that have rows (a left-over exception would hide a
+ * later seed regression on that table).
  */
 export function missingSeedTables(
   tableNames: readonly string[],
   exceptions: Readonly<Record<string, string>>,
   rowCounts: Readonly<Record<string, number>>,
-): { empty: string[]; staleExceptions: string[] } {
+): { empty: string[]; staleExceptions: string[]; seededExceptions: string[] } {
   return {
     empty: tableNames.filter((name) => (rowCounts[name] ?? 0) === 0 && !(name in exceptions)),
     staleExceptions: Object.keys(exceptions).filter((name) => !tableNames.includes(name)),
+    seededExceptions: tableNames.filter((name) => name in exceptions && (rowCounts[name] ?? 0) > 0),
   };
 }
 
@@ -68,13 +70,26 @@ afterEach(() => {
 });
 
 describe('seed:demo coverage (#230)', () => {
-  test('on an empty backend, every schema table outside SEED_EXCEPTIONS has at least one row, and no exception is stale', async () => {
+  test('on an empty backend, every schema table outside SEED_EXCEPTIONS has at least one row, and no exception is stale or on a seeded table', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
     expect(missingSeedTables(TABLES, SEED_EXCEPTIONS, rowCounts(await ids(t)))).toEqual({
       empty: [],
       staleExceptions: [],
+      seededExceptions: [],
     });
+  });
+
+  test('an exception on a table the seed fills fails the check', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.demo, {});
+    expect(
+      missingSeedTables(
+        TABLES,
+        { ...SEED_EXCEPTIONS, organizations: 'left over' },
+        rowCounts(await ids(t)),
+      ),
+    ).toEqual({ empty: [], staleExceptions: [], seededExceptions: ['organizations'] });
   });
 
   test('a second run leaves every schema table with the same row count and the same _ids', async () => {
@@ -92,6 +107,7 @@ describe('seed:demo coverage (#230)', () => {
     expect(missingSeedTables([...TABLES, 'newThings'], {}, counts)).toEqual({
       empty: ['newThings'],
       staleExceptions: [],
+      seededExceptions: [],
     });
   });
 
@@ -100,6 +116,7 @@ describe('seed:demo coverage (#230)', () => {
     expect(missingSeedTables(TABLES, { gone: 'was removed' }, counts)).toEqual({
       empty: [],
       staleExceptions: ['gone'],
+      seededExceptions: [],
     });
   });
 
@@ -107,6 +124,7 @@ describe('seed:demo coverage (#230)', () => {
     expect(missingSeedTables(['a', 'b'], { b: 'throttle state' }, { a: 2 })).toEqual({
       empty: [],
       staleExceptions: [],
+      seededExceptions: [],
     });
   });
 });
