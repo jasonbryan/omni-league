@@ -205,9 +205,11 @@ describe('LeaguePage', () => {
       expect(rows()[0].querySelector('.sr-only')?.textContent).toBe('Dates: ');
     });
 
-    it('has no Publish button and no link in a row: publishing and the season page come later', async () => {
+    it('has a Publish button on the Draft row only, and no link in a row: the season page comes later', async () => {
       await open(COED, SEASONS);
-      expect(page.querySelector('#seasons-list button')).toBeNull();
+      expect([...page.querySelectorAll('#seasons-list button')].map((b) => text(b))).toEqual([
+        'Publish Fall 2027',
+      ]);
       expect(page.querySelector('#seasons-list a')).toBeNull();
     });
 

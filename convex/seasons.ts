@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireLeagueOrganizer } from './lib/access';
+import { requireLeagueOrganizer, requireUser } from './lib/access';
 import {
   checkSeasonFields,
   firstSeasonError,
@@ -9,7 +9,7 @@ import {
 } from './lib/seasonInput';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatName, formatValidator } from './lib/sports';
-import { insertSeason, seasonSlugTaken } from './lib/tenantWrites';
+import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 
 /**
  * Seasons `listForOrganizer` returns at most. The list is one page with no paging (#125), as the
@@ -70,6 +70,34 @@ export const create = mutation({
       minimumRosterSize: args.minimumRosterSize,
     });
     return { seasonId };
+  },
+});
+
+/**
+ * Publishes a draft season (#126): it is what the league's public page lists once #127 adds that
+ * page, and it is written through `tenantWrites` (`publishSeason`). Org admins of the season's
+ * organization and the league organizers assigned to the season's league may publish it
+ * (`requireLeagueOrganizer`, with the league taken from the stored season, never from `args`). An
+ * unknown season is refused with `Not allowed`, as a season of another organization is, so the
+ * message does not say which ids exist; a caller who is not signed in gets `Sign in required`.
+ * Publishing a season of a league that is still a draft is refused with `Publish the league
+ * first`, because the season's public page lives under the league's, and the season stays a draft.
+ * Publishing a published season succeeds and changes nothing, also in a draft league. There is no
+ * unpublish.
+ */
+export const publish = mutation({
+  args: { seasonId: v.id('seasons') },
+  returns: v.null(),
+  handler: async (ctx, { seasonId }) => {
+    await requireUser(ctx);
+    const season = await ctx.db.get('seasons', seasonId);
+    if (!season) throw new Error('Not allowed');
+    const { league } = await requireLeagueOrganizer(ctx, season.leagueId);
+    if (season.status !== 'published' && league.status !== 'published') {
+      throw new Error('Publish the league first');
+    }
+    await publishSeason(ctx, season);
+    return null;
   },
 });
 

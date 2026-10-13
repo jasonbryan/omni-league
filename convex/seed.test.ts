@@ -17,7 +17,7 @@ function setup() {
 type T = ReturnType<typeof setup>;
 
 /** What one run on an empty deployment inserts. */
-const ROWS = { organizations: 5, locations: 10, leagues: 15, seasons: 2 };
+const ROWS = { organizations: 5, locations: 10, leagues: 15, seasons: 4 };
 /** What a run backfills when it changes no row. */
 const NONE = { organizations: 0, locations: 0, leagues: 0 };
 const NO_ROWS = { ...NONE, seasons: 0 };
@@ -159,7 +159,7 @@ describe('seed:demo', () => {
     expect(await counts(t)).toEqual(ROWS);
   });
 
-  test('adds the two demo draft seasons of Gulf Coast Sport & Social (#125), as seasons.create would take them', async () => {
+  test('adds the two demo draft seasons (#125) and the two published ones (#126) of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
     const rows = await t.run(async (ctx) => {
@@ -215,6 +215,30 @@ describe('seed:demo', () => {
         registrationDeadline: '2027-08-25',
         status: 'draft',
       },
+      {
+        organization: 'gulf-coast-sport-social',
+        league: 'sunday-reverse-coed-4s',
+        name: 'Summer 2027',
+        slug: 'summer-2027',
+        format: '4v4',
+        minimumRosterSize: 4,
+        startDate: '2027-06-06',
+        endDate: '2027-08-29',
+        registrationDeadline: '2027-05-23',
+        status: 'published',
+      },
+      {
+        organization: 'gulf-coast-sport-social',
+        league: 'coed-7v7-rec',
+        name: 'Summer 2027',
+        slug: 'summer-2027',
+        format: '7v7',
+        minimumRosterSize: 7,
+        startDate: '2027-06-02',
+        endDate: '2027-08-25',
+        registrationDeadline: '2027-05-19',
+        status: 'published',
+      },
     ]);
     // Each follows the rules of seasons.create for its league's sport.
     for (const { sport, season } of rows) {
@@ -235,12 +259,13 @@ describe('seed:demo', () => {
   test('leaves a season already under a demo slug alone, whatever its status, and inserts the other (#125)', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
-    // A reused staging: #126's published season took the slug of one demo draft.
+    // A reused staging: a published season took the slug of one demo draft, and a demo season
+    // was deleted.
     await t.run(async (ctx) => {
       const seasons = await ctx.db.query('seasons').collect();
-      const coed = seasons.find((season) => season.format === '7v7')!;
+      const coed = seasons.find((s) => s.slug === 'fall-2027' && s.format === '7v7')!;
       await ctx.db.patch('seasons', coed._id, { status: 'published', minimumRosterSize: 9 });
-      const other = seasons.find((season) => season.format === '4v4')!;
+      const other = seasons.find((s) => s.slug === 'fall-2027' && s.format === '4v4')!;
       await ctx.db.delete('seasons', other._id);
     });
     const before = await t.run((ctx) => ctx.db.query('seasons').collect());
@@ -251,12 +276,69 @@ describe('seed:demo', () => {
       backfilled: NONE,
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(2);
-    expect(after[0]).toEqual(before[0]);
-    expect(after.find((season) => season.format === '7v7')).toMatchObject({
-      status: 'published',
-      minimumRosterSize: 9,
+    expect(after).toHaveLength(4);
+    for (const season of before) expect(after).toContainEqual(season);
+    expect(
+      after.find((season) => season.slug === 'fall-2027' && season.format === '7v7'),
+    ).toMatchObject({ status: 'published', minimumRosterSize: 9 });
+  });
+
+  test('on a deployment where #125’s seed already ran, inserts the two published summer-2027 seasons, leaves the fall-2027 drafts unchanged, and a second run inserts nothing (#126)', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.demo, {});
+    // #125's seed inserted the two fall-2027 drafts and no summer-2027 season.
+    await t.run(async (ctx) => {
+      for (const season of await ctx.db.query('seasons').collect()) {
+        if (season.slug === 'summer-2027') await ctx.db.delete('seasons', season._id);
+      }
     });
+    const drafts = await t.run((ctx) => ctx.db.query('seasons').collect());
+    expect(drafts.map((season) => [season.slug, season.status])).toEqual([
+      ['fall-2027', 'draft'],
+      ['fall-2027', 'draft'],
+    ]);
+
+    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+      ...NO_ROWS,
+      seasons: 2,
+      backfilled: NONE,
+    });
+    const after = await t.run((ctx) => ctx.db.query('seasons').collect());
+    expect(after).toHaveLength(4);
+    for (const draft of drafts) expect(after).toContainEqual(draft);
+    const summers = after.filter((season) => season.slug === 'summer-2027');
+    expect(summers.map((season) => [season.name, season.status, season.format]).sort()).toEqual([
+      ['Summer 2027', 'published', '4v4'],
+      ['Summer 2027', 'published', '7v7'],
+    ]);
+
+    const settled = await snapshot(t);
+    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+      ...NO_ROWS,
+      backfilled: NONE,
+    });
+    expect(await snapshot(t)).toEqual(settled);
+  });
+
+  test('the published demo seasons write no organization or league row: no counter moves (#126)', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.demo, {});
+    const before = await t.run(async (ctx) => ({
+      organizations: await ctx.db.query('organizations').collect(),
+      leagues: await ctx.db.query('leagues').collect(),
+    }));
+    await t.run(async (ctx) => {
+      for (const season of await ctx.db.query('seasons').collect()) {
+        if (season.slug === 'summer-2027') await ctx.db.delete('seasons', season._id);
+      }
+    });
+    await t.mutation(internal.seed.demo, {});
+    expect(
+      await t.run(async (ctx) => ({
+        organizations: await ctx.db.query('organizations').collect(),
+        leagues: await ctx.db.query('leagues').collect(),
+      })),
+    ).toEqual(before);
   });
 
   test('every demo organization slug is a valid slug and reserved, so a created organization never gets demo rows (#64)', () => {

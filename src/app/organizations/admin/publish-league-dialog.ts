@@ -22,6 +22,14 @@ import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from './admin-alert';
+import {
+  ALERT_DIALOG_CONTENT,
+  ALERT_DIALOG_DESCRIPTION,
+  ALERT_DIALOG_FOOTER,
+  ALERT_DIALOG_HEADER,
+  ALERT_DIALOG_MEDIA,
+  ALERT_DIALOG_TITLE,
+} from './alert-dialog-classes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 
 /** The league the dialog asks about: its id for `leagues.publish`, its name for the copy. */
@@ -48,23 +56,6 @@ export const PUBLISH_ALERTS = {
 } as const;
 
 type PublishAlert = keyof typeof PUBLISH_ALERTS;
-
-// The mockup's classes (helm Nova alert dialog, size default), unmerged. The mockup centres the
-// content with `fixed` and a translate; here the CDK's global position strategy centres the pane,
-// and the content is its normal-flow child, so the `role="alertdialog"` container that wraps it
-// has the dialog's own box (a container around a fixed child has none, and reads as hidden).
-const CONTENT =
-  'group/alert-dialog-content grid w-[calc(100vw-2rem)] bg-popover text-popover-foreground ring-foreground/10 gap-4 rounded-xl p-4 ring-1 shadow-xl data-[size=default]:max-w-xs data-[size=default]:sm:max-w-sm';
-const HEADER =
-  'grid grid-rows-[auto_1fr] place-items-center gap-1.5 text-center has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 sm:group-data-[size=default]/alert-dialog-content:place-items-start sm:group-data-[size=default]/alert-dialog-content:text-start sm:group-data-[size=default]/alert-dialog-content:has-data-[slot=alert-dialog-media]:grid-rows-[auto_1fr]';
-const MEDIA =
-  "mb-2 inline-flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground sm:group-data-[size=default]/alert-dialog-content:row-span-2 *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(6)]";
-const TITLE =
-  'text-base font-medium sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2';
-const DESCRIPTION =
-  'text-muted-foreground *:[a]:hover:text-foreground text-sm text-balance md:text-pretty *:[a]:underline *:[a]:underline-offset-3 sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2';
-const FOOTER =
-  'bg-muted/50 -mx-4 -mb-4 rounded-b-xl border-t p-4 flex flex-col-reverse gap-2 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end';
 
 /**
  * The publish confirmation (#69; design/mockups/66-69-organization-leagues.html states 9 to 12): a
@@ -177,12 +168,12 @@ export class PublishLeagueDialog {
 
   protected readonly online = injectOnline();
   protected readonly alerts = PUBLISH_ALERTS;
-  protected readonly contentClass = CONTENT;
-  protected readonly headerClass = HEADER;
-  protected readonly mediaClass = MEDIA;
-  protected readonly titleClass = TITLE;
-  protected readonly descriptionClass = DESCRIPTION;
-  protected readonly footerClass = FOOTER;
+  protected readonly contentClass = ALERT_DIALOG_CONTENT;
+  protected readonly headerClass = ALERT_DIALOG_HEADER;
+  protected readonly mediaClass = ALERT_DIALOG_MEDIA;
+  protected readonly titleClass = ALERT_DIALOG_TITLE;
+  protected readonly descriptionClass = ALERT_DIALOG_DESCRIPTION;
+  protected readonly footerClass = ALERT_DIALOG_FOOTER;
   protected readonly cancelClass = OUTLINE_BUTTON;
 
   protected readonly target = signal<PublishTarget | null>(null);

@@ -1,6 +1,6 @@
 // Writers for an organization with its locations, leagues, and seasons: `organizations.create`
 // (#64), `locations.create` and `locations.update` (#65), `leagues.create` (#66) and
-// `leagues.publish` (#69), `seasons.create` (#125), and the seeds, `seed:demo` (previews and
+// `leagues.publish` (#69), `seasons.create` (#125) and `seasons.publish` (#126), and the seeds, `seed:demo` (previews and
 // staging) and the IS_TEST tenant seeds in `convex/testing.ts`. These are the only writers of these
 // tables.
 //
@@ -12,8 +12,8 @@
 // published leagues count (#66): `insertLeague` counts a published league, and a draft
 // (`insertDraftLeague`, `leagues.create`) changes no counter and writes no `sportLocations` row.
 // `publishLeague` (#69) counts a draft once, when it becomes `published`. Every season insert goes
-// through `insertSeason` (#125), which writes only the `seasons` row; #126 adds `publishSeason`
-// here, and #127 keeps its counter in both. The first writer that unpublishes or deletes a league, or
+// through `insertSeason` (#125), which writes only the `seasons` row, and every season publish
+// through `publishSeason` (#126), which writes only that row too; #127 keeps its counter in both. The first writer that unpublishes or deletes a league, or
 // changes its locations, decrements what `insertLeague` incremented: `leagueCount`,
 // `sportLeagueCounts[sport]`, and the `sportLocations` row of each location the league leaves,
 // deleting that row at 0 and decrementing `sportLocationCounts[sport]`.
@@ -285,7 +285,7 @@ export interface NewSeason {
  * Inserts a season of `league` (#125): the one writer of the `seasons` table, used by
  * `seasons.create`, `seed:demo`, and the IS_TEST seeds. The organization is the league's own, so a
  * season never names another organization. A `draft` unless the caller says `published` (only the
- * seeds do; `publishSeason` is #126's). It checks nothing about the values: the name, slug, date,
+ * seeds do; `seasons.publish` goes through `publishSeason`). It checks nothing about the values: the name, slug, date,
  * format, and minimum rules live in `seasons.create` (`convex/lib/seasonInput.ts`), so a seed can
  * hold a deadline on or after the start date, which #129's start-date case needs. It writes no
  * counter and no other row.
@@ -308,6 +308,19 @@ export async function insertSeason(
     minimumRosterSize: season.minimumRosterSize,
     status,
   });
+}
+
+/**
+ * Publishes a draft season (#126): sets its `status` to `published`, which puts it on the league's
+ * public page once #127 adds that page. A season that is already `published` is left alone and
+ * nothing is written. It writes only the `seasons` row; #127 adds `leagues.publishedSeasonCount`
+ * here, once, when a draft becomes published, and in `insertSeason` for a season inserted as
+ * published. The caller has checked access (`requireLeagueOrganizer`, with the league taken from
+ * the stored season) and that the league is published.
+ */
+export async function publishSeason(ctx: MutationCtx, season: Doc<'seasons'>): Promise<void> {
+  if (season.status === 'published') return;
+  await ctx.db.patch('seasons', season._id, { status: 'published' });
 }
 
 /** Whether a season of the league already has this slug, drafts included. */
