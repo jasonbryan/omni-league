@@ -241,6 +241,37 @@ test.describe('sign-up', () => {
     await expect(page).toHaveURL(`${baseURL}/sign-up`);
   });
 
+  test('Password is checked once focus leaves it and its Show button, by keyboard and by mouse', async ({
+    page,
+  }) => {
+    const short = 'Use at least 15 characters. This password has 10.';
+    await page.goto('/sign-up');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeVisible();
+
+    // Keyboard: Tab to Show shows nothing; Tab past it leaves the group and shows the error.
+    await field(page, 'password').focus();
+    await page.keyboard.type('tenletters');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: /Show password/ })).toBeFocused();
+    await expect(fieldError(page, 'password')).toHaveCount(0);
+    await page.keyboard.press('Tab');
+    await expect(adult(page)).toBeFocused();
+    await expect(fieldError(page, 'password')).toHaveText(short);
+    await expect(field(page, 'password')).toHaveAttribute('aria-invalid', 'true');
+
+    // Mouse: a fresh page, type, then click Show. The password is shown and no error talks over
+    // that status; clicking elsewhere then shows it.
+    await page.reload();
+    await field(page, 'password').fill('tenletters');
+    await page.getByRole('button', { name: /Show password/ }).click();
+    await expect(field(page, 'password')).toHaveAttribute('type', 'text');
+    await expect(fieldError(page, 'password')).toHaveCount(0);
+    await field(page, 'name').click();
+    await expect(fieldError(page, 'password')).toHaveText(short);
+  });
+
   test('signs up, lands on /app showing "Signed in as <name>", and Sign out goes to /', async ({
     page,
   }, testInfo) => {

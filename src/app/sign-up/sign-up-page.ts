@@ -18,7 +18,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
-import { ShownUntilValid } from '../core/forms/shown-errors';
+import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 import { Checkbox } from '../ui/checkbox';
 
@@ -270,7 +270,12 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                   class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
                   >Password</label
                 >
-                <div class="flex items-center gap-2">
+                <!-- Password and Show are one group: the check waits until focus leaves both, so
+                     tabbing or clicking to Show does not talk over its status (#205). -->
+                <div
+                  class="flex items-center gap-2"
+                  (focusout)="focusLeftGroup($event) && left('password')"
+                >
                   <!-- No maxlength: a long paste is never cut silently (WCAG 3.3.8). -->
                   <input
                     #password
@@ -281,7 +286,6 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                     autocapitalize="none"
                     [type]="showPassword() ? 'text' : 'password'"
                     [formField]="fields.password"
-                    (blur)="leftPassword($event)"
                     [attr.aria-describedby]="describedBy('password', 'password-description')"
                     [attr.aria-invalid]="errors.password() ? 'true' : null"
                     [attr.data-invalid]="errors.password() ? 'true' : null"
@@ -433,6 +437,7 @@ export class SignUpPage {
   protected readonly signInReturnTo = returnToOrApp(this.returnTo);
 
   protected readonly messages = MESSAGES;
+  protected readonly focusLeftGroup = focusLeftGroup;
 
   private readonly model = signal<SignUpModel>({ name: '', email: '', password: '', adult: false });
   protected readonly fields = form(this.model, (path) => {
@@ -511,16 +516,6 @@ export class SignUpPage {
   /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   protected left(field: FieldName): void {
     this.shown[field].left();
-  }
-
-  /**
-   * Focus left Password. Moving to Show password is not leaving the field for good: the error's
-   * alert would talk over the "Your password is shown." status, so the check waits (#205).
-   */
-  protected leftPassword(event: FocusEvent): void {
-    const next = event.relatedTarget;
-    if (next instanceof Element && next.getAttribute('aria-controls') === 'password') return;
-    this.left('password');
   }
 
   protected async submit(event: Event): Promise<void> {

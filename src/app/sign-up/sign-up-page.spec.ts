@@ -268,7 +268,9 @@ describe('SignUpPage', () => {
     beforeEach(() => open());
 
     async function leave(id: string) {
+      // A browser fires both; Password and its Show button are checked on `focusout`.
       input(id).dispatchEvent(new Event('blur'));
+      input(id).dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
       await harness.fixture.whenStable();
     }
 
@@ -324,12 +326,26 @@ describe('SignUpPage', () => {
       expect(checkbox().getAttribute('aria-describedby')).toBe('adult-description adult-error');
     });
 
-    it('does not check the password when focus moves to Show password, and does when it moves elsewhere', async () => {
+    it('does not check the password while focus moves to Show password, and does once it leaves Show', async () => {
       await type('password', 'tenletters');
-      input('password').dispatchEvent(new FocusEvent('blur', { relatedTarget: showButton() }));
+      input('password').dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: showButton() }),
+      );
       await harness.fixture.whenStable();
       expect(error('password')).toBeNull();
-      input('password').dispatchEvent(new FocusEvent('blur', { relatedTarget: checkbox() }));
+      // Tabbing past Show to the 18+ checkbox leaves the Password field and its Show button.
+      showButton().dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: checkbox() }),
+      );
+      await harness.fixture.whenStable();
+      expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
+    });
+
+    it('checks the password when focus moves from it to another field', async () => {
+      await type('password', 'tenletters');
+      input('password').dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: checkbox() }),
+      );
       await harness.fixture.whenStable();
       expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
     });
