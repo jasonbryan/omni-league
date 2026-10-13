@@ -106,8 +106,13 @@ describe('testing:seedLeague', () => {
       { name: 'Field Two', address: '2 Test Road' },
     ]);
     expect((await t.query(api.organizations.listPublicLeagues, page)).rows).toEqual([
-      { name: 'League A', sportName: 'Soccer', locationNames: ['Field One'] },
-      { name: 'League B', sportName: 'Softball', locationNames: ['Field Two', 'Field One'] },
+      { name: 'League A', slug: 'league-a', sportName: 'Soccer', locationNames: ['Field One'] },
+      {
+        name: 'League B',
+        slug: 'league-b',
+        sportName: 'Softball',
+        locationNames: ['Field Two', 'Field One'],
+      },
     ]);
   });
 
@@ -200,6 +205,7 @@ describe('testing:addLeague', () => {
     expect(leagues.rows.map((league) => league.name)).toEqual(['League A', 'League B', 'League C']);
     expect(leagues.rows[2]).toEqual({
       name: 'League C',
+      slug: 'league-c',
       sportName: 'Beach volleyball',
       locationNames: ['Field One'],
     });

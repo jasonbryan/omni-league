@@ -134,13 +134,26 @@ describe('seasons.publish', () => {
     );
   });
 
-  test('writes no organization or league row: a season moves no counter', async () => {
+  test('writes no organization row, and the only league row it changes is the league’s publishedSeasonCount (#127)', async () => {
     const s = await setup();
+    const leagueL = await s.t.run(
+      async (ctx) => (await ctx.db.get('seasons', s.seasonL))!.leagueId,
+    );
     const before = { organizations: await organizations(s.t), leagues: await leagues(s.t) };
     await s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL });
-    expect({ organizations: await organizations(s.t), leagues: await leagues(s.t) }).toEqual(
-      before,
-    );
+    const after = { organizations: await organizations(s.t), leagues: await leagues(s.t) };
+    expect(after.organizations).toEqual(before.organizations);
+    expect(after.leagues).toHaveLength(before.leagues.length);
+    for (const league of before.leagues) {
+      const changed = after.leagues.find((candidate) => candidate._id === league._id);
+      // L already held one published season (`publishedL`): the publish makes it two.
+      expect(changed).toEqual(
+        league._id === leagueL
+          ? { ...league, publishedSeasonCount: (league.publishedSeasonCount ?? 0) + 1 }
+          : league,
+      );
+      if (league._id === leagueL) expect(changed?.publishedSeasonCount).toBe(2);
+    }
   });
 
   test('the league organizer assigned to the league publishes its season; the season of a league they are not assigned is refused', async () => {

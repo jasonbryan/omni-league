@@ -225,10 +225,14 @@ describe('LeagueManagement: publishing a season', () => {
         'Fall 2027 is published.',
       );
       expect(text(region.querySelector('[data-slot="alert-description"]'))).toBe(
-        'It’s on the league’s public page now.',
+        'It’s on the league’s public page now. View public page',
       );
-      // The link to the league's public page comes with that page.
-      expect(region.querySelector('a')).toBeNull();
+      // The link to the league's public page (#127), built from the route's slugs.
+      const link = region.querySelector('a')!;
+      expect(text(link)).toBe('View public page');
+      expect(link.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec',
+      );
       const list = page.querySelector('#seasons-list')!;
       expect(region.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(document.activeElement).toBe(region);

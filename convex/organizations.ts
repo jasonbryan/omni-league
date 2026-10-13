@@ -9,6 +9,7 @@ import {
   ORGANIZATION_MESSAGES,
   type OrganizationInputError,
 } from './lib/organizationInput';
+import { pageOf, pageRows, PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import {
   getPublicPageReturns,
   publicLeaguesValidator,
@@ -20,14 +21,9 @@ import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from
 import { insertOrganization, organizationSlugTaken, sortName } from './lib/tenantWrites';
 import { getCurrentUser } from './lib/users';
 
-/** Rows per page of a public list (owner, #106). Never taken from args. */
-export const PUBLIC_LIST_PAGE_SIZE = 5;
-
-/**
- * The last page a public list serves, so one call reads at most 200 rows
- * (`PUBLIC_LIST_MAX_PAGE * PUBLIC_LIST_PAGE_SIZE`) whatever the args. Never taken from args.
- */
-export const PUBLIC_LIST_MAX_PAGE = 40;
+// The paging rules live in lib/publicList.ts, shared with seasons.ts (#127); the constants are
+// re-exported for the tests that count against them.
+export { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE };
 
 const listArgs = { slug: v.string(), page: v.number() };
 
@@ -42,24 +38,6 @@ async function organizationBySlug(
     .query('organizations')
     .withIndex('by_slug', (q) => q.eq('slug', slug))
     .unique();
-}
-
-/**
- * The page to serve and the number of pages, for a list of `total` rows. The requested page is
- * served when it is a whole number from 1 to the page count, and page 1 in every other case (0,
- * negative, fractional, `NaN`, past the last page, past `PUBLIC_LIST_MAX_PAGE`): the approved
- * mockup's rule (#106). So `page * PUBLIC_LIST_PAGE_SIZE` is at most 200.
- */
-function pageOf(total: number, requested: number): { page: number; pageCount: number } {
-  const pageCount = Math.min(Math.ceil(total / PUBLIC_LIST_PAGE_SIZE), PUBLIC_LIST_MAX_PAGE);
-  const page =
-    Number.isInteger(requested) && requested >= 1 && requested <= pageCount ? requested : 1;
-  return { page, pageCount };
-}
-
-/** The rows of `page` out of the first `page * PUBLIC_LIST_PAGE_SIZE` rows read. */
-function pageRows<D>(read: D[], page: number): D[] {
-  return read.slice((page - 1) * PUBLIC_LIST_PAGE_SIZE);
 }
 
 /**
@@ -185,7 +163,12 @@ export const listPublicLeagues = query({
         // Only this organization's locations: a league can never name another organization's.
         if (location?.organizationId === organization._id) locationNames.push(location.name);
       }
-      rows.push({ name: league.name, sportName: sportName(league.sport), locationNames });
+      rows.push({
+        name: league.name,
+        slug: league.slug,
+        sportName: sportName(league.sport),
+        locationNames,
+      });
     }
     return { rows, page, pageCount, total };
   },

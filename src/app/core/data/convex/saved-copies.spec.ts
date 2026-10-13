@@ -3,9 +3,11 @@ import { getFunctionName, makeFunctionReference } from 'convex/server';
 import { convexToJson, type Value } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
 import {
+  getLeaguePublicPageReturns,
   getPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
+  publicSeasonsValidator,
 } from '../../../../../convex/lib/publicPage';
 import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import {
@@ -66,7 +68,7 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists the organization page queries, deliberately public and caller-independent, each with its own returns validator', () => {
+  it('lists the organization page and league page queries, deliberately public and caller-independent, each with its own returns validator', () => {
     // The very validators the Convex functions declare, not restated copies.
     expect(
       OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
@@ -74,6 +76,8 @@ describe('ConvexSavedCopies', () => {
       ['organizations:getPublicPage', getPublicPageReturns],
       ['organizations:listPublicLeagues', publicLeaguesValidator],
       ['organizations:listPublicLocations', publicLocationsValidator],
+      ['leagues:getPublicPage', getLeaguePublicPageReturns],
+      ['seasons:listPublic', publicSeasonsValidator],
     ]);
     for (const { returns, version } of OFFLINE_SAVED_QUERIES) {
       expect(Number.isInteger(version)).toBe(true);
@@ -136,7 +140,14 @@ describe('ConvexSavedCopies', () => {
       [
         'organizations:listPublicLeagues',
         listPublicLeagues,
-        list([{ name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] }]),
+        list([
+          {
+            name: 'Coed 2s',
+            slug: 'coed-2s',
+            sportName: 'Beach volleyball',
+            locationNames: ['Bayside'],
+          },
+        ]),
       ],
       [
         'organizations:listPublicLocations',
@@ -377,7 +388,7 @@ describe('ConvexSavedCopies', () => {
     });
 
     // Tester, PR #136 round 2: nested shapes, checked through read() rather than the matcher alone.
-    const league = { name: 'L', sportName: 'Soccer', locationNames: ['Field'] };
+    const league = { name: 'L', slug: 'l', sportName: 'Soccer', locationNames: ['Field'] };
     const location = { name: 'Field', address: '1 Main St' };
     it.each([
       ['a nested field of the wrong type', { ...list([]), rows: [{ ...league, name: 1 }] }],

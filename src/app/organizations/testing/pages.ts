@@ -27,24 +27,33 @@ export const GULF_COAST: PublicOrganizationPage = {
     { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
   ],
   leagues: [
-    { name: 'Coed 7v7 Rec', sportName: 'Soccer', locationNames: ['Bayside Athletic Complex'] },
+    {
+      name: 'Coed 7v7 Rec',
+      slug: 'coed-7v7-rec',
+      sportName: 'Soccer',
+      locationNames: ['Bayside Athletic Complex'],
+    },
     {
       name: "Men's Over-30 11v11",
+      slug: 'mens-over-30-11v11',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
     },
     {
       name: 'Sunday Reverse Coed 4s',
+      slug: 'sunday-reverse-coed-4s',
       sportName: 'Beach volleyball',
       locationNames: ['North Beach Sand Courts'],
     },
     {
       name: 'Thursday Night Coed 2s',
+      slug: 'thursday-night-coed-2s',
       sportName: 'Beach volleyball',
       locationNames: ['North Beach Sand Courts'],
     },
     {
       name: 'Wednesday Coed Slow-Pitch',
+      slug: 'wednesday-coed-slow-pitch',
       sportName: 'Softball',
       locationNames: ['Flour Bluff Softball Park', 'Bayside Athletic Complex'],
     },
