@@ -281,7 +281,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                     autocapitalize="none"
                     [type]="showPassword() ? 'text' : 'password'"
                     [formField]="fields.password"
-                    (blur)="left('password')"
+                    (blur)="leftPassword($event)"
                     [attr.aria-describedby]="describedBy('password', 'password-description')"
                     [attr.aria-invalid]="errors.password() ? 'true' : null"
                     [attr.data-invalid]="errors.password() ? 'true' : null"
@@ -511,6 +511,16 @@ export class SignUpPage {
   /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   protected left(field: FieldName): void {
     this.shown[field].left();
+  }
+
+  /**
+   * Focus left Password. Moving to Show password is not leaving the field for good: the error's
+   * alert would talk over the "Your password is shown." status, so the check waits (#205).
+   */
+  protected leftPassword(event: FocusEvent): void {
+    const next = event.relatedTarget;
+    if (next instanceof Element && next.getAttribute('aria-controls') === 'password') return;
+    this.left('password');
   }
 
   protected async submit(event: Event): Promise<void> {

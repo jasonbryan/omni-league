@@ -271,9 +271,7 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(form.locator('[data-slot="field-error"]')).toHaveCount(0);
   });
 
-  test('invite staff: Email and the Leagues group are checked on leaving; the Role radios are not', async ({
-    page,
-  }) => {
+  test('invite staff: Email and the Leagues group are checked on leaving', async ({ page }) => {
     const { base } = await orgAdmin(page);
     await page.goto(`${base}/staff`);
     await field(page, 'email').focus();
@@ -285,7 +283,7 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expectLinked(page, 'email', 'email-description email-error');
 
-    // Role radios: passing through shows nothing. Leagues: check, uncheck, then leave the group.
+    // Leagues: check, uncheck, move within the group (no error), then leave the group.
     const coed = page.getByRole('checkbox', { name: 'Coed 7v7 Rec' });
     await coed.click();
     await coed.click();

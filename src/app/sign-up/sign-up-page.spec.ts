@@ -324,6 +324,16 @@ describe('SignUpPage', () => {
       expect(checkbox().getAttribute('aria-describedby')).toBe('adult-description adult-error');
     });
 
+    it('does not check the password when focus moves to Show password, and does when it moves elsewhere', async () => {
+      await type('password', 'tenletters');
+      input('password').dispatchEvent(new FocusEvent('blur', { relatedTarget: showButton() }));
+      await harness.fixture.whenStable();
+      expect(error('password')).toBeNull();
+      input('password').dispatchEvent(new FocusEvent('blur', { relatedTarget: checkbox() }));
+      await harness.fixture.whenStable();
+      expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
+    });
+
     it('a server refusal about a field shows under it until the field changes', async () => {
       await fill();
       client.nextSignUpError = { status: 422, code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' };

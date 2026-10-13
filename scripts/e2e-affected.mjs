@@ -218,7 +218,8 @@ export const AREAS = [
         'location-form',
         'location-row',
       ])(file),
-    specs: LOCATION_ADMIN,
+    // validate-on-blur (#205) fills in the location form and leaves its fields.
+    specs: [...LOCATION_ADMIN, 'validate-on-blur'],
   },
   {
     // The mockup spec compares the real leagues page text with the approved mockup, so a changed
@@ -230,7 +231,7 @@ export const AREAS = [
       'league-create-form',
       'league-form',
     ]),
-    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup'],
+    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup', 'validate-on-blur'],
   },
   {
     name: 'admin leagues publish dialog',
@@ -245,7 +246,7 @@ export const AREAS = [
       'staff-invite-panel',
       'format-day',
     ]),
-    specs: STAFF,
+    specs: [...STAFF, 'validate-on-blur'],
   },
   { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
   {
