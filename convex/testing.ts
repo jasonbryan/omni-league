@@ -234,6 +234,51 @@ export const addLeagueOrganizer = internalMutation({
 });
 
 /**
+ * Adds a league of another organization to the league organizer's assigned leagues (#141 e2e): the
+ * seeded user with this email must already be a league organizer of `organizationSlug`, and the
+ * league is `leagueSlug` of `leagueOrganizationSlug`. The result is a membership holding a league
+ * id of another organization, which nothing in the app writes and `organizations.listMine` must
+ * drop. Throws, writing nothing, for an unknown organization, account, or league, no membership,
+ * or a league of the membership's own organization.
+ */
+export const assignForeignLeague = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    email: v.string(),
+    leagueOrganizationSlug: v.string(),
+    leagueSlug: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, email, leagueOrganizationSlug, leagueSlug }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const user = await userByEmail(ctx, email);
+    const membership = await ctx.db
+      .query('memberships')
+      .withIndex('by_userId_and_organizationId', (q) =>
+        q.eq('userId', user._id).eq('organizationId', organization._id),
+      )
+      .unique();
+    if (!membership) throw new Error('This user has no membership in the organization');
+    const leagueOrganization = await organizationBySlug(ctx, leagueOrganizationSlug);
+    if (leagueOrganization._id === organization._id) {
+      throw new Error('The league must belong to another organization');
+    }
+    const league = await ctx.db
+      .query('leagues')
+      .withIndex('by_organizationId_and_slug', (q) =>
+        q.eq('organizationId', leagueOrganization._id).eq('slug', leagueSlug),
+      )
+      .unique();
+    if (!league) throw new Error(`No league has the slug ${JSON.stringify(leagueSlug)}`);
+    await ctx.db.patch('memberships', membership._id, {
+      leagueIds: [...membership.leagueIds, league._id],
+    });
+    return null;
+  },
+});
+
+/**
  * Adds a season to the league with `leagueSlug` of the organization with `organizationSlug` (#125
  * e2e), through `insertSeason`. A `draft` unless `status` says `published`. None of
  * `seasons.create`'s rules apply, so a test can seed a registration deadline on or after the start

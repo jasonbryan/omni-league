@@ -138,6 +138,7 @@ describe('convex/testing.ts exports', () => {
       'addLeague',
       'addLeagueOrganizer',
       'addMembership',
+      'assignForeignLeague',
       'ping',
       'reset',
       'seedLeague',
