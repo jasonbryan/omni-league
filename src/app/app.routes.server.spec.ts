@@ -15,6 +15,7 @@ import { AdminOverview } from './organizations/admin/admin-overview';
 import { CreateOrganizationPage } from './organizations/create-organization-page';
 import { OrganizationPage } from './organizations/organization-page';
 import { PublicLeaguePage } from './organizations/public-league/public-league-page';
+import { PublicSeasonPage } from './organizations/public-season/public-season-page';
 import { Placeholder } from './placeholder/placeholder';
 import { SignInPage } from './sign-in/sign-in-page';
 import { SignUpPage } from './sign-up/sign-up-page';
@@ -43,7 +44,7 @@ function directives(value: string): Map<string, string | true> {
 // `app/**` shell header from ADR 0010 item 4 (#37), the `**` not-found header (#23), the public
 // organization page (#60), and sign-up and the signed-in app (#62).
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, organizations/:orgSlug Server, organizations/:orgSlug/leagues/:leagueSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, organizations/:orgSlug Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       // #62: no auth code runs on the server, so these render in the browser only.
@@ -87,6 +88,12 @@ describe('Route tables', () => {
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },
       {
+        // #128: the public season page, the same.
+        path: 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
+        renderMode: RenderMode.Server,
+        headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+      },
+      {
         path: '**',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
@@ -120,11 +127,12 @@ describe('Route tables', () => {
     ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the league page, sign-up, sign-in, invites/accept, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the league page, the season page, sign-up, sign-in, invites/accept, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'organizations/:orgSlug',
       'organizations/:orgSlug/leagues/:leagueSlug',
+      'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
       'sign-up',
       'sign-in',
       'invites/accept',
@@ -148,6 +156,14 @@ describe('Route tables', () => {
     const route = routes.find((r) => r.path === 'organizations/:orgSlug/leagues/:leagueSlug');
     expect(route?.component).toBeUndefined();
     expect(await route?.loadComponent?.()).toBe(PublicLeaguePage);
+  });
+
+  it('organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug lazy-loads the public season page', async () => {
+    const route = routes.find(
+      (r) => r.path === 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
+    );
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(PublicSeasonPage);
   });
 
   it('the last client route is **, which lazy-loads the not-found page', async () => {

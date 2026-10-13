@@ -21,6 +21,8 @@ const EDGE_PATHS = [
   '/organizations/cache-key-sample',
   // #127: the public league page, here an unknown league (404); the known one is tested below.
   '/organizations/cache-key-sample/leagues/cache-key-sample',
+  // #128: the public season page, here an unknown season (404); the known one is tested below.
+  '/organizations/cache-key-sample/leagues/cache-key-sample/seasons/cache-key-sample',
   // #62: a Client route whose query string carries `returnTo`; the shell holds none of it.
   '/sign-up',
   // #63: the same for sign-in.
@@ -68,6 +70,7 @@ test.describe('query strings and the CDN', () => {
         `/app${unique}`,
         `/organizations${unique}`,
         `/organizations${unique}/leagues/sample`,
+        `/organizations${unique}/leagues/sample/seasons/sample`,
         `/sign-up`,
         `/sign-in`,
       ]) {
@@ -176,6 +179,50 @@ test.describe('query strings and the CDN', () => {
         const response = await rawGet(`${path}${query}`);
         expect(response.status, query).toBe(200);
         expect(names(response.body), query).toEqual(expected[query]);
+      }
+    },
+  );
+
+  // #128: the public season page reads no query parameter, so nothing of the query string may
+  // reach the response, and every query string gets the same page.
+  test(
+    'the season page: no query string value reaches the response, and every query string gets the same page',
+    RAW_HTTP,
+    async () => {
+      // On a preview the demo league has the published season `summer-2027` (#126); locally the
+      // test seeds one.
+      let path =
+        '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s/seasons/summer-2027';
+      if (remoteBaseUrl === undefined) {
+        const tenant = await seedTenant({
+          name: 'E2E Cache Key Season',
+          locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+          leagues: [
+            { name: 'Cache Key League', sport: 'beachVolleyball', locations: ['Alpha Field'] },
+          ],
+        });
+        await seedSeasons(tenant, 'cache-key-league', numberedSeasons(1));
+        path = `${tenant.path}/leagues/cache-key-league/seasons/season-01`;
+      }
+      const first = await rawGet(path);
+      expect(first.status).toBe(200);
+      expect(first.headers['netlify-vary']).toBe('query');
+      expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
+
+      for (const sample of [
+        (c: string) => `?ott=${c}`,
+        (c: string) => `?page=2&q=${c}`,
+        (c: string) => `?seasonSlug=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(response.headers['netlify-vary'], sample(token)).toBe('query');
+        const h1 = (body: string) => /<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(body)?.[1]?.trim();
+        expect(h1(response.body), sample(token)).toBe(h1(first.body));
       }
     },
   );

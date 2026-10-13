@@ -76,6 +76,11 @@ const PUBLIC_PAGE = [
  * own spec, its offline spec (saved pages), and the cache-key samples of its `?page=N` parameter.
  */
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
+/**
+ * Every spec that opens the public season page (#128), directly or from the league page: its own
+ * spec (raw HTML, time zone, the link from the league page) and the cache-key samples of its route.
+ */
+const SEASON_PAGE = ['season-page', 'cache-key'];
 /** Every spec that opens the organizer's league page (#125, #126), where seasons are created and published. */
 const LEAGUE_MANAGEMENT = [
   'league-management',
@@ -257,14 +262,23 @@ export const AREAS = [
       'organization-sidebar',
     ]),
     // The admin area imports `initials` from organization-sidebar, and the league rows link to the
-    // public league page (#127), which league-page.spec.ts reaches from here.
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE],
+    // public league page (#127), which league-page.spec.ts reaches from here. The season page
+    // (#128) shows the same sidebar.
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE],
   },
   {
-    // The public league page (#127): its page, content, sidebar, paths, and test data.
+    // The public league page (#127): its page, content, sidebar, paths, and test data. The season
+    // page (#128) shows the league page's sidebar and builds its links from its paths, and the
+    // league page's rows link to it.
     name: 'public league page',
     test: inDir('src/app/organizations/public-league/'),
-    specs: LEAGUE_PAGE,
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE],
+  },
+  {
+    // The public season page (#128): its page, content, paths, and test data.
+    name: 'public season page',
+    test: inDir('src/app/organizations/public-season/'),
+    specs: SEASON_PAGE,
   },
   {
     // The numbered control (#127, shared with #103's lists): the league page's seasons.
@@ -273,10 +287,16 @@ export const AREAS = [
     specs: LEAGUE_PAGE,
   },
   {
-    // `parseListPage` and the page query (#127) and the focus move after a route change (#127).
-    name: 'list page and focus helpers',
-    test: named('src/app/core/', ['list-page', 'focus-main']),
+    // `parseListPage` and the page query (#127).
+    name: 'list page helper',
+    test: named('src/app/core/', ['list-page']),
     specs: LEAGUE_PAGE,
+  },
+  {
+    // The focus move after a route change (#127), also asserted on the season page (#128).
+    name: 'focus helper',
+    test: named('src/app/core/', ['focus-main']),
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
@@ -289,13 +309,14 @@ export const AREAS = [
   {
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
-    // league-page.spec.ts asserts the league page's 404 (#127).
-    specs: ['not-found', 'organization-page', 'league-page', ...ADMIN],
+    // league-page.spec.ts and season-page.spec.ts assert the league and season pages' 404
+    // (#127, #128).
+    specs: ['not-found', 'organization-page', 'league-page', 'season-page', ...ADMIN],
   },
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    // The league page's saved-copy note and not-saved view (#127).
+    // The league page's (#127) and the season page's (#128) saved-copy note and not-saved view.
     specs: [
       'offline',
       'offline-note-height',
@@ -303,6 +324,7 @@ export const AREAS = [
       ...PUBLIC_PAGE,
       'league-page',
       'league-page-offline',
+      'season-page',
     ],
   },
   {
@@ -317,7 +339,8 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, SESSION],
+    // The season page (#128) reads the organization's header for its sidebar.
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, SESSION],
   },
   {
     name: 'convex locations',
@@ -330,11 +353,11 @@ export const AREAS = [
     specs: [...ADMIN, ...LEAGUE_ADMIN, ...PUBLIC_PAGE, ...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
   },
   {
-    // `seasons.create`, `publish`, `listForOrganizer` (the organizer's league page) and
-    // `listPublic` (the public league page).
+    // `seasons.create`, `publish`, `listForOrganizer` (the organizer's league page), `listPublic`
+    // (the public league page), and `getPublicPage` (the public season page, #128).
     name: 'convex seasons',
     test: named('convex/', ['seasons']),
-    specs: [...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...LEAGUE_MANAGEMENT],
   },
   { name: 'convex invites', test: named('convex/', ['invites']), specs: [...ADMIN, ...STAFF] },
   {
