@@ -348,12 +348,14 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, F
 }
 
 /**
- * Lines of text with the organization name replaced and the Limits fieldset removed (#143, #144):
- * from "Limits" up to the submit button.
+ * Lines of text with the organization name replaced, the "View public page" link removed (#127),
+ * and the Limits fieldset removed (#143, #144): from "Limits" up to the submit button.
  */
 function normalize(text: string, organization: string): string {
   const lines = text
     .replaceAll(organization, 'ORG')
+    // The mockup's published status links to the league's public page, which #127 adds.
+    .replaceAll(' View public page', '')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
@@ -719,9 +721,8 @@ for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`/app/organizations/${shared.slug}/leagues/${SLOW_PITCH}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(1);
-      // The mockup's frame has softball's only format chosen, which sets the minimum's hint.
-      await page.getByRole('radio', { name: '10 v 10' }).check();
-      await expect(page.locator('#minimum-roster-size')).toHaveValue('10');
+      // Softball's only format is chosen from the start, as in the mockup.
+      await expect(page.getByRole('radio', { name: '10 v 10' })).toBeChecked();
       await mockupMatches(page, browser, shared.name, 'draft-league-admin', width, testInfo);
     });
 

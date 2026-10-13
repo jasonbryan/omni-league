@@ -240,7 +240,23 @@ async function readStep(key: string): Promise<StepInfo> {
   const inViewport =
     rect.width > 0 && rect.height > 0 && x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
   const hit = inViewport ? document.elementFromPoint(x, y) : null;
-  const unobscured = !!hit && (hit === active || active.contains(hit));
+  let unobscured = !!hit && (hit === active || active.contains(hit));
+  if (inViewport && !unobscured) {
+    // An inline element that wraps (a link in a sentence) has one box per line, and the centre of
+    // their union can fall beside the shorter line, on the text around it. The element is
+    // obscured only when the centre of none of its line boxes is on it (#126).
+    for (const box of active.getClientRects()) {
+      const bx = box.left + box.width / 2;
+      const by = box.top + box.height / 2;
+      if (box.width <= 0 || box.height <= 0 || bx < 0 || by < 0 || bx >= innerWidth) continue;
+      if (by >= innerHeight) continue;
+      const lineHit = document.elementFromPoint(bx, by);
+      if (lineHit && (lineHit === active || active.contains(lineHit))) {
+        unobscured = true;
+        break;
+      }
+    }
+  }
   return {
     where: 'element',
     index,

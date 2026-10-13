@@ -150,10 +150,8 @@ test.describe('League management: publishing a season (#126)', () => {
     await expect(result(page)).toContainText('It’s on the league’s public page now.');
     await expect(result(page)).toBeFocused();
     await expect(page.locator('app-league-management')).not.toHaveAttribute('inert', '');
-    await expect(result(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
-      'href',
-      `${tenant.path}/leagues/${COED}`,
-    );
+    // The link to the league's public page comes with that page.
+    await expect(result(page).getByRole('link')).toHaveCount(0);
     const [resultBox, listBox] = await Promise.all([
       result(page).boundingBox(),
       page.locator('#seasons-list').boundingBox(),

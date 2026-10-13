@@ -131,6 +131,29 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
+  test('2.4.11: an inline link that wraps over lines is not obscured by the text around it (#126)', async ({
+    page,
+  }) => {
+    // The link's bounding box is the union of its line boxes, so its centre can fall in the gap
+    // beside the shorter line, on the paragraph. The link is visible on every line.
+    await page.setContent(
+      fixture(
+        '<p id="p" style="width:200px;font:16px/24px sans-serif;margin:0">' +
+          '<span style="display:inline-block;width:120px"></span>' +
+          '<a href="#x">Publish<br>league</a>, then come back.</p>',
+      ),
+    );
+    const lines = await page.evaluate(() => document.querySelector('a')!.getClientRects().length);
+    expect(lines).toBeGreaterThan(1);
+    const centreOnParagraph = await page.evaluate(() => {
+      const box = document.querySelector('a')!.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return hit?.id === 'p';
+    });
+    expect(centreOnParagraph).toBe(true);
+    expect((await tabWalk(page)).failures).toEqual([]);
+  });
+
   test('2.1.2: a Tab keydown handler that calls preventDefault fails the trap check', async ({
     page,
   }) => {

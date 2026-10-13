@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   Injector,
+  type OnInit,
   afterNextRender,
   computed,
   inject,
@@ -76,7 +77,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
  * The create form of the league management page (#125; design/mockups/125-126-seasons.html states
  * 4 to 11), inside the page's `#create-season` section: Name, Slug (filled from the name until
  * edited), Start date, End date, Registration deadline (native date fields), a Format radio group
- * of the league's sport with no default, and Minimum roster size (set when a format is chosen,
+ * of the league's sport with no default (a sport with one format, softball, has it chosen), and Minimum roster size (set when a format is chosen,
  * which the organizer may raise). The limits fieldset of the mockup is #143 and #144's. Errors
  * show after a submit, under their field or group; focus goes to the first invalid field (the
  * first format for the group), or to the form alert for a failure that is not about one field. On
@@ -407,7 +408,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
     </form>
   `,
 })
-export class SeasonCreateForm {
+export class SeasonCreateForm implements OnInit {
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly create = injectMutation(api.seasons.create);
@@ -420,6 +421,10 @@ export class SeasonCreateForm {
   protected readonly form = new SeasonForm(() => this.sport());
   protected readonly alerts = SEASON_FORM_ALERTS;
   protected readonly dateFields = DATE_FIELDS;
+
+  ngOnInit(): void {
+    this.form.chooseOnlyFormat();
+  }
 
   protected readonly fieldGroupClass = FIELD_GROUP;
   protected readonly fieldClass = FIELD;

@@ -46,9 +46,8 @@ import { SeasonCreateForm } from './season-create-form';
  * nothing here is requested before the caller is known to organize this league.
  *
  * Publishing (#126; states 16 to 23): each Draft season of a published league has a Publish button
- * that opens `PublishSeasonDialog`; once the season is published a status above the list says so,
- * with a link to the league's public page, and takes focus, because the button that had it is
- * gone. The page behind the dialog is inert while it is open. A draft league has no Publish
+ * that opens `PublishSeasonDialog`; once the season is published a status above the list says so
+ * and takes focus, because the button that had it is gone. The page behind the dialog is inert while it is open. A draft league has no Publish
  * buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a
  * link to the Leagues page, where #69's Publish is; a league organizer is told to ask an org
  * admin, with no link, because the admin area shows them the no-access view. The season page's
@@ -144,9 +143,8 @@ import { SeasonCreateForm } from './season-create-form';
                   kind="info"
                   title="Publish the league first"
                   description="Seasons of a draft league can’t be published."
-                  ><a [href]="leaguesPath()" class="inline-block"
-                    >Publish {{ league.name }} in Leagues</a
-                  >, then come back to publish its seasons.</app-admin-alert
+                  ><a [href]="leaguesPath()">Publish {{ league.name }} in Leagues</a>, then come
+                  back to publish its seasons.</app-admin-alert
                 >
               } @else {
                 <app-admin-alert
@@ -164,8 +162,7 @@ import { SeasonCreateForm } from './season-create-form';
                 kind="success"
                 [title]="published.name + ' is published.'"
                 description="It’s on the league’s public page now."
-                ><a [href]="publicPath()">View public page</a></app-admin-alert
-              >
+              />
             </div>
           }
           @if (failed()) {
@@ -339,12 +336,6 @@ export class LeagueManagement {
 
   /** The Leagues page of the admin area, where #69's Publish is. */
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
-  /** The league's public page (#127). */
-  protected readonly publicPath = computed(
-    () =>
-      `/organizations/${encodeURIComponent(this.context.orgSlug())}/leagues/${encodeURIComponent(this.context.leagueSlug())}`,
-  );
-
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
