@@ -414,11 +414,11 @@ async function seed(members: Member[], seasons: Record<string, SeasonSeed[]> = {
           leagueSlugs: assigned,
         }),
   );
-  const rows = Object.entries(seasons).flatMap(([leagueSlug, list]) =>
-    // The list orders seasons by start date, so the insert order does not matter.
-    list.map((season) =>
-      convexRun('testing:seedSeason', { organizationSlug: tenant.slug, leagueSlug, ...season }),
-    ),
+  // One mutation per league: concurrent `testing:seedSeason` calls for one league all write its
+  // `publishedSeasonCount` and conflict on a slow runner (#127). The list orders seasons by start
+  // date, so the insert order does not matter.
+  const rows = Object.entries(seasons).map(([leagueSlug, list]) =>
+    convexRun('testing:seedSeasons', { organizationSlug: tenant.slug, leagueSlug, seasons: list }),
   );
   await Promise.all([...memberships, ...rows]);
   return tenant;

@@ -104,22 +104,23 @@ export async function seedSeasons(
   leagueSlug: string,
   seasons: SeasonSeed[],
 ): Promise<void> {
-  await Promise.all(
-    seasons.map((season) =>
-      convexRun('testing:seedSeason', {
-        organizationSlug: tenant.slug,
-        leagueSlug,
-        name: season.name,
-        slug: season.slug,
-        startDate: season.startDate,
-        endDate: season.endDate,
-        registrationDeadline: '2025-12-01',
-        format: '4v4',
-        minimumRosterSize: 4,
-        status: season.status ?? 'published',
-      }),
-    ),
-  );
+  // One mutation, not one call per season: concurrent `testing:seedSeason` calls for one league all
+  // write its `publishedSeasonCount`, and on a slow runner they fail with
+  // `OptimisticConcurrencyControlFailure`. Seasons of different leagues may be seeded together.
+  await convexRun('testing:seedSeasons', {
+    organizationSlug: tenant.slug,
+    leagueSlug,
+    seasons: seasons.map((season) => ({
+      name: season.name,
+      slug: season.slug,
+      startDate: season.startDate,
+      endDate: season.endDate,
+      registrationDeadline: '2025-12-01',
+      format: '4v4',
+      minimumRosterSize: 4,
+      status: season.status ?? 'published',
+    })),
+  });
 }
 
 /**
