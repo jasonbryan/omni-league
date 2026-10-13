@@ -175,7 +175,11 @@ test.describe('public season page: raw server HTML', () => {
           ([tag]) => /\bhref="([^"]*)"/.exec(tag)?.[1],
         );
         expect(currentSport, query).toEqual([`${tenant.path}/sports/beach-volleyball`]);
-        expect(html, query).toContain(`href="${tenant.path}/sports/soccer"`);
+        // The organization has leagues of this sport only, so it is the one sport listed.
+        expect(
+          [...html.matchAll(/href="([^"]*\/sports\/[^"]*)"/g)].map(([, href]) => href),
+          query,
+        ).toEqual([`${tenant.path}/sports/beach-volleyball`]);
 
         // No price and no registration action (#129, #133, #143 add theirs).
         expect(html, query).not.toMatch(/Register|\$\d/);
