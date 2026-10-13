@@ -340,7 +340,7 @@ test.describe('organization page: more than 5 rows per list', () => {
 test.describe('organization page in the browser', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  test('hydrates with no console error and passes the axe helper; the Locations item jumps to its panel (1280) or the menu button shows (360)', async ({
+  test('hydrates with no console error and passes the axe helper; the Locations item keeps the page and the hash (1280) or the menu button shows (360)', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -405,7 +405,9 @@ test.describe('organization page in the browser', () => {
       ],
     });
 
-    // The sidebar's Locations item jumps to the Locations panel on this page, with no reload.
+    // The sidebar's Locations item sets the hash with no reload. At 1280 the panel sits beside
+    // Leagues and is in view at load, so the scroll itself is checked by the repeated-click test in
+    // organization-page-links.spec.ts and, from another page, in sport-view.spec.ts.
     await page.evaluate(() => {
       window.scrollTo(0, 0);
       (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;

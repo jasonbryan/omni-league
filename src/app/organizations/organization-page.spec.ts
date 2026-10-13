@@ -123,6 +123,59 @@ describe('OrganizationPage', () => {
     expect(document.activeElement).toBe(host(loaded).querySelector('main#main'));
   });
 
+  // A link to `/organizations/<slug>#locations` from another page (the sidebar's Locations item on
+  // a sport view or the league page) navigates before this page's lists have arrived, so the
+  // panel does not exist when the link's own scroll runs: the page scrolls once it has rendered.
+  describe('the route fragment after a client navigation', () => {
+    let scrolled: string[];
+    beforeEach(() => {
+      scrolled = [];
+      // jsdom has no scrollIntoView.
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this.id);
+      };
+    });
+    afterEach(() => {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    });
+
+    it('scrolls to the fragment’s element only once the results have arrived', async () => {
+      const harness = await open('/elsewhere');
+      await harness.navigateByUrl(`/organizations/${GULF_COAST.slug}#locations`);
+      await settle(harness);
+      expect(scrolled).toEqual([]);
+
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(scrolled).toEqual(['locations']);
+      // Later live updates do not scroll again.
+      emit({ ...GULF_COAST, locationCount: 4 });
+      await settle(harness);
+      expect(scrolled).toEqual(['locations']);
+    });
+
+    it('does not scroll on the page load, where the browser has its own fragment handling', async () => {
+      const harness = await open(`/organizations/${GULF_COAST.slug}#locations`);
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(scrolled).toEqual([]);
+    });
+
+    it('does not scroll without a fragment, and ignores a fragment that names nothing', async () => {
+      const harness = await open('/elsewhere');
+      await harness.navigateByUrl(`/organizations/${GULF_COAST.slug}`);
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(scrolled).toEqual([]);
+
+      await harness.navigateByUrl('/elsewhere');
+      await harness.navigateByUrl(`/organizations/${GULF_COAST.slug}#nothing-here`);
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(scrolled).toEqual([]);
+    });
+  });
+
   describe('populated', () => {
     let harness: RouterTestingHarness;
     beforeEach(async () => {

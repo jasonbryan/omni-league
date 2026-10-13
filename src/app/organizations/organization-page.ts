@@ -1,6 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  Injector,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  untracked,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
 import { injectOnline, injectQuery } from '../core/data/convex';
@@ -86,6 +96,16 @@ export class OrganizationPage {
     page: 1,
   }));
   private readonly online = injectOnline();
+  private readonly document = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
+  private readonly route = inject(ActivatedRoute);
+  /**
+   * The route's fragment when the visitor reached this page by a client navigation (a link from a
+   * sport view or the league page, for example `#locations`), which the page scrolls to once it
+   * has rendered. Not set on the page load, where the browser handles the fragment itself.
+   */
+  private fragmentToScrollTo: string | null =
+    (inject(Router).currentNavigation()?.id ?? 1) === 1 ? null : this.route.snapshot.fragment;
 
   /** The page's path from the route, for "Try again" when there is no result to build it from. */
   protected readonly path = computed(() => organizationPath(this.slug()));
@@ -126,6 +146,19 @@ export class OrganizationPage {
     // The sidebar's Overview link on a sport view (#114) belongs to the page that goes: focus
     // follows the visitor to main, never to body.
     focusMainAfterRouteChange();
+    // The link's own scroll (`FollowLink`) runs when the navigation resolves, before the lists have
+    // arrived and the panel exists, so the page does it once it has rendered.
+    effect(() => {
+      if (!this.page()) return;
+      untracked(() => {
+        const fragment = this.fragmentToScrollTo;
+        if (!fragment) return;
+        this.fragmentToScrollTo = null;
+        afterNextRender(() => this.document.getElementById(fragment)?.scrollIntoView(), {
+          injector: this.injector,
+        });
+      });
+    });
     bindPageMeta(() => {
       const page = this.page();
       if (!page) return null;

@@ -275,6 +275,13 @@ export const AREAS = [
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
+    // `sport-view-path.ts` builds the `/sports/` hrefs that the organization page's and the league
+    // page's raw HTML specs assert (their sidebars link to the sport view).
+    name: 'sport view paths',
+    test: named('src/app/organizations/sport-view/', ['sport-view-path']),
+    specs: ['organization-page', ...LEAGUE_PAGE, ...SPORT_VIEW],
+  },
+  {
     // The sport view (#114): its page, content, paths, and test data. The organization sidebar it
     // shows is the public organization page's rule above.
     name: 'sport view',
@@ -313,7 +320,8 @@ export const AREAS = [
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    // The league page's saved-copy note and not-saved view (#127).
+    // The league page's saved-copy note and not-saved view (#127), and the sport view's, which
+    // sport-view-tester.spec.ts asserts (#114).
     specs: [
       'offline',
       'offline-note-height',
@@ -321,6 +329,7 @@ export const AREAS = [
       ...PUBLIC_PAGE,
       'league-page',
       'league-page-offline',
+      'sport-view-tester',
     ],
   },
   {

@@ -12,7 +12,7 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
-import { seedTenant, type Tenant } from './support/tenant';
+import { seedTenant, tallLeagues, tallLocations, type Tenant } from './support/tenant';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -136,6 +136,47 @@ async function activate(page: Page, control: Locator): Promise<void> {
   const box = await control.boundingBox();
   if (!box) throw new Error('control has no box');
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+/**
+ * Holds the answer to the Convex query `udfPath`, and every frame after it (Convex applies
+ * transitions in order), until `release()`, as the #180 test in `organization-staff.spec.ts` does.
+ * Call it before the page opens its WebSocket. `holding()` is true once an answer is held.
+ */
+async function holdAnswer(page: Page, udfPath: string) {
+  interface Change {
+    type: string;
+    queryId: number;
+    udfPath?: string;
+  }
+  const changes = (message: string | Buffer): Change[] =>
+    (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
+  let queryId: number | undefined;
+  let holding = false;
+  const held: string[] = [];
+  let release: () => void = () => undefined;
+  await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      for (const change of changes(message)) {
+        if (change.type === 'Add' && change.udfPath === udfPath) queryId = change.queryId;
+      }
+      server.send(message);
+    });
+    release = () => {
+      holding = false;
+      for (const frame of held.splice(0)) ws.send(frame);
+    };
+    server.onMessage((message) => {
+      const answers = changes(message).some(
+        (change) => change.type === 'QueryUpdated' && change.queryId === queryId,
+      );
+      if (answers) holding = true;
+      if (holding) held.push(String(message));
+      else ws.send(message);
+    });
+  });
+  return { holding: () => holding, release: () => release() };
 }
 
 test.describe('sport view: raw server HTML', () => {
@@ -351,6 +392,56 @@ test.describe('sport view in the browser', () => {
     await page.goto(`${path}?page=3`);
     await expect(page.locator('section#leagues > ul > li')).toHaveCount(2);
     await expectAccessible(page);
+  });
+
+  // The sidebar's Locations item navigates from the sport view before the organization page's
+  // lists have arrived, so `#locations` does not exist yet when the link's own scroll runs. The
+  // page scrolls to the fragment once it has rendered. The answer to the locations list is held
+  // here, so the order is the same as on a deployed site; without the page's own scroll the panel
+  // stays below the fold. 1280x300 puts the panel, which sits beside Leagues there, below the fold
+  // too.
+  test('the Locations item on a sport view scrolls to the panel once the organization page has rendered, though its lists arrive after the navigation', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const desktop = testInfo.project.name === 'chromium-desktop';
+    const tenant = await seedTenant({ locations: tallLocations(), leagues: tallLeagues() });
+    if (desktop) await page.setViewportSize({ width: 1280, height: 300 });
+    const locations = await holdAnswer(page, 'organizations:listPublicLocations');
+    await page.goto(`${tenant.path}/sports/soccer`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Soccer' })).toBeVisible();
+    await hydrated(consoleGuard);
+    await page.evaluate(() => {
+      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+    });
+
+    if (desktop) {
+      await page
+        .getByRole('navigation', { name: tenant.name })
+        .getByRole('link', { name: /^Locations/ })
+        .click();
+    } else {
+      const dialog = page.getByRole('dialog', { name: 'Navigation' });
+      await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+      await activate(page, dialog.getByRole('link', { name: /^Locations/ }));
+      await expect(dialog).toHaveCount(0);
+    }
+    await expect(page).toHaveURL(new RegExp(`${tenant.path}#locations$`));
+    // The navigation is done and the locations list is still held: no panel yet.
+    await expect.poll(() => locations.holding()).toBe(true);
+    await expect(page.locator('main #locations')).toHaveCount(0);
+
+    locations.release();
+    const panel = page.locator('main #locations');
+    await expect(panel).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect(panel).toBeInViewport();
+    const top = await panel.evaluate((el) => el.getBoundingClientRect().top);
+    expect(top).toBeGreaterThanOrEqual(56);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+    ).toBe(true);
   });
 
   test.describe('an unknown sport', () => {

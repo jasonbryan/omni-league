@@ -194,7 +194,6 @@ describe('selectSpecs: mapped areas', () => {
     for (const file of [
       'src/app/organizations/sport-view/sport-view-page.ts',
       'src/app/organizations/sport-view/sport-view-content.ts',
-      'src/app/organizations/sport-view/sport-view-path.ts',
     ]) {
       assert.deepEqual(
         specsFor([file]),
@@ -202,6 +201,19 @@ describe('selectSpecs: mapped areas', () => {
         file,
       );
     }
+    // The path builder's `/sports/` hrefs are asserted in the organization page's and the league
+    // page's raw HTML specs too.
+    assert.deepEqual(
+      specsFor(['src/app/organizations/sport-view/sport-view-path.ts']),
+      want(
+        'e2e/cache-key.spec.ts',
+        'e2e/league-page-offline.spec.ts',
+        'e2e/league-page.spec.ts',
+        'e2e/organization-page.spec.ts',
+        'e2e/sport-view-tester.spec.ts',
+        'e2e/sport-view.spec.ts',
+      ),
+    );
     for (const file of [
       'src/app/organizations/organization-sidebar.ts',
       'src/app/organizations/organization-page.ts',
@@ -221,11 +233,11 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['src/app/organizations/sport-view/testing/sport-data.ts']), want());
   });
 
-  it('maps the not-found and offline views to the league page specs that assert them (#127)', () => {
+  it('maps the not-found and offline views to the league page and sport view specs that assert them (#127, #114)', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));
     const offline = specsFor(['src/app/offline/not-saved-view.ts']);
-    for (const name of ['league-page', 'league-page-offline']) {
+    for (const name of ['league-page', 'league-page-offline', 'sport-view-tester']) {
       assert.ok(offline.includes(`e2e/${name}.spec.ts`), name);
     }
     assert.ok(!notFound.includes('FULL') && !offline.includes('FULL'));
