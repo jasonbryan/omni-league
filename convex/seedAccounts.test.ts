@@ -720,3 +720,72 @@ describe('seed:demo accounts: the password never leaks', () => {
     }
   });
 });
+
+describe('seed:demo accounts: the seeded invite (tester probes)', () => {
+  test(
+    'cannot be accepted, even by the invited address, with the stored hash or a guessed token',
+    async () => {
+      const t = setup();
+      await run(t);
+      const stored = (await appRows(t)).invites[0];
+      if (!stored) throw new Error('no seeded invite');
+      // Someone signs up the invited address (nothing stops them) and signs in.
+      await signUp(t, INVITED, OTHER_PASSWORD);
+      const invited = await as(t, INVITED);
+      const memberships = (await appRows(t)).memberships.length;
+
+      const guesses = [
+        stored.tokenHash,
+        '',
+        'x'.repeat(43),
+        INVITED,
+        GULF_COAST,
+        'coed-7v7-rec',
+        'A'.repeat(43),
+        'x'.repeat(129),
+      ];
+      for (const token of guesses) {
+        expect(await t.query(api.invites.getByToken, { token })).toEqual({ status: 'invalid' });
+        const failure = await invited.mutation(api.invites.accept, { token }).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect(failure, `token ${token.slice(0, 12)}`).not.toBeNull();
+      }
+      // Still pending, still unaccepted, and no role was handed out.
+      const after = await appRows(t);
+      expect(after.invites).toEqual([stored]);
+      expect(after.memberships).toHaveLength(memberships);
+      expect(await membershipsOf(t, INVITED)).toEqual([]);
+    },
+    SLOW,
+  );
+});
+
+describe('seed:demo accounts: three runs at once (tester probes)', () => {
+  test(
+    'none throws, and the rows end one per address, membership, and invite',
+    async () => {
+      const t = setup();
+      const results = await Promise.all([run(t), run(t), run(t)]);
+      for (const result of results) {
+        for (const code of Object.values(result.accounts)) {
+          expect(['created', 'exists', 'conflict']).toContain(code);
+        }
+      }
+      const users = await authRows(t, 'user');
+      const accounts = await authRows(t, 'account');
+      for (const email of Object.values(EMAILS)) {
+        const user = users.filter((u) => u['email'] === email);
+        expect(user).toHaveLength(1);
+        expect(accounts.filter((a) => a['userId'] === user[0]?.['_id'])).toHaveLength(1);
+      }
+      expect((await run(t)).accounts).toEqual(ALL('exists'));
+      const rows = await appRows(t);
+      expect(rows.users).toHaveLength(3);
+      expect(rows.memberships).toHaveLength(4);
+      expect(rows.invites).toHaveLength(1);
+    },
+    SLOW * 2,
+  );
+});
