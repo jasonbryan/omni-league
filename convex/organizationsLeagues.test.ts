@@ -2,6 +2,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { LIST_MINE_LEAGUES_LIMIT } from './organizations';
 import { insertLeague, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -220,5 +221,48 @@ describe('organizations.listMine: leagues (#141)', () => {
       ['org-a', ['beach-2s', 'coed-soccer', 'l-draft']],
       ['org-b', ['sand-2s']],
     ]);
+  });
+  test("two league organizers of one organization each see only their own assignment, never the other's", async () => {
+    const { t, as, organizationA, leagueIds } = await setup();
+    await t.run(async (ctx) => {
+      const second = await ctx.db.insert('users', {
+        authUserId: 'second',
+        name: 'second',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId: second,
+        organizationId: organizationA,
+        role: 'leagueOrganizer',
+        leagueIds: [leagueIds['other']],
+      });
+    });
+    const mine = await as('organizer').query(api.organizations.listMine, {});
+    const theirs = await as('second').query(api.organizations.listMine, {});
+    expect(theirs.map((row) => row.leagues)).toEqual([[{ name: 'M Other', slug: 'm-other' }]]);
+    expect(JSON.stringify(theirs)).not.toMatch(/Coed Soccer|beach 2s|L Draft/);
+    expect(JSON.stringify(mine)).not.toContain('M Other');
+  });
+
+  test('reads no more than LIST_MINE_LEAGUES_LIMIT assigned ids of a membership', async () => {
+    const { t, as, organizationA } = await setup();
+    const extra = await t.run(async (ctx) => {
+      const ids: Id<'leagues'>[] = [];
+      for (let i = 0; i <= LIST_MINE_LEAGUES_LIMIT; i++) {
+        const { leagueId } = await insertLeague(ctx, organizationA, {
+          name: `Extra ${String(i).padStart(3, '0')}`,
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+        });
+        ids.push(leagueId);
+      }
+      return ids;
+    });
+    await assign(t, organizationA, 'leagueOrganizer', extra);
+    const [row] = await as('organizer').query(api.organizations.listMine, {});
+    expect(row?.leagues).toHaveLength(LIST_MINE_LEAGUES_LIMIT);
+    expect(row?.leagues.map((league) => league.slug)).not.toContain(
+      `extra-${LIST_MINE_LEAGUES_LIMIT}`,
+    );
   });
 });
