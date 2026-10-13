@@ -186,6 +186,59 @@ describe('SeasonCreateForm', () => {
       ).toEqual(['2v2', '4v4', '6v6']);
     });
 
+    describe('a sport with one format (softball)', () => {
+      const SOFTBALL = { ...COED, sport: 'softball' };
+
+      it('has its only format chosen, Minimum roster size set to its minimum, and the hint naming it', async () => {
+        await open(SOFTBALL);
+        const radios = [...page.querySelectorAll<HTMLInputElement>('fieldset#format input')];
+        expect(radios.map((r) => [r.value, r.checked])).toEqual([['10v10', true]]);
+        expect(input('minimum-roster-size').value).toBe('10');
+        expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
+          'At least 10 for 10 v 10. Raise it if teams need more players.',
+        );
+      });
+
+      it('is sent with that format and minimum without the user choosing it', async () => {
+        await open(SOFTBALL);
+        await type('name', 'Fall 2026');
+        await type('start-date', '2026-09-01');
+        await type('end-date', '2026-11-15');
+        await type('registration-deadline', '2026-08-25');
+        await submit();
+        expect(calls()).toEqual([
+          [
+            CREATE_SEASON,
+            expect.objectContaining({ format: '10v10', minimumRosterSize: 10, name: 'Fall 2026' }),
+          ],
+        ]);
+      });
+
+      it('still has it chosen after a season was created, for the next one', async () => {
+        await open(SOFTBALL);
+        await type('name', 'Fall 2026');
+        await type('start-date', '2026-09-01');
+        await type('end-date', '2026-11-15');
+        await type('registration-deadline', '2026-08-25');
+        await submit();
+        o.convex.calls[0].resolve({ seasonId: 'se_new' });
+        await o.flush();
+        expect(input('name').value).toBe('');
+        expect(format('10v10').checked).toBe(true);
+        expect(input('minimum-roster-size').value).toBe('10');
+      });
+
+      it('a sport with several formats still has none chosen', async () => {
+        await open({ ...COED, sport: 'beachVolleyball' });
+        expect(
+          [...page.querySelectorAll<HTMLInputElement>('fieldset#format input')].map(
+            (r) => r.checked,
+          ),
+        ).toEqual([false, false, false]);
+        expect(input('minimum-roster-size').value).toBe('');
+      });
+    });
+
     it('has no limits fieldset: the maximum teams and roster size come later', async () => {
       await open();
       expect(page.querySelector('fieldset#limits')).toBeNull();

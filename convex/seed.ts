@@ -3,6 +3,7 @@ import type { Id } from './_generated/dataModel';
 import { env, internalMutation, type MutationCtx } from './_generated/server';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { findLeagueBySlugs } from './lib/seasonLookup';
+import type { SeasonStatus } from './lib/seasonStatus';
 import {
   backfilledValidator,
   backfillTenantFields,
@@ -132,10 +133,12 @@ export const DEMO: readonly Tenant[] = [
 ];
 
 /**
- * The demo seasons (#125): draft seasons of demo leagues, by the organization's and the league's
- * slug. Only drafts are seeded here; #126 inserts the published ones under other slugs
- * (`summer-2027`), so on a reused staging an insert-only seed never leaves a stale draft under a
- * published season's slug. Never rename or remove an entry (hosting.md, Demo data).
+ * The demo seasons of demo leagues, by the organization's and the league's slug: the `fall-2027`
+ * drafts (#125) and the `summer-2027` published seasons (#126), which later issues register into
+ * (`sunday-reverse-coed-4s / summer-2027`). A season is a draft unless its entry says `published`.
+ * The published ones have slugs #125 does not seed, because the seed is insert-only: on a reused
+ * staging, where #125's seed already inserted the `fall-2027` drafts, a published season under the
+ * same slug would never be inserted. Never rename or remove an entry (hosting.md, Demo data).
  *
  * A plain value, not a Convex function, so it adds nothing to the API.
  */
@@ -143,6 +146,7 @@ export const DEMO_SEASONS: readonly {
   organizationSlug: string;
   leagueSlug: string;
   season: NewSeason;
+  status?: SeasonStatus;
 }[] = [
   {
     organizationSlug: 'gulf-coast-sport-social',
@@ -169,6 +173,34 @@ export const DEMO_SEASONS: readonly {
       format: '7v7',
       minimumRosterSize: 7,
     },
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'sunday-reverse-coed-4s',
+    season: {
+      name: 'Summer 2027',
+      slug: 'summer-2027',
+      startDate: '2027-06-06',
+      endDate: '2027-08-29',
+      registrationDeadline: '2027-05-23',
+      format: '4v4',
+      minimumRosterSize: 4,
+    },
+    status: 'published',
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'coed-7v7-rec',
+    season: {
+      name: 'Summer 2027',
+      slug: 'summer-2027',
+      startDate: '2027-06-02',
+      endDate: '2027-08-25',
+      registrationDeadline: '2027-05-19',
+      format: '7v7',
+      minimumRosterSize: 7,
+    },
+    status: 'published',
   },
 ];
 
@@ -228,8 +260,10 @@ async function ensureOrganization(
  * per table, which the build log shows. It throws before reading or writing unless the deployment
  * is a preview or staging deployment (`assertPreviewDeployment`).
  *
- * It also inserts the draft demo seasons (`DEMO_SEASONS`, #125) of the demo leagues, by slug within
- * the league, through `insertSeason`.
+ * It also inserts the demo seasons (`DEMO_SEASONS`: the `fall-2027` drafts, #125, and the
+ * `summer-2027` published seasons, #126) of the demo leagues, by slug within the league, through
+ * `insertSeason`. A season is inserted only when its league has none under the slug, so a season
+ * that exists is never updated, whatever its status.
  *
  * Before inserting, it backfills the fields #100, #101, and #66 added on any row written before
  * them (`backfillTenantFields`, the only update it makes, on demo and other rows alike): `sortName`,
@@ -278,11 +312,11 @@ export const demo = internalMutation({
     // The seasons last, so every demo league exists. A season is inserted when its league has none
     // under the slug, whatever that one's status; a league that is missing (a slug collision made
     // the stored slug differ) is skipped.
-    for (const { organizationSlug, leagueSlug, season } of DEMO_SEASONS) {
+    for (const { organizationSlug, leagueSlug, season, status } of DEMO_SEASONS) {
       const found = await findLeagueBySlugs(ctx, { orgSlug: organizationSlug, leagueSlug });
       if (!found) continue;
       if (await seasonSlugTaken(ctx, found.league._id, season.slug)) continue;
-      await insertSeason(ctx, found.league, season);
+      await insertSeason(ctx, found.league, season, status);
       inserted.seasons++;
     }
     return { ...inserted, backfilled };

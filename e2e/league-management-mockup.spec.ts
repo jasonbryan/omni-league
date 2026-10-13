@@ -1,16 +1,16 @@
 // The league management page against the approved mockup design/mockups/125-126-seasons.html
-// (#125): at 360px and 1280px, each state of the page shows the same text, in the same order, as the
-// mockup's frame of that state (without #126's Publish buttons and #143's and #144's Limits
-// fieldset), and passes axe. Local runs only: the tests use seeded tenants and users. They run in
-// one project and set both widths themselves.
+// (#125, #126): at 360px and 1280px, each state of the page shows the same text, in the same order,
+// as the mockup's frame of that state (without #143's and #144's Limits fieldset), and passes axe.
+// A state with the publish confirmation also shows the dialog's text. Local runs only: the tests
+// use seeded tenants and users. They run in one project and set both widths themselves.
 //
 // Cost (the 2-vCPU CI runner ran the first version of these tests past the 30 s test timeout, with
 // a sign-up, a tenant, and up to six `convex run` processes per test, and a browser context for the
 // mockup that was never closed): sign-up is not under test here (league-management.spec.ts signs
 // up through the real form), so each worker signs up its two users once and every test starts from
 // their saved session. Tests that only read share the tenants the worker seeded once; the two that
-// create a season (Create, and the saving state) seed their own. The mockup's text is read once
-// per width.
+// create a season (Create, and the saving state) or publish one (the publishing and published
+// states) seed their own. The mockup's text is read once per width.
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -68,10 +68,15 @@ const test = base.extend<{ role: Role }, { world: World | undefined }>({
             {
               user: leagueOrganizer.user,
               role: 'leagueOrganizer',
-              assigned: [SUNDAY, THURSDAY, COED],
+              assigned: [SUNDAY, THURSDAY, COED, FRIDAY],
             },
           ],
-          { [COED]: COED_SEASONS, [SUNDAY]: SUNDAY_SEASONS },
+          {
+            [COED]: COED_SEASONS,
+            [SUNDAY]: SUNDAY_SEASONS,
+            [SLOW_PITCH]: SLOW_PITCH_SEASONS,
+            [FRIDAY]: FRIDAY_SEASONS,
+          },
         ),
         seed([{ user: leagueOrganizer.user, role: 'leagueOrganizer', assigned: [THURSDAY] }]),
       ]);
@@ -107,6 +112,7 @@ const MOCKUP_ORGANIZATION = 'Gulf Coast Sport & Social';
 
 const LOCATIONS = [
   { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
+  { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
   { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
 ];
 const LEAGUES = [
@@ -126,11 +132,26 @@ const LEAGUES = [
     sport: 'beachVolleyball' as const,
     locations: ['North Beach Sand Courts'],
   },
+  // The two draft leagues of states 22 and 23.
+  {
+    name: 'Tuesday Coed Slow-Pitch',
+    sport: 'softball' as const,
+    locations: ['Flour Bluff Softball Park'],
+    status: 'draft' as const,
+  },
+  {
+    name: 'Friday Night Coed 6s',
+    sport: 'beachVolleyball' as const,
+    locations: ['North Beach Sand Courts'],
+    status: 'draft' as const,
+  },
 ];
 const COED = 'coed-7v7-rec';
 const MENS = 'men-s-over-30-11v11';
 const SUNDAY = 'sunday-reverse-coed-4s';
 const THURSDAY = 'thursday-night-coed-2s';
+const SLOW_PITCH = 'tuesday-coed-slow-pitch';
+const FRIDAY = 'friday-night-coed-6s';
 
 interface SeasonSeed {
   name: string;
@@ -138,7 +159,7 @@ interface SeasonSeed {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
-  format: '4v4' | '7v7';
+  format: '4v4' | '6v6' | '7v7' | '10v10';
   minimumRosterSize: number;
   status: 'draft' | 'published';
 }
@@ -221,6 +242,32 @@ const SUNDAY_SEASONS: SeasonSeed[] = [
   },
 ];
 
+/** The mockup's draft leagues' seasons (states 22 and 23). */
+const SLOW_PITCH_SEASONS: SeasonSeed[] = [
+  {
+    name: 'Spring 2027',
+    slug: 'spring-2027',
+    startDate: '2027-03-02',
+    endDate: '2027-05-18',
+    registrationDeadline: '2027-02-16',
+    format: '10v10',
+    minimumRosterSize: 12,
+    status: 'draft',
+  },
+];
+const FRIDAY_SEASONS: SeasonSeed[] = [
+  {
+    name: 'Spring 2027',
+    slug: 'spring-2027',
+    startDate: '2027-03-05',
+    endDate: '2027-05-14',
+    registrationDeadline: '2027-02-19',
+    format: '6v6',
+    minimumRosterSize: 6,
+    status: 'draft',
+  },
+];
+
 /** The mockup's "Create, filled" values. */
 const SPRING_2028 = {
   name: 'Spring 2028',
@@ -242,13 +289,26 @@ const STATES = [
   'organizer',
   'no-access',
   'not-found',
+  'publish-confirm',
+  'publishing',
+  'published',
+  'publish-error',
+  'publish-offline',
+  'draft-league-admin',
+  'draft-league-organizer',
 ] as const;
 type State = (typeof STATES)[number];
 
-/** The text of each mockup frame's main area, per width, read once per worker. */
-const mockupTexts = new Map<number, Promise<Map<State, string>>>();
+/** What a mockup frame shows: its main area, and its confirmation dialog when it has one. */
+interface Frame {
+  main: string;
+  dialog: string | null;
+}
 
-function mockupTextsAt(browser: Browser, width: number): Promise<Map<State, string>> {
+/** The text of each mockup frame, per width, read once per worker. */
+const mockupTexts = new Map<number, Promise<Map<State, Frame>>>();
+
+function mockupTextsAt(browser: Browser, width: number): Promise<Map<State, Frame>> {
   let texts = mockupTexts.get(width);
   if (!texts) {
     texts = readMockup(browser, width);
@@ -257,7 +317,7 @@ function mockupTextsAt(browser: Browser, width: number): Promise<Map<State, stri
   return texts;
 }
 
-async function readMockup(browser: Browser, width: number): Promise<Map<State, string>> {
+async function readMockup(browser: Browser, width: number): Promise<Map<State, Frame>> {
   // The mockup's overview page lists every state in 48 frames, and each frame loads the page again
   // (its parser starts the frames before the last script replaces the body with the state). Four
   // browsers doing that at once made single loads take over 30 s. The frames are not part of any
@@ -269,11 +329,16 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, s
     const file = join(directory, 'seasons.html');
     await writeFile(file, html);
     const page = await context.newPage();
-    const texts = new Map<State, string>();
+    const texts = new Map<State, Frame>();
     for (const state of STATES) {
       await page.goto(`${pathToFileURL(file).href}?state=${state}`);
       const text = await page.locator('main#main').first().innerText();
-      texts.set(state, normalize(text, MOCKUP_ORGANIZATION));
+      const dialog = page.locator('[role="alertdialog"]');
+      texts.set(state, {
+        main: normalize(text, MOCKUP_ORGANIZATION),
+        dialog:
+          (await dialog.count()) > 0 ? normalizeDialog(await dialog.first().innerText()) : null,
+      });
     }
     return texts;
   } finally {
@@ -283,24 +348,20 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, s
 }
 
 /**
- * Lines of text with the organization name replaced, the Publish buttons removed (#126), and the
- * Limits fieldset removed (#143, #144): from "Limits" up to the submit button.
+ * Lines of text with the organization name replaced, the "View public page" link removed (#127),
+ * and the Limits fieldset removed (#143, #144): from "Limits" up to the submit button.
  */
 function normalize(text: string, organization: string): string {
   const lines = text
     .replaceAll(organization, 'ORG')
+    // The mockup's published status links to the league's public page, which #127 adds.
+    .replaceAll(' View public page', '')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
   const kept: string[] = [];
   let inLimits = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // "Publish" plus the season's name that names the button for assistive technology.
-    if (line === 'Publish') {
-      i++;
-      continue;
-    }
+  for (const line of lines) {
     if (line === 'Limits') inLimits = true;
     if (inLimits && /^Creat(e draft|ing) season/.test(line)) inLimits = false;
     if (!inLimits) kept.push(line);
@@ -309,7 +370,21 @@ function normalize(text: string, organization: string): string {
 }
 
 async function appText(page: Page, organization: string): Promise<string> {
-  return normalize(await page.getByRole('main').innerText(), organization);
+  // Not `getByRole('main')`: the page behind a dialog is inert, which the role query may skip.
+  return normalize(await page.locator('main#main').innerText(), organization);
+}
+
+/**
+ * The dialog's lines. The app writes the offline copy with a straight apostrophe, as every offline
+ * message does (angular.md, State and data, and #69's dialog), and the mockup with a curly one.
+ */
+function normalizeDialog(text: string): string {
+  return text
+    .replaceAll("'", '’')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .join('\n');
 }
 
 interface Member {
@@ -362,6 +437,44 @@ function ownTenant(world: World | undefined) {
   });
 }
 
+const publishButton = (page: Page, season: string) =>
+  page.getByRole('button', { name: `Publish ${season}` });
+const dialog = (page: Page) => page.getByRole('alertdialog');
+
+/** Opens the confirmation for Fall 2027 of the Coed league, whose page is loaded. */
+async function openConfirmation(page: Page) {
+  await expect(page.locator('#seasons-list > li')).toHaveCount(4);
+  await publishButton(page, 'Fall 2027').click();
+  await expect(dialog(page)).toBeVisible();
+}
+
+/**
+ * Answers every `seasons:publish` mutation the page sends with a server error, and never sends it
+ * on, so the failure state can be read and nothing is written.
+ */
+async function failPublish(page: Page) {
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      if (typeof message === 'string' && message.includes('"seasons:publish"')) {
+        const { requestId } = JSON.parse(message) as { requestId: number };
+        ws.send(
+          JSON.stringify({
+            type: 'MutationResponse',
+            requestId,
+            success: false,
+            result: 'Server Error',
+            logLines: [],
+          }),
+        );
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+}
+
 const submit = (page: Page) =>
   page.locator('#create-season form').getByRole('button', { name: /^Create draft season/ });
 
@@ -387,18 +500,27 @@ async function mockupMatches(
   testInfo: Parameters<typeof screenshot>[1],
   scan: 'full' | 'axe' = 'full',
 ) {
-  const expected = (await mockupTextsAt(browser, width)).get(state);
+  const expected = (await mockupTextsAt(browser, width)).get(state)!;
   // Polled: the page's text follows the last input in a later render (the minimum roster size's
   // hint changes after the format is chosen), and a state is reached when its text equals the
   // mockup's.
   await expect
     .poll(() => appText(page, organization), { message: `${state} at ${width}px` })
-    .toBe(expected);
+    .toBe(expected.main);
+  if (expected.dialog !== null) {
+    await expect
+      .poll(async () => normalizeDialog(await page.getByRole('alertdialog').innerText()), {
+        message: `${state} dialog at ${width}px`,
+      })
+      .toBe(expected.dialog);
+  }
   await screenshot(page, testInfo, `125-mockup-${state}`);
-  if (scan === 'full') {
+  if (scan === 'full' && expected.dialog === null) {
     await expectAccessible(page);
   } else {
     // The saving state's spinner animates without end, which the reflow check waits on: axe only.
+    // A modal holds focus, so the page-wide Tab walk (which expects to leave the page) does not
+    // apply to a state with a dialog either.
     const results = await axeScan(page);
     expect(describeViolations(results.violations), `axe (${AXE_TAGS.join(', ')})`).toEqual([]);
   }
@@ -517,8 +639,103 @@ for (const width of WIDTHS) {
       release();
     });
 
+    // The confirmation, its failure, and its offline state write nothing, so they read the shared
+    // tenant (ADR 0005, "Amendment: worker-scoped tenants for read-only tests"): the failed publish
+    // is answered by the test and never sent, and offline sends nothing. If either wrote, the
+    // alert the test waits for would not appear and the test would fail.
+    test('publish, confirm', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
+      await openConfirmation(page);
+      await mockupMatches(page, browser, shared.name, 'publish-confirm', width, testInfo);
+    });
+
+    test.describe('publish, failed', () => {
+      // The refused mutation logs one console error.
+      test.use({ expectedConvexErrors: ['seasons:publish'] });
+
+      test('publish, failed', async ({ page, browser, world }, testInfo) => {
+        const { shared } = seeded(world);
+        await page.setViewportSize({ width, height: 900 });
+        await failPublish(page);
+        await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
+        await openConfirmation(page);
+        await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+        await expect(dialog(page).getByRole('alert')).toBeVisible();
+        await mockupMatches(page, browser, shared.name, 'publish-error', width, testInfo);
+      });
+    });
+
+    test('publish, offline', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
+      await openConfirmation(page);
+      await page.context().setOffline(true);
+      try {
+        await dialog(page).getByRole('button', { name: 'Publish season' }).click({ force: true });
+        await expect(dialog(page).locator('[data-slot="alert"]')).toBeVisible();
+        await mockupMatches(page, browser, shared.name, 'publish-offline', width, testInfo);
+      } finally {
+        await page.context().setOffline(false);
+      }
+    });
+
+    // The next two publish Fall 2027, so each has its own organization.
+    test('publish, publishing', async ({ page, browser, world }, testInfo) => {
+      const tenant = await ownTenant(world);
+      await page.setViewportSize({ width, height: 900 });
+      // Holds every mutation the page sends until released, so the publishing state can be read.
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      await page.routeWebSocket(/.*/, (ws) => {
+        const server = ws.connectToServer();
+        ws.onMessage(async (message) => {
+          if (typeof message === 'string' && message.includes('"Mutation"')) await held;
+          server.send(message);
+        });
+        server.onMessage((message) => ws.send(message));
+      });
+      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+      await openConfirmation(page);
+      await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+      await expect(dialog(page).getByRole('button', { name: 'Publishing…' })).toBeVisible();
+      await mockupMatches(page, browser, tenant.name, 'publishing', width, testInfo, 'axe');
+      release();
+    });
+
+    test('publish, done: published', async ({ page, browser, world }, testInfo) => {
+      const tenant = await ownTenant(world);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+      await openConfirmation(page);
+      await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+      await expect(dialog(page)).toHaveCount(0);
+      await expect(page.getByRole('status').filter({ hasText: 'is published' })).toBeVisible();
+      await mockupMatches(page, browser, tenant.name, 'published', width, testInfo);
+    });
+
+    test('a draft league: an org admin', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${SLOW_PITCH}`);
+      await expect(page.locator('#seasons-list > li')).toHaveCount(1);
+      // Softball's only format is chosen from the start, as in the mockup.
+      await expect(page.getByRole('radio', { name: '10 v 10' })).toBeChecked();
+      await mockupMatches(page, browser, shared.name, 'draft-league-admin', width, testInfo);
+    });
+
     test.describe('a league organizer', () => {
       test.use({ role: 'leagueOrganizer' });
+
+      test('a draft league: a league organizer', async ({ page, browser, world }, testInfo) => {
+        const { shared } = seeded(world);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`/app/organizations/${shared.slug}/leagues/${FRIDAY}`);
+        await expect(page.locator('#seasons-list > li')).toHaveCount(1);
+        await mockupMatches(page, browser, shared.name, 'draft-league-organizer', width, testInfo);
+      });
 
       test('as a league organizer', async ({ page, browser, world }, testInfo) => {
         const { shared } = seeded(world);

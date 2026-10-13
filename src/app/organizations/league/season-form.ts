@@ -209,11 +209,23 @@ export class SeasonForm {
     }
   }
 
-  /** Empties every field (after a create succeeded). */
+  /**
+   * A sport with only one format (softball) has it chosen from the start, with Minimum roster size
+   * set to its minimum, as choosing it would; a sport with several has none until the user
+   * chooses. Called when the form is shown and after it clears, because the league's sport is
+   * known only once the component's inputs are set.
+   */
+  chooseOnlyFormat(): void {
+    const formats = this.formats();
+    if (formats.length === 1) this.chooseFormat(formats[0].key);
+  }
+
+  /** Empties every field (after a create succeeded); a sport's only format stays chosen. */
   clear(): void {
     this.model.set({ ...EMPTY });
     this.slugEdited.set(false);
     this.format.set(null);
+    this.chooseOnlyFormat();
   }
 
   /**
