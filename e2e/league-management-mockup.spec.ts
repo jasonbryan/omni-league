@@ -12,8 +12,10 @@
 // create a season (Create, and the saving state) seed their own. The mockup's text is read once
 // per width.
 import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { pathToFileURL } from 'node:url';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { AXE_TAGS, axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -54,6 +56,9 @@ const test = base.extend<{ role: Role }, { world: World | undefined }>({
         await use(undefined);
         return;
       }
+      // The mockup read (11 loads of a 1.9 MB page per width) is slow on a busy machine, so it
+      // happens here, outside the first test's 30 s.
+      for (const width of WIDTHS) await mockupTextsAt(browser, width);
       const orgAdmin = await signedUp(browser, newUser('Admin'));
       const leagueOrganizer = await signedUp(browser, newUser('Organizer'));
       const [shared, notAssigned] = await Promise.all([
@@ -96,7 +101,7 @@ async function signedUp(browser: Browser, user: TestUser): Promise<Account> {
   }
 }
 
-const MOCKUP = pathToFileURL(join(process.cwd(), 'design', 'mockups', '125-126-seasons.html')).href;
+const MOCKUP_FILE = join(process.cwd(), 'design', 'mockups', '125-126-seasons.html');
 const WIDTHS = [360, 1280] as const;
 const MOCKUP_ORGANIZATION = 'Gulf Coast Sport & Social';
 
@@ -253,18 +258,27 @@ function mockupTextsAt(browser: Browser, width: number): Promise<Map<State, stri
 }
 
 async function readMockup(browser: Browser, width: number): Promise<Map<State, string>> {
+  // The mockup's overview page lists every state in 48 frames, and each frame loads the page again
+  // (its parser starts the frames before the last script replaces the body with the state). Four
+  // browsers doing that at once made single loads take over 30 s. The frames are not part of any
+  // state (the states are the page's <template>s), so the read uses a copy without them.
+  const html = (await readFile(MOCKUP_FILE, 'utf8')).replace(/<iframe\b[\s\S]*?<\/iframe>/g, '');
+  const directory = await mkdtemp(join(tmpdir(), 'mockup-125-'));
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   try {
+    const file = join(directory, 'seasons.html');
+    await writeFile(file, html);
     const page = await context.newPage();
     const texts = new Map<State, string>();
     for (const state of STATES) {
-      await page.goto(`${MOCKUP}?state=${state}`);
+      await page.goto(`${pathToFileURL(file).href}?state=${state}`);
       const text = await page.locator('main#main').first().innerText();
       texts.set(state, normalize(text, MOCKUP_ORGANIZATION));
     }
     return texts;
   } finally {
     await context.close();
+    await rm(directory, { recursive: true, force: true });
   }
 }
 
