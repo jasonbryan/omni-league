@@ -13,7 +13,7 @@ import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
-import { signUp } from './support/session';
+import { otherUser, signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -293,4 +293,44 @@ test.describe('League management: a draft league (#126)', () => {
     await screenshot(page, testInfo, '126-draft-league-admin');
     await expectAccessible(page);
   });
+});
+
+test.describe('League management: concurrent publishes (#126, tester)', () => {
+  test(
+    'an org admin and a league organizer press Publish season for the same season at once: both finish, and it is Published once',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, browser }) => {
+      const { tenant, base } = await memberOf(page, 'orgAdmin');
+      const colleague = newUser('Organizer');
+      const second = await otherUser(browser, colleague);
+      try {
+        await convexRun('testing:addLeagueOrganizer', {
+          organizationSlug: tenant.slug,
+          email: colleague.email,
+          leagueSlugs: [COED],
+        });
+        const pages = [page, second];
+        for (const each of pages) {
+          await each.goto(`${base}/leagues/${COED}`);
+          await publishButton(each, 'Fall 2027').click();
+          await expect(dialog(each)).toBeVisible();
+        }
+        await Promise.all(
+          pages.map((each) => dialog(each).getByRole('button', { name: 'Publish season' }).click()),
+        );
+        for (const each of pages) {
+          await expect(dialog(each)).toHaveCount(0);
+          await expect(status(each, 'Fall 2027')).toHaveText('Published');
+          await expect(result(each)).toContainText('Fall 2027 is published.');
+          await expect(status(each, 'Spring 2027')).toHaveText('Draft');
+        }
+        // A third press after both finished (the second context's page is stale) changes nothing.
+        await page.reload();
+        await expect(status(page, 'Fall 2027')).toHaveText('Published');
+        await expect(rows(page)).toHaveCount(3);
+      } finally {
+        await second.context().close();
+      }
+    },
+  );
 });

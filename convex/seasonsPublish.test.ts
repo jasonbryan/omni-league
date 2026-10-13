@@ -275,3 +275,85 @@ describe('seasons.publish', () => {
     });
   });
 });
+
+// Tester probes (#126): concurrent publishes, and that a published season is on no public surface
+// yet (the public queries read only counters and published leagues, and no public query returns a
+// season until #127 and #128).
+describe('seasons.publish (tester probes)', () => {
+  test('concurrent publishes of one season, by an org admin and by its league organizer, all succeed and leave one published row', async () => {
+    const s = await setup();
+    const before = await seasons(s.t);
+    const results = await Promise.all([
+      s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.organizerL.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.organizerL.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+    ]);
+    expect(results).toEqual([null, null, null, null, null]);
+    const after = await seasons(s.t);
+    expect(after).toHaveLength(before.length);
+    expect(after.find((season) => season._id === s.seasonL)).toEqual({
+      ...before.find((season) => season._id === s.seasonL)!,
+      status: 'published',
+    });
+    expect(after.filter((season) => season._id !== s.seasonL)).toEqual(
+      before.filter((season) => season._id !== s.seasonL),
+    );
+  });
+
+  test('concurrent publishes mixed with refused callers: only the permitted ones write', async () => {
+    const s = await setup();
+    const settled = await Promise.allSettled([
+      s.adminB.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.organizerM.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.t.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+      s.organizerL.mutation(api.seasons.publish, { seasonId: s.seasonL }),
+    ]);
+    expect(settled.map((r) => r.status)).toEqual([
+      'rejected',
+      'fulfilled',
+      'rejected',
+      'rejected',
+      'fulfilled',
+    ]);
+    expect(await statusOf(s.t, s.seasonL)).toBe('published');
+    expect(await statusOf(s.t, s.seasonM)).toBe('draft');
+    expect(await statusOf(s.t, s.seasonB)).toBe('draft');
+  });
+
+  test('a concurrent publish while the league is a draft refuses every caller and writes nothing', async () => {
+    const s = await setup();
+    const before = await seasons(s.t);
+    const settled = await Promise.allSettled([
+      s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonD }),
+      s.organizerD.mutation(api.seasons.publish, { seasonId: s.seasonD }),
+    ]);
+    expect(settled.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+    expect(await seasons(s.t)).toEqual(before);
+  });
+
+  test('publishing a season changes no result of the public queries, and an anonymous caller cannot list the season', async () => {
+    const s = await setup();
+    const publicResults = () =>
+      Promise.all([
+        s.t.query(api.organizations.getPublicPage, { slug: 'org-a' }),
+        s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page: 1 }),
+        s.t.query(api.organizations.listPublicLocations, { slug: 'org-a', page: 1 }),
+        s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page: 1, sport: 'soccer' }),
+      ]);
+    const before = await publicResults();
+    await s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL });
+    expect(await publicResults()).toEqual(before);
+    // Nothing the public queries return names a season.
+    expect(JSON.stringify(await publicResults())).not.toMatch(/season|fall-2027|Fall 2027/i);
+    const leagueId = (await seasons(s.t)).find((season) => season._id === s.seasonL)!.leagueId;
+    await expect(s.t.query(api.seasons.listForOrganizer, { leagueId })).rejects.toThrow(
+      'Sign in required',
+    );
+    await expect(s.adminB.query(api.seasons.listForOrganizer, { leagueId })).rejects.toThrow(
+      'Not allowed',
+    );
+  });
+});
