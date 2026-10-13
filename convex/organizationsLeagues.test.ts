@@ -341,36 +341,46 @@ describe('organizations.listMine: leagues (#141)', () => {
   });
 
   test('an org admin membership spends none of the budget (#196)', async () => {
-    const { t, as, organizationB } = await setup();
-    const bLeagues = await leaguesOf(t, organizationB, 'B Field', 'B extra', 3);
-    await addMembership(t, organizationB, 'orgAdmin', bLeagues);
+    const { t, as } = await setup();
+    // "Org 0" sorts before "Org A" and holds LIST_MINE_LEAGUES_LIMIT ids for an org admin, so the
+    // budget would be gone before Org A if an org admin spent it.
+    const zero = await t.run((ctx) =>
+      insertTenant(ctx, {
+        organization: { name: 'Org 0', slug: 'org-0' },
+        locations: [{ name: 'Zero Field', address: '0 Zero St' }],
+        leagues: [],
+      }),
+    );
+    const zeroLeagues = await leaguesOf(t, zero, 'Zero Field', 'Zero', LIST_MINE_LEAGUES_LIMIT);
+    await addMembership(t, zero, 'orgAdmin', zeroLeagues);
     const rows = await as('organizer').query(api.organizations.listMine, {});
     expect(rows.map((row) => [row.name, row.role, row.leagues.length])).toEqual([
+      ['Org 0', 'orgAdmin', 0],
       ['Org A', 'leagueOrganizer', 3],
-      ['Org B', 'orgAdmin', 0],
     ]);
   });
 
   test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once (#196)", async () => {
     const { t, as, organizationA, organizationB } = await setup();
-    // Org A (first by name) names LIST_MINE_LEAGUES_LIMIT foreign leagues (all of organization B's)
-    // plus one repeat: every read is spent, no row is listed, and Org B then has no budget left.
+    // Org A (first by name) names LIST_MINE_LEAGUES_LIMIT - 1 foreign leagues (all of organization
+    // B's) plus a repeat of one. Every distinct id is read and none is listed. The repeat is not
+    // read again, so exactly one read is left for Org B, which lists one league.
     const foreign = await leaguesOf(
       t,
       organizationB,
       'B Field',
       'Foreign',
-      LIST_MINE_LEAGUES_LIMIT,
+      LIST_MINE_LEAGUES_LIMIT - 1,
     );
     await assign(t, organizationA, 'leagueOrganizer', [...foreign, foreign[0]]);
     const bOwn = await leaguesOf(t, organizationB, 'B Field', 'Own', 3);
     await addMembership(t, organizationB, 'leagueOrganizer', bOwn);
     const rows = await as('organizer').query(api.organizations.listMine, {});
-    expect(rows.map((row) => [row.name, row.leagues.length])).toEqual([
-      ['Org A', 0],
-      ['Org B', 0],
+    expect(rows.map((row) => [row.name, row.leagues.map((league) => league.name)])).toEqual([
+      ['Org A', []],
+      ['Org B', ['Own 000']],
     ]);
-    expect(JSON.stringify(rows)).not.toMatch(/Foreign|Own/);
+    expect(JSON.stringify(rows)).not.toContain('Foreign');
   });
 
   test("another user's assignments never spend the caller's budget or appear in their rows (#196)", async () => {
