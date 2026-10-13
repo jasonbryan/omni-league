@@ -50,6 +50,7 @@ export const SEASONS = [
 export const GET_ORGANIZER_CONTEXT = 'leagues:getOrganizerContext';
 export const LIST_FOR_ORGANIZER = 'seasons:listForOrganizer';
 export const CREATE_SEASON = 'seasons:create';
+export const PUBLISH_SEASON = 'seasons:publish';
 export const LIST_MINE = 'organizations:listMine';
 
 /**
