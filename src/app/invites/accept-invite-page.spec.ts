@@ -368,6 +368,36 @@ describe('AcceptInvitePage', () => {
         expect(links).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
       });
 
+      it('an org admin answer without an organization slug (or an empty one): "Go to your organizations" to /app', async () => {
+        const behind = await acceptWith(ADMIN, {
+          organizationName: 'Coastal Bend Rec Club',
+          role: 'orgAdmin',
+          leagueNames: [],
+        });
+        expect(behind).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+        TestBed.resetTestingModule();
+        sessionStorage.clear();
+        const empty = await acceptWith(ADMIN, {
+          organizationName: 'Coastal Bend Rec Club',
+          organizationSlug: '',
+          role: 'orgAdmin',
+          leagueNames: [],
+          leagues: [],
+        });
+        expect(empty).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('one league but no organization slug: "Go to your organizations" to /app', async () => {
+        const links = await acceptWith(ORGANIZER, {
+          organizationName: 'Coastal Bend Rec Club',
+          organizationSlug: '',
+          role: 'leagueOrganizer',
+          leagueNames: ['Coed 7v7 Rec'],
+          leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
+        });
+        expect(links).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
       it('the destination holds only slugs: no token in the link', async () => {
         const links = await acceptWith(ADMIN, {
           organizationName: 'Coastal Bend Rec Club',

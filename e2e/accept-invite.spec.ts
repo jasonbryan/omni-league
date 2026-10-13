@@ -256,6 +256,16 @@ test.describe('Accept invite: while the invite is checked, issue 212', () => {
       });
     });
 
+    await page.addInitScript(() => {
+      const shifts = { score: 0 };
+      (window as unknown as { shifts: typeof shifts }).shifts = shifts;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const shift = entry as PerformanceEntry & { value: number; hadRecentInput: boolean };
+          if (!shift.hadRecentInput) shifts.score += shift.value;
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
     await openLink(page, token);
     const skeleton = main(page).getByTestId('invite-skeleton');
     await expect(skeleton).toBeVisible();
@@ -266,10 +276,31 @@ test.describe('Accept invite: while the invite is checked, issue 212', () => {
     await expect(main(page).getByRole('heading')).toHaveCount(0);
     await screenshot(page, testInfo, '212-checking');
     await expectAccessible(page);
+    const before = await skeleton.boundingBox();
 
     release();
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
     await expect(skeleton).toHaveCount(0);
+
+    // No layout shift as the invite arrives: the card keeps its left edge, width, and top, so only
+    // the height below the rows can change (the lead line may wrap, the sign-in prompt is longer).
+    const card = main(page).locator('.ring-1').first();
+    const after = await card.boundingBox();
+    expect(before).not.toBeNull();
+    expect(after).not.toBeNull();
+    expect(after?.x).toBeCloseTo(before?.x ?? -1, 0);
+    expect(after?.y).toBeCloseTo(before?.y ?? -1, 0);
+    expect(after?.width).toBeCloseTo(before?.width ?? -1, 0);
+    // The browser's own layout-shift score stays in "good" (below 0.1).
+    const score = await page.evaluate(
+      () => (window as unknown as { shifts: { score: number } }).shifts.score,
+    );
+    testInfo.annotations.push({ type: 'layout shift score', description: String(score) });
+    expect(score).toBeLessThan(0.1);
+    testInfo.annotations.push({
+      type: 'card height',
+      description: `skeleton ${before?.height}, loaded ${after?.height}`,
+    });
   });
 });
 
