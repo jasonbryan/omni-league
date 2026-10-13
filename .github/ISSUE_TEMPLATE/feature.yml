@@ -25,6 +25,13 @@ body:
       description: Unit, Convex, and e2e tests that prove each criterion, including permission and empty-data cases.
     validations:
       required: true
+  - type: textarea
+    id: demo
+    attributes:
+      label: Demo data
+      description: 'The rows `seed:demo` adds, or the demo account that shows the feature, or `Demo data: none` with the reason.'
+    validations:
+      required: true
   - type: checkboxes
     id: gates
     attributes:
