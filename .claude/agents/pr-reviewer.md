@@ -17,6 +17,7 @@ Check every changed file for:
 - **Tests:** tests assert behaviour, not implementation details, and would fail if the feature broke.
 - **Scope:** changes beyond the issue, and any new package or service without an Accepted ADR (a missed `gate:technology`).
 - **Migration:** a PR that changes `convex/schema.ts`, or code that rewrites stored data, with a missing or `none` Migration section is a blocking finding.
+- **Demo data:** compare the PR's seed change (`convex/seed.ts`) with the issue's own Demo data criterion. A PR that does not deliver it is a blocking finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 - **UX:** for any screen or task flow, the UX checklist in `docs/conventions/ux.md`, applied to what the PR adds or changes. A gap that was already there and has an open issue is a note linking that issue, not a finding.
 - **UI:** visible changes that break the design system: new colours or tokens outside `src/styles/tokens.css`, or patterns that deviate from the existing components and approved mockups. A missing mockup is not a finding.
 
