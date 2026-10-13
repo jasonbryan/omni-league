@@ -51,6 +51,16 @@ interface InviteSummary {
   expiresAt?: number;
 }
 
+/**
+ * What `invites.accept` returns to the caller who just accepted (#212): the summary plus the slugs
+ * that build the "Open" link. The slugs are optional so an answer from a backend one release
+ * behind still shows the page (the link then goes to `/app`).
+ */
+interface AcceptedInvite extends InviteSummary {
+  organizationSlug?: string;
+  leagues?: { name: string; slug: string }[];
+}
+
 type View = 'checking' | 'loadFailed' | 'invalid' | 'signedOut' | 'ready' | 'accepted';
 
 /** Why the Accept press did not make the visitor a member. `null` while nothing is wrong. */
@@ -120,17 +130,51 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
           @switch (view()) {
             @case ('checking') {
               <div
+                data-testid="invite-skeleton"
                 class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
               >
-                <div class="flex flex-col items-center px-6 py-12 text-center">
-                  <ng-icon
-                    name="lucideLoaderCircle"
-                    class="text-2xl text-muted-foreground motion-safe:animate-spin"
+                <p role="status" class="sr-only">Checking your invite…</p>
+                <div class="px-5 pt-6 md:px-8 md:pt-8">
+                  <div
+                    data-skeleton="icon"
                     aria-hidden="true"
-                  />
-                  <p role="status" class="mt-3 text-sm text-muted-foreground">
-                    Checking your invite…
-                  </p>
+                    class="size-10 rounded-lg bg-muted motion-safe:animate-pulse"
+                  ></div>
+                  <div
+                    aria-hidden="true"
+                    class="mt-4 h-5 w-20 rounded-md bg-muted motion-safe:animate-pulse"
+                  ></div>
+                  <div
+                    data-skeleton="heading"
+                    aria-hidden="true"
+                    class="mt-1 h-8 w-64 max-w-full rounded-md bg-muted motion-safe:animate-pulse"
+                  ></div>
+                  <div
+                    aria-hidden="true"
+                    class="mt-2 h-5 w-full rounded-md bg-muted motion-safe:animate-pulse"
+                  ></div>
+                </div>
+                <div
+                  aria-hidden="true"
+                  class="mx-5 mt-5 divide-y divide-border rounded-lg border border-border md:mx-8"
+                >
+                  @for (row of skeletonRows; track row) {
+                    <div class="flex justify-between gap-x-4 px-3 py-2.5">
+                      <div
+                        data-skeleton="row"
+                        class="h-5 w-24 rounded-md bg-muted motion-safe:animate-pulse"
+                      ></div>
+                      <div class="h-5 w-32 rounded-md bg-muted motion-safe:animate-pulse"></div>
+                    </div>
+                  }
+                </div>
+                <div aria-hidden="true" class="px-5 pt-5 pb-6 md:px-8 md:pb-8">
+                  <div class="h-5 w-40 rounded-md bg-muted motion-safe:animate-pulse"></div>
+                  <div
+                    data-skeleton="button"
+                    aria-hidden="true"
+                    class="mt-4 h-9 w-full rounded-lg bg-muted motion-safe:animate-pulse"
+                  ></div>
                 </div>
               </div>
             }
@@ -173,8 +217,11 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                   You’re on the staff of {{ accepted()?.organizationName }}
                 </h1>
                 <p class="mt-3 text-balance text-muted-foreground">{{ acceptedLine() }}</p>
-                <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
-                  >Go to your organizations</a
+                <a
+                  [routerLink]="destination().link"
+                  data-slot="button"
+                  [class]="primaryButton + ' mt-8'"
+                  >{{ destination().label }}</a
                 >
               </div>
             }
@@ -331,6 +378,8 @@ export class AcceptInvitePage {
   private readonly store = inject(InviteTokenStore);
   private readonly title = inject(Title);
 
+  /** The three detail rows of the invite card's skeleton: organization, role, and expiry. */
+  protected readonly skeletonRows = [0, 1, 2];
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   /** The only query sign-up and sign-in get: the page's own path, which holds no token. */
@@ -372,7 +421,7 @@ export class AcceptInvitePage {
     source: this.token,
     computation: () => false,
   });
-  protected readonly accepted = linkedSignal<string | null, InviteSummary | null>({
+  protected readonly accepted = linkedSignal<string | null, AcceptedInvite | null>({
     source: this.token,
     computation: () => null,
   });
@@ -422,6 +471,32 @@ export class AcceptInvitePage {
     const done = this.accepted();
     if (done?.role === 'orgAdmin') return 'You’re an org admin.';
     return `You’re a league organizer for ${LIST.format(done?.leagueNames ?? [])}.`;
+  });
+
+  /**
+   * Where the primary button goes once the invite is accepted (#212): the organization for an org
+   * admin, the league for a league organizer of one league, and the account page otherwise
+   * (several leagues, none left, or no slug). The link holds slugs only, never the token.
+   */
+  protected readonly destination = computed<{ label: string; link: string[] }>(() => {
+    const done = this.accepted();
+    const organization = done?.organizationSlug;
+    if (done && organization) {
+      if (done.role === 'orgAdmin') {
+        return {
+          label: `Open ${done.organizationName}`,
+          link: ['/app', 'organizations', organization],
+        };
+      }
+      const [league, ...others] = done.leagues ?? [];
+      if (league && others.length === 0) {
+        return {
+          label: `Open ${league.name}`,
+          link: ['/app', 'organizations', organization, 'leagues', league.slug],
+        };
+      }
+    }
+    return { label: 'Go to your organizations', link: ['/app'] };
   });
 
   private readonly alert = viewChild(InviteAlert);

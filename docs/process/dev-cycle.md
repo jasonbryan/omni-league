@@ -73,7 +73,7 @@ The planner writes issues using `.github/ISSUE_TEMPLATE/feature.yml`. Each issue
 
 ### 2. Plan review
 
-The plan reviewer reads the issue cold and returns `APPROVE` or `CHANGES` with specific edits. It checks: scope fits one PR, criteria are testable, gates are not missed (any new package → `gate:technology`), security and tenancy implications are covered, and payments flows name their webhook and failure cases.
+The plan reviewer reads the issue cold and returns `APPROVE` or `CHANGES` with specific edits. It checks: scope fits one PR, criteria are testable, gates are not missed (any new package → `gate:technology`), security and tenancy implications are covered, payments flows name their webhook and failure cases, and any screen or task flow follows [`docs/conventions/ux.md`](../conventions/ux.md).
 
 On `CHANGES`, the planner revises. After two rounds without `APPROVE`, the issue goes to `status:blocked` with the open disagreement summarised for the owner.
 
