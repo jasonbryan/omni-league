@@ -2,8 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injector,
+  afterNextRender,
   computed,
   inject,
+  signal,
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
@@ -12,21 +15,25 @@ import {
   lucideCalendarDays,
   lucideCircleCheck,
   lucideCircleDashed,
+  lucideGlobe,
   lucideMapPin,
   lucidePlus,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
+import type { Id } from '../../../../convex/_generated/dataModel';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { sportName } from '../../../../convex/lib/sports';
 import { injectQuery, skipToken } from '../../core/data/convex';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from '../admin/admin-alert';
+import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
 import { LeagueContext } from './league-context';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
+import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
 import { SeasonCreateForm } from './season-create-form';
 
 /**
@@ -36,25 +43,37 @@ import { SeasonCreateForm } from './season-create-form';
  * with its status, dates, registration deadline, and format, and the create form beside the list
  * from 1024px and after it below. Below 1024px the header's "Create a season" link jumps to the
  * form and puts focus on its first field. It exists only once `LeagueContext` says `ready`, so
- * nothing here is requested before the caller is known to organize this league. Publishing is
- * #126's and the season page's link is #134's: a season's name is plain text until then.
+ * nothing here is requested before the caller is known to organize this league.
+ *
+ * Publishing (#126; states 16 to 23): each Draft season of a published league has a Publish button
+ * that opens `PublishSeasonDialog`; once the season is published a status above the list says so,
+ * with a link to the league's public page, and takes focus, because the button that had it is
+ * gone. The page behind the dialog is inert while it is open. A draft league has no Publish
+ * buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a
+ * link to the Leagues page, where #69's Publish is; a league organizer is told to ask an org
+ * admin, with no link, because the admin area shows them the no-access view. The season page's
+ * link is #134's: a season's name is plain text until then.
  */
 @Component({
   selector: 'app-league-management',
-  imports: [AdminAlert, NgIcon, SeasonCreateForm],
+  imports: [AdminAlert, NgIcon, PublishSeasonDialog, SeasonCreateForm],
   providers: [
     provideIcons({
       lucideCalendarClock,
       lucideCalendarDays,
       lucideCircleCheck,
       lucideCircleDashed,
+      lucideGlobe,
       lucideMapPin,
       lucidePlus,
       lucideUsers,
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
+  host: {
+    class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8',
+    '[attr.inert]': 'publishOpen() ? "" : null',
+  },
   template: `
     @if (league(); as league) {
       <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
@@ -118,6 +137,37 @@ import { SeasonCreateForm } from './season-create-form';
           >
             <h2 id="seasons-heading" class="font-semibold">Seasons</h2>
           </div>
+          @if (league.status !== 'published') {
+            <div class="border-b border-border px-4 py-3 md:px-5">
+              @if (league.role === 'orgAdmin') {
+                <app-admin-alert
+                  kind="info"
+                  title="Publish the league first"
+                  description="Seasons of a draft league can’t be published."
+                  ><a [href]="leaguesPath()" class="inline-block"
+                    >Publish {{ league.name }} in Leagues</a
+                  >, then come back to publish its seasons.</app-admin-alert
+                >
+              } @else {
+                <app-admin-alert
+                  kind="info"
+                  title="Ask an org admin to publish the league"
+                  description="Seasons of a draft league can’t be published. You can create and prepare seasons until the league is published."
+                />
+              }
+            </div>
+          }
+          @if (published(); as published) {
+            <div class="border-b border-border px-4 py-3 md:px-5">
+              <app-admin-alert
+                #publishedNotice
+                kind="success"
+                [title]="published.name + ' is published.'"
+                description="It’s on the league’s public page now."
+                ><a [href]="publicPath()">View public page</a></app-admin-alert
+              >
+            </div>
+          }
           @if (failed()) {
             <div class="px-4 py-4 md:px-5">
               <app-admin-alert
@@ -182,6 +232,22 @@ import { SeasonCreateForm } from './season-create-form';
                         </p>
                       </div>
                     </div>
+                    @if (league.status === 'published' && row.status !== 'published') {
+                      <button
+                        type="button"
+                        data-slot="button"
+                        aria-haspopup="dialog"
+                        [attr.data-season-id]="row.seasonId"
+                        [class]="outlineButton"
+                        (click)="publish(row, league.name)"
+                      >
+                        <ng-icon
+                          name="lucideGlobe"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />Publish<span class="sr-only"> {{ row.name }}</span>
+                      </button>
+                    }
                   </li>
                 }
               </ul>
@@ -235,14 +301,20 @@ import { SeasonCreateForm } from './season-create-form';
           />
         </section>
       </div>
+      @if (league.status === 'published') {
+        <app-publish-season-dialog (dismissed)="publishDismissed($event)" />
+      }
     }
   `,
 })
 export class LeagueManagement {
   private readonly context = inject(LeagueContext);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly league = this.context.league;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
+  protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly defaultBadge = BADGE_DEFAULT;
   protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly outlineBadge = BADGE_OUTLINE;
@@ -265,7 +337,55 @@ export class LeagueManagement {
     () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#create-season`,
   );
 
+  /** The Leagues page of the admin area, where #69's Publish is. */
+  protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
+  /** The league's public page (#127). */
+  protected readonly publicPath = computed(
+    () =>
+      `/organizations/${encodeURIComponent(this.context.orgSlug())}/leagues/${encodeURIComponent(this.context.leagueSlug())}`,
+  );
+
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
+  private readonly publishDialog = viewChild(PublishSeasonDialog);
+  private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
+
+  /** The season just published, for the status above the list; cleared by the next dialog. */
+  protected readonly published = signal<{ seasonId: Id<'seasons'>; name: string } | null>(null);
+  protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
+
+  /** The row's Publish button: asks to confirm, and clears the last result. */
+  protected publish(
+    row: { seasonId: Id<'seasons'>; name: string; registrationDeadline: string },
+    leagueName: string,
+  ): void {
+    this.published.set(null);
+    this.publishDialog()?.open({
+      seasonId: row.seasonId,
+      name: row.name,
+      registrationDeadline: row.registrationDeadline,
+      leagueName,
+    });
+  }
+
+  /**
+   * The dialog has left the page and the page is no longer inert. A published season moves focus
+   * to the status, because the button that had it is gone; a dialog that was cancelled puts focus
+   * back on that row's Publish button.
+   */
+  protected publishDismissed(outcome: PublishSeasonOutcome): void {
+    if (outcome.published) {
+      this.published.set({ seasonId: outcome.seasonId, name: outcome.name });
+      afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLElement>(`button[data-season-id="${outcome.seasonId}"]`)
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
 
   /** A plain click on "Create a season" (phones): scroll to the form and focus its first field. */
   protected jumpToForm(event: MouseEvent): void {

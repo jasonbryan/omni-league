@@ -11,6 +11,7 @@ import {
   lucideCircleAlert,
   lucideCircleCheck,
   lucideEyeOff,
+  lucideInfo,
   lucideWifiOff,
 } from '@ng-icons/lucide';
 
@@ -22,9 +23,11 @@ export const ALERT_DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=
 
 /**
  * What an alert says: a success message, a failure, the offline refusal, or a `note` (#67): fixed
- * information in a `role="note"` box that announces nothing.
+ * information in a `role="note"` box that announces nothing. An `info` (#126) is the same box with
+ * the info icon, for a standing message about the page (a draft league's seasons cannot be
+ * published).
  */
-export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note';
+export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note' | 'info';
 
 /**
  * The admin forms' message box (design/mockups/65-organization-admin-locations.html, states 11,
@@ -37,7 +40,9 @@ export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note';
 @Component({
   selector: 'app-admin-alert',
   imports: [NgIcon],
-  providers: [provideIcons({ lucideCircleAlert, lucideCircleCheck, lucideEyeOff, lucideWifiOff })],
+  providers: [
+    provideIcons({ lucideCircleAlert, lucideCircleCheck, lucideEyeOff, lucideInfo, lucideWifiOff }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -70,10 +75,10 @@ export class AdminAlert {
 
   protected readonly role = computed(() => {
     const kind = this.kind();
-    return kind === 'success' ? 'status' : kind === 'note' ? 'note' : 'alert';
+    return kind === 'success' ? 'status' : kind === 'note' || kind === 'info' ? 'note' : 'alert';
   });
   protected readonly classes = computed(() =>
-    this.kind() === 'success' || this.kind() === 'note' ? ALERT_NEUTRAL : ALERT_DESTRUCTIVE,
+    this.kind() === 'error' || this.kind() === 'offline' ? ALERT_DESTRUCTIVE : ALERT_NEUTRAL,
   );
   protected readonly icon = computed(() => {
     const icons = {
@@ -81,6 +86,7 @@ export class AdminAlert {
       error: 'lucideCircleAlert',
       offline: 'lucideWifiOff',
       note: 'lucideEyeOff',
+      info: 'lucideInfo',
     } as const;
     return icons[this.kind()];
   });
