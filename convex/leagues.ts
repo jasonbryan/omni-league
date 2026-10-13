@@ -1,7 +1,11 @@
 import { ConvexError, v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
-import { requireLeagueOrganizer, requireOrgAdmin } from './lib/access';
+import {
+  requireLeagueOrganizer,
+  requireLeagueOrganizerOrForbidden,
+  requireOrgAdmin,
+} from './lib/access';
 import {
   checkLeagueLocations,
   checkLeagueName,
@@ -10,6 +14,8 @@ import {
   type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { roleValidator } from './lib/roles';
+import { findLeagueBySlugs } from './lib/seasonLookup';
 import { sportName, sportValidator } from './lib/sports';
 import { insertDraftLeague, leagueSlugTaken, publishLeague } from './lib/tenantWrites';
 
@@ -161,5 +167,61 @@ export const publishedCount = query({
     await requireOrgAdmin(ctx, organizationId);
     const organization = await ctx.db.get('organizations', organizationId);
     return organization?.leagueCount ?? 0;
+  },
+});
+
+/**
+ * The league management page's first question (#125), asked before anything else on it: the league
+ * with these slugs, for the caller who may organize it. The league is `{ leagueId, name, slug,
+ * sport, status, locationNames }` (a location of another organization is left out, as in
+ * `listForAdmin`), with the caller's `role` and the organization's `{ name, slug }`.
+ *
+ * - `null` for an unknown organization or league (`findLeagueBySlugs`), and for a draft league
+ *   when the caller is not staff of its organization, so nobody outside the staff learns that a
+ *   draft's slug exists. A league stored without a status counts as a draft.
+ * - A `FORBIDDEN` `ConvexError` (`lib/forbidden.ts`) for every other caller who may not organize
+ *   the league: not signed in, a member of none, an org admin of another organization, or a league
+ *   organizer of another league. Only org admins of the league's organization and the league
+ *   organizers assigned to the league get the context.
+ *
+ * The app shows the not-found view for `null` and the no-access view for `FORBIDDEN`, and
+ * requests nothing else until it passes.
+ */
+export const getOrganizerContext = query({
+  args: { orgSlug: v.string(), leagueSlug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      leagueId: v.id('leagues'),
+      name: v.string(),
+      slug: v.string(),
+      sport: sportValidator,
+      status: leagueStatusValidator,
+      locationNames: v.array(v.string()),
+      role: roleValidator,
+      organization: v.object({ name: v.string(), slug: v.string() }),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const found = await findLeagueBySlugs(ctx, args);
+    if (!found) return null;
+    const { organization, league } = found;
+    const access = await requireLeagueOrganizerOrForbidden(ctx, league);
+    if (!access) return null;
+    const locationNames: string[] = [];
+    for (const id of league.locationIds) {
+      const location = await ctx.db.get('locations', id);
+      if (location?.organizationId === organization._id) locationNames.push(location.name);
+    }
+    return {
+      leagueId: league._id,
+      name: league.name,
+      slug: league.slug,
+      sport: league.sport,
+      status: league.status ?? ('draft' as const),
+      locationNames,
+      role: access.membership.role,
+      organization: { name: organization.name, slug: organization.slug },
+    };
   },
 });

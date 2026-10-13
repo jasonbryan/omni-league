@@ -35,9 +35,12 @@ const byName = <T extends { name: string }>(items: T[]): T[] =>
   });
 
 /**
- * Creates the calling test's own tenant through `testing:seedLeague` (ADR 0005, per-test tenant
- * fixture): an organization with a unique name and slug, with the given locations and leagues.
- * Tests assert only on their own tenant, so no reset runs between them. Local runs only.
+ * Creates a tenant through `testing:seedLeague` (ADR 0005, per-test tenant fixture): an
+ * organization with a unique name and slug, with the given locations and leagues. Call it from the
+ * test, so tests assert only on their own tenant and no reset runs between them. A worker-scoped
+ * fixture may call it once for read-only tests to share, and a test that writes still seeds its
+ * own; a test whose click path ends in a refusal may share one only under the rules in ADR 0005,
+ * "Amendment: worker-scoped tenants for read-only tests (#125)". Local runs only.
  */
 export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
   const id = randomBytes(4).toString('hex');

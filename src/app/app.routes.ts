@@ -61,6 +61,15 @@ export const routes: Routes = [
           import('./organizations/create-organization-page').then((m) => m.CreateOrganizationPage),
       },
       {
+        // The league management page (#125): org admins and the league's assigned league
+        // organizers. Ahead of the admin area, whose `organizations/:slug` is a shorter prefix of
+        // the same URL space. It asks leagues.getOrganizerContext first and renders the page only
+        // for someone who may organize the league.
+        path: 'organizations/:orgSlug/leagues/:leagueSlug',
+        canActivate: [requireSignedIn],
+        loadComponent: () => import('./organizations/league/league-page').then((m) => m.LeaguePage),
+      },
+      {
         // The organization admin area (#65). The parent asks organizations.getAdminContext first
         // and renders a child only for an org admin; the no-access and not-found views take the
         // place of every child. Overview is the area's own path.
