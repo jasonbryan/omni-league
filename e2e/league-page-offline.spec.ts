@@ -98,6 +98,10 @@ test.describe('public league page offline', () => {
     await pages.getByRole('link', { name: 'Page 3' }).click();
     await expect(page.locator('app-not-saved-view')).toBeVisible({ timeout: 3_000 });
     await expect(rows).toHaveCount(0);
+    // Nothing stays busy, no page control is left to mislead, and "Try again" goes to the page asked for.
+    await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(pages).toHaveCount(0);
+    await expect(page.locator('app-not-saved-view a')).toHaveAttribute('href', `${path}?page=3`);
     await dump('offline-page-3-unsaved');
 
     await context.setOffline(false);

@@ -73,9 +73,9 @@ const PUBLIC_PAGE = [
 
 /**
  * Every spec that opens the public league page (#127), directly or from the organization page: its
- * own spec, and the cache-key samples of its `?page=N` parameter.
+ * own spec, its offline spec (saved pages), and the cache-key samples of its `?page=N` parameter.
  */
-const LEAGUE_PAGE = ['league-page', 'cache-key'];
+const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
 /** Every spec that opens the organizer's league page (#125, #126), where seasons are created and published. */
 const LEAGUE_MANAGEMENT = [
   'league-management',

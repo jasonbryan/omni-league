@@ -178,7 +178,7 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/league-page.spec.ts'),
+        want('e2e/cache-key.spec.ts', 'e2e/league-page-offline.spec.ts', 'e2e/league-page.spec.ts'),
         file,
       );
     }
@@ -201,6 +201,7 @@ describe('selectSpecs: mapped areas', () => {
     const specs = specsFor(['convex/seasons.ts']);
     for (const name of [
       'league-page',
+      'league-page-offline',
       'cache-key',
       'league-management',
       'league-management-publish',
