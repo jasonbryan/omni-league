@@ -2,8 +2,8 @@ import { v, type Infer, type Validator } from 'convex/values';
 import { sportValidator } from './sports';
 
 // The results of organizations:getPublicPage, listPublicLeagues, and listPublicLocations (#60,
-// #100), leagues:getPublicPage, and seasons:listPublic (#127). They live apart from the function
-// modules and import only `convex/values`, so the Angular app
+// #100), leagues:getPublicPage, and seasons:listPublic (#127), and seasons:getPublicPage (#128).
+// They live apart from the function modules and import only `convex/values`, so the Angular app
 // can import the same validators to check saved copies (ADR 0013 section 3, #82:
 // `src/app/core/data/convex/offline-saved-queries.ts`) without bundling the server functions.
 // Changing one changes what the app accepts as a saved copy.
@@ -102,3 +102,31 @@ const publicSeasonValidator = v.object({
 export const publicSeasonsValidator = publicListValidator(publicSeasonValidator);
 
 export type PublicSeasons = Infer<typeof publicSeasonsValidator>;
+
+/**
+ * The public season page (#128): the organization's name and slug, the league's name, slug, sport
+ * display name, and location names (the league page's header), and the season's name, slug,
+ * calendar dates as stored (`YYYY-MM-DD`, no time zone), format display name, and minimum roster
+ * size. No id, status, registration deadline, or counter; later slices add `registrationDeadline`
+ * (#129) and `isFull` (#143).
+ */
+export const publicSeasonPageValidator = v.object({
+  organization: v.object({ name: v.string(), slug: v.string() }),
+  league: v.object({
+    name: v.string(),
+    slug: v.string(),
+    sportName: v.string(),
+    locationNames: v.array(v.string()),
+  }),
+  name: v.string(),
+  slug: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  formatName: v.string(),
+  minimumRosterSize: v.number(),
+});
+
+export type PublicSeasonPage = Infer<typeof publicSeasonPageValidator>;
+
+/** The `returns` validator of `seasons:getPublicPage`: the page, or `null` when none. */
+export const getSeasonPublicPageReturns = v.union(v.null(), publicSeasonPageValidator);

@@ -60,6 +60,12 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
   },
   {
+    // The public season page (#128): the same. Its HTML holds nothing of the query string.
+    path: 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
+    renderMode: RenderMode.Server,
+    headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
+  },
+  {
     path: '**',
     renderMode: RenderMode.Server, // public pages and not-found (the view sets status 404, #23)
     // ADR 0006 "Cacheable": the not-found render is anonymous and the same for every visitor.

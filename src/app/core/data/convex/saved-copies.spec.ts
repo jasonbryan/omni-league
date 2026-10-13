@@ -5,6 +5,7 @@ import { api } from '../../../../../convex/_generated/api';
 import {
   getLeaguePublicPageReturns,
   getPublicPageReturns,
+  getSeasonPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
   publicSeasonsValidator,
@@ -68,7 +69,7 @@ describe('ConvexSavedCopies', () => {
     localStorage.clear();
   });
 
-  it('lists the organization page and league page queries, deliberately public and caller-independent, each with its own returns validator', () => {
+  it('lists the organization, league, and season page queries, deliberately public and caller-independent, each with its own returns validator', () => {
     // The very validators the Convex functions declare, not restated copies.
     expect(
       OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
@@ -78,6 +79,7 @@ describe('ConvexSavedCopies', () => {
       ['organizations:listPublicLocations', publicLocationsValidator],
       ['leagues:getPublicPage', getLeaguePublicPageReturns],
       ['seasons:listPublic', publicSeasonsValidator],
+      ['seasons:getPublicPage', getSeasonPublicPageReturns],
     ]);
     for (const { returns, version } of OFFLINE_SAVED_QUERIES) {
       expect(Number.isInteger(version)).toBe(true);

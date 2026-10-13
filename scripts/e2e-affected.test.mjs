@@ -166,16 +166,30 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public league page, its numbered control, and its helpers to the league page and cache-key specs (#127)', () => {
+  it('maps the public league page and its sidebar and paths to the league page, season page, and cache-key specs (#127, #128)', () => {
+    // The season page shows the league page's sidebar, builds its links from its paths, and is
+    // reached from the league page's rows.
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
       'src/app/organizations/public-league/public-league-sidebar.ts',
       'src/app/organizations/public-league/public-league-path.ts',
-      'src/app/organizations/page-control.ts',
-      'src/app/core/list-page.ts',
-      'src/app/core/focus-main.ts',
     ]) {
+      assert.deepEqual(
+        specsFor([file]),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/league-page-offline.spec.ts',
+          'e2e/league-page.spec.ts',
+          'e2e/season-page.spec.ts',
+        ),
+        file,
+      );
+    }
+  });
+
+  it('maps the numbered control and the page helper to the league page specs only (#127)', () => {
+    for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
       assert.deepEqual(
         specsFor([file]),
         want('e2e/cache-key.spec.ts', 'e2e/league-page-offline.spec.ts', 'e2e/league-page.spec.ts'),
@@ -184,9 +198,60 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
+  it('maps the focus helper to the league page and season page specs, which assert the focus move (#127, #128)', () => {
+    assert.deepEqual(
+      specsFor(['src/app/core/focus-main.ts']),
+      want(
+        'e2e/cache-key.spec.ts',
+        'e2e/league-page-offline.spec.ts',
+        'e2e/league-page.spec.ts',
+        'e2e/season-page.spec.ts',
+      ),
+    );
+  });
+
+  it('maps the public season page, its content, and its paths to the season page and cache-key specs (#128)', () => {
+    for (const file of [
+      'src/app/organizations/public-season/public-season-page.ts',
+      'src/app/organizations/public-season/public-season-content.ts',
+      'src/app/organizations/public-season/public-season-path.ts',
+    ]) {
+      assert.deepEqual(
+        specsFor([file]),
+        want('e2e/cache-key.spec.ts', 'e2e/season-page.spec.ts'),
+        file,
+      );
+    }
+  });
+
+  it('keeps the unit specs and test data of the season page out of the e2e run (#128)', () => {
+    assert.deepEqual(
+      specsFor(['src/app/organizations/public-season/public-season-page.spec.ts']),
+      want(),
+    );
+    assert.deepEqual(
+      specsFor(['src/app/organizations/public-season/public-season-page.server.spec.ts']),
+      want(),
+    );
+    assert.deepEqual(
+      specsFor(['src/app/organizations/public-season/public-season-page-offline.spec.ts']),
+      want(),
+    );
+    assert.deepEqual(
+      specsFor(['src/app/organizations/public-season/testing/season-data.ts']),
+      want(),
+    );
+    assert.deepEqual(specsFor(['convex/seasonsPublicPage.test.ts']), want());
+  });
+
+  it('maps a changed season page spec to itself (#128)', () => {
+    assert.deepEqual(specsFor(['e2e/season-page.spec.ts']), want('e2e/season-page.spec.ts'));
+  });
+
   it('maps the not-found and offline views to the league page specs that assert them (#127)', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));
+    assert.ok(notFound.includes('e2e/season-page.spec.ts'));
     const offline = specsFor(['src/app/offline/not-saved-view.ts']);
     for (const name of ['league-page', 'league-page-offline']) {
       assert.ok(offline.includes(`e2e/${name}.spec.ts`), name);
@@ -222,6 +287,21 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(!specs.includes('FULL'));
     assert.ok(specsFor(['convex/leagues.ts']).includes('e2e/league-page.spec.ts'));
     assert.ok(specsFor(['convex/organizations.ts']).includes('e2e/league-page.spec.ts'));
+  });
+
+  it('maps convex/seasons.ts and convex/organizations.ts to the season page specs (#128)', () => {
+    for (const file of ['convex/seasons.ts', 'convex/organizations.ts']) {
+      const specs = specsFor([file]);
+      assert.ok(specs.includes('e2e/season-page.spec.ts'), file);
+      assert.ok(specs.includes('e2e/cache-key.spec.ts'), file);
+      assert.ok(!specs.includes('FULL'), file);
+    }
+  });
+
+  it('maps the public organization page files to the season page spec, because the season page shows the organization sidebar (#128)', () => {
+    const specs = specsFor(['src/app/organizations/organization-sidebar.ts']);
+    assert.ok(specs.includes('e2e/season-page.spec.ts'));
+    assert.ok(!specs.includes('FULL'));
   });
 
   it('maps the leagues mockup to its spec, and every other design file to nothing', () => {
@@ -488,7 +568,8 @@ describe('the mapping', () => {
 
   // These specs run in no source-area rule. They run when changed, in the nightly full run, and
   // whenever a shared file changes. A new spec fails here until it is mapped or added on purpose.
-  // cache-key.spec.ts is mapped to the public league page (#127), which has its own samples in it.
+  // cache-key.spec.ts is mapped to the public league page (#127) and the season page (#128), which
+  // have their own samples in it.
   const FULL_SUITE_ONLY = ['e2e/convex-backend.spec.ts', 'e2e/screenshot.spec.ts'];
 
   it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
