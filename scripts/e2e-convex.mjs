@@ -400,6 +400,7 @@ export async function main(
     instanceName,
     portsFree = assertPortsFree,
     wait = {},
+    randomBytes: random = randomBytes,
   } = {},
 ) {
   const target = { env, spawnCli, projectDir, expectedProjectDir: projectDir, instanceName };
@@ -438,9 +439,11 @@ export async function main(
         await setEnv('IS_TEST', 'true');
         await setEnv('SITE_URL', E2E_SITE_URL);
         // A new secret every run (ADR 0005, ADR 0008), so none is stored anywhere. It is never
-        // printed: on failure only its name is. `testing:reset` then clears the component's
-        // `jwks`, whose signing key the previous run's secret encrypted.
-        const secret = randomBytes(32).toString('base64url');
+        // printed: on failure only its name is. It is hex (256 bits), never base64url: a base64url
+        // value starts with `-` in 1 run of 64, and `convex env set` reads that as an option (#191).
+        // `testing:reset` then clears the component's `jwks`, whose signing key the previous run's
+        // secret encrypted.
+        const secret = random(32).toString('hex');
         await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
         const reset = await runConvex(['run', 'testing:reset'], target);
         log(
