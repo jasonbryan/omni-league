@@ -14,8 +14,12 @@
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\" && node scripts/check-deploy-env.mjs preview --preview-name \"pr-$REVIEW_ID\" && npx convex run seed:demo --preview-name \"pr-$REVIEW_ID\""
 
 # Branch deploys: main only, the staging deploy, with the Convex preview deployment named main.
+# `--preview-name`, not `--preview-create`: it reuses the deployment named main (and creates it when
+# none exists), so staging keeps its data between deploys. `--preview-create` deletes and recreates
+# the deployment on every deploy, which wiped staging's accounts on each merge (#222, ADR 0010
+# amendment). PR previews keep `--preview-create`: a fresh backend per push is wanted there.
 [context.branch-deploy]
-  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\" && npx convex run seed:demo --preview-name \"$HEAD\""
+  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-name \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\" && npx convex run seed:demo --preview-name \"$HEAD\""
 
 # Production is not enabled until the production deploy issue adds the check BEFORE the deploy:
 # `npm ci && node scripts/check-deploy-env.mjs production && npx convex deploy ...` (#15, ADR 0010).
