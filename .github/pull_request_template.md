@@ -18,6 +18,10 @@ What changed and why, in one to three sentences.
 - Rollback:
 - Risk to existing records:
 
+## Demo data
+
+What `seed:demo` now adds or changes, or `none` with the reason.
+
 ## Gates
 
 - [ ] Every gate on the linked issue is approved, or none applies

@@ -248,8 +248,10 @@ describe('invites.accept', () => {
     const result = await s.asDana.mutation(api.invites.accept, { token });
     expect(result).toEqual({
       organizationName: 'Org A',
+      organizationSlug: 'org-a',
       role: 'leagueOrganizer',
       leagueNames: ['Coed 7v7'],
+      leagues: [{ name: 'Coed 7v7', slug: 'coed-7v7' }],
     });
     const rows = await membershipsOf(s, s.dana.userId);
     expect(rows).toHaveLength(1);
@@ -267,6 +269,37 @@ describe('invites.accept', () => {
       await expect(requireLeagueOrganizer(ctx, s.other)).rejects.toThrow('Not allowed');
       await expect(requireOrgAdmin(ctx, s.organizationA)).rejects.toThrow('Not allowed');
     });
+  });
+
+  test('it returns the organization slug and each league name and slug, keeping leagueNames (#212)', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed, s.sand]);
+    const result = await s.asDana.mutation(api.invites.accept, { token });
+    expect(result.organizationSlug).toBe('org-a');
+    expect(result.leagueNames).toEqual(['Coed 7v7', 'Sand 2s']);
+    expect(result.leagues).toEqual([
+      { name: 'Coed 7v7', slug: 'coed-7v7' },
+      { name: 'Sand 2s', slug: 'sand-2s' },
+    ]);
+  });
+
+  test('an org admin accept returns the organization slug and no leagues (#212)', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test');
+    expect(await s.asDana.mutation(api.invites.accept, { token })).toEqual({
+      organizationName: 'Org A',
+      organizationSlug: 'org-a',
+      role: 'orgAdmin',
+      leagueNames: [],
+      leagues: [],
+    });
+  });
+
+  test('the slugs are not in what getByToken shows a visitor (#212)', async () => {
+    const s = await setup();
+    const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed]);
+    const text = JSON.stringify(await s.t.query(api.invites.getByToken, { token }));
+    expect(text).not.toMatch(/org-a|coed-7v7|slug/i);
   });
 
   test('an org admin invite makes the caller an org admin, which requireOrgAdmin accepts', async () => {
@@ -381,6 +414,7 @@ describe('invites.accept', () => {
     await s.t.run((ctx) => ctx.db.delete('leagues', s.sand));
     const result = await s.asDana.mutation(api.invites.accept, { token });
     expect(result.leagueNames).toEqual(['Coed 7v7']);
+    expect(result.leagues).toEqual([{ name: 'Coed 7v7', slug: 'coed-7v7' }]);
     expect((await membershipsOf(s, s.dana.userId))[0]?.leagueIds).toEqual([s.coed]);
   });
 
@@ -474,6 +508,7 @@ describe('invites.accept: probes added by the tester (#70)', () => {
     await s.t.run((ctx) => ctx.db.patch('leagues', s.sand, { organizationId: s.organizationB }));
     const result = await s.asDana.mutation(api.invites.accept, { token });
     expect(result.leagueNames).toEqual(['Coed 7v7']);
+    expect(result.leagues).toEqual([{ name: 'Coed 7v7', slug: 'coed-7v7' }]);
     expect((await membershipsOf(s, s.dana.userId))[0]?.leagueIds).toEqual([s.coed]);
     await s.asDana.run(async (ctx) => {
       await expect(requireLeagueOrganizer(ctx, s.sand)).rejects.toThrow('Not allowed');

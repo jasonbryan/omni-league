@@ -77,6 +77,8 @@ Every build of a preview (`pr-<n>`) and of staging (`main`) runs the internal mu
 
 **Demo accounts** (an organization admin of a demo organization and a plain player) are #98.
 
+**Every change keeps the seed current (#230).** An issue that adds or changes a table, a field, or a user-visible feature has a Demo data criterion, and its PR updates `convex/seed.ts` to deliver it ([dev cycle](dev-cycle.md), Phases 1, 4, 5, and 6). `convex/seedCoverage.test.ts` runs `seed:demo` on an empty `convex-test` backend and fails when a schema table has no rows and is not in its `SEED_EXCEPTIONS` map (table name to reason), when an exception names no table, or when a second run changes any table's row count or `_id`s. An exception needs a reason the reviewer accepts. It runs in `test:convex`, so `ci` needs no extra step.
+
 ## Deploy environment check
 
 `scripts/check-deploy-env.mjs` fails the Netlify build, so nothing is published, when a Convex deployment has the wrong variables. It reads variable names only (`npx convex env list --names-only`), plus the value of `AUTH_EMAIL_DISABLED` in preview mode, which it compares in memory. It never prints a value, and it prints the name of the deployment it checked.
