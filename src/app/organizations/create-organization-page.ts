@@ -429,7 +429,8 @@ export class CreateOrganizationPage {
       this.showFailure(failure, slug);
       return;
     }
-    await this.router.navigateByUrl(adminPath(slug));
+    // replaceUrl: Back from the new organization skips the create form (#207).
+    await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
     this.submitting.set(false);
   }
 

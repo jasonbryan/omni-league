@@ -198,16 +198,22 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the focus helper to the league page and season page specs, which assert the focus move (#127, #128)', () => {
+  it('runs the full suite for the focus handler, which moves focus after every route change (#207)', () => {
+    assert.deepEqual(specsFor(['src/app/core/focus-main.ts']), ['FULL']);
+    assert.deepEqual(specsFor(['src/app/app.config.ts']), ['FULL']);
+  });
+
+  it('maps the create organization page and the navigation spec to the specs that assert the Back and focus moves (#207)', () => {
+    const specs = specsFor(['src/app/organizations/create-organization-page.ts']);
+    assert.ok(specs.includes('e2e/create-organization.spec.ts'));
+    assert.ok(specs.includes('e2e/navigation-focus.spec.ts'));
     assert.deepEqual(
-      specsFor(['src/app/core/focus-main.ts']),
-      want(
-        'e2e/cache-key.spec.ts',
-        'e2e/league-page-offline.spec.ts',
-        'e2e/league-page.spec.ts',
-        'e2e/season-page.spec.ts',
-      ),
+      specsFor(['e2e/navigation-focus.spec.ts']),
+      want('e2e/navigation-focus.spec.ts'),
     );
+    for (const file of ['src/app/sign-in/sign-in-page.ts', 'src/app/sign-up/sign-up-page.ts']) {
+      assert.ok(specsFor([file]).includes('e2e/navigation-focus.spec.ts'), file);
+    }
   });
 
   it('maps the public season page, its content, and its paths to the season page and cache-key specs (#128)', () => {

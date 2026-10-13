@@ -275,6 +275,14 @@ describe('SignUpPage', () => {
       expect(url()).toBe('/app');
     });
 
+    it('replaces /sign-up in the history, so Back skips the finished form', async () => {
+      await open();
+      await fill();
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      await submit();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app', { replaceUrl: true });
+    });
+
     it.each([
       ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
       ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/'],

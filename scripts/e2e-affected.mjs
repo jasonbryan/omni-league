@@ -54,6 +54,7 @@ const ADMIN = [
     'accept-invite',
     'create-organization',
     'organization-leagues-mockup',
+    'navigation-focus',
   ]),
 ];
 /** Every spec that opens the public organization page. */
@@ -69,6 +70,7 @@ const PUBLIC_PAGE = [
   'pwa',
   'top-bar',
   'auth-session',
+  'navigation-focus',
 ];
 
 /**
@@ -251,7 +253,7 @@ export const AREAS = [
   {
     name: 'create organization',
     test: named('src/app/organizations/', ['create-organization-page']),
-    specs: ['create-organization'],
+    specs: ['create-organization', 'navigation-focus'],
   },
   {
     name: 'public organization page',
@@ -291,12 +293,6 @@ export const AREAS = [
     name: 'list page helper',
     test: named('src/app/core/', ['list-page']),
     specs: LEAGUE_PAGE,
-  },
-  {
-    // The focus move after a route change (#127), also asserted on the season page (#128).
-    name: 'focus helper',
-    test: named('src/app/core/', ['focus-main']),
-    specs: [...LEAGUE_PAGE, ...SEASON_PAGE],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
