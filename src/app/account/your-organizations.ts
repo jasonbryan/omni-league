@@ -3,10 +3,13 @@ import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideBuilding2,
+  lucideChevronRight,
   lucideCircleAlert,
   lucideGlobe,
+  lucideInfo,
   lucidePlus,
   lucideSettings,
+  lucideTrophy,
 } from '@ng-icons/lucide';
 import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
@@ -27,6 +30,10 @@ export function organizationInitials(name: string): string {
 
 const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' } as const;
 
+/** A league link: the sidebar-item style, 36px tall (design/mockups/141-app-leagues.html). */
+const LEAGUE_LINK =
+  'flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted';
+
 // Every class string below is the approved mockup's, written as a static attribute
 // (design/mockups/64-create-organization.html); the buttons carry `buttonVariants` output
 // unmerged, as the mockup draws them, and your-organizations.spec.ts checks them.
@@ -35,15 +42,26 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
  * "Your organizations" on `/app` (#64; design/mockups/64-create-organization.html states 1 to 4):
  * one row per membership from `organizations.listMine`, sorted by name by the query, with the
  * organization's initials, name, role, and a "Public page" link, then "Manage" (the admin area, #65)
- * for org admins only. Loading shows two placeholder rows and a polite status; none shows the empty state with
- * "Create an organization". The query is asked only once Convex has accepted the token, so the
+ * for org admins only. A league organizer's row also lists their assigned leagues, each a link to
+ * its management page (#141; design/mockups/141-app-leagues.html), or says none are assigned.
+ * Loading shows two placeholder rows and a polite status; none shows the empty state with "Create
+ * an organization". The query is asked only once Convex has accepted the token, so the
  * first answer is the caller's own.
  */
 @Component({
   selector: 'app-your-organizations',
   imports: [NgIcon, RouterLink],
   providers: [
-    provideIcons({ lucideBuilding2, lucideCircleAlert, lucideGlobe, lucidePlus, lucideSettings }),
+    provideIcons({
+      lucideBuilding2,
+      lucideChevronRight,
+      lucideCircleAlert,
+      lucideGlobe,
+      lucideInfo,
+      lucidePlus,
+      lucideSettings,
+      lucideTrophy,
+    }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -133,37 +151,84 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
       } @else {
         <ul role="list" class="divide-y divide-border">
           @for (row of rows(); track row.slug) {
-            <li class="flex flex-wrap items-center gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
-              <span
-                aria-hidden="true"
-                class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground"
-                >{{ row.initials }}</span
-              >
-              <div class="min-w-0 flex-1">
-                <h3 class="font-medium">{{ row.name }}</h3>
-                <p class="mt-0.5 text-sm text-muted-foreground">{{ row.roleName }}</p>
-              </div>
-              <div class="flex w-full gap-2 sm:w-auto">
-                <a
-                  [routerLink]="row.publicPath"
-                  data-slot="button"
-                  class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 flex-1 sm:flex-none"
-                  ><ng-icon name="lucideGlobe" data-icon="inline-start" aria-hidden="true" />Public
-                  page<span class="sr-only">: {{ row.name }}</span></a
+            <li class="px-4 py-3.5 md:px-5">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-3">
+                <span
+                  aria-hidden="true"
+                  class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground"
+                  >{{ row.initials }}</span
                 >
-                @if (row.managePath; as managePath) {
+                <div class="min-w-0 flex-1">
+                  <h3 class="font-medium">{{ row.name }}</h3>
+                  <p class="mt-0.5 text-sm text-muted-foreground">{{ row.roleName }}</p>
+                </div>
+                <div class="flex w-full gap-2 sm:w-auto">
                   <a
-                    [routerLink]="managePath"
+                    [routerLink]="row.publicPath"
                     data-slot="button"
                     class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 flex-1 sm:flex-none"
                     ><ng-icon
-                      name="lucideSettings"
+                      name="lucideGlobe"
                       data-icon="inline-start"
                       aria-hidden="true"
-                    />Manage<span class="sr-only"> {{ row.name }}</span></a
+                    />Public page<span class="sr-only">: {{ row.name }}</span></a
                   >
-                }
+                  @if (row.managePath; as managePath) {
+                    <a
+                      [routerLink]="managePath"
+                      data-slot="button"
+                      class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 flex-1 sm:flex-none"
+                      ><ng-icon
+                        name="lucideSettings"
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />Manage<span class="sr-only"> {{ row.name }}</span></a
+                    >
+                  }
+                </div>
               </div>
+              @if (row.isLeagueOrganizer) {
+                @if (row.leagues.length > 0) {
+                  <div class="mt-3 sm:ps-13">
+                    <p [id]="row.leaguesLabelId" class="text-xs font-medium text-muted-foreground">
+                      Your leagues
+                    </p>
+                    <ul
+                      role="list"
+                      [attr.aria-labelledby]="row.leaguesLabelId"
+                      class="mt-1 -mx-2 flex flex-col gap-0.5"
+                    >
+                      @for (league of row.leagues; track league.slug) {
+                        <li>
+                          <a [routerLink]="league.path" [class]="leagueLink"
+                            ><ng-icon
+                              name="lucideTrophy"
+                              class="shrink-0 text-base text-muted-foreground"
+                              aria-hidden="true" /><span class="min-w-0 flex-1">{{
+                              league.name
+                            }}</span
+                            ><ng-icon
+                              name="lucideChevronRight"
+                              class="shrink-0 text-base text-muted-foreground"
+                              aria-hidden="true"
+                          /></a>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                } @else {
+                  <p class="mt-3 flex items-start gap-1.5 text-sm text-muted-foreground sm:ps-13">
+                    <ng-icon
+                      name="lucideInfo"
+                      class="mt-0.5 shrink-0 text-base"
+                      aria-hidden="true"
+                    /><span
+                      >No leagues are assigned to you here. Ask an org admin of {{ row.name }} to
+                      assign one.</span
+                    >
+                  </p>
+                }
+              }
             </li>
           }
         </ul>
@@ -179,10 +244,11 @@ export class YourOrganizations {
   );
 
   protected readonly placeholders = [1, 2];
+  protected readonly leagueLink = LEAGUE_LINK;
   protected readonly failed = computed(() => this.mine.error() !== undefined);
   protected readonly loading = computed(() => this.mine.value() === undefined);
   protected readonly rows = computed(() =>
-    (this.mine.value() ?? []).map(({ name, slug, role }) => ({
+    (this.mine.value() ?? []).map(({ name, slug, role, leagues }) => ({
       name,
       slug,
       initials: organizationInitials(name),
@@ -190,6 +256,15 @@ export class YourOrganizations {
       publicPath: `/organizations/${slug}`,
       // Only an org admin manages: the admin area is not for league organizers (#65).
       managePath: role === 'orgAdmin' ? adminPath(slug) : null,
+      // A league organizer has no admin area: their assigned leagues are listed instead (#141).
+      isLeagueOrganizer: role === 'leagueOrganizer',
+      leaguesLabelId: `${slug}-leagues-label`,
+      leagues: leagues.map((league) => ({
+        name: league.name,
+        slug: league.slug,
+        // Segments, not a string, so the router encodes each slug and none can change the path.
+        path: ['/app', 'organizations', slug, 'leagues', league.slug],
+      })),
     })),
   );
 }
