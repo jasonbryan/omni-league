@@ -145,17 +145,15 @@ describe('PublicLeaguePage populated', () => {
     const main = host(harness).querySelector('main');
     const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
     const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
-    expect(links.map(text)).toEqual([
-      'Gulf Coast Sport & Social',
-      'Beach volleyball',
-      'Sunday Reverse Coed 4s',
-    ]);
+    // The sport is plain text until #114 adds the sport view.
+    expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Sunday Reverse Coed 4s']);
     expect(links.map((a) => a?.getAttribute('href'))).toEqual([
       '/organizations/gulf-coast-sport-social',
-      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
       PATH,
     ]);
-    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
+    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, 'page']);
+    expect(text(crumbs[2])).toBe('Beach volleyball');
+    expect(crumbs[2].querySelector('a')).toBeNull();
     // The separators are decoration.
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
@@ -231,7 +229,9 @@ describe('PublicLeaguePage populated', () => {
   it('marks the league’s sport as the current section of the sidebar, with the league counts', () => {
     const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
     expect(nav).not.toBeNull();
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] a') ?? [])];
+    // Plain text until #114 adds the sport view: no link in the list.
+    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
+    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
     expect(
       sports.map((a) => [
         text(a.querySelector('span.min-w-0')),
@@ -242,11 +242,6 @@ describe('PublicLeaguePage populated', () => {
       ['Beach volleyball', '2 leagues', 'true'],
       ['Soccer', '2 leagues', null],
       ['Softball', '1 league', null],
-    ]);
-    expect(sports.map((a) => a.getAttribute('href'))).toEqual([
-      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
-      '/organizations/gulf-coast-sport-social/sports/soccer',
-      '/organizations/gulf-coast-sport-social/sports/softball',
     ]);
     expect(sports[0].className).toContain('bg-sidebar-accent');
     expect(sports[1].className).not.toContain('bg-sidebar-accent');
@@ -271,7 +266,7 @@ describe('PublicLeaguePage populated', () => {
     emit(leagueQueryResults({ league: { ...SUNDAY_4S, sportName: 'Curling' } }));
     await settle(harness);
     const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav?.querySelectorAll('a[aria-current]')).toHaveLength(0);
+    expect(nav?.querySelectorAll('[aria-current]')).toHaveLength(0);
     // The breadcrumb names the sport but cannot link it.
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
     expect(text(crumbs)).toContain('Curling');
@@ -443,6 +438,20 @@ describe('PublicLeaguePage page changes', () => {
     subscription(SEASONS_QUERY).emit({ ...seasonsPage(1, 8), total: 8 });
     await settle(harness);
     expect(host(harness).ownerDocument.activeElement).toBe(link);
+  });
+
+  it('a Ctrl-click on a page link, then a live update of the shown page, does not move focus', async () => {
+    const harness = await onPage1();
+    const link = host(harness).querySelector<HTMLAnchorElement>(
+      'nav[aria-label="Seasons pages"] a[href$="?page=2#seasons"]',
+    )!;
+    link.focus();
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+    await settle(harness);
+    subscription(SEASONS_QUERY).emit({ ...seasonsPage(1, 8), total: 8 });
+    await settle(harness);
+    expect(host(harness).ownerDocument.activeElement).toBe(link);
+    expect(host(harness).ownerDocument.activeElement?.id).not.toBe('seasons-heading');
   });
 
   it('Back to the earlier page changes the rows and does not move focus', async () => {

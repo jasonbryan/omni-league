@@ -289,12 +289,21 @@ export const AREAS = [
   {
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
-    specs: ['not-found', 'organization-page', ...ADMIN],
+    // league-page.spec.ts asserts the league page's 404 (#127).
+    specs: ['not-found', 'organization-page', 'league-page', ...ADMIN],
   },
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    specs: ['offline', 'offline-note-height', 'pwa', ...PUBLIC_PAGE],
+    // The league page's saved-copy note and not-saved view (#127).
+    specs: [
+      'offline',
+      'offline-note-height',
+      'pwa',
+      ...PUBLIC_PAGE,
+      'league-page',
+      'league-page-offline',
+    ],
   },
   {
     name: 'placeholder home',

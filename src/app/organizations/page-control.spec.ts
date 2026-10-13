@@ -190,6 +190,55 @@ describe('PageControl', () => {
     expect(activated).toEqual([1, 1, 3, 3]);
   });
 
+  it.each([
+    ['Ctrl', { ctrlKey: true }],
+    ['Cmd', { metaKey: true }],
+    ['Shift', { shiftKey: true }],
+    ['Alt', { altKey: true }],
+    ['the middle button', { button: 1 }],
+    ['the secondary button', { button: 2 }],
+  ])(
+    'emits nothing for a click with %s: the page is opened elsewhere and this one stays',
+    (_, init) => {
+      const fixture = render({ page: 1, pageCount: 3, total: 11 });
+      const activated: number[] = [];
+      fixture.componentInstance.pageActivated.subscribe((n) => activated.push(n));
+      for (const a of navOf(fixture)!.querySelectorAll('a')) {
+        a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
+      }
+      expect(activated).toEqual([]);
+    },
+  );
+
+  it('builds each link from queryFor, so a page with two lists keeps the other list’s page', () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter([{ path: '**', component: Blank }])],
+    });
+    const fixture = TestBed.createComponent(PageControl);
+    const set = (name: string, value: unknown) => fixture.componentRef.setInput(name, value);
+    set('label', 'Leagues pages');
+    set('noun', 'leagues');
+    set('path', '/organizations/acme');
+    set('fragment', 'leagues');
+    set('page', 3);
+    set('pageCount', 6);
+    set('total', 26);
+    // The other list (locations) is on page 2; leagues is the list this control pages.
+    set('queryFor', (page: number) => ({ ...(page > 1 ? { leagues: page } : {}), locations: 2 }));
+    fixture.detectChanges();
+    expect(
+      [...navOf(fixture)!.querySelectorAll('a')].map((a) => [text(a), a.getAttribute('href')]),
+    ).toEqual([
+      ['Previous page', '/organizations/acme?leagues=2&locations=2#leagues'],
+      ['Page 1', '/organizations/acme?locations=2#leagues'],
+      ['Page 2', '/organizations/acme?leagues=2&locations=2#leagues'],
+      ['Page 3', '/organizations/acme?leagues=3&locations=2#leagues'],
+      ['Page 4', '/organizations/acme?leagues=4&locations=2#leagues'],
+      ['Page 6', '/organizations/acme?leagues=6&locations=2#leagues'],
+      ['Next page', '/organizations/acme?leagues=4&locations=2#leagues'],
+    ]);
+  });
+
   it('uses the helm button classes of the mockup', () => {
     expect(GHOST_BUTTON).toBe(
       `${buttonVariants({ variant: 'ghost', size: 'default' })} max-sm:w-8 max-sm:px-0`,

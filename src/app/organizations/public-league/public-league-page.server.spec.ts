@@ -181,9 +181,9 @@ describe('PublicLeaguePage server render', () => {
     ]);
     expect(text(body.querySelector('nav[aria-label="Seasons pages"] p'))).toBe('1–5 of 7 seasons');
     const sidebar = body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(href(sidebar?.querySelector('a[aria-current="true"]'))).toBe(
-      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
-    );
+    // The sport is marked current and is plain text until #114 adds the sport view.
+    expect(text(sidebar?.querySelector('[aria-current="true"]'))).toContain('Beach volleyball');
+    expect(sidebar?.querySelector('a[href*="/sports/"]')).toBeNull();
     expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
 
     // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).

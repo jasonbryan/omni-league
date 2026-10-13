@@ -184,6 +184,16 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
+  it('maps the not-found and offline views to the league page specs that assert them (#127)', () => {
+    const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
+    assert.ok(notFound.includes('e2e/league-page.spec.ts'));
+    const offline = specsFor(['src/app/offline/not-saved-view.ts']);
+    for (const name of ['league-page', 'league-page-offline']) {
+      assert.ok(offline.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.ok(!notFound.includes('FULL') && !offline.includes('FULL'));
+  });
+
   it('keeps the other core files in the full suite, and the test data of the league page out of it (#127)', () => {
     assert.deepEqual(specsFor(['src/app/core/list-page.spec.ts']), want());
     assert.deepEqual(specsFor(['src/app/core/focus-main.spec.ts']), want());

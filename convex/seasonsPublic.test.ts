@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
-import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
+import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import schema from './schema';
 import { modules } from './test.setup';
 

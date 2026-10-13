@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { RouterLink, type Params } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronLeft, lucideChevronRight, lucideEllipsis } from '@ng-icons/lucide';
 import { LIST_PAGE_SIZE, listPageQuery } from '../core/list-page';
@@ -105,7 +105,7 @@ export function rangeText(page: number, total: number): string {
                 [routerLink]="path()"
                 [queryParams]="query(page() - 1)"
                 [fragment]="fragment()"
-                (click)="activated(page() - 1)"
+                (click)="activated(page() - 1, $event)"
                 data-slot="button"
                 [class]="ghostButton"
                 ><ng-icon
@@ -142,7 +142,7 @@ export function rangeText(page: number, total: number): string {
                   [queryParams]="query(item.n)"
                   [fragment]="fragment()"
                   [attr.aria-current]="item.n === page() ? 'page' : null"
-                  (click)="activated(item.n)"
+                  (click)="activated(item.n, $event)"
                   data-slot="button"
                   [class]="item.n === page() ? currentButton : ghostIconButton"
                   ><span class="sr-only">Page </span>{{ item.n }}</a
@@ -156,7 +156,7 @@ export function rangeText(page: number, total: number): string {
                 [routerLink]="path()"
                 [queryParams]="query(page() + 1)"
                 [fragment]="fragment()"
-                (click)="activated(page() + 1)"
+                (click)="activated(page() + 1, $event)"
                 data-slot="button"
                 [class]="ghostButton"
                 ><span class="max-sm:sr-only">Next</span><span class="sr-only"> page</span
@@ -191,7 +191,15 @@ export class PageControl {
   readonly path = input.required<string>();
   /** The id of the list's panel, without the `#`. */
   readonly fragment = input.required<string>();
-  /** A plain click on a link to a page other than the current one. */
+  /**
+   * The query parameters of the link to a page. The default is `?page=N` (`listPageQuery`); a page
+   * with two lists passes its own, which keeps the other list's page (`?leagues=3&locations=2`).
+   */
+  readonly queryFor = input<(page: number) => Params>(listPageQuery);
+  /**
+   * A plain primary click (no Ctrl, Cmd, Shift, or Alt) on a link to a page other than the current
+   * one. A click that opens the page elsewhere leaves this one unchanged and emits nothing.
+   */
   readonly pageActivated = output<number>();
 
   protected readonly pageSize = LIST_PAGE_SIZE;
@@ -201,11 +209,13 @@ export class PageControl {
   protected readonly range = computed(() => rangeText(this.page(), this.total()));
   protected readonly items = computed(() => pageWindow(this.page(), this.pageCount()));
 
-  protected query(page: number) {
-    return listPageQuery(page);
+  protected query(page: number): Params {
+    return this.queryFor()(page);
   }
 
-  protected activated(page: number): void {
-    if (page !== this.page()) this.pageActivated.emit(page);
+  protected activated(page: number, event: MouseEvent): void {
+    const plain =
+      event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+    if (plain && page !== this.page()) this.pageActivated.emit(page);
   }
 }

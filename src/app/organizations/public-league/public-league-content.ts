@@ -18,12 +18,7 @@ import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { seasonDates } from '../league/season-dates';
-import {
-  publicLeaguePath,
-  publicSeasonPath,
-  sportViewPath,
-  type PublicLeagueView,
-} from './public-league-path';
+import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
 /**
  * The public league page's content column (#127, design/mockups/127-128-public-seasons.html): the
@@ -58,15 +53,8 @@ import {
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
         </li>
         <li>
-          @if (sportHref(); as href) {
-            <a
-              [routerLink]="href"
-              class="font-medium underline underline-offset-4 hover:text-foreground"
-              >{{ view().league.sportName }}</a
-            >
-          } @else {
-            <span class="font-medium">{{ view().league.sportName }}</span>
-          }
+          <!-- Plain text until #114 adds the sport view (/organizations/<org>/sports/<segment>). -->
+          <span class="font-medium">{{ view().league.sportName }}</span>
         </li>
         <li aria-hidden="true">
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
@@ -189,12 +177,6 @@ export class PublicLeagueContent {
   protected readonly leagueHref = computed(() =>
     publicLeaguePath(this.view().league.organization.slug, this.view().league.slug),
   );
-  /** The sport's view, or `null` when the organization lists no sport of this name. */
-  protected readonly sportHref = computed(() => {
-    const { organization, league } = this.view();
-    const sport = organization.sports.find(({ name }) => name === league.sportName);
-    return sport ? sportViewPath(league.organization.slug, sport.segment) : null;
-  });
   protected readonly locationsLabel = computed(() =>
     this.view().league.locationNames.length === 1 ? 'Location: ' : 'Locations: ',
   );

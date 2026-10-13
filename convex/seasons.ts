@@ -7,12 +7,12 @@ import {
   SEASON_MESSAGES,
   type SeasonInputError,
 } from './lib/seasonInput';
+import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { publicSeasonsValidator } from './lib/publicPage';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatName, formatValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
-import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 
 /**
  * Seasons `listForOrganizer` returns at most. The list is one page with no paging (#125), as the
@@ -155,7 +155,7 @@ const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
  * `{ rows: [{ name, slug, startDate, endDate, formatName }], page, pageCount, total }`, with
  * `PUBLIC_LIST_PAGE_SIZE` rows or fewer. `total` is the league's `publishedSeasonCount` (a league
  * without the counter reads 0), and the page served and the page count follow
- * `organizations.pageOf`: a page that is not a whole number from 1 to the page count, or is past
+ * `pageOf` (`lib/publicList.ts`): a page that is not a whole number from 1 to the page count, or is past
  * `PUBLIC_LIST_MAX_PAGE`, serves page 1. An unknown organization or league, a league of another
  * organization, and a league that is not `published` give an empty page 1 of 0 (the page itself
  * answers 404 from `leagues.getPublicPage`).

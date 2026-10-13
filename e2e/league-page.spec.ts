@@ -134,7 +134,9 @@ test.describe('public league page: raw server HTML', () => {
         )?.[0];
         expect(breadcrumb, query).toBeDefined();
         expect(breadcrumb, query).toContain(`>${tenant.name}</a>`);
-        expect(breadcrumb, query).toContain('>Beach volleyball</a>');
+        // The sport is plain text until #114 adds the sport view.
+        expect(breadcrumb, query).toContain('>Beach volleyball</span>');
+        expect(html, query).not.toContain('/sports/');
         expect(breadcrumb, query).toMatch(
           new RegExp(`<a\\b[^>]*aria-current="page"[^>]*>${LEAGUE}</a>`),
         );
@@ -144,7 +146,7 @@ test.describe('public league page: raw server HTML', () => {
 
         // The sidebar marks the league's sport.
         expect(html, query).toMatch(
-          /<a\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/a>/,
+          /<span\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/span>/,
         );
 
         // Meta, from the query result: the canonical and og:url hold ?page=2, and nothing else.

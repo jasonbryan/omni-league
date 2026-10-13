@@ -36,11 +36,6 @@ export function publicSeasonPath(orgSlug: string, leagueSlug: string, seasonSlug
   return `${publicLeaguePath(orgSlug, leagueSlug)}/seasons/${encodeURIComponent(seasonSlug)}`;
 }
 
-/** A sport's view, `/organizations/<org>/sports/<segment>` (#114 adds the route). */
-export function sportViewPath(orgSlug: string, segment: string): string {
-  return `${organizationPath(orgSlug)}/sports/${encodeURIComponent(segment)}`;
-}
-
 /**
  * The canonical path of the league page for the page of seasons shown: the bare path, then
  * `?page=N` only when N is more than 1. Built from the query result's page number, an integer,
