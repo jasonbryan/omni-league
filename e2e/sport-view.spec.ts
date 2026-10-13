@@ -444,6 +444,53 @@ test.describe('sport view in the browser', () => {
     ).toBe(true);
   });
 
+  // The league page's sidebar has the same Locations item (#127), and `OrganizationPage` scrolls for
+  // it too. Tester probe: the same held answer as above, from a league page.
+  test('the Locations item on a league page scrolls to the panel once the organization page has rendered, though its lists arrive after the navigation', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const desktop = testInfo.project.name === 'chromium-desktop';
+    const tenant = await seedTenant({ locations: tallLocations(), leagues: tallLeagues() });
+    const gamma = tenant.leagues.find((league) => league.name.startsWith('Gamma League'));
+    expect(gamma?.sport).toBe('beachVolleyball');
+    if (desktop) await page.setViewportSize({ width: 1280, height: 300 });
+    const locations = await holdAnswer(page, 'organizations:listPublicLocations');
+    await page.goto(`${tenant.path}/leagues/gamma-league-of-the-corpus-christi-rec-district`);
+    await expect(page.getByRole('heading', { level: 1, name: /^Gamma League/ })).toBeVisible();
+    await hydrated(consoleGuard);
+    await page.evaluate(() => {
+      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+    });
+
+    if (desktop) {
+      await page
+        .getByRole('navigation', { name: tenant.name })
+        .getByRole('link', { name: /^Locations/ })
+        .click();
+    } else {
+      const dialog = page.getByRole('dialog', { name: 'Navigation' });
+      await activate(page, page.getByRole('button', { name: 'Open navigation' }));
+      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
+      await activate(page, dialog.getByRole('link', { name: /^Locations/ }));
+      await expect(dialog).toHaveCount(0);
+    }
+    await expect(page).toHaveURL(new RegExp(`${tenant.path}#locations$`));
+    await expect.poll(() => locations.holding()).toBe(true);
+    await expect(page.locator('main #locations')).toHaveCount(0);
+
+    locations.release();
+    const panel = page.locator('main #locations');
+    await expect(panel).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect(panel).toBeInViewport();
+    const top = await panel.evaluate((el) => el.getBoundingClientRect().top);
+    expect(top).toBeGreaterThanOrEqual(56);
+    expect(
+      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+    ).toBe(true);
+  });
+
   test.describe('an unknown sport', () => {
     test.use({ expectedDocumentStatus: 404 });
 
