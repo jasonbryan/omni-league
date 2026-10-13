@@ -52,6 +52,14 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
   },
   {
+    // The public league page (#127): the same, with `Netlify-Vary: query` from the handler
+    // (src/server-cache.ts), so each `?page=N` is stored on its own. Its HTML holds only the page
+    // number the query result gives, never the request's query string.
+    path: 'organizations/:orgSlug/leagues/:leagueSlug',
+    renderMode: RenderMode.Server,
+    headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
+  },
+  {
     path: '**',
     renderMode: RenderMode.Server, // public pages and not-found (the view sets status 404, #23)
     // ADR 0006 "Cacheable": the not-found render is anonymous and the same for every visitor.

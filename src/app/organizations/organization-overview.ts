@@ -1,20 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMapPin, lucideMapPinOff, lucideTrophy, lucideVolleyball } from '@ng-icons/lucide';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import type { PublicOrganizationPage } from './organization-path';
+import { publicLeaguePath } from './public-league/public-league-path';
 
 /**
  * The organization page's content column (#60): the name as the page's `<h1>`, the three summary
  * tiles (#73 decision 4), and the Leagues and Locations panels with their empty states, as in
  * design/mockups/60-organization-page.html. Each row carries the `id` the sidebar links to
  * (`league-<n>`, `location-<n>`, numbered in the order the query sorts them). The panels show the
- * rows of page 1 of each list, at most 5 (#100); the tiles show the totals. With `savedAt` set
+ * rows of page 1 of each list, at most 5 (#100); the tiles show the totals. Each league's name is a
+ * link to its public page (#127). With `savedAt` set
  * (a saved copy shown offline, #82), the saved-copy note sits right under the `h1`.
  */
 @Component({
   selector: 'app-organization-overview',
-  imports: [NgIcon, SavedCopyNote],
+  imports: [NgIcon, RouterLink, SavedCopyNote],
   providers: [provideIcons({ lucideMapPin, lucideMapPinOff, lucideTrophy, lucideVolleyball })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
@@ -57,7 +60,13 @@ import type { PublicOrganizationPage } from './organization-path';
                 class="flex items-start justify-between gap-3 px-4 py-3.5 md:px-5"
               >
                 <div class="min-w-0">
-                  <h3 class="font-medium">{{ league.name }}</h3>
+                  <h3 class="font-medium">
+                    <a
+                      [routerLink]="league.href"
+                      class="underline underline-offset-4 hover:text-primary"
+                      >{{ league.name }}</a
+                    >
+                  </h3>
                   @if (league.locations) {
                     <p class="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
                       <ng-icon
@@ -95,6 +104,7 @@ import type { PublicOrganizationPage } from './organization-path';
         }
       </section>
       <section
+        id="locations"
         aria-labelledby="locations-heading"
         class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
       >
@@ -154,6 +164,7 @@ export class OrganizationOverview {
     this.page().leagues.map((league, i) => ({
       id: `league-${i + 1}`,
       name: league.name,
+      href: publicLeaguePath(this.page().slug, league.slug),
       sportName: league.sportName,
       locationsLabel: league.locationNames.length === 1 ? 'Location: ' : 'Locations: ',
       locations: league.locationNames.join(', '),

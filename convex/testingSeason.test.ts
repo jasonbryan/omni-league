@@ -214,3 +214,62 @@ describe('testing:addLeagueOrganizer', () => {
     expect(await memberships(t)).toHaveLength(1);
   }, 30_000);
 });
+
+describe('testing:seedSeasons', () => {
+  const batch = (n: number, status?: 'draft' | 'published') =>
+    Array.from({ length: n }, (_, i) => ({
+      name: `Season ${i + 1}`,
+      slug: `season-${i + 1}`,
+      startDate: `2026-${String(i + 1).padStart(2, '0')}-01`,
+      endDate: '2026-12-28',
+      registrationDeadline: '2025-12-01',
+      format: '7v7' as const,
+      minimumRosterSize: 7,
+      status,
+    }));
+  const args = (list: ReturnType<typeof batch>) => ({
+    organizationSlug: TENANT.organization.slug,
+    leagueSlug: 'coed-7v7',
+    seasons: list,
+  });
+
+  test.each([
+    ['unset', undefined],
+    ['"false"', 'false'],
+  ])(
+    'throws with IS_TEST %s and writes nothing',
+    async (_, value) => {
+      const t = await seeded();
+      vi.stubEnv('IS_TEST', value);
+      await expect(t.mutation(internal.testing.seedSeasons, args(batch(2)))).rejects.toThrow(
+        /IS_TEST/,
+      );
+      expect(await seasons(t)).toEqual([]);
+    },
+    30_000,
+  );
+
+  test('inserts every season in one call, and the league counter equals a recount', async () => {
+    const t = await seeded();
+    const list = [...batch(7, 'published'), { ...batch(1)[0], slug: 'draft', name: 'Draft' }];
+    await expect(t.mutation(internal.testing.seedSeasons, args(list))).resolves.toEqual({
+      count: 8,
+    });
+    const rows = await seasons(t);
+    expect(rows).toHaveLength(8);
+    const counter = await t.run(async (ctx) => {
+      const leagues = await ctx.db.query('leagues').collect();
+      return leagues.find((league) => league.slug === 'coed-7v7')?.publishedSeasonCount;
+    });
+    expect(counter).toBe(rows.filter((row) => row.status === 'published').length);
+    expect(counter).toBe(7);
+  }, 30_000);
+
+  test('throws, writing nothing, for an unknown league', async () => {
+    const t = await seeded();
+    await expect(
+      t.mutation(internal.testing.seedSeasons, { ...args(batch(2)), leagueSlug: 'nope' }),
+    ).rejects.toThrow(/No league/);
+    expect(await seasons(t)).toEqual([]);
+  }, 30_000);
+});

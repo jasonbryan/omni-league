@@ -7,8 +7,9 @@ import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatValidator, sportCountsValidator, sportValidator } from './lib/sports';
 
 // Every write to organizations, locations, leagues, sportLocations, and seasons goes through
-// convex/lib/tenantWrites.ts, which keeps `sortName`, the organization's counters, and the
-// sportLocations rows in the same mutation as the row (#100, #101).
+// convex/lib/tenantWrites.ts, which keeps `sortName`, the organization's counters, the
+// sportLocations rows, and the league's `publishedSeasonCount` in the same mutation as the row
+// (#100, #101, #127).
 // Those fields are optional only until every existing row is backfilled (`seed:demo`); #104 makes
 // them required.
 export default defineSchema({
@@ -116,6 +117,13 @@ export default defineSchema({
      * one is on no public index and is listed to staff as a draft.
      */
     status: v.optional(leagueStatusValidator),
+    /**
+     * The league's number of `published` seasons (#127): the public league page's Seasons total.
+     * Kept by `insertSeason` and `publishSeason` in convex/lib/tenantWrites.ts, in the same
+     * mutation as the season row. A league without one (written before #127) reads as 0 until
+     * `seed:demo` sets it from a recount; #104 or a named follow-up makes it required.
+     */
+    publishedSeasonCount: v.optional(v.number()),
   })
     .index('by_organizationId_and_name', ['organizationId', 'name'])
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])

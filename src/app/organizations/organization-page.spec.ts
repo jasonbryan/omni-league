@@ -161,6 +161,26 @@ describe('OrganizationPage', () => {
       expect(text(rows[4].querySelector('p .sr-only'))).toBe('Locations:');
     });
 
+    it('links each league name to its league page, built from the organization and league slugs', () => {
+      const rows = [
+        ...host(harness).querySelectorAll('section[aria-labelledby="leagues-heading"] li'),
+      ];
+      expect(rows.map((row) => row.querySelector('h3 a')?.getAttribute('href'))).toEqual(
+        GULF_COAST.leagues.map(
+          (league) => `/organizations/gulf-coast-sport-social/leagues/${league.slug}`,
+        ),
+      );
+      expect(rows.map((row) => text(row.querySelector('h3 a')))).toEqual(
+        GULF_COAST.leagues.map((league) => league.name),
+      );
+      // Their layout is otherwise unchanged: the name is the row's h3, and the locations are not links.
+      expect(rows.every((row) => row.querySelector('p a') === null)).toBe(true);
+      const locations = host(harness).querySelectorAll(
+        'section[aria-labelledby="locations-heading"] h3 a',
+      );
+      expect(locations).toHaveLength(0);
+    });
+
     it('lists the locations with addresses, each row with its #location-<n> id', () => {
       const rows = [
         ...host(harness).querySelectorAll('section[aria-labelledby="locations-heading"] li'),
@@ -236,7 +256,7 @@ describe('OrganizationPage', () => {
         leagueCount: 6,
         locationCount: 4,
         leagues: [
-          { name: 'Adult League', sportName: 'Soccer', locationNames: [] },
+          { name: 'Adult League', slug: 'adult-league', sportName: 'Soccer', locationNames: [] },
           ...GULF_COAST.leagues.slice(0, 4),
         ],
       });

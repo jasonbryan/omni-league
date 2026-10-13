@@ -420,10 +420,21 @@ describe('organizations:listPublicLeagues rows', () => {
       await t.query(api.organizations.listPublicLeagues, { slug: 'gulf-coast', page: 1 }),
     ).toEqual({
       rows: [
-        { name: 'coed 7v7 Rec', sportName: 'Soccer', locationNames: ['Bayside Athletic Complex'] },
-        { name: 'Thursday Night Coed 2s', sportName: 'Beach volleyball', locationNames: [] },
+        {
+          name: 'coed 7v7 Rec',
+          slug: 'coed-7v7-rec',
+          sportName: 'Soccer',
+          locationNames: ['Bayside Athletic Complex'],
+        },
+        {
+          name: 'Thursday Night Coed 2s',
+          slug: 'thursday-night-coed-2s',
+          sportName: 'Beach volleyball',
+          locationNames: [],
+        },
         {
           name: 'Wednesday Coed Slow-Pitch',
+          slug: 'wednesday-coed-slow-pitch',
           sportName: 'Softball',
           locationNames: ['North Beach Sand Courts', 'Bayside Athletic Complex'],
         },
@@ -449,7 +460,12 @@ describe('organizations:listPublicLeagues rows', () => {
     expect(names(shownLocations)).not.toContain('Row 013');
     const leagues = await t.query(api.organizations.listPublicLeagues, { slug: 'far', page: 1 });
     expect(leagues.rows).toEqual([
-      { name: 'Far League', sportName: 'Softball', locationNames: ['Row 013', 'Row 001'] },
+      {
+        name: 'Far League',
+        slug: 'far-league',
+        sportName: 'Softball',
+        locationNames: ['Row 013', 'Row 001'],
+      },
     ]);
   });
 
@@ -475,13 +491,14 @@ describe('organizations:listPublicLeagues rows', () => {
     });
     expect(leagues.rows.find((league) => league.name === 'Crossed League')).toEqual({
       name: 'Crossed League',
+      slug: 'crossed-league',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
     });
     expect(JSON.stringify(leagues)).not.toContain('B Field');
   });
 
-  test('returns only the fields of the returns validator: no ids, creation times, or slugs', async () => {
+  test('returns only the fields of the returns validator: no ids or creation times, and only a league’s own slug', async () => {
     const t = setup();
     await seedA(t);
     const leagues = await t.query(api.organizations.listPublicLeagues, {
@@ -496,14 +513,15 @@ describe('organizations:listPublicLeagues rows', () => {
       expect(Object.keys(result).sort()).toEqual(['page', 'pageCount', 'rows', 'total']);
     }
     for (const league of leagues.rows) {
-      expect(Object.keys(league).sort()).toEqual(['locationNames', 'name', 'sportName']);
+      expect(Object.keys(league).sort()).toEqual(['locationNames', 'name', 'slug', 'sportName']);
     }
     for (const location of locations.rows) {
       expect(Object.keys(location).sort()).toEqual(['address', 'name']);
     }
     expect(JSON.stringify([leagues, locations])).not.toMatch(
-      /_id|_creationTime|organizationId|locationIds|sortName|slug/,
+      /_id|_creationTime|organizationId|locationIds|sortName|publishedSeasonCount/,
     );
+    expect(JSON.stringify(locations)).not.toContain('slug');
   });
 });
 

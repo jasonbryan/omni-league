@@ -143,6 +143,7 @@ describe('convex/testing.ts exports', () => {
       'reset',
       'seedLeague',
       'seedSeason',
+      'seedSeasons',
       'seedSignInFailures',
       'seedTenant',
     ]);

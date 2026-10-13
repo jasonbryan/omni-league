@@ -2,6 +2,7 @@
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
+import type { Doc } from './_generated/dataModel';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { checkSeasonFields } from './lib/seasonInput';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
@@ -320,16 +321,19 @@ describe('seed:demo', () => {
     expect(await snapshot(t)).toEqual(settled);
   });
 
-  test('the published demo seasons write no organization or league row: no counter moves (#126)', async () => {
+  test('the published demo seasons write no organization row, and a league’s only change is its publishedSeasonCount (#126, #127)', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
     const before = await t.run(async (ctx) => ({
       organizations: await ctx.db.query('organizations').collect(),
       leagues: await ctx.db.query('leagues').collect(),
     }));
+    // Deleting the seasons directly bypasses the writers: reset the counters with them.
     await t.run(async (ctx) => {
       for (const season of await ctx.db.query('seasons').collect()) {
-        if (season.slug === 'summer-2027') await ctx.db.delete('seasons', season._id);
+        if (season.slug !== 'summer-2027') continue;
+        await ctx.db.delete('seasons', season._id);
+        await ctx.db.patch('leagues', season.leagueId, { publishedSeasonCount: 0 });
       }
     });
     await t.mutation(internal.seed.demo, {});
@@ -538,7 +542,11 @@ describe('seed:demo', () => {
     const after = await snapshot(t);
     // Every earlier location and league is unchanged; the organization gained one of each.
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
-    expect(after.leagues.slice(0, before.leagues.length)).toEqual(before.leagues);
+    // A league the demo gave a published season (#126) gained only its publishedSeasonCount (#127).
+    const withoutCount = (league: Doc<'leagues'>) => ({ ...league, publishedSeasonCount: 0 });
+    expect(after.leagues.slice(0, before.leagues.length).map(withoutCount)).toEqual(
+      before.leagues.map(withoutCount),
+    );
     const gulf = after.organizations.find((organization) => organization._id === gulfId);
     expect(gulf).toEqual({
       ...before.organizations[0],
@@ -713,7 +721,9 @@ describe('seed:demo', () => {
         sport: 'softball',
       }),
     ).toEqual({
-      rows: [{ name: 'Beta League', sportName: 'Softball', locationNames: [] }],
+      rows: [
+        { name: 'Beta League', slug: 'beta-league', sportName: 'Softball', locationNames: [] },
+      ],
       page: 1,
       pageCount: 1,
       total: 1,
@@ -722,8 +732,13 @@ describe('seed:demo', () => {
       await t.query(api.organizations.listPublicLeagues, { slug: 'old-club', page: 1 }),
     ).toEqual({
       rows: [
-        { name: 'alpha League', sportName: 'Soccer', locationNames: ['Old Field'] },
-        { name: 'Beta League', sportName: 'Softball', locationNames: [] },
+        {
+          name: 'alpha League',
+          slug: 'alpha-league',
+          sportName: 'Soccer',
+          locationNames: ['Old Field'],
+        },
+        { name: 'Beta League', slug: 'beta-league', sportName: 'Softball', locationNames: [] },
       ],
       page: 1,
       pageCount: 1,

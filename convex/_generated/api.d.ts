@@ -28,6 +28,7 @@ import type * as lib_memberships from "../lib/memberships.js";
 import type * as lib_organizationInput from "../lib/organizationInput.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_previewOrigin from "../lib/previewOrigin.js";
+import type * as lib_publicList from "../lib/publicList.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_seasonInput from "../lib/seasonInput.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   "lib/organizationInput": typeof lib_organizationInput;
   "lib/password": typeof lib_password;
   "lib/previewOrigin": typeof lib_previewOrigin;
+  "lib/publicList": typeof lib_publicList;
   "lib/publicPage": typeof lib_publicPage;
   "lib/roles": typeof lib_roles;
   "lib/seasonInput": typeof lib_seasonInput;

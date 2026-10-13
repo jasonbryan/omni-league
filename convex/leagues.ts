@@ -14,6 +14,7 @@ import {
   type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { getLeaguePublicPageReturns } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import { sportName, sportValidator } from './lib/sports';
@@ -222,6 +223,44 @@ export const getOrganizerContext = query({
       locationNames,
       role: access.membership.role,
       organization: { name: organization.name, slug: organization.slug },
+    };
+  },
+});
+
+/**
+ * The public league page's header (#127): the organization's name and slug, and the league's name,
+ * slug, sport display name, and location names, or `null` when there is no such page. `null` for
+ * an unknown organization or league (`findLeagueBySlugs`, which reads a league slug in its own
+ * organization only), and for a league that is not `published`: a draft, and a row stored without
+ * a status (written before #66), so nothing public says whether a draft's slug exists. The
+ * location names follow the league's own order and leave out an id of another organization's
+ * location, as `organizations.listPublicLeagues` does.
+ *
+ * Deliberately public (convex.md, Functions): visitors and crawlers read it without signing in,
+ * and the server render calls it anonymously. It reads no identity, so every caller gets the same
+ * result, and returns only the fields of `publicLeaguePageValidator` (`lib/publicPage.ts`): no id,
+ * status, or counter. The seasons are `seasons.listPublic`.
+ */
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (ADR 0002): an anonymous public page that reads no identity and returns only published fields.
+export const getPublicPage = query({
+  args: { orgSlug: v.string(), leagueSlug: v.string() },
+  // The app checks saved copies against this same validator (convex/lib/publicPage.ts, #82).
+  returns: getLeaguePublicPageReturns,
+  handler: async (ctx, args) => {
+    const found = await findLeagueBySlugs(ctx, args);
+    if (found?.league.status !== 'published') return null;
+    const { organization, league } = found;
+    const locationNames: string[] = [];
+    for (const id of league.locationIds) {
+      const location = await ctx.db.get('locations', id);
+      if (location?.organizationId === organization._id) locationNames.push(location.name);
+    }
+    return {
+      organization: { name: organization.name, slug: organization.slug },
+      name: league.name,
+      slug: league.slug,
+      sportName: sportName(league.sport),
+      locationNames,
     };
   },
 });

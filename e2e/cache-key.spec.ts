@@ -7,9 +7,11 @@
 // - every response with a Location is `no-store` (it can copy the query string).
 // Add a sample path here for every new server route, with a sample value for each parameter.
 import { randomUUID } from 'node:crypto';
+import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
+import { numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
 
 /** Paths the edge function answers (server and client routes), one per route kind. */
 const EDGE_PATHS = [
@@ -17,6 +19,8 @@ const EDGE_PATHS = [
   '/app/x',
   '/app',
   '/organizations/cache-key-sample',
+  // #127: the public league page, here an unknown league (404); the known one is tested below.
+  '/organizations/cache-key-sample/leagues/cache-key-sample',
   // #62: a Client route whose query string carries `returnTo`; the shell holds none of it.
   '/sign-up',
   // #63: the same for sign-in.
@@ -63,6 +67,7 @@ test.describe('query strings and the CDN', () => {
         unique,
         `/app${unique}`,
         `/organizations${unique}`,
+        `/organizations${unique}/leagues/sample`,
         `/sign-up`,
         `/sign-in`,
       ]) {
@@ -94,6 +99,83 @@ test.describe('query strings and the CDN', () => {
         expect(response.status, query).toBe(302);
         expect(response.headers['cache-control'], query).toBe('no-store');
         expect(response.location, query).toBe(`${unique}/${query}`);
+      }
+    },
+  );
+
+  // #127: the public league page reads `?page=N`, the one query parameter whose value the HTML may
+  // hold (as an integer from the query result). Nothing else of the query string may: not the
+  // canary in `?page=<canary>` (which reads as page 1), nor one beside a valid `page`.
+  test(
+    'the league page: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
+    RAW_HTTP,
+    async () => {
+      // On a preview the demo league has the published seasons `seed:demo` gives it (#126); locally
+      // the test seeds a league with 7.
+      let path = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s';
+      if (remoteBaseUrl === undefined) {
+        const tenant = await seedTenant({
+          name: 'E2E Cache Key League',
+          locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+          leagues: [
+            { name: 'Cache Key League', sport: 'beachVolleyball', locations: ['Alpha Field'] },
+          ],
+        });
+        await seedSeasons(tenant, 'cache-key-league', numberedSeasons(7));
+        path = `${tenant.path}/leagues/cache-key-league`;
+      }
+      const first = await rawGet(path);
+      expect(first.status).toBe(200);
+      expect(first.headers['netlify-vary']).toBe('query');
+      expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
+
+      for (const sample of [(c: string) => `?page=${c}`, (c: string) => `?page=2&page=${c}`]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(response.headers['netlify-vary'], sample(token)).toBe('query');
+        // Page 1: the same seasons as the bare path.
+        const names = (body: string) =>
+          [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
+            name.trim(),
+          );
+        expect(names(response.body), sample(token)).toEqual(names(first.body));
+      }
+    },
+  );
+
+  // Locally only: a preview needs a league with more than 5 published seasons.
+  test(
+    'a request for one page never gets the body of a request for another',
+    RAW_HTTP,
+    async () => {
+      test.skip(
+        remoteBaseUrl !== undefined,
+        'E2E_BASE_URL is set: no local Convex backend to seed',
+      );
+      const tenant = await seedTenant({
+        name: 'E2E Cache Key Pages',
+        locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+        leagues: [{ name: 'Pages League', sport: 'beachVolleyball', locations: ['Alpha Field'] }],
+      });
+      await seedSeasons(tenant, 'pages-league', numberedSeasons(12));
+      const path = `${tenant.path}/leagues/pages-league`;
+      const names = (body: string) =>
+        [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) => name.trim());
+      const expected: Record<string, string[]> = {
+        '?page=2': ['Season 07', 'Season 06', 'Season 05', 'Season 04', 'Season 03'],
+        '?page=3': ['Season 02', 'Season 01'],
+        '?page=2&page=3': ['Season 12', 'Season 11', 'Season 10', 'Season 09', 'Season 08'],
+        '': ['Season 12', 'Season 11', 'Season 10', 'Season 09', 'Season 08'],
+      };
+      // Store the page-2 response first, then ask for the others: none gets page 2's rows.
+      for (const query of ['?page=2', '?page=2', '?page=3', '?page=2&page=3', '', '?page=2']) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(names(response.body), query).toEqual(expected[query]);
       }
     },
   );

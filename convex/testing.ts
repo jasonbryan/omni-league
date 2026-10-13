@@ -313,6 +313,49 @@ export const seedSeason = internalMutation({
   },
 });
 
+/** One season of `seedSeasons`: the fields of `seedSeason` after the league. */
+const seasonSeedValidator = v.object({
+  name: v.string(),
+  slug: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
+  format: formatValidator,
+  minimumRosterSize: v.number(),
+  status: v.optional(seasonStatusValidator),
+});
+
+/**
+ * Adds several seasons to one league in one transaction (#127 e2e), each through `insertSeason`
+ * like `seedSeason`. Many `seedSeason` calls at once for one league all write that league's
+ * `publishedSeasonCount`, so on a slow runner they conflict (`OptimisticConcurrencyControlFailure`);
+ * one mutation writes the counter once per season in a single transaction, and needs one process.
+ * Throws, writing nothing, for an unknown organization or league.
+ */
+export const seedSeasons = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    leagueSlug: v.string(),
+    seasons: v.array(seasonSeedValidator),
+  },
+  returns: v.object({ count: v.number() }),
+  handler: async (ctx, { organizationSlug, leagueSlug, seasons }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const league = await ctx.db
+      .query('leagues')
+      .withIndex('by_organizationId_and_slug', (q) =>
+        q.eq('organizationId', organization._id).eq('slug', leagueSlug),
+      )
+      .unique();
+    if (!league) throw new Error(`No league has the slug ${JSON.stringify(leagueSlug)}`);
+    for (const { status, ...season } of seasons) {
+      await insertSeason(ctx, league, season, status);
+    }
+    return { count: seasons.length };
+  },
+});
+
 async function organizationBySlug(
   ctx: Pick<MutationCtx, 'db'>,
   slug: string,

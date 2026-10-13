@@ -24,7 +24,12 @@ const PAGE = {
 };
 
 const LOCATION = { name: 'Bayside', address: '4410 Ocean Dr' };
-const LEAGUE = { name: 'Coed 2s', sportName: 'Beach volleyball', locationNames: ['Bayside'] };
+const LEAGUE = {
+  name: 'Coed 2s',
+  slug: 'coed-2s',
+  sportName: 'Beach volleyball',
+  locationNames: ['Bayside'],
+};
 const LIST = { page: 1, pageCount: 1, total: 1 };
 
 describe('matchesValidator', () => {

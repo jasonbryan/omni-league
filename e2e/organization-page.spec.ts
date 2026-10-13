@@ -197,7 +197,7 @@ test.describe('organization page: raw server HTML', () => {
           expect(html, path).toMatch(new RegExp(`>\\s*${location.address}\\s*<`));
         }
         for (const league of tenant.leagues) {
-          expect(html, path).toContain(`>${league.name}</h3>`);
+          expect(html, path).toMatch(new RegExp(`<h3\\b[^>]*>\\s*<a\\b[^>]*>${league.name}</a>`));
           expect(html, path).toMatch(new RegExp(`>\\s*${SPORT_NAMES[league.sport]}\\s*</span>`));
         }
 
@@ -279,13 +279,17 @@ test.describe('organization page: more than 5 rows per list', () => {
         ...[1, 2, 3, 4, 5].map((n) => `location-${n}`),
       ]);
       expect(
-        [...content.matchAll(/<h3\b[^>]*>([^<]*)<\/h3>/g)].map(([, name]) => name.trim()),
+        // A league's name is a link (#127); a location's is plain text.
+        [...content.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
+          name.trim(),
+        ),
       ).toEqual([
         ...shownLeagues.map((league) => league.name),
         ...shownLocations.map((location) => location.name),
       ]);
       for (const hidden of [tenant.leagues[5], tenant.locations[5]]) {
         expect(content).not.toContain(`>${hidden.name}</h3>`);
+        expect(content).not.toContain(`>${hidden.name}</a>`);
       }
       // A league shows its location's name though that location is not among the 5 shown.
       expect(content).toContain(`${tenant.leagues[0].locations[0]}<`);
@@ -326,6 +330,11 @@ test.describe('organization page in the browser', () => {
     await hydrated(consoleGuard);
     await expect(page).toHaveTitle(`${tenant.name} | Omni League`);
 
+    // The league names in the content link to their public pages (#127), after the sidebar's links.
+    const leagueLinks = tenant.leagues.map(
+      (league) =>
+        `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
+    );
     const sidebarColumn = page.locator('main').locator('xpath=preceding-sibling::div[1]');
     const menuButton = page.getByRole('button', { name: 'Open navigation' });
     const nav = page.getByRole('navigation', { name: tenant.name });
@@ -340,6 +349,8 @@ test.describe('organization page in the browser', () => {
           'header button[aria-label="Open navigation"]',
           'header a[href="/"]',
           'header a[href^="/sign-in"]',
+          // Each league's name links to its page (#127): the first focusable controls of the content.
+          ...leagueLinks,
         ],
       });
       return;
@@ -368,6 +379,7 @@ test.describe('organization page in the browser', () => {
         'nav a[aria-current="page"]',
         ...tenant.leagues.map((_, i) => `nav a[href="${tenant.path}#league-${i + 1}"]`),
         ...tenant.locations.map((_, i) => `nav a[href="${tenant.path}#location-${i + 1}"]`),
+        ...leagueLinks,
       ],
     });
 

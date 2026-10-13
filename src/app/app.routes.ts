@@ -16,6 +16,13 @@ export const routes: Routes = [
       import('./organizations/organization-page').then((m) => m.OrganizationPage),
   },
   {
+    // The public league page (#127), a Server route (app.routes.server.ts): the league's published
+    // seasons, `?page=N` for the numbered control.
+    path: 'organizations/:orgSlug/leagues/:leagueSlug',
+    loadComponent: () =>
+      import('./organizations/public-league/public-league-page').then((m) => m.PublicLeaguePage),
+  },
+  {
     // Sign-up (#62), a Client route. A signed-in visitor goes on to `returnTo`, else /app.
     path: 'sign-up',
     title: 'Create an account | Omni League',
