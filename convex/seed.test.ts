@@ -156,13 +156,13 @@ afterEach(() => {
 describe('seed:demo', () => {
   test('on an empty deployment, creates every demo organization and returns the inserted counts', async () => {
     const t = setup();
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual(FULL);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual(FULL);
     expect(await counts(t)).toEqual(ROWS);
   });
 
   test('adds the two demo draft seasons (#125) and the two published ones (#126) of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const rows = await t.run(async (ctx) => {
       const seasons = await ctx.db.query('seasons').collect();
       const result = [];
@@ -259,7 +259,7 @@ describe('seed:demo', () => {
 
   test('leaves a season already under a demo slug alone, whatever its status, and inserts the other (#125)', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     // A reused staging: a published season took the slug of one demo draft, and a demo season
     // was deleted.
     await t.run(async (ctx) => {
@@ -271,7 +271,7 @@ describe('seed:demo', () => {
     });
     const before = await t.run((ctx) => ctx.db.query('seasons').collect());
 
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       seasons: 1,
       backfilled: NONE,
@@ -286,7 +286,7 @@ describe('seed:demo', () => {
 
   test('on a deployment where #125’s seed already ran, inserts the two published summer-2027 seasons, leaves the fall-2027 drafts unchanged, and a second run inserts nothing (#126)', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     // #125's seed inserted the two fall-2027 drafts and no summer-2027 season.
     await t.run(async (ctx) => {
       for (const season of await ctx.db.query('seasons').collect()) {
@@ -299,7 +299,7 @@ describe('seed:demo', () => {
       ['fall-2027', 'draft'],
     ]);
 
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       seasons: 2,
       backfilled: NONE,
@@ -314,7 +314,7 @@ describe('seed:demo', () => {
     ]);
 
     const settled = await snapshot(t);
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
     });
@@ -323,7 +323,7 @@ describe('seed:demo', () => {
 
   test('the published demo seasons write no organization row, and a league’s only change is its publishedSeasonCount (#126, #127)', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const before = await t.run(async (ctx) => ({
       organizations: await ctx.db.query('organizations').collect(),
       leagues: await ctx.db.query('leagues').collect(),
@@ -336,7 +336,7 @@ describe('seed:demo', () => {
         await ctx.db.patch('leagues', season.leagueId, { publishedSeasonCount: 0 });
       }
     });
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     expect(
       await t.run(async (ctx) => ({
         organizations: await ctx.db.query('organizations').collect(),
@@ -357,7 +357,7 @@ describe('seed:demo', () => {
 
   test('keeps the two mockup organizations (#73) exactly as the mockup shows them', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     const gulf = await t.query(api.organizations.getPublicPage, {
       slug: 'gulf-coast-sport-social',
@@ -429,7 +429,7 @@ describe('seed:demo', () => {
 
   test('covers every sport in at least 2 organizations, one multi-sport and one empty organization', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const { organizations, locations, leagues } = await snapshot(t);
 
     expect(organizations.length).toBeGreaterThanOrEqual(4);
@@ -476,7 +476,7 @@ describe('seed:demo', () => {
 
   test('every demo organization has a public page', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const { organizations } = await snapshot(t);
     for (const { slug } of organizations) {
       const page = await t.query(api.organizations.getPublicPage, { slug });
@@ -486,9 +486,9 @@ describe('seed:demo', () => {
 
   test('a second run inserts nothing, returns zero counts, and changes no row', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const before = await snapshot(t);
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
     });
@@ -531,7 +531,7 @@ describe('seed:demo', () => {
     );
     const before = await snapshot(t);
 
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       organizations: ROWS.organizations - 1,
       locations: ROWS.locations - 2,
       leagues: ROWS.leagues - 4,
@@ -601,7 +601,7 @@ describe('seed:demo', () => {
       locations: ['Larkspur Turf Center'],
     });
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     const { organizations, locations, leagues } = await snapshot(t);
     for (const organization of organizations) {
@@ -648,7 +648,7 @@ describe('seed:demo', () => {
     );
     const before = await snapshot(t);
 
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual(FULL);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual(FULL);
 
     const after = await snapshot(t);
     expect(after.organizations[0]).toEqual(before.organizations[0]);
@@ -679,7 +679,7 @@ describe('seed:demo', () => {
       });
     });
 
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       organizations: ROWS.organizations - 1,
       locations: ROWS.locations - 1,
       leagues: ROWS.leagues,
@@ -746,7 +746,7 @@ describe('seed:demo', () => {
     });
 
     const before = await snapshot(t);
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
     });
@@ -793,7 +793,7 @@ describe('seed:demo', () => {
     });
 
     // The three leagues were written before #66, so the backfill also sets their status.
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
       backfilled: { ...NONE, organizations: 1, leagues: 3 },
     });
@@ -806,7 +806,7 @@ describe('seed:demo', () => {
 
     const before = await snapshot(t);
     const rowsBefore = await t.run((ctx) => ctx.db.query('sportLocations').collect());
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
     });
@@ -826,7 +826,9 @@ describe('seed:demo', () => {
       const t = setup();
       await insertRaw(t);
       const before = await snapshot(t);
-      await expect(t.mutation(internal.seed.demo, {})).rejects.toThrow(/PREVIEW_ORIGIN_PATTERN/);
+      await expect(t.mutation(internal.seed.insertDemoData, {})).rejects.toThrow(
+        /PREVIEW_ORIGIN_PATTERN/,
+      );
       expect(await snapshot(t)).toEqual(before);
     },
   );
@@ -834,17 +836,26 @@ describe('seed:demo', () => {
   test('runs without IS_TEST (previews and staging never set it)', async () => {
     vi.stubEnv('IS_TEST', undefined);
     const t = setup();
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual(FULL);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual(FULL);
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    // `DEMO` is the plain data array e2e/pwa.spec.ts reads (#82), and `DEMO_SEASONS` the seasons
-    // (#125): no function, nothing to call.
-    const { DEMO, DEMO_SEASONS, ...functions } = seed;
+    // `DEMO` is the plain data array e2e/pwa.spec.ts reads (#82), `DEMO_SEASONS` the seasons
+    // (#125), and `DEMO_ACCOUNTS` and `DEMO_ACCOUNT_DOMAIN` the demo accounts (#98): no function,
+    // nothing to call.
+    const { DEMO, DEMO_SEASONS, DEMO_ACCOUNTS, DEMO_ACCOUNT_DOMAIN, ...functions } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
+    expect(Object.keys(DEMO_ACCOUNTS)).toEqual(['admin', 'organizer', 'player']);
+    expect(DEMO_ACCOUNT_DOMAIN).toBe('demo.omni-league.test');
     const exports = Object.entries(functions);
-    expect(exports.map(([name]) => name)).toEqual(['demo']);
+    expect(exports.map(([name]) => name).sort()).toEqual([
+      'demo',
+      'findDemoCredential',
+      'grantDemoMemberships',
+      'insertDemoData',
+      'insertDemoInvite',
+    ]);
     for (const [name, fn] of exports) {
       const markers = fn as Partial<Record<'isInternal' | 'isPublic', boolean>>;
       expect({ name, isInternal: markers.isInternal }).toEqual({ name, isInternal: true });
@@ -891,7 +902,7 @@ describe('seed:demo backfill against a recount (#100, tester)', () => {
     const old = (await snapshot(t)).organizations.find((o) => o.slug === 'old-club');
     expect([old?.leagueCount, old?.locationCount]).toEqual([undefined, undefined]);
 
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
     expect(result.backfilled).toEqual({ organizations: 1, locations: 2, leagues: 2 });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({
@@ -912,7 +923,7 @@ describe('seed:demo backfill against a recount (#100, tester)', () => {
       if (!old) throw new Error('fixture: old-club is missing');
       await ctx.db.patch('organizations', old._id, { leagueCount: 99 });
     });
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
     expect(result.backfilled.organizations).toBe(1);
     await expectCountersMatchRecount(t);
   });
@@ -921,7 +932,7 @@ describe('seed:demo backfill against a recount (#100, tester)', () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
     await insertRaw(t);
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     await t.mutation(internal.testing.addLeague, {
       organizationSlug: 'gulf-coast-sport-social',
       name: 'Extra Gulf League',
@@ -929,7 +940,7 @@ describe('seed:demo backfill against a recount (#100, tester)', () => {
       locations: ['Bayside Athletic Complex'],
     });
     for (let run = 0; run < 3; run++) {
-      await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+      await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
         ...NO_ROWS,
         backfilled: NONE,
       });
@@ -998,7 +1009,7 @@ describe('seed:demo and league status (#66, tester probes)', () => {
       });
     });
 
-    const first = await t.mutation(internal.seed.demo, {});
+    const first = await t.mutation(internal.seed.insertDemoData, {});
     expect(first.backfilled.leagues).toBe(3);
     const statuses = await t.run(async (ctx) =>
       Object.fromEntries((await ctx.db.query('leagues').collect()).map((l) => [l.slug, l.status])),
@@ -1024,7 +1035,7 @@ describe('seed:demo and league status (#66, tester probes)', () => {
 
     const before = await snapshot(t);
     const rowsBefore = await t.run((ctx) => ctx.db.query('sportLocations').collect());
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
     });

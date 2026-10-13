@@ -670,6 +670,65 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
   });
 });
 
+describe('seed-demo with a demo account password (#98)', () => {
+  const THROWAWAY = 'throwaway local passphrase 2026';
+
+  it('seedDemoCalls sets DEMO_ACCOUNT_PASSWORD between the pattern and the seed, only when given', () => {
+    const pattern = '^x$';
+    assert.deepEqual(seedDemoCalls(pattern, ''), seedDemoCalls(pattern));
+    assert.deepEqual(seedDemoCalls(pattern, THROWAWAY), [
+      ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', pattern],
+      ['env', 'set', 'DEMO_ACCOUNT_PASSWORD', THROWAWAY],
+      ['run', 'seed:demo'],
+    ]);
+  });
+
+  it('main passes the shell variable to the local backend only, and prints no value', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const calls = [];
+    const lines = [];
+    const code = await main(['seed-demo'], {
+      env: { DEMO_ACCOUNT_PASSWORD: THROWAWAY },
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      spawnCli: async (args) => {
+        calls.push(args.slice(0, 3));
+        return { code: 0, stdout: args[0] === 'run' ? '{"accounts":{}}' : '', stderr: '' };
+      },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    });
+    assert.equal(code, 0, lines.join('\n'));
+    assert.deepEqual(
+      calls.map((args) => args.slice(0, 3)),
+      [
+        ['env', 'set', 'PREVIEW_ORIGIN_PATTERN'],
+        ['env', 'set', 'DEMO_ACCOUNT_PASSWORD'],
+        ['run', 'seed:demo', '--env-file'],
+      ],
+    );
+    assert.ok(!lines.join('\n').includes(THROWAWAY));
+  });
+
+  it('main redacts the value from a failure the CLI echoes', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const lines = [];
+    const code = await main(['seed-demo'], {
+      env: { DEMO_ACCOUNT_PASSWORD: THROWAWAY },
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      spawnCli: async (args) =>
+        args[2] === 'DEMO_ACCOUNT_PASSWORD'
+          ? { code: 1, stdout: '', stderr: `bad value ${THROWAWAY}` }
+          : { code: 0, stdout: '{}', stderr: '' },
+      log: (line) => lines.push(line),
+      error: (line) => lines.push(line),
+    });
+    assert.equal(code, 1);
+    assert.ok(!lines.join('\n').includes(THROWAWAY));
+  });
+});
+
 describe('main seed-demo (#82)', () => {
   it('checks the target like setup and run: the given project dir and instance name', async () => {
     const dir = projectDir({ config: LOCAL_CONFIG });

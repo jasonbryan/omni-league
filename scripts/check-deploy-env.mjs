@@ -11,9 +11,10 @@
 //
 // - preview: IS_TEST must be unset, AUTH_EMAIL_DISABLED must be exactly `true`, and RESEND_API_KEY
 //   must be unset.
-// - production: IS_TEST, AUTH_EMAIL_DISABLED, and PREVIEW_ORIGIN_PATTERN must be unset. (The email
-//   slice adds the presence checks for RESEND_API_KEY, RESEND_WEBHOOK_SECRET, and EMAIL_FROM,
-//   ADR 0011.)
+// - production: IS_TEST, AUTH_EMAIL_DISABLED, PREVIEW_ORIGIN_PATTERN, and DEMO_ACCOUNT_PASSWORD
+//   (the demo accounts' shared password, #98; preview mode does not require it) must be unset.
+//   (The email slice adds the presence checks for RESEND_API_KEY, RESEND_WEBHOOK_SECRET, and
+//   EMAIL_FROM, ADR 0011.)
 // - both: BETTER_AUTH_SECRET and SITE_URL must be set (#111, ADR 0008). Without the secret Better
 //   Auth would sign with its public default; without SITE_URL no origin is trusted. Only the names
 //   are read. An empty value is invisible to `--names-only`; convex/auth.ts refuses requests then.
@@ -86,6 +87,11 @@ export async function checkDeployEnv(mode, reader) {
     if (names.has('PREVIEW_ORIGIN_PATTERN')) {
       failures.push(
         'PREVIEW_ORIGIN_PATTERN is set; it must not be set on production (it admits preview origins and lets seed:demo write).',
+      );
+    }
+    if (names.has('DEMO_ACCOUNT_PASSWORD')) {
+      failures.push(
+        'DEMO_ACCOUNT_PASSWORD is set; it must not be set on production (it is the shared password of the demo accounts, #98).',
       );
     }
   } else {

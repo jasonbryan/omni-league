@@ -9,7 +9,10 @@
 //                                                while the backend does not accept admin requests (#156)
 //   node scripts/e2e-convex.mjs run <fn> [json]  `run` one test function; prints its JSON result
 //   node scripts/e2e-convex.mjs seed-demo        `env set PREVIEW_ORIGIN_PATTERN`, `run seed:demo`:
-//                                                the demo data of a production-build PWA run (#82)
+//                                                the demo data of a production-build PWA run (#82).
+//                                                With DEMO_ACCOUNT_PASSWORD set in the shell (a
+//                                                throwaway, never the owner's), it is set on the local
+//                                                backend first, so the demo accounts exist (#98)
 //
 // TARGETING (security). The CLI follows `.env.local`, which may name a contributor's cloud dev
 // deployment, and `convex dev` rewrites `.env.local`. So the CLI never runs from the repository
@@ -64,9 +67,12 @@ const USAGE =
  * is the preview constant (convex/seed.ts), so the local backend gets that value first. It admits
  * only this project's Netlify preview origins, so it opens nothing on a local backend.
  */
-export function seedDemoCalls(previewOriginPattern) {
+export function seedDemoCalls(previewOriginPattern, demoAccountPassword = '') {
   return [
     ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', previewOriginPattern],
+    ...(demoAccountPassword === ''
+      ? []
+      : [['env', 'set', 'DEMO_ACCOUNT_PASSWORD', demoAccountPassword]]),
     ['run', 'seed:demo'],
   ];
 }
@@ -454,8 +460,16 @@ export async function main(
       }
       case 'seed-demo': {
         let inserted = '';
-        for (const args of seedDemoCalls(await previewOriginPattern())) {
-          inserted = await runConvex(args, target);
+        const password = env['DEMO_ACCOUNT_PASSWORD'] ?? '';
+        try {
+          for (const args of seedDemoCalls(await previewOriginPattern(), password)) {
+            inserted = await runConvex(args, target);
+          }
+        } catch (failure) {
+          // Only the redacted text may reach the output; no `cause`.
+          const text = failure instanceof Error ? failure.message : String(failure);
+          // eslint-disable-next-line preserve-caught-error -- a cause would carry the unredacted text.
+          throw new Error(password === '' ? text : text.split(password).join('<secret>'));
         }
         log(
           `e2e-convex: seed:demo on ${LOCAL_CONVEX_URL} inserted ` +

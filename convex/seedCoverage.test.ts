@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { internal } from './_generated/api';
@@ -14,9 +15,6 @@ import { modules } from './test.setup';
  */
 export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
   signInFailures: 'Throttle state from failed sign-ins (#63), not demo content.',
-  users: 'Filled by the demo accounts (#98).',
-  memberships: 'Filled by the demo accounts (#98).',
-  invites: 'Filled by the demo accounts (#98).',
 };
 
 /**
@@ -39,7 +37,10 @@ export function missingSeedTables(
 const TABLES = Object.keys(schema.tables);
 
 function setup() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  // The demo accounts (#98) are made through Better Auth's sign-up, so the component is registered.
+  betterAuthTest.register(t, 'betterAuth');
+  return t;
 }
 
 type T = ReturnType<typeof setup>;
@@ -63,16 +64,33 @@ function rowCounts(tableIds: Record<string, string[]>): Record<string, number> {
 beforeEach(() => {
   // Every preview and staging deployment has this Convex default preview variable (hosting.md).
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
+  // What the demo accounts need (#98): a throwaway password, the auth variables, and the breached
+  // password check on (IS_TEST unset) against a mocked Pwned Passwords range response.
+  vi.stubEnv('DEMO_ACCOUNT_PASSWORD', 'throwaway coverage passphrase 2026');
+  vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
+  vi.stubEnv('SITE_URL', 'http://localhost:4000');
+  vi.stubEnv('CONVEX_SITE_URL', 'http://127.0.0.1:3211');
+  vi.stubEnv('IS_TEST', undefined);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve(new Response('0018A45C4D1DEF81644B54AB7F969B88D65:0\r\n', { status: 200 })),
+    ),
+  );
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe('seed:demo coverage (#230)', () => {
+  // The seed signs up three demo accounts, each hashed with scrypt, so a run takes seconds.
+  vi.setConfig({ testTimeout: 120_000 });
+
   test('on an empty backend, every schema table outside SEED_EXCEPTIONS has at least one row, and no exception is stale or on a seeded table', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.action(internal.seed.demo, {});
     expect(missingSeedTables(TABLES, SEED_EXCEPTIONS, rowCounts(await ids(t)))).toEqual({
       empty: [],
       staleExceptions: [],
@@ -82,7 +100,7 @@ describe('seed:demo coverage (#230)', () => {
 
   test('an exception on a table the seed fills fails the check', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.action(internal.seed.demo, {});
     expect(
       missingSeedTables(
         TABLES,
@@ -94,9 +112,9 @@ describe('seed:demo coverage (#230)', () => {
 
   test('a second run leaves every schema table with the same row count and the same _ids', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.action(internal.seed.demo, {});
     const before = await ids(t);
-    await t.mutation(internal.seed.demo, {});
+    await t.action(internal.seed.demo, {});
     const after = await ids(t);
     expect(rowCounts(after)).toEqual(rowCounts(before));
     expect(after).toEqual(before);

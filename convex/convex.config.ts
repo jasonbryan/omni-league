@@ -17,6 +17,10 @@ const app = defineApp({
     // every preview and staging deployment; never on production (scripts/check-deploy-env.mjs).
     // Better Auth then trusts this project's preview origins (convex/lib/authOrigins.ts).
     PREVIEW_ORIGIN_PATTERN: v.optional(v.string()),
+    // The shared password of the demo accounts (#98), set by the owner as a Convex default preview
+    // variable. Secret; read only by `seed:demo`, never logged, and never on production
+    // (scripts/check-deploy-env.mjs production fails when it is set).
+    DEMO_ACCOUNT_PASSWORD: v.optional(v.string()),
   },
 });
 

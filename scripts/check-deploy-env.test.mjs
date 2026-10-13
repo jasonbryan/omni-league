@@ -13,6 +13,7 @@ const SECRET = {
   BETTER_AUTH_SECRET: 'sentinel-better-auth-7d3a',
   SITE_URL: 'https://sentinel-site-url.example',
   PREVIEW_ORIGIN_PATTERN: '^sentinel-pattern-5e8b$',
+  DEMO_ACCOUNT_PASSWORD: 'sentinel-demo-password-3c7d',
   AUTH_EMAIL_DISABLED_WRONG: 'sentinel-yes-2a6f',
 };
 
@@ -130,6 +131,18 @@ describe('checkDeployEnv, preview mode', () => {
   });
 });
 
+describe('checkDeployEnv, DEMO_ACCOUNT_PASSWORD in preview mode (#98)', () => {
+  it('is not required: a preview without it passes, and with it passes', async () => {
+    assert.deepEqual(await checkDeployEnv('preview', stubReader(ALLOWED_PREVIEW)), []);
+    const reader = stubReader({
+      ...ALLOWED_PREVIEW,
+      DEMO_ACCOUNT_PASSWORD: SECRET.DEMO_ACCOUNT_PASSWORD,
+    });
+    assert.deepEqual(await checkDeployEnv('preview', reader), []);
+    assert.deepEqual(reader.reads, ['AUTH_EMAIL_DISABLED']);
+  });
+});
+
 describe('checkDeployEnv, production mode', () => {
   it('passes when neither IS_TEST nor AUTH_EMAIL_DISABLED is set', async () => {
     const reader = stubReader({ ...ALLOWED_PRODUCTION, RESEND_API_KEY: SECRET.RESEND_API_KEY });
@@ -154,6 +167,18 @@ describe('checkDeployEnv, production mode', () => {
     const failures = await checkDeployEnv('production', reader);
     assert.equal(failures.length, 1);
     assert.match(failures[0], /^PREVIEW_ORIGIN_PATTERN /);
+    assert.deepEqual(reader.reads, []);
+  });
+
+  it('fails when DEMO_ACCOUNT_PASSWORD is set, without reading its value (#98)', async () => {
+    const reader = stubReader({
+      ...ALLOWED_PRODUCTION,
+      DEMO_ACCOUNT_PASSWORD: SECRET.DEMO_ACCOUNT_PASSWORD,
+    });
+    const failures = await checkDeployEnv('production', reader);
+    assert.equal(failures.length, 1);
+    assert.match(failures[0], /^DEMO_ACCOUNT_PASSWORD /);
+    assert.ok(!failures[0].includes(SECRET.DEMO_ACCOUNT_PASSWORD));
     assert.deepEqual(reader.reads, []);
   });
 
@@ -253,6 +278,12 @@ describe('runCheck output', () => {
       ['RESEND_API_KEY'],
     ],
     ['production', ALLOWED_PRODUCTION, 0, []],
+    [
+      'production',
+      { ...ALLOWED_PRODUCTION, DEMO_ACCOUNT_PASSWORD: SECRET.DEMO_ACCOUNT_PASSWORD },
+      1,
+      ['DEMO_ACCOUNT_PASSWORD'],
+    ],
     ['production', { ...ALLOWED_PRODUCTION, IS_TEST: SECRET.IS_TEST }, 1, ['IS_TEST']],
     [
       'production',
