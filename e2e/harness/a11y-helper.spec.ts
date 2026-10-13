@@ -154,6 +154,42 @@ test.describe('axe helper checks', () => {
     expect((await tabWalk(page)).failures).toEqual([]);
   });
 
+  // A wrapped link is partly obscured when a fixed banner covers one of its lines, which WCAG
+  // 2.4.11 (AA) allows; it fails only when no part of it is visible. The fixture puts a fixed
+  // banner over the top of a two-line link (lines at 0 to 24px and 24 to 48px).
+  const wrappedLink = (bannerHeight: number): string =>
+    fixture(
+      `<div style="position:fixed;top:0;left:0;right:0;height:${bannerHeight}px;background:#fff;z-index:1">Banner</div>` +
+        '<p style="width:90px;font:16px/24px sans-serif;margin:0">' +
+        '<a href="#x">Publish league</a>, then come back.</p>',
+      '<style>body{margin:0}</style>',
+    );
+
+  test('2.4.11: a wrapped link with one line under a banner and the other visible passes (#126)', async ({
+    page,
+  }) => {
+    await page.setContent(wrappedLink(30));
+    expect(await page.evaluate(() => document.querySelector('a')!.getClientRects().length)).toBe(2);
+    const covered = await page.evaluate(() => {
+      const box = document.querySelector('a')!.getBoundingClientRect();
+      return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.tagName;
+    });
+    // The centre of the whole link is under the banner, and its second line is clear.
+    expect(covered).toBe('DIV');
+    expect((await tabWalk(page)).failures).toEqual([]);
+  });
+
+  test('2.4.11: a wrapped link with every line under a banner fails (#126)', async ({ page }) => {
+    await page.setContent(wrappedLink(60));
+    expect(await page.evaluate(() => document.querySelector('a')!.getClientRects().length)).toBe(2);
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([
+      expect.stringMatching(
+        /^2\.4\.11 Focus not obscured: a "Publish league" is covered by div "Banner"/,
+      ),
+    ]);
+  });
+
   test('2.1.2: a Tab keydown handler that calls preventDefault fails the trap check', async ({
     page,
   }) => {
