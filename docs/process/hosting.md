@@ -4,11 +4,11 @@ How per-PR previews and staging are set up and checked on Netlify with Convex pr
 
 The Netlify project (site name, `<site>` below) is **`charming-longma-28c00d`**. The site name is not a secret.
 
-| Deploy     | URL                                                                            | Convex deployment                   | Netlify context  |
-| ---------- | ------------------------------------------------------------------------------ | ----------------------------------- | ---------------- |
-| PR preview | `https://deploy-preview-<n>--charming-longma-28c00d.netlify.app`               | preview `pr-<n>`, new on every push | `deploy-preview` |
-| Staging    | `https://main--charming-longma-28c00d.netlify.app`                             | preview `main`, new on every merge  | `branch-deploy`  |
-| Production | `https://charming-longma-28c00d.netlify.app` (private until the first release) | production (US East)                | `production`     |
+| Deploy     | URL                                                                            | Convex deployment                                                                                       | Netlify context  |
+| ---------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| PR preview | `https://deploy-preview-<n>--charming-longma-28c00d.netlify.app`               | preview `pr-<n>`, new on every push                                                                     | `deploy-preview` |
+| Staging    | `https://main--charming-longma-28c00d.netlify.app`                             | preview `main`, kept between merges until Convex deletes it 5 days after creation ([Cleanup](#cleanup)) | `branch-deploy`  |
+| Production | `https://charming-longma-28c00d.netlify.app` (private until the first release) | production (US East)                                                                                    | `production`     |
 
 ## Owner setup (one time)
 
