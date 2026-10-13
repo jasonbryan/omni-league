@@ -5,6 +5,13 @@
 /** How long an invite works: 14 days from creation (#67). Expired invites stay `pending`. */
 export const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
+/**
+ * How long after a revoke an org admin can undo it: 10 minutes (#211). The server checks it
+ * (`invites.restore`); the page only names it.
+ */
+export const INVITE_RESTORE_WINDOW_MINUTES = 10;
+export const INVITE_RESTORE_WINDOW_MS = INVITE_RESTORE_WINDOW_MINUTES * 60 * 1000;
+
 /** The longest address, as RFC 5321 allows. */
 export const MAX_INVITE_EMAIL_LENGTH = 254;
 
@@ -20,6 +27,21 @@ export interface InviteInputError {
   message: string;
 }
 
+/**
+ * Why `invites.restore` refused, as the `code` of its `ConvexError` data (#211): the two codes
+ * `create` also uses for the address (`alreadyMember`, `alreadyInvited`, with the same data), and
+ * `windowPassed`, `expired` (the invite's 14 days are over), and `leaguesGone` (a league of a
+ * league organizer invite no longer exists in the organization). Nothing is written for any.
+ */
+export type InviteRestoreCode =
+  'alreadyMember' | 'alreadyInvited' | 'windowPassed' | 'expired' | 'leaguesGone';
+
+/** A restore refusal that is not about a field: the `data` of the `ConvexError`. */
+export interface InviteRestoreError {
+  code: 'windowPassed' | 'expired' | 'leaguesGone';
+  message: string;
+}
+
 export const INVITE_MESSAGES = {
   emailEmpty: 'Enter their email address.',
   emailInvalid: 'Enter an email address like name@example.com.',
@@ -27,6 +49,13 @@ export const INVITE_MESSAGES = {
   alreadyMember: (email: string) => `${email} is already on your staff.`,
   alreadyInvited: (email: string) =>
     `${email} already has a pending invite. To send a new link, revoke that invite first.`,
+  restoreWindowPassed: `You can undo a revoke for ${INVITE_RESTORE_WINDOW_MINUTES} minutes. That time has passed. Invite this address again.`,
+  restoreExpired:
+    'This invite had expired, so its link cannot work again. Invite this address again.',
+  restoreAlreadyInvited: (email: string) =>
+    `${email} already has a newer pending invite, so the old link stays revoked.`,
+  restoreLeaguesGone:
+    'A league on this invite no longer exists. Invite this address again with the leagues you want.',
 } as const;
 
 /** The address as stored and compared: trimmed and lower case (Better Auth stores it that way). */

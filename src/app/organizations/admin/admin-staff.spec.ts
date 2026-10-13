@@ -25,6 +25,7 @@ const LIST_PENDING = 'invites:listPending';
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const CREATE = 'invites:create';
 const REVOKE = 'invites:revoke';
+const RESTORE = 'invites:restore';
 const tokens = (value: string) => value.split(' ').sort();
 
 /** The mockup's "today", at midday UTC so the shown date is the same in every time zone. */
@@ -944,8 +945,9 @@ describe('AdminStaff', () => {
       expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
         'Invite to dana.whitlock@example.com revoked.',
       );
+      // The description is followed by Undo (#211).
       expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
-        'Its link no longer works. You can invite this address again.',
+        'Its link no longer works. You can invite this address again. Undo revoking the invite to dana.whitlock@example.com',
       );
       expect(document.activeElement).toBe(box);
       const list = pendingSection().querySelector('ul')!;
@@ -1025,6 +1027,225 @@ describe('AdminStaff', () => {
       await press(0);
       await press(0);
       expect(o.convex.calls).toHaveLength(1);
+    });
+  });
+
+  describe('Undo a revoke (issue 211)', () => {
+    const DANA = 'dana.whitlock@example.com';
+    const statusBox = () => pendingSection().querySelector<HTMLElement>('[data-slot="alert"]');
+    const undoButton = () =>
+      [...pendingSection().querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        text(b)?.startsWith('Undo'),
+      );
+    const revokeButton = (n: number) => pending()[n].querySelector<HTMLButtonElement>('button')!;
+
+    /** Revokes Dana's invite and lets the live list drop it: the status now offers Undo. */
+    async function revokeDana(rest: unknown[] = [PENDING[1]]) {
+      await openFull();
+      revokeButton(0).click();
+      await o.flush();
+      o.convex.calls[0].resolve(null);
+      o.subscription(LIST_PENDING)!.emit(rest);
+      await o.flush();
+    }
+
+    async function pressUndo() {
+      undoButton()!.click();
+      await o.flush();
+    }
+
+    async function goOffline() {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await o.harness.fixture.whenStable();
+    }
+
+    it('the revoked status carries an Undo button, a helm outline button named for the invite', async () => {
+      await revokeDana();
+      const undo = undoButton()!;
+      expect(statusBox()!.contains(undo)).toBe(true);
+      expect(undo.getAttribute('type')).toBe('button');
+      expect(text(undo)).toBe(`Undo revoking the invite to ${DANA}`);
+      expect(undo.querySelector('.sr-only')?.textContent).toBe(` revoking the invite to ${DANA}`);
+      expect(tokens(undo.className)).toEqual(expect.arrayContaining(tokens(OUTLINE_BUTTON)));
+      expect(text(statusBox()!.querySelector('[data-slot="alert-description"]'))).toContain(
+        'Its link no longer works. You can invite this address again.',
+      );
+    });
+
+    it('a failed revoke offers no Undo', async () => {
+      await openFull();
+      revokeButton(0).click();
+      await o.flush();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      expect(undoButton()).toBeUndefined();
+    });
+
+    it('Undo sends one mutation with the invite id and shows its pending state at once', async () => {
+      await revokeDana();
+      await pressUndo();
+      expect(calls()[1]).toEqual([RESTORE, { inviteId: 'inv_dana' }]);
+      expect(o.convex.calls[1].kind).toBe('mutation');
+      const pendingUndo = undoButton()!;
+      expect(text(pendingUndo)).toBe('Undoing…');
+      expect(pendingUndo.getAttribute('aria-disabled')).toBe('true');
+      expect(pendingUndo.hasAttribute('disabled')).toBe(false);
+      // A second press while one is in flight sends nothing more.
+      await pressUndo();
+      expect(o.convex.calls).toHaveLength(2);
+    });
+
+    it('on success the status reads restored, the row returns, and the status takes focus', async () => {
+      await revokeDana();
+      await pressUndo();
+      o.convex.calls[1].resolve(null);
+      o.subscription(LIST_PENDING)!.emit(PENDING);
+      await o.flush();
+      const box = statusBox()!;
+      expect(box.getAttribute('role')).toBe('status');
+      expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+        `Invite to ${DANA} restored.`,
+      );
+      expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Its link works again.',
+      );
+      expect(text(box)).toBe(`Invite to ${DANA} restored. Its link works again.`);
+      expect(document.activeElement).toBe(box);
+      expect(undoButton()).toBeUndefined();
+      expect(pending().map((li) => text(li.querySelector('h3')))).toEqual([
+        DANA,
+        'r.castillo@example.com',
+      ]);
+    });
+
+    describe('a refusal from the server says why, keeps the invite revoked, and offers no more Undo', () => {
+      const refusals: [string, unknown, string][] = [
+        [
+          'the 10 minutes have passed',
+          { code: 'windowPassed', message: INVITE_MESSAGES.restoreWindowPassed },
+          'You can undo a revoke for 10 minutes. That time has passed. Invite this address again.',
+        ],
+        [
+          'the invite had expired',
+          { code: 'expired', message: INVITE_MESSAGES.restoreExpired },
+          'This invite had expired, so its link cannot work again. Invite this address again.',
+        ],
+        [
+          'another pending invite to the address exists',
+          {
+            field: 'email',
+            code: 'alreadyInvited',
+            message: INVITE_MESSAGES.alreadyInvited(DANA),
+          },
+          `${DANA} already has a newer pending invite, so the old link stays revoked.`,
+        ],
+        [
+          'the address is now a member',
+          { field: 'email', code: 'alreadyMember', message: INVITE_MESSAGES.alreadyMember(DANA) },
+          `${DANA} is already on your staff.`,
+        ],
+        [
+          'a league is gone',
+          { code: 'leaguesGone', message: INVITE_MESSAGES.restoreLeaguesGone },
+          'A league on this invite no longer exists. Invite this address again with the leagues you want.',
+        ],
+      ];
+      for (const [name, data, description] of refusals) {
+        it(name, async () => {
+          await revokeDana();
+          await pressUndo();
+          o.convex.calls[1].reject(new ConvexError(data as never));
+          await o.flush();
+          const box = statusBox()!;
+          expect(box.getAttribute('role')).toBe('alert');
+          expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+            `Invite to ${DANA} could not be restored.`,
+          );
+          expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(description);
+          expect(document.activeElement).toBe(box);
+          expect(undoButton()).toBeUndefined();
+          expect(pending()).toHaveLength(1);
+        });
+      }
+    });
+
+    it('any other failure shows the destructive alert, focuses it, and offers Undo again', async () => {
+      await revokeDana();
+      await pressUndo();
+      o.convex.calls[1].reject(new Error('Server Error: secret'));
+      await o.flush();
+      const box = statusBox()!;
+      expect(box.getAttribute('role')).toBe('alert');
+      expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The invite could not be restored.',
+      );
+      expect(text(box.querySelector('[data-slot="alert-description"]'))).toContain(
+        'Check your connection and try again.',
+      );
+      expect(page.textContent).not.toContain('secret');
+      expect(document.activeElement).toBe(box);
+      expect(text(undoButton())).toBe(`Undo revoking the invite to ${DANA}`);
+      await pressUndo();
+      expect(o.convex.calls).toHaveLength(3);
+      expect(calls()[2]).toEqual([RESTORE, { inviteId: 'inv_dana' }]);
+    });
+
+    it('offline, Undo is aria-disabled and a press sends nothing and shows the offline alert', async () => {
+      await revokeDana();
+      await goOffline();
+      expect(undoButton()!.getAttribute('aria-disabled')).toBe('true');
+      expect(undoButton()!.hasAttribute('disabled')).toBe(false);
+      await pressUndo();
+      expect(o.convex.calls).toHaveLength(1);
+      const box = statusBox()!;
+      expect(box.getAttribute('role')).toBe('alert');
+      expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+        "You're offline. Nothing was sent.",
+      );
+      expect(text(box.querySelector('[data-slot="alert-description"]'))).toContain(
+        'The invite is still revoked.',
+      );
+      expect(document.activeElement).toBe(box);
+      // Undo stays, to try again when connected.
+      expect(undoButton()).toBeDefined();
+    });
+
+    it('a refusal from the adapter at call time shows the offline alert', async () => {
+      await revokeDana();
+      await pressUndo();
+      o.convex.calls[1].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(text(statusBox()!.querySelector('[data-slot="alert-title"]'))).toBe(
+        "You're offline. Nothing was sent.",
+      );
+    });
+
+    it('the status leaves with the next press, and Undo with it', async () => {
+      await revokeDana();
+      revokeButton(0).click();
+      await o.flush();
+      expect(undoButton()).toBeUndefined();
+      expect(statusBox()).toBeNull();
+      o.convex.calls[1].resolve(null);
+      await o.flush();
+      expect(text(statusBox())).toContain('Invite to r.castillo@example.com revoked.');
+      expect(undoButton()).toBeDefined();
+    });
+
+    it('leaving the page drops the status and its Undo', async () => {
+      await revokeDana();
+      await o.harness.navigateByUrl('/app');
+      await o.harness.navigateByUrl(URL);
+      page = o.harness.routeNativeElement!;
+      o.subscription(GET_ADMIN_CONTEXT)?.emit(COASTAL);
+      await o.flush();
+      o.subscription(LIST_PENDING)?.emit([PENDING[1]]);
+      await o.flush();
+      expect(pending()).toHaveLength(1);
+      expect(statusBox()).toBeNull();
+      expect(undoButton()).toBeUndefined();
     });
   });
 });

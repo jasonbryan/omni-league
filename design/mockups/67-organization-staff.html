@@ -498,6 +498,16 @@
           link stops working, and the status at the top of the list confirms it and takes focus
           (drawn), because the button that had focus is gone.
         </p>
+        <p class="mt-2 max-w-3xl text-sm/relaxed text-muted-foreground">
+          <strong class="font-medium text-foreground">Decision 7, changed by #211: Undo.</strong>
+          The status carries an Undo button. Undo works for 10 minutes after the revoke, and the
+          server enforces that window (<code>invites.restore</code>), not the page. It sets the same
+          invite back to pending, with the same link and expiry, so the link the org admin already
+          sent works again, and the status says so and takes focus. Undo is refused, and the status
+          says why, after 10 minutes, once the invite has expired, when another pending invite to
+          the address exists, when the address has joined the staff, or when a league on the invite
+          no longer exists. Inviting the address again stays the way back after that.
+        </p>
         <div
           tabindex="0"
           role="region"
@@ -671,10 +681,51 @@
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">Revoked</th>
                 <td class="px-4 py-2 align-top">
                   "Invite to &lt;email&gt; revoked." / "Its link no longer works. You can invite
-                  this address again."
+                  this address again." Then the button "Undo" (decision 7, #211)
                 </td>
                 <td class="px-4 py-2 align-top">Status above the pending list</td>
                 <td class="px-4 py-2 align-top">The status</td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">Restored</th>
+                <td class="px-4 py-2 align-top">
+                  "Invite to &lt;email&gt; restored." / "Its link works again."
+                </td>
+                <td class="px-4 py-2 align-top">
+                  Status above the pending list; the invite is back in the list
+                </td>
+                <td class="px-4 py-2 align-top">The status</td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">
+                  Restore refused
+                </th>
+                <td class="px-4 py-2 align-top">
+                  "Invite to &lt;email&gt; could not be restored." / one of: "You can undo a revoke
+                  for 10 minutes. That time has passed. Invite this address again."; "This invite
+                  had expired, so its link cannot work again. Invite this address again.";
+                  "&lt;email&gt; already has a newer pending invite, so the old link stays
+                  revoked."; "&lt;email&gt; is already on your staff."; "A league on this invite no
+                  longer exists. Invite this address again with the leagues you want."
+                </td>
+                <td class="px-4 py-2 align-top">
+                  Destructive alert above the pending list; no Undo
+                </td>
+                <td class="px-4 py-2 align-top">The alert</td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">
+                  Restore failed
+                </th>
+                <td class="px-4 py-2 align-top">
+                  "The invite could not be restored." / "Check your connection and try again."
+                  Offline: "You're offline. Nothing was sent." / "The invite is still revoked. Try
+                  again when you're connected."
+                </td>
+                <td class="px-4 py-2 align-top">
+                  Destructive alert above the pending list; Undo stays, to try again
+                </td>
+                <td class="px-4 py-2 align-top">The alert</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
@@ -752,6 +803,18 @@
                 <td class="px-4 py-2 align-top"><code>button</code>, helm destructive</td>
                 <td class="px-4 py-2 align-top">"Revoke the invite to &lt;email&gt;"</td>
                 <td class="px-4 py-2 align-top">Acts at once</td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">Undo</th>
+                <td class="px-4 py-2 align-top">
+                  <code>button</code>, helm outline, inside the revoked status; at least 44px high
+                  on touch screens
+                </td>
+                <td class="px-4 py-2 align-top">"Undo revoking the invite to &lt;email&gt;"</td>
+                <td class="px-4 py-2 align-top">
+                  <code>aria-disabled</code> while it works ("Undoing…") and offline; allowed for 10
+                  minutes, enforced by the server
+                </td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
@@ -8844,6 +8907,31 @@ https://charming-longma-28c00d.netlify.app/invites/accept#vT3kq9Xo-PwGYsFI6eyKfm
                           class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
                         >
                           Its link no longer works. You can invite this address again.
+                          <div class="mt-2">
+                            <button
+                              type="button"
+                              data-slot="button"
+                              class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3"
+                            >
+                              <ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                                ><svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                                >
+                                  <path d="M9 14 4 9l5-5"></path>
+                                  <path
+                                    d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"
+                                  ></path></svg></ng-icon
+                              >Undo<span class="sr-only">
+                                revoking the invite to r.castillo@example.com</span
+                              >
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
