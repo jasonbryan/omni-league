@@ -350,4 +350,49 @@ describe('organizations.listMine: leagues (#141)', () => {
       ['Org B', 'orgAdmin', 0],
     ]);
   });
+
+  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once (#196)", async () => {
+    const { t, as, organizationA, organizationB } = await setup();
+    // Org A (first by name) names LIST_MINE_LEAGUES_LIMIT foreign leagues (all of organization B's)
+    // plus one repeat: every read is spent, no row is listed, and Org B then has no budget left.
+    const foreign = await leaguesOf(
+      t,
+      organizationB,
+      'B Field',
+      'Foreign',
+      LIST_MINE_LEAGUES_LIMIT,
+    );
+    await assign(t, organizationA, 'leagueOrganizer', [...foreign, foreign[0]]);
+    const bOwn = await leaguesOf(t, organizationB, 'B Field', 'Own', 3);
+    await addMembership(t, organizationB, 'leagueOrganizer', bOwn);
+    const rows = await as('organizer').query(api.organizations.listMine, {});
+    expect(rows.map((row) => [row.name, row.leagues.length])).toEqual([
+      ['Org A', 0],
+      ['Org B', 0],
+    ]);
+    expect(JSON.stringify(rows)).not.toMatch(/Foreign|Own/);
+  });
+
+  test("another user's assignments never spend the caller's budget or appear in their rows (#196)", async () => {
+    const { t, as, organizationA } = await setup();
+    const many = await leaguesOf(t, organizationA, 'Alpha Field', 'Many', LIST_MINE_LEAGUES_LIMIT);
+    await t.run(async (ctx) => {
+      const other = await ctx.db.insert('users', {
+        authUserId: 'other',
+        name: 'other',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId: other,
+        organizationId: organizationA,
+        role: 'leagueOrganizer',
+        leagueIds: many,
+      });
+    });
+    const mine = await as('organizer').query(api.organizations.listMine, {});
+    expect(mine.map((row) => row.leagues.map((league) => league.name))).toEqual([
+      ['beach 2s', 'Coed Soccer', 'L Draft'],
+    ]);
+    expect(JSON.stringify(mine)).not.toContain('Many');
+  });
 });
