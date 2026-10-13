@@ -165,7 +165,8 @@ test.describe('public season page: raw server HTML', () => {
         expect(dates, query).toContain('datetime="2027-06-06"');
         expect(dates, query).toContain('datetime="2027-08-29"');
         expect(textOf(dates), query).toBe('Jun 6 – Aug 29, 2027');
-        expect(textOf(definition(html, 'Format')), query).toBe('4 v 4');
+        expect(textOf(definition(html, 'Format')), query).toBe('4v4');
+        expect(html, query).not.toContain('4 v 4');
         expect(textOf(definition(html, 'Team size')), query).toBe('Teams need at least 4 players');
         // The league's locations, in its own order.
         expect(textOf(definition(html, 'Locations')), query).toBe('Beta Courts, Alpha Field');
@@ -189,7 +190,7 @@ test.describe('public season page: raw server HTML', () => {
         expect(metaContent(html, 'og:title'), query).toBe('Summer 2027');
         expect(metaContent(html, 'og:type'), query).toBe('website');
         expect(metaContent(html, 'og:description'), query).toBe(
-          'Jun 6 – Aug 29, 2027. 4 v 4, teams need at least 4 players.',
+          'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
         );
         expect(html, query).not.toContain('SECRETtoken');
         expect(html, query).not.toContain('Draft Season');
@@ -245,7 +246,7 @@ test.describe('public season page: dates and locations in the raw server HTML', 
       expect(crossDates).toContain('<time datetime="2027-12-01">Dec 1, 2027</time>');
       expect(crossDates).toContain('<time datetime="2028-02-20">Feb 20, 2028</time>');
       expect(metaContent(cross.html, 'og:description')).toBe(
-        'Dec 1, 2027 – Feb 20, 2028. 4 v 4, teams need at least 4 players.',
+        'Dec 1, 2027 – Feb 20, 2028. 4v4, teams need at least 4 players.',
       );
 
       const one = await fetchRawHtml(request, `${league}/one-day-cup`);
@@ -255,7 +256,7 @@ test.describe('public season page: dates and locations in the raw server HTML', 
       expect(oneDates?.match(/<time\b/g)).toHaveLength(1);
       expect(oneDates).not.toContain('–');
       expect(metaContent(one.html, 'og:description')).toBe(
-        'Sep 4, 2027. 4 v 4, teams need at least 4 players.',
+        'Sep 4, 2027. 4v4, teams need at least 4 players.',
       );
 
       // A league with one location: the label is singular.

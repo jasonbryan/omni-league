@@ -197,7 +197,7 @@ describe('PublicLeaguePage populated', () => {
     );
     expect(text(rows[0].querySelector('p'))).toBe('Dates: Jun 6 – Aug 29, 2027');
     expect(text(rows[2].querySelector('p'))).toBe('Dates: Sep 13 – Nov 15, 2026');
-    expect(text(rows[0].querySelector('[data-slot="badge"]'))).toBe('4 v 4');
+    expect(text(rows[0].querySelector('[data-slot="badge"]'))).toBe('4v4');
   });
 
   it('shows the range and the numbered control of page 1 of 2', () => {

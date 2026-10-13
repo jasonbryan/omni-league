@@ -161,7 +161,7 @@ describe('PublicSeasonPage populated', () => {
     expect(text(panel?.querySelector('h2'))).toBe('Season details');
     expect(details(harness)).toEqual([
       ['Dates', 'Jun 6 – Aug 29, 2027'],
-      ['Format', '4 v 4'],
+      ['Format', '4v4'],
       ['Team size', 'Teams need at least 4 players'],
       ['Location', 'North Beach Sand Courts'],
     ]);
@@ -193,7 +193,7 @@ describe('PublicSeasonPage populated', () => {
     expect(metaContent('og:title')).toBe('Summer 2027');
     expect(metaContent('og:type')).toBe('website');
     expect(metaContent('og:description')).toBe(
-      'Jun 6 – Aug 29, 2027. 4 v 4, teams need at least 4 players.',
+      'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
     );
     expect(metaContent('og:url')).toBe(`${window.location.origin}${PATH}`);
     expect(canonical()).toBe(`${window.location.origin}${PATH}`);
@@ -276,7 +276,7 @@ describe('PublicSeasonPage populated', () => {
     expect(details(harness)[0]).toEqual(['Dates', 'Jun 13 – Sep 5, 2027']);
     expect(details(harness)[2]).toEqual(['Team size', 'Teams need at least 6 players']);
     expect(metaContent('og:description')).toBe(
-      'Jun 13 – Sep 5, 2027. 4 v 4, teams need at least 6 players.',
+      'Jun 13 – Sep 5, 2027. 4v4, teams need at least 6 players.',
     );
     // The same elements: the page was not torn down and rebuilt.
     expect(host(harness).querySelector('main h1')).toBe(h1);

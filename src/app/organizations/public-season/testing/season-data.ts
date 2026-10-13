@@ -21,7 +21,7 @@ export const SUMMER_2027: PublicSeasonData = {
   slug: 'summer-2027',
   startDate: '2027-06-06',
   endDate: '2027-08-29',
-  formatName: '4 v 4',
+  formatName: '4v4',
   minimumRosterSize: 4,
 };
 

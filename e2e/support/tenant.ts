@@ -96,7 +96,7 @@ export function numberedSeasons(count: number): SeasonSeed[] {
 }
 
 /**
- * Adds seasons to a beach volleyball (4 v 4) league of the tenant through `testing:seedSeason`
+ * Adds seasons to a beach volleyball (4v4) league of the tenant through `testing:seedSeason`
  * (#125), in one go. Local runs only.
  */
 export async function seedSeasons(

@@ -486,7 +486,7 @@ async function fill(
   await page.locator('#start-date').fill(values.startDate);
   await page.locator('#end-date').fill(values.endDate);
   await page.locator('#registration-deadline').fill(values.registrationDeadline);
-  await page.getByRole('radio', { name: '7 v 7' }).check();
+  await page.getByRole('radio', { name: '7v7' }).check();
   // The format sets the minimum in a later render; a minimum typed before it would be overwritten.
   await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
 }
@@ -722,7 +722,7 @@ for (const width of WIDTHS) {
       await page.goto(`/app/organizations/${shared.slug}/leagues/${SLOW_PITCH}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(1);
       // Softball's only format is chosen from the start, as in the mockup.
-      await expect(page.getByRole('radio', { name: '10 v 10' })).toBeChecked();
+      await expect(page.getByRole('radio', { name: '10v10' })).toBeChecked();
       await mockupMatches(page, browser, shared.name, 'draft-league-admin', width, testInfo);
     });
 

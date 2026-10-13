@@ -106,7 +106,7 @@ describe('seasons.getPublicPage', () => {
       slug: 'summer-2027',
       startDate: '2027-06-06',
       endDate: '2027-08-29',
-      formatName: '4 v 4',
+      formatName: '4v4',
       minimumRosterSize: 5,
     });
   });
@@ -169,13 +169,13 @@ describe('seasons.getPublicPage', () => {
   test('the same season slug in two leagues answers each league’s own season', async () => {
     const t = await setup();
     const sand = await get(t, 'org-a', 'sand-4s', 'summer-2027');
-    expect(sand?.formatName).toBe('4 v 4');
+    expect(sand?.formatName).toBe('4v4');
     // Another league's slug, `coed-7v7`, has only `coed-summer`: no `summer-2027`.
     expect(await get(t, 'org-a', 'coed-7v7', 'summer-2027')).toBeNull();
     const coed = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
     expect(coed).toMatchObject({
       league: { sportName: 'Soccer' },
-      formatName: '7 v 7',
+      formatName: '7v7',
       minimumRosterSize: 7,
     });
   });
