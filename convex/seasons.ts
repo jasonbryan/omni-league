@@ -8,10 +8,11 @@ import {
   type SeasonInputError,
 } from './lib/seasonInput';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
-import { publicSeasonsValidator } from './lib/publicPage';
-import { findLeagueBySlugs } from './lib/seasonLookup';
+import { leagueLocationNames } from './lib/publicLeague';
+import { getSeasonPublicPageReturns, publicSeasonsValidator } from './lib/publicPage';
+import { findLeagueBySlugs, findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { formatName, formatValidator } from './lib/sports';
+import { formatName, formatValidator, sportName } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 
 /**
@@ -198,6 +199,46 @@ export const listPublic = query({
       page,
       pageCount,
       total,
+    };
+  },
+});
+
+/**
+ * The public season page's data (#128): the organization's name and slug; the league's name, slug,
+ * sport display name, and location names; and the season's name, slug, dates as stored
+ * (`YYYY-MM-DD`, no time zone), format display name, and minimum roster size. `null` unless both
+ * the season and its league are `published`: a draft season, a published season of a draft league
+ * (or of a league stored without a status), and an unknown organization, league, or season, so
+ * nothing public says whether a draft's slug exists. The season is looked up in the league named
+ * by the slugs only (`findSeasonBySlugs`), so a season slug of another league is unknown.
+ *
+ * Deliberately public (convex.md, Functions): anonymous, the same result for every caller, and no
+ * id, status, registration deadline, or counter (`publicSeasonPageValidator`,
+ * `lib/publicPage.ts`). It writes no row. Registration fields join the result with #129 and #143.
+ */
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (ADR 0002): an anonymous public page that reads no identity and returns only published fields.
+export const getPublicPage = query({
+  args: seasonSlugsValidator.fields,
+  // The app checks saved copies against this same validator (convex/lib/publicPage.ts, #82).
+  returns: getSeasonPublicPageReturns,
+  handler: async (ctx, args) => {
+    const found = await findSeasonBySlugs(ctx, args);
+    if (found?.league.status !== 'published' || found.season.status !== 'published') return null;
+    const { organization, league, season } = found;
+    return {
+      organization: { name: organization.name, slug: organization.slug },
+      league: {
+        name: league.name,
+        slug: league.slug,
+        sportName: sportName(league.sport),
+        locationNames: await leagueLocationNames(ctx, organization, league),
+      },
+      name: season.name,
+      slug: season.slug,
+      startDate: season.startDate,
+      endDate: season.endDate,
+      formatName: formatName(league.sport, season.format),
+      minimumRosterSize: season.minimumRosterSize,
     };
   },
 });

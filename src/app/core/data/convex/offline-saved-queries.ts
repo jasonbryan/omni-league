@@ -4,6 +4,7 @@ import { api } from '../../../../../convex/_generated/api';
 import {
   getLeaguePublicPageReturns,
   getPublicPageReturns,
+  getSeasonPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
   publicSeasonsValidator,
@@ -45,7 +46,7 @@ function savedQuery<Q extends FunctionReference<'query'>>(
  * Functions) and its result does not depend on the caller, so a saved copy never holds signed-in
  * or per-user data, whoever was signed in when it was written. A query that reads the caller's
  * identity, or ever may, is never listed. Each public page adds its own query in its own issue
- * (schedules, standings); the league page's (#127) are listed below.
+ * (schedules, standings); the league page's (#127) and the season page's (#128) are listed below.
  */
 export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.organizations.getPublicPage, getPublicPageReturns, 1),
@@ -58,4 +59,8 @@ export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   // (above) for its sidebar, so it opens offline once all three have been viewed together.
   savedQuery(api.leagues.getPublicPage, getLeaguePublicPageReturns, 1),
   savedQuery(api.seasons.listPublic, publicSeasonsValidator, 1),
+  // The public season page (#128): the season with its league. The page also keeps
+  // `organizations.getPublicPage` (above) for its sidebar, so it opens offline once both have
+  // been viewed together.
+  savedQuery(api.seasons.getPublicPage, getSeasonPublicPageReturns, 1),
 ];
