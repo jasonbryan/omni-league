@@ -66,6 +66,7 @@ The planner writes issues using `.github/ISSUE_TEMPLATE/feature.yml`. Each issue
 
 - user story and acceptance criteria written as checkable Given/When/Then statements
 - test plan naming the unit, Convex, and e2e tests that prove each criterion
+- a **Demo data** criterion when the issue adds or changes a table, a field, or a user-visible feature: it names the rows `seed:demo` adds, or the demo account that shows the feature, or says `Demo data: none` with the reason ([Demo data](hosting.md#demo-data))
 - gates required, with reasons
 - `Blocked by: #n` lines for dependencies
 
@@ -104,6 +105,7 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Write the failing test for each acceptance criterion first, then the code.
 - Build UI against the design system: `src/styles/tokens.css`, `design/mockup-kit/`, [Angular conventions](../conventions/angular.md), and the approved mockups in `design/mockups/` as references. Where an approved mockup covers the screen, match it. Use tokens only: no new colours or tokens, and no new patterns where an existing one fits.
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
+- Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 - Stop local processes as in [Local processes](#local-processes).
@@ -121,6 +123,9 @@ The tester checks out the PR branch in its own worktree and verifies it without 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
 - The full suite, including the serial unit tests, and e2e tests run; UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
+- The demo data shows the feature:
+  - **Screens behind sign-in:** the proof is a screenshot as the matching demo account on the anonymous local backend with a local build ([hosting, Service worker, "With data"](hosting.md#service-worker)), using a throwaway `DEMO_ACCOUNT_PASSWORD` set only on that backend. `DEMO_ACCOUNT_PASSWORD` is owner-held and never given to an agent ([AGENTS.md, Secrets](../../AGENTS.md#secrets)), so no agent signs in on a preview.
+  - **Signed-out pages:** the screenshot may come from the seeded preview.
 - Stop local processes as in [Local processes](#local-processes).
 
 Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fixes it and the tester re-runs.
@@ -130,6 +135,8 @@ Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fix
 ### 6. PR review
 
 The PR reviewer reads the full diff against the issue and the conventions files, and returns `APPROVE` or `CHANGES` with file:line findings ranked by severity. Focus: correctness, Convex authorization and argument validation, Stripe safety, Angular conventions, visible changes that break the design system, test quality, and scope creep beyond the issue.
+
+It compares the PR's seed change with the issue's own Demo data criterion. A PR that does not deliver it is a **blocking** finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 
 On `CHANGES`, the implementer fixes it, then the tester re-runs, then the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
 
