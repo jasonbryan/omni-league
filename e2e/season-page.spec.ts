@@ -31,6 +31,20 @@ const NEW_YEAR: SeasonSeed = {
   startDate: '2027-01-01',
   endDate: '2027-03-01',
 };
+/** A season across two years: both dates carry their year. */
+const CROSS_YEAR: SeasonSeed = {
+  name: 'Winter 2027-28',
+  slug: 'winter-2027-28',
+  startDate: '2027-12-01',
+  endDate: '2028-02-20',
+};
+/** A season of one day: one date, no end. */
+const ONE_DAY: SeasonSeed = {
+  name: 'One Day Cup',
+  slug: 'one-day-cup',
+  startDate: '2027-09-04',
+  endDate: '2027-09-04',
+};
 const DRAFT_SEASON: SeasonSeed = {
   name: 'Draft Season',
   slug: 'draft-season',
@@ -69,7 +83,7 @@ async function seed(): Promise<SeededSeason> {
     ],
   });
   await Promise.all([
-    seedSeasons(tenant, LEAGUE_SLUG, [SUMMER, NEW_YEAR, DRAFT_SEASON]),
+    seedSeasons(tenant, LEAGUE_SLUG, [SUMMER, NEW_YEAR, CROSS_YEAR, ONE_DAY, DRAFT_SEASON]),
     seedSeasons(tenant, 'draft-league', [SUMMER]),
     seedSeasons(tenant, 'other-league', [
       {
@@ -216,6 +230,46 @@ test.describe('public season page: raw server HTML', () => {
   );
 });
 
+test.describe('public season page: dates and locations in the raw server HTML', () => {
+  test(
+    'a season across two years writes both years, a season of one day writes one date, and one location reads "Location" (tester probe)',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant } = await seed();
+      const league = `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons`;
+
+      const cross = await fetchRawHtml(request, `${league}/winter-2027-28`);
+      expect(cross.status).toBe(200);
+      const crossDates = definition(cross.html, 'Dates');
+      expect(textOf(crossDates)).toBe('Dec 1, 2027 – Feb 20, 2028');
+      expect(crossDates).toContain('<time datetime="2027-12-01">Dec 1, 2027</time>');
+      expect(crossDates).toContain('<time datetime="2028-02-20">Feb 20, 2028</time>');
+      expect(metaContent(cross.html, 'og:description')).toBe(
+        'Dec 1, 2027 – Feb 20, 2028. 4 v 4, teams need at least 4 players.',
+      );
+
+      const one = await fetchRawHtml(request, `${league}/one-day-cup`);
+      expect(one.status).toBe(200);
+      const oneDates = definition(one.html, 'Dates');
+      expect(textOf(oneDates)).toBe('Sep 4, 2027');
+      expect(oneDates?.match(/<time\b/g)).toHaveLength(1);
+      expect(oneDates).not.toContain('–');
+      expect(metaContent(one.html, 'og:description')).toBe(
+        'Sep 4, 2027. 4 v 4, teams need at least 4 players.',
+      );
+
+      // A league with one location: the label is singular.
+      const single = await fetchRawHtml(
+        request,
+        `${tenant.path}/leagues/other-league/seasons/other-season`,
+      );
+      expect(single.status).toBe(200);
+      expect(textOf(definition(single.html, 'Location'))).toBe('Alpha Field');
+      expect(definition(single.html, 'Locations')).toBeUndefined();
+    },
+  );
+});
+
 test.describe('public season page in the browser', () => {
   test('hydrates with no console error and passes the axe helper', async ({
     page,
@@ -303,5 +357,74 @@ test.describe('public season page in the browser', () => {
       .click();
     await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
+  });
+});
+
+// Offline (#82): chromium-mobile only (ADR 0013).
+test.describe('public season page offline', () => {
+  test('offline (tester probe): a viewed season opens offline from its saved copy with the note; a season never viewed shows the not-saved view', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only (ADR 0013)');
+    const tenant = await seedTenant({
+      name: 'E2E Season Offline',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [{ name: 'Offline League', sport: 'beachVolleyball', locations: ['Alpha Field'] }],
+    });
+    await seedSeasons(tenant, 'offline-league', [
+      {
+        name: 'Winter 2027-28',
+        slug: 'winter-2027-28',
+        startDate: '2027-12-01',
+        endDate: '2028-02-20',
+      },
+      { name: 'Spring 2028', slug: 'spring-2028', startDate: '2028-03-01', endDate: '2028-05-30' },
+    ]);
+    const leaguePath = `${tenant.path}/leagues/offline-league`;
+    const winterPath = `${leaguePath}/seasons/winter-2027-28`;
+    const springPath = `${leaguePath}/seasons/spring-2028`;
+    const h1 = page.locator('main h1');
+    const note = page.locator('app-saved-copy-note');
+    const dates = page.locator('main dl > div').filter({ hasText: 'Dates' }).locator('dd');
+    const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+
+    // Online: the league page, then one season through its row, then back through the breadcrumb.
+    await page.goto(leaguePath);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
+    await expect(h1).toHaveText('Winter 2027-28');
+    await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
+    await expect(note).toHaveCount(0);
+    await crumbs.getByRole('link', { name: 'Offline League' }).click();
+    await expect(h1).toHaveText('Offline League');
+
+    // Offline: the viewed season opens from its saved copies (the season and the organization
+    // header), with the saved-copy note under the h1.
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
+    await expect(h1).toHaveText('Winter 2027-28');
+    await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
+    await expect(dates.locator('time')).toHaveText(['Dec 1, 2027', 'Feb 20, 2028']);
+    await expect(note).toBeVisible();
+    await expect(page.locator('app-not-saved-view')).toHaveCount(0);
+
+    // A season never viewed has no saved copy: the not-saved view, with "Try again" to the page
+    // asked for, and no season details.
+    await crumbs.getByRole('link', { name: 'Offline League' }).click();
+    await expect(h1).toHaveText('Offline League');
+    await page.getByRole('main').getByRole('link', { name: 'Spring 2028', exact: true }).click();
+    await expect(page.locator('app-not-saved-view')).toBeVisible({ timeout: 3_000 });
+    await expect(page.locator('main dl')).toHaveCount(0);
+    await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(page.locator('app-not-saved-view a')).toHaveAttribute('href', springPath);
+
+    // Back online: the live season replaces the not-saved view.
+    await context.setOffline(false);
+    await page.goto(winterPath);
+    await expect(h1).toHaveText('Winter 2027-28');
+    await expect(note).toHaveCount(0);
   });
 });
