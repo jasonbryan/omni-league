@@ -247,26 +247,39 @@ function refuseAccept(code: AcceptRefusal): never {
   throw new ConvexError({ code });
 }
 
-/** The organization's name and the names of the invite's leagues that still exist in it. */
+/**
+ * The organization's name and slug and the invite's leagues that still exist in it (ids, and each
+ * league's name and slug).
+ */
 async function summarise(
   ctx: Pick<QueryCtx, 'db'>,
   invite: Doc<'invites'>,
 ): Promise<{
   organizationName: string;
+  organizationSlug: string;
   leagueIds: Id<'leagues'>[];
   leagueNames: string[];
+  leagues: { name: string; slug: string }[];
 }> {
   const organization = await ctx.db.get('organizations', invite.organizationId);
   const leagueIds: Id<'leagues'>[] = [];
   const leagueNames: string[] = [];
+  const leagues: { name: string; slug: string }[] = [];
   for (const id of invite.leagueIds) {
     const league = await ctx.db.get('leagues', id);
     if (league?.organizationId === invite.organizationId) {
       leagueIds.push(id);
       leagueNames.push(league.name);
+      leagues.push({ name: league.name, slug: league.slug });
     }
   }
-  return { organizationName: organization?.name ?? '', leagueIds, leagueNames };
+  return {
+    organizationName: organization?.name ?? '',
+    organizationSlug: organization?.slug ?? '',
+    leagueIds,
+    leagueNames,
+    leagues,
+  };
 }
 
 /**
@@ -305,13 +318,21 @@ export const getByToken = query({
  * membership per user per organization, and changing a role is a later slice). It then creates the
  * membership (an org admin, or a league organizer with the invite's leagues that still exist) and
  * marks the invite accepted in the same transaction. A concurrent second accept sees the invite
- * accepted and is refused, so the membership is never created twice. Refusals are a
+ * accepted and is refused, so the membership is never created twice. It returns the organization's
+ * name and slug, the role, and the leagues granted (`leagues`: name and slug, for the page's "Open"
+ * link, #212); `leagueNames` stays for the previous frontend and may go in a release at least 14
+ * days after #212 ships. Only the caller who just accepted receives the slugs; `getByToken` still
+ * shows a visitor none. Refusals are a
  * `ConvexError` whose data is `{ code: AcceptRefusal }`; a caller who is not signed in gets
  * `Sign in required`.
  */
 export const accept = mutation({
   args: { token: v.string() },
-  returns: v.object(inviteSummaryFields),
+  returns: v.object({
+    ...inviteSummaryFields,
+    organizationSlug: v.string(),
+    leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
+  }),
   handler: async (ctx, { token }) => {
     const user = await requireUser(ctx);
     const invite = await findUsableInvite(ctx, token, Date.now());
@@ -330,7 +351,10 @@ export const accept = mutation({
       .unique();
     if (existing) refuseAccept('alreadyMember');
 
-    const { organizationName, leagueIds, leagueNames } = await summarise(ctx, invite);
+    const { organizationName, organizationSlug, leagueIds, leagueNames, leagues } = await summarise(
+      ctx,
+      invite,
+    );
     await insertMembership(
       ctx,
       user._id,
@@ -339,6 +363,6 @@ export const accept = mutation({
       invite.role === 'orgAdmin' ? [] : leagueIds,
     );
     await ctx.db.patch('invites', invite._id, { status: 'accepted' });
-    return { organizationName, role: invite.role, leagueNames };
+    return { organizationName, organizationSlug, role: invite.role, leagueNames, leagues };
   },
 });
