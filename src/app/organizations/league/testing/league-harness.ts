@@ -51,6 +51,31 @@ export const GET_ORGANIZER_CONTEXT = 'leagues:getOrganizerContext';
 export const LIST_FOR_ORGANIZER = 'seasons:listForOrganizer';
 export const CREATE_SEASON = 'seasons:create';
 export const PUBLISH_SEASON = 'seasons:publish';
+export const LIST_MINE = 'organizations:listMine';
+
+/**
+ * What `organizations.listMine` returns for the league organizer of the mockup's organization
+ * (design/mockups/125-126-seasons.html state 12): three assigned leagues, sorted by name, and
+ * another organization the caller organizes a league of.
+ */
+export const MINE_AS_ORGANIZER = [
+  {
+    name: GULF.name,
+    slug: GULF.slug,
+    role: 'leagueOrganizer',
+    leagues: [
+      { name: 'Coed 7v7 Rec', slug: COED.slug },
+      { name: 'Friday Night Coed 6s', slug: 'friday-night-coed-6s' },
+      { name: 'Thursday Night Coed 2s', slug: 'thursday-night-coed-2s' },
+    ],
+  },
+  {
+    name: 'Lakeside Softball',
+    slug: 'lakeside-softball',
+    role: 'leagueOrganizer',
+    leagues: [{ name: 'Tuesday Slowpitch', slug: 'tuesday-slowpitch' }],
+  },
+];
 
 export const LEAGUE_URL = `/app/organizations/${GULF.slug}/leagues/${COED.slug}`;
 

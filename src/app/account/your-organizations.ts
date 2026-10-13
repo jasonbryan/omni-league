@@ -30,13 +30,10 @@ export function organizationInitials(name: string): string {
 
 const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' } as const;
 
-/** A league link: the sidebar-item style, 36px tall (design/mockups/141-app-leagues.html). */
-const LEAGUE_LINK =
-  'flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted';
-
 // Every class string below is the approved mockup's, written as a static attribute
-// (design/mockups/64-create-organization.html); the buttons carry `buttonVariants` output
-// unmerged, as the mockup draws them, and your-organizations.spec.ts checks them.
+// (design/mockups/64-create-organization.html, 141-app-leagues.html); the buttons carry
+// `buttonVariants` output unmerged, as the mockup draws them, and your-organizations.spec.ts
+// checks them.
 
 /**
  * "Your organizations" on `/app` (#64; design/mockups/64-create-organization.html states 1 to 4):
@@ -200,7 +197,9 @@ const LEAGUE_LINK =
                     >
                       @for (league of row.leagues; track league.slug) {
                         <li>
-                          <a [routerLink]="league.path" [class]="leagueLink"
+                          <a
+                            [routerLink]="league.path"
+                            class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted"
                             ><ng-icon
                               name="lucideTrophy"
                               class="shrink-0 text-base text-muted-foreground"
@@ -244,7 +243,6 @@ export class YourOrganizations {
   );
 
   protected readonly placeholders = [1, 2];
-  protected readonly leagueLink = LEAGUE_LINK;
   protected readonly failed = computed(() => this.mine.error() !== undefined);
   protected readonly loading = computed(() => this.mine.value() === undefined);
   protected readonly rows = computed(() =>
