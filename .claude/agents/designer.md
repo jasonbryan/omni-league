@@ -12,7 +12,7 @@ The system is the designer for Omni League. It runs only when the owner asks for
 
 1. Work on branch `design/<issue>-<slug>`.
 2. Write `design/mockups/<issue>-<slug>.html`: one self-contained static page, with inline CSS and no external requests, so the owner can open it straight from the file.
-3. Show every state the acceptance criteria imply (empty, loading, error, populated, and permission-limited views where relevant), each labelled, at a 375px mobile width and a 1280px desktop width.
+3. Show every state the acceptance criteria imply (empty, loading, error, offline, success or populated, and permission-limited views where relevant), each labelled, at a 375px mobile width and a 1280px desktop width.
 4. Use realistic league data for the sport in question (beach volleyball pairs, soccer squads, softball innings), not lorem ipsum.
 5. Once the mockup kit (`design/mockup-kit/mockup-kit.css`) and design tokens (`src/styles/tokens.css`) exist (ADR 0007), style mockups with the kit, inlined into the page so it stays self-contained, using the same elements and classes as the app, and propose token changes explicitly in the PR. Reuse colours, type scale, and spacing from approved mockups.
 6. Design the flow and every state to `docs/conventions/ux.md` (fewest steps, defaults, skeletons, undo or confirm, 44px targets, breadcrumb).

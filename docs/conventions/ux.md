@@ -1,6 +1,6 @@
 # UX conventions
 
-Applies to every task flow and screen: planning, building, testing, and reviewing UI. It adds flow and behaviour rules to the design system (`src/styles/tokens.css`, `design/mockup-kit/`, approved mockups in `design/mockups/`) and to the [Angular conventions](angular.md). Where an approved mockup and a rule here disagree, the mockup wins for that screen until an issue changes it.
+Applies to every task flow and screen: planning, building, testing, and reviewing UI. It adds flow and behaviour rules to the design system (`src/styles/tokens.css`, `design/mockup-kit/`, approved mockups in `design/mockups/`) and to the [Angular conventions](angular.md). Where an approved mockup and a rule here disagree, the mockup wins for that screen until an issue changes it. The rules and the [UX checklist](#ux-checklist) apply to what a PR adds or changes. A gap that was already there and has an open issue is a note on the PR linking that issue, not a failure.
 
 ## Task flows
 
@@ -14,7 +14,7 @@ Applies to every task flow and screen: planning, building, testing, and reviewin
 
 ## States
 
-Every screen designs, builds, and tests five states: **empty**, **loading**, **error**, **offline**, and **success**.
+Every screen designs, builds, and tests each of these states that applies: **empty**, **loading**, **error**, **offline**, and **success**. A state that cannot occur (sign-in has no empty state, a prerendered page no loading state) is marked N/A with the reason.
 
 - Empty states say what will appear and carry the primary action that fills them (or say who can).
 - Loading content uses a skeleton shaped like the content (`bg-muted motion-safe:animate-pulse`) plus an `sr-only` `role="status"`; a spinner is only for a pending button. A route never renders a blank `<main>` while it loads.
@@ -31,7 +31,7 @@ Every screen designs, builds, and tests five states: **empty**, **loading**, **e
 
 - The user always knows where they are: a breadcrumb on any page more than one level deep, and `aria-current` on the current sidebar or breadcrumb item.
 - Every state a user might share or return to has a URL (page numbers, sections, the jump to a form). Back returns to the previous state; a finished one-time form (sign-in, sign-up, create) is replaced in history, not left behind it.
-- After a route change, focus moves to `<main>` (`focusMainAfterRouteChange`); after an in-page change, to the status or the next control.
+- After a route change, focus moves to `<main>` (`focusMainAfterRouteChange`); after an in-page change, focus follows the Feedback rule in [Task flows](#task-flows).
 
 ## Content
 
@@ -42,15 +42,17 @@ Every screen designs, builds, and tests five states: **empty**, **loading**, **e
 ## Accessibility and performance
 
 - Everything works by keyboard and screen reader: [Angular conventions, Accessibility](angular.md#accessibility) and the [WCAG checklist](../process/wcag-checklist.md).
-- The first load stays within the `angular.json` initial budget (#202). Reserve space for content that arrives late (skeletons the size of the content, image width and height) so nothing shifts.
+- The initial bundle (the `Initial total` line of `ng build`) grows by no more than 2 kB over `main`, unless the PR states why. Once #202 closes, the limit is the `angular.json` initial warning of 500 kB instead. Reserve space for content that arrives late (skeletons the size of the content, image width and height) so nothing shifts.
 
-## Reviewer checklist
+## UX checklist
+
+The implementer copies this list into the PR body and ticks it; the tester and PR reviewer check it. It covers what the PR adds or changes; mark an item N/A with the reason, or link the open issue for a gap that was already there.
 
 - [ ] The flow has no step the server or a default could take.
-- [ ] Empty, loading (skeleton), error, offline, and success states exist and are tested.
+- [ ] Each state that applies (empty, loading with a skeleton, error, offline, success) exists and is tested; the others are N/A with a reason.
 - [ ] Fields validate on leaving them; server refusals show under the field; input survives errors.
 - [ ] Reversible actions offer Undo; only irreversible or public ones confirm.
 - [ ] Touch targets are 44px or more; no horizontal scroll at 320px; long phone forms keep the action visible.
 - [ ] Breadcrumb and current marker, a URL for each shareable state, Back works, focus moves after navigation.
 - [ ] Copy is plain, errors say how to fix, dates and money use `Intl`.
-- [ ] Bundle within budget; no layout shift as data arrives.
+- [ ] Initial bundle no more than 2 kB over `main`, or the reason is stated (500 kB once #202 closes); no layout shift as data arrives.
