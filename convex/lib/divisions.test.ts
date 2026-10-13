@@ -311,6 +311,44 @@ describe('deriveDivisionFromName (decision 23)', () => {
     expect(deriveDivisionFromName("Women's", 'soccer')).toStrictEqual({ gender: 'womens' });
   });
 
+  test('does not read a gender word inside a longer word', () => {
+    expect(deriveDivisionFromName("Policemen's 4s", 'beachVolleyball')).toStrictEqual({
+      playersPerSide: 4,
+    });
+    expect(deriveDivisionFromName('Policemens 4s', 'beachVolleyball')).toStrictEqual({
+      playersPerSide: 4,
+    });
+    expect(deriveDivisionFromName('Intercoed 4s', 'beachVolleyball')).toStrictEqual({
+      playersPerSide: 4,
+    });
+    expect(deriveDivisionFromName('Superladies 4s', 'beachVolleyball')).toStrictEqual({
+      playersPerSide: 4,
+    });
+  });
+
+  test('takes the first level in the name', () => {
+    expect(deriveDivisionFromName('Rec Open BB', 'beachVolleyball').level).toBe('rec');
+    expect(deriveDivisionFromName('BB AA', 'beachVolleyball').level).toBe('bb');
+    expect(deriveDivisionFromName('Intermediate Competitive', 'soccer').level).toBe('intermediate');
+  });
+
+  test('reads a level in straight quotes', () => {
+    expect(deriveDivisionFromName("Coed 'BB' 4s", 'beachVolleyball')).toStrictEqual({
+      gender: 'coed',
+      playersPerSide: 4,
+      level: 'bb',
+    });
+    expect(deriveDivisionFromName("Coed 'Rec'", 'soccer')).toStrictEqual({
+      gender: 'coed',
+      level: 'rec',
+    });
+  });
+
+  test('does not read an age group number as a format', () => {
+    expect(deriveDivisionFromName('U10 Girls 7s', 'soccer')).toStrictEqual({ playersPerSide: 7 });
+    expect(deriveDivisionFromName('U10 Girls', 'soccer')).toStrictEqual({});
+  });
+
   test('takes the earliest gender and the first format in range', () => {
     expect(deriveDivisionFromName("Women's and Men's 4s", 'beachVolleyball').gender).toBe('womens');
     expect(deriveDivisionFromName('Coed 12s 7s', 'soccer').playersPerSide).toBe(7);
