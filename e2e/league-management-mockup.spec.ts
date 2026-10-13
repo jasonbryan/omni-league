@@ -28,7 +28,7 @@ type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 
 interface Account {
   user: TestUser;
-  /** The cookies of the signed-in session, which each test's browser context starts from. */
+  /** The signed-in session (its `localStorage` and cookies), which each test's context starts from. */
   state: StorageState;
 }
 

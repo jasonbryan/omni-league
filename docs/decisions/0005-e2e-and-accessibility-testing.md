@@ -7,6 +7,7 @@
 - **Amended:** by ADR 0009 (PR #31, CI pipeline): CI run conditions, the `webkit-mobile` trigger, and the Convex backend cache. See "Amendment: CI usage (ADR 0009)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** by #94 (PR #107): the console fixture fails on every `console.warn`, not only `NG05xx`, with a per-test `expectedConsoleWarnings` opt-in. See "Amendment: console warnings (#94)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** by #178: `workers: 2` in CI, not 1 (ADR 0009, "Amendment: e2e workers and job timeout"). Where the sections below say `workers: 1`, the amendment applies.
+- **Amended:** by #125 (PR #189): a worker fixture may seed users and tenants that read-only tests share, under the rules in "Amendment: worker-scoped tenants for read-only tests (#125)" at the end. Where "Per test: a Playwright fixture creates the test's own tenant" says otherwise, the amendment applies.
 
 ## Context
 
@@ -347,3 +348,23 @@ The console fixture fails a test on every `console.warn`, not only on warnings t
 **Effects.** Every existing e2e test now fails on a warning it used to ignore; PR #107 ran the full suite in `chromium-mobile`, `chromium-desktop`, and `webkit-mobile` under the new rule with no new failure. Specs written under the old rule (for example the sign-up specs in #62) must run once under the new one before they merge.
 
 **Sources.** [Issue #94](https://github.com/jasonbryan/omni-league/issues/94), [PR #107](https://github.com/jasonbryan/omni-league/pull/107), [PR #107 review](https://github.com/jasonbryan/omni-league/pull/107#issuecomment-6092306846).
+
+## Amendment: worker-scoped tenants for read-only tests (#125, 2026-10-12)
+
+"Per test: a Playwright fixture creates the test's own tenant" stays the rule. One exception is added: a worker-scoped fixture may seed users and tenants once, and the tests of that worker that only read share them. The league management mockup spec (`e2e/league-management-mockup.spec.ts`, PR #189) needs it: with a sign-up, a tenant, and up to six `convex run` processes per test, its 22 tests ran past the 30 s test timeout on the 2-vCPU runner. Under load the seed calls were about half of each test's time (the other half is the axe and Tab-walk scan, which a shared tenant does not change).
+
+| Rule                                                | Was                                            | Now                                                                                                                                                                                                              |
+| --------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who may share a tenant                              | No test shares one                             | Only read-only tests, and only within the worker whose fixture seeded it                                                                                                                                         |
+| A test that writes                                  | Seeds its own tenant                           | Unchanged. A test that writes, or whose refused write could land (a bug could let it through), seeds its own tenant, so no later test reads the result                                                           |
+| Where a saved session comes from                    | Each test signs in or up through the real form | A worker fixture may sign a user up through the real sign-up form once and give each test's context that session (`storageState`). Never a test-only sign-in path; sign-up itself stays covered by its own specs |
+| What keeps a failed test from leaking into the next | Each test's own data                           | Playwright starts a new worker after any failed test, and the new worker's fixture signs up new users and seeds new tenants. Nothing outlives a failure                                                          |
+| Isolation between workers (ADR 0009, 2 workers)     | Uniquely named data per test                   | Unchanged in effect: each worker's fixture creates uniquely named users and tenants, and no reset runs between tests                                                                                             |
+
+**Rules for the next spec that copies the pattern.**
+
+- Declare the fixture with `scope: 'worker'` and its own `timeout`, so its setup is outside the test timeout.
+- Keep every shared-tenant test free of writes. Click paths that end in a server refusal are acceptable only when the form or the server stops them in one transaction and the console fixture would fail an unexpected mutation; anything else gets its own tenant.
+- Do not use this to share state that tests assert on across each other: a test must pass alone and in any order.
+
+**Sources.** [Issue #125](https://github.com/jasonbryan/omni-league/issues/125), [PR #189](https://github.com/jasonbryan/omni-league/pull/189), [PR #189 review](https://github.com/jasonbryan/omni-league/pull/189#issuecomment-6135203387).
