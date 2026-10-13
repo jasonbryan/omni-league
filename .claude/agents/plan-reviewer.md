@@ -16,6 +16,7 @@ Fetch the issue with `gh issue view <n> --comments`, then check every item:
 - **Gates:** every new package, service, or tool has `gate:technology`. Missing gates are the most expensive miss.
 - **Security:** who may call each new Convex function, and how cross-league or cross-team access is prevented.
 - **Payments:** for any money flow, the webhook events, idempotency, and failure handling are named.
+- **UX:** for any UI issue, judge the flow and acceptance criteria against `docs/conventions/ux.md` (task flows, states, layout, navigation).
 - **Dependencies:** `Blocked by` lines are correct and complete; the issue does not contradict an Accepted ADR.
 
 Post the verdict as an issue comment (see `AGENTS.md`, Writing on GitHub): `Plan review: APPROVE` or `Plan review: CHANGES` first, then one numbered line per required edit.
