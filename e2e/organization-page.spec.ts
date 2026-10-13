@@ -16,6 +16,7 @@ import {
   numberedLocations,
   seedTenant,
   SPORT_NAMES,
+  tallLeagues,
   tallLocations,
   type Tenant,
 } from './support/tenant';
@@ -43,17 +44,12 @@ function smallTenant(): Promise<Tenant> {
 }
 
 /**
- * Two leagues and five locations, the most a list shows (#100): the last location's row starts
- * below the fold at 1280x720 and at 360x800 (asserted by the tests that use it).
+ * Five leagues of all three sports and five locations, the most a list shows (#100). The
+ * Locations panel starts below the fold at 360x800 (`tallLeagues`); the tests that use it assert
+ * that.
  */
 function tallTenant(): Promise<Tenant> {
-  return seedTenant({
-    locations: tallLocations(),
-    leagues: [
-      { name: 'Alpha League', sport: 'soccer', locations: ['Location 01'] },
-      { name: 'Beta League', sport: 'softball', locations: ['Location 02', 'Location 03'] },
-    ],
-  });
+  return seedTenant({ locations: tallLocations(), leagues: tallLeagues() });
 }
 
 function metaContent(html: string, property: string): string | undefined {
@@ -76,6 +72,15 @@ function sidebarHtml(html: string, name: string): string {
 }
 
 const hrefs = (html: string) => [...html.matchAll(/\bhref="([^"]*)"/g)].map(([, href]) => href);
+
+/** The text of each link of the sidebar's HTML, tags removed and white space collapsed. */
+const sidebarText = (nav: string) =>
+  [...nav.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)].map(([, inner]) =>
+    inner
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
 
 /** Waits for the dev-mode hydration log, so the live subscription is open. */
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
@@ -114,59 +119,54 @@ async function activate(page: Page, control: Locator): Promise<void> {
 }
 
 /**
- * The same-path jump of #95. The page is loaded as `<path>?utm_source=x`; for each row `jump`
- * follows its sidebar link. The query string stays, the fragment is set, the page does not reload,
- * the row is in view, history grows by one entry, and Back returns to the URL before the click.
+ * The same-path jump of #95, now the sidebar's Locations item (#114). The page is loaded as
+ * `<path>?utm_source=x`; `jump` follows the Locations link. The query string stays, the fragment is
+ * set, the page does not reload, the panel is in view, history grows by one entry, and Back
+ * returns to the URL before the click.
  */
-async function expectQueryKeepingJumps(
+async function expectQueryKeepingJump(
   page: Page,
   consoleGuard: { hydrated: boolean },
   tenant: Tenant,
-  jump: (id: string) => Promise<void>,
+  jump: () => Promise<void>,
 ): Promise<void> {
   const search = '?utm_source=x';
   const before = `${ORIGIN}${tenant.path}${search}`;
-  for (const id of ['league-2', 'location-3']) {
-    // A goto to the URL the page is on replaces its entry, which would keep the forward entry
-    // that Back left and make the count below grow by zero. A blank page first makes a new entry.
-    await page.goto('about:blank');
-    await page.goto(`${tenant.path}${search}`);
-    await hydrated(consoleGuard);
-    await page.evaluate(() => {
-      window.scrollTo(0, 0);
-      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
-    });
-    await expect.poll(() => scrollY(page)).toBe(0);
-    const lengthBefore = await page.evaluate(() => history.length);
+  const id = 'locations';
+  await page.goto(`${tenant.path}${search}`);
+  await hydrated(consoleGuard);
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+  });
+  await expect.poll(() => scrollY(page)).toBe(0);
+  const lengthBefore = await page.evaluate(() => history.length);
 
-    await jump(id);
+  await jump();
 
-    await expect(page, id).toHaveURL(`${before}#${id}`);
-    expect(await page.evaluate(() => history.length), `${id} history.length`).toBe(
-      lengthBefore + 1,
-    );
-    const row = page.locator(`main #${id}`);
-    await expect
-      .poll(
-        async () => {
-          const position = await rowPosition(row);
-          return position.top >= position.headerBottom && position.top < position.viewport;
-        },
-        { message: `${id} is scrolled into view` },
-      )
-      .toBe(true);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-      `${id} no reload`,
-    ).toBe(true);
+  await expect(page, id).toHaveURL(`${before}#${id}`);
+  expect(await page.evaluate(() => history.length), `${id} history.length`).toBe(lengthBefore + 1);
+  const panel = page.locator(`main #${id}`);
+  await expect
+    .poll(
+      async () => {
+        const position = await rowPosition(panel);
+        return position.top >= position.headerBottom && position.top < position.viewport;
+      },
+      { message: `${id} is scrolled into view` },
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+    `${id} no reload`,
+  ).toBe(true);
 
-    await page.goBack();
-    await expect(page, `${id} Back`).toHaveURL(before);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-      `${id} no reload after Back`,
-    ).toBe(true);
-  }
+  await page.goBack();
+  await expect(page, `${id} Back`).toHaveURL(before);
+  expect(
+    await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+    `${id} no reload after Back`,
+  ).toBe(true);
 }
 
 test.describe('organization page: raw server HTML', () => {
@@ -211,19 +211,33 @@ test.describe('organization page: raw server HTML', () => {
         expect(metaContent(html, 'og:url'), path).toBe(canonical);
         expect(canonicalHrefs(html), path).toEqual([canonical]);
 
-        // Sidebar: one link per league and location, built from the slug, and no id inside.
+        // Sidebar (#114): Overview (current), one link per sport with leagues (beach volleyball
+        // and soccer, not softball) and Locations, built from the slug, with no id inside and no
+        // link to a league or a location.
         const nav = sidebarHtml(html, tenant.name);
         expect(nav, path).not.toMatch(/\sid="/);
         expect(nav, path).not.toContain('aria-labelledby');
         expect(hrefs(nav), path).toEqual([
           tenant.path,
-          `${tenant.path}#league-1`,
-          `${tenant.path}#league-2`,
-          `${tenant.path}#location-1`,
-          `${tenant.path}#location-2`,
+          `${tenant.path}/sports/beach-volleyball`,
+          `${tenant.path}/sports/soccer`,
+          `${tenant.path}#locations`,
         ]);
-        for (const id of ['league-1', 'league-2', 'location-1', 'location-2']) {
-          expect(html.split(nav).join(''), `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
+        expect(nav, path).toMatch(/<a\b[^>]*aria-current="page"[^>]*>[\s\S]*?Overview<\/span>/);
+        expect(nav.match(/aria-current=/g), path).toHaveLength(1);
+        expect(sidebarText(nav), path).toEqual([
+          'Overview',
+          'Beach volleyball 1 league',
+          'Soccer 1 league',
+          'Locations 2 locations',
+        ]);
+        expect(nav, path).not.toContain('Softball');
+        for (const league of tenant.leagues) expect(nav, path).not.toContain(league.name);
+        for (const location of tenant.locations) expect(nav, path).not.toContain(location.name);
+        // The panels' rows keep their ids and `#locations` names the panel.
+        const content = html.split(nav).join('');
+        for (const id of ['league-1', 'league-2', 'location-1', 'location-2', 'locations']) {
+          expect(content, `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
         }
 
         // Tiles: 2 leagues, 2 locations, 2 distinct sports.
@@ -244,7 +258,7 @@ test.describe('organization page: more than 5 rows per list', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
   test(
-    'raw: 5 league rows, 5 location rows, totals in the tiles, a sidebar link per row shown',
+    'raw: 5 league rows, 5 location rows, totals in the tiles, a sidebar of sports and one Locations item',
     RAW_HTTP,
     async ({ request }) => {
       // 13 of each, in one call, with leagues of two sports. "League 01" to "League 05", the
@@ -301,15 +315,21 @@ test.describe('organization page: more than 5 rows per list', () => {
         '2',
       ]);
 
-      // Sidebar: one link per row shown, each resolving to a row in the content.
-      const rowLinks = hrefs(nav).slice(1);
-      expect(rowLinks).toEqual([
-        ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#league-${n}`),
-        ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#location-${n}`),
+      // Sidebar (#114): the sports with their league counts (soccer 6, softball 7, the leagues of
+      // the whole organization, not the 5 shown) and one Locations item with the total; no link
+      // to a row.
+      expect(hrefs(nav)).toEqual([
+        tenant.path,
+        `${tenant.path}/sports/soccer`,
+        `${tenant.path}/sports/softball`,
+        `${tenant.path}#locations`,
       ]);
-      for (const href of rowLinks) {
-        expect(content, href).toMatch(new RegExp(`\\sid="${href.split('#')[1]}"`));
-      }
+      expect(sidebarText(nav)).toEqual([
+        'Overview',
+        'Soccer 6 leagues',
+        'Softball 7 leagues',
+        'Locations 13 locations',
+      ]);
 
       // The query string never reaches the cacheable HTML (PR #90).
       expect(html).not.toContain('utm_source');
@@ -320,7 +340,7 @@ test.describe('organization page: more than 5 rows per list', () => {
 test.describe('organization page in the browser', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  test('hydrates with no console error and passes the axe helper; the sidebar link jumps to its row (1280) or the menu button shows (360)', async ({
+  test('hydrates with no console error and passes the axe helper; the Locations item jumps to its panel (1280) or the menu button shows (360)', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -360,16 +380,16 @@ test.describe('organization page in the browser', () => {
     await expect(nav).toBeVisible();
     await expect(menuButton).toBeHidden();
     expect((await sidebarColumn.boundingBox())?.width).toBe(256);
-    // The league and location icons are muted, as in the mockup: the colour utility on <ng-icon>
+    // The sport and location icons are muted, as in the mockup: the colour utility on <ng-icon>
     // wins over ng-icon's own layer (src/styles.css). The eyebrow above the h1 is muted too.
     const muted = await page
       .getByRole('main')
       .getByText('Organization', { exact: true })
       .evaluate((el) => getComputedStyle(el).color);
-    for (const group of ['Leagues', 'Locations']) {
-      const icon = nav.locator(`ul[aria-label="${group}"] ng-icon`).first();
-      expect(await icon.evaluate((el) => getComputedStyle(el).color), group).toBe(muted);
-    }
+    const sportIcon = nav.locator('ul[aria-label="Sports"] ng-icon').first();
+    expect(await sportIcon.evaluate((el) => getComputedStyle(el).color)).toBe(muted);
+    const locationsIcon = nav.locator(`a[href="${tenant.path}#locations"] ng-icon`);
+    expect(await locationsIcon.evaluate((el) => getComputedStyle(el).color)).toBe(muted);
 
     await expectAccessible(page, {
       expectedOrder: [
@@ -377,55 +397,49 @@ test.describe('organization page in the browser', () => {
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
         'nav a[aria-current="page"]',
-        ...tenant.leagues.map((_, i) => `nav a[href="${tenant.path}#league-${i + 1}"]`),
-        ...tenant.locations.map((_, i) => `nav a[href="${tenant.path}#location-${i + 1}"]`),
+        `nav a[href="${tenant.path}/sports/beach-volleyball"]`,
+        `nav a[href="${tenant.path}/sports/soccer"]`,
+        `nav a[href="${tenant.path}/sports/softball"]`,
+        `nav a[href="${tenant.path}#locations"]`,
         ...leagueLinks,
       ],
     });
 
-    // The last location's row starts below the fold; its sidebar link jumps to it on this page.
-    const last = tenant.locations.length;
-    const row = page.locator(`main #location-${last}`);
-    await expect(row.locator('h3')).toHaveText(tenant.locations[last - 1].name);
+    // The sidebar's Locations item jumps to the Locations panel on this page, with no reload.
     await page.evaluate(() => {
       window.scrollTo(0, 0);
       (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
     });
     await expect.poll(() => scrollY(page)).toBe(0);
-    const before = await rowPosition(row);
-    expect(before.top).toBeGreaterThanOrEqual(before.viewport);
-    const scrollBefore = await scrollY(page);
 
-    await nav.locator(`a[href="${tenant.path}#location-${last}"]`).click();
+    await nav.locator(`a[href="${tenant.path}#locations"]`).click();
 
-    await expect.poll(() => scrollY(page)).toBeGreaterThan(scrollBefore);
-    const after = await rowPosition(row);
-    expect(after.top).toBeGreaterThanOrEqual(after.headerBottom);
-    expect(after.top).toBeLessThan(after.viewport);
-    expect(new URL(page.url()).pathname).toBe(tenant.path);
-    expect(new URL(page.url()).hash).toBe(`#location-${last}`);
+    await expect(page).toHaveURL(`${ORIGIN}${tenant.path}#locations`);
+    const panel = await rowPosition(page.locator('main #locations'));
+    expect(panel.top).toBeGreaterThanOrEqual(panel.headerBottom);
+    expect(panel.top).toBeLessThan(panel.viewport);
     expect(
       await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
     ).toBe(true);
   });
 
-  // #95: the sidebar links keep the visitor's query string. A plain click goes through the router
-  // to the current path, the current search, and the link's hash, so there is no reload, history
-  // grows by one entry, and Back returns to the URL before the click.
-  test('1280: a sidebar link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
+  // #95: the sidebar's Locations link keeps the visitor's query string. A plain click goes through
+  // the router to the current path, the current search, and the link's hash, so there is no reload,
+  // history grows by one entry, and Back returns to the URL before the click.
+  test('1280: the Locations link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
     page,
     consoleGuard,
   }, testInfo) => {
     test.skip(!isDesktop(testInfo), 'the sidebar column shows at 1280px only');
     const tenant = await tallTenant();
     const nav = page.getByRole('navigation', { name: tenant.name });
-    await expectQueryKeepingJumps(page, consoleGuard, tenant, async (id) => {
-      await nav.locator(`a[href="${tenant.path}#${id}"]`).click();
+    await expectQueryKeepingJump(page, consoleGuard, tenant, async () => {
+      await nav.locator(`a[href="${tenant.path}#locations"]`).click();
     });
   });
 
   // #95: the same for the phone sheet, which closes before the link is followed (#75).
-  test('phone sheet (360): its link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
+  test('phone sheet (360): its Locations link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -433,16 +447,16 @@ test.describe('organization page in the browser', () => {
     const tenant = await tallTenant();
     const menuButton = page.getByRole('button', { name: 'Open navigation' });
     const dialog = page.getByRole('dialog', { name: 'Navigation' });
-    await expectQueryKeepingJumps(page, consoleGuard, tenant, async (id) => {
+    await expectQueryKeepingJump(page, consoleGuard, tenant, async () => {
       await activate(page, menuButton);
       await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
-      await activate(page, dialog.locator(`a[href="${tenant.path}#${id}"]`));
+      await activate(page, dialog.locator(`a[href="${tenant.path}#locations"]`));
       await expect(dialog).toHaveCount(0);
       await expect(menuButton).toBeFocused();
     });
   });
 
-  test('phone sheet (360): 288px, focus on Close, Tab trapped, closes without moving the page, and its link jumps to the row', async ({
+  test('phone sheet (360): 288px, focus on Close, Tab trapped, closes without moving the page, and its Locations link jumps to the panel', async ({
     page,
     consoleGuard,
   }, testInfo) => {
@@ -503,20 +517,19 @@ test.describe('organization page in the browser', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
 
-    // The sheet's link to the last location: the sheet closes, focus returns to the menu button,
-    // and the page jumps to the row, which the block scroll strategy must not undo (#75).
+    // The sheet's Locations link: the sheet closes, focus returns to the menu button, and the page
+    // jumps to the panel, which the block scroll strategy must not undo (#75).
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
     await expect.poll(() => scrollY(page)).toBe(0);
-    const last = tenant.locations.length;
-    const row = page.locator(`main #location-${last}`);
+    const row = page.locator('main #locations');
     const before = await rowPosition(row);
     expect(before.top).toBeGreaterThanOrEqual(before.viewport);
     const scrollBefore = await scrollY(page);
 
     await openSheet();
-    await activate(page, dialog.locator(`a[href="${tenant.path}#location-${last}"]`));
+    await activate(page, dialog.locator(`a[href="${tenant.path}#locations"]`));
     await expect(dialog).toHaveCount(0);
     await expect(menuButton).toBeFocused();
     await expect.poll(() => scrollY(page)).toBeGreaterThan(scrollBefore);
@@ -678,7 +691,7 @@ test.describe('organization page in the browser', () => {
   });
 
   test(
-    'a league added after load appears without a reload in its panel, sidebar group, and tile',
+    'a league added after load appears without a reload in its panel, its sport in the sidebar, and the tile',
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const tenant = await smallTenant();
@@ -700,10 +713,10 @@ test.describe('organization page in the browser', () => {
       await expect(main.locator('#league-3 h3')).toHaveText('Zulu League');
       await expect(main.locator('#league-3')).toContainText('Softball');
       await expect(main.locator('#league-3')).toContainText('Beta Courts');
-      // The sidebar column is hidden at 360px, so not by role.
+      // The sidebar column is hidden at 360px, so not by role. The new sport joins the sports.
       await expect(
-        page.locator(`nav[aria-label="${tenant.name}"] a[href="${tenant.path}#league-3"]`),
-      ).toHaveText('Zulu League');
+        page.locator(`nav[aria-label="${tenant.name}"] a[href="${tenant.path}/sports/softball"]`),
+      ).toHaveText('Softball 1 league');
       await expect(main.locator('dl dd')).toHaveText(['3', '2', '3']);
       expect(
         await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
@@ -790,8 +803,9 @@ test.describe('organization page in the browser', () => {
       main.getByText('Places where this organization plays will be listed here.'),
     ).toBeVisible();
     const nav = page.locator(`nav[aria-label="${tenant.name}"]`);
-    await expect(nav.getByText('None yet', { exact: true })).toHaveCount(2);
-    await expect(nav.locator('a')).toHaveCount(1); // Overview only
+    await expect(nav.getByText('None yet', { exact: true })).toHaveCount(1);
+    // Overview and Locations only; the Sports group lists nothing.
+    await expect(nav.locator('a')).toHaveText(['Overview', 'Locations 0 locations']);
     await expectAccessible(page);
   });
 });
@@ -937,8 +951,8 @@ test.describe('tenant isolation', VIEWPORT_AGNOSTIC, () => {
       // The sidebar column is hidden at 360px, so not by role.
       await expect(page.locator(`nav[aria-label="${tenant.name}"] a`)).toHaveText([
         'Overview',
-        `League ${label}`,
-        `Field ${label}`,
+        'Soccer 1 league',
+        'Locations 1 location',
       ]);
     });
   }

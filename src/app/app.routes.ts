@@ -16,6 +16,14 @@ export const routes: Routes = [
       import('./organizations/organization-page').then((m) => m.OrganizationPage),
   },
   {
+    // The sport view (#114), a Server route (app.routes.server.ts): one sport's published leagues,
+    // `?page=N` for the numbered control. Ahead of nothing it could shadow: its path has a
+    // literal `sports` segment.
+    path: 'organizations/:orgSlug/sports/:sport',
+    loadComponent: () =>
+      import('./organizations/sport-view/sport-view-page').then((m) => m.SportViewPage),
+  },
+  {
     // The public league page (#127), a Server route (app.routes.server.ts): the league's published
     // seasons, `?page=N` for the numbered control.
     path: 'organizations/:orgSlug/leagues/:leagueSlug',

@@ -181,9 +181,16 @@ describe('PublicLeaguePage server render', () => {
     ]);
     expect(text(body.querySelector('nav[aria-label="Seasons pages"] p'))).toBe('1–5 of 7 seasons');
     const sidebar = body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    // The sport is marked current and is plain text until #114 adds the sport view.
+    // The sport is marked current, and every sport links to its view (#114).
     expect(text(sidebar?.querySelector('[aria-current="true"]'))).toContain('Beach volleyball');
-    expect(sidebar?.querySelector('a[href*="/sports/"]')).toBeNull();
+    expect([...(sidebar?.querySelectorAll('a[href*="/sports/"]') ?? [])].map(href)).toEqual([
+      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
+      '/organizations/gulf-coast-sport-social/sports/soccer',
+      '/organizations/gulf-coast-sport-social/sports/softball',
+    ]);
+    expect(href(body.querySelector('nav[aria-label="Breadcrumb"] a[href*="/sports/"]'))).toBe(
+      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
+    );
     expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
 
     // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).

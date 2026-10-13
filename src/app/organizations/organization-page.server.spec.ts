@@ -124,6 +124,11 @@ async function render(
   return { html, body: doc.body, head: doc.head, responseInit, queries };
 }
 
+/** A link's path, query string, and fragment: a router link's `href` is absolute in this render. */
+const href = (link: Element | null | undefined) => {
+  const url = new URL(link?.getAttribute('href') ?? '', ORIGIN);
+  return `${url.pathname}${url.search}${url.hash}`;
+};
 const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const meta = (head: HTMLHeadElement, property: string) =>
@@ -167,16 +172,22 @@ describe('OrganizationPage server render', () => {
     const nav = body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
     expect(nav).not.toBeNull();
     expect(nav?.querySelectorAll('[id]')).toHaveLength(0);
-    const fragmentLinks = [...(nav?.querySelectorAll('a[href*="#"]') ?? [])].map((a) =>
-      a.getAttribute('href'),
-    );
-    expect(fragmentLinks).toEqual([
-      ...[1, 2, 3, 4, 5].map((n) => `/organizations/gulf-coast-sport-social#league-${n}`),
-      ...[1, 2, 3].map((n) => `/organizations/gulf-coast-sport-social#location-${n}`),
+    // The consolidated sidebar (#114): Overview (current), a link per sport with its count, and
+    // Locations. No league and no location of the organization.
+    expect(
+      [...(nav?.querySelectorAll('ul > li > a') ?? [])].map((a) => [text(a), href(a)]),
+    ).toEqual([
+      ['Overview', '/organizations/gulf-coast-sport-social'],
+      [
+        'Beach volleyball 2 leagues',
+        '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
+      ],
+      ['Soccer 2 leagues', '/organizations/gulf-coast-sport-social/sports/soccer'],
+      ['Softball 1 league', '/organizations/gulf-coast-sport-social/sports/softball'],
+      ['Locations 3 locations', '/organizations/gulf-coast-sport-social#locations'],
     ]);
-    for (const href of fragmentLinks) {
-      expect(body.querySelector(`main [id="${href?.split('#')[1]}"]`), href ?? '').not.toBeNull();
-    }
+    expect(text(nav?.querySelector('[aria-current="page"]'))).toBe('Overview');
+    expect(nav?.querySelector('a[href*="#league-"], a[href*="#location-"]')).toBeNull();
     expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
 
     // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).
@@ -216,7 +227,8 @@ describe('OrganizationPage server render', () => {
     expect(
       body.querySelectorAll('main section[aria-labelledby="leagues-heading"] li'),
     ).toHaveLength(5);
-    expect(body.querySelectorAll('nav a[href*="#league-"]')).toHaveLength(5);
+    // The sidebar lists the sports, never the leagues (#114).
+    expect(body.querySelectorAll('nav a[href*="#league-"]')).toHaveLength(0);
   });
 
   it('renders the server-error view with 503 and Cache-Control: no-store when the query fails', async () => {

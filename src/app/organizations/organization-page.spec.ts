@@ -105,6 +105,24 @@ describe('OrganizationPage', () => {
     expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
   });
 
+  // The sidebar's Overview link on a sport view (#114) belongs to the page that goes: focus
+  // follows the visitor to main, never to body.
+  it('moves focus to main when the visitor arrives from another page, and not on the page load', async () => {
+    const loaded = await open();
+    emit(GULF_COAST);
+    await settle(loaded);
+    expect(document.activeElement).toBe(document.body);
+
+    await loaded.navigateByUrl('/elsewhere');
+    await settle(loaded);
+    await loaded.navigateByUrl(`/organizations/${GULF_COAST.slug}`);
+    await settle(loaded);
+    emit(GULF_COAST);
+    await settle(loaded);
+    expect(text(host(loaded).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
+    expect(document.activeElement).toBe(host(loaded).querySelector('main#main'));
+  });
+
   describe('populated', () => {
     let harness: RouterTestingHarness;
     beforeEach(async () => {
@@ -205,33 +223,36 @@ describe('OrganizationPage', () => {
       expect(host(harness).querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
     });
 
-    it('links Overview (current page) and every league and location row, hrefs built from the slug', () => {
+    it('links Overview (current page), a view per sport with its count, and Locations, hrefs built from the slug', () => {
       const nav = host(harness).querySelector('nav');
       const overview = nav?.querySelector('a[aria-current="page"]');
       expect(text(overview)).toBe('Overview');
       expect(overview?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
+      expect(nav?.querySelectorAll('[aria-current]')).toHaveLength(1);
 
-      const leagues = nav?.querySelector('ul[aria-label="Leagues"]');
-      const locations = nav?.querySelector('ul[aria-label="Locations"]');
-      const links = (list: Element | null | undefined) =>
-        [...(list?.querySelectorAll('a') ?? [])].map((a) => [text(a), a.getAttribute('href')]);
-      expect(links(leagues)).toEqual(
-        GULF_COAST.leagues.map((league, i) => [
-          league.name,
-          `/organizations/gulf-coast-sport-social#league-${i + 1}`,
+      expect(
+        [...(nav?.querySelectorAll('ul[aria-label="Sports"] a') ?? [])].map((a) => [
+          text(a),
+          a.getAttribute('href'),
         ]),
+      ).toEqual([
+        [
+          'Beach volleyball 2 leagues',
+          '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
+        ],
+        ['Soccer 2 leagues', '/organizations/gulf-coast-sport-social/sports/soccer'],
+        ['Softball 1 league', '/organizations/gulf-coast-sport-social/sports/softball'],
+      ]);
+      const locations = [...(nav?.querySelectorAll('a') ?? [])].at(-1);
+      expect(text(locations)).toBe('Locations 3 locations');
+      expect(locations?.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social#locations',
       );
-      expect(links(locations)).toEqual(
-        GULF_COAST.locations.map((location, i) => [
-          location.name,
-          `/organizations/gulf-coast-sport-social#location-${i + 1}`,
-        ]),
-      );
-      // Every fragment names a row in the page content.
-      for (const a of nav?.querySelectorAll('a[href*="#"]') ?? []) {
-        const id = (a.getAttribute('href') ?? '').split('#')[1];
-        expect(host(harness).querySelector(`main [id="${id}"]`), id).not.toBeNull();
-      }
+      // The Locations link names a panel of the page.
+      expect(host(harness).querySelector('main section#locations')).not.toBeNull();
+      // No league and no location of the organization.
+      expect(nav?.querySelector('ul[aria-label="Leagues"], ul[aria-label="Locations"]')).toBeNull();
+      expect(nav?.querySelector('a[href*="#league-"], a[href*="#location-"]')).toBeNull();
     });
 
     it('sets the title, og tags, and canonical from the result, with the path built from the slug', () => {
@@ -270,12 +291,17 @@ describe('OrganizationPage', () => {
         ...GULF_COAST.leagues.slice(0, 4).map((league) => league.name),
       ]);
       expect(host(harness).querySelector('#league-1 p')).toBeNull(); // no locations: no line
-      const sidebarLinks = host(harness).querySelectorAll('nav ul[aria-label="Leagues"] a');
-      expect([...sidebarLinks].map(text)).toEqual(names);
+      // The sidebar's sports follow the header's counts (#114), not the rows.
+      expect(
+        [...host(harness).querySelectorAll('nav ul[aria-label="Sports"] a')].map(text),
+      ).toEqual(['Beach volleyball 2 leagues', 'Soccer 2 leagues', 'Softball 1 league']);
+      expect(text([...host(harness).querySelectorAll('nav a')].at(-1))).toBe(
+        'Locations 4 locations',
+      );
       expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual(['6', '4', '3']);
     });
 
-    it('tiles show the totals, not the rows shown; the sidebar lists the rows shown', async () => {
+    it('tiles show the totals, not the rows shown; the sidebar lists the sports and one Locations item', async () => {
       emit({ ...GULF_COAST, leagueCount: 13, locationCount: 236, sportCount: 2 });
       await settle(harness);
       expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual([
@@ -284,8 +310,10 @@ describe('OrganizationPage', () => {
         '2',
       ]);
       expect(host(harness).querySelectorAll('main li')).toHaveLength(8);
-      expect(host(harness).querySelectorAll('nav ul[aria-label="Leagues"] a')).toHaveLength(5);
-      expect(host(harness).querySelectorAll('nav ul[aria-label="Locations"] a')).toHaveLength(3);
+      expect(host(harness).querySelectorAll('nav ul[aria-label="Sports"] a')).toHaveLength(3);
+      expect(text([...host(harness).querySelectorAll('nav a')].at(-1))).toBe(
+        'Locations 236 locations',
+      );
     });
 
     it('removes its og tags and canonical when the visitor leaves the page', async () => {
@@ -318,7 +346,7 @@ describe('OrganizationPage', () => {
   });
 
   describe('empty organization', () => {
-    it('shows each panel empty state, "None yet" in both sidebar groups, and tiles 0, 0, 0', async () => {
+    it('shows each panel empty state, "None yet" in the Sports group, and tiles 0, 0, 0', async () => {
       const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
       emit(PORT_ARANSAS);
       await settle(harness);
@@ -344,8 +372,10 @@ describe('OrganizationPage', () => {
       expect(text(nav?.querySelector('.size-10'))).toBe('PA');
       expect(
         [...(nav?.querySelectorAll('p') ?? [])].map(text).filter((t) => t === 'None yet'),
-      ).toHaveLength(2);
-      expect(nav?.querySelectorAll('ul')).toHaveLength(1); // only the Overview list
+      ).toHaveLength(1);
+      // Overview and Locations are the only lists: the Sports group has none to list.
+      expect(nav?.querySelectorAll('ul')).toHaveLength(2);
+      expect(text([...(nav?.querySelectorAll('a') ?? [])].at(-1))).toBe('Locations 0 locations');
     });
   });
 

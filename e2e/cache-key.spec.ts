@@ -19,6 +19,8 @@ const EDGE_PATHS = [
   '/app/x',
   '/app',
   '/organizations/cache-key-sample',
+  // #114: the sport view, here of an unknown organization (404); a known one is tested below.
+  '/organizations/cache-key-sample/sports/soccer',
   // #127: the public league page, here an unknown league (404); the known one is tested below.
   '/organizations/cache-key-sample/leagues/cache-key-sample',
   // #62: a Client route whose query string carries `returnTo`; the shell holds none of it.
@@ -68,6 +70,7 @@ test.describe('query strings and the CDN', () => {
         `/app${unique}`,
         `/organizations${unique}`,
         `/organizations${unique}/leagues/sample`,
+        `/organizations${unique}/sports/soccer`,
         `/sign-up`,
         `/sign-in`,
       ]) {
@@ -143,6 +146,95 @@ test.describe('query strings and the CDN', () => {
             name.trim(),
           );
         expect(names(response.body), sample(token)).toEqual(names(first.body));
+      }
+    },
+  );
+
+  // #114: the sport view reads `?page=N` as the league page does. The same samples: a canary in
+  // `page` reads as page 1 and never reaches the response, and a segment the map does not know is
+  // a 404 that holds no query string either.
+  test(
+    'the sport view: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
+    RAW_HTTP,
+    async () => {
+      // On a preview the demo organization has two beach volleyball leagues; locally the test
+      // seeds an organization with 7.
+      let path = '/organizations/gulf-coast-sport-social/sports/beach-volleyball';
+      if (remoteBaseUrl === undefined) {
+        const tenant = await seedTenant({
+          name: 'E2E Cache Key Sport',
+          locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+          leagues: Array.from({ length: 7 }, (_, i) => ({
+            name: `Sport League ${i + 1}`,
+            sport: 'beachVolleyball' as const,
+            locations: ['Alpha Field'],
+          })),
+        });
+        path = `${tenant.path}/sports/beach-volleyball`;
+      }
+      const first = await rawGet(path);
+      expect(first.status).toBe(200);
+      expect(first.headers['netlify-vary']).toBe('query');
+      expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
+
+      for (const sample of [(c: string) => `?page=${c}`, (c: string) => `?page=2&page=${c}`]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(response.headers['netlify-vary'], sample(token)).toBe('query');
+        // Page 1: the same leagues as the bare path.
+        const names = (body: string) =>
+          [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
+            name.trim(),
+          );
+        expect(names(response.body), sample(token)).toEqual(names(first.body));
+      }
+
+      const token = canary();
+      const unknown = await rawGet(`${path.replace(/[^/]+$/, 'curling')}?page=${token}`);
+      expect(unknown.status).toBe(404);
+      expect(unknown.body).not.toContain(token);
+      expect(unknown.headers['netlify-vary']).toBe('query');
+    },
+  );
+
+  // Locally only: a preview needs a sport with more than 5 published leagues.
+  test(
+    'the sport view: a request for one page never gets the body of a request for another',
+    RAW_HTTP,
+    async () => {
+      test.skip(
+        remoteBaseUrl !== undefined,
+        'E2E_BASE_URL is set: no local Convex backend to seed',
+      );
+      const tenant = await seedTenant({
+        name: 'E2E Cache Key Sport Pages',
+        locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+        leagues: Array.from({ length: 12 }, (_, i) => ({
+          name: `Sport League ${String(i + 1).padStart(2, '0')}`,
+          sport: 'beachVolleyball' as const,
+          locations: ['Alpha Field'],
+        })),
+      });
+      const path = `${tenant.path}/sports/beach-volleyball`;
+      const names = (body: string) =>
+        [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) => name.trim());
+      const league = (...numbers: number[]) =>
+        numbers.map((n) => `Sport League ${String(n).padStart(2, '0')}`);
+      const expected: Record<string, string[]> = {
+        '?page=2': league(6, 7, 8, 9, 10),
+        '?page=3': league(11, 12),
+        '?page=2&page=3': league(1, 2, 3, 4, 5),
+        '': league(1, 2, 3, 4, 5),
+      };
+      // Store the page-2 response first, then ask for the others: none gets page 2's rows.
+      for (const query of ['?page=2', '?page=2', '?page=3', '?page=2&page=3', '', '?page=2']) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(names(response.body), query).toEqual(expected[query]);
       }
     },
   );

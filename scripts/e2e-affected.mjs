@@ -76,6 +76,12 @@ const PUBLIC_PAGE = [
  * own spec, its offline spec (saved pages), and the cache-key samples of its `?page=N` parameter.
  */
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
+/**
+ * Every spec that opens the sport view (#114), directly or from the organization or league page: its
+ * own spec and the cache-key samples of its `?page=N` parameter. The league page links to it from
+ * its sidebar and breadcrumb, and the organization page lists the sports in its sidebar.
+ */
+const SPORT_VIEW = ['sport-view', 'cache-key'];
 /** Every spec that opens the organizer's league page (#125, #126), where seasons are created and published. */
 const LEAGUE_MANAGEMENT = [
   'league-management',
@@ -258,25 +264,35 @@ export const AREAS = [
     ]),
     // The admin area imports `initials` from organization-sidebar, and the league rows link to the
     // public league page (#127), which league-page.spec.ts reaches from here.
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE],
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
-    // The public league page (#127): its page, content, sidebar, paths, and test data.
+    // The public league page (#127): its page, content, sidebar, paths, and test data. Its sidebar
+    // and breadcrumb link to the sport view (#114).
     name: 'public league page',
     test: inDir('src/app/organizations/public-league/'),
-    specs: LEAGUE_PAGE,
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
-    // The numbered control (#127, shared with #103's lists): the league page's seasons.
+    // The sport view (#114): its page, content, paths, and test data. The organization sidebar it
+    // shows is the public organization page's rule above.
+    name: 'sport view',
+    test: inDir('src/app/organizations/sport-view/'),
+    specs: SPORT_VIEW,
+  },
+  {
+    // The numbered control (#127, shared with #103's lists): the league page's seasons and the
+    // sport view's leagues (#114).
     name: 'numbered page control',
     test: named('src/app/organizations/', ['page-control']),
-    specs: LEAGUE_PAGE,
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
-    // `parseListPage` and the page query (#127) and the focus move after a route change (#127).
+    // `parseListPage` and the page query (#127) and the focus move after a route change (#127,
+    // #114).
     name: 'list page and focus helpers',
     test: named('src/app/core/', ['list-page', 'focus-main']),
-    specs: LEAGUE_PAGE,
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
@@ -289,8 +305,9 @@ export const AREAS = [
   {
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
-    // league-page.spec.ts asserts the league page's 404 (#127).
-    specs: ['not-found', 'organization-page', 'league-page', ...ADMIN],
+    // league-page.spec.ts asserts the league page's 404 (#127), sport-view.spec.ts the sport
+    // view's (#114).
+    specs: ['not-found', 'organization-page', 'league-page', 'sport-view', ...ADMIN],
   },
   {
     name: 'offline views',
@@ -317,7 +334,7 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, SESSION],
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SPORT_VIEW, SESSION],
   },
   {
     name: 'convex locations',
@@ -327,7 +344,14 @@ export const AREAS = [
   {
     name: 'convex leagues',
     test: named('convex/', ['leagues']),
-    specs: [...ADMIN, ...LEAGUE_ADMIN, ...PUBLIC_PAGE, ...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
+    specs: [
+      ...ADMIN,
+      ...LEAGUE_ADMIN,
+      ...PUBLIC_PAGE,
+      ...LEAGUE_PAGE,
+      ...SPORT_VIEW,
+      ...LEAGUE_MANAGEMENT,
+    ],
   },
   {
     // `seasons.create`, `publish`, `listForOrganizer` (the organizer's league page) and

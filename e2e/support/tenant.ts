@@ -136,3 +136,23 @@ export function tallLocations(): { name: string; address: string }[] {
       'Corpus Christi Municipal Recreation District grounds, past the visitor parking lot',
   }));
 }
+
+/**
+ * The five leagues of a tall page (#114), of all three sports, for `tallLocations()`. Their names
+ * wrap over two lines at 360px, so the organization page's Locations panel, which follows its
+ * Leagues panel there, starts below the fold at 360x800 (the tests that use it assert that).
+ */
+export function tallLeagues(): NonNullable<TenantSeed['leagues']> {
+  const wrapping = 'of the Corpus Christi Rec District';
+  return [
+    { name: `Alpha League ${wrapping}`, sport: 'soccer', locations: ['Location 01'] },
+    {
+      name: `Beta League ${wrapping}`,
+      sport: 'softball',
+      locations: ['Location 02', 'Location 03'],
+    },
+    { name: `Gamma League ${wrapping}`, sport: 'beachVolleyball', locations: ['Location 04'] },
+    { name: `Delta League ${wrapping}`, sport: 'soccer', locations: ['Location 05'] },
+    { name: `Epsilon League ${wrapping}`, sport: 'softball', locations: ['Location 01'] },
+  ];
+}

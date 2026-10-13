@@ -4,6 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
 import { injectOnline, injectQuery } from '../core/data/convex';
+import { focusMainAfterRouteChange } from '../core/focus-main';
 import { bindPageMeta } from '../core/page-meta';
 import { NotFoundView } from '../not-found/not-found-view';
 import { NotSavedView } from '../offline/not-saved-view';
@@ -55,7 +56,7 @@ import { OrganizationSidebar } from './organization-sidebar';
     <app-shell>
       @if (page(); as page) {
         <ng-template appShellSidebar>
-          <app-organization-sidebar [page]="page" />
+          <app-organization-sidebar [organization]="page" />
         </ng-template>
         <app-organization-overview [page]="page" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
@@ -122,6 +123,9 @@ export class OrganizationPage {
   });
 
   constructor() {
+    // The sidebar's Overview link on a sport view (#114) belongs to the page that goes: focus
+    // follows the visitor to main, never to body.
+    focusMainAfterRouteChange();
     bindPageMeta(() => {
       const page = this.page();
       if (!page) return null;

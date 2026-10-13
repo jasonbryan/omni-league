@@ -145,15 +145,18 @@ describe('PublicLeaguePage populated', () => {
     const main = host(harness).querySelector('main');
     const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
     const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
-    // The sport is plain text until #114 adds the sport view.
-    expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Sunday Reverse Coed 4s']);
+    // The sport is a link to its view (#114).
+    expect(links.map(text)).toEqual([
+      'Gulf Coast Sport & Social',
+      'Beach volleyball',
+      'Sunday Reverse Coed 4s',
+    ]);
     expect(links.map((a) => a?.getAttribute('href'))).toEqual([
       '/organizations/gulf-coast-sport-social',
+      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
       PATH,
     ]);
-    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, 'page']);
-    expect(text(crumbs[2])).toBe('Beach volleyball');
-    expect(crumbs[2].querySelector('a')).toBeNull();
+    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
     // The separators are decoration.
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
@@ -229,19 +232,24 @@ describe('PublicLeaguePage populated', () => {
   it('marks the league’s sport as the current section of the sidebar, with the league counts', () => {
     const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
     expect(nav).not.toBeNull();
-    // Plain text until #114 adds the sport view: no link in the list.
-    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
+    // Each sport is a link to its view (#114); the league's own is the current section.
+    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > a') ?? [])];
     expect(
       sports.map((a) => [
         text(a.querySelector('span.min-w-0')),
         text(a.querySelector('span.ms-auto')),
         a.getAttribute('aria-current'),
+        a.getAttribute('href'),
       ]),
     ).toEqual([
-      ['Beach volleyball', '2 leagues', 'true'],
-      ['Soccer', '2 leagues', null],
-      ['Softball', '1 league', null],
+      [
+        'Beach volleyball',
+        '2 leagues',
+        'true',
+        '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
+      ],
+      ['Soccer', '2 leagues', null, '/organizations/gulf-coast-sport-social/sports/soccer'],
+      ['Softball', '1 league', null, '/organizations/gulf-coast-sport-social/sports/softball'],
     ]);
     expect(sports[0].className).toContain('bg-sidebar-accent');
     expect(sports[1].className).not.toContain('bg-sidebar-accent');

@@ -1,10 +1,11 @@
-// Tester probes for #95 (PR #120): the query-keeping same-path links of the organization page,
-// beyond the implementer's league-2 / location-3 jumps: the last row of a tall page below the
-// offline note, modified clicks, a repeated click, and several query strings.
+// Tester probes for #95 (PR #120), kept for the sidebar's one same-path link since #114: the
+// Locations item of the organization page, beyond the implementer's jump: the panel below the top
+// bar and the offline note, modified clicks, a repeated click, and several query strings. (The
+// per-league and per-location links these probes first covered left the sidebar in #114.)
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { seedTenant, tallLocations } from './support/tenant';
+import { seedTenant, tallLeagues, tallLocations } from './support/tenant';
 
 test.skip(
   remoteBaseUrl !== undefined,
@@ -13,17 +14,8 @@ test.skip(
 
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
-/** The last location row of the tall tenant: a list shows at most 5 (#100). */
-const LAST = 5;
-
 function tallTenant() {
-  return seedTenant({
-    locations: tallLocations(),
-    leagues: [
-      { name: 'Alpha League', sport: 'soccer', locations: ['Location 01'] },
-      { name: 'Beta League', sport: 'softball', locations: ['Location 02', 'Location 03'] },
-    ],
-  });
+  return seedTenant({ locations: tallLocations(), leagues: tallLeagues() });
 }
 
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
@@ -56,8 +48,8 @@ async function tap(page: Page, control: Locator): Promise<void> {
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-test.describe('organization page links (#95, tester probes)', () => {
-  test('the last row of a tall page lands below the top bar and the offline note, query kept', async ({
+test.describe('organization page links (#95, tester probes; the Locations item since #114)', () => {
+  test('the Locations panel of a tall page lands below the top bar and the offline note, query kept', async ({
     page,
     context,
     consoleGuard,
@@ -81,9 +73,11 @@ test.describe('organization page links (#95, tester probes)', () => {
     await expect(note).toBeVisible({ timeout: 2_000 });
     const lengthBefore = await page.evaluate(() => history.length);
 
-    const row = page.locator(`main #location-${LAST}`);
-    expect(await rowTop(row)).toBeGreaterThan(page.viewportSize()!.height);
-    const href = `${tenant.path}#location-${LAST}`;
+    // At 360 the Locations panel follows the Leagues panel and starts below the fold; at 1280 it
+    // sits beside it, in view from the start.
+    const panel = page.locator('main #locations');
+    if (!desktop) expect(await rowTop(panel)).toBeGreaterThan(page.viewportSize()!.height);
+    const href = `${tenant.path}#locations`;
     if (desktop) {
       await page
         .getByRole('navigation', { name: tenant.name })
@@ -96,12 +90,13 @@ test.describe('organization page links (#95, tester probes)', () => {
       await expect(dialog).toHaveCount(0);
     }
 
-    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#location-${LAST}`);
-    const noteBottom = (await note.boundingBox())!.y + (await note.boundingBox())!.height;
+    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#locations`);
+    const noteBox = (await note.boundingBox())!;
+    const noteBottom = noteBox.y + noteBox.height;
     const headerBottom = (await page.locator('header').boundingBox())!.y + 56;
-    await expect.poll(() => rowTop(row)).toBeGreaterThanOrEqual(noteBottom);
+    await expect.poll(() => rowTop(panel)).toBeGreaterThanOrEqual(noteBottom);
     expect(noteBottom).toBeGreaterThan(headerBottom);
-    expect(await rowTop(row)).toBeLessThan(page.viewportSize()!.height);
+    expect(await rowTop(panel)).toBeLessThan(page.viewportSize()!.height);
     expect(await page.evaluate(() => history.length)).toBe(lengthBefore + 1);
     expect(await marker(page)).toBe(true);
     await context.setOffline(false);
@@ -135,7 +130,7 @@ test.describe('organization page links (#95, tester probes)', () => {
     const lengthBefore = await page.evaluate(() => history.length);
     const link = page
       .getByRole('navigation', { name: tenant.name })
-      .locator(`a[href="${tenant.path}#league-2"]`);
+      .locator(`a[href="${tenant.path}#locations"]`);
     // On macOS, Ctrl+click is a secondary click (a context menu), so the page gets no click event.
     const mac = await page.evaluate(() => navigator.userAgent.includes('Macintosh'));
     const cases = [
@@ -164,7 +159,7 @@ test.describe('organization page links (#95, tester probes)', () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     // Control: a plain click is cancelled by the app and navigates through the router.
     await link.click();
-    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#league-2`);
+    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#locations`);
     expect(await marker(page)).toBe(true);
   });
 
@@ -180,22 +175,24 @@ test.describe('organization page links (#95, tester probes)', () => {
     await arm(page);
     const link = page
       .getByRole('navigation', { name: tenant.name })
-      .locator(`a[href="${tenant.path}#location-${LAST}"]`);
-    const row = page.locator(`main #location-${LAST}`);
+      .locator(`a[href="${tenant.path}#locations"]`);
+    const panel = page.locator('main #locations');
+    const headerBottom = () =>
+      page.evaluate(() => document.querySelector('header')?.getBoundingClientRect().bottom ?? 0);
     const lengthBefore = await page.evaluate(() => history.length);
 
     await link.click();
-    await expect(page).toHaveURL(`${tenant.path}${search}#location-${LAST}`);
-    await expect.poll(() => rowTop(row)).toBeLessThan(page.viewportSize()!.height);
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect.poll(() => rowTop(row)).toBeGreaterThan(page.viewportSize()!.height);
+    await expect(page).toHaveURL(`${tenant.path}${search}#locations`);
+    await expect.poll(() => rowTop(panel)).toBeGreaterThanOrEqual(await headerBottom());
+
+    // Scroll to the end of the page: the panel's top passes above the top bar.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => rowTop(panel)).toBeLessThan(await headerBottom());
 
     await link.click();
-    await expect.poll(() => rowTop(row)).toBeLessThan(page.viewportSize()!.height);
-    expect(await rowTop(row)).toBeGreaterThanOrEqual(56);
-    expect(page.url()).toBe(
-      `${new URL(page.url()).origin}${tenant.path}${search}#location-${LAST}`,
-    );
+    await expect.poll(() => rowTop(panel)).toBeGreaterThanOrEqual(await headerBottom());
+    expect(await rowTop(panel)).toBeLessThan(page.viewportSize()!.height);
+    expect(page.url()).toBe(`${new URL(page.url()).origin}${tenant.path}${search}#locations`);
     expect(await page.evaluate(() => history.length)).toBe(lengthBefore + 1);
     expect(await marker(page)).toBe(true);
   });
@@ -211,9 +208,9 @@ test.describe('organization page links (#95, tester probes)', () => {
     await arm(page);
     await page
       .getByRole('navigation', { name: tenant.name })
-      .locator(`a[href="${tenant.path}#location-3"]`)
+      .locator(`a[href="${tenant.path}#locations"]`)
       .click();
-    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#location-3`);
+    await expect(page).toHaveURL(`${tenant.path}?utm_source=x#locations`);
     expect(await marker(page)).toBe(true);
   });
 });

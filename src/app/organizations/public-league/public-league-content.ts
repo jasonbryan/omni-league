@@ -17,12 +17,13 @@ import { lucideCalendarDays, lucideChevronRight, lucideMapPin } from '@ng-icons/
 import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
+import { sportViewPath } from '../sport-view/sport-view-path';
 import { seasonDates } from '../league/season-dates';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
 /**
  * The public league page's content column (#127, design/mockups/127-128-public-seasons.html): the
- * breadcrumb organization, sport, league; the league as the page's `<h1>`; the sport badge and the
+ * breadcrumb organization, sport (a link to its sport view, #114), league; the league as the page's `<h1>`; the sport badge and the
  * locations; and the Seasons panel with one row per published season on this page (a link to the
  * season page, its dates, and its format), the empty state, and #103's numbered control when the
  * league has more than 5 published seasons. With `savedAt` set (a saved copy shown offline, #82),
@@ -53,8 +54,16 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
         </li>
         <li>
-          <!-- Plain text until #114 adds the sport view (/organizations/<org>/sports/<segment>). -->
-          <span class="font-medium">{{ view().league.sportName }}</span>
+          <!-- A sport the organization no longer lists has no view to link to. -->
+          @if (sportHref(); as sportHref) {
+            <a
+              [routerLink]="sportHref"
+              class="font-medium underline underline-offset-4 hover:text-foreground"
+              >{{ view().league.sportName }}</a
+            >
+          } @else {
+            <span class="font-medium">{{ view().league.sportName }}</span>
+          }
         </li>
         <li aria-hidden="true">
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
@@ -177,6 +186,12 @@ export class PublicLeagueContent {
   protected readonly leagueHref = computed(() =>
     publicLeaguePath(this.view().league.organization.slug, this.view().league.slug),
   );
+  /** The league's sport view, or `undefined` when the organization lists no such sport. */
+  protected readonly sportHref = computed(() => {
+    const { league, organization } = this.view();
+    const sport = organization.sports.find((entry) => entry.name === league.sportName);
+    return sport ? sportViewPath(league.organization.slug, sport.segment) : undefined;
+  });
   protected readonly locationsLabel = computed(() =>
     this.view().league.locationNames.length === 1 ? 'Location: ' : 'Locations: ',
   );

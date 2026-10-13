@@ -166,7 +166,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public league page, its numbered control, and its helpers to the league page and cache-key specs (#127)', () => {
+  it('maps the public league page, its numbered control, and its helpers to the league page, sport view, and cache-key specs (#127, #114)', () => {
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
@@ -178,10 +178,46 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/league-page-offline.spec.ts', 'e2e/league-page.spec.ts'),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/league-page-offline.spec.ts',
+          'e2e/league-page.spec.ts',
+          'e2e/sport-view.spec.ts',
+        ),
         file,
       );
     }
+  });
+
+  it('maps the sport view, and the sidebar it shares with the organization page, to the sport view and cache-key specs (#114)', () => {
+    for (const file of [
+      'src/app/organizations/sport-view/sport-view-page.ts',
+      'src/app/organizations/sport-view/sport-view-content.ts',
+      'src/app/organizations/sport-view/sport-view-path.ts',
+    ]) {
+      assert.deepEqual(
+        specsFor([file]),
+        want('e2e/cache-key.spec.ts', 'e2e/sport-view.spec.ts'),
+        file,
+      );
+    }
+    for (const file of [
+      'src/app/organizations/organization-sidebar.ts',
+      'src/app/organizations/organization-page.ts',
+      'convex/organizations.ts',
+    ]) {
+      const specs = specsFor([file]);
+      for (const name of ['sport-view', 'cache-key', 'organization-page']) {
+        assert.ok(specs.includes(`e2e/${name}.spec.ts`), `${file} ${name}`);
+      }
+      assert.ok(!specs.includes('FULL'), file);
+    }
+    assert.ok(specsFor(['src/app/not-found/not-found-view.ts']).includes('e2e/sport-view.spec.ts'));
+    assert.deepEqual(
+      specsFor(['src/app/organizations/sport-view/sport-view-page.spec.ts']),
+      want(),
+    );
+    assert.deepEqual(specsFor(['src/app/organizations/sport-view/testing/sport-data.ts']), want());
   });
 
   it('maps the not-found and offline views to the league page specs that assert them (#127)', () => {

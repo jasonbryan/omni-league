@@ -134,9 +134,12 @@ test.describe('public league page: raw server HTML', () => {
         )?.[0];
         expect(breadcrumb, query).toBeDefined();
         expect(breadcrumb, query).toContain(`>${tenant.name}</a>`);
-        // The sport is plain text until #114 adds the sport view.
-        expect(breadcrumb, query).toContain('>Beach volleyball</span>');
-        expect(html, query).not.toContain('/sports/');
+        // The sport links to its view (#114).
+        expect(breadcrumb, query).toMatch(
+          new RegExp(
+            `<a\\b[^>]*href="${tenant.path}/sports/beach-volleyball"[^>]*>Beach volleyball</a>`,
+          ),
+        );
         expect(breadcrumb, query).toMatch(
           new RegExp(`<a\\b[^>]*aria-current="page"[^>]*>${LEAGUE}</a>`),
         );
@@ -144,10 +147,12 @@ test.describe('public league page: raw server HTML', () => {
         expect(html, query).toMatch(/data-slot="badge"[^>]*>Beach volleyball<\/span>/);
         expect(html, query).toMatch(/Locations: <\/span>\s*Beta Courts, Alpha Field/);
 
-        // The sidebar marks the league's sport.
-        expect(html, query).toMatch(
-          /<span\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/span>/,
+        // The sidebar marks the league's sport, and links every sport to its view (#114).
+        const currentSport = [...html.matchAll(/<a\b[^>]*aria-current="true"[^>]*>/g)].map(
+          ([tag]) => /\bhref="([^"]*)"/.exec(tag)?.[1],
         );
+        expect(currentSport, query).toEqual([`${tenant.path}/sports/beach-volleyball`]);
+        expect(html, query).toContain(`href="${tenant.path}/sports/beach-volleyball"`);
 
         // Meta, from the query result: the canonical and og:url hold ?page=2, and nothing else.
         const canonical = `${path}?page=2`;

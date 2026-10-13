@@ -1,4 +1,4 @@
-import type { PublicOrganizationPage } from '../organization-path';
+import type { PublicOrganizationHeader, PublicOrganizationPage } from '../organization-path';
 
 /**
  * The organization page's data for specs: the mockup's populated organization (#73), as
@@ -90,4 +90,14 @@ export const PORT_ARANSAS: PublicOrganizationPage = {
   sports: [],
   locations: [],
   leagues: [],
+};
+
+/** The organization's header alone, as `organizations:getPublicPage` returns it. Test-only. */
+export const GULF_COAST_HEADER: PublicOrganizationHeader = {
+  name: GULF_COAST.name,
+  slug: GULF_COAST.slug,
+  leagueCount: GULF_COAST.leagueCount,
+  locationCount: GULF_COAST.locationCount,
+  sportCount: GULF_COAST.sportCount,
+  sports: GULF_COAST.sports,
 };

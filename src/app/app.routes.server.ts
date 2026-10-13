@@ -52,6 +52,14 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
   },
   {
+    // The sport view (#114): the same, with `Netlify-Vary: query` from the handler
+    // (src/server-cache.ts), so each `?page=N` is stored on its own. Its HTML holds only the page
+    // number the query result gives, never the request's query string.
+    path: 'organizations/:orgSlug/sports/:sport',
+    renderMode: RenderMode.Server,
+    headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
+  },
+  {
     // The public league page (#127): the same, with `Netlify-Vary: query` from the handler
     // (src/server-cache.ts), so each `?page=N` is stored on its own. Its HTML holds only the page
     // number the query result gives, never the request's query string.
