@@ -293,6 +293,13 @@ export const AREAS = [
     specs: LEAGUE_PAGE,
   },
   {
+    // The field-error rule every form shares (#205): sign-up, sign-in, create organization, the
+    // admin forms (locations, leagues, staff invites), and the create-season form.
+    name: 'form helper',
+    test: named('src/app/core/forms/', ['shown-errors']),
+    specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT],
+  },
+  {
     // The focus move after a route change (#127), also asserted on the season page (#128).
     name: 'focus helper',
     test: named('src/app/core/', ['focus-main']),

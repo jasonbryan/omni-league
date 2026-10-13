@@ -18,6 +18,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
+import { ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 import { Checkbox } from '../ui/checkbox';
 
@@ -76,8 +77,9 @@ type FormAlert = 'check-unavailable' | 'unexpected';
 /**
  * `/sign-up` (#62), a `RenderMode.Client` route, approved in #96
  * (design/mockups/62-sign-up.html): name, email, password with the policy text and a Show
- * control beside it, and the required 18+ confirmation. Errors show after a submit, under their
- * field (`aria-invalid`, `aria-describedby`), and each clears once its field is valid; focus goes
+ * control beside it, and the required 18+ confirmation. Errors show under their field
+ * (`aria-invalid`, `aria-describedby`) when the user leaves a field they changed, and after a submit
+ * for every invalid field; each clears once its field is valid; focus goes
  * to the first invalid field, or to the form alert for a failure that is not about one field.
  * After sign-up the browser goes to the validated `returnTo`, else `/app`.
  */
@@ -166,6 +168,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                   autocomplete="name"
                   autocapitalize="words"
                   [formField]="fields.name"
+                  (blur)="left('name')"
                   [attr.aria-describedby]="describedBy('name', 'name-description')"
                   [attr.aria-invalid]="errors.name() ? 'true' : null"
                   [attr.data-invalid]="errors.name() ? 'true' : null"
@@ -218,6 +221,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                   spellcheck="false"
                   autocapitalize="none"
                   [formField]="fields.email"
+                  (blur)="left('email')"
                   [attr.aria-describedby]="describedBy('email')"
                   [attr.aria-invalid]="errors.email() ? 'true' : null"
                   [attr.data-invalid]="errors.email() ? 'true' : null"
@@ -277,6 +281,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                     autocapitalize="none"
                     [type]="showPassword() ? 'text' : 'password'"
                     [formField]="fields.password"
+                    (blur)="left('password')"
                     [attr.aria-describedby]="describedBy('password', 'password-description')"
                     [attr.aria-invalid]="errors.password() ? 'true' : null"
                     [attr.data-invalid]="errors.password() ? 'true' : null"
@@ -345,6 +350,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                   #adult
                   controlId="adult"
                   [formField]="fields.adult"
+                  (touch)="left('adult')"
                   [describedBy]="describedBy('adult', 'adult-description')"
                   [showInvalid]="!!errors.adult()"
                 />
@@ -463,8 +469,11 @@ export class SignUpPage {
     adult: computed(() => this.fields.adult().errors()[0]?.message ?? null),
   };
 
-  /** Set on a submit for each invalid field; cleared once the field is valid (mockup state 4). */
-  private readonly shown: Record<FieldName, WritableSignal<boolean>> = {
+  /**
+   * Whether each field's client error shows: after a submit, or when the user leaves the field
+   * after changing it; cleared once the field is valid (mockup state 4, #205).
+   */
+  private readonly shown: Record<FieldName, ShownUntilValid> = {
     name: this.shownUntilValid('name'),
     email: this.shownUntilValid('email'),
     password: this.shownUntilValid('password'),
@@ -499,6 +508,11 @@ export class SignUpPage {
     return ids.length > 0 ? ids.join(' ') : null;
   }
 
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  protected left(field: FieldName): void {
+    this.shown[field].left();
+  }
+
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
     if (this.submitting()) return;
@@ -507,9 +521,8 @@ export class SignUpPage {
 
     let firstInvalid: FieldName | null = null;
     for (const field of FIELDS) {
-      const invalid = this.clientErrors[field]() !== null;
-      this.shown[field].set(invalid);
-      if (invalid) firstInvalid ??= field;
+      this.shown[field].submitted();
+      if (this.clientErrors[field]() !== null) firstInvalid ??= field;
     }
     if (firstInvalid) {
       this.focusAfterRender(firstInvalid);
@@ -559,11 +572,11 @@ export class SignUpPage {
     );
   }
 
-  private shownUntilValid(field: FieldName): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors[field]() === null,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
+  private shownUntilValid(field: FieldName): ShownUntilValid {
+    return new ShownUntilValid(
+      () => this.clientErrors[field]() !== null,
+      () => this.fields[field]().dirty(),
+    );
   }
 
   private untilChanged(value: () => unknown): WritableSignal<string | null> {
@@ -572,7 +585,7 @@ export class SignUpPage {
 
   private shownError(field: FieldName): Signal<string | null> {
     return computed(() =>
-      this.shown[field]() ? this.clientErrors[field]() : this.serverErrors[field](),
+      this.shown[field].shown() ? this.clientErrors[field]() : this.serverErrors[field](),
     );
   }
 }

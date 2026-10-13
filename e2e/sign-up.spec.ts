@@ -208,6 +208,39 @@ test.describe('sign-up', () => {
     if (!remoteBaseUrl) expect(await accountByEmail(user.email)).toBeNull();
   });
 
+  test('a field is checked when the user leaves it, and the error clears as they fix it', async ({
+    page,
+  }) => {
+    await page.goto('/sign-up');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeVisible();
+
+    // Passing through Name without changing it, then typing a bad Email: no error while typing.
+    await field(page, 'name').focus();
+    await page.keyboard.press('Tab');
+    await expect(field(page, 'email')).toBeFocused();
+    await expect(fieldError(page, 'name')).toHaveCount(0);
+    await page.keyboard.type('maya.okafor.example.com');
+    await expect(fieldError(page, 'email')).toHaveCount(0);
+
+    // Leaving Email shows the error, linked to the field, and the page passes axe with it shown.
+    await page.keyboard.press('Tab');
+    await expect(fieldError(page, 'email')).toHaveText(
+      'Enter an email address like name@example.com.',
+    );
+    await expect(field(page, 'email')).toHaveAttribute('aria-invalid', 'true');
+    await expect(field(page, 'email')).toHaveAttribute('aria-describedby', 'email-error');
+    await expect(fieldError(page, 'name')).toHaveCount(0);
+    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+
+    // Fixing it clears the error on the keystroke that makes the address valid.
+    await field(page, 'email').fill('maya.okafor@example.com');
+    await expect(fieldError(page, 'email')).toHaveCount(0);
+    await expect(field(page, 'email')).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(page).toHaveURL(`${baseURL}/sign-up`);
+  });
+
   test('signs up, lands on /app showing "Signed in as <name>", and Sign out goes to /', async ({
     page,
   }, testInfo) => {

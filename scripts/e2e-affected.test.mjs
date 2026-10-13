@@ -198,6 +198,23 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
+  it('maps the form field-error helper to the specs that fill in a form, and its unit spec to none (#205)', () => {
+    const specs = specsFor(['src/app/core/forms/shown-errors.ts']);
+    assert.ok(!specs.includes('FULL'));
+    for (const name of [
+      'sign-up',
+      'sign-in',
+      'create-organization',
+      'organization-admin',
+      'organization-leagues',
+      'organization-staff',
+      'league-management',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.deepEqual(specsFor(['src/app/core/forms/shown-errors.spec.ts']), want());
+  });
+
   it('maps the focus helper to the league page and season page specs, which assert the focus move (#127, #128)', () => {
     assert.deepEqual(
       specsFor(['src/app/core/focus-main.ts']),

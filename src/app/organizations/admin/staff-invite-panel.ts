@@ -234,6 +234,7 @@ const TEXTAREA =
                   spellcheck="false"
                   autocapitalize="none"
                   [formField]="form.fields.email"
+                  (blur)="form.left('email')"
                   [attr.aria-describedby]="
                     form.errors.email() ? 'email-description email-error' : 'email-description'
                   "
@@ -360,6 +361,7 @@ const TEXTAREA =
                       : 'leagues-description'
                   "
                   [attr.data-invalid]="form.errors.leagues() ? 'true' : null"
+                  (focusout)="form.leftGroup('leagues', $event)"
                   [class]="fieldSetClass"
                 >
                   <legend
