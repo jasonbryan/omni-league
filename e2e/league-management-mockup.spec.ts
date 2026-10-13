@@ -1,28 +1,103 @@
 // The league management page against the approved mockup design/mockups/125-126-seasons.html
-// (#125): at 375px and 1280px, each state of the page shows the same text, in the same order, as the
+// (#125): at 360px and 1280px, each state of the page shows the same text, in the same order, as the
 // mockup's frame of that state (without #126's Publish buttons and #143's and #144's Limits
-// fieldset), and passes axe. Local runs only: the tests seed a tenant and sign up a user. They run
-// in one project and set both widths themselves.
-import type { Page } from '@playwright/test';
+// fieldset), and passes axe. Local runs only: the tests use seeded tenants and users. They run in
+// one project and set both widths themselves.
+//
+// Cost (the 2-vCPU CI runner ran the first version of these tests past the 30 s test timeout, with
+// a sign-up, a tenant, and up to six `convex run` processes per test, and a browser context for the
+// mockup that was never closed): sign-up is not under test here (league-management.spec.ts signs
+// up through the real form), so each worker signs up its two users once and every test starts from
+// their saved session. Tests that only read share the tenants the worker seeded once; the two that
+// create a season (Create, and the saving state) seed their own. The mockup's text is read once
+// per width.
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { AXE_TAGS, axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
-import { remoteBaseUrl } from './support/env';
-import { expect, test } from './support/fixtures';
+import { baseURL, remoteBaseUrl } from './support/env';
+import { expect, test as base } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { seedTenant } from './support/tenant';
-import { newUser } from './support/users';
+import { seedTenant, type Tenant } from './support/tenant';
+import { newUser, type TestUser } from './support/users';
+
+type Role = 'orgAdmin' | 'leagueOrganizer';
+type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
+
+interface Account {
+  user: TestUser;
+  /** The cookies of the signed-in session, which each test's browser context starts from. */
+  state: StorageState;
+}
+
+/** What a worker seeds once, in the project that runs the tests. */
+interface World {
+  accounts: Record<Role, Account>;
+  /**
+   * The org admin's organization with the mockup's seasons, where the league organizer is assigned
+   * Sunday, Thursday, and Coed: the tests that only read open its pages.
+   */
+  shared: Tenant;
+  /** An organization where the league organizer is assigned Thursday only (no access to Coed). */
+  notAssigned: Tenant;
+}
+
+/** The one project that runs these tests (they set both widths themselves). */
+const PROJECT = 'chromium-desktop';
+
+const test = base.extend<{ role: Role }, { world: World | undefined }>({
+  world: [
+    async ({ browser }, use, workerInfo) => {
+      if (workerInfo.project.name !== PROJECT || remoteBaseUrl !== undefined) {
+        await use(undefined);
+        return;
+      }
+      const orgAdmin = await signedUp(browser, newUser('Admin'));
+      const leagueOrganizer = await signedUp(browser, newUser('Organizer'));
+      const [shared, notAssigned] = await Promise.all([
+        seed(
+          [
+            { user: orgAdmin.user, role: 'orgAdmin' },
+            {
+              user: leagueOrganizer.user,
+              role: 'leagueOrganizer',
+              assigned: [SUNDAY, THURSDAY, COED],
+            },
+          ],
+          { [COED]: COED_SEASONS, [SUNDAY]: SUNDAY_SEASONS },
+        ),
+        seed([{ user: leagueOrganizer.user, role: 'leagueOrganizer', assigned: [THURSDAY] }]),
+      ]);
+      await use({ accounts: { orgAdmin, leagueOrganizer }, shared, notAssigned });
+    },
+    { scope: 'worker', timeout: 180_000 },
+  ],
+  role: ['orgAdmin', { option: true }],
+  storageState: async ({ world, role }, use) => {
+    await use(world?.accounts[role].state);
+  },
+});
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 test.beforeEach(({ page }, testInfo) => {
   void page;
-  test.skip(testInfo.project.name !== 'chromium-desktop', 'both widths are set inside each test');
+  test.skip(testInfo.project.name !== PROJECT, 'both widths are set inside each test');
 });
 
+async function signedUp(browser: Browser, user: TestUser): Promise<Account> {
+  const context = await browser.newContext({ baseURL });
+  try {
+    await signUp(await context.newPage(), user);
+    return { user, state: await context.storageState() };
+  } finally {
+    await context.close();
+  }
+}
+
 const MOCKUP = pathToFileURL(join(process.cwd(), 'design', 'mockups', '125-126-seasons.html')).href;
-const WIDTHS = [375, 1280] as const;
+const WIDTHS = [360, 1280] as const;
 const MOCKUP_ORGANIZATION = 'Gulf Coast Sport & Social';
 
 const LOCATIONS = [
@@ -149,12 +224,48 @@ const SPRING_2028 = {
   registrationDeadline: '2028-02-15',
 };
 
-/** The text of a mockup frame's main area, without #126's and #143's and #144's parts. */
-async function mockupText(page: Page, state: string, width: number): Promise<string> {
-  await page.setViewportSize({ width, height: 900 });
-  await page.goto(`${MOCKUP}?state=${state}`);
-  const text = await page.locator('main#main').first().innerText();
-  return normalize(text, MOCKUP_ORGANIZATION);
+/** The mockup states these tests compare (`?state=`). */
+const STATES = [
+  'empty',
+  'populated',
+  'filled',
+  'errors-required',
+  'errors-rules',
+  'errors-slug',
+  'created',
+  'creating',
+  'organizer',
+  'no-access',
+  'not-found',
+] as const;
+type State = (typeof STATES)[number];
+
+/** The text of each mockup frame's main area, per width, read once per worker. */
+const mockupTexts = new Map<number, Promise<Map<State, string>>>();
+
+function mockupTextsAt(browser: Browser, width: number): Promise<Map<State, string>> {
+  let texts = mockupTexts.get(width);
+  if (!texts) {
+    texts = readMockup(browser, width);
+    mockupTexts.set(width, texts);
+  }
+  return texts;
+}
+
+async function readMockup(browser: Browser, width: number): Promise<Map<State, string>> {
+  const context = await browser.newContext({ viewport: { width, height: 900 } });
+  try {
+    const page = await context.newPage();
+    const texts = new Map<State, string>();
+    for (const state of STATES) {
+      await page.goto(`${MOCKUP}?state=${state}`);
+      const text = await page.locator('main#main').first().innerText();
+      texts.set(state, normalize(text, MOCKUP_ORGANIZATION));
+    }
+    return texts;
+  } finally {
+    await context.close();
+  }
 }
 
 /**
@@ -187,37 +298,54 @@ async function appText(page: Page, organization: string): Promise<string> {
   return normalize(await page.getByRole('main').innerText(), organization);
 }
 
-type Role = 'orgAdmin' | 'leagueOrganizer' | null;
+interface Member {
+  user: TestUser;
+  role: Role;
+  /** The leagues a league organizer is assigned. */
+  assigned?: string[];
+}
 
-async function signedIn(page: Page, role: Role, assigned: string[] = []) {
-  const user = newUser(role === 'orgAdmin' ? 'Admin' : 'Organizer');
-  await signUp(page, user);
+/**
+ * Seeds an organization (unique name and slug) with the mockup's locations and leagues, gives each
+ * of `members` their role in it, and adds the seasons, by league slug. Everything after the
+ * organization runs together.
+ */
+async function seed(members: Member[], seasons: Record<string, SeasonSeed[]> = {}) {
   const tenant = await seedTenant({
     name: MOCKUP_ORGANIZATION,
     locations: LOCATIONS,
     leagues: LEAGUES,
   });
-  if (role === 'orgAdmin') {
-    await convexRun('testing:addMembership', {
-      organizationSlug: tenant.slug,
-      email: user.email,
-      role,
-    });
-  } else if (role === 'leagueOrganizer') {
-    await convexRun('testing:addLeagueOrganizer', {
-      organizationSlug: tenant.slug,
-      email: user.email,
-      leagueSlugs: assigned,
-    });
-  }
+  const memberships = members.map(({ user: { email }, role, assigned = [] }) =>
+    role === 'orgAdmin'
+      ? convexRun('testing:addMembership', { organizationSlug: tenant.slug, email, role })
+      : convexRun('testing:addLeagueOrganizer', {
+          organizationSlug: tenant.slug,
+          email,
+          leagueSlugs: assigned,
+        }),
+  );
+  const rows = Object.entries(seasons).flatMap(([leagueSlug, list]) =>
+    // The list orders seasons by start date, so the insert order does not matter.
+    list.map((season) =>
+      convexRun('testing:seedSeason', { organizationSlug: tenant.slug, leagueSlug, ...season }),
+    ),
+  );
+  await Promise.all([...memberships, ...rows]);
   return tenant;
 }
 
-async function seedSeasons(organizationSlug: string, leagueSlug: string, seasons: SeasonSeed[]) {
-  // Oldest first, so the rows are inserted in the order a reader would create them.
-  for (const season of [...seasons].reverse()) {
-    await convexRun('testing:seedSeason', { organizationSlug, leagueSlug, ...season });
-  }
+/** The worker's seeded users and tenants. */
+function seeded(world: World | undefined): World {
+  if (!world) throw new Error('The worker seeded nothing: not the project that runs these tests');
+  return world;
+}
+
+/** A new organization for a test that creates a season: the org admin and the Coed seasons. */
+function ownTenant(world: World | undefined) {
+  return seed([{ user: seeded(world).accounts.orgAdmin.user, role: 'orgAdmin' }], {
+    [COED]: COED_SEASONS,
+  });
 }
 
 const submit = (page: Page) =>
@@ -232,19 +360,26 @@ async function fill(
   await page.locator('#end-date').fill(values.endDate);
   await page.locator('#registration-deadline').fill(values.registrationDeadline);
   await page.getByRole('radio', { name: '7 v 7' }).check();
+  // The format sets the minimum in a later render; a minimum typed before it would be overwritten.
+  await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
 }
 
 async function mockupMatches(
   page: Page,
-  mockup: Page,
+  browser: Browser,
   organization: string,
-  state: string,
+  state: State,
   width: number,
   testInfo: Parameters<typeof screenshot>[1],
   scan: 'full' | 'axe' = 'full',
 ) {
-  const expected = await mockupText(mockup, state, width);
-  expect(await appText(page, organization), `${state} at ${width}px`).toBe(expected);
+  const expected = (await mockupTextsAt(browser, width)).get(state);
+  // Polled: the page's text follows the last input in a later render (the minimum roster size's
+  // hint changes after the format is chosen), and a state is reached when its text equals the
+  // mockup's.
+  await expect
+    .poll(() => appText(page, organization), { message: `${state} at ${width}px` })
+    .toBe(expected);
   await screenshot(page, testInfo, `125-mockup-${state}`);
   if (scan === 'full') {
     await expectAccessible(page);
@@ -257,53 +392,45 @@ async function mockupMatches(
 
 for (const width of WIDTHS) {
   test.describe(`League management against the mockup at ${width}px`, () => {
-    test('no seasons yet', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
+    test('no seasons yet', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${MENS}`);
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${MENS}`);
       await expect(page.getByText('No seasons yet')).toBeVisible();
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'empty', width, testInfo);
+      await mockupMatches(page, browser, shared.name, 'empty', width, testInfo);
     });
 
-    test('drafts and published', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await seedSeasons(tenant.slug, COED, COED_SEASONS);
+    test('drafts and published', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(4);
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'populated', width, testInfo);
+      await mockupMatches(page, browser, shared.name, 'populated', width, testInfo);
     });
 
-    test('create, filled', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await seedSeasons(tenant.slug, COED, COED_SEASONS);
+    test('create, filled', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(4);
       await fill(page, SPRING_2028);
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'filled', width, testInfo);
+      await mockupMatches(page, browser, shared.name, 'filled', width, testInfo);
     });
 
-    test('create, submitted empty', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await seedSeasons(tenant.slug, COED, COED_SEASONS);
+    test('create, submitted empty', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(4);
       await submit(page).click();
       await expect(page.locator('#name-error')).toBeVisible();
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'errors-required', width, testInfo);
+      await mockupMatches(page, browser, shared.name, 'errors-required', width, testInfo);
     });
 
-    test('create, refused values', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await seedSeasons(tenant.slug, COED, COED_SEASONS);
+    test('create, refused values', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+      await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(4);
       await fill(page, {
         name: 'Spring 2028',
@@ -314,19 +441,17 @@ for (const width of WIDTHS) {
       await page.locator('#minimum-roster-size').fill('6');
       await submit(page).click();
       await expect(page.locator('#end-date-error')).toBeVisible();
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'errors-rules', width, testInfo);
+      await mockupMatches(page, browser, shared.name, 'errors-rules', width, testInfo);
     });
 
     test.describe('slug used', () => {
       // The rejected mutation logs one console error, as in league-management.spec.ts.
       test.use({ expectedConvexErrors: ['seasons:create'] });
 
-      test('create, slug used', async ({ page, browser }, testInfo) => {
-        const tenant = await signedIn(page, 'orgAdmin');
-        await seedSeasons(tenant.slug, COED, COED_SEASONS);
+      test('create, slug used', async ({ page, browser, world }, testInfo) => {
+        const { shared } = seeded(world);
         await page.setViewportSize({ width, height: 900 });
-        await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
+        await page.goto(`/app/organizations/${shared.slug}/leagues/${COED}`);
         await expect(page.locator('#seasons-list > li')).toHaveCount(4);
         await fill(page, {
           name: 'Spring 2027',
@@ -336,14 +461,13 @@ for (const width of WIDTHS) {
         });
         await submit(page).click();
         await expect(page.locator('#slug-error')).toBeVisible();
-        const mockup = await (await browser.newContext()).newPage();
-        await mockupMatches(page, mockup, tenant.name, 'errors-slug', width, testInfo);
+        await mockupMatches(page, browser, shared.name, 'errors-slug', width, testInfo);
       });
     });
 
-    test('create, done: a draft', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await seedSeasons(tenant.slug, COED, COED_SEASONS);
+    // The next two create Spring 2028, so each has its own organization.
+    test('create, done: a draft', async ({ page, browser, world }, testInfo) => {
+      const tenant = await ownTenant(world);
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(4);
@@ -353,13 +477,11 @@ for (const width of WIDTHS) {
         page.getByRole('status').filter({ hasText: 'created as a draft' }),
       ).toBeVisible();
       await expect(page.locator('#seasons-list > li')).toHaveCount(5);
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'created', width, testInfo);
+      await mockupMatches(page, browser, tenant.name, 'created', width, testInfo);
     });
 
-    test('create, saving', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await seedSeasons(tenant.slug, COED, COED_SEASONS);
+    test('create, saving', async ({ page, browser, world }, testInfo) => {
+      const tenant = await ownTenant(world);
       await page.setViewportSize({ width, height: 900 });
       // Holds every mutation the page sends until released, so the saving state can be read.
       let release: () => void = () => undefined;
@@ -377,39 +499,38 @@ for (const width of WIDTHS) {
       await fill(page, SPRING_2028);
       await submit(page).click();
       await expect(page.getByText('Creating season…')).toBeVisible();
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'creating', width, testInfo, 'axe');
+      await mockupMatches(page, browser, tenant.name, 'creating', width, testInfo, 'axe');
       release();
     });
 
-    test('as a league organizer', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'leagueOrganizer', [SUNDAY, THURSDAY, COED]);
-      await seedSeasons(tenant.slug, SUNDAY, SUNDAY_SEASONS);
-      await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${SUNDAY}`);
-      await expect(page.locator('#seasons-list > li')).toHaveCount(3);
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'organizer', width, testInfo);
+    test.describe('a league organizer', () => {
+      test.use({ role: 'leagueOrganizer' });
+
+      test('as a league organizer', async ({ page, browser, world }, testInfo) => {
+        const { shared } = seeded(world);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`/app/organizations/${shared.slug}/leagues/${SUNDAY}`);
+        await expect(page.locator('#seasons-list > li')).toHaveCount(3);
+        await mockupMatches(page, browser, shared.name, 'organizer', width, testInfo);
+      });
+
+      test('no access', async ({ page, browser, world }, testInfo) => {
+        const { notAssigned } = seeded(world);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`/app/organizations/${notAssigned.slug}/leagues/${COED}`);
+        await expect(
+          page.getByRole('heading', { name: 'You can’t manage this league' }),
+        ).toBeVisible();
+        await mockupMatches(page, browser, notAssigned.name, 'no-access', width, testInfo);
+      });
     });
 
-    test('no access', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'leagueOrganizer', [THURSDAY]);
+    test('unknown league: not found', async ({ page, browser, world }, testInfo) => {
+      const { shared } = seeded(world);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/${COED}`);
-      await expect(
-        page.getByRole('heading', { name: 'You can’t manage this league' }),
-      ).toBeVisible();
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'no-access', width, testInfo);
-    });
-
-    test('unknown league: not found', async ({ page, browser }, testInfo) => {
-      const tenant = await signedIn(page, 'orgAdmin');
-      await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/app/organizations/${tenant.slug}/leagues/does-not-exist`);
+      await page.goto(`/app/organizations/${shared.slug}/leagues/does-not-exist`);
       await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
-      const mockup = await (await browser.newContext()).newPage();
-      await mockupMatches(page, mockup, tenant.name, 'not-found', width, testInfo);
+      await mockupMatches(page, browser, shared.name, 'not-found', width, testInfo);
     });
   });
 }
