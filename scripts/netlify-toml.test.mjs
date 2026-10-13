@@ -17,10 +17,14 @@ function command(context) {
   return /^\s*command\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/m.exec(body)?.[1];
 }
 
-/** The TOML-escaped quoted name a context passes to `--preview-create`. */
-const PREVIEW_NAME = {
-  'deploy-preview': String.raw`\"pr-$REVIEW_ID\"`,
-  'branch-deploy': String.raw`\"$HEAD\"`,
+/**
+ * What each context passes to `npx convex deploy`: the TOML-escaped quoted preview name and the
+ * flag. PR previews use `--preview-create` (a fresh backend per push); staging uses
+ * `--preview-name`, which reuses the `main` deployment and its data (#222).
+ */
+const PREVIEW = {
+  'deploy-preview': { name: String.raw`\"pr-$REVIEW_ID\"`, flag: '--preview-create' },
+  'branch-deploy': { name: String.raw`\"$HEAD\"`, flag: '--preview-name' },
 };
 
 // The app registers the service worker only when `scripts/ng-convex.mjs` passes
@@ -38,7 +42,7 @@ describe('netlify.toml builds through npm run build (#81)', () => {
 });
 
 describe('netlify.toml demo seed (#97)', () => {
-  for (const [context, name] of Object.entries(PREVIEW_NAME)) {
+  for (const [context, { name, flag }] of Object.entries(PREVIEW)) {
     it(`${context} runs seed:demo on its preview after the deploy and the environment check`, () => {
       const cmd = command(context);
       assert.ok(cmd, `[context.${context}] has a command`);
@@ -50,14 +54,22 @@ describe('netlify.toml demo seed (#97)', () => {
       const seed = steps.indexOf(`npx convex run seed:demo --preview-name ${name}`);
       assert.ok(deploy >= 0, '`npx convex deploy` is a step');
       assert.ok(
-        steps[deploy].includes(`--preview-create ${name}`),
-        `the deploy creates the preview ${name}`,
+        steps[deploy].includes(`${flag} ${name}`),
+        `the deploy targets the preview ${name} with ${flag}`,
       );
       assert.ok(check > deploy, 'the environment check runs after the deploy');
       assert.ok(seed > check, 'seed:demo runs after the environment check, on the same preview');
       assert.equal(cmd.match(/seed:demo/g)?.length, 1);
     });
   }
+
+  it('only deploy previews recreate their backend; staging reuses it and its data (#222)', () => {
+    const recreating = Object.keys(PREVIEW).filter((context) =>
+      /--preview-create\b/.test(command(context) ?? ''),
+    );
+    assert.deepEqual(recreating, ['deploy-preview']);
+    assert.doesNotMatch(command('production') ?? '', /--preview-(create|name)/);
+  });
 
   it('no context passes --preview-run (it seeds only a newly created preview)', () => {
     const lines = toml
