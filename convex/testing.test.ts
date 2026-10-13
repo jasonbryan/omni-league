@@ -136,10 +136,12 @@ describe('convex/testing.ts exports', () => {
       'accountByEmail',
       'addInvite',
       'addLeague',
+      'addLeagueOrganizer',
       'addMembership',
       'ping',
       'reset',
       'seedLeague',
+      'seedSeason',
       'seedSignInFailures',
       'seedTenant',
     ]);

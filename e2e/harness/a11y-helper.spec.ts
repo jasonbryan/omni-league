@@ -144,6 +144,107 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(/^2\.1\.2 No keyboard trap: /)]);
   });
 
+  test('2.1.2: a native date field takes one Tab press per segment and is not a trap (#125)', async ({
+    page,
+  }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Dates</h1><label for="d">Start</label><input id="d" type="date">' +
+          '<button type="button">After</button>',
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([]);
+    expect(walk.order).toEqual(['input#d ""', 'button "After"']);
+  });
+
+  // The date-field allowance (#125) must not hide a real trap: each fixture below traps focus,
+  // next to a date field or on it, and the walk must still report it.
+  const TRAP = /^2\.1\.2 No keyboard trap: /;
+  const dateAndTrap = (trapScript: string, extra = ''): string =>
+    fixture(
+      '<h1>Dates and a trap</h1><label for="d">Start</label><input id="d" type="date">' +
+        `${extra}<button type="button" id="after">After</button><button type="button">Last</button>` +
+        `<script>${trapScript}</script>`,
+    );
+
+  test('2.1.2: a button that keeps focus on Tab, right after a date field, is still a trap (#125)', async ({
+    page,
+  }) => {
+    await page.setContent(
+      dateAndTrap(
+        "document.getElementById('after').addEventListener('keydown', (e) => { if (e.key === 'Tab') e.preventDefault(); });",
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+  });
+
+  test('2.1.2: a date field that keeps focus on Tab is still a trap (#125)', async ({ page }) => {
+    await page.setContent(
+      dateAndTrap(
+        "document.getElementById('d').addEventListener('keydown', (e) => { if (e.key === 'Tab') e.preventDefault(); });",
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+  });
+
+  test('2.1.2: a date field that takes focus back on blur is still a trap (#125)', async ({
+    page,
+  }) => {
+    await page.setContent(
+      dateAndTrap(
+        "const d = document.getElementById('d'); d.addEventListener('blur', () => setTimeout(() => d.focus(), 0));",
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+  });
+
+  test('2.1.2: two buttons that pass focus back and forth, on a page with a date field, are still a trap (#125)', async ({
+    page,
+  }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Ping-pong</h1><input id="d" type="date" aria-label="Start">' +
+          '<button type="button" id="a">A</button><button type="button" id="b">B</button>' +
+          '<script>' +
+          "const a = document.getElementById('a'), b = document.getElementById('b');" +
+          "b.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); a.focus(); } });" +
+          '</script>',
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+  });
+
+  test('2.1.2: a trap on a button before the date field is still a trap (#125)', async ({
+    page,
+  }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Trap first</h1><button type="button" id="t">Trap</button>' +
+          '<input id="d" type="date" aria-label="Start"><button type="button">After</button>' +
+          "<script>document.getElementById('t').addEventListener('keydown', (e) => { if (e.key === 'Tab') e.preventDefault(); });</script>",
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+  });
+
+  test('2.1.2: three date fields in a row, with no trap, still pass (#125)', async ({ page }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Dates</h1><input id="a" type="date" aria-label="A"><input id="b" type="date" aria-label="B">' +
+          '<input id="c" type="date" aria-label="C"><button type="button">After</button>',
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([]);
+    expect(walk.order).toEqual(['input#a "A"', 'input#b "B"', 'input#c "C"', 'button "After"']);
+  });
+
   test('2.4.3: an order different from the expected order fails; the matching order passes', async ({
     page,
   }) => {

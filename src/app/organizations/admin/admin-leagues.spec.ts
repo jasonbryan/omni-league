@@ -185,6 +185,19 @@ describe('AdminLeagues', () => {
       expect(items().map((li) => li.querySelector('button') !== null)).toEqual([false, true, true]);
     });
 
+    it('links each league’s name to its management page (design/mockups/125-126-seasons.html state 16)', async () => {
+      await open(LEAGUES);
+      const links = items().map((li) => li.querySelector<HTMLAnchorElement>('h3 a')!);
+      expect(links.map((a) => [text(a), a.getAttribute('href')])).toEqual(
+        LEAGUES.map((l) => [l.name, `/app/organizations/${COASTAL.slug}/leagues/${l.slug}`]),
+      );
+      expect(tokens(links[0].className)).toEqual(
+        tokens('inline-block underline underline-offset-4 hover:text-primary'),
+      );
+      // The Publish button is still the only button of a draft's row.
+      expect(items()[1].querySelectorAll('button')).toHaveLength(1);
+    });
+
     it('a failed list shows the destructive alert, never the error message', async () => {
       await open(undefined, COASTAL_LOCATIONS);
       o.subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
