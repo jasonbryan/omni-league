@@ -20,16 +20,34 @@ import { YourOrganizations, organizationInitials } from './your-organizations';
 })
 class Host {}
 
-const COASTAL = { name: 'Coastal Bend Rec Club', slug: 'coastal-bend-rec-club', role: 'orgAdmin' };
+const COASTAL = {
+  name: 'Coastal Bend Rec Club',
+  slug: 'coastal-bend-rec-club',
+  role: 'orgAdmin',
+  leagues: [],
+};
 const MUSTANG = {
   name: 'Mustang Island Beach Volleyball',
   slug: 'mustang-island-beach-volleyball',
   role: 'orgAdmin',
+  leagues: [],
 };
+// A league organizer whose assigned leagues were all dropped (#141).
 const RIVERBEND = {
   name: 'Riverbend Softball Association',
   slug: 'riverbend-softball-association',
   role: 'leagueOrganizer',
+  leagues: [],
+};
+const GULF_COAST = {
+  name: 'Gulf Coast Sport & Social',
+  slug: 'gulf-coast-sport-social',
+  role: 'leagueOrganizer',
+  leagues: [
+    { name: 'Friday Night Coed 6s', slug: 'friday-night-coed-6s' },
+    { name: 'Sunday Reverse Coed 4s', slug: 'sunday-reverse-coed-4s' },
+    { name: 'Thursday Night Coed 2s', slug: 'thursday-night-coed-2s' },
+  ],
 };
 
 describe('YourOrganizations', () => {
@@ -62,7 +80,8 @@ describe('YourOrganizations', () => {
     return subscription;
   }
 
-  const rows = () => [...section.querySelectorAll('li')];
+  // The organization rows only: a row's league links are a nested list (#141).
+  const rows = () => [...section.querySelectorAll('ul[role="list"].divide-y > li')];
   const link = (row: Element, text: string) =>
     [...row.querySelectorAll('a')].find((a) => a.textContent?.includes(text));
   const text = (element: Element | null | undefined) =>
@@ -180,6 +199,122 @@ describe('YourOrganizations', () => {
       '/app/organizations/mustang-island-beach-volleyball',
       null,
     ]);
+  });
+
+  describe('assigned leagues (issue 141, design/mockups/141-app-leagues.html)', () => {
+    const leagueLinks = (row: Element) => [...row.querySelectorAll('ul ul a, li ul a')];
+
+    it('one league (state 1): "Your leagues" and a link to the league management page, no Manage', async () => {
+      await open();
+      await answer([
+        {
+          ...GULF_COAST,
+          leagues: [{ name: 'Friday Night Coed 6s', slug: 'friday-night-coed-6s' }],
+        },
+      ]);
+      const row = rows()[0];
+      expect(text(row.querySelector('p'))).toBe('League organizer');
+      expect(link(row, 'Manage')).toBeUndefined();
+      expect(link(row, 'Public page')?.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social',
+      );
+      const label = row.querySelector('p[id$="-leagues-label"]')!;
+      expect(text(label)).toBe('Your leagues');
+      const list = row.querySelector('ul')!;
+      expect(list.getAttribute('role')).toBe('list');
+      expect(list.getAttribute('aria-labelledby')).toBe(label.id);
+      expect(leagueLinks(row).map((a) => [text(a), a.getAttribute('href')])).toEqual([
+        [
+          'Friday Night Coed 6s',
+          '/app/organizations/gulf-coast-sport-social/leagues/friday-night-coed-6s',
+        ],
+      ]);
+      // The trophy and chevron icons are decorative.
+      for (const icon of leagueLinks(row)[0].querySelectorAll('ng-icon')) {
+        expect(icon.getAttribute('aria-hidden')).toBe('true');
+      }
+      expect(row.querySelectorAll('ng-icon[name="lucideTrophy"]')).toHaveLength(1);
+      expect(row.querySelectorAll('ng-icon[name="lucideChevronRight"]')).toHaveLength(1);
+    });
+
+    it('several leagues (state 2): one link each, in the order the query gives, beside an unchanged org admin row', async () => {
+      await open();
+      await answer([GULF_COAST, MUSTANG]);
+      expect(leagueLinks(rows()[0]).map((a) => text(a))).toEqual([
+        'Friday Night Coed 6s',
+        'Sunday Reverse Coed 4s',
+        'Thursday Night Coed 2s',
+      ]);
+      expect(leagueLinks(rows()[0]).map((a) => a.getAttribute('href'))).toEqual([
+        '/app/organizations/gulf-coast-sport-social/leagues/friday-night-coed-6s',
+        '/app/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s',
+        '/app/organizations/gulf-coast-sport-social/leagues/thursday-night-coed-2s',
+      ]);
+      // The org admin's row has no leagues list, and keeps Public page and Manage.
+      expect(rows()[1].querySelector('ul')).toBeNull();
+      expect(rows()[1].textContent).not.toContain('Your leagues');
+      expect(rows()[1].textContent).not.toContain('No leagues are assigned');
+      expect([...rows()[1].querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([
+        '/organizations/mustang-island-beach-volleyball',
+        '/app/organizations/mustang-island-beach-volleyball',
+      ]);
+    });
+
+    it('league links use the sidebar-item style, 36px tall', async () => {
+      await open();
+      await answer([GULF_COAST]);
+      expect(leagueLinks(rows()[0])).toHaveLength(3);
+      for (const a of leagueLinks(rows()[0])) {
+        expect([...a.classList].sort()).toEqual(
+          'flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted'
+            .split(' ')
+            .sort(),
+        );
+      }
+    });
+
+    it('no leagues (state 3): the row stays with the no-leagues line and no links', async () => {
+      await open();
+      await answer([RIVERBEND]);
+      const row = rows()[0];
+      expect(text(row.querySelector('h3'))).toBe('Riverbend Softball Association');
+      expect(text(row)).toContain(
+        'No leagues are assigned to you here. Ask an org admin of Riverbend Softball Association to assign one.',
+      );
+      expect(row.querySelector('ul')).toBeNull();
+      expect(row.textContent).not.toContain('Your leagues');
+      expect([...row.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([
+        '/organizations/riverbend-softball-association',
+      ]);
+      expect(row.querySelector('ng-icon[name="lucideInfo"]')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      );
+    });
+
+    it('org admin only (state 4): rows are as #64 drew them', async () => {
+      await open();
+      await answer([COASTAL]);
+      expect(rows()[0].textContent).not.toContain('Your leagues');
+      expect(rows()[0].textContent).not.toContain('No leagues are assigned');
+      expect(rows()[0].querySelector('ul')).toBeNull();
+    });
+
+    it('encodes the slugs in the link, so a slug cannot change the path', async () => {
+      await open();
+      await answer([
+        { ...GULF_COAST, slug: 'a b', leagues: [{ name: 'X', slug: '../admin?x=1#y' }] },
+      ]);
+      expect(leagueLinks(rows()[0])[0].getAttribute('href')).toBe(
+        '/app/organizations/a%20b/leagues/..%2Fadmin%3Fx%3D1%23y',
+      );
+    });
+
+    it('gives each organization its own list labels, so two lists never share an id', async () => {
+      await open();
+      await answer([GULF_COAST, { ...GULF_COAST, name: 'Other', slug: 'other-org' }]);
+      const ids = [...section.querySelectorAll('p[id$="-leagues-label"]')].map((p) => p.id);
+      expect(ids).toEqual(['gulf-coast-sport-social-leagues-label', 'other-org-leagues-label']);
+    });
   });
 
   it('follows the live query: a new organization appears without a reload', async () => {

@@ -216,16 +216,53 @@ export const getAdminContext = query({
 /** Memberships `listMine` reads. A user is rarely in more than a few organizations. */
 export const LIST_MINE_LIMIT = 100;
 
+/** Assigned leagues `listMine` reads per membership (#141): the first ones in the membership. */
+export const LIST_MINE_LEAGUES_LIMIT = 100;
+
 /**
- * "Your organizations" on `/app` (#64): the caller's own memberships as `{ name, slug, role }`,
- * sorted by organization name ignoring case. It takes no argument, so no caller can name another
- * user; with no identity, or an identity with no `users` row, it returns `[]`. Reads at most
- * `LIST_MINE_LIMIT` memberships.
+ * The leagues assigned to a league organizer in their organization, as `{ name, slug }` sorted by
+ * the league's `sortName` (#100), drafts included (#141). An id whose league is missing, or belongs
+ * to another organization, is dropped; a repeated id is listed once. An org admin has none: they
+ * reach every league through the admin area.
+ */
+async function assignedLeagues(
+  ctx: QueryCtx,
+  membership: Doc<'memberships'>,
+): Promise<{ name: string; slug: string }[]> {
+  if (membership.role !== 'leagueOrganizer') return [];
+  const leagues = [];
+  for (const leagueId of new Set(membership.leagueIds.slice(0, LIST_MINE_LEAGUES_LIMIT))) {
+    const league = await ctx.db.get('leagues', leagueId);
+    if (league?.organizationId !== membership.organizationId) continue;
+    leagues.push({
+      name: league.name,
+      slug: league.slug,
+      sortKey: league.sortName ?? sortName(league.name),
+    });
+  }
+  leagues.sort((x, y) => (x.sortKey < y.sortKey ? -1 : x.sortKey > y.sortKey ? 1 : 0));
+  return leagues.map(({ name, slug }) => ({ name, slug }));
+}
+
+/**
+ * "Your organizations" on `/app` (#64): the caller's own memberships as
+ * `{ name, slug, role, leagues }`, sorted by organization name ignoring case. `leagues` (#141) is
+ * the caller's assigned leagues in the organization when they are a league organizer, drafts
+ * included, sorted by name ignoring case, and `[]` for an org admin. It takes no argument, so no
+ * caller can name another user; with no identity, or an identity with no `users` row, it returns
+ * `[]`. Reads at most `LIST_MINE_LIMIT` memberships and `LIST_MINE_LEAGUES_LIMIT` leagues of each.
  */
 // eslint-disable-next-line @convex-dev/require-access-control -- the caller's own memberships only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
 export const listMine = query({
   args: {},
-  returns: v.array(v.object({ name: v.string(), slug: v.string(), role: roleValidator })),
+  returns: v.array(
+    v.object({
+      name: v.string(),
+      slug: v.string(),
+      role: roleValidator,
+      leagues: v.array(v.object({ name: v.string(), slug: v.string() })),
+    }),
+  ),
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
@@ -234,9 +271,15 @@ export const listMine = query({
       .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
       .take(LIST_MINE_LIMIT);
     const rows = [];
-    for (const { organizationId, role } of memberships) {
-      const organization = await ctx.db.get('organizations', organizationId);
-      if (organization) rows.push({ name: organization.name, slug: organization.slug, role });
+    for (const membership of memberships) {
+      const organization = await ctx.db.get('organizations', membership.organizationId);
+      if (!organization) continue;
+      rows.push({
+        name: organization.name,
+        slug: organization.slug,
+        role: membership.role,
+        leagues: await assignedLeagues(ctx, membership),
+      });
     }
     return rows.sort((x, y) => {
       const a = sortName(x.name);

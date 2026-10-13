@@ -85,7 +85,14 @@ describe('AccountPage', () => {
     emitMe();
     convex.activeSubscriptions
       .find((s) => s.name === 'organizations:listMine')
-      ?.emit([{ name: 'Coastal Bend Rec Club', slug: 'coastal-bend-rec-club', role: 'orgAdmin' }]);
+      ?.emit([
+        {
+          name: 'Coastal Bend Rec Club',
+          slug: 'coastal-bend-rec-club',
+          role: 'orgAdmin',
+          leagues: [],
+        },
+      ]);
     await harness.fixture.whenStable();
 
     const sections = [...page.querySelectorAll('section')];

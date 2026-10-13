@@ -256,13 +256,13 @@ describe('organizations.listMine', () => {
     });
 
     await expect(a.query(api.organizations.listMine, {})).resolves.toEqual([
-      { name: 'Alpha Club', slug: 'alpha-club', role: 'orgAdmin' },
-      { name: 'beta Club', slug: 'beta-club', role: 'orgAdmin' },
-      { name: 'Bob Club', slug: 'bob-club', role: 'leagueOrganizer' },
-      { name: 'zebra Club', slug: 'zebra-club', role: 'orgAdmin' },
+      { name: 'Alpha Club', slug: 'alpha-club', role: 'orgAdmin', leagues: [] },
+      { name: 'beta Club', slug: 'beta-club', role: 'orgAdmin', leagues: [] },
+      { name: 'Bob Club', slug: 'bob-club', role: 'leagueOrganizer', leagues: [] },
+      { name: 'zebra Club', slug: 'zebra-club', role: 'orgAdmin', leagues: [] },
     ]);
     await expect(b.query(api.organizations.listMine, {})).resolves.toEqual([
-      { name: 'Bob Club', slug: 'bob-club', role: 'orgAdmin' },
+      { name: 'Bob Club', slug: 'bob-club', role: 'orgAdmin', leagues: [] },
     ]);
   });
 
@@ -314,7 +314,7 @@ describe('organizations.create, edge cases (tester)', () => {
       await ctx.db.delete('organizations', gone!._id);
     });
     await expect(a.query(api.organizations.listMine, {})).resolves.toEqual([
-      { name: 'Kept', slug: 'kept-org', role: 'orgAdmin' },
+      { name: 'Kept', slug: 'kept-org', role: 'orgAdmin', leagues: [] },
     ]);
   });
 });
