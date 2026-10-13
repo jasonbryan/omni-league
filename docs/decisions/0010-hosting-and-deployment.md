@@ -6,6 +6,7 @@
 - **Date:** 2026-10-07
 - **Amended:** 2026-10-10, by #62 (PR #102): client-route shells are kept by no shared cache. See "Amendment: client shells and the shared cache (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-10, by #158: previews are cleaned up after their PR merges, by a workflow on `main` that holds one environment secret. See "Amendment: preview cleanup (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-10-13, by #222: staging reuses its Convex deployment, so its data survives a deploy. See "Amendment: staging keeps its Convex data (2026-10-13)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -337,7 +338,7 @@ The engine merges three sources: `security.allowedHosts` from `angular.json`, th
 - **One Convex preview deployment per PR.**
   - It is named `pr-<number>` (`REVIEW_ID`: "for example, `deploy-preview-12` is for PR #12"), rather than the branch name.
   - That way a release PR (`main` into `production`) does not recreate the staging backend `main`, and a reused branch name cannot collide.
-  - `--preview-create` deletes and recreates the backend on every push, so each preview starts with fresh data.
+  - `--preview-create` deletes and recreates the backend on every push, so each PR preview starts with fresh data (staging reuses its backend; see the 2026-10-13 amendment).
 - **It is a server deployment.** Each preview is an atomic Netlify deploy with its own copy of the edge function and the static files. It does not share a function with production.
 - **URL reporting.** Netlify's GitHub App posts the preview link as a PR comment and as a commit status, both on by default ([deploy notifications](https://docs.netlify.com/deploy/deploy-notifications/)).
   - The URL is predictable: `https://deploy-preview-<n>--<site>.netlify.app`.
@@ -709,3 +710,25 @@ The Convex team caps deployments at 40, and each PR adds a preview deployment `p
 | No deploy secret exists in GitHub (item 8, Consequences)                | No secret, no token, no cleanup job | One environment secret, `CONVEX_TEAM_TOKEN` (a Convex team access token), in the GitHub environment `preview-cleanup`, whose deployment branches are limited to `main`. Only `clean-previews.yml` uses it. The token acts for the whole team: it can mint deploy keys for any deployment (production included) and so deploy code, delete projects, and change default environment variables. It is therefore held like a production credential, readable only by runs on `main`. No deploy key, Netlify token, or other secret is added; ADR 0009's rules for `ci` hold. |
 
 The workflow has no `pull_request`, `pull_request_target`, or `workflow_run` trigger (only `push` to `main`, `schedule`, and `workflow_dispatch`), declares `environment: preview-cleanup`, uses `permissions: contents: read` and `pull-requests: read` only, pinned GitHub-owned actions, and skips with a notice when the secret is unset. Its engine, `scripts/clean-previews.mjs`, deletes only `preview`-type deployments of the `omni-league` project named `pr-<n>` whose PR `gh` reports as CLOSED or MERGED. Operating reference and the owner's setup: [hosting, Cleanup](../process/hosting.md#cleanup).
+
+## Amendment: staging keeps its Convex data (2026-10-13)
+
+Every merge to `main` ran `npx convex deploy --preview-create "$HEAD"`, which `convex deploy --help` (CLI 1.46) describes as "Like --preview-name, but deletes and recreates an existing preview deployment with the same name". Each merge therefore deleted staging's Convex deployment, and with it the owner's test accounts and organizations, and staging answered 503 until the new deployment was seeded (#222, observed 2026-10-13: `successful-viper-762` gone, `preview/main` recreated as `adorable-spaniel-118`).
+
+| Rule in this ADR                                                              | Was                                                                            | Now                                                                                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Staging deploy (`[context.branch-deploy]`, item 6)                            | `npx convex deploy ... --preview-create "$HEAD"`: deletes and recreates `main` | `npx convex deploy ... --preview-name "$HEAD"`: reuses the deployment `main` and its data, and creates it when none exists |
+| PR previews (`[context.deploy-preview]`, item 6)                              | `--preview-create "pr-$REVIEW_ID"`                                             | Unchanged: a fresh backend per push is wanted for a PR                                                                     |
+| "`--preview-create` deletes and recreates the backend on every push" (item 6) | Said of every preview                                                          | True of PR previews only                                                                                                   |
+
+**Why staging differs.** A PR preview is disposable, and a clean backend per push keeps one push's data from leaking into the next test. Staging is the environment the owner reviews and keeps test accounts in, so it must outlive a deploy. `--preview-name` and `--preview-create` both call Convex's `claim_preview_deployment` endpoint with the same name; the CLI source (`convex/src/cli/deploy.ts`) differs only in a `reuse` flag, true for `--preview-name`. `--preview-name` is also what Convex's CI integrations default to (the Git branch name) on a branch's first push, when no deployment exists, so it creates when none exists, which a fresh staging needs. The documentation says only "Reuses the existing deployment if one exists" and the server side of the endpoint is not public, so this rests on the CLI source and that default. The first staging build after this change is the live confirmation; the build log shows the deployment name.
+
+**Effects checked.**
+
+- `seed:demo` is insert-only and backfills (it adds only missing demo rows and never deletes), so it runs unchanged on a reused deployment and inserts zero rows once the demo data is there.
+- `scripts/check-deploy-env.mjs preview` still runs after the deploy and reads the reused deployment's variables.
+- Convex applies its default preview variables (`BETTER_AUTH_SECRET`, `SITE_URL`, and the others in [hosting, Preview variables](../process/hosting.md#preview-variables)) only when it creates a deployment, and does not sync later changes ([environment variables](https://docs.convex.dev/production/environment-variables)). A reused `main` therefore keeps the `BETTER_AUTH_SECRET` it got at creation, so sessions stay valid across deploys. A default added or changed later does not reach it; the check fails the build for a missing required variable, and the owner sets the value on `main` by hand.
+
+**Unchanged.** Convex deletes a preview deployment 5 days after creation on the Free plan, and reuse does not extend that. Staging still resets to an empty, re-seeded backend about every 5 days; whether to avoid that (a longer-retention plan, or a different staging deployment) is a separate owner decision.
+
+**Sources.** `npx convex deploy --help` (CLI 1.46), [deploy CLI](https://docs.convex.dev/cli/reference/deploy), [preview deployments](https://docs.convex.dev/production/hosting/preview-deployments).
