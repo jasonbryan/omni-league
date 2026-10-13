@@ -216,22 +216,29 @@ export const getAdminContext = query({
 /** Memberships `listMine` reads. A user is rarely in more than a few organizations. */
 export const LIST_MINE_LIMIT = 100;
 
-/** Assigned leagues `listMine` reads per membership (#141): the first ones in the membership. */
+/**
+ * Assigned leagues `listMine` reads in all (#141, #196): one budget across every membership, spent
+ * in organization-name order, so a caller in several organizations costs no more than this many
+ * league reads. An organization the budget does not reach lists no leagues.
+ */
 export const LIST_MINE_LEAGUES_LIMIT = 100;
 
 /**
  * The leagues assigned to a league organizer in their organization, as `{ name, slug }` sorted by
  * the league's `sortName` (#100), drafts included (#141). An id whose league is missing, or belongs
  * to another organization, is dropped; a repeated id is listed once. An org admin has none: they
- * reach every league through the admin area.
+ * reach every league through the admin area. Reads at most `budget` leagues (the first ids of the
+ * membership) and returns how many it read, so the caller can spend one budget across memberships.
  */
 async function assignedLeagues(
   ctx: QueryCtx,
   membership: Doc<'memberships'>,
-): Promise<{ name: string; slug: string }[]> {
-  if (membership.role !== 'leagueOrganizer') return [];
+  budget: number,
+): Promise<{ leagues: { name: string; slug: string }[]; reads: number }> {
+  if (membership.role !== 'leagueOrganizer') return { leagues: [], reads: 0 };
+  const ids = [...new Set(membership.leagueIds)].slice(0, budget);
   const leagues = [];
-  for (const leagueId of new Set(membership.leagueIds.slice(0, LIST_MINE_LEAGUES_LIMIT))) {
+  for (const leagueId of ids) {
     const league = await ctx.db.get('leagues', leagueId);
     if (league?.organizationId !== membership.organizationId) continue;
     leagues.push({
@@ -241,7 +248,7 @@ async function assignedLeagues(
     });
   }
   leagues.sort((x, y) => (x.sortKey < y.sortKey ? -1 : x.sortKey > y.sortKey ? 1 : 0));
-  return leagues.map(({ name, slug }) => ({ name, slug }));
+  return { leagues: leagues.map(({ name, slug }) => ({ name, slug })), reads: ids.length };
 }
 
 /**
@@ -250,7 +257,8 @@ async function assignedLeagues(
  * the caller's assigned leagues in the organization when they are a league organizer, drafts
  * included, sorted by name ignoring case, and `[]` for an org admin. It takes no argument, so no
  * caller can name another user; with no identity, or an identity with no `users` row, it returns
- * `[]`. Reads at most `LIST_MINE_LIMIT` memberships and `LIST_MINE_LEAGUES_LIMIT` leagues of each.
+ * `[]`. Reads at most `LIST_MINE_LIMIT` memberships and `LIST_MINE_LEAGUES_LIMIT` leagues in all
+ * (#196), spent in organization-name order.
  */
 // eslint-disable-next-line @convex-dev/require-access-control -- the caller's own memberships only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
 export const listMine = query({
@@ -270,22 +278,30 @@ export const listMine = query({
       .query('memberships')
       .withIndex('by_userId_and_organizationId', (q) => q.eq('userId', user._id))
       .take(LIST_MINE_LIMIT);
-    const rows = [];
+    const organizations = [];
     for (const membership of memberships) {
       const organization = await ctx.db.get('organizations', membership.organizationId);
-      if (!organization) continue;
+      if (organization) organizations.push({ membership, organization });
+    }
+    // The order the rows come back in, so the league budget goes to the first rows.
+    organizations.sort((x, y) => {
+      const a = sortName(x.organization.name);
+      const b = sortName(y.organization.name);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    let budget = LIST_MINE_LEAGUES_LIMIT;
+    const rows = [];
+    for (const { membership, organization } of organizations) {
+      const { leagues, reads } = await assignedLeagues(ctx, membership, budget);
+      budget -= reads;
       rows.push({
         name: organization.name,
         slug: organization.slug,
         role: membership.role,
-        leagues: await assignedLeagues(ctx, membership),
+        leagues,
       });
     }
-    return rows.sort((x, y) => {
-      const a = sortName(x.name);
-      const b = sortName(y.name);
-      return a < b ? -1 : a > b ? 1 : 0;
-    });
+    return rows;
   },
 });
 

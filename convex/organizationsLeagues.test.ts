@@ -265,4 +265,89 @@ describe('organizations.listMine: leagues (#141)', () => {
       `extra-${LIST_MINE_LEAGUES_LIMIT}`,
     );
   });
+
+  /** Creates `count` leagues of `organizationId` named `<prefix> 000`, `<prefix> 001`, and so on. */
+  async function leaguesOf(
+    t: Setup['t'],
+    organizationId: Id<'organizations'>,
+    location: string,
+    prefix: string,
+    count: number,
+  ) {
+    return t.run(async (ctx) => {
+      const ids: Id<'leagues'>[] = [];
+      for (let i = 0; i < count; i++) {
+        const { leagueId } = await insertLeague(ctx, organizationId, {
+          name: `${prefix} ${String(i).padStart(3, '0')}`,
+          sport: 'soccer',
+          locations: [location],
+        });
+        ids.push(leagueId);
+      }
+      return ids;
+    });
+  }
+
+  /** Gives the `organizer` user a membership. */
+  async function addMembership(
+    t: Setup['t'],
+    organizationId: Id<'organizations'>,
+    role: 'orgAdmin' | 'leagueOrganizer',
+    leagueIds: Id<'leagues'>[],
+  ) {
+    await t.run(async (ctx) => {
+      const organizer = (await ctx.db.query('users').collect()).find(
+        (u) => u.authUserId === 'organizer',
+      )!;
+      await ctx.db.insert('memberships', {
+        userId: organizer._id,
+        organizationId,
+        role,
+        leagueIds,
+      });
+    });
+  }
+
+  test('one LIST_MINE_LEAGUES_LIMIT budget covers all memberships, spent in organization-name order (#196)', async () => {
+    const { t, as } = await setup();
+    // "Org 0" sorts before "Org A", but its membership is the later one.
+    const zero = await t.run((ctx) =>
+      insertTenant(ctx, {
+        organization: { name: 'Org 0', slug: 'org-0' },
+        locations: [{ name: 'Zero Field', address: '0 Zero St' }],
+        leagues: [],
+      }),
+    );
+    const zeroLeagues = await leaguesOf(t, zero, 'Zero Field', 'Zero', LIST_MINE_LEAGUES_LIMIT + 5);
+    await addMembership(t, zero, 'leagueOrganizer', zeroLeagues);
+    const rows = await as('organizer').query(api.organizations.listMine, {});
+    expect(rows.map((row) => [row.name, row.leagues.length])).toEqual([
+      ['Org 0', LIST_MINE_LEAGUES_LIMIT],
+      ['Org A', 0],
+    ]);
+  });
+
+  test('the budget one organization leaves goes to the next, and the total never exceeds the limit (#196)', async () => {
+    const { t, as, organizationA, organizationB } = await setup();
+    const aLeagues = await leaguesOf(t, organizationA, 'Alpha Field', 'A extra', 59);
+    await assign(t, organizationA, 'leagueOrganizer', aLeagues);
+    const bLeagues = await leaguesOf(t, organizationB, 'B Field', 'B extra', 60);
+    await addMembership(t, organizationB, 'leagueOrganizer', bLeagues);
+    const rows = await as('organizer').query(api.organizations.listMine, {});
+    expect(rows.map((row) => [row.name, row.leagues.length])).toEqual([
+      ['Org A', 59],
+      ['Org B', LIST_MINE_LEAGUES_LIMIT - 59],
+    ]);
+  });
+
+  test('an org admin membership spends none of the budget (#196)', async () => {
+    const { t, as, organizationB } = await setup();
+    const bLeagues = await leaguesOf(t, organizationB, 'B Field', 'B extra', 3);
+    await addMembership(t, organizationB, 'orgAdmin', bLeagues);
+    const rows = await as('organizer').query(api.organizations.listMine, {});
+    expect(rows.map((row) => [row.name, row.role, row.leagues.length])).toEqual([
+      ['Org A', 'leagueOrganizer', 3],
+      ['Org B', 'orgAdmin', 0],
+    ]);
+  });
 });

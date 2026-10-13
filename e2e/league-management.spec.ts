@@ -14,6 +14,7 @@ import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -290,6 +291,34 @@ test.describe('League management: an assigned league organizer', () => {
     await screenshot(page, testInfo, '125-league-no-access');
     await expectAccessible(page);
   });
+
+  test(
+    'the sidebar lists every assigned league, drafts included, by name, and marks the one open',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { tenant, base } = await memberOf(page, 'leagueOrganizer', [COED, SAND, SOFTBALL]);
+      await page.goto(`${base}/leagues/${SAND}`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Sand 2s');
+      // The column is hidden below 1024px and the sheet is closed, so the checks read the element
+      // wherever it is and do not depend on the screen.
+      const leagues = page
+        .getByRole('navigation', { name: `${tenant.name} leagues`, includeHidden: true })
+        .first()
+        .getByRole('list', { name: 'Your leagues', includeHidden: true })
+        .getByRole('link', { includeHidden: true });
+      const list = (name: string) => leagues.filter({ hasText: name });
+      await expect(leagues).toHaveText(['Coed 7v7 Rec', 'Draft Softball', 'Sand 2s']);
+      await expect(list('Sand 2s')).toHaveAttribute('aria-current', 'page');
+      await expect(list('Coed 7v7 Rec')).not.toHaveAttribute('aria-current', /.*/);
+      await expect(list('Draft Softball')).not.toHaveAttribute('aria-current', /.*/);
+      await expect(list('Draft Softball')).toHaveAttribute('href', `${base}/leagues/${SOFTBALL}`);
+      // The link goes to the other league, whose page marks it instead.
+      await page.goto((await list('Coed 7v7 Rec').getAttribute('href'))!);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
+      await expect(list('Coed 7v7 Rec')).toHaveAttribute('aria-current', 'page');
+      await expect(list('Sand 2s')).not.toHaveAttribute('aria-current', /.*/);
+    },
+  );
 
   test('a draft league they are not assigned to is no access, not not found: they are staff', async ({
     page,
