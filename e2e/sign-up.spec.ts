@@ -272,6 +272,35 @@ test.describe('sign-up', () => {
     await expect(fieldError(page, 'password')).toHaveText(short);
   });
 
+  test('the Password error is announced as an alert, linked to the field, and passes axe', async ({
+    page,
+  }) => {
+    await page.goto('/sign-up');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeVisible();
+
+    await field(page, 'password').focus();
+    await page.keyboard.type('tenletters');
+    // Moving to Show raises no alert: nothing talks over the Show button's own status.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: /Show password/ })).toBeFocused();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    // Leaving the group puts the error in an alert region, which screen readers announce.
+    await page.keyboard.press('Tab');
+    await expect(adult(page)).toBeFocused();
+    const alert = page.getByRole('alert');
+    await expect(alert).toHaveCount(1);
+    await expect(alert).toHaveText('Use at least 15 characters. This password has 10.');
+    await expect(alert).toHaveAttribute('id', 'password-error');
+    await expect(field(page, 'password')).toHaveAttribute('aria-invalid', 'true');
+    await expect(field(page, 'password')).toHaveAttribute(
+      'aria-describedby',
+      /(^|\s)password-error(\s|$)/,
+    );
+    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+  });
+
   test('signs up, lands on /app showing "Signed in as <name>", and Sign out goes to /', async ({
     page,
   }, testInfo) => {
