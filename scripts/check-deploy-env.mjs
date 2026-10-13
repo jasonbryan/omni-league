@@ -22,9 +22,14 @@
 // or `main` for staging) with the preview deploy key in CONVEX_DEPLOY_KEY. Without it, the CLI
 // acts on the deployment that CONVEX_DEPLOY_KEY itself names (a production key).
 //
-// ORDERING. Preview mode runs AFTER `npx convex deploy ... --preview-create`, because the `pr-<n>`
-// deployment does not exist before it (netlify.toml). Production mode must run BEFORE
-// `npx convex deploy`:
+// ORDERING. Preview mode runs AFTER `npx convex deploy ... --preview-create|--preview-name`, because
+// the `pr-<n>` deployment does not exist before it (netlify.toml). PR previews use
+// `--preview-create` (deleted and recreated per push). Staging uses `--preview-name`, which reuses
+// the deployment `main` and its data (#222): the variables checked here are then those the
+// deployment got at creation. Convex applies its default preview variables only when it creates a
+// deployment and does not sync later changes, so a default added or changed after staging was
+// created must be set on `main` by hand (a missing variable this check requires fails the staging
+// build). Production mode must run BEFORE `npx convex deploy`:
 //
 //   npm ci && node scripts/check-deploy-env.mjs production && npx convex deploy ...
 //

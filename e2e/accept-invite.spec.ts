@@ -166,11 +166,18 @@ test.describe('Accept invite: a visitor with no account', () => {
     await screenshot(page, testInfo, '70-accepted');
     await expectAccessible(page);
 
-    // The membership is for Coed 7v7 Rec only: the organization is listed, and its admin area is not
-    // open to a league organizer.
-    await main(page).getByRole('link', { name: 'Go to your organizations' }).click();
-    await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(main(page)).toContainText(tenant.name);
+    // One league, so the button opens it (#212). The membership is for Coed 7v7 Rec only: the
+    // organization's admin area is not open to a league organizer, and Sand 2s is not theirs.
+    const open = main(page).getByRole('link', { name: 'Open Coed 7v7 Rec' });
+    await expect(open).toHaveAttribute(
+      'href',
+      `/app/organizations/${tenant.slug}/leagues/coed-7v7-rec`,
+    );
+    await open.click();
+    await expect(page).toHaveURL(
+      `${baseURL}/app/organizations/${tenant.slug}/leagues/coed-7v7-rec`,
+    );
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
     await page.goto(`/app/organizations/${tenant.slug}`);
     await expect(main(page)).toContainText('You can’t manage this organization');
 
@@ -197,8 +204,103 @@ test.describe('Accept invite: a visitor with no account', () => {
     await expect(page).toHaveURL(`${baseURL}/invites/accept`);
     await main(page).getByRole('button', { name: 'Accept invite' }).click();
     await expect(main(page)).toContainText('You’re an org admin.');
-    await page.goto(`/app/organizations/${tenant.slug}`);
+    // The button opens the organization (#212).
+    const open = main(page).getByRole('link', { name: `Open ${tenant.name}` });
+    await expect(open).toHaveAttribute('href', `/app/organizations/${tenant.slug}`);
+    await open.click();
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/${tenant.slug}`);
     await expect(main(page).getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+  });
+});
+
+test.describe('Accept invite: while the invite is checked, issue 212', () => {
+  test('shows a skeleton of the invite card with a "Checking your invite…" status and no spinner, then the invite', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seedOrganization();
+    const token = await seedInvite(tenant, { email: newUser('Checking').email });
+    // Holds the answer to getByToken, and every frame after it (Convex applies transitions in
+    // order), until released.
+    interface Change {
+      type: string;
+      queryId: number;
+      udfPath?: string;
+    }
+    const changes = (message: string | Buffer): Change[] =>
+      (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
+    let inviteQuery: number | undefined;
+    let holding = false;
+    const held: (string | Buffer)[] = [];
+    let release: () => void = () => undefined;
+    await page.routeWebSocket(CONVEX_SOCKET, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((message) => {
+        for (const change of changes(message)) {
+          if (change.type === 'Add' && change.udfPath === 'invites:getByToken') {
+            inviteQuery = change.queryId;
+          }
+        }
+        server.send(message);
+      });
+      release = () => {
+        holding = false;
+        for (const frame of held.splice(0)) ws.send(frame);
+      };
+      server.onMessage((message) => {
+        const answersInvite = changes(message).some(
+          (change) => change.type === 'QueryUpdated' && change.queryId === inviteQuery,
+        );
+        if (answersInvite) holding = true;
+        if (holding) held.push(message);
+        else ws.send(message);
+      });
+    });
+
+    await page.addInitScript(() => {
+      const shifts = { score: 0 };
+      (window as unknown as { shifts: typeof shifts }).shifts = shifts;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const shift = entry as PerformanceEntry & { value: number; hadRecentInput: boolean };
+          if (!shift.hadRecentInput) shifts.score += shift.value;
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
+    await openLink(page, token);
+    const skeleton = main(page).getByTestId('invite-skeleton');
+    await expect(skeleton).toBeVisible();
+    await expect.poll(() => holding).toBe(true);
+    await expect(skeleton.getByRole('status')).toHaveText('Checking your invite…');
+    await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
+    await expect(main(page).locator('[class*="animate-spin"]')).toHaveCount(0);
+    await expect(main(page).getByRole('heading')).toHaveCount(0);
+    await screenshot(page, testInfo, '212-checking');
+    await expectAccessible(page);
+    const before = await skeleton.boundingBox();
+
+    release();
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
+    await expect(skeleton).toHaveCount(0);
+
+    // No layout shift as the invite arrives: the card keeps its left edge, width, and top, so only
+    // the height below the rows can change (the lead line may wrap, the sign-in prompt is longer).
+    const card = main(page).locator('.ring-1').first();
+    const after = await card.boundingBox();
+    expect(before).not.toBeNull();
+    expect(after).not.toBeNull();
+    expect(after?.x).toBeCloseTo(before?.x ?? -1, 0);
+    expect(after?.y).toBeCloseTo(before?.y ?? -1, 0);
+    expect(after?.width).toBeCloseTo(before?.width ?? -1, 0);
+    // The browser's own layout-shift score stays in "good" (below 0.1).
+    const score = await page.evaluate(
+      () => (window as unknown as { shifts: { score: number } }).shifts.score,
+    );
+    testInfo.annotations.push({ type: 'layout shift score', description: String(score) });
+    expect(score).toBeLessThan(0.1);
+    testInfo.annotations.push({
+      type: 'card height',
+      description: `skeleton ${before?.height}, loaded ${after?.height}`,
+    });
   });
 });
 

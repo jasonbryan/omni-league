@@ -113,6 +113,37 @@ describe('AcceptInvitePage', () => {
       expect(page.querySelector('h1')).toBeNull();
     });
 
+    it('shows a skeleton of the invite card (icon, heading, three detail rows, a button) and no spinner', async () => {
+      const { page, flush } = await open();
+      await flush();
+      const card = page.querySelector('main [data-testid="invite-skeleton"]');
+      expect(card).not.toBeNull();
+      expect(card?.querySelectorAll('[data-skeleton="icon"]')).toHaveLength(1);
+      expect(card?.querySelectorAll('[data-skeleton="heading"]')).toHaveLength(1);
+      expect(card?.querySelectorAll('[data-skeleton="row"]')).toHaveLength(3);
+      expect(card?.querySelectorAll('[data-skeleton="button"]')).toHaveLength(1);
+      for (const block of card?.querySelectorAll('[data-skeleton]') ?? []) {
+        expect(block.className).toContain('bg-muted');
+        expect(block.className).toContain('motion-safe:animate-pulse');
+        expect(block.closest('[aria-hidden="true"]')).not.toBeNull();
+      }
+      // The only live region is the sr-only status; nothing spins.
+      const statuses = page.querySelectorAll('main [role="status"]');
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0].className).toContain('sr-only');
+      expect(page.querySelector('main .animate-spin, main [class*="animate-spin"]')).toBeNull();
+      expect(page.querySelector('main ng-icon')).toBeNull();
+    });
+
+    it('keeps the skeleton while the session is still unknown after the invite arrived', async () => {
+      const { page, flush, emitInvite } = await open({ signedIn: true });
+      await emitInvite(ORGANIZER);
+      await flush();
+      // Signed in, but the account has not answered yet.
+      expect(page.querySelector('[data-testid="invite-skeleton"]')).not.toBeNull();
+      expect(page.querySelector('h1')).toBeNull();
+    });
+
     it('a link opened on the open page is captured: the page reads the new token and the URL stays clean', async () => {
       const { page, flush, sub, emitInvite, harness } = await open({ token: null });
       await flush();
@@ -235,7 +266,7 @@ describe('AcceptInvitePage', () => {
       expect(convex.calls.filter((c) => c.name === ACCEPT)).toHaveLength(1);
     });
 
-    it('on success: the accepted view, focus on the heading, the token deleted, a link to /app', async () => {
+    it('on success: the accepted view, focus on the heading, the token deleted, a link to the league', async () => {
       const { page, emitInvite, signIn, accept, flush, call } = await open({ signedIn: true });
       await emitInvite(ORGANIZER);
       await signIn();
@@ -243,8 +274,10 @@ describe('AcceptInvitePage', () => {
       await flush();
       call()?.resolve({
         organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
         role: 'leagueOrganizer',
         leagueNames: ['Coed 7v7 Rec'],
+        leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
       });
       await flush();
       const heading = page.querySelector('h1');
@@ -254,10 +287,10 @@ describe('AcceptInvitePage', () => {
       expect(text(page.querySelector('main p'))).toBe(
         'You’re a league organizer for Coed 7v7 Rec.',
       );
-      const link = [...page.querySelectorAll('a')].find(
-        (a) => text(a) === 'Go to your organizations',
+      const link = [...page.querySelectorAll('a')].find((a) => text(a) === 'Open Coed 7v7 Rec');
+      expect(link?.getAttribute('href')).toBe(
+        '/app/organizations/coastal-bend/leagues/coed-7v7-rec',
       );
-      expect(link?.getAttribute('href')).toBe('/app');
       expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Invite accepted | Omni League');
     });
@@ -270,11 +303,111 @@ describe('AcceptInvitePage', () => {
       await flush();
       call()?.resolve({
         organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
         role: 'orgAdmin',
         leagueNames: [],
+        leagues: [],
       });
       await flush();
       expect(text(page.querySelector('main p'))).toBe('You’re an org admin.');
+      const link = [...page.querySelectorAll('main a')].find((a) => text(a)?.startsWith('Open'));
+      expect(text(link)).toBe('Open Coastal Bend Rec Club');
+      expect(link?.getAttribute('href')).toBe('/app/organizations/coastal-bend');
+      expect(TestBed.inject(Router).url).toBe('/invites/accept');
+    });
+
+    describe('where the primary button goes after accepting, issue 212', () => {
+      async function acceptWith(invite: unknown, result: unknown) {
+        const ctx = await open({ signedIn: true });
+        await ctx.emitInvite(invite);
+        await ctx.signIn();
+        ctx.accept()?.click();
+        await ctx.flush();
+        ctx.call()?.resolve(result);
+        await ctx.flush();
+        return [...ctx.page.querySelectorAll('main a')].map((a) => ({
+          label: text(a),
+          href: a.getAttribute('href'),
+        }));
+      }
+
+      it('several leagues: "Go to your organizations" to /app', async () => {
+        const links = await acceptWith(
+          { ...ORGANIZER, leagueNames: ['Coed 7v7 Rec', 'Sand 2s'] },
+          {
+            organizationName: 'Coastal Bend Rec Club',
+            organizationSlug: 'coastal-bend',
+            role: 'leagueOrganizer',
+            leagueNames: ['Coed 7v7 Rec', 'Sand 2s'],
+            leagues: [
+              { name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' },
+              { name: 'Sand 2s', slug: 'sand-2s' },
+            ],
+          },
+        );
+        expect(links).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('no league left (all deleted since the invite): "Go to your organizations" to /app', async () => {
+        const links = await acceptWith(ORGANIZER, {
+          organizationName: 'Coastal Bend Rec Club',
+          organizationSlug: 'coastal-bend',
+          role: 'leagueOrganizer',
+          leagueNames: [],
+          leagues: [],
+        });
+        expect(links).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('an answer without slugs (a backend one release behind): "Go to your organizations" to /app', async () => {
+        const links = await acceptWith(ORGANIZER, {
+          organizationName: 'Coastal Bend Rec Club',
+          role: 'leagueOrganizer',
+          leagueNames: ['Coed 7v7 Rec'],
+        });
+        expect(links).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('an org admin answer without an organization slug (or an empty one): "Go to your organizations" to /app', async () => {
+        const behind = await acceptWith(ADMIN, {
+          organizationName: 'Coastal Bend Rec Club',
+          role: 'orgAdmin',
+          leagueNames: [],
+        });
+        expect(behind).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+        TestBed.resetTestingModule();
+        sessionStorage.clear();
+        const empty = await acceptWith(ADMIN, {
+          organizationName: 'Coastal Bend Rec Club',
+          organizationSlug: '',
+          role: 'orgAdmin',
+          leagueNames: [],
+          leagues: [],
+        });
+        expect(empty).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('one league but no organization slug: "Go to your organizations" to /app', async () => {
+        const links = await acceptWith(ORGANIZER, {
+          organizationName: 'Coastal Bend Rec Club',
+          organizationSlug: '',
+          role: 'leagueOrganizer',
+          leagueNames: ['Coed 7v7 Rec'],
+          leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
+        });
+        expect(links).toEqual([{ label: 'Go to your organizations', href: '/app' }]);
+      });
+
+      it('the destination holds only slugs: no token in the link', async () => {
+        const links = await acceptWith(ADMIN, {
+          organizationName: 'Coastal Bend Rec Club',
+          organizationSlug: 'coastal-bend',
+          role: 'orgAdmin',
+          leagueNames: [],
+          leagues: [],
+        });
+        expect(links.map((l) => l.href).join(' ')).not.toContain(TOKEN);
+      });
     });
 
     it('stays on the accepted view when the invite then reads as invalid', async () => {
@@ -287,8 +420,10 @@ describe('AcceptInvitePage', () => {
       expect(page.querySelector('h1')?.textContent).toContain('Join Coastal Bend Rec Club');
       call()?.resolve({
         organizationName: 'Coastal Bend Rec Club',
+        organizationSlug: 'coastal-bend',
         role: 'leagueOrganizer',
         leagueNames: ['Coed 7v7 Rec'],
+        leagues: [{ name: 'Coed 7v7 Rec', slug: 'coed-7v7-rec' }],
       });
       await flush();
       await emitInvite({ status: 'invalid' });
