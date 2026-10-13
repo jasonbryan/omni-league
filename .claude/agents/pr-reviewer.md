@@ -17,6 +17,7 @@ Check every changed file for:
 - **Tests:** tests assert behaviour, not implementation details, and would fail if the feature broke.
 - **Scope:** changes beyond the issue, and any new package or service without an Accepted ADR (a missed `gate:technology`).
 - **Migration:** a PR that changes `convex/schema.ts`, or code that rewrites stored data, with a missing or `none` Migration section is a blocking finding.
+- **UX:** for any screen or task flow, the UX checklist in `docs/conventions/ux.md`, applied to what the PR adds or changes. A gap that was already there and has an open issue is a note linking that issue, not a finding.
 - **UI:** visible changes that break the design system: new colours or tokens outside `src/styles/tokens.css`, or patterns that deviate from the existing components and approved mockups. A missing mockup is not a finding.
 
 Post a PR review comment (see `AGENTS.md`, Writing on GitHub): `Review: APPROVE` or `Review: CHANGES (<n> blocking)` first, then one line per finding, `path:line`: problem and the failure it causes, then fix, most severe first. Style preferences not backed by a conventions file are labelled `optional` and do not block approval. The review is a comment; the system never merges or formally approves the PR on GitHub.
