@@ -71,6 +71,18 @@ const PUBLIC_PAGE = [
   'auth-session',
 ];
 
+/**
+ * Every spec that opens the public league page (#127), directly or from the organization page: its
+ * own spec, and the cache-key samples of its `?page=N` parameter.
+ */
+const LEAGUE_PAGE = ['league-page', 'cache-key'];
+/** Every spec that opens the organizer's league page (#125, #126), where seasons are created and published. */
+const LEAGUE_MANAGEMENT = [
+  'league-management',
+  'league-management-publish',
+  'league-management-mockup',
+];
+
 /** The token in a rule's `specs` for the specs that sign a user up or in (deriveSessionSpecs). */
 export const SESSION = '@session';
 
@@ -244,8 +256,27 @@ export const AREAS = [
       'organization-path',
       'organization-sidebar',
     ]),
-    // The admin area imports `initials` from organization-sidebar.
-    specs: [...PUBLIC_PAGE, ...ADMIN],
+    // The admin area imports `initials` from organization-sidebar, and the league rows link to the
+    // public league page (#127), which league-page.spec.ts reaches from here.
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE],
+  },
+  {
+    // The public league page (#127): its page, content, sidebar, paths, and test data.
+    name: 'public league page',
+    test: inDir('src/app/organizations/public-league/'),
+    specs: LEAGUE_PAGE,
+  },
+  {
+    // The numbered control (#127, shared with #103's lists): the league page's seasons.
+    name: 'numbered page control',
+    test: named('src/app/organizations/', ['page-control']),
+    specs: LEAGUE_PAGE,
+  },
+  {
+    // `parseListPage` and the page query (#127) and the focus move after a route change (#127).
+    name: 'list page and focus helpers',
+    test: named('src/app/core/', ['list-page', 'focus-main']),
+    specs: LEAGUE_PAGE,
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
@@ -277,7 +308,7 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    specs: [...PUBLIC_PAGE, ...ADMIN, SESSION],
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, SESSION],
   },
   {
     name: 'convex locations',
@@ -287,7 +318,14 @@ export const AREAS = [
   {
     name: 'convex leagues',
     test: named('convex/', ['leagues']),
-    specs: [...ADMIN, ...LEAGUE_ADMIN, ...PUBLIC_PAGE],
+    specs: [...ADMIN, ...LEAGUE_ADMIN, ...PUBLIC_PAGE, ...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
+  },
+  {
+    // `seasons.create`, `publish`, `listForOrganizer` (the organizer's league page) and
+    // `listPublic` (the public league page).
+    name: 'convex seasons',
+    test: named('convex/', ['seasons']),
+    specs: [...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
   },
   { name: 'convex invites', test: named('convex/', ['invites']), specs: [...ADMIN, ...STAFF] },
   {

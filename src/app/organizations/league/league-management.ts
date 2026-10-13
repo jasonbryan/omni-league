@@ -9,6 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
@@ -30,6 +31,7 @@ import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
+import { publicLeaguePath } from '../public-league/public-league-path';
 import { LeagueContext } from './league-context';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
@@ -51,11 +53,12 @@ import { SeasonCreateForm } from './season-create-form';
  * buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a
  * link to the Leagues page, where #69's Publish is; a league organizer is told to ask an org
  * admin, with no link, because the admin area shows them the no-access view. The season page's
- * link is #134's: a season's name is plain text until then.
+ * link is #134's: a season's name is plain text until then. Once a season is published, the status
+ * above the list links to the league's public page (#127).
  */
 @Component({
   selector: 'app-league-management',
-  imports: [AdminAlert, NgIcon, PublishSeasonDialog, SeasonCreateForm],
+  imports: [AdminAlert, NgIcon, PublishSeasonDialog, RouterLink, SeasonCreateForm],
   providers: [
     provideIcons({
       lucideCalendarClock,
@@ -162,7 +165,8 @@ import { SeasonCreateForm } from './season-create-form';
                 kind="success"
                 [title]="published.name + ' is published.'"
                 description="It’s on the league’s public page now."
-              />
+                ><a [routerLink]="publicPath()">View public page</a></app-admin-alert
+              >
             </div>
           }
           @if (failed()) {
@@ -332,6 +336,11 @@ export class LeagueManagement {
   });
   protected readonly createPath = computed(
     () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#create-season`,
+  );
+
+  /** The league's public page (#127), where a published season now appears. */
+  protected readonly publicPath = computed(() =>
+    publicLeaguePath(this.context.orgSlug(), this.context.leagueSlug()),
   );
 
   /** The Leagues page of the admin area, where #69's Publish is. */

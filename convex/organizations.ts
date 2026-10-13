@@ -50,7 +50,7 @@ async function organizationBySlug(
  * negative, fractional, `NaN`, past the last page, past `PUBLIC_LIST_MAX_PAGE`): the approved
  * mockup's rule (#106). So `page * PUBLIC_LIST_PAGE_SIZE` is at most 200.
  */
-function pageOf(total: number, requested: number): { page: number; pageCount: number } {
+export function pageOf(total: number, requested: number): { page: number; pageCount: number } {
   const pageCount = Math.min(Math.ceil(total / PUBLIC_LIST_PAGE_SIZE), PUBLIC_LIST_MAX_PAGE);
   const page =
     Number.isInteger(requested) && requested >= 1 && requested <= pageCount ? requested : 1;
@@ -58,7 +58,7 @@ function pageOf(total: number, requested: number): { page: number; pageCount: nu
 }
 
 /** The rows of `page` out of the first `page * PUBLIC_LIST_PAGE_SIZE` rows read. */
-function pageRows<D>(read: D[], page: number): D[] {
+export function pageRows<D>(read: D[], page: number): D[] {
   return read.slice((page - 1) * PUBLIC_LIST_PAGE_SIZE);
 }
 
@@ -185,7 +185,12 @@ export const listPublicLeagues = query({
         // Only this organization's locations: a league can never name another organization's.
         if (location?.organizationId === organization._id) locationNames.push(location.name);
       }
-      rows.push({ name: league.name, sportName: sportName(league.sport), locationNames });
+      rows.push({
+        name: league.name,
+        slug: league.slug,
+        sportName: sportName(league.sport),
+        locationNames,
+      });
     }
     return { rows, page, pageCount, total };
   },

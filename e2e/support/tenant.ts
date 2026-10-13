@@ -66,6 +66,62 @@ export function numberedLocations(count: number): { name: string; address: strin
   }));
 }
 
+/** A season to seed (`testing:seedSeason`): a published one unless the seed says `draft`. */
+export interface SeasonSeed {
+  name: string;
+  slug: string;
+  /** `YYYY-MM-DD`; the public league page lists the newest start date first. */
+  startDate: string;
+  endDate: string;
+  status?: 'draft' | 'published';
+}
+
+/**
+ * `count` published seasons "Season 01", "Season 02", ... (slugs `season-01`, ...), season n
+ * starting on the 1st of a month n months after December 2025, so the higher the number the later
+ * it starts and the earlier the public league page lists it.
+ */
+export function numberedSeasons(count: number): SeasonSeed[] {
+  return Array.from({ length: count }, (_, i) => {
+    const n = String(i + 1).padStart(2, '0');
+    const year = 2026 + Math.floor(i / 12);
+    const month = String((i % 12) + 1).padStart(2, '0');
+    return {
+      name: `Season ${n}`,
+      slug: `season-${n}`,
+      startDate: `${year}-${month}-01`,
+      endDate: `${year}-${month}-28`,
+    };
+  });
+}
+
+/**
+ * Adds seasons to a beach volleyball (4 v 4) league of the tenant through `testing:seedSeason`
+ * (#125), in one go. Local runs only.
+ */
+export async function seedSeasons(
+  tenant: Tenant,
+  leagueSlug: string,
+  seasons: SeasonSeed[],
+): Promise<void> {
+  await Promise.all(
+    seasons.map((season) =>
+      convexRun('testing:seedSeason', {
+        organizationSlug: tenant.slug,
+        leagueSlug,
+        name: season.name,
+        slug: season.slug,
+        startDate: season.startDate,
+        endDate: season.endDate,
+        registrationDeadline: '2025-12-01',
+        format: '4v4',
+        minimumRosterSize: 4,
+        status: season.status ?? 'published',
+      }),
+    ),
+  );
+}
+
 /**
  * The five locations of a tall page, the most a list shows (#100): numbered as above, with
  * addresses that wrap over several lines, so the fifth row starts below the fold at 1280x720 and

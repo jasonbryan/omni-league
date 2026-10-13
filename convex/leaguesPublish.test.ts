@@ -204,6 +204,7 @@ describe('leagues.publish', () => {
     expect(after.rows.map((row) => row.name)).toEqual(['Draft Softball', 'Live Soccer']);
     expect(after.rows[0]).toEqual({
       name: 'Draft Softball',
+      slug: 'draft-softball',
       sportName: 'Softball',
       locationNames: ['Bravo Beach'],
     });

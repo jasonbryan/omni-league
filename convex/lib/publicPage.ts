@@ -2,7 +2,8 @@ import { v, type Infer, type Validator } from 'convex/values';
 import { sportValidator } from './sports';
 
 // The results of organizations:getPublicPage, listPublicLeagues, and listPublicLocations (#60,
-// #100). They live apart from organizations.ts and import only `convex/values`, so the Angular app
+// #100), leagues:getPublicPage, and seasons:listPublic (#127). They live apart from the function
+// modules and import only `convex/values`, so the Angular app
 // can import the same validators to check saved copies (ADR 0013 section 3, #82:
 // `src/app/core/data/convex/offline-saved-queries.ts`) without bundling the server functions.
 // Changing one changes what the app accepts as a saved copy.
@@ -43,6 +44,8 @@ const publicLocationValidator = v.object({ name: v.string(), address: v.string()
 
 const publicLeagueValidator = v.object({
   name: v.string(),
+  // The URL segment of the league's public page, `/organizations/<org>/leagues/<slug>` (#127).
+  slug: v.string(),
   sportName: v.string(),
   locationNames: v.array(v.string()),
 });
@@ -65,3 +68,37 @@ export const publicLeaguesValidator = publicListValidator(publicLeagueValidator)
 
 export type PublicLocations = Infer<typeof publicLocationsValidator>;
 export type PublicLeagues = Infer<typeof publicLeaguesValidator>;
+
+/**
+ * The public league page's header (#127): the organization's name and slug, and the league's name,
+ * slug, sport display name, and location names. No id, status, or counter.
+ */
+export const publicLeaguePageValidator = v.object({
+  organization: v.object({ name: v.string(), slug: v.string() }),
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  locationNames: v.array(v.string()),
+});
+
+export type PublicLeaguePage = Infer<typeof publicLeaguePageValidator>;
+
+/** The `returns` validator of `leagues:getPublicPage`: the header, or `null` when none. */
+export const getLeaguePublicPageReturns = v.union(v.null(), publicLeaguePageValidator);
+
+/**
+ * One published season in a league's list (#127): its name and slug (the season page's URL), its
+ * calendar dates as stored (`YYYY-MM-DD`, no time zone), and the format's display name.
+ */
+const publicSeasonValidator = v.object({
+  name: v.string(),
+  slug: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  formatName: v.string(),
+});
+
+/** The `returns` validator of `seasons:listPublic`. */
+export const publicSeasonsValidator = publicListValidator(publicSeasonValidator);
+
+export type PublicSeasons = Infer<typeof publicSeasonsValidator>;

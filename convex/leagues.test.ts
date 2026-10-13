@@ -434,7 +434,9 @@ describe('drafts stay off the public page (#66)', () => {
     await s.adminA.mutation(api.leagues.create, valid(s));
     const list = await s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page: 1 });
     expect(list).toEqual({
-      rows: [{ name: 'Coed 7v7', sportName: 'Soccer', locationNames: ['Alpha Field'] }],
+      rows: [
+        { name: 'Coed 7v7', slug: 'coed-7v7', sportName: 'Soccer', locationNames: ['Alpha Field'] },
+      ],
       page: 1,
       pageCount: 1,
       total: 1,
@@ -576,7 +578,8 @@ describe('tenantWrites league slugs and status (#66)', () => {
       return { organizationId, legacy };
     });
     const backfilled = await t.run((ctx) => backfillTenantFields(ctx));
-    expect(backfilled).toEqual({ organizations: 1, locations: 0, leagues: 1 });
+    // Both leagues lack `publishedSeasonCount` (#127): the legacy one also lacks a status.
+    expect(backfilled).toEqual({ organizations: 1, locations: 0, leagues: 2 });
     await t.run(async (ctx) => {
       expect((await ctx.db.get('leagues', ids.legacy))?.status).toBe('published');
       const organization = await ctx.db.get('organizations', ids.organizationId);

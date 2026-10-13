@@ -7,9 +7,12 @@ import {
   SEASON_MESSAGES,
   type SeasonInputError,
 } from './lib/seasonInput';
+import { publicSeasonsValidator } from './lib/publicPage';
+import { findLeagueBySlugs } from './lib/seasonLookup';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatName, formatValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
+import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 
 /**
  * Seasons `listForOrganizer` returns at most. The list is one page with no paging (#125), as the
@@ -142,5 +145,59 @@ export const listForOrganizer = query({
       minimumRosterSize: season.minimumRosterSize,
       status: season.status,
     }));
+  },
+});
+
+const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
+
+/**
+ * One page of the published seasons of a published league (#127), newest start date first:
+ * `{ rows: [{ name, slug, startDate, endDate, formatName }], page, pageCount, total }`, with
+ * `PUBLIC_LIST_PAGE_SIZE` rows or fewer. `total` is the league's `publishedSeasonCount` (a league
+ * without the counter reads 0), and the page served and the page count follow
+ * `organizations.pageOf`: a page that is not a whole number from 1 to the page count, or is past
+ * `PUBLIC_LIST_MAX_PAGE`, serves page 1. An unknown organization or league, a league of another
+ * organization, and a league that is not `published` give an empty page 1 of 0 (the page itself
+ * answers 404 from `leagues.getPublicPage`).
+ *
+ * Offset reads, as `organizations.listPublicLocations`: page N reads the first
+ * `N * PUBLIC_LIST_PAGE_SIZE` rows of `by_leagueId_and_status_and_startDate` (status `published`,
+ * descending) and returns the last of them, so drafts never take a place in the 200-row reach.
+ *
+ * Deliberately public (convex.md, Functions): anonymous, the same result for every caller, and no
+ * id, status, or registration field in a row (`publicSeasonsValidator`, `lib/publicPage.ts`).
+ */
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (ADR 0002): an anonymous public page that reads no identity and returns only published fields.
+export const listPublic = query({
+  args: { orgSlug: v.string(), leagueSlug: v.string(), page: v.number() },
+  // The app checks saved copies against this same validator (convex/lib/publicPage.ts, #82).
+  returns: publicSeasonsValidator,
+  handler: async (ctx, args) => {
+    const found = await findLeagueBySlugs(ctx, args);
+    if (found?.league.status !== 'published') return EMPTY_LIST;
+    const { league } = found;
+    const total = league.publishedSeasonCount ?? 0;
+    const { page, pageCount } = pageOf(total, args.page);
+    // No published season by the counter (also a counter not yet backfilled): no read.
+    if (pageCount === 0) return EMPTY_LIST;
+    const read = await ctx.db
+      .query('seasons')
+      .withIndex('by_leagueId_and_status_and_startDate', (q) =>
+        q.eq('leagueId', league._id).eq('status', 'published'),
+      )
+      .order('desc')
+      .take(page * PUBLIC_LIST_PAGE_SIZE);
+    return {
+      rows: pageRows(read, page).map((season) => ({
+        name: season.name,
+        slug: season.slug,
+        startDate: season.startDate,
+        endDate: season.endDate,
+        formatName: formatName(league.sport, season.format),
+      })),
+      page,
+      pageCount,
+      total,
+    };
   },
 });

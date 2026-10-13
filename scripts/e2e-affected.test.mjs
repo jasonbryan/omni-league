@@ -155,6 +155,64 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(!specs.includes('FULL'));
   });
 
+  it('maps the public organization page files to the league page spec too, because the league rows link to it (#127)', () => {
+    for (const file of [
+      'src/app/organizations/organization-overview.ts',
+      'src/app/organizations/organization-page.ts',
+    ]) {
+      const specs = specsFor([file]);
+      assert.ok(specs.includes('e2e/league-page.spec.ts'), file);
+      assert.ok(!specs.includes('FULL'), file);
+    }
+  });
+
+  it('maps the public league page, its numbered control, and its helpers to the league page and cache-key specs (#127)', () => {
+    for (const file of [
+      'src/app/organizations/public-league/public-league-page.ts',
+      'src/app/organizations/public-league/public-league-content.ts',
+      'src/app/organizations/public-league/public-league-sidebar.ts',
+      'src/app/organizations/public-league/public-league-path.ts',
+      'src/app/organizations/page-control.ts',
+      'src/app/core/list-page.ts',
+      'src/app/core/focus-main.ts',
+    ]) {
+      assert.deepEqual(
+        specsFor([file]),
+        want('e2e/cache-key.spec.ts', 'e2e/league-page.spec.ts'),
+        file,
+      );
+    }
+  });
+
+  it('keeps the other core files in the full suite, and the test data of the league page out of it (#127)', () => {
+    assert.deepEqual(specsFor(['src/app/core/list-page.spec.ts']), want());
+    assert.deepEqual(specsFor(['src/app/core/focus-main.spec.ts']), want());
+    assert.deepEqual(specsFor(['src/app/organizations/page-control.spec.ts']), want());
+    assert.deepEqual(
+      specsFor(['src/app/organizations/public-league/testing/league-data.ts']),
+      want(),
+    );
+    assert.deepEqual(specsFor(['src/app/core/focus-main.ts', 'src/app/core/page-meta.ts']), [
+      'FULL',
+    ]);
+  });
+
+  it('maps convex/seasons.ts to the league page and league management specs (#127)', () => {
+    const specs = specsFor(['convex/seasons.ts']);
+    for (const name of [
+      'league-page',
+      'cache-key',
+      'league-management',
+      'league-management-publish',
+      'league-management-mockup',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.ok(!specs.includes('FULL'));
+    assert.ok(specsFor(['convex/leagues.ts']).includes('e2e/league-page.spec.ts'));
+    assert.ok(specsFor(['convex/organizations.ts']).includes('e2e/league-page.spec.ts'));
+  });
+
   it('maps the leagues mockup to its spec, and every other design file to nothing', () => {
     assert.deepEqual(
       specsFor(['design/mockups/66-69-organization-leagues.html']),
@@ -419,11 +477,8 @@ describe('the mapping', () => {
 
   // These specs run in no source-area rule. They run when changed, in the nightly full run, and
   // whenever a shared file changes. A new spec fails here until it is mapped or added on purpose.
-  const FULL_SUITE_ONLY = [
-    'e2e/cache-key.spec.ts',
-    'e2e/convex-backend.spec.ts',
-    'e2e/screenshot.spec.ts',
-  ];
+  // cache-key.spec.ts is mapped to the public league page (#127), which has its own samples in it.
+  const FULL_SUITE_ONLY = ['e2e/convex-backend.spec.ts', 'e2e/screenshot.spec.ts'];
 
   it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
     const mapped = new Set();
