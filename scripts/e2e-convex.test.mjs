@@ -465,7 +465,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
    * maps an `env set` name to how many of its first attempts fail; `fail` is shorthand for
    * `{ [fail]: Infinity }`.
    */
-  async function setup({ fail, failures = {}, stderr, clock = fakeClock() } = {}) {
+  async function setup({ fail, failures = {}, stderr, clock = fakeClock(), randomBytes } = {}) {
     const dir = projectDir({ config: LOCAL_CONFIG });
     const calls = [];
     const lines = [];
@@ -474,8 +474,13 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
       env: {},
       projectDir: dir,
       instanceName: async () => 'anonymous-agent',
+      ...(randomBytes && { randomBytes }),
       spawnCli: async (args) => {
         calls.push(args.slice(0, -2)); // without `--env-file <target>`
+        // Like the real CLI (#191): a value that starts with `-` is parsed as an option.
+        if (args[0] === 'env' && args[3]?.startsWith('-')) {
+          return { code: 1, stdout: '', stderr: "error: unknown option '<redacted>'" };
+        }
         const left = remaining.get(args[2]) ?? 0;
         if (left > 0) {
           remaining.set(args[2], left - 1);
@@ -516,11 +521,34 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
 
     // Random per run, at least 256 bits, and never printed.
     const secret = first.calls[2][3];
-    assert.match(secret, /^[A-Za-z0-9_-]{43,}$/);
+    assert.match(secret, /^[0-9a-f]{64}$/);
     assert.ok(!first.output.includes(secret), 'the secret is printed');
     const second = await setup();
     assert.notEqual(second.calls[2][3], secret);
     assert.deepEqual(first.clock.sleeps, [], 'a backend that is ready costs no wait');
+  });
+
+  it('sets the secret when the random bytes would give a leading "-" in base64url (#191)', async () => {
+    // 0xfb encodes to "-" as the first base64url character; the CLI reads such a value as an option.
+    const bytes = Buffer.alloc(32, 0xfb);
+    assert.ok(bytes.toString('base64url').startsWith('-'), 'the fixture forces a leading -');
+    const { code, calls, output } = await setup({ randomBytes: () => bytes });
+    assert.equal(code, 0, output);
+    assert.deepEqual(
+      calls.map((args) => args.slice(0, 3).join(' ')),
+      ['env set IS_TEST', 'env set SITE_URL', 'env set BETTER_AUTH_SECRET', 'run testing:reset'],
+    );
+    const secret = calls[2][3];
+    assert.ok(!secret.startsWith('-'), 'the secret can be read as an option');
+    assert.ok(!output.includes(secret), 'the secret is printed');
+  });
+
+  it('never generates a secret that starts with "-", whatever the random bytes (#191)', async () => {
+    for (const byte of [0x00, 0x7f, 0xfb, 0xff]) {
+      const { code, calls } = await setup({ randomBytes: () => Buffer.alloc(32, byte) });
+      assert.equal(code, 0);
+      assert.match(calls[2][3], /^[0-9a-f]{64}$/);
+    }
   });
 
   it('fails without printing the secret when setting it fails', async () => {
