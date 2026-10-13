@@ -316,7 +316,7 @@ export const AREAS = [
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    // The league page's saved-copy note and not-saved view (#127).
+    // The league page's (#127) and the season page's (#128) saved-copy note and not-saved view.
     specs: [
       'offline',
       'offline-note-height',
@@ -324,6 +324,7 @@ export const AREAS = [
       ...PUBLIC_PAGE,
       'league-page',
       'league-page-offline',
+      'season-page',
     ],
   },
   {

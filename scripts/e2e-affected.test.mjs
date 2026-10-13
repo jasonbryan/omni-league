@@ -214,7 +214,7 @@ describe('selectSpecs: mapped areas', () => {
     for (const file of [
       'src/app/organizations/public-season/public-season-page.ts',
       'src/app/organizations/public-season/public-season-content.ts',
-      'src/app/organizations/public-season/public-season-path.ts',
+      'src/app/organizations/public-season/public-season-view.ts',
     ]) {
       assert.deepEqual(
         specsFor([file]),
@@ -248,12 +248,12 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['e2e/season-page.spec.ts']), want('e2e/season-page.spec.ts'));
   });
 
-  it('maps the not-found and offline views to the league page specs that assert them (#127)', () => {
+  it('maps the not-found and offline views to the league page and season page specs that assert them (#127, #128)', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));
     assert.ok(notFound.includes('e2e/season-page.spec.ts'));
     const offline = specsFor(['src/app/offline/not-saved-view.ts']);
-    for (const name of ['league-page', 'league-page-offline']) {
+    for (const name of ['league-page', 'league-page-offline', 'season-page']) {
       assert.ok(offline.includes(`e2e/${name}.spec.ts`), name);
     }
     assert.ok(!notFound.includes('FULL') && !offline.includes('FULL'));

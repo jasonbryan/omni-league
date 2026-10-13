@@ -1,6 +1,6 @@
 import type { PublicOrganizationHeader } from '../../organization-path';
 import { ORGANIZATION } from '../../public-league/testing/league-data';
-import type { PublicSeasonData, PublicSeasonView } from '../public-season-path';
+import type { PublicSeasonData, PublicSeasonView } from '../public-season-view';
 
 /**
  * The public season page's data for specs: design/mockups/127-128-public-seasons.html's state 9

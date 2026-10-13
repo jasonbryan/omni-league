@@ -12,7 +12,7 @@ import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
-import type { PublicSeasonView } from './public-season-path';
+import type { PublicSeasonView } from './public-season-view';
 
 /**
  * The public season page's content column (#128, design/mockups/127-128-public-seasons.html

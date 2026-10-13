@@ -14,7 +14,7 @@ import { seasonDates } from '../league/season-dates';
 import { publicSeasonPath } from '../public-league/public-league-path';
 import { PublicLeagueSidebar } from '../public-league/public-league-sidebar';
 import { PublicSeasonContent } from './public-season-content';
-import type { PublicSeasonView } from './public-season-path';
+import type { PublicSeasonView } from './public-season-view';
 
 /**
  * The public season page, `/organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug`
