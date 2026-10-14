@@ -146,8 +146,6 @@ describe('mutation and action helpers without a client', () => {
 });
 
 describe('mutation and action helpers on the server with a client present', () => {
-  // Defence in depth for the server rule (no mutations or actions during a render): even if a client reached the server injector,
-  // run() must not call it.
   for (const helper of helpers) {
     it(`${helper.kind} rejects with ConvexServerCallError and calls no client method`, async () => {
       const client = new FakeConvexClient();
@@ -188,9 +186,9 @@ describe('mutation and action helpers while offline (call-time guard)', () => {
   for (const helper of helpers) {
     it(`${helper.kind} rejects with ConvexOfflineError when the socket stays down for 3 s, and never calls the client`, async () => {
       const ref = TestBed.runInInjectionContext(helper.create);
-      const listenersBefore = client.connectionStateListeners; // the online signal's own
+      const listenersBefore = client.connectionStateListeners;
       client.setConnected(false);
-      await vi.advanceTimersByTimeAsync(1_000); // dropped 1 s ago: the online signal is still true
+      await vi.advanceTimersByTimeAsync(1_000);
 
       const result = ref.run({ name: 'Sharks' });
       const settled = vi.fn();

@@ -5,7 +5,6 @@ import { fetchWithTimeout } from './server-query-loader';
 
 const listTeams = makeFunctionReference<'query', { leagueId: string }, string[]>('teams:list');
 
-/** A `fetch` stub that never answers and settles only when its signal aborts. */
 function hangingFetch() {
   const signals: (AbortSignal | undefined)[] = [];
   const stub = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
@@ -32,7 +31,7 @@ describe('default CONVEX_HTTP_CLIENT_FACTORY (real timers)', () => {
     );
 
     const { stub, signals } = hangingFetch();
-    vi.stubGlobal('fetch', stub); // installed after the factory and the client were created
+    vi.stubGlobal('fetch', stub);
     const started = Date.now();
     const result = client.query(listTeams, { leagueId: 'a' });
 

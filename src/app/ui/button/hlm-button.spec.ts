@@ -9,9 +9,8 @@ const VARIANTS: NonNullable<ButtonVariants['variant']>[] = [
   'link',
 ];
 
-// Helm's focus halo (`ring-ring/50` at 3px) is 2.25:1 and fails WCAG 1.4.11. The base layer's solid
-// 2px `--ring` outline (src/styles/base.css) is the focus indicator, so the button must not remove
-// or recolour it (#61).
+// Helm's focus halo (`ring-ring/50` at 3px) is 2.25:1 and fails WCAG 1.4.11. The base layer's solid 2px `--ring` outline (src/styles/base.css) is the focus indicator,
+// so the button must not remove or recolour it.
 const REMOVED = ['outline-none', 'focus-visible:border-ring', 'focus-visible:ring-ring/50'];
 
 describe('buttonVariants', () => {

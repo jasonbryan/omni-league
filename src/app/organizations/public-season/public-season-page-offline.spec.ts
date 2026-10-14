@@ -17,9 +17,6 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
-// #128: saved copies on the public season page and the not-saved view
-// (design/mockups/82-offline-pages.html). "Offline" is the adapter's `online` signal (#88).
-
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
 const ORG_SLUG = 'gulf-coast-sport-social';
@@ -28,12 +25,9 @@ const PATH = `/organizations/${ORG_SLUG}/leagues/${LEAGUE_SLUG}/seasons/summer-2
 
 let client: FakeConvexClient;
 
-const ORG = 'organizations:getPublicPage';
 const SEASON = 'seasons:getPublicPage';
 
-/** The saved-copy allow-list entries' functions and the args the page asks them with. */
 const queries = [
-  { fn: api.organizations.getPublicPage, name: ORG, args: { slug: ORG_SLUG } },
   {
     fn: api.seasons.getPublicPage,
     name: SEASON,
@@ -41,7 +35,6 @@ const queries = [
   },
 ];
 
-/** Saves the two results the page's queries return. */
 function plant(results = seasonQueryResults(), savedAt = SAVED_AT): void {
   for (const { fn, name, args } of queries) plantSavedCopy(fn, args, results[name], savedAt);
 }
@@ -55,7 +48,6 @@ function stubOnLine(value: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
 }
 
-/** Opens `url` with a fake client; `socket: 'down'` models a client that has not connected yet. */
 async function open(
   url = PATH,
   options: { socket?: 'up' | 'down' } = {},
@@ -111,7 +103,7 @@ describe('PublicSeasonPage offline', () => {
     localStorage.clear();
   });
 
-  it('lists the page’s own query beside the organization header, each with its own returns validator', () => {
+  it('lists the page’s own query with its returns validator', () => {
     const listed = new Set(OFFLINE_SAVED_QUERIES.map((entry) => getFunctionName(entry.query)));
     for (const { name } of queries) expect(listed.has(name), name).toBe(true);
   });
@@ -124,13 +116,10 @@ describe('PublicSeasonPage offline', () => {
       harness = await open(PATH, { socket: 'down' });
     });
 
-    it('shows the season, its details, and the sidebar from the saved copies', () => {
+    it('shows the season, its details, from the saved copies', () => {
       const main = host(harness).querySelector('main');
       expect(text(main?.querySelector('h1'))).toBe('Summer 2027');
       expect(text(main?.querySelector('dl'))).toContain('Jun 6 – Aug 29, 2027');
-      expect(
-        host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]'),
-      ).not.toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
       );
@@ -164,20 +153,6 @@ describe('PublicSeasonPage offline', () => {
     });
   });
 
-  it('dates the note by the older saved copy on screen', async () => {
-    const older = SAVED_AT - 3 * 60 * 60 * 1000;
-    plant();
-    plantSavedCopy(
-      api.organizations.getPublicPage,
-      { slug: ORG_SLUG },
-      seasonQueryResults()[ORG],
-      older,
-    );
-    stubOnLine(false);
-    const harness = await open(PATH, { socket: 'down' });
-    expect(text(note(harness))).toContain(formatSavedTime(older, NOW).text);
-  });
-
   it('online before the first live result: shows the saved copy with no note', async () => {
     plant();
     stubOnLine(true);
@@ -188,7 +163,6 @@ describe('PublicSeasonPage offline', () => {
 
   describe('no saved copy', () => {
     it('offline: shows the not-saved view at once, top bar only, with Try again to the season page asked for', async () => {
-      // Summer 2027 is saved; Fall 2026 is not.
       plant();
       stubOnLine(false);
       const other = `${PATH.replace('summer-2027', 'fall-2026')}`;
@@ -199,16 +173,13 @@ describe('PublicSeasonPage offline', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe(other);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('main nav')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
     });
 
-    it.each([
-      ['the organization', ORG],
-      ['the season', SEASON],
-    ])('offline with %s not saved: shows the not-saved view', async (_, missing) => {
+    it('offline with the season not saved: shows the not-saved view', async () => {
       plant();
-      const query = queries.find((q) => q.name === missing)!;
+      const query = queries.find((q) => q.name === SEASON)!;
       localStorage.removeItem(savedCopyKey(query.fn, query.args));
       stubOnLine(false);
       const harness = await open(PATH, { socket: 'down' });
@@ -245,7 +216,7 @@ describe('PublicSeasonPage offline', () => {
     });
   });
 
-  it("a live null removes the saved season and shows #23's not-found view with no note", async () => {
+  it('a live null removes the saved season and shows the not-found view with no note', async () => {
     plant();
     stubOnLine(true);
     const harness = await open();

@@ -21,13 +21,6 @@ const DESCRIPTION =
 const FIELD =
   'group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2';
 
-/**
- * The Name and Address fields of a location form (#65; design/mockups/65-organization-admin-
- * locations.html, "Location fields"), shared by the add form (ids `name`, `address`) and a row's
- * edit form (`edit-name`, `edit-address`): `idPrefix` is `''` or `'edit-'`. Each field has its
- * label, input, description, and, while `errors` has one, the error with `role="alert"` linked
- * by `aria-describedby`.
- */
 @Component({
   selector: 'app-location-fields',
   imports: [FormField, NgIcon],
@@ -96,7 +89,6 @@ export class LocationFields {
   readonly fields = input.required<FieldTree<LocationModel>>();
   readonly errors = input.required<Record<LocationField, Signal<string | null>>>();
   readonly descriptions = input.required<Record<LocationField, string>>();
-  /** Focus left a field's input, whatever its value (the form decides whether to check it). */
   readonly fieldLeft = output<LocationField>();
 
   protected readonly list: readonly { key: LocationField; label: string }[] = [
@@ -114,13 +106,11 @@ export class LocationFields {
     return `${this.idPrefix()}${field}`;
   }
 
-  /** `aria-describedby`: the field's description, then its error while one is shown. */
   protected describedBy(field: LocationField): string {
     const description = `${this.id(field)}-description`;
     return this.errors()[field]() ? `${description} ${this.id(field)}-error` : description;
   }
 
-  /** Moves focus to the field's input. */
   focus(field: LocationField): void {
     this.inputs()[field === 'name' ? 0 : 1]?.nativeElement.focus();
   }

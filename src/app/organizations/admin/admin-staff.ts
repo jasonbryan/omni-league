@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,16 +10,20 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
+import { ConvexError } from 'convex/values';
 import {
   lucideBan,
   lucideClock,
   lucideClockAlert,
+  lucideLoaderCircle,
   lucideMail,
+  lucideUndo2,
   lucideUserPlus,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
+import { INVITE_MESSAGES } from '../../../../convex/lib/inviteInput';
 import type { Role } from '../../../../convex/lib/roles';
 import {
   ConvexOfflineError,
@@ -27,7 +32,7 @@ import {
   injectQuery,
   skipToken,
 } from '../../core/data/convex';
-import { initials } from '../organization-sidebar';
+import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
@@ -37,8 +42,34 @@ import { BADGE_SECONDARY } from './field-classes';
 import { formatDay } from './format-day';
 import { StaffInvitePanel } from './staff-invite-panel';
 
-/** What the status above the pending list says: a revoke done, failed, or refused offline. */
-type RevokeNotice = { kind: 'revoked'; email: string } | { kind: 'failed' } | { kind: 'offline' };
+type RestoreRefusal =
+  'windowPassed' | 'expired' | 'alreadyInvited' | 'alreadyMember' | 'leaguesGone';
+
+const RESTORE_REFUSALS: readonly string[] = [
+  'windowPassed',
+  'expired',
+  'alreadyInvited',
+  'alreadyMember',
+  'leaguesGone',
+] satisfies RestoreRefusal[];
+
+type Notice =
+  | { kind: 'revoked'; inviteId: Id<'invites'>; email: string }
+  | { kind: 'failed' }
+  | { kind: 'offline' }
+  | { kind: 'restored'; email: string }
+  | { kind: 'refused'; email: string; reason: RestoreRefusal }
+  | { kind: 'restoreFailed'; inviteId: Id<'invites'>; email: string }
+  | { kind: 'restoreOffline'; inviteId: Id<'invites'>; email: string };
+
+function refusalOf(failure: unknown): RestoreRefusal | null {
+  if (!(failure instanceof ConvexError)) return null;
+  const data: unknown = failure.data;
+  const code = typeof data === 'object' && data !== null && 'code' in data ? data.code : null;
+  return typeof code === 'string' && RESTORE_REFUSALS.includes(code)
+    ? (code as RestoreRefusal)
+    : null;
+}
 
 const ROLE_LABEL: Record<Role, string> = {
   orgAdmin: 'Org admin',
@@ -46,27 +77,21 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 /**
- * Staff, `/app/organizations/:slug/staff` (#67; design/mockups/67-organization-staff.html): the
- * organization's members from `memberships.listForOrganization`, its pending invites from
- * `invites.listPending` (live, each with Revoke; an invite whose expiry has passed stays listed as
- * "Expired <date>" until it is revoked, decision 8), and the invite panel beside them from 1024px
- * and after them below. Below 1024px the header's "Invite staff" link jumps to the panel and puts
- * focus on its first control.
- *
- * Revoke acts at once, with no confirmation (decision 7): a status above the list says so and
- * takes focus, because the button that had it is gone; inviting the address again is the undo.
- * Every query here is org-admin only; the area's parent has already shown the no-access view to
- * anyone else, so none is asked for them (`AdminArea`).
+ * Revoke acts at once, with no confirmation: a status above the list says so and takes focus, because the button that had it is gone. The status carries Undo, which `invites.restore` allows
+ * for 10 minutes after the revoke (the server enforces it) and which makes the link already sent work again.
+ * Every query here is org-admin only; the area's parent has already shown the no-access view to anyone else, so none is asked for them.
  */
 @Component({
   selector: 'app-admin-staff',
-  imports: [AdminAlert, NgIcon, StaffInvitePanel],
+  imports: [AdminAlert, NgIcon, NgTemplateOutlet, StaffInvitePanel],
   providers: [
     provideIcons({
       lucideBan,
       lucideClock,
       lucideClockAlert,
+      lucideLoaderCircle,
       lucideMail,
+      lucideUndo2,
       lucideUserPlus,
       lucideUsers,
     }),
@@ -83,8 +108,7 @@ const ROLE_LABEL: Record<Role, string> = {
             Org admins manage everything here. League organizers run the leagues you assign them.
           </p>
         </div>
-        <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to
-             the home page. A plain click scrolls to the panel and focuses its first control. -->
+        <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to the home page. -->
         <a
           [href]="invitePath()"
           data-slot="button"
@@ -185,7 +209,45 @@ const ROLE_LABEL: Record<Role, string> = {
                       kind="success"
                       [title]="'Invite to ' + notice.email + ' revoked.'"
                       description="Its link no longer works. You can invite this address again."
+                    >
+                      <ng-container [ngTemplateOutlet]="undoAction" />
+                    </app-admin-alert>
+                  }
+                  @case ('restored') {
+                    <app-admin-alert
+                      #noticeAlert
+                      kind="success"
+                      [title]="'Invite to ' + notice.email + ' restored.'"
+                      description="Its link works again."
                     />
+                  }
+                  @case ('refused') {
+                    <app-admin-alert
+                      #noticeAlert
+                      kind="error"
+                      [title]="'Invite to ' + notice.email + ' could not be restored.'"
+                      [description]="refusalText(notice.reason, notice.email)"
+                    />
+                  }
+                  @case ('restoreFailed') {
+                    <app-admin-alert
+                      #noticeAlert
+                      kind="error"
+                      title="The invite could not be restored."
+                      description="Check your connection and try again."
+                    >
+                      <ng-container [ngTemplateOutlet]="undoAction" />
+                    </app-admin-alert>
+                  }
+                  @case ('restoreOffline') {
+                    <app-admin-alert
+                      #noticeAlert
+                      kind="offline"
+                      title="You're offline. Nothing was sent."
+                      description="The invite is still revoked. Try again when you're connected."
+                    >
+                      <ng-container [ngTemplateOutlet]="undoAction" />
+                    </app-admin-alert>
                   }
                   @case ('offline') {
                     <app-admin-alert
@@ -314,17 +376,50 @@ const ROLE_LABEL: Record<Role, string> = {
         />
       </div>
     }
+    <!-- Undo, inside the status that offers it. aria-disabled, not disabled, so it keeps focus while it works or while offline. -->
+    <ng-template #undoAction>
+      @if (undoTarget(); as target) {
+        <div class="mt-2">
+          <button
+            type="button"
+            data-slot="button"
+            [class]="undoClass"
+            [class.opacity-50]="!online() && !restoring()"
+            [attr.aria-disabled]="restoring() || !online() ? 'true' : null"
+            (click)="restore(target.inviteId, target.email)"
+          >
+            @if (restoring()) {
+              <ng-icon
+                name="lucideLoaderCircle"
+                class="motion-safe:animate-spin"
+                data-icon="inline-start"
+                aria-hidden="true"
+              />Undoing…
+            } @else {
+              <ng-icon name="lucideUndo2" data-icon="inline-start" aria-hidden="true" />Undo<span
+                class="sr-only"
+              >
+                revoking the invite to {{ target.email }}</span
+              >
+            }
+          </button>
+        </div>
+      }
+    </ng-template>
   `,
 })
 export class AdminStaff {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
   private readonly revokeCall = injectMutation(api.invites.revoke);
+  private readonly restoreCall = injectMutation(api.invites.restore);
 
   protected readonly organization = this.context.organization;
   protected readonly online = injectOnline();
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly destructiveButton = DESTRUCTIVE_BUTTON;
+  protected readonly undoClass = `${OUTLINE_BUTTON} pointer-coarse:min-h-11 pointer-coarse:px-4`;
+  protected readonly restoring = computed(() => this.restoreCall.pending());
   protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly placeholders = [1, 2, 3];
   protected readonly day = formatDay;
@@ -350,7 +445,6 @@ export class AdminStaff {
   protected readonly pendingFailed = computed(() => this.pendingList.error() !== undefined);
   protected readonly leaguesFailed = computed(() => this.leagueList.error() !== undefined);
 
-  /** The pending invites, each marked expired once its `expiresAt` has passed (decision 8). */
   protected readonly pendingRows = computed(() => {
     const rows = this.pendingList.value();
     if (rows === undefined) return undefined;
@@ -358,7 +452,6 @@ export class AdminStaff {
     return rows.map((row) => ({ ...row, expired: row.expiresAt <= now }));
   });
 
-  /** The organization's leagues for the form, drafts included, or `undefined` while they load. */
   protected readonly leagueChoices = computed(() =>
     this.leagueList.value()?.map(({ leagueId, name }) => ({ leagueId, name })),
   );
@@ -367,8 +460,12 @@ export class AdminStaff {
     () => `${adminPath(this.context.slug(), 'staff')}#invite`,
   );
 
-  /** The status above the pending list: the last revoke's outcome, until the next press. */
-  protected readonly notice = signal<RevokeNotice | null>(null);
+  protected readonly notice = signal<Notice | null>(null);
+
+  protected readonly undoTarget = computed(() => {
+    const notice = this.notice();
+    return notice && 'inviteId' in notice ? notice : null;
+  });
 
   private readonly panel = viewChild(StaffInvitePanel);
   private readonly noticeAlert = viewChild<AdminAlert>('noticeAlert');
@@ -381,7 +478,6 @@ export class AdminStaff {
     return ROLE_LABEL[role];
   }
 
-  /** A plain click on "Invite staff" (phones): scroll to the panel and focus its first control. */
   protected jumpToPanel(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
     const panel = this.panel();
@@ -392,13 +488,8 @@ export class AdminStaff {
     panel.focusFirst();
   }
 
-  /**
-   * Revoke at once, no confirmation (decision 7). Offline, nothing is sent and the offline alert
-   * shows; a failure shows the destructive alert. Either way the alert takes focus. On success the
-   * live list drops the invite, and the status takes focus because the button that had it is gone.
-   */
   protected async revoke(inviteId: Id<'invites'>, email: string): Promise<void> {
-    if (this.revokeCall.pending()) return;
+    if (this.revokeCall.pending() || this.restoreCall.pending()) return;
     this.notice.set(null);
     if (!this.online()) {
       this.show({ kind: 'offline' });
@@ -406,13 +497,47 @@ export class AdminStaff {
     }
     try {
       await this.revokeCall.run({ inviteId });
-      this.show({ kind: 'revoked', email });
+      this.show({ kind: 'revoked', inviteId, email });
     } catch (failure) {
       this.show(failure instanceof ConvexOfflineError ? { kind: 'offline' } : { kind: 'failed' });
     }
   }
 
-  private show(notice: RevokeNotice): void {
+  protected refusalText(reason: RestoreRefusal, email: string): string {
+    switch (reason) {
+      case 'windowPassed':
+        return INVITE_MESSAGES.restoreWindowPassed;
+      case 'expired':
+        return INVITE_MESSAGES.restoreExpired;
+      case 'alreadyInvited':
+        return INVITE_MESSAGES.restoreAlreadyInvited(email);
+      case 'alreadyMember':
+        return INVITE_MESSAGES.alreadyMember(email);
+      case 'leaguesGone':
+        return INVITE_MESSAGES.restoreLeaguesGone;
+    }
+  }
+
+  /** The status takes focus either way, because Undo has gone or the alert replaced it. */
+  protected async restore(inviteId: Id<'invites'>, email: string): Promise<void> {
+    if (this.restoreCall.pending()) return;
+    if (!this.online()) {
+      this.show({ kind: 'restoreOffline', inviteId, email });
+      return;
+    }
+    try {
+      await this.restoreCall.run({ inviteId });
+      this.show({ kind: 'restored', email });
+    } catch (failure) {
+      const reason = refusalOf(failure);
+      if (reason) this.show({ kind: 'refused', email, reason });
+      else if (failure instanceof ConvexOfflineError) {
+        this.show({ kind: 'restoreOffline', inviteId, email });
+      } else this.show({ kind: 'restoreFailed', inviteId, email });
+    }
+  }
+
+  private show(notice: Notice): void {
     this.notice.set(notice);
     afterNextRender(() => this.noticeAlert()?.focus(), { injector: this.injector });
   }

@@ -1,11 +1,3 @@
-// WCAG contrast check for the design tokens in src/styles/tokens.css (#58). Node built-ins only.
-// Run `node scripts/token-contrast.mjs [tokens.css]` for a table; `npm run test:scripts` runs the
-// tests in token-contrast.test.mjs.
-//
-// Colour formats: hex (#rgb, #rrggbb) and oklch() (spartan's presets), converted to sRGB in this
-// file. Anything else (named colours, var(), alpha) is reported as a problem, because a contrast
-// ratio cannot be computed for it. Only the `:root` block is read; a `.dark` block is ignored until
-// the owner approves a dark theme.
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,12 +5,8 @@ import { fileURLToPath } from 'node:url';
 const TEXT = 4.5; // WCAG 1.4.3, text
 const UI = 3; // WCAG 1.4.11, user interface components
 
-/**
- * Pairs the issue requires. `--border` and `--sidebar-border` are not listed: they mark decorative
- * separators and card edges, which 1.4.11 does not cover. A control bounded only by `--border`
- * must use `--input`.
- * `optional` pairs are skipped when the foreground token is not defined.
- */
+// `--border` and `--sidebar-border` are not listed: they mark decorative separators and card edges,
+// which 1.4.11 does not cover. A control bounded only by `--border` must use `--input`.
 export const PAIRS = [
   { fg: '--foreground', bg: '--background', min: TEXT },
   { fg: '--card-foreground', bg: '--card', min: TEXT },
@@ -38,7 +26,6 @@ export const PAIRS = [
   { fg: '--sidebar-ring', bg: '--sidebar', min: UI },
 ];
 
-/** Custom properties declared in `:root` blocks, as a Map of name to the raw value. */
 export function parseRootTokens(css) {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const tokens = new Map();
@@ -95,7 +82,6 @@ function parseOklch(value) {
   return { r, g, b: bl };
 }
 
-/** Parses a hex or oklch() colour into gamma-encoded sRGB channels `{ r, g, b }` in 0..1. */
 export function parseColor(value) {
   const text = value.trim();
   const color = parseHex(text) ?? parseOklch(text);
@@ -103,22 +89,15 @@ export function parseColor(value) {
   return color;
 }
 
-/** WCAG relative luminance. */
 function luminance({ r, g, b }) {
   return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 }
 
-/** WCAG contrast ratio, from 1 to 21. */
 export function contrastRatio(a, b) {
   const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (light + 0.05) / (dark + 0.05);
 }
 
-/**
- * Checks every pair in PAIRS against the `:root` tokens of `css`.
- * `results` has one entry per pair that could be computed; `problems` lists missing or unreadable
- * tokens, which also fail the check.
- */
 export function checkTokens(css) {
   const tokens = parseRootTokens(css);
   const results = [];
@@ -148,7 +127,6 @@ export function checkTokens(css) {
   return { results, problems: [...new Set(problems)] };
 }
 
-/** One line per pair: `PASS --a on --b: 12.63:1 (needs 4.5:1)`. */
 export function formatResult({ fg, bg, min, ratio, ok }) {
   return `${ok ? 'PASS' : 'FAIL'} ${fg} on ${bg}: ${ratio.toFixed(2)}:1 (needs ${min}:1)`;
 }

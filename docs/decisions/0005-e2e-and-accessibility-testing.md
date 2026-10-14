@@ -8,6 +8,7 @@
 - **Amended:** by #94 (PR #107): the console fixture fails on every `console.warn`, not only `NG05xx`, with a per-test `expectedConsoleWarnings` opt-in. See "Amendment: console warnings (#94)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** by #178: `workers: 2` in CI, not 1 (ADR 0009, "Amendment: e2e workers and job timeout"). Where the sections below say `workers: 1`, the amendment applies.
 - **Amended:** by #125 (PR #189): a worker fixture may seed users and tenants that read-only tests share, under the rules in "Amendment: worker-scoped tenants for read-only tests (#125)" at the end. Where "Per test: a Playwright fixture creates the test's own tenant" says otherwise, the amendment applies.
+- **Amended:** by #269: comments that excuse an exclusion, a disabled axe rule, or an `expectedConsoleWarnings` entry give a one-line why, with no issue link. See "Amendment: code comments (#269)" at the end. Where the sections above say a comment links an issue, the amendment applies.
 
 ## Context
 
@@ -368,3 +369,15 @@ The console fixture fails a test on every `console.warn`, not only on warnings t
 - Do not use this to share state that tests assert on across each other: a test must pass alone and in any order.
 
 **Sources.** [Issue #125](https://github.com/jasonbryan/omni-league/issues/125), [PR #189](https://github.com/jasonbryan/omni-league/pull/189), [PR #189 review](https://github.com/jasonbryan/omni-league/pull/189#issuecomment-6135203387).
+
+## Amendment: code comments (#269, 2026-10-13)
+
+The owner set one rule for code comments: [AGENTS.md, Code comments](../../AGENTS.md#code-comments). Three rules in this ADR asked for an issue link in a comment.
+
+| Rule in this ADR                                                        | Was                                                                       | Now                                                                                                                                               |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rule exclusions for a UI library (assumption for #6)                    | Per rule, "with a comment and an issue link"                              | Per rule, with a one-line comment giving the why. The tracking issue stays open, and the PR that adds the exclusion links it                      |
+| A disabled axe rule (Recommendation, "axe rule tags enforced")          | Per rule and per selector, "with a code comment linking an issue"         | Per rule and per selector, with a one-line code comment giving the why. The tracking issue stays open, and the PR that disables the rule links it |
+| An `expectedConsoleWarnings` entry (amendment "console warnings (#94)") | "Each entry carries a comment linking the issue that removes the warning" | Each entry carries a one-line comment giving the why. The issue that removes the warning stays open, and the PR that adds the entry links it      |
+
+**Why.** A link in code goes stale when the issue closes. The allowance still cannot outlive its warning: an entry that matches nothing fails the test at teardown, and the open issue records what removes it.

@@ -13,10 +13,6 @@ import {
   SEASONS,
 } from './testing/league-harness';
 
-// The league management page (#125), design/mockups/125-126-seasons.html states 1 to 3 and 12 to
-// 15: what `leagues.getOrganizerContext` decides, the sidebar for each role, and the seasons list.
-// The create form is in season-create-form.spec.ts.
-
 const tokens = (value: string) => value.split(' ').sort();
 
 describe('LeaguePage', () => {
@@ -195,12 +191,12 @@ describe('LeaguePage', () => {
       expect([...rows()[0].querySelectorAll('p')].map((p) => text(p))).toEqual([
         'Dates: Sep 8 – Nov 10, 2027',
         'Registration deadline Aug 25, 2027',
-        '7 v 7 · at least 9 players',
+        '7v7 · at least 9 players',
       ]);
       expect([...rows()[1].querySelectorAll('p')].map((p) => text(p))).toEqual([
         'Dates: Jun 2 – Aug 25, 2027',
         'Registration deadline May 19, 2027',
-        '7 v 7 · at least 7 players',
+        '7v7 · at least 7 players',
       ]);
       expect(rows()[0].querySelector('.sr-only')?.textContent).toBe('Dates: ');
     });
@@ -264,7 +260,7 @@ describe('LeaguePage', () => {
   });
 
   describe('an unknown league (state 15)', () => {
-    it('shows #23’s not-found view, with no sidebar and no season data requested', async () => {
+    it('shows the not-found view, with no sidebar and no season data requested', async () => {
       o = await openAdmin(LEAGUE_ROUTES, `/app/organizations/${GULF.slug}/leagues/does-not-exist`);
       page = o.page;
       o.acceptToken();

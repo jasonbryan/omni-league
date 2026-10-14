@@ -39,22 +39,8 @@ import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season
 import { SeasonCreateForm } from './season-create-form';
 
 /**
- * The content of the league management page, `/app/organizations/:orgSlug/leagues/:leagueSlug`
- * (#125; design/mockups/125-126-seasons.html states 2 to 11 and 22): the league's header, its
- * seasons from `seasons.listForOrganizer` (live, newest start date first, drafts included), each
- * with its status, dates, registration deadline, and format, and the create form beside the list
- * from 1024px and after it below. Below 1024px the header's "Create a season" link jumps to the
- * form and puts focus on its first field. It exists only once `LeagueContext` says `ready`, so
- * nothing here is requested before the caller is known to organize this league.
- *
- * Publishing (#126; states 16 to 23): each Draft season of a published league has a Publish button
- * that opens `PublishSeasonDialog`; once the season is published a status above the list says so
- * and takes focus, because the button that had it is gone. The page behind the dialog is inert while it is open. A draft league has no Publish
- * buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a
- * link to the Leagues page, where #69's Publish is; a league organizer is told to ask an org
- * admin, with no link, because the admin area shows them the no-access view. The season page's
- * link is #134's: a season's name is plain text until then. Once a season is published, the status
- * above the list links to the league's public page (#127).
+ * A draft league has no Publish buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a link to the Leagues page;
+ * a league organizer is told to ask an org admin, with no link, because the admin area shows them the no-access view.
  */
 @Component({
   selector: 'app-league-management',
@@ -121,9 +107,7 @@ import { SeasonCreateForm } from './season-create-form';
             </p>
           }
         </div>
-        <!-- The fragment link is explicit: a bare #create-season would resolve against <base
-             href="/"> to the home page. A plain click scrolls to the form and focuses its first
-             field. -->
+        <!-- The fragment link is explicit: a bare #create-season would resolve against <base href="/"> to the home page. -->
         <a [href]="createPath()" data-slot="button" [class]="jumpClass" (click)="jumpToForm($event)"
           ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
           season</a
@@ -338,22 +322,18 @@ export class LeagueManagement {
     () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#create-season`,
   );
 
-  /** The league's public page (#127), where a published season now appears. */
   protected readonly publicPath = computed(() =>
     publicLeaguePath(this.context.orgSlug(), this.context.leagueSlug()),
   );
 
-  /** The Leagues page of the admin area, where #69's Publish is. */
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
-  /** The season just published, for the status above the list; cleared by the next dialog. */
   protected readonly published = signal<{ seasonId: Id<'seasons'>; name: string } | null>(null);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
-  /** The row's Publish button: asks to confirm, and clears the last result. */
   protected publish(
     row: { seasonId: Id<'seasons'>; name: string; registrationDeadline: string },
     leagueName: string,
@@ -367,11 +347,7 @@ export class LeagueManagement {
     });
   }
 
-  /**
-   * The dialog has left the page and the page is no longer inert. A published season moves focus
-   * to the status, because the button that had it is gone; a dialog that was cancelled puts focus
-   * back on that row's Publish button.
-   */
+  /** A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on that row's Publish button. */
   protected publishDismissed(outcome: PublishSeasonOutcome): void {
     if (outcome.published) {
       this.published.set({ seasonId: outcome.seasonId, name: outcome.name });
@@ -387,7 +363,6 @@ export class LeagueManagement {
     );
   }
 
-  /** A plain click on "Create a season" (phones): scroll to the form and focus its first field. */
   protected jumpToForm(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
     const section = this.createSection()?.nativeElement;

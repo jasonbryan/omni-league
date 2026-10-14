@@ -12,8 +12,6 @@ import {
 import { buttonVariants } from '../ui/button/hlm-button';
 import { YourOrganizations, organizationInitials } from './your-organizations';
 
-// "Your organizations" on /app (#64), design/mockups/64-create-organization.html states 1 to 4.
-
 @Component({
   imports: [YourOrganizations],
   template: '<app-your-organizations />',
@@ -32,7 +30,6 @@ const MUSTANG = {
   role: 'orgAdmin',
   leagues: [],
 };
-// A league organizer whose assigned leagues were all dropped (#141).
 const RIVERBEND = {
   name: 'Riverbend Softball Association',
   slug: 'riverbend-softball-association',
@@ -70,7 +67,6 @@ describe('YourOrganizations', () => {
     section = harness.routeNativeElement!.querySelector('section')!;
   }
 
-  /** Convex accepts the token, then the query answers with `rows`. */
   async function answer(rows: unknown): Promise<FakeSubscription> {
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
@@ -80,7 +76,6 @@ describe('YourOrganizations', () => {
     return subscription;
   }
 
-  // The organization rows only: a row's league links are a nested list (#141).
   const rows = () => [...section.querySelectorAll('ul[role="list"].divide-y > li')];
   const link = (row: Element, text: string) =>
     [...row.querySelectorAll('a')].find((a) => a.textContent?.includes(text));
@@ -147,14 +142,12 @@ describe('YourOrganizations', () => {
     expect(publicPage.getAttribute('href')).toBe('/organizations/coastal-bend-rec-club');
     expect(text(publicPage)).toBe('Public page: Coastal Bend Rec Club');
     expect(publicPage.querySelector('.sr-only')?.textContent).toBe(': Coastal Bend Rec Club');
-    // #65: Manage, for an org admin, to the admin area. Its name includes the organization.
     const manage = link(row, 'Manage')!;
     expect(manage.getAttribute('href')).toBe('/app/organizations/coastal-bend-rec-club');
     expect(text(manage)).toBe('Manage Coastal Bend Rec Club');
     expect(manage.querySelector('.sr-only')?.textContent).toBe(' Coastal Bend Rec Club');
     expect([...manage.classList].sort()).toEqual([...publicPage.classList].sort());
     expect(row.querySelectorAll('a')).toHaveLength(2);
-    // Public page first, then Manage.
     expect([...row.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([
       '/organizations/coastal-bend-rec-club',
       '/app/organizations/coastal-bend-rec-club',
@@ -201,7 +194,7 @@ describe('YourOrganizations', () => {
     ]);
   });
 
-  describe('assigned leagues (issue 141, design/mockups/141-app-leagues.html)', () => {
+  describe('assigned leagues', () => {
     const leagueLinks = (row: Element) => [...row.querySelectorAll('ul ul a, li ul a')];
 
     it('one league (state 1): "Your leagues" and a link to the league management page, no Manage', async () => {
@@ -229,7 +222,6 @@ describe('YourOrganizations', () => {
           '/app/organizations/gulf-coast-sport-social/leagues/friday-night-coed-6s',
         ],
       ]);
-      // The trophy and chevron icons are decorative.
       for (const icon of leagueLinks(row)[0].querySelectorAll('ng-icon')) {
         expect(icon.getAttribute('aria-hidden')).toBe('true');
       }
@@ -250,7 +242,6 @@ describe('YourOrganizations', () => {
         '/app/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s',
         '/app/organizations/gulf-coast-sport-social/leagues/thursday-night-coed-2s',
       ]);
-      // The org admin's row has no leagues list, and keeps Public page and Manage.
       expect(rows()[1].querySelector('ul')).toBeNull();
       expect(rows()[1].textContent).not.toContain('Your leagues');
       expect(rows()[1].textContent).not.toContain('No leagues are assigned');
@@ -291,7 +282,7 @@ describe('YourOrganizations', () => {
       );
     });
 
-    it('org admin only (state 4): rows are as #64 drew them', async () => {
+    it('org admin only (state 4): rows have no leagues list', async () => {
       await open();
       await answer([COASTAL]);
       expect(rows()[0].textContent).not.toContain('Your leagues');

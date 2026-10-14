@@ -8,55 +8,18 @@ import { bindPageMeta } from '../core/page-meta';
 import { NotFoundView } from '../not-found/not-found-view';
 import { NotSavedView } from '../offline/not-saved-view';
 import { ServerErrorView } from '../server-error/server-error-view';
-import { Shell, ShellSidebar } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview } from './organization-overview';
 import { organizationPath, type PublicOrganizationPage } from './organization-path';
-import { OrganizationSidebar } from './organization-sidebar';
 
-/**
- * The public organization page, `/organizations/:orgSlug` (#60), approved in #73
- * (design/mockups/60-organization-page.html). A Server route: the render reads three queries
- * anonymously, `organizations:getPublicPage` (the header and totals) and page 1 of
- * `organizations:listPublicLeagues` and `organizations:listPublicLocations` (#100), and after
- * hydration the live subscriptions keep the page current.
- *
- * - Found: the overview in the app shell, with the organization's sidebar, and the title, Open
- *   Graph tags, and canonical from the query results, once all three have arrived.
- * - Header `null`: #23's not-found view with status 404, top bar only (#73 decision 2).
- * - Any of the three failed or timed out: the server-error view with status 503 and `no-store`,
- *   top bar only, so an error never enters the CDN cache. The live subscriptions replace it once
- *   every result has arrived.
- *
- * Offline (#82, design/mockups/82-offline-pages.html): all three queries are on the adapter's
- * `OFFLINE_SAVED_QUERIES`, so the browser keeps each live result as a saved copy and shows it when
- * there is no transferred value and no live result yet. While the app is offline (`injectOnline()`
- * false) the overview shows the saved-copy note under the `h1`, dated by the oldest saved copy on
- * screen; online, a saved copy shows with no note until the live result replaces it. Offline with
- * any of the three missing, the page shows the not-saved view. A live `null` header removes its
- * saved copy (the adapter) and shows the not-found view.
- *
- * The queries' only arguments are the route's slug and page 1, so the server and the browser use
- * the same `TransferState` keys and the server HTML holds no query string. Page numbers in the URL
- * are #103.
- */
+/** The queries' only arguments are the route's slug and page 1, so the server and the browser use the same `TransferState` keys and the server HTML holds no query string. */
 @Component({
   selector: 'app-organization-page',
-  imports: [
-    NotFoundView,
-    NotSavedView,
-    OrganizationOverview,
-    OrganizationSidebar,
-    ServerErrorView,
-    Shell,
-    ShellSidebar,
-  ],
+  imports: [NotFoundView, NotSavedView, OrganizationOverview, PublicLayout, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (page(); as page) {
-        <ng-template appShellSidebar>
-          <app-organization-sidebar [page]="page" />
-        </ng-template>
         <app-organization-overview [page]="page" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -65,7 +28,7 @@ import { OrganizationSidebar } from './organization-sidebar';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="path()" />
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class OrganizationPage {
@@ -86,10 +49,8 @@ export class OrganizationPage {
   }));
   private readonly online = injectOnline();
 
-  /** The page's path from the route, for "Try again" when there is no result to build it from. */
   protected readonly path = computed(() => organizationPath(this.slug()));
 
-  /** The organization with the rows of page 1 of each list, once found and all three arrived. */
   protected readonly page = computed((): PublicOrganizationPage | undefined => {
     const header = this.header.value();
     const leagues = this.leagues.value();
@@ -98,10 +59,6 @@ export class OrganizationPage {
     return { ...header, leagues: leagues.rows, locations: locations.rows };
   });
 
-  /**
-   * When the oldest saved copy on screen was saved, only while offline (the note is hidden online)
-   * and only while some of the three results is still a saved copy.
-   */
   protected readonly savedAt = computed(() => {
     if (this.online()) return undefined;
     const times = [this.header.savedAt(), this.leagues.savedAt(), this.locations.savedAt()].filter(
@@ -113,11 +70,9 @@ export class OrganizationPage {
   protected readonly state = computed(() => {
     if (this.page()) return 'page';
     if (this.header.value() === null) return 'not-found';
-    // Any error of any of the three, including a missing Convex URL; never its message (adapter
-    // README).
     if (this.header.error() || this.leagues.error() || this.locations.error()) return 'error';
-    // Offline with nothing to show (never on the server, where `online` is always true).
-    if (!this.online()) return 'not-saved';
+    const offlineWithoutSavedCopy = !this.online();
+    if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
 

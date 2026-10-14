@@ -1,5 +1,3 @@
-// Unit tests for scripts/clean-previews.mjs (#158). Run with `npm run test:scripts` (node:test).
-// The Convex API and `gh` are never called: each case passes a stub `fetch`, `gh`, and prompt.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -19,7 +17,6 @@ import {
 const TOKEN = 'sentinel-team-token-c0ffee-8f3a';
 const PROJECT_ID = 4242;
 
-/** One deployment as the list endpoint returns it. */
 function deployment(name, overrides = {}) {
   return {
     id: 1,
@@ -37,7 +34,6 @@ function deployment(name, overrides = {}) {
   };
 }
 
-/** A preview deployment with Convex name `animal-<pr>` for the preview `pr-<pr>`. */
 function prDeployment(pr, overrides = {}) {
   return deployment(`animal-${pr}`, {
     previewIdentifier: `pr-${pr}`,
@@ -46,7 +42,6 @@ function prDeployment(pr, overrides = {}) {
   });
 }
 
-/** A fetch stub over a table of `METHOD path` routes; records every request. */
 function stubFetch(routes) {
   const calls = [];
   const fetchStub = async (url, init = {}) => {
@@ -62,7 +57,6 @@ function stubFetch(routes) {
   return fetchStub;
 }
 
-/** Everything `runClean` needs, over in-memory stubs. */
 function harness({ deployments, states = {}, answer = 'y', deleteStatus = {}, args = {} }) {
   const out = [];
   const err = [];
@@ -519,7 +513,6 @@ describe('the team token is never printed, logged, or written', () => {
       throw new Error(`connect failed for Bearer ${TOKEN}`);
     };
     const cases = [
-      // happy path, with a delete failure
       harness({
         deployments: [prDeployment(1), prDeployment(2)],
         states: { 1: 'CLOSED', 2: new Error(`gh said ${TOKEN}`) },

@@ -1,6 +1,4 @@
-/** `localStorage` key of the record: `{ [ngsw version hash]: first-run time in epoch ms }`. */
 export const FIRST_RUN_STORAGE_KEY = 'omni-league:sw-version-first-run';
-/** The record keeps this many versions, the most recently first run; older ones are dropped. */
 export const FIRST_RUN_MAX_ENTRIES = 10;
 
 type FirstRuns = Record<string, number>;
@@ -20,11 +18,7 @@ function read(): FirstRuns {
   }
 }
 
-/**
- * When the version `hash` was first run on this device, recording `now` when it has no record yet.
- * With no usable storage every version counts as first run `now`, so the app never forces a reload.
- * The value holds only version hashes and times, nothing about the user.
- */
+/** With no usable storage every version counts as first run `now`, so the app never forces a reload. */
 export function firstRunOf(hash: string, now: number): number {
   const runs = read();
   const known = runs[hash];

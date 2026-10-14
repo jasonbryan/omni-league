@@ -6,11 +6,6 @@ import type {
   PublicLeagueView,
 } from '../public-league-path';
 
-/**
- * The public league page's data for specs: design/mockups/127-128-public-seasons.html's populated
- * league, as `organizations:getPublicPage`, `leagues:getPublicPage`, and `seasons:listPublic`
- * return it. Test-only.
- */
 export const ORGANIZATION: PublicOrganizationHeader = {
   name: GULF_COAST.name,
   slug: GULF_COAST.slug,
@@ -28,7 +23,6 @@ export const SUNDAY_4S: PublicLeagueHeader = {
   locationNames: ['North Beach Sand Courts'],
 };
 
-/** The league's seven published seasons, newest start date first. */
 export const SEASONS = [
   ['Summer 2027', 'summer-2027', '2027-06-06', '2027-08-29'],
   ['Spring 2027', 'spring-2027', '2027-03-07', '2027-05-16'],
@@ -42,10 +36,9 @@ export const SEASONS = [
   slug,
   startDate,
   endDate,
-  formatName: '4 v 4',
+  formatName: '4v4',
 }));
 
-/** Page `page` of `total` seasons as `seasons:listPublic` returns it (5 per page, 40 pages at most). */
 export function seasonsPage(page: number, total = SEASONS.length): PublicLeagueSeasons {
   const pageCount = Math.min(Math.ceil(total / 5), 40);
   const rows = SEASONS.slice((page - 1) * 5, page * 5);
@@ -54,7 +47,6 @@ export function seasonsPage(page: number, total = SEASONS.length): PublicLeagueS
 
 export const NO_SEASONS: PublicLeagueSeasons = { rows: [], page: 1, pageCount: 0, total: 0 };
 
-/** The results of the page's three queries, by function name. */
 export function leagueQueryResults(
   options: {
     page?: number;

@@ -4,12 +4,6 @@ import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft, lucideLock } from '@ng-icons/lucide';
 
-/**
- * The no-access view (#65; design/mockups/65-organization-admin-locations.html state 5), shown in
- * the app shell with no sidebar when `organizations.getAdminContext` throws `FORBIDDEN`: a signed-in
- * league organizer of the organization, or a member of none. The same view serves every admin path.
- * It reads no data, and nothing about the organization is on screen.
- */
 @Component({
   selector: 'app-admin-no-access',
   imports: [NgIcon, RouterLink],

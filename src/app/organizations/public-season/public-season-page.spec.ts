@@ -12,9 +12,6 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
-// The public season page (#128), drawn in design/mockups/127-128-public-seasons.html state 9.
-
-const ORG = 'organizations:getPublicPage';
 const SEASON = 'seasons:getPublicPage';
 const LEAGUE_PATH = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s';
 const PATH = `${LEAGUE_PATH}/seasons/summer-2027`;
@@ -65,7 +62,6 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
-/** The details list as `[term, definition]` pairs. */
 function details(harness: RouterTestingHarness): [string, string][] {
   return [...host(harness).querySelectorAll('main dl > div')].map((row) => [
     text(row.querySelector('dt')),
@@ -73,8 +69,7 @@ function details(harness: RouterTestingHarness): [string, string][] {
   ]);
 }
 
-// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
-// next one, nor a later spec file (spec files share one global).
+// Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
 });
@@ -87,14 +82,13 @@ afterEach(() => {
 });
 
 describe('PublicSeasonPage queries', () => {
-  it("asks for the organization and the season with the route's slugs only", async () => {
+  it("asks for the season with the route's slugs only", async () => {
     await open(`${PATH}?ott=SECRET&utm_source=x#details`);
     expect(
       client.activeSubscriptions
         .map(({ name, args }) => ({ name, args }))
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
-      { name: ORG, args: { slug: 'gulf-coast-sport-social' } },
       {
         name: SEASON,
         args: {
@@ -106,12 +100,11 @@ describe('PublicSeasonPage queries', () => {
     ]);
   });
 
-  it('shows nothing but the shell until both results have arrived', async () => {
+  it('shows nothing but the layout until the result has arrived', async () => {
     const harness = await open();
-    subscription(ORG).emit(seasonQueryResults()[ORG]);
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     subscription(SEASON).emit(SUMMER_2027);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Summer 2027');
@@ -141,7 +134,6 @@ describe('PublicSeasonPage populated', () => {
       PATH,
     ]);
     expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
-    // The separators are decoration.
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Summer 2027');
@@ -161,7 +153,7 @@ describe('PublicSeasonPage populated', () => {
     expect(text(panel?.querySelector('h2'))).toBe('Season details');
     expect(details(harness)).toEqual([
       ['Dates', 'Jun 6 – Aug 29, 2027'],
-      ['Format', '4 v 4'],
+      ['Format', '4v4'],
       ['Team size', 'Teams need at least 4 players'],
       ['Location', 'North Beach Sand Courts'],
     ]);
@@ -193,24 +185,22 @@ describe('PublicSeasonPage populated', () => {
     expect(metaContent('og:title')).toBe('Summer 2027');
     expect(metaContent('og:type')).toBe('website');
     expect(metaContent('og:description')).toBe(
-      'Jun 6 – Aug 29, 2027. 4 v 4, teams need at least 4 players.',
+      'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
     );
     expect(metaContent('og:url')).toBe(`${window.location.origin}${PATH}`);
     expect(canonical()).toBe(`${window.location.origin}${PATH}`);
   });
 
-  it('marks the league’s sport as the current section of the sidebar, as plain text until the sport view exists', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav).not.toBeNull();
-    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
-    expect(
-      sports.map((el) => [text(el.querySelector('span.min-w-0')), el.getAttribute('aria-current')]),
-    ).toEqual([
-      ['Beach volleyball', 'true'],
-      ['Soccer', null],
-      ['Softball', null],
-    ]);
+  it('renders in the public layout: top bar and footer, no organization sidebar and no menu button', () => {
+    const root = host(harness);
+    expect(root.querySelector('app-public-layout')).not.toBeNull();
+    expect(root.querySelector('app-shell')).toBeNull();
+    expect(root.querySelectorAll('header')).toHaveLength(1);
+    expect(root.querySelectorAll('footer')).toHaveLength(1);
+    const names = [...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'));
+    expect(names).toContain('Footer');
+    expect(names).not.toContain('Gulf Coast Sport & Social');
+    expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
   it('writes several locations as "Locations", in the league’s order', async () => {
@@ -276,28 +266,26 @@ describe('PublicSeasonPage populated', () => {
     expect(details(harness)[0]).toEqual(['Dates', 'Jun 13 – Sep 5, 2027']);
     expect(details(harness)[2]).toEqual(['Team size', 'Teams need at least 6 players']);
     expect(metaContent('og:description')).toBe(
-      'Jun 13 – Sep 5, 2027. 4 v 4, teams need at least 6 players.',
+      'Jun 13 – Sep 5, 2027. 4v4, teams need at least 6 players.',
     );
-    // The same elements: the page was not torn down and rebuilt.
     expect(host(harness).querySelector('main h1')).toBe(h1);
   });
 });
 
 describe('PublicSeasonPage not found and failures', () => {
   it.each([
-    ['a null season (a draft or an unknown one)', { season: null }],
-    ['an unknown organization', { organization: null, season: null }],
-  ])('shows #23’s not-found view, with no sidebar, for %s', async (_label, options) => {
+    ['a null season (a draft, or an unknown organization, league, or season)', { season: null }],
+  ])('shows the not-found view in the public layout for %s', async (_label, options) => {
     const harness = await open();
     emit(seasonQueryResults(options));
     await settle(harness);
     expect(host(harness).querySelector('app-not-found-view')).not.toBeNull();
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     expect(head().querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
   });
 
-  it.each([ORG, SEASON])('shows the server-error view when %s fails', async (failing) => {
+  it.each([SEASON])('shows the server-error view when %s fails', async (failing) => {
     const harness = await open(`${PATH}?x=1`);
     for (const [name, value] of Object.entries(seasonQueryResults())) {
       if (name === failing) subscription(name).fail(new Error('connect ECONNREFUSED internal-db'));
@@ -307,6 +295,6 @@ describe('PublicSeasonPage not found and failures', () => {
     expect(host(harness).querySelector('app-server-error-view')).not.toBeNull();
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(PATH);
     expect(host(harness).textContent).not.toContain('internal-db');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
   });
 });

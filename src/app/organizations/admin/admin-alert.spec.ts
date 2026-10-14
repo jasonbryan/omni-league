@@ -3,9 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { lucideEyeOff, lucideInfo } from '@ng-icons/lucide';
 import { AdminAlert } from './admin-alert';
 
-// The alert's `note` kind (#67), design/mockups/67-organization-staff.html states 8 to 10: the
-// "This is the only time the link is shown." note draws the eye-off icon.
-
 @Component({
   imports: [AdminAlert],
   template: '<app-admin-alert kind="note" title="This is the only time the link is shown." />',
@@ -38,8 +35,6 @@ describe('the admin alert note kind', () => {
 })
 class InfoHost {}
 
-// The `info` kind (#126), design/mockups/125-126-seasons.html states 22 and 23: the draft-league
-// message is a neutral note with the info icon.
 describe('the admin alert info kind', () => {
   it('is a role="note" box in the neutral classes that draws the info icon', async () => {
     const fixture = TestBed.createComponent(InfoHost);

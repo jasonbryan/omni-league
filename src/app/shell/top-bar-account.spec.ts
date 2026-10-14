@@ -8,15 +8,11 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { PlainTestPage } from './testing/test-pages';
 
-// The top bar's "Sign in" link and its signed-in account link (#63; PR #96 decisions 1 and 2;
-// design/mockups/63-sign-in.html states 10 to 12).
-
 describe('Top bar account area', () => {
   let auth: FakeAuthClient;
   let convex: FakeConvexClient;
   let harness: RouterTestingHarness;
 
-  /** Opens `url` in a page with the shell; `session` null is signed out, undefined is not yet known. */
   async function open(url: string, session: { id: string } | null | undefined = null) {
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
@@ -40,7 +36,6 @@ describe('Top bar account area', () => {
   const accountLink = (page: HTMLElement) =>
     header(page).querySelector<HTMLAnchorElement>('a[href="/app"]');
 
-  /** Signs the account in and answers `users.me`. */
   async function signedIn(name: string | null) {
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
@@ -61,7 +56,6 @@ describe('Top bar account area', () => {
         '/sign-up?returnTo=%2Fleagues%2Fx%2Fregister',
         '/sign-in?returnTo=%2Fleagues%2Fx%2Fregister',
       ],
-      // The sign-up page with no returnTo lands on /app, so the link says so (mockup 62).
       ['/sign-up', '/sign-in?returnTo=%2Fapp'],
     ])('on %s the Sign in link goes to %s', async (url, href) => {
       const page = await open(url);
@@ -160,7 +154,6 @@ describe('Top bar account area', () => {
       const page = await open('/organizations/x', { id: 's1' });
       TestBed.tick();
       expect(convex.subscriptions).toEqual([]);
-      // Neither link until the name is known: no wrong "Sign in" for a signed-in visitor.
       expect(signInLink(page)).toBeNull();
       expect(accountLink(page)).toBeNull();
       TestBed.inject(AuthService).onChange(true);

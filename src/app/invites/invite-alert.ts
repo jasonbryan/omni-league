@@ -10,15 +10,9 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideInfo, lucideWifiOff } from '@ng-icons/lucide';
 import { ALERT_DESTRUCTIVE, ALERT_NEUTRAL } from '../organizations/admin/admin-alert';
 
-/** What an invite-page alert says: a failure, the offline refusal, or plain information. */
 export type InviteAlertKind = 'error' | 'offline' | 'info';
 
-/**
- * The invite page's message box (design/mockups/70-accept-invite.html states 7, 8, and 10;
- * design/mockups/88-offline-note.html state 3): helm's alert in the mockup's classes. It is a
- * `role="alert"` region that takes focus through `focus()` (`tabindex="-1"`), and shows the
- * focus ring the mockup draws, because focus moves to it from a button that has just gone.
- */
+/** Takes focus through `focus()` and shows the focus ring the mockup draws, because focus moves to it from a button that has just gone. */
 @Component({
   selector: 'app-invite-alert',
   imports: [NgIcon],

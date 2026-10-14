@@ -5,8 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { DefaultUrlSerializer, provideRouter, Router, UrlSerializer } from '@angular/router';
 import { hasUndecodableQuery, QueryTolerantUrlSerializer } from './url-serializer';
 
-// The router cannot decode `?q=%`: it warns NG04018 and navigates to `/`, so a visitor who follows
-// a truncated tracking link lands on the home page after hydration (PR #105, tester round 2).
+// The router cannot decode `?q=%`: it warns NG04018 and navigates to `/`, so a visitor who follows a truncated tracking link lands on the home page after hydration.
 
 describe('hasUndecodableQuery', () => {
   it.each(['?q=%', '?%', '?q=%E0%A4%A', '?q=%zz', '?a=1&b=%'])('is true for %s', (search) => {
@@ -36,8 +35,7 @@ describe('QueryTolerantUrlSerializer', () => {
     expect(serializer.serialize(serializer.parse(url))).toBe(plain.serialize(plain.parse(bare)));
   });
 
-  // The router decodes the fragment with `decodeURIComponent`, so `/x#%` throws `URIError` and the
-  // router would navigate to `/` (#116).
+  // The router decodes the fragment with `decodeURIComponent`, so `/x#%` throws `URIError` and the router would navigate to `/`.
   it.each([
     ['/x#%', '/x'],
     ['/x#%E0%A4%A', '/x'],
@@ -92,7 +90,6 @@ describe('the app router with the query-tolerant serializer', () => {
     });
     const router = TestBed.inject(Router);
 
-    // A string URL goes through `Router.parseUrl`, as the browser's URL does on the first navigation.
     await router.navigateByUrl('/x?q=%');
 
     expect(router.url).toBe('/x');
@@ -121,8 +118,6 @@ describe('the app router with the query-tolerant serializer', () => {
     warn.mockRestore();
   });
 
-  // A paging or filter query written by the app (`?leagues=2`) round-trips through the serializer
-  // unchanged, including a value the serializer must percent-encode (PR #105, tester round 3).
   it('writes and reads a legitimate query string as the default serializer does', async () => {
     TestBed.configureTestingModule({
       providers: [

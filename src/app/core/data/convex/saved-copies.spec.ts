@@ -24,18 +24,15 @@ import { plantSavedCopy } from './testing/saved-copy';
 const getPublicPage = api.organizations.getPublicPage;
 const listPublicLeagues = api.organizations.listPublicLeagues;
 const listPublicLocations = api.organizations.listPublicLocations;
-/** Same function name as the listed query, with free-form args, for the key-order cases. */
 const listedAnyArgs = makeFunctionReference<'query', Record<string, unknown>, unknown>(
   'organizations:getPublicPage',
 );
-/** A query that is not on the allow-list (a signed-in query, for example). */
 const myTeams = makeFunctionReference<'query', { leagueId: string }, unknown>('teams:mine');
 
 const START = Date.UTC(2026, 9, 10, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 const VERSION = OFFLINE_SAVED_QUERIES[0].version;
 
-/** A `getPublicPage` result with this name and no leagues or locations. */
 const page = (name: string) => ({
   name,
   slug: 'org',
@@ -45,7 +42,6 @@ const page = (name: string) => ({
   sports: [],
 });
 
-/** A `listPublicLeagues` / `listPublicLocations` result with these rows. */
 const list = (rows: Value[]) => ({ rows, page: 1, pageCount: 1, total: rows.length });
 
 const savedKeys = () =>
@@ -70,7 +66,6 @@ describe('ConvexSavedCopies', () => {
   });
 
   it('lists the organization, league, and season page queries, deliberately public and caller-independent, each with its own returns validator', () => {
-    // The very validators the Convex functions declare, not restated copies.
     expect(
       OFFLINE_SAVED_QUERIES.map(({ query, returns }) => [getFunctionName(query), returns]),
     ).toEqual([
@@ -169,7 +164,6 @@ describe('ConvexSavedCopies', () => {
           version: VERSION,
         });
         expect(store.read(query, args)).toEqual({ value: result, savedAt: START });
-        // Another page of the same list is its own copy.
         expect(store.read(query, { slug: 'gulf-coast', page: 2 })).toBeUndefined();
       },
     );
@@ -189,7 +183,6 @@ describe('ConvexSavedCopies', () => {
       expect(setItem).not.toHaveBeenCalled();
       expect(localStorage.length).toBe(0);
 
-      // An entry planted under that key by anything else is not used either.
       localStorage.setItem(
         'cvx-saved:teams:mine:{"leagueId":"a"}',
         JSON.stringify({ v: ['Sharks'], savedAt: START, usedAt: START, version: VERSION }),
@@ -216,7 +209,6 @@ describe('ConvexSavedCopies', () => {
       }
       expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES);
 
-      // Reading org-0 makes it the most recently used, so org-1 is now the least recently used.
       vi.setSystemTime(START + 100_000);
       expect(store.read(getPublicPage, { slug: 'org-0' })?.value).toEqual(page('Org 0'));
 
@@ -228,7 +220,6 @@ describe('ConvexSavedCopies', () => {
       expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-new' }));
       expect(keys).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-1' }));
 
-      // One more: org-2 goes next.
       vi.setSystemTime(START + 300_000);
       store.write(getPublicPage, { slug: 'org-newer' }, page('Newer'));
       expect(savedKeys()).toHaveLength(SAVED_COPY_MAX_ENTRIES);
@@ -236,7 +227,6 @@ describe('ConvexSavedCopies', () => {
     });
 
     it(`given ${String(SAVED_COPY_MAX_ENTRIES + 1)} saved results, one more write removes the least recently used down to the limit`, () => {
-      // 51 entries already in storage (for example written by another tab at the same moment).
       for (let i = 0; i <= SAVED_COPY_MAX_ENTRIES; i++) {
         const at = START + i * 1000;
         localStorage.setItem(
@@ -256,7 +246,6 @@ describe('ConvexSavedCopies', () => {
       const keys = savedKeys();
       expect(keys).toHaveLength(SAVED_COPY_MAX_ENTRIES);
       expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-new' }));
-      // The two least recently used go; the next one stays.
       expect(keys).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-0' }));
       expect(keys).not.toContain(savedCopyKey(getPublicPage, { slug: 'org-1' }));
       expect(keys).toContain(savedCopyKey(getPublicPage, { slug: 'org-2' }));
@@ -293,7 +282,6 @@ describe('ConvexSavedCopies', () => {
         vi.setSystemTime(START + i * 1000);
         store.write(getPublicPage, { slug: `q-${i}` }, quarter);
       }
-      // Four quarters plus their keys and fields exceed the budget: the oldest goes.
       expect(savedKeys()).toEqual([
         savedCopyKey(getPublicPage, { slug: 'q-1' }),
         savedCopyKey(getPublicPage, { slug: 'q-2' }),
@@ -360,7 +348,6 @@ describe('ConvexSavedCopies', () => {
       }
     });
 
-    // The tester's repros on PR #136: each crashed the organization page offline.
     it.each([
       ['an object missing fields', { name: 'Shape Only' }],
       ['a number', 42],
@@ -389,7 +376,6 @@ describe('ConvexSavedCopies', () => {
       });
     });
 
-    // Tester, PR #136 round 2: nested shapes, checked through read() rather than the matcher alone.
     const league = { name: 'L', slug: 'l', sportName: 'Soccer', locationNames: ['Field'] };
     const location = { name: 'Field', address: '1 Main St' };
     it.each([

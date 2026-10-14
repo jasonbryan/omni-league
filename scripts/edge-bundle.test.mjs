@@ -1,4 +1,3 @@
-// Unit tests for scripts/edge-bundle.mjs (#15). Run with `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,7 @@ const IMPORT = 'import of a Node filesystem module (fs, path, or module)';
 const BARE = 'import of a package outside the allow-list';
 const REQUIRE = 'require of a Node filesystem module (fs, path, or module)';
 
-// The construct that failed every SSR request on Netlify Edge (PR #54): `convex/browser`'s `node`
+// The construct that failed every SSR request on Netlify Edge: `convex/browser`'s `node`
 // entry (dist/esm/browser/simple_client-node.js), as published and as minified into
 // main.server.mjs by the production build.
 const CONVEX_NODE_ENTRY =

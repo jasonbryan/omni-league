@@ -11,7 +11,7 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
-import { initials } from '../organization-sidebar';
+import { initials } from '../initials';
 import type { AdminOrganization } from './admin-context';
 import { adminPath } from './admin-path';
 
@@ -20,22 +20,12 @@ const CURRENT =
 const OTHER =
   'flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted';
 
-/** A path with its query string and fragment removed, and no trailing slash. */
 function pathOf(url: string): string {
   const path = url.split(/[?#]/, 1)[0] ?? '';
   return path.length > 1 ? path.replace(/\/+$/, '') : path;
 }
 
-/**
- * The admin area's sidebar (#65; design/mockups/65-organization-admin-locations.html, "Admin
- * sidebar"), rendered in the app shell's sidebar slot: the organization, then Overview and
- * Locations, Leagues, and Staff (#67), then Public page and Your organizations. The
- * current section carries `aria-current="page"`; on a league management page (#125) the Leagues
- * entry is highlighted the same and carries `aria-current="true"`.
- *
- * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
- * so it carries no `id`.
- */
+/** The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`. */
 @Component({
   selector: 'app-admin-sidebar',
   imports: [NgIcon, RouterLink],
@@ -128,15 +118,13 @@ export class AdminSidebar {
   protected readonly sections = computed(() => {
     const { slug } = this.organization();
     const here = pathOf(this.url());
-    // `page` on the section's own path; `true` below it (a league management page, #125, is a
-    // page of the Leagues section, not the section's page).
-    const mark = (path: string, below = false): 'page' | 'true' | null =>
-      here === path ? 'page' : below && here.startsWith(`${path}/`) ? 'true' : null;
+    const ariaCurrentFor = (path: string, includeChildren = false): 'page' | 'true' | null =>
+      here === path ? 'page' : includeChildren && here.startsWith(`${path}/`) ? 'true' : null;
     return [
       { label: 'Overview', icon: 'lucideLayoutDashboard', path: adminPath(slug) },
       { label: 'Locations', icon: 'lucideMapPin', path: adminPath(slug, 'locations') },
       { label: 'Leagues', icon: 'lucideTrophy', path: adminPath(slug, 'leagues') },
       { label: 'Staff', icon: 'lucideUsers', path: adminPath(slug, 'staff') },
-    ].map((link) => ({ ...link, current: mark(link.path, link.label === 'Leagues') }));
+    ].map((link) => ({ ...link, current: ariaCurrentFor(link.path, link.label === 'Leagues') }));
   });
 }

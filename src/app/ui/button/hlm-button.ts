@@ -5,7 +5,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type { ClassValue } from 'clsx';
 import { injectBrnButtonConfig } from './hlm-button.token';
 
-// Vendored from spartan helm. Local changes (#61), to keep when re-copying from upstream:
+// Vendored from spartan helm. Local changes, to keep when re-copying from upstream:
 // - none of helm's focus-halo and outline-removal classes (the list is in hlm-button.spec.ts):
 //   helm's 50% halo is 2.25:1 and fails WCAG 1.4.11, so the solid `:focus-visible` outline in
 //   src/styles/base.css is the focus indicator. Tailwind scans this file, so this comment does

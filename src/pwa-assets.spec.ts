@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// The web app manifest and the icon files it names (#80, ADR 0013). Node built-ins only: a PNG's
-// width and height are the two big-endian integers after its 8-byte signature and the IHDR chunk
-// header.
+// Node built-ins only: a PNG's width and height are the two big-endian integers after its 8-byte signature and the IHDR chunk header.
 const publicDir = join(process.cwd(), 'public');
 
 interface ManifestIcon {

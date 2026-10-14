@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// `testing:assignForeignLeague` (#141), against the real schema: it seeds the case `listMine`
-// must drop, a membership whose assigned leagues include a league of another organization.
-// Throws without IS_TEST before touching data.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';

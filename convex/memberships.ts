@@ -5,19 +5,8 @@ import { requireOrgAdmin } from './lib/access';
 import { authEmailOf } from './lib/authUsers';
 import { roleValidator } from './lib/roles';
 
-/**
- * Members `listForOrganization` returns at most. The staff screen is one page with no paging (#67).
- * Never taken from args.
- */
 export const MEMBERS_LIMIT = 200;
 
-/**
- * The organization's staff for its staff screen (#67): `{ name, email, role, leagueNames, isYou }`
- * sorted by name ignoring case. `email` is the account's address (kept by Better Auth), and
- * `leagueNames` are a league organizer's leagues in their own order, leaving out an id of another
- * organization's league. `isYou` marks the caller's own row, for "(you)". Org admins of the
- * organization only, because the rows hold email addresses.
- */
 export const listForOrganization = query({
   args: { organizationId: v.id('organizations') },
   returns: v.array(

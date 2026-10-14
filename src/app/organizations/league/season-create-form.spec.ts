@@ -13,9 +13,6 @@ import {
   LIST_FOR_ORGANIZER,
 } from './testing/league-harness';
 
-// The create-season form (#125), design/mockups/125-126-seasons.html states 4 to 11 and "Messages
-// and attributes", plus design/mockups/88-offline-note.html states 2 and 3.
-
 const tokens = (value: string) => value.split(' ').sort();
 
 describe('SeasonCreateForm', () => {
@@ -60,7 +57,6 @@ describe('SeasonCreateForm', () => {
     await o.flush();
   }
 
-  /** Fills every field validly: the issue's "Fall 2026", 7v7, minimum 7. */
   async function fill() {
     await type('name', 'Fall 2026');
     await type('start-date', '2026-09-01');
@@ -69,7 +65,6 @@ describe('SeasonCreateForm', () => {
     await chooseFormat('7v7');
   }
 
-  /** What `seasons.create` is called with after `fill()`. */
   const FALL_2026 = {
     leagueId: COED.leagueId,
     name: 'Fall 2026',
@@ -148,10 +143,9 @@ describe('SeasonCreateForm', () => {
       expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
         'Set when you choose a format. You can raise it, never lower it.',
       );
-      // After a format is chosen, the description names the minimum it sets.
       await chooseFormat('11v11');
       expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-        'At least 11 for 11 v 11. Raise it if teams need more players.',
+        'At least 11 for 11v11. Raise it if teams need more players.',
       );
       expect(input('end-date').getAttribute('aria-describedby')).toBe('end-date-description');
     });
@@ -173,9 +167,9 @@ describe('SeasonCreateForm', () => {
           r.getAttribute('aria-describedby'),
         ]),
       ).toEqual([
-        ['5 v 5', 'At least 5 players', 'format-5v5-description'],
-        ['7 v 7', 'At least 7 players', 'format-7v7-description'],
-        ['11 v 11', 'At least 11 players', 'format-11v11-description'],
+        ['5v5', 'At least 5 players', 'format-5v5-description'],
+        ['7v7', 'At least 7 players', 'format-7v7-description'],
+        ['11v11', 'At least 11 players', 'format-11v11-description'],
       ]);
     });
 
@@ -195,7 +189,7 @@ describe('SeasonCreateForm', () => {
         expect(radios.map((r) => [r.value, r.checked])).toEqual([['10v10', true]]);
         expect(input('minimum-roster-size').value).toBe('10');
         expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-          'At least 10 for 10 v 10. Raise it if teams need more players.',
+          'At least 10 for 10v10. Raise it if teams need more players.',
         );
       });
 
@@ -336,7 +330,7 @@ describe('SeasonCreateForm', () => {
       expect(error('registration-deadline')).toBe(
         'The registration deadline must be before the start date, Mar 1, 2028.',
       );
-      expect(error('minimum-roster-size')).toBe('7 v 7 needs at least 7 players. Enter 7 or more.');
+      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
       expect(error('start-date')).toBeNull();
       expect(document.activeElement).toBe(input('end-date'));
       expect(calls()).toEqual([]);
@@ -426,7 +420,7 @@ describe('SeasonCreateForm', () => {
       await chooseFormat('7v7');
       await type('minimum-roster-size', '6');
       await leave('minimum-roster-size');
-      expect(error('minimum-roster-size')).toBe('7 v 7 needs at least 7 players. Enter 7 or more.');
+      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
     });
 
     it('shows nothing while the user types an invalid partial value', async () => {
@@ -520,10 +514,8 @@ describe('SeasonCreateForm', () => {
       expect(document.activeElement).toBe(submitButton());
       expect(text(submitButton())).toBe('Create draft season');
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
-      // Slug follows the name again after the form cleared.
       await type('name', 'Next One');
       expect(input('slug').value).toBe('next-one');
-      // The next press clears the message.
       await submit();
       expect(form().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
     });
@@ -546,7 +538,6 @@ describe('SeasonCreateForm', () => {
       expect(page.querySelector('#slug-error strong')?.textContent).toBe('fall-2026');
       expect(document.activeElement).toBe(input('slug'));
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
-      // The values stay, and the error goes once the slug changes.
       expect(input('name').value).toBe('Fall 2026');
       await type('slug', 'fall-2026-b');
       expect(error('slug')).toBeNull();
@@ -595,7 +586,7 @@ describe('SeasonCreateForm', () => {
       );
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3, state 11)', () => {
+    describe('offline', () => {
       afterEach(() => vi.restoreAllMocks());
 
       async function goOffline() {

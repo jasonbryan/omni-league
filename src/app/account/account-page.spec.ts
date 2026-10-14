@@ -9,8 +9,6 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { AccountPage, initialsOf } from './account-page';
 
-// /app (#62), design/mockups/62-sign-up.html state 10.
-
 @Component({ template: 'home' })
 class Home {}
 
@@ -52,7 +50,6 @@ describe('AccountPage', () => {
 
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
-    // The page and the top bar's account link (#63) each ask for the caller's own row.
     expect(convex.activeSubscriptions.map((s) => [s.name, s.args]).sort()).toEqual([
       ['organizations:listMine', {}],
       ['users:me', {}],
@@ -78,7 +75,7 @@ describe('AccountPage', () => {
     expect(page.querySelectorAll('h1')).toHaveLength(1);
   });
 
-  it('shows "Your organizations" below the account panel (#64)', async () => {
+  it('shows "Your organizations" below the account panel', async () => {
     const page = await open();
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();

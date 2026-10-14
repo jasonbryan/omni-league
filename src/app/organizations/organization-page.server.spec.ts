@@ -19,11 +19,11 @@ import {
   type ConvexHttpClientLike,
 } from '../core/data/convex';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
+import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { provideSpartanHlm } from '../ui/utils';
 import { GULF_COAST, queryResults } from './testing/pages';
 
-// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each
-// test (see dom-globals.ts).
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
@@ -63,14 +63,8 @@ interface Rendered {
   queries: { name: string; args: unknown }[];
 }
 
-/** Answers each query with its `GULF_COAST` result. */
 const gulfCoast = (name: string) => Promise.resolve(queryResults(GULF_COAST)[name]);
 
-/**
- * Renders `path` through the app's real routes the way `@angular/ssr` does for a Server route:
- * REQUEST is the request, and RESPONSE_INIT starts with the route's headers. `query` answers each
- * Convex query by function name (`organizations:getPublicPage`).
- */
 async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
@@ -130,20 +124,19 @@ const meta = (head: HTMLHeadElement, property: string) =>
   head.querySelector(`meta[property="${property}"]`)?.getAttribute('content');
 
 describe('OrganizationPage server render', () => {
-  it('renders the page, meta, and sidebar from the query, with no query string anywhere', async () => {
+  it('renders the page and meta from the query in the public layout, with no query string anywhere', async () => {
     const { html, body, head, responseInit, queries } = await render(
       '/organizations/gulf-coast-sport-social?ott=SECRET&x=1',
       gulfCoast,
     );
 
-    // One fetch per query, with the route's slug and page 1 only.
     const slug = 'gulf-coast-sport-social';
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'organizations:getPublicPage', args: { slug } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1 } },
       { name: 'organizations:listPublicLocations', args: { slug, page: 1 } },
     ]);
-    expect(responseInit.status).toBeUndefined(); // 200
+    expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
@@ -164,28 +157,19 @@ describe('OrganizationPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
     expect([...body.querySelectorAll('main dl dd')].map(text)).toEqual(['5', '3', '3']);
 
-    const nav = body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav).not.toBeNull();
-    expect(nav?.querySelectorAll('[id]')).toHaveLength(0);
-    const fragmentLinks = [...(nav?.querySelectorAll('a[href*="#"]') ?? [])].map((a) =>
-      a.getAttribute('href'),
+    expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
+    expect(body.querySelector('a')?.getAttribute('href')).toBe(
+      '/organizations/gulf-coast-sport-social#main',
     );
-    expect(fragmentLinks).toEqual([
-      ...[1, 2, 3, 4, 5].map((n) => `/organizations/gulf-coast-sport-social#league-${n}`),
-      ...[1, 2, 3].map((n) => `/organizations/gulf-coast-sport-social#location-${n}`),
-    ]);
-    for (const href of fragmentLinks) {
-      expect(body.querySelector(`main [id="${href?.split('#')[1]}"]`), href ?? '').not.toBeNull();
-    }
-    expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
+    expect([...body.querySelectorAll('header a')].map(text)).toEqual(['Omni League', 'Sign in']);
+    expect(body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]')).toBeNull();
 
-    // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
   });
 
-  it('renders the not-found view with status 404, the public Cache-Control, and no sidebar', async () => {
+  it('renders the not-found view in the public layout with status 404 and the public Cache-Control', async () => {
     const { body, head, responseInit } = await render('/organizations/does-not-exist', (name) =>
       Promise.resolve(
         name === 'organizations:getPublicPage'
@@ -196,7 +180,7 @@ describe('OrganizationPage server render', () => {
     expect(responseInit.status).toBe(404);
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
     expect(text(body.querySelector('main h1'))).toBe('Page not found');
-    expect(body.querySelector('nav')).toBeNull();
+    expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     expect(body.querySelector('button')).toBeNull();
     expect(head.querySelector('title')?.textContent).toBe('Page not found | Omni League');
     expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
@@ -216,10 +200,9 @@ describe('OrganizationPage server render', () => {
     expect(
       body.querySelectorAll('main section[aria-labelledby="leagues-heading"] li'),
     ).toHaveLength(5);
-    expect(body.querySelectorAll('nav a[href*="#league-"]')).toHaveLength(5);
   });
 
-  it('renders the server-error view with 503 and Cache-Control: no-store when the query fails', async () => {
+  it('renders the server-error view in the public layout with 503 and Cache-Control: no-store when the query fails', async () => {
     const { html, body, head, responseInit } = await render(
       '/organizations/gulf-coast-sport-social?ott=SECRET',
       () => Promise.reject(new Error('connect ECONNREFUSED internal-db.corp.example:443')),
@@ -231,7 +214,7 @@ describe('OrganizationPage server render', () => {
     expect(body.querySelector('main a')?.getAttribute('href')).toBe(
       '/organizations/gulf-coast-sport-social',
     );
-    expect(body.querySelector('nav')).toBeNull();
+    expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     expect(body.querySelector('button')).toBeNull();
     expect(head.querySelector('title')?.textContent).toBe('Temporarily unavailable | Omni League');
     expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
@@ -265,7 +248,7 @@ describe('OrganizationPage server render', () => {
       expect(body.querySelector('main a')?.getAttribute('href')).toBe(
         '/organizations/gulf-coast-sport-social',
       );
-      expect(body.querySelector('nav')).toBeNull();
+      expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
       expect(body.querySelector('main section')).toBeNull();
       expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
       expect(html).not.toContain('internal-db');
@@ -281,7 +264,7 @@ describe('OrganizationPage server render', () => {
       expect(responseInit.status).toBe(503);
       expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
       expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
-      expect(body.querySelector('nav')).toBeNull();
+      expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     });
   }
 });

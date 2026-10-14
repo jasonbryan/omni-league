@@ -13,13 +13,9 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Overview (#65, #66), design/mockups/65-organization-admin-locations.html states 1 and 2 and
-// design/mockups/66-69-organization-leagues.html (decision 2).
-
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
 const URL = `/app/organizations/${COASTAL.slug}`;
-// The "Get set up" rule and the published part of the Leagues tile read the organization's counter
-// (#172), not the admin list, which stops at 200 rows; the drafts are counted from that list.
+// The "Get set up" rule and the published part of the Leagues tile read the organization's counter, not the admin list, which stops at 200 rows; the drafts are counted from that list.
 const PUBLISHED_COUNT = 'leagues:publishedCount';
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const LIST_MEMBERS = 'memberships:listForOrganization';
@@ -199,7 +195,7 @@ describe('AdminOverview', () => {
     });
   });
 
-  describe('the Staff tile (#67, decision 2)', () => {
+  describe('the Staff tile', () => {
     const tile = (page: HTMLElement) =>
       [...page.querySelectorAll('main dl > div')][2].querySelectorAll('dd');
 

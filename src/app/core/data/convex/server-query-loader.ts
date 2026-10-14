@@ -12,12 +12,10 @@ import { convexToJson, type Value } from 'convex/values';
 import { CONVEX_URL } from './convex-url';
 import type { TransferredQuery } from './transfer';
 
-/** The part of `ConvexHttpClient` the server path uses; tests substitute a fake. */
 export interface ConvexHttpClientLike {
   query: ConvexHttpClient['query'];
 }
 
-/** Limit for each server-render query, enforced by the loader and by the default client's fetch. */
 export const CONVEX_SERVER_QUERY_TIMEOUT_MS = new InjectionToken<number>(
   'CONVEX_SERVER_QUERY_TIMEOUT_MS',
   {
@@ -26,10 +24,6 @@ export const CONVEX_SERVER_QUERY_TIMEOUT_MS = new InjectionToken<number>(
   },
 );
 
-/**
- * A `fetch` that aborts after `timeoutMs` (releasing a hung socket) and still honours a caller's
- * signal. It reads `globalThis.fetch` at call time, so a stubbed or patched `fetch` is the one used.
- */
 export function fetchWithTimeout(timeoutMs: number): typeof globalThis.fetch {
   return (input, init) => {
     const timeout = AbortSignal.timeout(timeoutMs);
@@ -50,27 +44,20 @@ export const CONVEX_HTTP_CLIENT_FACTORY = new InjectionToken<(url: string) => Co
   },
 );
 
-/** `TransferState` key shared by the server write and the browser seed: `cvx:<function>:<JSON args>`. */
 export function transferKey(query: FunctionReference<'query'>, argsKey: string): string {
   return `cvx:${getFunctionName(query)}:${argsKey}`;
 }
 
-/** A settled server query: exactly one of `value` (possibly `undefined`) or `error`. */
 export type ServerQueryResult =
   { value: unknown; error?: undefined } | { value?: undefined; error: Error };
 
 const FAILED_MESSAGE = 'Convex query failed during server render';
 
-/** The loader's own timeout error; only it (and a fetch-signal timeout) is reported as a timeout. */
 class LoaderTimeoutError extends Error {
   override readonly name = 'TimeoutError';
 }
 
-/**
- * Server-only, one instance per render (root-provided; Angular SSR bootstraps a new application
- * per request). Holds that render's HTTP client and its dedupe map, so nothing is shared across
- * requests. Injected only on the server with a URL; never calls `setAuth`.
- */
+/** One instance per render: Angular SSR bootstraps a new application per request, so nothing is shared across requests. */
 @Injectable({ providedIn: 'root' })
 export class ConvexServerQueryLoader {
   private readonly url = inject(CONVEX_URL);
@@ -81,7 +68,6 @@ export class ConvexServerQueryLoader {
   private client?: ConvexHttpClientLike;
   private readonly inflight = new Map<string, Promise<ServerQueryResult>>();
 
-  /** One HTTP query per distinct function and args in this render; never rejects. */
   load(
     query: FunctionReference<'query'>,
     args: unknown,
@@ -140,7 +126,6 @@ export class ConvexServerQueryLoader {
     }
   }
 
-  /** Races the query against the loader's own timer (cleared on settle), so any client is bounded. */
   private withTimeout<T>(query: Promise<T>): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {

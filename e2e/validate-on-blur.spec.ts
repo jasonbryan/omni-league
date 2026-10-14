@@ -1,8 +1,3 @@
-// A field is checked when the user leaves it (ux.md, Task flows, Validation), on the forms that
-// sign-up and create-organization do not cover (those two have their own tests in sign-up.spec.ts
-// and create-organization.spec.ts): sign-in, add and edit location, create league, create season,
-// and invite staff. Each test leaves a changed field, sees its error linked with `aria-invalid`
-// and `aria-describedby`, runs axe with the error shown, and fixes it. They run at both widths.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -31,7 +26,6 @@ const SLUG_MESSAGE =
 const field = (page: Page, id: string) => page.locator(`#${id}`);
 const fieldError = (page: Page, id: string) => page.locator(`#${id}-error`);
 
-/** A signed-in org admin of a seeded organization with locations and leagues. */
 async function orgAdmin(page: Page) {
   const user = newUser('Admin');
   await signUp(page, user);
@@ -44,7 +38,6 @@ async function orgAdmin(page: Page) {
   return { base: `/app/organizations/${tenant.slug}` };
 }
 
-/** The field is marked invalid and linked to its error (`describedBy` lists the ids it names). */
 async function expectLinked(page: Page, id: string, describedBy: string) {
   await expect(field(page, id)).toHaveAttribute('aria-invalid', 'true');
   await expect(field(page, id)).toHaveAttribute('aria-describedby', describedBy);
@@ -119,7 +112,6 @@ test.describe('a field is checked when the user leaves it', () => {
     await page.goto(`${base}/leagues`);
     const form = page.locator('#create-league form');
 
-    // Name passes through unchanged; a bad slug shows its error on leaving, not while typing.
     await field(page, 'name').focus();
     await page.keyboard.press('Tab');
     await expect(field(page, 'slug')).toBeFocused();
@@ -130,14 +122,11 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(fieldError(page, 'slug')).toHaveText(SLUG_MESSAGE);
     await expectLinked(page, 'slug', 'slug-description slug-error');
 
-    // The Sport radio group: passing through it unchosen shows nothing.
     await expect(page.locator('#sport input[type="radio"]').first()).toBeFocused();
     await expect(fieldError(page, 'sport')).toHaveCount(0);
     await page.keyboard.press('Tab');
     await expect(fieldError(page, 'sport')).toHaveCount(0);
 
-    // The Locations group: checking and unchecking one, then moving between boxes, shows nothing;
-    // leaving the whole group shows the error.
     const first = page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' });
     await first.click();
     await first.click();
@@ -152,14 +141,12 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expectAccessible(page);
 
-    // A submit shows every invalid field, Sport included, and focuses the first.
     await form.getByRole('button', { name: /^Create draft league/ }).click();
     await expect(fieldError(page, 'name')).toHaveText('Enter the league’s name.');
     await expect(fieldError(page, 'sport')).toHaveText('Choose a sport.');
     await expect(field(page, 'name')).toBeFocused();
     await expectAccessible(page);
 
-    // Choosing a sport clears its error.
     await page.getByRole('radio', { name: 'Soccer' }).check();
     await expect(fieldError(page, 'sport')).toHaveCount(0);
   });
@@ -188,12 +175,12 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expect(field(page, 'end-date')).toHaveAttribute('aria-invalid', 'true');
 
-    await page.getByRole('radio', { name: '7 v 7' }).check();
+    await page.getByRole('radio', { name: '7v7' }).check();
     await expect(fieldError(page, 'format')).toHaveCount(0);
     await field(page, 'minimum-roster-size').fill('2');
     await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);
     await field(page, 'name').focus();
-    await expect(fieldError(page, 'minimum-roster-size')).toContainText('7 v 7 needs at least 7');
+    await expect(fieldError(page, 'minimum-roster-size')).toContainText('7v7 needs at least 7');
     await expect(field(page, 'minimum-roster-size')).toHaveAttribute('aria-invalid', 'true');
     await expectAccessible(page);
 
@@ -202,7 +189,6 @@ test.describe('a field is checked when the user leaves it', () => {
     await field(page, 'minimum-roster-size').fill('7');
     await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);
 
-    // A submit still shows every invalid field: Format is unchosen here, so only a submit shows it.
     await page.reload();
     await expect(form).toBeVisible();
     await field(page, 'name').focus();
@@ -283,7 +269,6 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expectLinked(page, 'email', 'email-description email-error');
 
-    // Leagues: check, uncheck, move within the group (no error), then leave the group.
     const coed = page.getByRole('checkbox', { name: 'Coed 7v7 Rec' });
     await coed.click();
     await coed.click();

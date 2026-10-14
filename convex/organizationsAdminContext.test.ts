@@ -7,8 +7,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `organizations.getAdminContext` (#65): the query the admin area asks before anything else.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -59,7 +57,6 @@ async function setup() {
   return { t, organizationId };
 }
 
-/** The error a call throws, or `null`. */
 async function failure(call: Promise<unknown>): Promise<unknown> {
   return call.then(
     () => null,

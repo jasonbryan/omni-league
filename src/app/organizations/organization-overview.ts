@@ -6,15 +6,6 @@ import { SavedCopyNote } from '../offline/saved-copy-note';
 import type { PublicOrganizationPage } from './organization-path';
 import { publicLeaguePath } from './public-league/public-league-path';
 
-/**
- * The organization page's content column (#60): the name as the page's `<h1>`, the three summary
- * tiles (#73 decision 4), and the Leagues and Locations panels with their empty states, as in
- * design/mockups/60-organization-page.html. Each row carries the `id` the sidebar links to
- * (`league-<n>`, `location-<n>`, numbered in the order the query sorts them). The panels show the
- * rows of page 1 of each list, at most 5 (#100); the tiles show the totals. Each league's name is a
- * link to its public page (#127). With `savedAt` set
- * (a saved copy shown offline, #82), the saved-copy note sits right under the `h1`.
- */
 @Component({
   selector: 'app-organization-overview',
   imports: [NgIcon, RouterLink, SavedCopyNote],
@@ -80,7 +71,6 @@ import { publicLeaguePath } from './public-league/public-league-path';
                     </p>
                   }
                 </div>
-                <!-- The mockup's badge: helm's hlmBadge variant="secondary" classes plus mt-0.5. -->
                 <span
                   data-slot="badge"
                   data-variant="secondary"
@@ -144,13 +134,9 @@ import { publicLeaguePath } from './public-league/public-league-path';
 })
 export class OrganizationOverview {
   readonly page = input.required<PublicOrganizationPage>();
-  /** When the saved copy shown was saved; set only while offline (`OrganizationPage`). */
   readonly savedAt = input<number | undefined>(undefined);
 
-  /**
-   * The organization's league, location, and sport totals (#73 decision 4), from
-   * `getPublicPage`: never the number of rows shown, which is at most 5 per list (#100).
-   */
+  /** From `getPublicPage`: never the number of rows shown, which is at most 5 per list. */
   protected readonly tiles = computed(() => {
     const { leagueCount, locationCount, sportCount } = this.page();
     return [

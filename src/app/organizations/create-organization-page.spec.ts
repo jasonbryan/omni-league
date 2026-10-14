@@ -11,9 +11,6 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { CreateOrganizationPage } from './create-organization-page';
 
-// /app/organizations/new (#64), design/mockups/64-create-organization.html states 5 to 12 and
-// design/mockups/88-offline-note.html states 2 and 3.
-
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
 
@@ -131,7 +128,7 @@ describe('CreateOrganizationPage', () => {
     });
   });
 
-  describe('Slug follows the name until it is edited (decision 3)', () => {
+  describe('Slug follows the name until it is edited', () => {
     beforeEach(() => open());
 
     it('typing a name sets Slug to slugify(name), and the address follows', async () => {
@@ -157,7 +154,6 @@ describe('CreateOrganizationPage', () => {
       await type('name', 'Another Name Entirely');
       expect(input('slug').value).toBe('my-own-slug');
       expect(address()).toBe(`${location.host}/organizations/my-own-slug`);
-      // Also after the user emptied Slug themselves.
       await type('slug', '');
       await type('name', 'Third Name');
       expect(input('slug').value).toBe('');
@@ -341,7 +337,7 @@ describe('CreateOrganizationPage', () => {
   describe('submitting (mockup state 11)', () => {
     beforeEach(() => open());
 
-    it('sends the trimmed name and the slug, and lands on the admin Overview (#65)', async () => {
+    it('sends the trimmed name and the slug, and lands on the admin Overview', async () => {
       await type('name', `  ${NAME} `);
       await submit();
       expect(convex.calls.map((c) => [c.kind, c.name, c.args])).toEqual([
@@ -350,6 +346,17 @@ describe('CreateOrganizationPage', () => {
       convex.calls[0]?.resolve({ slug: SLUG });
       await flush();
       expect(url()).toBe(`/app/organizations/${SLUG}`);
+    });
+
+    it('replaces the create form in the history, so Back skips it', async () => {
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      await type('name', NAME);
+      await submit();
+      convex.calls[0]?.resolve({ slug: SLUG });
+      await flush();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(`/app/organizations/${SLUG}`, {
+        replaceUrl: true,
+      });
     });
 
     it('sends a slug edited by hand, as typed', async () => {
@@ -369,7 +376,6 @@ describe('CreateOrganizationPage', () => {
       expect(status()?.getAttribute('role')).toBe('status');
       await submit();
       expect(convex.calls).toHaveLength(1);
-      // The values stay while in flight.
       expect(input('name').value).toBe(NAME);
     });
 
@@ -459,13 +465,12 @@ describe('CreateOrganizationPage', () => {
       expect(input('name').value).toBe(NAME);
       expect(input('slug').value).toBe(SLUG);
       expect(box?.textContent).not.toContain('Connection lost');
-      // A later press clears the alert.
       await submit();
       expect(alert()).toBeNull();
     });
   });
 
-  describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+  describe('offline', () => {
     beforeEach(() => open());
     afterEach(() => vi.restoreAllMocks());
 

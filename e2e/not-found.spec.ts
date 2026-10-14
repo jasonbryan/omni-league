@@ -1,7 +1,3 @@
-// Not-found page (#23): the router `**` route, rendered on the server with status 404 inside the
-// app shell (top bar only). Each browser test does all its checks in one page load. Since #62,
-// paths under /app are Client routes: the server sends the shell, and the browser renders the
-// not-found view for an unknown /app path.
 import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -24,7 +20,7 @@ test.describe('not-found page', () => {
     'raw server HTML: 404 with the public Cache-Control for unknown paths, 200 for /',
     RAW_HTTP,
     async ({ request }) => {
-      // `/application/x` is not under /app (#62), so the server renders it.
+      // `/application/x` is not under /app, so the server renders it.
       for (const path of [UNKNOWN, '/application/x']) {
         const { status, headers, html } = await fetchRawHtml(request, path);
         expect(status, path).toBe(404);
@@ -37,16 +33,14 @@ test.describe('not-found page', () => {
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(HOME_LINK);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
-        // Top bar only (#73 decisions 2 and 5): no menu button and no sidebar, and the top bar's
-        // "Sign in" (#63), which every public page carries.
         expect(html, path).not.toContain('aria-label="Open navigation"');
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1);
+        expect(html, path).toMatch(/<footer\b[\s\S]*<nav\b[^>]*aria-label="Footer"/);
         expect(html.slice(html.indexOf('<header'), html.indexOf('</header>')), path).toMatch(
           />Sign in<\/a>/,
         );
       }
 
-      // Regression: the catch-all does not capture the home route.
       const home = await fetchRawHtml(request, '/');
       expect(home.status).toBe(200);
       expect(home.html).toMatch(HOME_H1);
@@ -85,7 +79,7 @@ test.describe('not-found page', () => {
   );
 
   // The router parses `/(` and `/()x` to `/`, so the engine rendered the home page under each with
-  // the public Cache-Control (#91). Netlify may answer before the function: 400 or 404.
+  // the public Cache-Control. Netlify may answer before the function: 400 or 404.
   test('a path the router reads as / gets the plain 404, not the home page', RAW_HTTP, async () => {
     for (const path of ['/(', '/()x']) {
       const response = await rawGet(path);
@@ -101,10 +95,10 @@ test.describe('not-found page', () => {
     }
   });
 
-  // The router cannot decode `?q=%` and rendered the home page for any path (#91). The server
-  // renders the path without the query string, so an unknown path gets the not-found page. Not a
-  // redirect: Netlify copies the query string into a Location without one, so it would loop
-  // (PR #105). Netlify may answer before the function: 400.
+  // The router cannot decode `?q=%` and rendered the home page for any path. The server renders the
+  // path without the query string, so an unknown path gets the not-found page. Not a redirect:
+  // Netlify copies the query string into a Location without one, so it would loop. Netlify may
+  // answer before the function: 400.
   test(
     'a query string the router cannot decode renders the path without it',
     RAW_HTTP,
@@ -124,8 +118,8 @@ test.describe('not-found page', () => {
   );
 
   // Angular's Location drops one trailing slash before the router parses the URL, so `/x//?q=%`
-  // reaches the router as `/x/?q=%`, which it cannot decode: it rendered the home page with 200
-  // and the public Cache-Control under any path ending in `//` (PR #105, tester).
+  // reaches the router as `/x/?q=%`, which it cannot decode: it rendered the home page with 200 and
+  // the public Cache-Control under any path ending in `//`.
   test(
     'a path ending in // with an undecodable query string never gets the home page',
     RAW_HTTP,
@@ -140,7 +134,7 @@ test.describe('not-found page', () => {
   );
 
   // The browser's router parses the same URL after hydration. If it cannot decode the query string
-  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page.
   test(
     'a query string the router cannot decode: the browser stays on the not-found page',
     VIEWPORT_AGNOSTIC,
@@ -237,7 +231,7 @@ test.describe('not-found page', () => {
   );
 
   // The engine's redirect for a normalized URL is a 302 that no shared cache stores, its Location
-  // stays on this site, and the target renders the not-found page itself (PR #90, round 3).
+  // stays on this site, and the target renders the not-found page itself.
   test(
     'a normalized unknown path gets a no-store 302 to a page that renders the 404',
     RAW_HTTP,
@@ -343,7 +337,6 @@ test.describe('not-found page', () => {
         .toBe(true);
     }
 
-    // First Tab: the skip link; Enter moves focus to main on the same document.
     const tab = tabKey(page);
     const skipLink = page.getByRole('link', { name: 'Skip to main content' });
     await page.keyboard.press(tab);
@@ -352,8 +345,8 @@ test.describe('not-found page', () => {
     await expect(page.locator('main#main')).toBeFocused();
     expect(new URL(page.url()).pathname).toBe(UNKNOWN);
 
-    // Next Tab: the home link, with #61's 2px solid focus outline. Polled, because the button's
-    // `transition-all` animates the width from the unfocused `medium` (3px) over 150ms.
+    // Polled, because the button's `transition-all` animates the width from the unfocused `medium`
+    // (3px) over 150ms.
     await page.keyboard.press(tab);
     await expect(home).toBeFocused();
     await expect
@@ -365,23 +358,24 @@ test.describe('not-found page', () => {
       )
       .toEqual({ style: 'solid', width: '2px' });
 
-    // One banner and one main landmark, no navigation landmark, and no menu button.
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
     await expect(page.getByRole('button')).toHaveCount(0);
 
-    // Tab order: skip link, "Omni League", the top bar's "Sign in" (#63), "Go to the home page".
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
         'main a[href="/"]',
+        'footer a[href="/"]',
+        'footer a[href="/app"]',
+        'footer a[href="/app/organizations/new"]',
+        'footer a[href^="/sign-in"]',
       ],
     });
 
-    // The Tab walk ends on the skip link: Enter, Tab, Enter follows the home link.
     await expect(skipLink).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.locator('main#main')).toBeFocused();
@@ -393,8 +387,8 @@ test.describe('not-found page', () => {
     await expect(page).toHaveTitle('Omni League');
   });
 
-  // #62: /app paths are Client routes. The server sends the empty shell with status 200 (no guard
-  // or page runs there), even for these odd paths, and never a 5xx or a Location.
+  // Client routes: the server sends the empty shell with status 200 (no guard or page runs there),
+  // even for these odd paths, and never a 5xx or a Location.
   test(
     'paths under /app get the client shell: 200, no Location, nothing rendered',
     RAW_HTTP,
@@ -417,7 +411,6 @@ test.describe('not-found page', () => {
       expect(response?.status()).toBe(200);
       await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
       await expect(page).toHaveTitle(/Page not found/);
-      // The shell holds no query string; the browser renders the skip link with it.
       expect(await response?.text()).not.toContain('ref=1');
       await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute(
         'href',

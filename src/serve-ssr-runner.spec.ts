@@ -14,9 +14,7 @@ import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// The local SSR runner (`scripts/serve-ssr.mjs`, #37) against a temporary copy of the build layout:
-// the real runner script, a small `browser/` folder, and a fake `server/server.mjs` handler. The
-// runner finds `dist/` relative to its own file, so the copy needs no configuration.
+// The runner finds `dist/` relative to its own file, so the copy needs no configuration.
 
 const FAKE_SERVER = `
 export async function netlifyAppEngineHandler(request) {
@@ -81,7 +79,6 @@ function get(path: string, options: { host?: string; headers?: Record<string, st
   });
 }
 
-/** Sends raw HTTP over one connection and resolves with everything the runner wrote back. */
 function raw(text: string, { close }: { close?: 'half' | 'reset' } = {}) {
   return new Promise<string>((resolve, reject) => {
     const socket = connect(port, '127.0.0.1');
@@ -97,7 +94,7 @@ function raw(text: string, { close }: { close?: 'half' | 'reset' } = {}) {
 }
 
 const BIG_FILE_BYTES = 32 * 1024 * 1024;
-// Sizes no other fixture uses: the read-failure preload picks its files by size (#44).
+// Sizes no other fixture uses: the read-failure preload picks its files by size.
 // eio-mid.bin is larger than one read chunk (64 KiB), so the first chunk is sent before the failure.
 const EIO_MID_BYTES = 8 * 1024 * 1024 + 1;
 const EIO_FIRST_BYTES = 65_537;
@@ -129,12 +126,10 @@ proto.read = async function (...args) {
 interface Outcome {
   status?: number;
   bytes: number;
-  /** The response ended normally (its 'end' event), so the body arrived in full. */
   complete: boolean;
   error?: string;
 }
 
-/** A GET that resolves (never rejects) with how far the response got. */
 function fetchOutcome(path: string) {
   return new Promise<Outcome>((resolve) => {
     const outcome: Outcome = { bytes: 0, complete: false };
@@ -154,15 +149,10 @@ function fetchOutcome(path: string) {
   });
 }
 
-/** The lines of the runner output so far that contain `text`. */
 function outputLines(text: string) {
   return output.split('\n').filter((line) => line.includes(text));
 }
 
-/**
- * Sends a raw request and disconnects (`reset` or `destroy`) once `afterBytes` of the reply have
- * arrived, or after `afterMs` when no byte count is given. Resolves with the bytes received.
- */
 function disconnect(
   text: string,
   how: 'reset' | 'destroy',
@@ -285,7 +275,7 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
       const reply = await get(path);
 
       expect(reply.body).not.toContain('TOPSECRET');
-      expect(reply.body).toBe(`ssr ${path}`); // handed to the handler, which answers 404 in the app
+      expect(reply.body).toBe(`ssr ${path}`);
     },
   );
 
@@ -357,7 +347,6 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
     expect(reply.body).toBe('Internal Server Error');
     await waitForOutput('error handling GET /throw:');
     expect(output).not.toContain('SECRET');
-    // A string stack is still logged, frames included, with the query redacted.
     expect(output).toMatch(/GET \/throw: Error: engine failed for \S+\?<redacted>\n\s+at /);
   });
 
@@ -482,7 +471,7 @@ describe('local SSR runner (scripts/serve-ssr.mjs)', () => {
           how,
           { afterBytes: 64 * 1024 * (i + 1) },
         );
-        expect(received).toBeLessThan(BIG_FILE_BYTES); // the transfer really was cut short
+        expect(received).toBeLessThan(BIG_FILE_BYTES);
       }
       // Long enough for the runner's garbage collection (every 25 ms) to find a leaked handle.
       await new Promise((resolve) => setTimeout(resolve, 200));

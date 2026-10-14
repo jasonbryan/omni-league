@@ -6,10 +6,6 @@ import { QueryTolerantUrlSerializer } from '../../core/url-serializer';
 import { parseListPage } from '../../core/list-page';
 import { publicLeagueCanonicalPath, publicLeaguePath } from './public-league-path';
 
-// Tester probes (#127): hostile query strings on the league page's URL go through the app's
-// query-tolerant serializer and the router, and the page asked for is a whole number from the
-// bare path or from one canonical `page` value, never any other part of the query string.
-
 @Component({ template: '' })
 class Blank {}
 
@@ -59,7 +55,6 @@ describe('the league page URL with a hostile query string', () => {
     expect(page).toBe(expected);
     expect(path).toBe('/organizations/acme/leagues/sunday');
     expect(Number.isInteger(page)).toBe(true);
-    // The canonical and links are built from slugs and the integer, never from the request.
     expect(publicLeagueCanonicalPath('acme', 'sunday', page)).toBe(
       page > 1
         ? `${publicLeaguePath('acme', 'sunday')}?page=${page}`

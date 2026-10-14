@@ -7,9 +7,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// Hostile and boundary inputs to `seasons.create` that a form never sends (#125, tester): the
-// mutation is public, so it must refuse them on its own. Nothing is written for any of them.
-
 const identity = {
   subject: 'admin-a',
   issuer: 'http://127.0.0.1:3211',
@@ -163,7 +160,7 @@ describe('seasons.create refuses input a form never sends', () => {
     Number.NEGATIVE_INFINITY,
     Number.MAX_SAFE_INTEGER,
     1e21,
-  ])('the minimum roster size %s for 7 v 7', async (minimumRosterSize) => {
+  ])('the minimum roster size %s for 7v7', async (minimumRosterSize) => {
     const s = await setup();
     expect(
       await fieldOf(

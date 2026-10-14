@@ -1,8 +1,3 @@
-// The Leagues page against the approved mockup design/mockups/66-69-organization-leagues.html
-// (#66, tester): at 375px and 1280px, each state of the page shows the same text, in the same
-// order, as the mockup's frame of that state (without #69's Publish buttons), and passes axe.
-// Local runs only: the tests seed a tenant and sign up a user. They run in one project and set
-// both widths themselves.
 import type { Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
@@ -63,7 +58,6 @@ const SUNDAY: SeedLeague = {
 
 const LEAGUES = { leagues: [COED_7V7, THURSDAY, WEDNESDAY] } satisfies Pick<TenantSeed, 'leagues'>;
 
-/** The text of a mockup frame's main area, without the Publish buttons (#69). */
 async function mockupText(page: Page, state: string, width: number): Promise<string> {
   await page.setViewportSize({ width, height: 900 });
   await page.goto(`${MOCKUP}?state=${state}`);
@@ -71,7 +65,6 @@ async function mockupText(page: Page, state: string, width: number): Promise<str
   return normalize(text, MOCKUP_ORGANIZATIONS);
 }
 
-/** Lines of text with the organization name and the Publish buttons removed. */
 function normalize(text: string, organizations: string[]): string {
   let result = text;
   for (const name of organizations) result = result.replaceAll(name, 'ORG');
@@ -79,16 +72,19 @@ function normalize(text: string, organizations: string[]): string {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
+  return withoutPublishButtonNames(lines).join('\n');
+}
+
+function withoutPublishButtonNames(lines: string[]): string[] {
   const kept: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    // "Publish" plus the league's name that names the button for assistive technology.
     if (lines[i] === 'Publish') {
       i++;
       continue;
     }
     kept.push(lines[i]);
   }
-  return kept.join('\n');
+  return kept;
 }
 
 async function signedInAdmin(page: Page, seed: TenantSeed) {
@@ -195,7 +191,6 @@ for (const width of WIDTHS) {
     });
 
     test.describe('slug used', () => {
-      // The rejected mutation logs one console error, as in organization-leagues.spec.ts.
       test.use({ expectedConvexErrors: ['leagues:create'] });
 
       test('create, slug used', async ({ page, browser }, testInfo) => {
@@ -230,7 +225,6 @@ for (const width of WIDTHS) {
     test('create, saving', async ({ page, browser }, testInfo) => {
       const tenant = await signedInAdmin(page, { locations: LOCATIONS, ...LEAGUES });
       await page.setViewportSize({ width, height: 900 });
-      // Holds every mutation the page sends until released, so the saving state can be read.
       let release: () => void = () => undefined;
       const held = new Promise<void>((resolve) => (release = resolve));
       await page.routeWebSocket(/.*/, (ws) => {

@@ -17,11 +17,6 @@ import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
 import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
 
-// #82: saved copies on the organization page, the not-saved view, and the removed organization
-// (design/mockups/82-offline-pages.html states 1 to 5). "Offline" is the adapter's `online` signal
-// (#88): false at once with navigator.onLine false, and 5 s after start when the socket never
-// connects (field wifi with no internet).
-
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
 const PATH = `/organizations/${GULF_COAST.slug}`;
@@ -32,14 +27,12 @@ const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
 
-/** The saved-copy allow-list entries' functions and the args the page asks them with. */
 const queries = (slug: string) => [
   { fn: api.organizations.getPublicPage, name: HEADER, args: { slug } },
   { fn: api.organizations.listPublicLeagues, name: LEAGUES, args: { slug, page: 1 } },
   { fn: api.organizations.listPublicLocations, name: LOCATIONS, args: { slug, page: 1 } },
 ];
 
-/** Saves the header and page 1 of both lists of `page`, as the page's three queries return them. */
 function plant(page: PublicOrganizationPage = GULF_COAST, savedAt = SAVED_AT): void {
   const results = queryResults(page);
   for (const { fn, name, args } of queries(page.slug)) {
@@ -56,10 +49,6 @@ function stubOnLine(value: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
 }
 
-/**
- * Opens `url` with a fake client. `socket: 'down'` models a client that has not connected yet
- * (field wifi, or a device offline); the default is connected.
- */
 async function open(
   url = PATH,
   options: { socket?: 'up' | 'down' } = {},
@@ -87,14 +76,12 @@ async function settle(harness: RouterTestingHarness): Promise<void> {
   }
 }
 
-/** The one active subscription to the query `name` (the header query by default). */
 function subscription(name = HEADER): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
   expect(active, name).toHaveLength(1);
   return active[0];
 }
 
-/** Emits the header and page 1 of both lists for `page`, as the three queries return them. */
 function emit(page: PublicOrganizationPage): void {
   for (const [name, value] of Object.entries(queryResults(page))) subscription(name).emit(value);
 }
@@ -105,7 +92,7 @@ const text = (el: Element | null | undefined) =>
 const note = (harness: RouterTestingHarness) =>
   host(harness).querySelector('main [data-saved-copy-note]');
 
-describe('OrganizationPage offline (#82)', () => {
+describe('OrganizationPage offline', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
@@ -126,14 +113,13 @@ describe('OrganizationPage offline (#82)', () => {
       harness = await open(PATH, { socket: 'down' });
     });
 
-    it('shows the name, leagues, locations, and sidebar from the saved copy', () => {
+    it('shows the name, leagues, and locations from the saved copy', () => {
       const main = host(harness).querySelector('main');
       expect(text(main?.querySelector('h1'))).toBe(GULF_COAST.name);
       expect([...(main?.querySelectorAll('section h3') ?? [])].map(text)).toEqual([
         ...GULF_COAST.leagues.map((league) => league.name),
         ...GULF_COAST.locations.map((location) => location.name),
       ]);
-      expect(host(harness).querySelector(`nav[aria-label="${GULF_COAST.name}"]`)).not.toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe(`${GULF_COAST.name} | Omni League`);
     });
 
@@ -168,7 +154,6 @@ describe('OrganizationPage offline (#82)', () => {
         v: { name: 'Gulf Coast Live' },
         savedAt: NOW,
       });
-      // The lists are kept too, so the next visit offline opens with them (#100).
       for (const name of [LEAGUES, LOCATIONS]) {
         expect(JSON.parse(savedEntry(GULF_COAST.slug, name) ?? 'null'), name).toMatchObject({
           savedAt: NOW,
@@ -220,7 +205,7 @@ describe('OrganizationPage offline (#82)', () => {
 
   describe('no saved copy (state 2)', () => {
     it('offline: shows the not-saved view at once, top bar only, with Try again to the path', async () => {
-      plant(PORT_ARANSAS); // another page is saved; this one is not
+      plant(PORT_ARANSAS);
       stubOnLine(false);
       const harness = await open(`${PATH}?ott=SECRET#league-2`, { socket: 'down' });
       const main = host(harness).querySelector('main');
@@ -229,13 +214,13 @@ describe('OrganizationPage offline (#82)', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe(PATH);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('app-public-layout')).not.toBeNull();
+      expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
       expect(host(harness).querySelector('button')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
       for (const link of host(harness).querySelectorAll('a')) {
         expect(link.hasAttribute('aria-disabled')).toBe(false);
       }
-      // The subscription stays open: the page appears by itself once a result arrives.
       stubOnLine(true);
       window.dispatchEvent(new Event('online'));
       client.setConnected(true);
@@ -246,7 +231,6 @@ describe('OrganizationPage offline (#82)', () => {
       expect(note(harness)).toBeNull();
     });
 
-    // PR #136's test FAIL: these values crashed the page (`OrganizationOverview.tiles`).
     it.each<[string, unknown, Record<string, unknown>]>([
       ['an object missing fields', { name: 'Shape Only' }, {}],
       ['a number', 42, {}],
@@ -277,7 +261,6 @@ describe('OrganizationPage offline (#82)', () => {
       },
     );
 
-    // #100: the page needs all three copies; a missing or unusable one is the not-saved view.
     it.each([
       ['the header', HEADER],
       ['the leagues list', LEAGUES],
@@ -333,7 +316,7 @@ describe('OrganizationPage offline (#82)', () => {
     });
   });
 
-  it("a live null removes the saved entry and shows #23's not-found view with no note (state 5)", async () => {
+  it('a live null removes the saved entry and shows the not-found view with no note (state 5)', async () => {
     plant();
     stubOnLine(true);
     const harness = await open();
@@ -344,7 +327,7 @@ describe('OrganizationPage offline (#82)', () => {
     expect(host(harness).querySelector('app-not-found-view')).not.toBeNull();
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
     expect(note(harness)).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
   });
 
   it('renders live data with no error when localStorage throws on read and on write', async () => {

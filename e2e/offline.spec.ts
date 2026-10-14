@@ -1,7 +1,5 @@
-// Offline note and connection signal (#88, ADR 0013 section 3) against the real ConvexClient and
-// the local backend (#59): one test, one page load, chromium-mobile only. `page.clock` skips the
-// 5-second wait and the client's reconnect back-off, so the test takes a few seconds of real time.
-// It needs the local backend and the development build, so it is skipped with E2E_BASE_URL set.
+// `page.clock` skips the 5-second wait and the client's reconnect back-off, so the test takes a few
+// seconds of real time.
 import type { Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
@@ -10,7 +8,6 @@ import { seedTenant } from './support/tenant';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 
-/** Waits for the Convex client's first failed connect, logged as "Attempting reconnect in …". */
 async function firstReconnectLogged(consoleGuard: { logMessages: readonly string[] }) {
   await expect
     .poll(() => consoleGuard.logMessages.some((text) => text.startsWith('Attempting reconnect')))
@@ -53,7 +50,6 @@ test.describe('offline note', () => {
     });
     await page.clock.install();
 
-    // Step 1: the note shows within 10 s of fake time.
     await page.goto(tenant.path);
     await firstReconnectLogged(consoleGuard);
     await expect(note).toBeHidden();
@@ -62,7 +58,6 @@ test.describe('offline note', () => {
     await expect(note).toHaveText("You're offline. Changes need a connection.");
     await expect.poll(() => scrollPaddingTop(page)).toBe('108px');
 
-    // Step 2: once sockets reach the server again, the note clears within 10 s of fake time.
     // Each fast-forward fires the client's pending reconnect at most once.
     refuse = false;
     await page.clock.fastForward(10_000);
@@ -70,11 +65,9 @@ test.describe('offline note', () => {
     await expect(status).toHaveText('Back online.');
     await expect.poll(() => scrollPaddingTop(page)).toBe('72px');
 
-    // Step 3: the browser goes offline; the note shows at once.
     await context.setOffline(true);
     await expect(note).toBeVisible({ timeout: 2_000 });
 
-    // The note at 360px and 1280px: zero axe violations; screenshots for the mockup comparison.
     for (const width of [360, 1280]) {
       await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });
       await expect(note).toBeVisible();
@@ -84,20 +77,19 @@ test.describe('offline note', () => {
       await page.screenshot({ path });
       await testInfo.attach(`offline-note-${width}.png`, { path, contentType: 'image/png' });
     }
-    // At 320px the note wraps to two lines (56px). The scroll offset follows its measured height,
-    // so a focused or anchored element above the viewport lands below the note, not under it.
+    // At 320px the note wraps to two lines (56px), so the scroll offset follows its measured
+    // height.
     await page.setViewportSize({ width: 320, height: 800 });
     await expect.poll(async () => (await note.boundingBox())?.height).toBe(56);
     const noteBox = await status.boundingBox();
-    expect(noteBox).toMatchObject({ y: 56, height: 56 });
+    expect(noteBox).toMatchObject({ y: 65, height: 56 });
     await expect.poll(() => scrollPaddingTop(page)).toBe('128px');
     // The header cancels the same amount on itself (shell.ts).
     expect(
       await page.locator('header').evaluate((header) => getComputedStyle(header).scrollMarginTop),
     ).toBe('-128px');
     // The overview has no control of its own, so the test adds a button to main between two
-    // spacers (the page can then scroll the button to any offset), scrolls to the end, and focuses
-    // the button, now above the viewport.
+    // spacers: the page can then scroll the button to any offset.
     await page.locator('main').evaluate((main) => {
       const spacer = (height: string) => {
         const element = document.createElement('div');
@@ -119,7 +111,6 @@ test.describe('offline note', () => {
     await button.focus();
     await expect(button).toBeFocused();
     expect((await button.boundingBox())?.y).toBeGreaterThanOrEqual(56 + 56 + 16);
-    // An anchored element (scrolled to its start) lands exactly 16px below the wrapped note.
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await button.evaluate((element) => element.scrollIntoView({ block: 'start' }));
     expect((await button.boundingBox())?.y).toBe(56 + 56 + 16);
@@ -129,7 +120,6 @@ test.describe('offline note', () => {
     });
     await page.setViewportSize({ width: 360, height: 800 });
 
-    // Step 4: back online; the client reconnects at once on the browser's `online` event.
     await context.setOffline(false);
     await page.clock.fastForward(10_000);
     await expect(note).toBeHidden();

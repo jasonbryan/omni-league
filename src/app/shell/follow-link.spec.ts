@@ -21,8 +21,7 @@ async function setup(url: string) {
   return { followLink: TestBed.inject(FollowLink), router, navigate, loadPage, origin };
 }
 
-/** Tester probes for #95: hostile and odd URLs never reach the router as another site. */
-describe('FollowLink.follow (#95)', () => {
+describe('FollowLink.follow', () => {
   it('loads another origin as a page, with no router navigation, and keeps its own query string', async () => {
     const { followLink, navigate, loadPage } = await setup('/organizations/a?utm_source=x');
     followLink.follow('https://evil.example/path?own=1#frag');
@@ -39,7 +38,7 @@ describe('FollowLink.follow (#95)', () => {
     const target = String(navigate.mock.calls[0][0]);
     expect(target).toMatch(/^\/organizations\/a\?/);
     expect(target).toMatch(/#league-2$/);
-    expect(target).toContain('evil.example'); // only as an encoded query value
+    expect(target).toContain('evil.example');
     expect(target.startsWith('//')).toBe(false);
     expect(new URL(target, origin).origin).toBe(origin);
   });

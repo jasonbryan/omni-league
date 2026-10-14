@@ -4,9 +4,6 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
-// The offline note in the shell (#88; design/mockups/88-offline-note.html). The note's own content
-// and timing are covered in offline-note.spec.ts.
-
 async function render(page: Type<unknown>): Promise<HTMLElement> {
   TestBed.configureTestingModule({ providers: [provideRouter([{ path: '**', component: page }])] });
   const harness = await RouterTestingHarness.create();
@@ -61,7 +58,6 @@ describe('Shell offline note', () => {
       );
     };
 
-    // The classes stay put; only --offline-note-h (set by the note) changes (offline-note.spec.ts).
     expectOffsets();
     setBrowserOnline(false);
     expectOffsets();

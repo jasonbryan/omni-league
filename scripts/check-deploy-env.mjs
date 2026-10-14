@@ -1,42 +1,10 @@
-// Deploy environment check (#15; ADR 0005, ADR 0008, ADR 0010, ADR 0011). Node built-ins only.
+// Preview mode runs AFTER `npx convex deploy`, because the `pr-<n>` deployment does not exist before
+// it. Production mode runs BEFORE it: a failure after the deploy would leave the new functions
+// already pushed to the production backend.
 //
-//   node scripts/check-deploy-env.mjs preview --preview-name <name>
-//   node scripts/check-deploy-env.mjs production [--preview-name <name>]
-//
-// It reads which environment variables are set on one Convex deployment and fails (exit 1) when a
-// forbidden one is present or a required one is missing, so the Netlify build fails and nothing is
-// published. Every failure names the variable. It never prints a value: it reads only variable
-// names (`npx convex env list --names-only`), plus the value of AUTH_EMAIL_DISABLED in preview mode,
-// which it compares in memory. It prints the name of the deployment it checked.
-//
-// - preview: IS_TEST must be unset, AUTH_EMAIL_DISABLED must be exactly `true`, and RESEND_API_KEY
-//   must be unset.
-// - production: IS_TEST, AUTH_EMAIL_DISABLED, PREVIEW_ORIGIN_PATTERN, and DEMO_ACCOUNT_PASSWORD
-//   (the demo accounts' shared password; preview mode does not require it) must be unset.
-//   (The email slice adds the presence checks for RESEND_API_KEY, RESEND_WEBHOOK_SECRET, and
-//   EMAIL_FROM, ADR 0011.)
-// - both: BETTER_AUTH_SECRET and SITE_URL must be set (#111, ADR 0008). Without the secret Better
-//   Auth would sign with its public default; without SITE_URL no origin is trusted. Only the names
-//   are read. An empty value is invisible to `--names-only`; convex/auth.ts refuses requests then.
-//
-// Targeting: `--preview-name <name>` selects the preview deployment `<name>` (for example `pr-12`,
-// or `main` for staging) with the preview deploy key in CONVEX_DEPLOY_KEY. Without it, the CLI
-// acts on the deployment that CONVEX_DEPLOY_KEY itself names (a production key).
-//
-// ORDERING. Preview mode runs AFTER `npx convex deploy ... --preview-create|--preview-name`, because
-// the `pr-<n>` deployment does not exist before it (netlify.toml). PR previews use
-// `--preview-create` (deleted and recreated per push). Staging uses `--preview-name`, which reuses
-// the deployment `main` and its data (#222): the variables checked here are then those the
-// deployment got at creation. Convex applies its default preview variables only when it creates a
-// deployment and does not sync later changes, so a default added or changed after staging was
-// created must be set on `main` by hand (a missing variable this check requires fails the staging
-// build). Production mode must run BEFORE `npx convex deploy`:
-//
-//   npm ci && node scripts/check-deploy-env.mjs production && npx convex deploy ...
-//
-// A production failure after `npx convex deploy` would leave the new functions already pushed to
-// the production backend, with only the Netlify publish stopped. Do not copy the preview ordering.
-// See docs/process/hosting.md.
+// Convex applies its default preview variables only when it creates a deployment and does not sync
+// later changes, so a default added or changed after staging was created must be set on `main` by
+// hand.
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -45,13 +13,9 @@ const USAGE =
   '(--preview-name is required in preview mode)';
 
 /**
- * Checks one deployment's variables. Returns one failure line per problem, each starting with the
- * variable's name; an empty array means the check passed. Never includes a value.
- *
+ * Never includes a value.
  * @param {'preview' | 'production'} mode
  * @param {{ names: () => Promise<ReadonlySet<string>>, value: (name: string) => Promise<string | undefined> }} reader
- *   `names` lists the variables set on the deployment; `value` reads one value, and is called only
- *   for AUTH_EMAIL_DISABLED in preview mode.
  * @returns {Promise<string[]>}
  */
 export async function checkDeployEnv(mode, reader) {
@@ -97,7 +61,7 @@ export async function checkDeployEnv(mode, reader) {
   } else {
     throw new Error(USAGE);
   }
-  // Required in both modes. Names only: these values are secrets or origins and are never read.
+  // Names only: these values are secrets or origins and are never read.
   if (!names.has('BETTER_AUTH_SECRET')) {
     failures.push(
       'BETTER_AUTH_SECRET is not set; it must be set on every deployment, or auth would sign with a public default secret (ADR 0008).',
@@ -111,16 +75,12 @@ export async function checkDeployEnv(mode, reader) {
   return failures;
 }
 
-/** A Convex preview name: `pr-<n>` (n from 1), or a branch-like name such as `main`. */
 function isPreviewName(name) {
   if (name.startsWith('pr-')) return /^pr-[1-9][0-9]*$/.test(name);
   return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(name);
 }
 
 /**
- * Parses `<mode> [--preview-name <name>]`. Throws an Error whose message starts with "usage" on
- * anything else, including an empty `pr-` (unset REVIEW_ID).
- *
  * @param {string[]} argv
  * @returns {{ mode: 'preview' | 'production', previewName: string | undefined }}
  */
@@ -137,10 +97,6 @@ export function parseArgs(argv) {
   return { mode, previewName };
 }
 
-/**
- * Runs the check and reports it. Returns the exit code: 0 pass, 1 fail (including any error while
- * reading the deployment, whose text is not printed: it could hold a value).
- */
 export async function runCheck({ mode, previewName }, { reader, log, error }) {
   const target =
     previewName === undefined
@@ -151,6 +107,7 @@ export async function runCheck({ mode, previewName }, { reader, log, error }) {
   try {
     failures = await checkDeployEnv(mode, reader);
   } catch {
+    // The error text is not printed: it could hold a value.
     error(`check-deploy-env: FAIL could not read the environment variables of ${target}`);
     return 1;
   }
@@ -163,14 +120,13 @@ export async function runCheck({ mode, previewName }, { reader, log, error }) {
   return 1;
 }
 
-/** Removes the deploy key from `text`, in case a CLI message ever echoes it. */
+// In case a CLI message ever echoes the key.
 function redactKey(text) {
   const key = process.env['CONVEX_DEPLOY_KEY'];
   return key ? text.split(key).join('<redacted>') : text;
 }
 
-/** Runs the project's Convex CLI with `args`; output is captured in memory, never inherited. */
-function convexCli(args) {
+function captureConvexCli(args) {
   const cli = join(import.meta.dirname, '..', 'node_modules', 'convex', 'bin', 'main.js');
   const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
   delete env['CONVEX_VERBOSE'];
@@ -188,12 +144,11 @@ function convexCli(args) {
   });
 }
 
-/** The reader backed by `npx convex env`, for the deployment `previewName` (or the key's own). */
 function convexReader(previewName) {
   const target = previewName === undefined ? [] : ['--preview-name', previewName];
   return {
     async names() {
-      const result = await convexCli(['env', 'list', '--names-only', ...target]);
+      const result = await captureConvexCli(['env', 'list', '--names-only', ...target]);
       if (result.code !== 0) {
         // `--names-only` writes no value anywhere, so its error text is safe to show.
         console.error(redactKey(result.stderr.trim()));
@@ -207,7 +162,7 @@ function convexReader(previewName) {
       );
     },
     async value(name) {
-      const result = await convexCli(['env', 'get', name, ...target]);
+      const result = await captureConvexCli(['env', 'get', name, ...target]);
       // Not printed on failure: this command's output is a value.
       if (result.code !== 0) throw new Error('convex env get failed');
       return result.stdout.endsWith('\n') ? result.stdout.slice(0, -1) : result.stdout;

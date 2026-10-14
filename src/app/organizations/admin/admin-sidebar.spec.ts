@@ -4,8 +4,6 @@ import { provideRouter, Router } from '@angular/router';
 import { AdminSidebar } from './admin-sidebar';
 import { COASTAL, Elsewhere, text } from './testing/admin-harness';
 
-// The admin sidebar (#65), design/mockups/65-organization-admin-locations.html "Admin sidebar".
-
 @Component({
   imports: [AdminSidebar],
   template: '<app-admin-sidebar [organization]="organization" />',

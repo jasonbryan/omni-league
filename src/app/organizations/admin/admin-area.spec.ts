@@ -12,9 +12,6 @@ import {
   text,
 } from './testing/admin-harness';
 
-// The admin area's shell (#65), design/mockups/65-organization-admin-locations.html states 1, 3,
-// 4, 5, and 6: what `organizations.getAdminContext` decides, and the sidebar.
-
 @Component({ template: '<p id="child">child</p>' })
 class Child {}
 
@@ -124,7 +121,7 @@ describe('AdminArea', () => {
   });
 
   describe('unknown slug (state 6)', () => {
-    it('shows #23’s not-found view, with no sidebar and no other query besides the top bar’s', async () => {
+    it('shows the not-found view, with no sidebar and no other query besides the top bar’s', async () => {
       const { page, convex, acceptToken, subscription, flush } = await openAdmin(
         ROUTES,
         '/app/organizations/does-not-exist/locations',

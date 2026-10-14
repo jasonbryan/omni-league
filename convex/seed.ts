@@ -31,18 +31,7 @@ import {
   type Tenant,
 } from './lib/tenantWrites';
 
-/**
- * The demo organizations. All names and addresses are fictional demo values. The first two are
- * the organizations of the approved mockup (design/mockups/60-organization-page.html, #73), kept
- * exactly as the mockup shows them: one with leagues and locations, one empty. Every sport has
- * leagues in at least two organizations, and some organizations run more than one sport.
- *
- * Later features add their demo rows here, under the same insert-only rule (hosting.md, Demo
- * data): never rename or remove an entry, because a renamed one is inserted again next to the old.
- *
- * Exported for `e2e/pwa.spec.ts` (#82), which opens these pages on a production build seeded by
- * `seed:demo`. A plain value, not a Convex function, so it adds nothing to the API.
- */
+// Insert-only: never rename or remove an entry, or the seed inserts it again next to the old one.
 export const DEMO: readonly Tenant[] = [
   {
     organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
@@ -147,16 +136,8 @@ export const DEMO: readonly Tenant[] = [
   },
 ];
 
-/**
- * The demo seasons of demo leagues, by the organization's and the league's slug: the `fall-2027`
- * drafts (#125) and the `summer-2027` published seasons (#126), which later issues register into
- * (`sunday-reverse-coed-4s / summer-2027`). A season is a draft unless its entry says `published`.
- * The published ones have slugs #125 does not seed, because the seed is insert-only: on a reused
- * staging, where #125's seed already inserted the `fall-2027` drafts, a published season under the
- * same slug would never be inserted. Never rename or remove an entry (hosting.md, Demo data).
- *
- * A plain value, not a Convex function, so it adds nothing to the API.
- */
+// Insert-only: a published season under the slug of an existing draft would never be inserted, so
+// the published seasons have slugs of their own.
 export const DEMO_SEASONS: readonly {
   organizationSlug: string;
   leagueSlug: string;
@@ -219,7 +200,6 @@ export const DEMO_SEASONS: readonly {
   },
 ];
 
-/** Rows inserted by one run, per table, and the rows its backfill changed (#100). */
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
@@ -228,12 +208,7 @@ const resultValidator = v.object({
   backfilled: backfilledValidator,
 });
 
-/**
- * Throws unless `PREVIEW_ORIGIN_PATTERN` is exactly this project's preview origin pattern. Every
- * preview and staging deployment has it as a Convex default preview variable (hosting.md), and
- * `scripts/check-deploy-env.mjs production` fails when production has it, so the seed cannot write
- * on production even when run from the dashboard or the CLI. The message holds no value.
- */
+// Refuses to write on production, even when run from the dashboard or the CLI.
 function assertPreviewDeployment(): void {
   if (env.PREVIEW_ORIGIN_PATTERN !== PREVIEW_ORIGIN_PATTERN) {
     throw new Error(
@@ -243,7 +218,6 @@ function assertPreviewDeployment(): void {
   }
 }
 
-/** The id of the organization with this slug, inserting the organization when it is missing. */
 async function ensureOrganization(
   ctx: MutationCtx,
   tenant: Tenant,
@@ -254,7 +228,6 @@ async function ensureOrganization(
     .withIndex('by_slug', (q) => q.eq('slug', slug))
     .unique();
   if (existing) return { id: existing._id, inserted: false };
-  // insertTenant validates the slug; the locations and leagues follow one by one below.
   const id = await insertTenant(ctx, {
     organization: tenant.organization,
     locations: [],
@@ -263,29 +236,6 @@ async function ensureOrganization(
   return { id, inserted: true };
 }
 
-/**
- * The organizations, locations, leagues, and seasons of the demo data, the first step of `seed:demo`
- * (`demo`, below), which every build of netlify.toml's `deploy-preview` and `branch-deploy` contexts
- * runs after the deploy environment check. The production context never runs it.
- *
- * Insert-only, per record: it inserts each demo organization (by slug), location (by name within
- * its organization), and league (by name within its organization, with its location links) only
- * when it is missing, through the shared writers, which keep the organization's counters. It
- * never deletes a row, and a second run inserts nothing. It returns the number of rows it inserted
- * per table, which the build log shows. It throws before reading or writing unless the deployment
- * is a preview or staging deployment (`assertPreviewDeployment`).
- *
- * It also inserts the demo seasons (`DEMO_SEASONS`: the `fall-2027` drafts, #125, and the
- * `summer-2027` published seasons, #126) of the demo leagues, by slug within the league, through
- * `insertSeason`. A season is inserted only when its league has none under the slug, so a season
- * that exists is never updated, whatever its status.
- *
- * Before inserting, it backfills the fields #100, #101, and #66 added on any row written before
- * them (`backfillTenantFields`, the only update it makes, on demo and other rows alike): `sortName`,
- * the counters, and `status` `published` on a league without one, before the recount that counts
- * only published leagues. It reports the changed rows as `backfilled`. Every demo league is inserted
- * `published`. #104 removes the backfill.
- */
 export const insertDemoData = internalMutation({
   args: {},
   returns: resultValidator,
@@ -318,15 +268,12 @@ export const insertDemoData = internalMutation({
           )
           .first();
         if (existing) continue;
-        // Links the league to its named locations, which exist by now; throws on an unknown one.
         await insertLeague(ctx, organizationId, league);
         inserted.leagues++;
       }
     }
 
-    // The seasons last, so every demo league exists. A season is inserted when its league has none
-    // under the slug, whatever that one's status; a league that is missing (a slug collision made
-    // the stored slug differ) is skipped.
+    // A league is missing when a slug collision gave it another slug.
     for (const { organizationSlug, leagueSlug, season, status } of DEMO_SEASONS) {
       const found = await findLeagueBySlugs(ctx, { orgSlug: organizationSlug, leagueSlug });
       if (!found) continue;
@@ -436,7 +383,6 @@ async function organizationBySlug(ctx: Pick<MutationCtx, 'db'>, slug: string) {
     .unique();
 }
 
-/** The ids of the leagues with these slugs in the organization, or `null` when one is missing. */
 async function leagueIdsBySlugs(
   ctx: Pick<MutationCtx, 'db'>,
   organizationId: Id<'organizations'>,

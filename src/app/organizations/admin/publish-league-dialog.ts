@@ -32,18 +32,15 @@ import {
 } from './alert-dialog-classes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 
-/** The league the dialog asks about: its id for `leagues.publish`, its name for the copy. */
 export interface PublishTarget {
   leagueId: Id<'leagues'>;
   name: string;
 }
 
-/** How the dialog ended: the league that was asked about, and whether it is now published. */
 export interface PublishOutcome extends PublishTarget {
   published: boolean;
 }
 
-/** The text of each failure alert (design/mockups/66-69-organization-leagues.html state 12). */
 export const PUBLISH_ALERTS = {
   failed: {
     title: 'The league could not be published.',
@@ -58,18 +55,8 @@ export const PUBLISH_ALERTS = {
 type PublishAlert = keyof typeof PUBLISH_ALERTS;
 
 /**
- * The publish confirmation (#69; design/mockups/66-69-organization-leagues.html states 9 to 12): a
- * helm-style alert dialog, from the brain `alert-dialog` primitives with the mockup's classes as
- * static strings (the admin chunks load no class-merging code, button-classes.ts). `open(league)`
- * opens it for one league from the row's Publish button. Its scrim is the phone-menu sheet's
- * `bg-foreground/50` with no blur, not helm's. Focus starts on Cancel. Cancel and Escape close it
- * and write nothing (Escape is handled here, because the brain dialog reads `disableClose` only
- * when it opens); a press outside does not. While `leagues.publish` runs the button reads
- * "Publishing…" and the dialog stays open and cannot be dismissed. A failure (or the offline
- * refusal of angular.md, State and data) shows the destructive alert inside the dialog, takes
- * focus, and leaves the league a draft. Focus is not restored by the dialog: `dismissed` tells the
- * page how it ended, and the page puts focus where it belongs once the page behind is no longer
- * inert.
+ * Its scrim is the phone-menu sheet's `bg-foreground/50` with no blur, not helm's. Escape is handled here, because the brain dialog reads `disableClose` only when it opens.
+ * Focus is not restored by the dialog: `dismissed` tells the page how it ended, and the page puts focus where it belongs once the page behind is no longer inert.
  */
 @Component({
   selector: 'app-publish-league-dialog',
@@ -163,7 +150,6 @@ export class PublishLeagueDialog {
   private readonly injector = inject(Injector);
   private readonly publishLeague = injectMutation(api.leagues.publish);
 
-  /** The dialog ended, after it left the page: the league and whether it was published. */
   readonly dismissed = output<PublishOutcome>();
 
   protected readonly online = injectOnline();
@@ -187,10 +173,8 @@ export class PublishLeagueDialog {
   private readonly alertBox = viewChild<AdminAlert>('alertBox');
   private published = false;
 
-  /** Whether the dialog is open: the page behind it is inert while it is. */
   readonly isOpen = computed(() => this.dialog().stateComputed() === 'open');
 
-  /** Opens the confirmation for `league`. */
   open(league: PublishTarget): void {
     this.target.set(league);
     this.alert.set(null);
@@ -220,7 +204,6 @@ export class PublishLeagueDialog {
     this.dialog().close();
   }
 
-  /** The dialog has left the page. */
   protected onClosed(): void {
     const target = this.target();
     if (!target) return;

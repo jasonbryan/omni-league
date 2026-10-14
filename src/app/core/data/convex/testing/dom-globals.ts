@@ -1,12 +1,8 @@
 /**
- * Snapshot of the DOM classes on `globalThis`, for specs that call `renderApplication` in jsdom.
- *
- * With DOM emulation on (the default), `@angular/platform-server` runs `Object.assign(globalThis,
- * domino.impl)`, replacing jsdom's `Event`, `Node`, `HTMLElement` and the rest with domino's and
- * adding a few domino-only classes. Angular's unit-test builder runs spec files with
- * `isolate: false`, so those classes would leak into every later file in the same worker; jsdom
- * then rejects a domino `Event` in `dispatchEvent` (for example the router's `FakeNavigation`).
- * Call `snapshotDomGlobals()` before the render and the returned `restore()` after it. Test-only.
+ * With DOM emulation on (the default), `@angular/platform-server` runs `Object.assign(globalThis, domino.impl)`, replacing jsdom's `Event`, `Node`,
+ * `HTMLElement` and the rest with domino's and adding a few domino-only classes. Angular's unit-test builder runs spec files with `isolate: false`,
+ * so those classes would leak into every later file in the same worker; jsdom then rejects a domino `Event` in `dispatchEvent`
+ * (for example the router's `FakeNavigation`).
  */
 export function snapshotDomGlobals(): () => void {
   const global = globalThis as unknown as Record<string, unknown>;
@@ -23,7 +19,7 @@ export function snapshotDomGlobals(): () => void {
       // plain object replacing jsdom's function, and it must be restored too.
       if (typeof current !== 'function' && typeof previous !== 'function') continue;
       if (!before.has(key)) {
-        delete global[key]; // a domino-only class such as HTMLParser
+        delete global[key];
       } else if (current !== previous) {
         global[key] = previous; // vitest's jsdom globals are accessors; assignment restores them
       }

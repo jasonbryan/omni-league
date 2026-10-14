@@ -152,8 +152,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('forced reload past 14 days (ADR 0013 section 4)', () => {
-    /** Starts the service with version `a` first run at START, then moves the clock on by `days`. */
+  describe('forced reload past 14 days', () => {
     function runningFor(days: number) {
       const activate = vi.spyOn(sw, 'activateUpdate');
       const updates = setUp();
@@ -260,8 +259,7 @@ describe('AppUpdates', () => {
       expect(storedFirstRuns()).toEqual({ a: START, b: START + DAY });
     });
 
-    // A newly opened page runs the newest version the worker has, so NO_NEW_VERSION_DETECTED names
-    // the running version until this page learns of a newer one (PR #119 review).
+    // A newly opened page runs the newest version the worker has, so NO_NEW_VERSION_DETECTED names the running version until this page learns of a newer one.
     it('after VERSION_READY, records the running version, never the downloaded one', () => {
       const updates = setUp();
       updates.start();

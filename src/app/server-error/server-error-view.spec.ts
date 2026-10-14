@@ -22,7 +22,7 @@ const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
 describe('ServerErrorView', () => {
-  it('renders the approved server-error card (design/mockups/60-organization-page.html)', () => {
+  it('renders the approved server-error card', () => {
     const host = create();
     expect(host.className).toBe('block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16');
     expect(host.querySelectorAll('h1')).toHaveLength(1);

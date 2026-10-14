@@ -4,14 +4,12 @@ import { join } from 'node:path';
 const html = readFileSync(join(process.cwd(), 'src/index.html'), 'utf8');
 const doc = new DOMParser().parseFromString(html, 'text/html');
 
-// The product name is "Omni League" (two words) in every user-visible place (owner, #10).
 describe('src/index.html', () => {
   it('sets the document title to "Omni League"', () => {
     expect(doc.title).toBe('Omni League');
   });
 
-  // Install tags (#80, ADR 0013): every server, prerendered, and client page carries them because
-  // they sit in the one index.html. Hrefs are relative to <base href="/">.
+  // Install tags: every server, prerendered, and client page carries them because they sit in the one index.html. Hrefs are relative to <base href="/">.
   describe('install tags', () => {
     it('links the web app manifest', () => {
       const link = doc.head.querySelector('link[rel="manifest"]');
