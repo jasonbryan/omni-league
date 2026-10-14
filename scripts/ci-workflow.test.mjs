@@ -195,8 +195,6 @@ describe('the scope step', () => {
   });
 });
 
-// A just-enough evaluator for the workflow's own expressions: string literals, dotted contexts
-// (with `.*.` filters), `!`, `==`, `!=`, `&&`, `||`, and the functions the workflow uses.
 function lookup(context, path) {
   const walk = (value, segments) => {
     if (segments.length === 0) return value;
@@ -208,7 +206,7 @@ function lookup(context, path) {
   return walk(context, path.split('.')) ?? '';
 }
 
-function evaluate(expression, context) {
+function evaluateWorkflowExpression(expression, context) {
   const inner = /^\$\{\{\s*([\s\S]*?)\s*\}\}$/.exec(expression.trim())?.[1];
   assert.ok(inner !== undefined, `not one expression: ${expression}`);
   const functions = {
@@ -278,10 +276,10 @@ function otherContext(eventName, skip = '') {
 /** @param {object} context */
 function decide(context) {
   return {
-    runs: Boolean(evaluate(jobCondition, context)),
-    name: evaluate(jobName, context),
-    fullRun: evaluate(fullRunEnv, context),
-    group: evaluate(concurrencyGroup, context),
+    runs: Boolean(evaluateWorkflowExpression(jobCondition, context)),
+    name: evaluateWorkflowExpression(jobName, context),
+    fullRun: evaluateWorkflowExpression(fullRunEnv, context),
+    group: evaluateWorkflowExpression(concurrencyGroup, context),
   };
 }
 
@@ -392,11 +390,16 @@ describe('the ci job by event', () => {
     }
   });
 
-  it('names a nightly and a dispatch run ci, and skips the nightly one only on a gate skip', () => {
+  it('names a nightly and a dispatch run ci, and a gate-skipped nightly checks', () => {
     const full = { runs: true, name: 'ci', fullRun: '1', group: `ci-${RUN}` };
     assert.deepEqual(decide(otherContext('schedule')), full);
     assert.deepEqual(decide(otherContext('workflow_dispatch')), full);
-    assert.deepEqual(decide(otherContext('schedule', 'true')), { ...full, runs: false });
+    assert.deepEqual(decide(otherContext('schedule', 'true')), {
+      runs: false,
+      name: 'checks',
+      fullRun: '0',
+      group: `ci-${RUN}`,
+    });
   });
 
   it('skips a push to main and names it checks, so no skipped ci exists', () => {
@@ -461,7 +464,10 @@ describe('the steps of a fast run and a full run', () => {
     const state = { ...context, env: { FULL_RUN: fullRun }, steps: {}, success: true };
     const ran = [];
     for (const step of allSteps()) {
-      const runs = step.condition === undefined ? state.success : evaluate(step.condition, state);
+      const runs =
+        step.condition === undefined
+          ? state.success
+          : evaluateWorkflowExpression(step.condition, state);
       const outcome = !runs
         ? 'skipped'
         : failing !== undefined && step.name === failing

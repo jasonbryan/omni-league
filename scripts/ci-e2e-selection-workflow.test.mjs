@@ -431,19 +431,17 @@ describe('skipping a night that is already tested', () => {
   const MAIN = 'abcdef0123456789';
   const OLDER = '1111111222222233333';
 
-  // Jobs of a past scheduled run, as `gh run view --json jobs` lists them.
-  const tested = (ci) => [
+  const scheduledRunJobs = (ci, name = 'ci') => [
     { name: 'nightly-gate', conclusion: 'success' },
-    { name: 'ci', conclusion: ci },
+    { name, conclusion: ci },
   ];
 
+  // The fake gh applies the workflow's own --jq filters with the real jq.
   /**
-   * A fake `gh` that answers `run list` and `run view` from a fixture and applies the `--jq`
-   * filter with the real jq, so the workflow's own filters run.
    * @param {{ runs: object[], jobs?: Record<string, object[]>, listFails?: boolean, viewFails?: string[] }} fixture
    * @param {string} head
    */
-  function runGate(fixture, head = MAIN) {
+  function runGateWithFakeGh(fixture, head = MAIN) {
     const dir = mkdtempSync(join(tmpdir(), 'nightly-gate-'));
     try {
       const calls = join(dir, 'calls');
@@ -507,7 +505,10 @@ describe('skipping a night that is already tested', () => {
   });
 
   it('asks for the completed scheduled runs of ci.yml on main, newest first', { skip }, () => {
-    const { calls } = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('success') } });
+    const { calls } = runGateWithFakeGh({
+      runs: [night(5, MAIN)],
+      jobs: { 5: scheduledRunJobs('success') },
+    });
     const args = calls[0].split(' ');
     assert.deepEqual(args.slice(0, 2), ['run', 'list']);
     for (const [flag, value] of [
@@ -521,19 +522,44 @@ describe('skipping a night that is already tested', () => {
   });
 
   it('skips with a notice after a night whose ci succeeded on this commit', { skip }, () => {
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('success') } });
+    const run = runGateWithFakeGh({
+      runs: [night(5, MAIN)],
+      jobs: { 5: scheduledRunJobs('success') },
+    });
     assert.equal(run.outputs, 'skip=true\n');
     assert.match(run.stdout, /^::notice::main is still abcdef0, the commit the last tested/m);
   });
 
   it('skips after a night whose ci failed on this commit', { skip }, () => {
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('failure') } });
+    const run = runGateWithFakeGh({
+      runs: [night(5, MAIN)],
+      jobs: { 5: scheduledRunJobs('failure') },
+    });
     assert.equal(run.outputs, 'skip=true\n');
   });
 
   it('skips after a night the gate itself skipped on this commit', { skip }, () => {
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('skipped') } });
+    const run = runGateWithFakeGh({
+      runs: [night(5, MAIN)],
+      jobs: { 5: scheduledRunJobs('skipped') },
+    });
     assert.equal(run.outputs, 'skip=true\n');
+  });
+
+  it('skips after a night whose gate-skipped job is named checks', { skip }, () => {
+    const jobs = scheduledRunJobs('skipped', 'checks');
+    assert.equal(
+      runGateWithFakeGh({ runs: [night(5, MAIN)], jobs: { 5: jobs } }).outputs,
+      'skip=true\n',
+    );
+  });
+
+  it('does not count a checks job that ran as a tested night', { skip }, () => {
+    for (const conclusion of ['success', 'failure']) {
+      const jobs = scheduledRunJobs(conclusion, 'checks');
+      const fixture = { runs: [night(5, MAIN)], jobs: { 5: jobs } };
+      assert.equal(runGateWithFakeGh(fixture).outputs, 'skip=false\n', conclusion);
+    }
   });
 
   it('counts a skipped ci as tested only when the gate succeeded', { skip }, () => {
@@ -541,71 +567,77 @@ describe('skipping a night that is already tested', () => {
       { name: 'nightly-gate', conclusion: 'failure' },
       { name: 'ci', conclusion: 'skipped' },
     ];
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: jobs } });
+    const run = runGateWithFakeGh({ runs: [night(5, MAIN)], jobs: { 5: jobs } });
     assert.equal(run.outputs, 'skip=false\n');
   });
 
   it('runs the suite after a startup failure, because nothing was tested', { skip }, () => {
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: [] } });
+    const run = runGateWithFakeGh({ runs: [night(5, MAIN)], jobs: { 5: [] } });
     assert.equal(run.outputs, 'skip=false\n');
     assert.doesNotMatch(run.stdout, /::notice::/);
   });
 
   it('runs the suite after a cancelled ci', { skip }, () => {
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('cancelled') } });
+    const run = runGateWithFakeGh({
+      runs: [night(5, MAIN)],
+      jobs: { 5: scheduledRunJobs('cancelled') },
+    });
     assert.equal(run.outputs, 'skip=false\n');
   });
 
   it('runs the suite after a run that was cancelled between the gate and ci', { skip }, () => {
-    const run = runGate({
+    const run = runGateWithFakeGh({
       runs: [night(5, MAIN, 'completed', 'cancelled')],
-      jobs: { 5: tested('skipped') },
+      jobs: { 5: scheduledRunJobs('skipped') },
     });
     assert.equal(run.outputs, 'skip=false\n');
   });
 
   it('runs the suite after a run with no ci job', { skip }, () => {
     const jobs = [{ name: 'nightly-gate', conclusion: 'success' }];
-    const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: jobs } });
+    const run = runGateWithFakeGh({ runs: [night(5, MAIN)], jobs: { 5: jobs } });
     assert.equal(run.outputs, 'skip=false\n');
   });
 
   it('looks past an untested night to the last tested one', { skip }, () => {
     const fixture = {
       runs: [night(7, MAIN), night(6, MAIN), night(5, MAIN)],
-      jobs: { 7: [], 6: tested('cancelled'), 5: tested('success') },
+      jobs: { 7: [], 6: scheduledRunJobs('cancelled'), 5: scheduledRunJobs('success') },
     };
-    assert.equal(runGate(fixture).outputs, 'skip=true\n');
+    assert.equal(runGateWithFakeGh(fixture).outputs, 'skip=true\n');
   });
 
   it('decides on the newest tested night, not an older one on the same commit', { skip }, () => {
     const fixture = {
       runs: [night(6, OLDER), night(5, MAIN)],
-      jobs: { 6: tested('success'), 5: tested('success') },
+      jobs: { 6: scheduledRunJobs('success'), 5: scheduledRunJobs('success') },
     };
-    assert.equal(runGate(fixture).outputs, 'skip=false\n');
+    assert.equal(runGateWithFakeGh(fixture).outputs, 'skip=false\n');
   });
 
   it('runs the suite when main moved since the last tested night', { skip }, () => {
-    const run = runGate({ runs: [night(5, OLDER)], jobs: { 5: tested('success') } });
+    const run = runGateWithFakeGh({
+      runs: [night(5, OLDER)],
+      jobs: { 5: scheduledRunJobs('success') },
+    });
     assert.equal(run.outputs, 'skip=false\n');
     assert.doesNotMatch(run.stdout, /::notice::/);
   });
 
   it('runs the suite when no earlier night completed', { skip }, () => {
-    assert.equal(runGate({ runs: [] }).outputs, 'skip=false\n');
-    const inProgress = runGate({ runs: [night(5, MAIN, 'in_progress')], jobs: {} });
+    assert.equal(runGateWithFakeGh({ runs: [] }).outputs, 'skip=false\n');
+    const inProgress = runGateWithFakeGh({ runs: [night(5, MAIN, 'in_progress')], jobs: {} });
     assert.equal(inProgress.outputs, 'skip=false\n');
   });
 
   it('runs the suite when the run list or a run lookup fails', { skip }, () => {
-    const jobs = { 5: tested('success') };
+    const jobs = { 5: scheduledRunJobs('success') };
     assert.equal(
-      runGate({ runs: [night(5, MAIN)], jobs, listFails: true }).outputs,
+      runGateWithFakeGh({ runs: [night(5, MAIN)], jobs, listFails: true }).outputs,
       'skip=false\n',
     );
     assert.equal(
-      runGate({ runs: [night(5, MAIN)], jobs, viewFails: ['5'] }).outputs,
+      runGateWithFakeGh({ runs: [night(5, MAIN)], jobs, viewFails: ['5'] }).outputs,
       'skip=false\n',
     );
   });
@@ -613,9 +645,9 @@ describe('skipping a night that is already tested', () => {
   it('does not skip on a lookup failure even when an older night would match', { skip }, () => {
     const fixture = {
       runs: [night(6, MAIN), night(5, MAIN)],
-      jobs: { 5: tested('success') },
+      jobs: { 5: scheduledRunJobs('success') },
       viewFails: ['6'],
     };
-    assert.equal(runGate(fixture).outputs, 'skip=false\n');
+    assert.equal(runGateWithFakeGh(fixture).outputs, 'skip=false\n');
   });
 });

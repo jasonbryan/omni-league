@@ -44,7 +44,6 @@ jobs:
       GH_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ github.sha }}
     steps:
-      # A night counts as tested when its job `ci` concluded success or failure, or the gate skipped it.
       # A startup failure, a cancelled run (even one whose jobs read as a gate skip), or a run with no `ci` job tested nothing.
       - name: last tested night
         id: last-tested
@@ -53,7 +52,7 @@ jobs:
           runs="$(gh run list --workflow ci.yml --event schedule --branch main --status completed --limit 10 --json databaseId,headSha,conclusion --jq '.[] | select(.conclusion != "cancelled") | "\(.databaseId) \(.headSha)"')" || runs=''
           while read -r id sha; do
             [ -n "$id" ] || continue
-            state="$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.name == "ci" or .name == "nightly-gate") | {key: .name, value: .conclusion}] | from_entries | if (.ci == "success" or .ci == "failure") or (.ci == "skipped" and .["nightly-gate"] == "success") then "tested" else "untested" end')" || break
+            state="$(gh run view "$id" --json jobs --jq '(.jobs | map({(.name): .conclusion}) | add // {}) as $j | if ($j.ci == "success" or $j.ci == "failure") or (($j.ci == "skipped" or $j.checks == "skipped") and $j["nightly-gate"] == "success") then "tested" else "untested" end')" || break
             if [ "$state" = tested ]; then
               last="$sha"
               break
@@ -66,11 +65,11 @@ jobs:
             echo 'skip=false' >> "$GITHUB_OUTPUT"
           fi
 
-  # Named `ci` only on a path that runs the full suite, so a skipped job on a PR head is never `ci`
-  # (a skipped job counts as a pass for the required check). Every other path is named `checks`.
+  # A skipped job counts as a pass for the required check, so none is named `ci`, a gated nightly
+  # included: the tip of main is also the head of a release PR.
   # FULL_RUN repeats the name condition because a job name cannot read `env`.
   checks:
-    name: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production'))))) && 'ci' || 'checks' }}
+    name: ${{ ((github.event_name == 'schedule' && needs.nightly-gate.outputs.skip != 'true') || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production'))))) && 'ci' || 'checks' }}
     needs: nightly-gate
     if: ${{ !cancelled() && needs.nightly-gate.outputs.skip != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production' || !github.event.pull_request.draft))))) }}
     runs-on: ubuntu-24.04
@@ -79,7 +78,7 @@ jobs:
       e2e_failures: ${{ steps.failures.outputs.failures }}
     env:
       E2E_WEBKIT: ${{ (github.base_ref == 'production' || inputs.webkit == true) && '1' || '0' }}
-      FULL_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production'))))) && '1' || '0' }}
+      FULL_RUN: ${{ ((github.event_name == 'schedule' && needs.nightly-gate.outputs.skip != 'true') || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production'))))) && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -163,7 +162,7 @@ jobs:
             echo "Every npm cooldown window equals min-release-age=${age}."
           fi
           exit "$status"
-      # !cancelled() lets setup-node and install run after a release age failure, but not after a stale merge ref.
+      # !cancelled() lets setup-node and install run after a release age failure.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         id: setup-node
         if: ${{ !cancelled() && steps.merge-ref.outcome != 'failure' }}
@@ -212,7 +211,8 @@ jobs:
           if [ "$E2E_WEBKIT" = "1" ]; then
             npx playwright install --with-deps webkit
           fi
-      # After e2e browsers so build-icons.test.mjs re-renders the icons in Chromium instead of skipping.
+      # After e2e browsers so build-icons.test.mjs re-renders the icons in Chromium instead of skipping;
+      # a fast run installs no browsers, so that test skips there.
       # !cancelled(), not success(): it still reports its own failures when an earlier check failed.
       - name: test:scripts
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.checks == 'true' }}

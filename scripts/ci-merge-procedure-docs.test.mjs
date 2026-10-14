@@ -7,11 +7,10 @@ const root = join(import.meta.dirname, '..');
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
 /**
- * The text from a heading to the next heading of the same or a higher level.
  * @param {string} markdown
  * @param {string} heading the heading line without the leading hashes
  */
-function section(markdown, heading) {
+function sectionUnderHeading(markdown, heading) {
   const lines = markdown.split('\n');
   const start = lines.findIndex(
     (line) => /^#+ /.test(line) && line.replace(/^#+ /, '') === heading,
@@ -36,8 +35,8 @@ const adr = read('docs/decisions/0009-ci-pipeline.md');
 const glossary = read('docs/glossary.md');
 
 describe('the merge procedure, as written in every place that states it', () => {
-  const merge = section(devCycle, '7. Merge');
-  const procedure = section(ci, 'Merge procedure');
+  const merge = sectionUnderHeading(devCycle, '7. Merge');
+  const procedure = sectionUnderHeading(ci, 'Merge procedure');
   const skillStep = skill.split('\n').find((line) => line.startsWith('7. **Merge.**')) ?? '';
 
   it('tells the orchestrator to update while draft, mark ready, label, wait for ci, then merge by SHA', () => {
@@ -81,7 +80,7 @@ describe('the merge procedure, as written in every place that states it', () => 
 
   it('gives Dependabot PRs the label too', () => {
     assert.match(merge, /Dependabot PRs open ready[^.]*get the same label/);
-    assert.match(section(ci, 'Merge procedure'), /get `ready-to-merge` like any PR/);
+    assert.match(sectionUnderHeading(ci, 'Merge procedure'), /get `ready-to-merge` like any PR/);
     assert.match(skillStep, /Dependabot PRs get the label too/);
   });
 
@@ -114,8 +113,8 @@ describe('the local checks as the per-push check', () => {
   const tester = read('.claude/agents/tester.md');
 
   it('requires npm run e2e:affected before reporting, with its output in Evidence', () => {
-    const implement = section(devCycle, '4. Implement');
-    const test = section(devCycle, '5. Test');
+    const implement = sectionUnderHeading(devCycle, '4. Implement');
+    const test = sectionUnderHeading(devCycle, '5. Test');
     assert.match(implement, /`npm run e2e:affected` before reporting[^.]*Evidence block/);
     assert.match(test, /`npm run e2e:affected` before reporting[^.]*Evidence block/);
     assert.match(implementer, /`npm run e2e:affected`[^.]*Evidence block/);
@@ -124,7 +123,7 @@ describe('the local checks as the per-push check', () => {
 
   it('keeps the line that CI does not run on drafts and names the local checks as the per-push check', () => {
     assert.match(
-      section(devCycle, '4. Implement'),
+      sectionUnderHeading(devCycle, '4. Implement'),
       /CI does not run on drafts[\s\S]{0,80}local checks plus the affected e2e specs are the per-push check/,
     );
     assert.match(
@@ -140,7 +139,7 @@ describe('the label and the vocabulary', () => {
   });
 
   it('lists the label in the dev cycle and defines it in the glossary', () => {
-    assert.match(section(devCycle, 'Labels'), /\*\*Merge:\*\* `ready-to-merge`/);
+    assert.match(sectionUnderHeading(devCycle, 'Labels'), /\*\*Merge:\*\* `ready-to-merge`/);
     assert.match(glossary, /^- \*\*`ready-to-merge`:\*\* /m);
   });
 
@@ -149,22 +148,22 @@ describe('the label and the vocabulary', () => {
       glossary,
       /^- \*\*CI \(the `ci` check\):\*\*.*named `ci` when it runs the full suite/m,
     );
-    assert.match(section(ci, 'Required check'), /`checks` is not required either/);
+    assert.match(sectionUnderHeading(ci, 'Required check'), /`checks` is not required either/);
     assert.match(
-      section(ci, 'What runs when'),
+      sectionUnderHeading(ci, 'What runs when'),
       /`ready_for_review` \(`gh pr ready`\)[^\n]*not a trigger/,
     );
   });
 
   it('keeps the owner settings checklist on the label and an unchanged ruleset', () => {
-    const checklist = section(ci, 'Owner settings checklist');
+    const checklist = sectionUnderHeading(ci, 'Owner settings checklist');
     assert.match(checklist, /The `ready-to-merge` label exists/);
     assert.match(checklist, /keeps `ci` required and strict/);
   });
 });
 
 describe('the ADR amendment', () => {
-  const amendment = section(
+  const amendment = sectionUnderHeading(
     adr,
     'Amendment: fast checks on every push, e2e once at merge, nightly once per commit (2026-10-14)',
   );
@@ -185,7 +184,7 @@ describe('the ADR amendment', () => {
   });
 
   it('replaces the sentence that a night after a failed night runs again', () => {
-    const quiet = section(
+    const quiet = sectionUnderHeading(
       adr,
       'Amendment: affected e2e specs on PRs, full suite nightly (2026-10-12)',
     );
