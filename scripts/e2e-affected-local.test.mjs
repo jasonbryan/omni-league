@@ -61,6 +61,13 @@ describe('e2eArgs', () => {
     assert.equal(specs, undefined);
   });
 
+  it('keeps every spec in a full run when a filter has no directory or ends in a line number', () => {
+    for (const filter of ['season-page', 'season-page.spec.ts:42']) {
+      const { args } = e2eArgs(['src/app/shell/shell.ts'], [filter], { sessionSpecs });
+      assert.deepEqual(args, ['e2e/', filter]);
+    }
+  });
+
   it('runs the full suite when the changed files cannot be listed', () => {
     const { args, specs } = quiet(() =>
       e2eArgs(

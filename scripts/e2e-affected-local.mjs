@@ -7,7 +7,7 @@ import { runE2e } from './e2e.mjs';
 const ROOT = join(import.meta.dirname, '..');
 const BASE_REF = 'origin/main';
 const TEST_DIR = 'e2e/';
-const isSpecPath = (arg) => !arg.startsWith('-') && /(?:^e2e\/|\.spec\.[cm]?[jt]s$)/.test(arg);
+const isFilter = (arg) => !arg.startsWith('-');
 
 function git(args) {
   const result = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
@@ -18,16 +18,16 @@ function git(args) {
 }
 
 /**
- * @param {(args: string[]) => string} [run] Runs git and returns its standard output.
+ * @param {(args: string[]) => string} [runGit]
  * @returns {string[]}
  */
-export function changedFiles(run = git) {
-  const base = run(['merge-base', BASE_REF, 'HEAD']).trim();
+export function changedFiles(runGit = git) {
+  const base = runGit(['merge-base', BASE_REF, 'HEAD']).trim();
   const lines = (output) => output.split('\n').filter(Boolean);
   return [
     ...new Set([
-      ...lines(run(['diff', '--no-renames', '--name-only', base])),
-      ...lines(run(['ls-files', '--others', '--exclude-standard'])),
+      ...lines(runGit(['diff', '--no-renames', '--name-only', base])),
+      ...lines(runGit(['ls-files', '--others', '--exclude-standard'])),
     ]),
   ].sort();
 }
@@ -56,9 +56,9 @@ export function e2eArgs(files, extraArgs, { sessionSpecs } = {}) {
     console.error(`e2e:affected: ${error instanceof Error ? error.message : error}`);
   }
   if (selection.scope === 'full') {
-    // Playwright runs only the files named on its command line, so a named spec would otherwise
-    // narrow a full run to itself.
-    const args = extraArgs.some(isSpecPath) ? [TEST_DIR, ...extraArgs] : extraArgs;
+    // Playwright runs only the files that match a name on its command line, so any name would
+    // otherwise narrow a full run to it.
+    const args = extraArgs.some(isFilter) ? [TEST_DIR, ...extraArgs] : extraArgs;
     return { args, specs: undefined };
   }
   return { args: [...selection.specs, ...extraArgs], specs: selection.specs };

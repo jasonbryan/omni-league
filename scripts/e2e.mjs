@@ -61,7 +61,6 @@ function runStep(step) {
   });
 }
 
-/** Whether this run needs the machine-wide lock: it starts a local backend and server. */
 export function needsLock({ env }) {
   const ci = !['', '0', 'false'].includes((env.CI ?? '').toLowerCase());
   return remoteBaseUrl(env) === undefined && !ci;
