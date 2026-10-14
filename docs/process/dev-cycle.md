@@ -107,6 +107,7 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
+- Run e2e with `npm run e2e:affected`, which runs only the specs the branch's changed files map to.
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 - Stop local processes as in [Local processes](#local-processes).
 
@@ -121,7 +122,7 @@ The serial run (`npm run test:serial`) runs the Angular specs in one worker, as 
 The tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The full suite, including the serial unit tests, and e2e tests run; UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
+- The checks run, including the serial unit tests and the affected e2e specs (`npm run e2e:affected`; the full e2e suite runs nightly on `main`, and the tester adds a named spec only when an acceptance criterion needs it); UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
 - The demo data shows the feature:
   - **Screens behind sign-in:** the proof is a screenshot as the matching demo account on the anonymous local backend with a local build ([hosting, Service worker, "With data"](hosting.md#service-worker)), using a throwaway `DEMO_ACCOUNT_PASSWORD` set only on that backend. `DEMO_ACCOUNT_PASSWORD` is owner-held and never given to an agent ([AGENTS.md, Secrets](../../AGENTS.md#secrets)), so no agent signs in on a preview.
@@ -208,6 +209,8 @@ Sessions share one machine, and default ports (`ng serve` 4200, Convex local bac
 5. If a PID it did not record holds the port, leaves it running and mentions it in the report.
 
 It never stops a process the system did not start, whether by name (`pkill`, `killall`) or by a PID found with `lsof`.
+
+Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over (a PID reused by another process keeps the lock held until that process ends), and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
 
 ## Escalation
 
