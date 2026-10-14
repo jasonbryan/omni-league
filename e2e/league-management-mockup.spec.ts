@@ -141,7 +141,7 @@ interface SeasonSeed {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
-  format: '4v4' | '6v6' | '7v7' | '10v10';
+  playersPerSide: number;
   minimumRosterSize: number;
   status: 'draft' | 'published';
 }
@@ -153,7 +153,7 @@ const COED_SEASONS: SeasonSeed[] = [
     startDate: '2027-09-08',
     endDate: '2027-11-10',
     registrationDeadline: '2027-08-25',
-    format: '7v7',
+    playersPerSide: 7,
     minimumRosterSize: 9,
     status: 'draft',
   },
@@ -163,7 +163,7 @@ const COED_SEASONS: SeasonSeed[] = [
     startDate: '2027-06-02',
     endDate: '2027-08-25',
     registrationDeadline: '2027-05-19',
-    format: '7v7',
+    playersPerSide: 7,
     minimumRosterSize: 7,
     status: 'published',
   },
@@ -173,7 +173,7 @@ const COED_SEASONS: SeasonSeed[] = [
     startDate: '2027-03-03',
     endDate: '2027-05-12',
     registrationDeadline: '2027-02-17',
-    format: '7v7',
+    playersPerSide: 7,
     minimumRosterSize: 7,
     status: 'published',
   },
@@ -183,7 +183,7 @@ const COED_SEASONS: SeasonSeed[] = [
     startDate: '2026-09-09',
     endDate: '2026-11-18',
     registrationDeadline: '2026-08-26',
-    format: '7v7',
+    playersPerSide: 7,
     minimumRosterSize: 7,
     status: 'published',
   },
@@ -196,7 +196,7 @@ const SUNDAY_SEASONS: SeasonSeed[] = [
     startDate: '2027-09-12',
     endDate: '2027-11-14',
     registrationDeadline: '2027-08-29',
-    format: '4v4',
+    playersPerSide: 4,
     minimumRosterSize: 4,
     status: 'draft',
   },
@@ -206,7 +206,7 @@ const SUNDAY_SEASONS: SeasonSeed[] = [
     startDate: '2027-06-06',
     endDate: '2027-08-29',
     registrationDeadline: '2027-05-23',
-    format: '4v4',
+    playersPerSide: 4,
     minimumRosterSize: 4,
     status: 'published',
   },
@@ -216,7 +216,7 @@ const SUNDAY_SEASONS: SeasonSeed[] = [
     startDate: '2026-09-13',
     endDate: '2026-11-15',
     registrationDeadline: '2026-08-30',
-    format: '4v4',
+    playersPerSide: 4,
     minimumRosterSize: 4,
     status: 'published',
   },
@@ -229,7 +229,7 @@ const SLOW_PITCH_SEASONS: SeasonSeed[] = [
     startDate: '2027-03-02',
     endDate: '2027-05-18',
     registrationDeadline: '2027-02-16',
-    format: '10v10',
+    playersPerSide: 10,
     minimumRosterSize: 12,
     status: 'draft',
   },
@@ -241,7 +241,7 @@ const FRIDAY_SEASONS: SeasonSeed[] = [
     startDate: '2027-03-05',
     endDate: '2027-05-14',
     registrationDeadline: '2027-02-19',
-    format: '6v6',
+    playersPerSide: 6,
     minimumRosterSize: 6,
     status: 'draft',
   },

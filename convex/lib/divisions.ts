@@ -223,3 +223,7 @@ export function deriveDivisionFromName(name: string, sport: Sport): DerivedDivis
 
   return derived;
 }
+
+export function customLevelNameKey(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}

@@ -41,7 +41,7 @@ const SEASON = {
   startDate: '2026-09-01',
   endDate: '2026-11-15',
   registrationDeadline: '2026-08-25',
-  format: '7v7' as const,
+  playersPerSide: 7,
   minimumRosterSize: 7,
 };
 
@@ -98,12 +98,28 @@ describe('testing:seedSeason', () => {
         startDate: '2026-09-01',
         endDate: '2026-11-15',
         registrationDeadline: '2026-08-25',
-        format: '7v7',
+        playersPerSide: 7,
         minimumRosterSize: 7,
         status: 'draft',
       }),
     ]);
   }, 30_000);
+
+  test('a season without players per side takes its league’s, else the smallest of its sport', async () => {
+    const t = await seeded();
+    const withoutPlayers = { ...SEASON, playersPerSide: undefined };
+    await t.mutation(internal.testing.seedSeason, { ...withoutPlayers, slug: 'sport-default' });
+    const league = (await t.run((ctx) => ctx.db.query('leagues').collect())).find(
+      (row) => row.slug === 'coed-7v7',
+    )!;
+    await t.run((ctx) => ctx.db.patch('leagues', league._id, { playersPerSide: 5 }));
+    await t.mutation(internal.testing.seedSeason, { ...withoutPlayers, slug: 'league-default' });
+    const stored = await seasons(t);
+    expect(stored.map((row) => [row.slug, row.playersPerSide])).toEqual([
+      ['sport-default', 4],
+      ['league-default', 5],
+    ]);
+  });
 
   test('inserts a published season when asked', async () => {
     const t = await seeded();
@@ -221,7 +237,7 @@ describe('testing:seedSeasons', () => {
       startDate: `2026-${String(i + 1).padStart(2, '0')}-01`,
       endDate: '2026-12-28',
       registrationDeadline: '2025-12-01',
-      format: '7v7' as const,
+      playersPerSide: 7,
       minimumRosterSize: 7,
       status,
     }));

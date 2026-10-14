@@ -15,21 +15,38 @@ import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { insertMembership } from './lib/memberships';
 import { verifyPassword } from './lib/password';
+import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import type { Role } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import type { SeasonStatus } from './lib/seasonStatus';
+import type { Sport } from './lib/sports';
 import {
   backfilledValidator,
+  backfillDivisionFields,
   backfillTenantFields,
+  divisionBackfilledValidator,
+  findCustomLevel,
+  insertCustomLevel,
   insertLeague,
   insertLocation,
   insertSeason,
   insertTenant,
   seasonSlugTaken,
+  type DemoDivision,
+  type DivisionSeed,
   type NewSeason,
   type Tenant,
 } from './lib/tenantWrites';
+
+function division(
+  gender: Gender,
+  playersPerSide: number,
+  level: StandardLevel,
+  rest: Partial<DivisionSeed> = {},
+): DivisionSeed {
+  return { gender, playersPerSide, level, ageGroup: 'adult', ...rest };
+}
 
 // Insert-only: never rename or remove an entry, or the seed inserts it again next to the old one.
 export const DEMO: readonly Tenant[] = [
@@ -41,22 +58,35 @@ export const DEMO: readonly Tenant[] = [
       { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
     ],
     leagues: [
-      { name: 'Coed 7v7 Rec', sport: 'soccer', locations: ['Bayside Athletic Complex'] },
-      { name: "Men's Over-30 11v11", sport: 'soccer', locations: ['Bayside Athletic Complex'] },
+      {
+        name: 'Coed 7v7 Rec',
+        sport: 'soccer',
+        locations: ['Bayside Athletic Complex'],
+        division: division('coed', 7, 'rec'),
+      },
+      {
+        name: "Men's Over-30 11v11",
+        sport: 'soccer',
+        locations: ['Bayside Athletic Complex'],
+        division: division('mens', 11, 'rec', { ageGroup: 'over30' }),
+      },
       {
         name: 'Sunday Reverse Coed 4s',
         sport: 'beachVolleyball',
         locations: ['North Beach Sand Courts'],
+        division: division('coed', 4, 'bb'),
       },
       {
         name: 'Thursday Night Coed 2s',
         sport: 'beachVolleyball',
         locations: ['North Beach Sand Courts'],
+        division: division('coed', 2, 'b'),
       },
       {
         name: 'Wednesday Coed Slow-Pitch',
         sport: 'softball',
         locations: ['Flour Bluff Softball Park', 'Bayside Athletic Complex'],
+        division: division('coed', 10, 'rec'),
       },
     ],
   },
@@ -76,17 +106,35 @@ export const DEMO: readonly Tenant[] = [
       { name: 'Larkspur Turf Center', address: '455 Larkspur Mesa Dr, Lakewood, CO 80228' },
     ],
     leagues: [
-      { name: 'Coed 6v6 Indoor', sport: 'soccer', locations: ['Larkspur Turf Center'] },
-      { name: "Women's Sunday 11v11", sport: 'soccer', locations: ['Cottonwood Creek Fields'] },
+      {
+        name: 'Coed 6v6 Indoor',
+        sport: 'soccer',
+        locations: ['Larkspur Turf Center'],
+        division: division('coed', 6, 'rec', { minimumRosterSize: 8 }),
+      },
+      {
+        name: 'U10 Girls Fall Rec',
+        sport: 'soccer',
+        locations: ['Cottonwood Creek Fields'],
+        division: division('womens', 7, 'rec', { ageGroup: 'u10' }),
+      },
+      {
+        name: "Women's Sunday 11v11",
+        sport: 'soccer',
+        locations: ['Cottonwood Creek Fields'],
+        division: division('womens', 11, 'intermediate'),
+      },
       {
         name: 'Monday Coed Slow-Pitch',
         sport: 'softball',
         locations: ['Bluebird Softball Complex'],
+        division: division('coed', 10, 'rec'),
       },
       {
         name: "Men's Modified Fast-Pitch",
         sport: 'softball',
         locations: ['Bluebird Softball Complex', 'Cottonwood Creek Fields'],
+        division: division('mens', 9, 'competitive'),
       },
     ],
   },
@@ -101,16 +149,19 @@ export const DEMO: readonly Tenant[] = [
         name: "Tuesday Women's 2s",
         sport: 'beachVolleyball',
         locations: ['Driftwood Beach Courts'],
+        division: division('womens', 2, 'a'),
       },
       {
         name: 'Saturday Coed 6s',
         sport: 'beachVolleyball',
         locations: ['Driftwood Beach Courts', 'Harbor Point Sand Courts'],
+        division: division('coed', 6, 'rec'),
       },
       {
         name: "Competitive Men's 4s",
         sport: 'beachVolleyball',
         locations: ['Harbor Point Sand Courts'],
+        division: division('mens', 4, 'aa'),
       },
     ],
   },
@@ -125,16 +176,52 @@ export const DEMO: readonly Tenant[] = [
         name: 'Friday Night Coed Slow-Pitch',
         sport: 'softball',
         locations: ['Saguaro Ridge Park'],
+        division: division('coed', 10, 'rec'),
       },
-      { name: 'Senior 55+ Slow-Pitch', sport: 'softball', locations: ['Mesquite Flats Diamonds'] },
+      {
+        name: 'Senior 55+ Slow-Pitch',
+        sport: 'softball',
+        locations: ['Mesquite Flats Diamonds'],
+        division: division('coed', 10, 'rec', { ageGroup: 'over55' }),
+      },
       {
         name: "Men's D Division Slow-Pitch",
         sport: 'softball',
         locations: ['Saguaro Ridge Park', 'Mesquite Flats Diamonds'],
+        division: division('mens', 10, 'rec', { customLevel: 'D' }),
       },
     ],
   },
 ];
+
+// Never rename or remove an entry: a renamed one is inserted again next to the old.
+const DEMO_CUSTOM_LEVELS: readonly {
+  organizationSlug: string;
+  sport: Sport;
+  name: string;
+  standardLevel: StandardLevel;
+}[] = [
+  {
+    organizationSlug: 'saguaro-valley-softball',
+    sport: 'softball',
+    name: 'D',
+    standardLevel: 'rec',
+  },
+];
+
+const DEMO_DIVISIONS: readonly DemoDivision[] = DEMO.flatMap((tenant) =>
+  tenant.leagues.flatMap((league) =>
+    league.division
+      ? [
+          {
+            organizationSlug: tenant.organization.slug,
+            leagueName: league.name,
+            division: league.division,
+          },
+        ]
+      : [],
+  ),
+);
 
 // Insert-only: a published season under the slug of an existing draft would never be inserted, so
 // the published seasons have slugs of their own.
@@ -153,7 +240,7 @@ export const DEMO_SEASONS: readonly {
       startDate: '2027-09-12',
       endDate: '2027-11-14',
       registrationDeadline: '2027-08-29',
-      format: '4v4',
+      playersPerSide: 4,
       minimumRosterSize: 4,
     },
   },
@@ -166,7 +253,7 @@ export const DEMO_SEASONS: readonly {
       startDate: '2027-09-08',
       endDate: '2027-11-10',
       registrationDeadline: '2027-08-25',
-      format: '7v7',
+      playersPerSide: 7,
       minimumRosterSize: 7,
     },
   },
@@ -179,7 +266,7 @@ export const DEMO_SEASONS: readonly {
       startDate: '2027-06-06',
       endDate: '2027-08-29',
       registrationDeadline: '2027-05-23',
-      format: '4v4',
+      playersPerSide: 4,
       minimumRosterSize: 4,
     },
     status: 'published',
@@ -193,7 +280,7 @@ export const DEMO_SEASONS: readonly {
       startDate: '2027-06-02',
       endDate: '2027-08-25',
       registrationDeadline: '2027-05-19',
-      format: '7v7',
+      playersPerSide: 7,
       minimumRosterSize: 7,
     },
     status: 'published',
@@ -203,9 +290,10 @@ export const DEMO_SEASONS: readonly {
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
+  customLevels: v.number(),
   leagues: v.number(),
   seasons: v.number(),
-  backfilled: backfilledValidator,
+  backfilled: v.object({ ...backfilledValidator.fields, ...divisionBackfilledValidator.fields }),
 });
 
 // Refuses to write on production, even when run from the dashboard or the CLI.
@@ -236,13 +324,41 @@ async function ensureOrganization(
   return { id, inserted: true };
 }
 
+async function ensureCustomLevels(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  organizationSlug: string,
+): Promise<number> {
+  let inserted = 0;
+  for (const level of DEMO_CUSTOM_LEVELS) {
+    if (level.organizationSlug !== organizationSlug) continue;
+    if (await findCustomLevel(ctx, organizationId, level.sport, level.name)) continue;
+    await insertCustomLevel(ctx, organizationId, level);
+    inserted++;
+  }
+  return inserted;
+}
+
 export const insertDemoData = internalMutation({
   args: {},
   returns: resultValidator,
   handler: async (ctx) => {
     assertPreviewDeployment();
-    const backfilled = await backfillTenantFields(ctx);
-    const inserted = { organizations: 0, locations: 0, leagues: 0, seasons: 0 };
+    const tenantBackfilled = await backfillTenantFields(ctx);
+    const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
+    // Existing organizations get their custom levels first, so a demo league can name its level.
+    for (const tenant of DEMO) {
+      const slug = tenant.organization.slug;
+      const existing = await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', slug))
+        .unique();
+      if (existing) inserted.customLevels += await ensureCustomLevels(ctx, existing._id, slug);
+    }
+    const backfilled = {
+      ...tenantBackfilled,
+      ...(await backfillDivisionFields(ctx, DEMO_DIVISIONS)),
+    };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
@@ -259,6 +375,12 @@ export const insertDemoData = internalMutation({
         await insertLocation(ctx, organizationId, location);
         inserted.locations++;
       }
+
+      inserted.customLevels += await ensureCustomLevels(
+        ctx,
+        organizationId,
+        tenant.organization.slug,
+      );
 
       for (const league of tenant.leagues) {
         const existing = await ctx.db

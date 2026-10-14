@@ -73,7 +73,7 @@ async function memberOf(page: Page, role: Role, assigned: string[] = [COED]) {
       startDate,
       endDate,
       registrationDeadline,
-      format: leagueSlug === COED ? '7v7' : '10v10',
+      playersPerSide: leagueSlug === COED ? 7 : 10,
       minimumRosterSize: leagueSlug === COED ? 7 : 10,
       status,
     }),
