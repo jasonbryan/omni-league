@@ -7,9 +7,7 @@ import { internal } from './_generated/api';
 import * as testing from './testing';
 import { modules } from './test.setup';
 
-// `testing:reset` derives its tables from `convex/schema.ts`, so a fixture schema replaces it
-// here: two tables, neither of which `testing.ts` names (#59). The getter defers the read until
-// `reset` runs, after the assignment below.
+// The getter defers the read until `reset` runs, after the assignment below.
 const fixture = vi.hoisted((): { schema: unknown } => ({ schema: undefined }));
 vi.mock('./schema', () => ({
   get default() {
@@ -27,12 +25,11 @@ const HOUR = 60 * 60 * 1000;
 
 function setup() {
   const t = convexTest(schema, modules);
-  // `reset` also clears the Better Auth component's tables (#62; testingAuth.test.ts).
+  // `reset` also clears the Better Auth component's tables.
   betterAuthTest.register(t, 'betterAuth');
   return t;
 }
 
-/** Two documents per fixture table, one pending scheduled function, and one stored file. */
 async function seed(t: ReturnType<typeof setup>) {
   await t.run(async (ctx) => {
     await ctx.db.insert('alpha', { name: 'a1' });
@@ -68,7 +65,6 @@ afterEach(() => {
 });
 
 describe('IS_TEST guard', () => {
-  // Unset, then values that are not exactly "true".
   const refused: [string, string | undefined][] = [
     ['unset', undefined],
     ['"false"', 'false'],

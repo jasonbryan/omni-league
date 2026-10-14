@@ -1,7 +1,5 @@
 /// <reference types="vite/client" />
-// Sign-in through Better Auth's real HTTP route, `POST /api/auth/sign-in/email`, with the
-// per-address throttle (#63; ADR 0008 "Rate limits and lockout"). The clock is controlled with
-// fake `Date` only, so scrypt and the component keep real timers.
+// The clock is faked with `Date` only, so scrypt and the component keep real timers.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import type { GenericCtx } from '@convex-dev/better-auth';
 import { convexTest } from 'convex-test';
@@ -78,7 +76,6 @@ async function sessionCount(t: T): Promise<number> {
   });
 }
 
-/** `count` wrong-password attempts for `email`, each expected to be a 401. */
 async function fail(t: T, email: string, count: number): Promise<Answer[]> {
   const answers: Answer[] = [];
   for (let i = 0; i < count; i++) {
@@ -97,8 +94,8 @@ beforeEach(() => {
   vi.stubEnv('CONVEX_SITE_URL', 'http://127.0.0.1:3211');
   vi.stubEnv('SITE_URL', SITE_URL);
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
-  // IS_TEST turns the breached-password check off (ADR 0008), so sign-up makes no outside call. The
-  // per-address throttle stays on under IS_TEST.
+  // IS_TEST turns the breached-password check off, so sign-up makes no outside call. The per-address
+  // throttle stays on under IS_TEST.
   vi.stubEnv('IS_TEST', 'true');
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', undefined);
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -160,7 +157,6 @@ describe('per-address throttle (ADR 0008)', () => {
       retryAfterSeconds: 60,
     });
     expect(sixth.headers.get('retry-after')).toBe('60');
-    // The refused attempt created no session and did not extend the wait.
     expect(await sessionCount(t)).toBe(sessions);
     advance(30_000);
     const waiting = await signIn(t, EMAIL, PASSWORD);
@@ -175,7 +171,7 @@ describe('per-address throttle (ADR 0008)', () => {
     await fail(t, EMAIL, 5);
 
     advance(MINUTE);
-    await fail(t, EMAIL, 1); // the sixth failure: 2 minutes
+    await fail(t, EMAIL, 1);
     const afterSix = await signIn(t, EMAIL, PASSWORD);
     expect(afterSix.status).toBe(429);
     expect(afterSix.json).toMatchObject({
@@ -187,7 +183,6 @@ describe('per-address throttle (ADR 0008)', () => {
     const ok = await signIn(t, EMAIL, PASSWORD);
     expect(ok.status, JSON.stringify(ok.json)).toBe(200);
     expect(await rows(t)).toEqual([]);
-    // A new failure starts again from one.
     await fail(t, EMAIL, 1);
     expect((await rows(t)).map((row) => row.failures)).toEqual([1]);
   }, 60_000);
@@ -250,7 +245,6 @@ describe('per-address throttle (ADR 0008)', () => {
 });
 
 describe('hard limit (ADR 0008)', () => {
-  /** A row that is `failures` deep and no longer waiting. */
   const seedFailures = (t: T, email: string, failures: number) =>
     t.run((ctx) =>
       ctx.db.insert('signInFailures', { email, failures, blockedUntil: Date.now() - 1 }),
@@ -261,7 +255,7 @@ describe('hard limit (ADR 0008)', () => {
     await signUp(t);
     expect(HARD_LIMIT).toBe(100);
     await seedFailures(t, EMAIL, HARD_LIMIT - 1);
-    await fail(t, EMAIL, 1); // the 100th
+    await fail(t, EMAIL, 1);
 
     for (const wait of [0, 61 * MINUTE, 24 * 60 * MINUTE, 400 * 24 * 60 * MINUTE]) {
       advance(wait);
@@ -329,8 +323,7 @@ describe('only internal functions read or write signInFailures (ADR 0008)', () =
 
 describe('per-IP limiter (ADR 0008, #63)', () => {
   test('the limiter ships off until #163 shows the header is the caller’s address', () => {
-    // The probe in #163 decides this. Off, a shared bucket cannot block every user after
-    // three sign-ins in ten seconds.
+    // Off: a shared bucket would block every user after three sign-ins in ten seconds.
     const options = createAuth({} as GenericCtx<DataModel>).options;
     expect(options.rateLimit).toEqual({ enabled: false, storage: 'database' });
     expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(['cf-connecting-ip']);

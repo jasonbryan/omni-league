@@ -7,9 +7,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// Hostile and boundary inputs to `seasons.create` that a form never sends (#125, tester): the
-// mutation is public, so it must refuse them on its own. Nothing is written for any of them.
-
 const identity = {
   subject: 'admin-a',
   issuer: 'http://127.0.0.1:3211',

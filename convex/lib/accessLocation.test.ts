@@ -7,9 +7,6 @@ import { requireLocationAdmin, requireOrgAdminOrForbidden } from './access';
 import { FORBIDDEN_CODE } from './forbidden';
 import { insertLocation, insertTenant } from './tenantWrites';
 
-// The access helpers #65 adds to convex/lib/access.ts. Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -19,11 +16,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A with a location, organization B with a location, and these users: `admin-a` and
- * `organizer-a` (a league organizer of A), `admin-b`, `stranger` (no membership), and `ghost` (an
- * identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -109,7 +101,6 @@ describe('requireLocationAdmin', () => {
         caller,
       ).rejects.toThrow('Not allowed');
     }
-    // The organization comes from the stored location: A's admin holds no membership in B.
     await expect(
       t.withIdentity(identity('admin-a')).run((ctx) => requireLocationAdmin(ctx, locationB)),
     ).rejects.toThrow('Not allowed');

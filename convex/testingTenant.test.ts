@@ -1,6 +1,4 @@
 /// <reference types="vite/client" />
-// The per-test tenant seeds of `convex/testing.ts` (ADR 0005, #60), against the real schema.
-// `testing.test.ts` covers ping and reset with a fixture schema.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -265,7 +263,6 @@ describe('testing:addLeague', () => {
 });
 
 describe('sport counters and sportLocations (#101)', () => {
-  /** What a recount of the leagues gives for the organization with this slug. */
   async function stored(t: T, slug: string) {
     return t.run(async (ctx) => {
       const organization = await ctx.db

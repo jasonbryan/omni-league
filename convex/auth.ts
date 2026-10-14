@@ -1,7 +1,3 @@
-// Better Auth through the Convex component (ADR 0008 "Server configuration", #62).
-//
-// Email + password sign-up (#62) and sign-in with the per-address throttle (#63). No Google (later
-// slice), and no email verification or password reset (#26).
 import { type AuthFunctions, createClient, type GenericCtx } from '@convex-dev/better-auth';
 import type { GenericActionCtx } from 'convex/server';
 import { convex, crossDomain } from '@convex-dev/better-auth/plugins';
@@ -17,16 +13,13 @@ import { hashPassword, verifyPassword } from './lib/password';
 import { throttleKey, tooManyAttemptsMessage } from './lib/signInThrottle';
 import { deleteUserRecord, insertUserRecord } from './lib/users';
 
-/** The sign-up body field that carries the 18+ confirmation; it must be exactly `true`. */
 export const ADULT_CONFIRMATION_FIELD = 'adultConfirmed';
 
-/** The error a sign-up without the 18+ confirmation gets (HTTP 400). */
 export const ADULT_CONFIRMATION_REQUIRED = {
   code: 'ADULT_CONFIRMATION_REQUIRED',
   message: 'Confirm that you are 18 or older to create an account.',
 } as const;
 
-/** The approved breached-password text (design/mockups/62-sign-up.html, "Messages"). */
 export const PASSWORD_COMPROMISED_MESSAGE =
   'This password has appeared in a data breach, so it is not safe to use. Choose a different one.';
 
@@ -51,52 +44,41 @@ export const authComponent = createClient<DataModel>(components.betterAuth, {
 
 export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
 
-/** The longest sign-up `name`, in `String.length` units after `trim()` (as the page counts). */
+// In `String.length` units after `trim()`, as the page counts.
 export const NAME_MAX_LENGTH = 100;
 
-/** The error a sign-up with a missing, blank, or over-long name gets (HTTP 400). */
 export const NAME_INVALID = {
   code: 'NAME_INVALID',
   message: 'Enter a name of 1 to 100 characters.',
 } as const;
 
-/** The error every endpoint gets while `BETTER_AUTH_SECRET` is unset or empty (HTTP 503). */
 export const AUTH_NOT_CONFIGURED = {
   code: 'AUTH_NOT_CONFIGURED',
   message: 'Authentication is not available.',
 } as const;
 
-/** The 429 a sign-in gets inside an address's wait, even with the correct password (HTTP 429). */
 export const TOO_MANY_ATTEMPTS_CODE = 'TOO_MANY_ATTEMPTS';
 
-/** The 429 a sign-in gets once an address has reached the hard limit (HTTP 429). */
 export const SIGN_IN_LOCKED = {
   code: 'SIGN_IN_LOCKED',
   message: 'Password sign-in is locked for this email address.',
 } as const;
 
-/**
- * A secret for one `createAuth` call while `BETTER_AUTH_SECRET` is unset. Better Auth would
- * otherwise sign with its public default secret. Nothing signed with this value outlives the call,
- * and the guard below refuses every request, so nothing is signed with it at all.
- */
+// Better Auth would otherwise sign with its public default secret. The request guard refuses every
+// request while the secret is unset, so nothing is signed with this value.
 function placeholderSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** The email of a sign-in body, or `null` when it holds none (Better Auth then answers 400). */
 function emailOf(body: unknown): string | null {
   if (typeof body !== 'object' || body === null) return null;
   const email = (body as Record<string, unknown>)['email'];
   return typeof email === 'string' ? email : null;
 }
 
-/**
- * The hooks' function context as an action context. Sign-in is served by an HTTP action, whose
- * context can run a mutation. A query context cannot, and the throttle must not be skipped, so the
- * hook fails the sign-in instead.
- */
+// Sign-in is served by an HTTP action, whose context can run a mutation. A query context cannot, and
+// the throttle must not be skipped.
 function mutationRunner(ctx: GenericCtx<DataModel>): GenericActionCtx<DataModel> {
   if (!('runMutation' in ctx)) {
     throw new Error('The sign-in throttle needs a context with runMutation');
@@ -104,12 +86,6 @@ function mutationRunner(ctx: GenericCtx<DataModel>): GenericActionCtx<DataModel>
   return ctx as GenericActionCtx<DataModel>;
 }
 
-/**
- * Starts the sign-in attempt in the per-address throttle (ADR 0008 "Rate limits and lockout"),
- * and refuses it with 429 while the address waits or is locked, even for the correct password.
- * Unknown addresses are counted and answered the same way. A body with no string `email` is left
- * to Better Auth's own 400.
- */
 async function beginSignIn(ctx: GenericCtx<DataModel>, body: unknown): Promise<void> {
   const email = emailOf(body);
   if (email === null) return;
@@ -132,23 +108,10 @@ async function beginSignIn(ctx: GenericCtx<DataModel>, body: unknown): Promise<v
   }
 }
 
-/**
- * The `before` hook for every endpoint, over HTTP and through `auth.api.*`, so a direct request
- * cannot skip it. In order:
- * 1. While the secret is unset (`configured` false), refuses with 503 AUTH_NOT_CONFIGURED. The body
- *    never names the variable; the server log does. It runs first, so it also wins over the
- *    sign-up checks.
- * 2. On `/sign-in/email`, starts the attempt in the per-address throttle (`beginSignIn`).
- * 3. On `/sign-up/email`, refuses a `name` that is not a string, is blank, or is longer than
- *    NAME_MAX_LENGTH after `trim()` (NAME_INVALID). The stored name is the trimmed one
- *    (`databaseHooks` in createAuth): a before hook cannot change the body, because the plugins'
- *    before hooks return the original context, which replaces the change.
- * 4. On `/sign-up/email`, refuses a body whose `adultConfirmed` is not `true` (accounts are adults
- *    only, ADR 0008 "Ages"). Better Auth ignores the field itself.
- */
 function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
   return createAuthMiddleware((ctx) => {
     if (!configured) {
+      // The body never names the variable.
       console.error('BETTER_AUTH_SECRET is not set');
       return Promise.reject(APIError.from('SERVICE_UNAVAILABLE', AUTH_NOT_CONFIGURED));
     }
@@ -161,6 +124,7 @@ function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
     if (name === '' || name.length > NAME_MAX_LENGTH) {
       return Promise.reject(APIError.from('BAD_REQUEST', NAME_INVALID));
     }
+    // Better Auth ignores this field itself.
     if (fields[ADULT_CONFIRMATION_FIELD] !== true) {
       return Promise.reject(APIError.from('BAD_REQUEST', ADULT_CONFIRMATION_REQUIRED));
     }
@@ -168,12 +132,6 @@ function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
   });
 }
 
-/**
- * The `after` hook: a sign-in that returned a session deletes its address's failure row. Any error
- * answer leaves the row as `beginSignIn` counted it. A failure to delete is logged (without the
- * address) and swallowed: the session exists, and a stale count only makes the next failures
- * count from where they were.
- */
 function afterSignIn(fnCtx: GenericCtx<DataModel>) {
   return createAuthMiddleware(async (ctx) => {
     if (ctx.path !== '/sign-in/email') return;
@@ -185,18 +143,17 @@ function afterSignIn(fnCtx: GenericCtx<DataModel>) {
       const key = await throttleKey(email);
       await mutationRunner(fnCtx).runMutation(internal.signInThrottle.clear, { key });
     } catch {
+      // The session exists, and a stale count only makes the next failures count from where they were.
       console.error('The sign-in throttle could not clear a failure row');
     }
   });
 }
 
-/**
- * The Better Auth instance for one Convex function call. `registerRoutes` also calls it once with
- * an empty context at module load, to read the static options.
- */
+// `registerRoutes` also calls this once at module load with an empty context, to read the static
+// options.
 export function createAuth(ctx: GenericCtx<DataModel>) {
   const siteUrl = env.SITE_URL ?? '';
-  // Read on every call, never at module load. Unset or empty: see requestGuard.
+  // Read on every call, never at module load.
   const secret = env.BETTER_AUTH_SECRET;
   const configured = secret !== undefined && secret !== '';
   const isTest = env.IS_TEST === 'true';
@@ -219,8 +176,8 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
     },
     account: { accountLinking: { enabled: true, trustedProviders: [] } },
     user: { deleteUser: { enabled: true } },
-    // Ships off (#62): #163 probes `cf-connecting-ip` and turns it on (`!IS_TEST`) only if the
-    // header is the caller's address. A shared bucket would block everyone after three sign-ups in 10 s.
+    // A shared bucket would block everyone after three sign-ups in 10 s until the header is known to
+    // carry the caller's address.
     rateLimit: { enabled: false, storage: 'database' },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
@@ -231,8 +188,8 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
     hooks: { before: requestGuard(configured, ctx), after: afterSignIn(ctx) },
     databaseHooks: {
       user: {
-        // A direct POST cannot store leading or trailing whitespace in a name (NAME_INVALID covers
-        // the rest). Runs inside the sign-up, before the user.onCreate trigger copies the name.
+        // A before hook cannot change the body (the plugins' before hooks return the original
+        // context), so the name is trimmed here, before the `user.onCreate` trigger copies it.
         create: {
           before: (user) => Promise.resolve({ data: { ...user, name: user.name.trim() } }),
         },
@@ -240,7 +197,7 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
     },
     plugins: [
       // Fails closed: an unreachable API refuses the sign-up. Off under IS_TEST, so e2e makes no
-      // outside call; convex/auth.test.ts covers it with a mocked fetch.
+      // outside call.
       haveIBeenPwned({
         enabled: !isTest,
         customPasswordCompromisedMessage: PASSWORD_COMPROMISED_MESSAGE,

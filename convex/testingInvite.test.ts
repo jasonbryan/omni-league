@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// `testing:addInvite` (#67 e2e): a pending invite written straight to the table, so a test can have
-// one whose expiry has passed without waiting 14 days. Like every test-only function it refuses
-// unless IS_TEST is exactly `true`.
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';

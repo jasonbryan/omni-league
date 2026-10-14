@@ -14,9 +14,6 @@ import {
   SEASON_MESSAGES,
 } from './seasonInput';
 
-// #125: what an organizer may type when creating a season, the rules `seasons.create` and the form
-// share (design/mockups/125-126-seasons.html, "Messages and attributes").
-
 describe('isCalendarDate', () => {
   test.each(['2026-09-01', '2028-02-29', '2026-12-31', '2026-01-01'])('accepts %s', (value) => {
     expect(isCalendarDate(value)).toBe(true);

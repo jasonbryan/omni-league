@@ -9,9 +9,6 @@ import { backfillTenantFields, insertLeague, insertTenant } from './lib/tenantWr
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `leagues.create` and `leagues.listForAdmin` (#66). Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -21,12 +18,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A (slug `org-a`) with locations Alpha Field and bravo Beach and one published soccer
- * league at Alpha Field, and organization B with one location and a published league whose slug
- * `sand-2s` A will also use. Users: `admin-a`, `organizer-a` (a league organizer of A), `admin-b`,
- * `stranger` (no membership), and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -86,7 +77,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** Everything a league write may touch, so a refused call can be shown to change nothing. */
 const snapshot = (t: Setup['t']) =>
   t.run(async (ctx) => ({
     leagues: await ctx.db.query('leagues').collect(),
@@ -94,7 +84,6 @@ const snapshot = (t: Setup['t']) =>
     sportLocations: await ctx.db.query('sportLocations').collect(),
   }));
 
-/** The `ConvexError` data a refused call carries, or fails the test. */
 async function refusal(call: Promise<unknown>) {
   const error = await call.then(
     () => null,
@@ -104,7 +93,6 @@ async function refusal(call: Promise<unknown>) {
   return (error as ConvexError<{ field: string; code: string; message: string }>).data;
 }
 
-/** Every caller that must be refused for organization A: how to call, and the error text. */
 function refusedCallers(s: Setup) {
   return [
     ['unauthenticated', s.t, 'Sign in required'],
@@ -228,7 +216,6 @@ describe('leagues.create', () => {
 
   test('refuses a slug used in the organization, and allows the same slug in another one', async () => {
     const s = await setup();
-    // `coed-7v7` is the seeded league's slug in A; `sand-2s` is B's.
     const before = await snapshot(s.t);
     expect(
       await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), slug: 'coed-7v7' })),
@@ -286,7 +273,6 @@ describe('leagues.create', () => {
         s.adminA.mutation(api.leagues.create, { ...valid(s), locationIds }),
       ).rejects.toThrow('Not allowed');
     }
-    // B's admin cannot use A's location for B either.
     await expect(
       s.adminB.mutation(api.leagues.create, {
         ...valid(s),
@@ -449,7 +435,6 @@ describe('drafts stay off the public page (#66)', () => {
     const s = await setup();
     const before = await snapshot(s.t);
     const pageBefore = await s.t.query(api.organizations.getPublicPage, { slug: 'org-a' });
-    // A draft soccer league at bravo Beach, which has no published soccer league.
     await s.adminA.mutation(api.leagues.create, {
       ...valid(s),
       sport: 'soccer',
@@ -482,7 +467,6 @@ describe('drafts stay off the public page (#66)', () => {
 
   test('drafts never take a place in a public page of published leagues', async () => {
     const s = await setup();
-    // Eleven drafts sort before the one published league, "Coed 7v7".
     for (let n = 0; n < 11; n++) {
       await s.adminA.mutation(api.leagues.create, {
         ...valid(s),
@@ -578,7 +562,6 @@ describe('tenantWrites league slugs and status (#66)', () => {
       return { organizationId, legacy };
     });
     const backfilled = await t.run((ctx) => backfillTenantFields(ctx));
-    // Both leagues lack `publishedSeasonCount` (#127): the legacy one also lacks a status.
     expect(backfilled).toEqual({ organizations: 1, locations: 0, leagues: 2 });
     await t.run(async (ctx) => {
       expect((await ctx.db.get('leagues', ids.legacy))?.status).toBe('published');
@@ -592,7 +575,6 @@ describe('tenantWrites league slugs and status (#66)', () => {
       const rows = await ctx.db.query('sportLocations').collect();
       expect(rows.map((row) => row.leagueCount)).toEqual([1]);
     });
-    // A second run changes nothing, and the draft stays a draft.
     expect(await t.run((ctx) => backfillTenantFields(ctx))).toEqual({
       organizations: 0,
       locations: 0,
@@ -635,7 +617,6 @@ describe('tester probes (#66)', () => {
           })
         ).slug;
       }
-      // A second "New" skips new and new-2.
       made['New again'] = (
         await insertLeague(ctx, s.organizationA, {
           name: 'New',
@@ -663,7 +644,6 @@ describe('tester probes (#66)', () => {
           sport: 'softball',
           locations: ['bravo Beach'],
         });
-        // A draft softball league sorting just before each published one.
         await insertLeague(ctx, s.organizationA, {
           name: `Soft ${n} draft`,
           sport: 'softball',

@@ -7,11 +7,6 @@ import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
 import { modules } from './test.setup';
 
-/**
- * Schema tables `seed:demo` leaves empty, each with the reason. A later PR adds an entry only with
- * a reason the reviewer accepts (dev-cycle Phase 6). An entry that names no schema table fails the
- * test, so a removed or renamed table cannot leave a stale one behind.
- */
 export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
   signInFailures: 'Throttle state from failed sign-ins (#63), not demo content.',
   users: 'Filled by the demo accounts (#98).',
@@ -19,11 +14,6 @@ export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
   invites: 'Filled by the demo accounts (#98).',
 };
 
-/**
- * What the coverage rule finds wrong: the tables with no rows and no exception, the exception keys
- * that name no table, and the excepted tables that have rows (a left-over exception would hide a
- * later seed regression on that table).
- */
 export function missingSeedTables(
   tableNames: readonly string[],
   exceptions: Readonly<Record<string, string>>,
@@ -44,7 +34,6 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-/** The `_id`s of every row of every schema table, sorted, keyed by table. */
 async function ids(t: T): Promise<Record<string, string[]>> {
   return t.run(async (ctx) => {
     const result: Record<string, string[]> = {};
@@ -61,7 +50,6 @@ function rowCounts(tableIds: Record<string, string[]>): Record<string, number> {
 }
 
 beforeEach(() => {
-  // Every preview and staging deployment has this Convex default preview variable (hosting.md).
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
 });
 

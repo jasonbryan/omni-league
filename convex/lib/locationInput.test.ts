@@ -7,9 +7,6 @@ import {
   MAX_LOCATION_NAME_LENGTH,
 } from './locationInput';
 
-// The rules and messages of design/mockups/65-organization-admin-locations.html, "Location
-// messages". The form and `locations.create` / `locations.update` share them.
-
 describe('checkLocationName', () => {
   test('returns the trimmed name', () => {
     expect(checkLocationName('  Redfish Flats Fields \n')).toEqual({

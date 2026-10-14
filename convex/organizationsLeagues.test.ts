@@ -7,10 +7,6 @@ import { insertLeague, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `organizations.listMine` and its `leagues` field (#141): a league organizer's assigned leagues in
-// each organization, from the caller's own membership. Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -20,12 +16,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A (`org-a`) with the leagues "Coed Soccer", "beach 2s", "L Draft" (a draft), and
- * "M Other", and organization B (`org-b`) with the league "Sand 2s". Users: `organizer` (a league
- * organizer of A assigned "Coed Soccer", "beach 2s", and "L Draft", but not "M Other"), `admin` (an
- * org admin of A), `outsider` (an org admin of B), and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const seeded = await t.run(async (ctx) => {
@@ -92,7 +82,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** Replaces the league ids of the first membership with this role in this organization. */
 async function assign(
   t: Setup['t'],
   organizationId: Id<'organizations'>,
@@ -266,7 +255,6 @@ describe('organizations.listMine: leagues (#141)', () => {
     );
   });
 
-  /** Creates `count` leagues of `organizationId` named `<prefix> 000`, `<prefix> 001`, and so on. */
   async function leaguesOf(
     t: Setup['t'],
     organizationId: Id<'organizations'>,
@@ -288,7 +276,6 @@ describe('organizations.listMine: leagues (#141)', () => {
     });
   }
 
-  /** Gives the `organizer` user a membership. */
   async function addMembership(
     t: Setup['t'],
     organizationId: Id<'organizations'>,

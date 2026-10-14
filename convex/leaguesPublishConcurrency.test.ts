@@ -7,10 +7,6 @@ import { insertDraftLeague, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// Probes of `leagues.publish` (#69) beyond convex/leaguesPublish.test.ts: publishes at the same
-// time, a league that names a location twice, an id of another table, and the public location
-// list, which a publish must not move. Identities are faked the way ADR 0008 "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -20,11 +16,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * One organization with locations X and Y, a published soccer league at X, and four soccer drafts:
- * `Draft One` at X and Y, `Draft Two` at X, `Draft Twice` at X listed twice, and `Draft Three` at
- * Y. `admin` is the org admin and `organizer` is assigned to `Draft One` only.
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -131,7 +122,6 @@ describe('leagues.publish at the same time (#69)', () => {
       locationCount: 2,
       sportLeagueCounts: { soccer: 4 },
       sportLocationCounts: { soccer: 2 },
-      // X: live + one + two = 3. Y: one + three = 2.
       rows: [`soccer/${s.x}/3`, `soccer/${s.y}/2`].sort(),
     });
     const page = await s.t.query(api.organizations.getPublicPage, { slug: 'org' });

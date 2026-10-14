@@ -1,6 +1,4 @@
 /// <reference types="vite/client" />
-// Sign-up through Better Auth's real HTTP route, `POST /api/auth/sign-up/email`, with the
-// component registered in convex-test (#62; ADR 0008 "Server configuration").
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -12,7 +10,6 @@ import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// When set, the `users` row writer throws, so the component's user.onCreate trigger fails.
 const failures = vi.hoisted(() => ({ userRecord: false }));
 vi.mock('./lib/users', async (importOriginal) => {
   const original = await importOriginal<typeof import('./lib/users')>();
@@ -72,7 +69,6 @@ const valid = (email = 'maya.okafor@example.com'): SignUpBody => ({
   adultConfirmed: true,
 });
 
-/** Every auth user, account, and session in the component, and every `users` row. */
 async function stored(t: T) {
   return t.run(async (ctx) => {
     const all = async (model: 'user' | 'account' | 'session') =>
@@ -99,7 +95,6 @@ async function sha1Hex(text: string): Promise<string> {
     .toUpperCase();
 }
 
-/** A Pwned Passwords range response: padding lines, plus `suffix` when it is breached. */
 function rangeResponse(breachedSuffix?: string): Response {
   const lines = ['0018A45C4D1DEF81644B54AB7F969B88D65:0', '00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2'];
   if (breachedSuffix) lines.push(`${breachedSuffix}:3730471`);
@@ -114,7 +109,7 @@ beforeEach(() => {
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
   vi.stubEnv('IS_TEST', undefined);
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', undefined);
-  // The breached-password check is on (IS_TEST unset); by default no password is breached.
+  // The breached-password check is on because IS_TEST is unset.
   pwned = vi.fn(() => Promise.resolve(rangeResponse()));
   vi.stubGlobal('fetch', pwned);
   failures.userRecord = false;
@@ -139,7 +134,7 @@ describe('sign-up', () => {
     expect(authUser).toMatchObject({ email: 'maya.okafor@example.com', name: 'Maya Okafor' });
     expect(accounts).toHaveLength(1);
     expect(accounts[0]).toMatchObject({ providerId: 'credential', userId: authUser?.['_id'] });
-    // ADR 0008: the stored hash is in convex/lib/password.ts's format, never the default one.
+    // The stored hash is in convex/lib/password.ts's format, never the default one.
     expect(accounts[0]?.['password']).toMatch(/^scrypt\$15\$8\$3\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
 
     expect(users).toHaveLength(1);
@@ -164,7 +159,6 @@ describe('sign-up', () => {
       expect(status).toBe(400);
       expect(json).toMatchObject(ADULT_CONFIRMATION_REQUIRED);
       expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
-      // Refused before the password is checked or hashed.
       expect(pwned).not.toHaveBeenCalled();
     },
   );
@@ -176,7 +170,6 @@ describe('sign-up', () => {
     expect(status).toBeGreaterThanOrEqual(400);
     expect(await stored(t)).toEqual({ authUsers: [], accounts: [], sessions: [], users: [] });
 
-    // The same address can sign up once the trigger works again.
     failures.userRecord = false;
     expect((await signUp(t, valid())).status).toBe(200);
     expect((await stored(t)).users).toHaveLength(1);
@@ -294,9 +287,7 @@ describe('breached-password check (Pwned Passwords, mocked fetch)', () => {
   }, 30_000);
 });
 
-// Tester (#62): the origin check must hold even where Better Auth would skip it by default
-// (`NODE_ENV` "test" or `TEST` set, better-auth/dist/context/create-context.mjs), and for every
-// lookalike of this project's preview hostnames, over the real HTTP route.
+// Better Auth skips the origin check by default when NODE_ENV is "test" or TEST is set.
 describe('origin check under a test environment (tester)', () => {
   test('Vitest runs with NODE_ENV "test", the case Better Auth skips the check by default', () => {
     // Better Auth reads process.env.NODE_ENV itself (@better-auth/core/env), not the typed `env`.
@@ -349,8 +340,6 @@ describe('origin check under a test environment (tester)', () => {
   });
 });
 
-// Tester (#62): the password never appears in a response or in anything logged, on success and on
-// each refusal path (breached, check unavailable, too short, existing email, forged origin).
 describe('the password is never echoed or logged (tester)', () => {
   test('across success and every refusal path', async () => {
     const secret = 'unique tester passphrase 7f3a9c';
@@ -390,9 +379,8 @@ describe('the password is never echoed or logged (tester)', () => {
   }, 60_000);
 });
 
-// Tester (#62, round 2): the client maps `VALIDATION_ERROR` to the Email field only when every
-// `[body.<field>]` issue is on `email` (src/app/core/auth/auth.service.ts). This pins the server's
-// message format that mapping reads, and that the refused value is never echoed.
+// Pins the message format that the client's `VALIDATION_ERROR` mapping reads
+// (src/app/core/auth/auth.service.ts), and that the refused value is never echoed.
 describe('body validation messages the client maps (tester)', () => {
   test.each([
     ['a malformed email', { email: 'not-an-email' }, '[body.email] Invalid email address'],
@@ -402,8 +390,8 @@ describe('body validation messages the client maps (tester)', () => {
       { email: 'a; [body.name]@example.com' },
       '[body.email] Invalid email address',
     ],
-    // A bad `name` no longer reaches body validation: the before hook answers NAME_INVALID first
-    // (#111, 'name bounds'), so these cases use `password` for the issue on another field.
+    // A bad `name` never reaches body validation (the before hook answers NAME_INVALID first), so
+    // these cases use `password` for the issue on another field.
     [
       'a missing password and a malformed email',
       { password: undefined, email: 'bad' },
@@ -423,15 +411,12 @@ describe('body validation messages the client maps (tester)', () => {
   });
 });
 
-// #111: while BETTER_AUTH_SECRET is unset or empty, Better Auth would sign with its public default
-// secret. createAuth refuses every endpoint instead, with a 503 whose body never names the variable.
 describe('auth not configured (#111)', () => {
   const NOT_CONFIGURED = {
     code: 'AUTH_NOT_CONFIGURED',
     message: 'Authentication is not available.',
   };
 
-  /** Every row the refusal must not create: the component's tables and the app's `users`. */
   async function rows(t: T) {
     return t.run(async (ctx) => {
       const all = async (model: 'user' | 'account' | 'session' | 'jwks') =>
@@ -479,7 +464,6 @@ describe('auth not configured (#111)', () => {
       expect(headers.get('set-auth-token')).toBeNull();
       expect(headers.get('set-better-auth-cookie')).toBeNull();
       expect(await rows(t)).toEqual(NO_ROWS);
-      // Refused before the password is checked or hashed.
       expect(pwned).not.toHaveBeenCalled();
     });
 
@@ -572,8 +556,6 @@ describe('auth not configured (#111)', () => {
   });
 });
 
-// #111: the sign-up hook bounds `name`. The page trims and refuses an empty name; a direct POST
-// has to meet the same rule, and what is stored is the trimmed value.
 describe('name bounds (#111)', () => {
   test.each([
     ['empty', ''],
@@ -630,7 +612,6 @@ describe('name bounds (#111)', () => {
   });
 });
 
-// Tester (#111): edge cases the criteria imply, beyond the implementer's cases.
 describe('name bounds and refusal, tester probes (#111)', () => {
   test.each([
     ['tabs and newlines only', '\t\n\r '],

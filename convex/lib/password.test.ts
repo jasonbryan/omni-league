@@ -12,8 +12,6 @@ import {
   verifyPassword,
 } from './password';
 
-// ADR 0008 "Passwords": scrypt N=2^15, r=8, p=3 (32 MiB), stored as
-// `scrypt$15$8$3$<16-byte salt hex>$<32-byte key hex>`, NFKC input, constant-time comparison.
 // Each hash takes about 0.4 s in the Convex runtime and longer here, so the cases share hashes.
 
 const FORMAT = /^scrypt\$15\$8\$3\$([0-9a-f]{32})\$([0-9a-f]{64})$/;
@@ -28,7 +26,6 @@ describe('hashPassword', () => {
     const match = FORMAT.exec(stored);
     expect(match, stored).not.toBeNull();
 
-    // The key is scrypt of the NFKC-normalised password with the stored salt and parameters.
     const [, salt = '', key = ''] = match ?? [];
     const expected = await scryptAsync(PASSWORD.normalize('NFKC'), hexToBytes(salt), {
       N: 2 ** 15,
@@ -38,7 +35,6 @@ describe('hashPassword', () => {
     });
     expect(key).toBe(bytesToHex(expected));
 
-    // A new random salt every time, so equal passwords get different hashes.
     const again = await hashPassword(PASSWORD);
     expect(FORMAT.exec(again)?.[1]).not.toBe(salt);
     await expect(verifyPassword({ hash: again, password: PASSWORD })).resolves.toBe(true);
@@ -59,7 +55,6 @@ describe('hashPassword', () => {
 
 describe('verifyPassword', () => {
   test('reads the parameters from the stored hash, so they can be raised later', async () => {
-    // A hash written at N=2^10, r=8, p=1 still verifies after the defaults change.
     const salt = new Uint8Array(16).fill(7);
     const key = await scryptAsync(PASSWORD, salt, { N: 2 ** 10, r: 8, p: 1, dkLen: 32 });
     const stored = `scrypt$10$8$1$${bytesToHex(salt)}$${bytesToHex(key)}`;

@@ -1,8 +1,4 @@
-// What an org admin may type when inviting staff (#67), checked in the browser and again by
-// `invites.create` with the same rules and messages (design/mockups/67-organization-staff.html,
-// "Staff messages"). Imports nothing, so the app can import it (convex.md, Functions).
-
-/** How long an invite works: 14 days from creation (#67). Expired invites stay `pending`. */
+// Imports nothing, so the app can import it.
 export const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
@@ -19,7 +15,6 @@ export type InviteInputCode =
 
 export type InviteField = 'email' | 'leagues';
 
-/** A refusal about one field: the `data` of the `ConvexError` that `invites.create` throws. */
 export interface InviteInputError {
   field: InviteField;
   code: InviteInputCode;
@@ -57,15 +52,13 @@ export const INVITE_MESSAGES = {
     'A league on this invite no longer exists. Invite this address again with the leagues you want.',
 } as const;
 
-/** The address as stored and compared: trimmed and lower case (Better Auth stores it that way). */
+// Better Auth stores addresses trimmed and in lower case.
 export function normaliseInviteEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** One `@`, text on both sides, and a dot in the domain, with no spaces. */
 const SHAPE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
-/** The address to store (normalised), or the refusal. */
 export function checkInviteEmail(
   email: string,
 ): { ok: true; email: string } | { ok: false; error: InviteInputError } {
@@ -85,7 +78,6 @@ export function checkInviteEmail(
   return { ok: true, email: normalised };
 }
 
-/** The refusal when a league organizer has no league chosen, or `null`. */
 export function checkInviteLeagues(leagueCount: number): InviteInputError | null {
   return leagueCount === 0
     ? { field: 'leagues', code: 'leaguesEmpty', message: INVITE_MESSAGES.leaguesEmpty }

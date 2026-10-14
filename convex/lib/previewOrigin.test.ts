@@ -2,9 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { NETLIFY_SITE, PREVIEW_ORIGIN_PATTERN } from './previewOrigin';
 
-// ADR 0010 "Auth items": the anchored pattern for this project's preview, staging, and deploy
-// permalink origins (#15). The Convex variable PREVIEW_ORIGIN_PATTERN holds this exact string.
-
 const pattern = new RegExp(PREVIEW_ORIGIN_PATTERN);
 
 describe('PREVIEW_ORIGIN_PATTERN', () => {
@@ -16,7 +13,7 @@ describe('PREVIEW_ORIGIN_PATTERN', () => {
   });
 
   test.each([
-    // This PR's (#54) preview origin and its real deploy permalink, then other PR numbers.
+    // A preview origin and its real deploy permalink, then other PR numbers.
     'https://deploy-preview-54--charming-longma-28c00d.netlify.app',
     'https://6ac85c819a0329a74a7f3ae6--charming-longma-28c00d.netlify.app',
     'https://deploy-preview-15--charming-longma-28c00d.netlify.app',

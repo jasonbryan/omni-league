@@ -7,9 +7,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `organizations.create` and `organizations.listMine` (#64). Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -38,7 +35,6 @@ const counts = (t: T) =>
     sportLocations: (await ctx.db.query('sportLocations').collect()).length,
   }));
 
-/** The `ConvexError` data a refused call carries, or fails the test. */
 async function refusal(call: Promise<unknown>) {
   const error = await call.then(
     () => null,
@@ -63,7 +59,6 @@ describe('organizations.create', () => {
       const organizations = await ctx.db.query('organizations').collect();
       expect(organizations).toHaveLength(1);
       const organization = organizations[0];
-      // The writer contract (#100, #101): the counters exist from the first write.
       expect(organization).toMatchObject({
         name: 'Coastal Bend Rec Club',
         slug: 'coastal-bend-rec-club',
@@ -237,7 +232,6 @@ describe('organizations.listMine', () => {
     await a.mutation(api.organizations.create, { name: 'beta Club', slug: 'beta-club' });
     await b.mutation(api.organizations.create, { name: 'Bob Club', slug: 'bob-club' });
 
-    // A league organizer membership of user A in B's organization.
     await t.run(async (ctx) => {
       const user = await ctx.db
         .query('users')

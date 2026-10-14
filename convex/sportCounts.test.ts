@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// Tester probes for #101 (PR #155): the sport counters under the cases the criteria imply and the
-// implementer's tests do not combine: the cap with real rows behind the sport filter, a league
-// written to an organization before its backfill and then recounted, and writes in one batch.
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
@@ -26,7 +23,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** A recount of one organization's leagues: per sport, the leagues and the distinct locations. */
 async function recount(t: T, organizationId: Id<'organizations'>) {
   return t.run(async (ctx) => {
     const leagues = await ctx.db
@@ -51,7 +47,6 @@ async function recount(t: T, organizationId: Id<'organizations'>) {
   });
 }
 
-/** What the organization stores: its two sport objects and its `sportLocations` rows. */
 async function stored(t: T, organizationId: Id<'organizations'>) {
   return t.run(async (ctx) => {
     const organization = await ctx.db.get('organizations', organizationId);
@@ -70,7 +65,6 @@ async function stored(t: T, organizationId: Id<'organizations'>) {
 }
 
 describe('tester probes: the sport filter at the page cap with real rows (#101)', () => {
-  /** 236 soccer leagues (past the cap of 40 pages of 5) and 12 softball leagues. */
   async function seedBig(t: T) {
     const names = (prefix: string, n: number) =>
       Array.from({ length: n }, (_, i) => `${prefix} ${String(i).padStart(3, '0')}`);
@@ -164,7 +158,6 @@ describe('tester probes: the sport filter at the page cap with real rows (#101)'
 });
 
 describe('tester probes: a league written before the backfill, then the backfill (#101)', () => {
-  /** An organization with the #100 fields only (as on staging after #100's backfill). */
   async function oldOrganization(t: T) {
     return t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
@@ -189,7 +182,6 @@ describe('tester probes: a league written before the backfill, then the backfill
   test('insertLeague on the unbackfilled organization leaves counters unset; the backfill then counts each league and location once', async () => {
     const t = setup();
     const organizationId = await oldOrganization(t);
-    // Written by the current release before the backfill ran.
     for (const league of [
       { name: 'One', sport: 'soccer' as const, locations: ['Field A', 'Field A'] },
       { name: 'Two', sport: 'soccer' as const, locations: ['Field A', 'Field B'] },
@@ -213,7 +205,6 @@ describe('tester probes: a league written before the backfill, then the backfill
     expect(after.locationCounts).toEqual(expected.locationCounts);
     expect(after.rows.map(([key, count]) => [key, count])).toEqual(expected.rows);
     expect(after.rows.map(([, count]) => count).sort()).toEqual([1, 1, 2]);
-    // The organization's total counters were counted from the rows, not from the earlier +1s.
     expect(await t.run((ctx) => ctx.db.get('organizations', organizationId))).toMatchObject({
       leagueCount: 3,
       locationCount: 2,

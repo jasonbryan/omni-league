@@ -1,16 +1,10 @@
-// What an org admin may type when adding or editing a location (#65), checked in the browser and
-// again by `locations.create` and `locations.update` with the same rules and messages
-// (design/mockups/65-organization-admin-locations.html, "Location messages"). Imports nothing, so
-// the app can import it (convex.md, Functions).
+// Imports nothing, so the app can import it.
 
-/** Longest location name, counted after trimming. */
 export const MAX_LOCATION_NAME_LENGTH = 100;
-/** Longest location address, counted after trimming. */
 export const MAX_LOCATION_ADDRESS_LENGTH = 200;
 
 export type LocationInputCode = 'nameEmpty' | 'nameTooLong' | 'addressEmpty' | 'addressTooLong';
 
-/** A refusal about one field: the `data` of the `ConvexError` the mutations throw. */
 export interface LocationInputError {
   field: 'name' | 'address';
   code: LocationInputCode;
@@ -28,7 +22,6 @@ export const LOCATION_MESSAGES = {
 
 type Checked = { ok: true; value: string } | { ok: false; error: LocationInputError };
 
-/** The name to store (trimmed), or the refusal. */
 export function checkLocationName(name: string): Checked {
   const value = name.trim();
   if (value === '') {
@@ -50,7 +43,6 @@ export function checkLocationName(name: string): Checked {
   return { ok: true, value };
 }
 
-/** The address to store (trimmed), or the refusal. */
 export function checkLocationAddress(address: string): Checked {
   const value = address.trim();
   if (value === '') {
