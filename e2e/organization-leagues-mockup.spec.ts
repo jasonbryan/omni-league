@@ -72,16 +72,19 @@ function normalize(text: string, organizations: string[]): string {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
+  return withoutPublishButtonNames(lines).join('\n');
+}
+
+function withoutPublishButtonNames(lines: string[]): string[] {
   const kept: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    // "Publish" plus the league's name that names the button for assistive technology.
     if (lines[i] === 'Publish') {
       i++;
       continue;
     }
     kept.push(lines[i]);
   }
-  return kept.join('\n');
+  return kept;
 }
 
 async function signedInAdmin(page: Page, seed: TenantSeed) {

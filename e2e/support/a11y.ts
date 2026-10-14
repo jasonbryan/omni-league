@@ -25,7 +25,6 @@ export interface TabWalkOptions {
    * follow the DOM order of the sequentially focusable elements.
    */
   expectedOrder?: string[];
-  /** Upper bound on Tab presses; default twice the focusable count plus 5. */
   maxSteps?: number;
 }
 
@@ -278,11 +277,22 @@ export function tabKey(page: Page): 'Tab' | 'Alt+Tab' {
  * CSS visual reordering is not detected (manual check). A page with no focusable elements passes.
  * Shadow roots and iframe contents are not walked.
  */
+const TAB_ROUNDS = 2;
+const STEP_MARGIN = 5;
+const EXTRA_PRESSES_PER_DATE_FIELD = 5;
+
+function defaultMaxSteps(focusableCount: number, dateFieldCount: number): number {
+  return (
+    focusableCount * TAB_ROUNDS +
+    STEP_MARGIN +
+    dateFieldCount * EXTRA_PRESSES_PER_DATE_FIELD * TAB_ROUNDS
+  );
+}
+
 export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise<TabWalkResult> {
   const domOrder = await page.evaluate(setUpWalk, WALK_KEY);
   const failures: string[] = [];
   const tab = tabKey(page);
-  // A native date or time field takes up to 5 more Tab presses per round than another element.
   const multiPartFields = await page.evaluate(
     () =>
       document.querySelectorAll(
@@ -290,7 +300,7 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
           'input[type="datetime-local"]',
       ).length,
   );
-  const maxSteps = options.maxSteps ?? domOrder.length * 2 + 5 + multiPartFields * 10;
+  const maxSteps = options.maxSteps ?? defaultMaxSteps(domOrder.length, multiPartFields);
   const same = (a: StepInfo | undefined, b: StepInfo): boolean =>
     !!a && a.where === 'element' && a.index === b.index && a.description === b.description;
   // A fresh Tab sequence starts once focus first leaves the page, so positive tabindex values are
@@ -341,8 +351,8 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
       }
       if (phase === 'cycle') {
         if (info.where === 'outside') {
-          // An empty round (two exits in a row) means nothing on the page takes focus.
-          if (cycle.length === 0) done = true;
+          const nothingTakesFocus = cycle.length === 0;
+          if (nothingTakesFocus) done = true;
           else phase = 'return';
         } else if (cycle.some((c) => same(c, info))) {
           trap(

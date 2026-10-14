@@ -208,17 +208,25 @@ test.describe('service worker (production build)', () => {
     await expect(status).toHaveText('A new version of Omni League is ready.');
     expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 
+    const PHONE_CARD_INSET = 12;
+    const DESKTOP_CARD_INSET = 16;
+    const DESKTOP_CARD_WIDTH = 384;
     for (const [width, height, gap] of [
-      [360, 800, 12],
-      [1280, 720, 16],
+      [360, 800, PHONE_CARD_INSET],
+      [1280, 720, DESKTOP_CARD_INSET],
     ] as const) {
       await page.setViewportSize({ width, height });
       const box = await card.boundingBox();
       if (!box) throw new Error('no card box');
-      // Full width less 12px on phones; 384px at the bottom end corner from 640px.
       expect(box.y + box.height).toBeCloseTo(height - gap, 0);
-      if (width === 360) expect(box).toMatchObject({ x: 12, width: 336 });
-      else expect(box).toMatchObject({ x: width - 16 - 384, width: 384 });
+      if (width === 360) {
+        expect(box).toMatchObject({ x: PHONE_CARD_INSET, width: width - 2 * PHONE_CARD_INSET });
+      } else {
+        expect(box).toMatchObject({
+          x: width - DESKTOP_CARD_INSET - DESKTOP_CARD_WIDTH,
+          width: DESKTOP_CARD_WIDTH,
+        });
+      }
       await expect
         .poll(() =>
           card.evaluate((section, cardGap) => {

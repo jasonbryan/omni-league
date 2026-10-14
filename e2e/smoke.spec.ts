@@ -190,9 +190,11 @@ test.describe('smoke: placeholder home', () => {
       expect(response.status()).toBe(400);
       expect(response.headers()['content-type']).toMatch(/^text\/plain\b/);
       expect(body).toContain('Bad Request');
-      expect(body).not.toMatch(/\bat /); // stack frame
+      const STACK_FRAME = /\bat /;
+      const FILE_PATH = /(?:\/[\w.@-]+){2,}|[A-Za-z]:\\|node_modules|\.m?[jt]s\b/;
+      expect(body).not.toMatch(STACK_FRAME);
       expect(body).not.toMatch(/\w+Error\b|stack/i);
-      expect(body).not.toMatch(/(?:\/[\w.@-]+){2,}|[A-Za-z]:\\|node_modules|\.m?[jt]s\b/); // file path
+      expect(body).not.toMatch(FILE_PATH);
     },
   );
 });

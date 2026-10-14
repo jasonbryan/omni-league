@@ -67,6 +67,23 @@ function sidebarHtml(html: string, name: string): string {
 
 const hrefs = (html: string) => [...html.matchAll(/\bhref="([^"]*)"/g)].map(([, href]) => href);
 
+async function plantSavedCopyAndRecordH1s(page: Page, key: string, saved: string): Promise<void> {
+  await page.addInitScript(
+    ([savedKey, savedValue]) => {
+      localStorage.setItem(savedKey, savedValue);
+      const seen: string[] = [];
+      (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
+      new MutationObserver(() => {
+        for (const h1 of document.querySelectorAll('h1')) {
+          const text = h1.textContent.trim();
+          if (text && !seen.includes(text)) seen.push(text);
+        }
+      }).observe(document, { subtree: true, childList: true, characterData: true });
+    },
+    [key, saved] as const,
+  );
+}
+
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
   await expect
     .poll(() => consoleGuard.hydrated, {
@@ -674,21 +691,7 @@ test.describe('organization page in the browser', () => {
         usedAt: savedAt,
         version: OFFLINE_SAVED_QUERIES[0].version,
       });
-      // Before any app script: plant the saved copy and record every h1 text the page ever shows.
-      await page.addInitScript(
-        ([savedKey, savedValue]) => {
-          localStorage.setItem(savedKey, savedValue);
-          const seen: string[] = [];
-          (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
-          new MutationObserver(() => {
-            for (const h1 of document.querySelectorAll('h1')) {
-              const text = h1.textContent.trim();
-              if (text && !seen.includes(text)) seen.push(text);
-            }
-          }).observe(document, { subtree: true, childList: true, characterData: true });
-        },
-        [key, saved] as const,
-      );
+      await plantSavedCopyAndRecordH1s(page, key, saved);
 
       await page.goto(tenant.path);
       await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();

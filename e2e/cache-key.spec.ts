@@ -162,8 +162,15 @@ test.describe('query strings and the CDN', () => {
         '?page=2&page=3': ['Season 12', 'Season 11', 'Season 10', 'Season 09', 'Season 08'],
         '': ['Season 12', 'Season 11', 'Season 10', 'Season 09', 'Season 08'],
       };
-      // Store the page-2 response first, then ask for the others: none gets page 2's rows.
-      for (const query of ['?page=2', '?page=2', '?page=3', '?page=2&page=3', '', '?page=2']) {
+      const pageTwoFirstThenOthers = [
+        '?page=2',
+        '?page=2',
+        '?page=3',
+        '?page=2&page=3',
+        '',
+        '?page=2',
+      ];
+      for (const query of pageTwoFirstThenOthers) {
         const response = await rawGet(`${path}${query}`);
         expect(response.status, query).toBe(200);
         expect(names(response.body), query).toEqual(expected[query]);

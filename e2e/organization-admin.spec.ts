@@ -293,18 +293,17 @@ test.describe('Locations', () => {
       const { base } = await memberOf(page, 'orgAdmin');
       await page.goto(`${base}/locations`);
       await expect(page.getByText('No locations yet')).toBeVisible();
-      // A second page of the same context stands in for a second device.
-      const second = await page.context().newPage();
-      await second.goto(`${base}/locations`);
-      await second.locator('#name').fill('Second Tab Field');
-      await second.locator('#address').fill('2 Tab Way');
-      await second
+      const secondDevice = await page.context().newPage();
+      await secondDevice.goto(`${base}/locations`);
+      await secondDevice.locator('#name').fill('Second Tab Field');
+      await secondDevice.locator('#address').fill('2 Tab Way');
+      await secondDevice
         .locator('#add-location')
         .getByRole('button', { name: /^Add location/ })
         .click();
       await expect(listRows(page)).toHaveCount(1);
       await expect(listRows(page).first()).toContainText('Second Tab Field');
-      await second.close();
+      await secondDevice.close();
     },
   );
 

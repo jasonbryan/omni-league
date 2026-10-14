@@ -50,8 +50,7 @@ async function build(): Promise<string> {
   return output;
 }
 
-/** The SSR server this spec started (scripts/serve-ssr.mjs; the started process is the listener). */
-let server: ChildProcess | undefined;
+let startedSsrServer: ChildProcess | undefined;
 
 async function startServer(onPort: number): Promise<void> {
   const child = spawn(process.execPath, [join(ROOT, 'scripts', 'serve-ssr.mjs')], {
@@ -59,7 +58,7 @@ async function startServer(onPort: number): Promise<void> {
     env: { ...process.env, PORT: String(onPort) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  server = child;
+  startedSsrServer = child;
   let output = '';
   await new Promise<void>((resolve, reject) => {
     const onData = (chunk: Buffer) => {
@@ -75,8 +74,8 @@ async function startServer(onPort: number): Promise<void> {
 }
 
 async function stopServer(): Promise<void> {
-  const child = server;
-  server = undefined;
+  const child = startedSsrServer;
+  startedSsrServer = undefined;
   if (child?.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise((resolve) => child.once('exit', resolve));
   child.kill('SIGTERM');
