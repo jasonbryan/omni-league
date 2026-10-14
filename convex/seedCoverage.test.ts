@@ -8,10 +8,10 @@ import schema from './schema';
 import { modules } from './test.setup';
 
 export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
-  signInFailures: 'Throttle state from failed sign-ins (#63), not demo content.',
-  users: 'Filled by the demo accounts (#98).',
-  memberships: 'Filled by the demo accounts (#98).',
-  invites: 'Filled by the demo accounts (#98).',
+  signInFailures: 'Throttle state from failed sign-ins, not demo content.',
+  users: 'Filled by the demo accounts.',
+  memberships: 'Filled by the demo accounts.',
+  invites: 'Filled by the demo accounts.',
 };
 
 export function missingSeedTables(

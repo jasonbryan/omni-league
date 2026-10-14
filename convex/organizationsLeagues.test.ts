@@ -295,9 +295,10 @@ describe('organizations.listMine: leagues', () => {
     });
   }
 
+  const FOREIGN_LEAGUE_COUNT = LIST_MINE_LEAGUES_LIMIT - 1;
+
   test('one LIST_MINE_LEAGUES_LIMIT budget covers all memberships, spent in organization-name order', async () => {
     const { t, as } = await setup();
-    // "Org 0" sorts before "Org A", but its membership is the later one.
     const zero = await t.run((ctx) =>
       insertTenant(ctx, {
         organization: { name: 'Org 0', slug: 'org-0' },
@@ -327,10 +328,8 @@ describe('organizations.listMine: leagues', () => {
     ]);
   });
 
-  test('an org admin membership spends none of the budget', async () => {
+  test('an org admin membership spends none of the budget, even when it sorts first and holds a full budget of ids', async () => {
     const { t, as } = await setup();
-    // "Org 0" sorts before "Org A" and holds LIST_MINE_LEAGUES_LIMIT ids for an org admin, so the
-    // budget would be gone before Org A if an org admin spent it.
     const zero = await t.run((ctx) =>
       insertTenant(ctx, {
         organization: { name: 'Org 0', slug: 'org-0' },
@@ -347,18 +346,9 @@ describe('organizations.listMine: leagues', () => {
     ]);
   });
 
-  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once", async () => {
+  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once, leaving one read for the next organization", async () => {
     const { t, as, organizationA, organizationB } = await setup();
-    // Org A (first by name) names LIST_MINE_LEAGUES_LIMIT - 1 foreign leagues (all of organization
-    // B's) plus a repeat of one. Every distinct id is read and none is listed. The repeat is not
-    // read again, so exactly one read is left for Org B, which lists one league.
-    const foreign = await leaguesOf(
-      t,
-      organizationB,
-      'B Field',
-      'Foreign',
-      LIST_MINE_LEAGUES_LIMIT - 1,
-    );
+    const foreign = await leaguesOf(t, organizationB, 'B Field', 'Foreign', FOREIGN_LEAGUE_COUNT);
     await assign(t, organizationA, 'leagueOrganizer', [...foreign, foreign[0]]);
     const bOwn = await leaguesOf(t, organizationB, 'B Field', 'Own', 3);
     await addMembership(t, organizationB, 'leagueOrganizer', bOwn);

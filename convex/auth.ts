@@ -44,8 +44,7 @@ export const authComponent = createClient<DataModel>(components.betterAuth, {
 
 export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
 
-// In `String.length` units after `trim()`, as the page counts.
-export const NAME_MAX_LENGTH = 100;
+export const NAME_MAX_UTF16_UNITS = 100;
 
 export const NAME_INVALID = {
   code: 'NAME_INVALID',
@@ -121,7 +120,7 @@ function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
     const fields =
       typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
     const name = typeof fields['name'] === 'string' ? fields['name'].trim() : '';
-    if (name === '' || name.length > NAME_MAX_LENGTH) {
+    if (name === '' || name.length > NAME_MAX_UTF16_UNITS) {
       return Promise.reject(APIError.from('BAD_REQUEST', NAME_INVALID));
     }
     // Better Auth ignores this field itself.

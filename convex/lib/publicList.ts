@@ -1,7 +1,8 @@
 export const PUBLIC_LIST_PAGE_SIZE = 5;
 
-// Caps one call at 200 rows whatever the args.
-export const PUBLIC_LIST_MAX_PAGE = 40;
+export const PUBLIC_LIST_MAX_ROWS = 200;
+
+export const PUBLIC_LIST_MAX_PAGE = PUBLIC_LIST_MAX_ROWS / PUBLIC_LIST_PAGE_SIZE;
 
 export function pageOf(total: number, requested: number): { page: number; pageCount: number } {
   const pageCount = Math.min(Math.ceil(total / PUBLIC_LIST_PAGE_SIZE), PUBLIC_LIST_MAX_PAGE);

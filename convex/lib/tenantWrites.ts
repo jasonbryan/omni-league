@@ -187,8 +187,8 @@ export async function insertDraftLeague(
 export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
   if (league.status === 'published') return;
   await ctx.db.patch('leagues', league._id, { status: 'published' });
-  // A league without a status was public and already counted.
-  if (league.status === undefined) return;
+  const wasPublicAndCounted = league.status === undefined;
+  if (wasPublicAndCounted) return;
   await increment(ctx, league.organizationId, 'leagueCount');
   await countLeagueInSport(ctx, league.organizationId, league.sport, league.locationIds);
 }
