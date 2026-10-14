@@ -101,7 +101,7 @@ export async function seedSeasons(
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: '2025-12-01',
-      format: '4v4',
+      playersPerSide: 4,
       minimumRosterSize: 4,
       status: season.status ?? 'published',
     })),

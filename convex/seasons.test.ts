@@ -124,10 +124,11 @@ describe('seasons.create', () => {
       startDate: '2026-09-01',
       endDate: '2026-11-15',
       registrationDeadline: '2026-08-25',
-      format: '7v7',
+      playersPerSide: 7,
       minimumRosterSize: 7,
       status: 'draft',
     });
+    expect(season).not.toHaveProperty('format');
   });
 
   test('trims the name', async () => {
@@ -394,7 +395,7 @@ describe('seasons.listForOrganizer', () => {
           startDate,
           endDate: '2030-01-01',
           registrationDeadline: '2000-01-01',
-          format: league.sport === 'soccer' ? '7v7' : '4v4',
+          playersPerSide: league.sport === 'soccer' ? 7 : 4,
           minimumRosterSize: league.sport === 'soccer' ? 7 : 4,
         },
         status,
@@ -463,7 +464,7 @@ describe('seasons.listForOrganizer', () => {
           startDate: `2030-01-01`,
           endDate: '2031-01-01',
           registrationDeadline: '2029-01-01',
-          format: '7v7',
+          playersPerSide: 7,
           minimumRosterSize: 7,
         });
       }
