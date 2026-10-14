@@ -1,9 +1,3 @@
-// The organization admin area and its Locations page (#65): `/app/organizations/:slug` and
-// `/app/organizations/:slug/locations`, Client routes behind sign-in (approved design
-// design/mockups/65-organization-admin-locations.html). Every test signs up its own user through
-// the real form, then gives it a role in a seeded organization (`testing:addMembership`), so the
-// tests need the local Convex backend and are skipped with E2E_BASE_URL set. The tests that create
-// an organization through the form run on the Overview only.
 import type { Locator, Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible } from './support/a11y';
@@ -30,7 +24,6 @@ const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
-/** Signs up a user and gives it `role` in a new seeded organization with `locations`. */
 async function memberOf(
   page: Page,
   role: Role | null,
@@ -66,7 +59,6 @@ const locationTile = (page: Page) =>
   main(page).locator('dl > div').filter({ hasText: 'Locations' });
 const listRows = (page: Page) => page.locator('#locations-list > app-location-row');
 
-/** Opens the phone menu sheet (360px) and returns its dialog. */
 async function openMenu(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Open navigation' }).click();
   const dialog = page.getByRole('dialog', { name: 'Navigation' });
@@ -74,7 +66,6 @@ async function openMenu(page: Page): Promise<Locator> {
   return dialog;
 }
 
-/** The admin navigation: the sidebar column at 1280px, the open sheet at 360px. */
 async function adminNav(page: Page, organizationName: string): Promise<Locator> {
   if (isDesktop(page)) {
     const nav = page.getByRole('navigation', { name: `${organizationName} admin` });
@@ -139,12 +130,10 @@ test.describe('the admin area: entry and navigation', () => {
         '/app',
       );
       if (!isDesktop(page)) {
-        // The sheet closes with Escape, and focus returns to the menu button.
         await page.keyboard.press('Escape');
         await expect(page.getByRole('dialog', { name: 'Navigation' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
       } else {
-        // 256px wide, below the 56px top bar, with no menu button.
         await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
         const column = page.locator('main').locator('xpath=preceding-sibling::div[1]');
         expect((await column.boundingBox())?.width).toBe(256);
@@ -261,7 +250,6 @@ test.describe('Locations', () => {
     await page.goto(`${base}/locations`);
     const jump = main(page).getByRole('link', { name: 'Add location' });
     if (isDesktop(page)) {
-      // The form is beside the list, so the link is hidden from 1024px.
       await expect(jump).toBeHidden();
       return;
     }
@@ -305,19 +293,17 @@ test.describe('Locations', () => {
       const { base } = await memberOf(page, 'orgAdmin');
       await page.goto(`${base}/locations`);
       await expect(page.getByText('No locations yet')).toBeVisible();
-      // The same user in a second tab (sign-in is #63, so a second page of the same context stands
-      // in for a second device).
-      const second = await page.context().newPage();
-      await second.goto(`${base}/locations`);
-      await second.locator('#name').fill('Second Tab Field');
-      await second.locator('#address').fill('2 Tab Way');
-      await second
+      const secondDevice = await page.context().newPage();
+      await secondDevice.goto(`${base}/locations`);
+      await secondDevice.locator('#name').fill('Second Tab Field');
+      await secondDevice.locator('#address').fill('2 Tab Way');
+      await secondDevice
         .locator('#add-location')
         .getByRole('button', { name: /^Add location/ })
         .click();
       await expect(listRows(page)).toHaveCount(1);
       await expect(listRows(page).first()).toContainText('Second Tab Field');
-      await second.close();
+      await secondDevice.close();
     },
   );
 
@@ -339,8 +325,8 @@ test.describe('Locations', () => {
     await addButton(page).click();
     await expect(page.locator('#name-error')).toHaveText('Enter the location’s name.');
     await expect(page.locator('#address-error')).toHaveText('Enter the location’s address.');
-    // The form moves focus to Name once it has rendered (#167). Filling before then lets that focus
-    // land between two fills, and the second value goes into Name.
+    // The form moves focus to Name once it has rendered. Filling before then lets that focus land
+    // between two fills, and the second value goes into Name.
     await expect(nameField(page)).toBeFocused();
 
     await nameField(page).fill('n'.repeat(101));
@@ -410,7 +396,7 @@ test.describe('Locations', () => {
     await expect(edit).toBeFocused();
 
     await edit.click();
-    // Fill only once the form has taken focus: it would land between the two fills (#167).
+    // Fill only once the form has taken focus: it would land between the two fills.
     await expect(page.locator('#edit-name')).toBeFocused();
     await page.locator('#edit-name').fill(' ');
     await page.locator('#edit-address').fill('');
@@ -424,7 +410,6 @@ test.describe('Locations', () => {
 });
 
 test.describe('who may open the admin area', () => {
-  /** Every WebSocket message the page sends, so a test can show what it asked for. */
   function sentFrames(page: Page): string[] {
     const frames: string[] = [];
     page.on('websocket', (socket) => {
@@ -463,7 +448,6 @@ test.describe('who may open the admin area', () => {
             0,
           );
           await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
-          // Nothing about the organization is on the page.
           await expect(page.locator('body')).not.toContainText(LOCATIONS[0].name);
           await expect(page.locator('body')).not.toContainText(tenant.name);
         }
@@ -475,7 +459,6 @@ test.describe('who may open the admin area', () => {
     );
   }
 
-  // The view is the same for every role, so one run of it is saved as a screenshot and scanned.
   test('the no-access view is saved as a screenshot and passes the axe helper', async ({
     page,
   }, testInfo) => {
@@ -491,7 +474,7 @@ test.describe('who may open the admin area', () => {
   });
 
   test(
-    'an unknown slug shows #23’s not-found view with no other request',
+    'an unknown slug shows the not-found view with no other request',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
       await signUp(page, newUser('Lost'));
@@ -527,7 +510,6 @@ test.describe('who may open the admin area', () => {
       const user = newUser('Intruder');
       const intruder = await otherUser(browser, user);
       try {
-        // An org admin, but of an organization of their own.
         const mine = await seedFor(user.email, 'orgAdmin', []);
         expect(mine.base).not.toBe(owner.base);
         await intruder.goto(`${owner.base}/locations`);
@@ -538,7 +520,6 @@ test.describe('who may open the admin area', () => {
       } finally {
         await intruder.context().close();
       }
-      // The owner still sees its own list.
       await page.goto(`${owner.base}/locations`);
       await expect(listRows(page)).toHaveCount(2);
     },

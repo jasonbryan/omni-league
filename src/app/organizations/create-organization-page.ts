@@ -447,7 +447,7 @@ export class CreateOrganizationPage {
       this.showFailure(failure, slug);
       return;
     }
-    await this.router.navigateByUrl(adminPath(slug));
+    await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
     this.submitting.set(false);
   }
 
