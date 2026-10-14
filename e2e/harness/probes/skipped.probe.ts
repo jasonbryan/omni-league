@@ -1,5 +1,4 @@
-// Run only through `console-fixture.spec.ts` ("a test that skips itself"). Each test uses the real
-// fixture with allowances it never reaches, then skips itself.
+// Run only by `console-fixture.spec.ts`.
 import type { Page } from '@playwright/test';
 import { test } from '../../support/fixtures';
 

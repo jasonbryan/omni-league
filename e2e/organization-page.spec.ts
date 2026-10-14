@@ -1,6 +1,4 @@
-// Tests that seed their own tenant need the local Convex backend and are skipped with
-// E2E_BASE_URL set; the unknown-slug tests also run against a preview.
-import type { TestInfo } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -25,7 +23,6 @@ const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
-/** The two-location, two-league tenant of the raw-HTML criteria, with two different sports. */
 function smallTenant(): Promise<Tenant> {
   return seedTenant({
     locations: [
@@ -39,10 +36,6 @@ function smallTenant(): Promise<Tenant> {
   });
 }
 
-/**
- * Two leagues and five locations, the most a list shows (#100): the last location's row starts
- * below the fold at 1280x720 and at 360x800 (asserted by the tests that use it).
- */
 function tallTenant(): Promise<Tenant> {
   return seedTenant({
     locations: tallLocations(),
@@ -64,7 +57,23 @@ function canonicalHrefs(html: string): string[] {
   );
 }
 
-/** Waits for the dev-mode hydration log, so the live subscription is open. */
+async function plantSavedCopyAndRecordH1s(page: Page, key: string, saved: string): Promise<void> {
+  await page.addInitScript(
+    ([savedKey, savedValue]) => {
+      localStorage.setItem(savedKey, savedValue);
+      const seen: string[] = [];
+      (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
+      new MutationObserver(() => {
+        for (const h1 of document.querySelectorAll('h1')) {
+          const text = h1.textContent.trim();
+          if (text && !seen.includes(text)) seen.push(text);
+        }
+      }).observe(document, { subtree: true, childList: true, characterData: true });
+    },
+    [key, saved] as const,
+  );
+}
+
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
   await expect
     .poll(() => consoleGuard.hydrated, {
@@ -93,7 +102,6 @@ test.describe('organization page: raw server HTML', () => {
         );
         expect(headers['content-type'], path).toContain('text/html');
 
-        // Content: the h1, both locations with addresses, both leagues with sport display names.
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(new RegExp(`<h1\\b[^>]*>\\s*${tenant.name}\\s*</h1>`));
         for (const location of tenant.locations) {
@@ -105,7 +113,6 @@ test.describe('organization page: raw server HTML', () => {
           expect(html, path).toMatch(new RegExp(`>\\s*${SPORT_NAMES[league.sport]}\\s*</span>`));
         }
 
-        // Meta, from the query result; og:url and the canonical carry no query string.
         expect(html, path).toContain(`<title>${tenant.name} | Omni League</title>`);
         expect(metaContent(html, 'og:title'), path).toBe(tenant.name);
         expect(metaContent(html, 'og:description'), path).toBe(
@@ -120,20 +127,17 @@ test.describe('organization page: raw server HTML', () => {
           expect(html, `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
         }
 
-        // Tiles: 2 leagues, 2 locations, 2 distinct sports.
         expect(
           [...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n),
           path,
         ).toEqual(['2', '2', '2']);
 
-        // The query string never reaches the cacheable HTML (PR #90).
         if (query) expect(html, path).not.toContain(query.slice(1));
       }
     },
   );
 });
 
-// #100: each list shows its first 5 rows by name, and the tiles show the totals.
 test.describe('organization page: more than 5 rows per list', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
@@ -141,8 +145,6 @@ test.describe('organization page: more than 5 rows per list', () => {
     'raw: 5 league rows, 5 location rows, and totals in the tiles',
     RAW_HTTP,
     async ({ request }) => {
-      // 13 of each, in one call, with leagues of two sports. "League 01" to "League 05", the
-      // leagues shown, are at "Location 13" to "Location 09", none of the locations shown.
       const locations = numberedLocations(13);
       const tenant = await seedTenant({
         locations,
@@ -162,7 +164,6 @@ test.describe('organization page: more than 5 rows per list', () => {
       const content = html;
       const shownLeagues = tenant.leagues.slice(0, 5);
       const shownLocations = tenant.locations.slice(0, 5);
-      // Exactly the first 5 of each list, in name order.
       expect(
         [...content.matchAll(/\sid="(league|location)-(\d+)"/g)].map(
           ([, kind, n]) => `${kind}-${n}`,
@@ -172,7 +173,6 @@ test.describe('organization page: more than 5 rows per list', () => {
         ...[1, 2, 3, 4, 5].map((n) => `location-${n}`),
       ]);
       expect(
-        // A league's name is a link (#127); a location's is plain text.
         [...content.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
           name.trim(),
         ),
@@ -184,17 +184,14 @@ test.describe('organization page: more than 5 rows per list', () => {
         expect(content).not.toContain(`>${hidden.name}</h3>`);
         expect(content).not.toContain(`>${hidden.name}</a>`);
       }
-      // A league shows its location's name though that location is not among the 5 shown.
       expect(content).toContain(`${tenant.leagues[0].locations[0]}<`);
 
-      // Tiles: the totals, not the rows shown.
       expect([...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n)).toEqual([
         '13',
         '13',
         '2',
       ]);
 
-      // The query string never reaches the cacheable HTML (PR #90).
       expect(html).not.toContain('utm_source');
     },
   );
@@ -283,9 +280,9 @@ test.describe('organization page in the browser', () => {
     },
   );
 
-  // #82: a saved copy never takes part in hydration. The server-rendered first load carries a
-  // TransferState entry, which wins over the saved copy (ADR 0013 section 3), so the page hydrates
-  // the server HTML unchanged, and the live result then replaces the saved copy in storage.
+  // A saved copy never takes part in hydration. The server-rendered first load carries a
+  // TransferState entry, which wins over the saved copy, so the page hydrates the server HTML
+  // unchanged, and the live result then replaces the saved copy in storage.
   test(
     'hydrates the transferred value over a saved copy with no console error, then saves the live result',
     VIEWPORT_AGNOSTIC,
@@ -306,21 +303,7 @@ test.describe('organization page in the browser', () => {
         usedAt: savedAt,
         version: OFFLINE_SAVED_QUERIES[0].version,
       });
-      // Before any app script: plant the saved copy and record every h1 text the page ever shows.
-      await page.addInitScript(
-        ([savedKey, savedValue]) => {
-          localStorage.setItem(savedKey, savedValue);
-          const seen: string[] = [];
-          (window as Window & { e2eH1s?: string[] }).e2eH1s = seen;
-          new MutationObserver(() => {
-            for (const h1 of document.querySelectorAll('h1')) {
-              const text = h1.textContent.trim();
-              if (text && !seen.includes(text)) seen.push(text);
-            }
-          }).observe(document, { subtree: true, childList: true, characterData: true });
-        },
-        [key, saved] as const,
-      );
+      await plantSavedCopyAndRecordH1s(page, key, saved);
 
       await page.goto(tenant.path);
       await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
@@ -369,7 +352,7 @@ test.describe('organization page: unknown slug', () => {
   test.use({ expectedDocumentStatus: 404 });
 
   test(
-    'raw: 404 with the public Cache-Control and the not-found view in the public layout',
+    'raw: 404 with the public Cache-Control and the not-found view, top bar only',
     RAW_HTTP,
     async ({ request }) => {
       const { status, headers, html } = await fetchRawHtml(
@@ -397,16 +380,16 @@ test.describe('organization page: unknown slug', () => {
       expect(response?.status()).toBe(404);
       await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
       if (!remoteBaseUrl) await hydrated(consoleGuard);
-      await expect(page.getByRole('navigation')).toHaveCount(1); // the footer's
+      await expect(page.getByRole('navigation')).toHaveCount(1);
       await expect(page.getByRole('button')).toHaveCount(0);
       await expect(page).toHaveTitle('Page not found | Omni League');
     },
   );
 });
 
-// A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page
-// as if there were none (#91). Not a redirect: Netlify copies the query string into a Location
-// without one, so it would loop (PR #105). Against a preview it uses the demo organization.
+// A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page as
+// if there were none. Not a redirect: Netlify copies the query string into a Location without one,
+// so it would loop. Against a preview it uses the demo organization.
 test.describe('organization page: undecodable query string', () => {
   test('raw: the same page, cacheable, with no query string in the HTML', RAW_HTTP, async () => {
     const path = remoteBaseUrl
@@ -434,7 +417,7 @@ test.describe('organization page: undecodable query string', () => {
   });
 
   // The browser's router parses the same URL after hydration. If it cannot decode the query string
-  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page.
   test(
     'browser: the organization page stays after hydration, at the same path',
     VIEWPORT_AGNOSTIC,
@@ -455,8 +438,8 @@ test.describe('organization page: undecodable query string', () => {
 });
 
 // A fragment the router cannot decode (`#%`) is read as no fragment, as an undecodable query string
-// is (#116). The server never sees a fragment, so only the browser's router can send the visitor
-// to `/` (NG04018). The test collects the console messages itself: the console fixture fails only on
+// is. The server never sees a fragment, so only the browser's router can send the visitor to `/`
+// (NG04018). The test collects the console messages itself: the console fixture fails only on
 // NG05xx warnings. Against a preview it uses the demo organization.
 test.describe('organization page: undecodable fragment', () => {
   test(
@@ -483,8 +466,6 @@ test.describe('organization page: undecodable fragment', () => {
   );
 });
 
-// ADR 0005: each test seeds its own tenant and sees only its own data, whatever else the shared
-// backend holds (other tests' tenants run in parallel).
 test.describe('tenant isolation', VIEWPORT_AGNOSTIC, () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 

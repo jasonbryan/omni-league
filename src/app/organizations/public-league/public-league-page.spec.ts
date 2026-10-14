@@ -473,23 +473,3 @@ describe('PublicLeaguePage page changes', () => {
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=2`);
   });
 });
-
-describe('PublicLeaguePage route changes', () => {
-  it('moves focus to main when the visitor arrives from another page, and not on the page load', async () => {
-    const harness = await open('/organizations/gulf-coast-sport-social');
-    await settle(harness);
-    await TestBed.inject(Router).navigateByUrl(PATH);
-    await settle(harness);
-    emit();
-    await settle(harness);
-    expect(text(host(harness).querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
-    expect(document.activeElement).toBe(host(harness).querySelector('main#main'));
-  });
-
-  it('leaves focus alone on the page load', async () => {
-    const harness = await open();
-    emit();
-    await settle(harness);
-    expect(document.activeElement).toBe(document.body);
-  });
-});

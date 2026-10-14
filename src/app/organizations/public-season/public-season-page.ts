@@ -4,7 +4,6 @@ import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
 import { api } from '../../../../convex/_generated/api';
 import { injectOnline, injectQuery } from '../../core/data/convex';
-import { focusMainAfterRouteChange } from '../../core/focus-main';
 import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
@@ -101,9 +100,6 @@ export class PublicSeasonPage {
   });
 
   constructor() {
-    // A link on the league page belongs to the page that goes: focus follows the visitor to main,
-    // never to body (#127).
-    focusMainAfterRouteChange();
     bindPageMeta(() => {
       const view = this.view();
       if (!view) return null;

@@ -1,4 +1,3 @@
-// Playwright e2e and accessibility harness (ADR 0005, amended by ADR 0009). Usage: README "E2E tests".
 import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
 import {
   baseURL,
@@ -47,12 +46,12 @@ export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   forbidOnly: ci,
-  // 2 on CI: one worker ran the ~500 tests past the 25-minute job timeout (#178). Specs share one
-  // local Convex backend and SSR server and each seeds its own uniquely named data, so they are
+  // 2 on CI: one worker ran the ~500 tests past the 25-minute job timeout. Specs share one local
+  // Convex backend and SSR server and each seeds its own uniquely named data, so they are
   // independent of order and of each other.
   workers: ci ? 2 : undefined,
   retries: ci ? 1 : 0,
-  // The JSON report names the failing tests in the nightly run's issue (#186).
+  // The JSON report names the failing tests in the nightly run's issue.
   reporter: [
     ['list'],
     ['html', { open: 'never' }],
@@ -63,8 +62,6 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  // Tagged tests run in fewer projects (e2e/support/viewport-agnostic.ts): `RAW_HTTP` tests in
-  // `chromium-desktop` only, `VIEWPORT_AGNOSTIC` tests in every project but `chromium-mobile`.
   projects: projects.map((project) => ({ ...project, ...projectFilter(project.name ?? '') })),
   // The push and the build run before Playwright (`npm run e2e`), so a failure there is its own
   // step, not a server-start timeout. With E2E_BASE_URL set, no local server or backend starts.
@@ -72,7 +69,6 @@ export default defineConfig({
     ? undefined
     : [
         {
-          // The anonymous local Convex backend (ADR 0005, #59): scripts/e2e-convex.mjs.
           name: 'convex',
           command: 'node scripts/e2e-convex.mjs serve',
           url: `${LOCAL_CONVEX_URL}/version`,

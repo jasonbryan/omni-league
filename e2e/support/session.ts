@@ -4,7 +4,6 @@ import { baseURL } from './env';
 import { expect } from './fixtures';
 import type { TestUser } from './users';
 
-/** Signs `user` up through the real sign-up form and waits for /app and the Convex token. */
 export async function signUp(page: Page, user: TestUser): Promise<void> {
   const tokens = tokensSettled(page);
   await page.goto('/sign-up');
@@ -14,12 +13,12 @@ export async function signUp(page: Page, user: TestUser): Promise<void> {
   await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
   await page.getByRole('button', { name: /Create account/ }).click();
   // Under CPU load the request can still be running after the 5 s default ("Creating account…" on
-  // screen), which is not a failure (#167).
+  // screen), which is not a failure.
   await expect(page).toHaveURL(`${baseURL}/app`, { timeout: 20_000 });
   await tokens;
 }
 
-/** A second signed-in browser context, for a second user. Close its context when done. */
+/** Close its context when done. */
 export async function otherUser(browser: Browser, user: TestUser): Promise<Page> {
   const context = await browser.newContext({ baseURL });
   const page = await context.newPage();

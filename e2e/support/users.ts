@@ -4,7 +4,7 @@ import { convexRun } from './convex';
 export interface TestUser {
   name: string;
   email: string;
-  /** Random per run, never stored (ADR 0005, ADR 0008 "Testing"). */
+  /** Random per run, never stored. */
   password: string;
 }
 
@@ -14,7 +14,6 @@ export interface Account {
   sessions: number;
 }
 
-/** A new user with a unique name and email and a random 24-character password. */
 export function newUser(label = 'Player'): TestUser {
   const id = randomBytes(4).toString('hex');
   return {
@@ -25,8 +24,8 @@ export function newUser(label = 'Player'): TestUser {
 }
 
 /**
- * Creates `user` through Better Auth's own sign-up (`testing:seedLeague` with `users`, ADR 0008),
- * with a throwaway organization as its tenant. Local runs only.
+ * Creates `user` through Better Auth's own sign-up, with a throwaway organization as its tenant.
+ * Local runs only.
  */
 export async function seedUser(user: TestUser = newUser()): Promise<TestUser> {
   const id = randomBytes(4).toString('hex');
@@ -39,7 +38,6 @@ export async function seedUser(user: TestUser = newUser()): Promise<TestUser> {
   return user;
 }
 
-/** The account sign-up wrote for `email`, or `null` (`testing:accountByEmail`). Local runs only. */
 export async function accountByEmail(email: string): Promise<Account | null> {
   return (await convexRun('testing:accountByEmail', { email })) as Account | null;
 }

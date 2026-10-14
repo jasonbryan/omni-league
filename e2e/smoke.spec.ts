@@ -1,5 +1,3 @@
-// Smoke spec (#13): the prerendered placeholder home `/`. #15 runs it against previews with
-// E2E_BASE_URL, where the local-build-only checks are skipped.
 import { expectAccessible, tabKey } from './support/a11y';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -19,7 +17,6 @@ test.describe('smoke: placeholder home', () => {
       expect(headers['content-type']).toContain('text/html');
       expect(html).toMatch(HEADING);
 
-      // App shell (#75), in DOM order: skip link, top bar with the home link, main holding the h1.
       const at = (pattern: RegExp): number => html.search(pattern);
       const skipLink = at(/<a\b[^>]*\bhref="[^"]*#main"[^>]*>\s*Skip to main content\s*<\/a>/);
       const header = at(/<header\b/);
@@ -70,8 +67,6 @@ test.describe('smoke: placeholder home', () => {
     // On the local development build, scan the hydrated page, not the server HTML alone.
     if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
 
-    // App shell (#75): the first Tab reaches the skip link, shown as a pill with a visible outline;
-    // Enter moves focus to main without leaving the page.
     const skipLink = page.getByRole('link', { name: 'Skip to main content' });
     const tab = tabKey(page);
     await page.keyboard.press(tab);
@@ -102,13 +97,12 @@ test.describe('smoke: placeholder home', () => {
       }),
     ).toEqual({ position: 'sticky', top: '0px', height: '65px' });
 
-    // base.css (#61): the offset that keeps anchor targets and focused elements below the sticky
-    // top bar (4.5rem at the 16px root font size, WCAG 2.4.11).
+    // The offset that keeps anchor targets and focused elements below the sticky top bar (4.5rem at
+    // the 16px root font size, WCAG 2.4.11).
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop))
       .toBe('72px');
 
-    // Inter is self-hosted (ADR 0007): the font face loads from the app's own origin. Vacuous
     // `fonts.check` is true when no face matches, so the loaded face is asserted too.
     await page.evaluate(() => document.fonts.ready);
     expect(await page.evaluate(() => document.fonts.check('16px "Inter Variable"'))).toBe(true);
@@ -133,10 +127,10 @@ test.describe('smoke: placeholder home', () => {
       ],
     });
 
-    // Focusing a top bar control on a scrolled page leaves the page where it is (#75): the sticky
-    // header cancels the html scroll-padding-top, which otherwise makes the browser scroll focused
-    // header elements "into view". The phone sheet returns focus to the menu button the same way.
-    // The page is made tall here, in this page load, as the home page does not scroll.
+    // The sticky header cancels the html scroll-padding-top, which otherwise makes the browser
+    // scroll focused header elements "into view". The phone sheet returns focus to the menu button
+    // the same way. The page is made tall here, in this page load, as the home page does not
+    // scroll.
     await page.evaluate(() => {
       const spacer = document.createElement('div');
       spacer.style.height = '3000px';
@@ -150,7 +144,6 @@ test.describe('smoke: placeholder home', () => {
     });
     await expect(home).toBeFocused();
     expect(await page.evaluate(() => window.scrollY)).toBe(600);
-    // By keyboard: Shift+Tab to the skip link, then Tab back to the home link.
     await page.keyboard.press(`Shift+${tab}`);
     await expect(skipLink).toBeFocused();
     await page.keyboard.press(tab);
@@ -172,9 +165,8 @@ test.describe('smoke: placeholder home', () => {
     },
   );
 
-  // ADR 0013 section 1 (#81): only production builds register the worker. A production build
-  // registers it as soon as the app is stable, so two seconds after hydration a wrongly enabled
-  // worker would have been fetched and registered. e2e/pwa.spec.ts covers the production build.
+  // Only production builds register the worker, as soon as the app is stable, so two seconds after
+  // hydration a wrongly enabled worker would have been fetched and registered.
   test(
     'the development build registers no service worker',
     VIEWPORT_AGNOSTIC,
@@ -207,9 +199,11 @@ test.describe('smoke: placeholder home', () => {
       expect(response.status()).toBe(400);
       expect(response.headers()['content-type']).toMatch(/^text\/plain\b/);
       expect(body).toContain('Bad Request');
-      expect(body).not.toMatch(/\bat /); // stack frame
+      const STACK_FRAME = /\bat /;
+      const FILE_PATH = /(?:\/[\w.@-]+){2,}|[A-Za-z]:\\|node_modules|\.m?[jt]s\b/;
+      expect(body).not.toMatch(STACK_FRAME);
       expect(body).not.toMatch(/\w+Error\b|stack/i);
-      expect(body).not.toMatch(/(?:\/[\w.@-]+){2,}|[A-Za-z]:\\|node_modules|\.m?[jt]s\b/); // file path
+      expect(body).not.toMatch(FILE_PATH);
     },
   );
 });

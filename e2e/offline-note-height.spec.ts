@@ -1,5 +1,5 @@
-// One browser project only. The note is driven by `setOffline` (navigator.onLine false), which
-// needs no socket route and no fake clock.
+// The note is driven by `setOffline` (navigator.onLine false), which needs no socket route and no
+// fake clock.
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
@@ -8,7 +8,7 @@ import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { numberedLocations, seedTenant } from './support/tenant';
 
-/** Width, root text size (200% is the largest size WCAG 1.4.4 asks for), and where the note wraps. */
+/** 200% is the largest root text size WCAG 1.4.4 asks for. */
 const CASES = [
   { width: 320, textPercent: 100 },
   { width: 360, textPercent: 200 },
@@ -45,7 +45,6 @@ test.describe('offline note height', () => {
     const note = status.locator('[data-offline-note]');
     const header = page.locator('header');
 
-    // Online and empty: no custom property, offsets as before the note.
     await expect(status).toBeAttached();
     expect(await rootVar(page)).toBe('');
     expect(px(await computed(page.locator('html'), 'scroll-padding-top'))).toBe(72);
@@ -62,7 +61,6 @@ test.describe('offline note height', () => {
       const rem = (16 * textPercent) / 100;
       const barHeight = 4 * rem + 1;
 
-      // The variable equals the note's rendered height once the observer has run.
       await expect
         .poll(async () => px(await rootVar(page)) - ((await status.boundingBox())?.height ?? 0), {
           message: `--offline-note-h tracks the note at ${label}`,
@@ -82,8 +80,6 @@ test.describe('offline note height', () => {
       const results = await axeScan(page);
       expect(describeViolations(results.violations), `axe violations at ${label}`).toEqual([]);
 
-      // A control focused from below the page, scrolled above the viewport, is never under the
-      // note (or the top bar): its top is at or below the bottom of the note.
       await page.locator('main').evaluate((main) => {
         const spacer = (height: string) => {
           const element = document.createElement('div');
@@ -107,7 +103,6 @@ test.describe('offline note height', () => {
       expect((await button.boundingBox())!.y, `focus at ${label}`).toBeGreaterThanOrEqual(
         noteBottom,
       );
-      // Anchor behaviour (scrolled to the start) lands exactly at the scroll padding.
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await button.evaluate((element) => element.scrollIntoView({ block: 'start' }));
       expect((await button.boundingBox())!.y, `anchor at ${label}`).toBeCloseTo(offset, 0);
@@ -124,7 +119,6 @@ test.describe('offline note height', () => {
       await page.evaluate(() => window.scrollTo(0, 0));
     }
 
-    // Back online: the region empties, the property goes, and every offset returns to its default.
     await page.evaluate(() => {
       document.documentElement.style.fontSize = '';
     });

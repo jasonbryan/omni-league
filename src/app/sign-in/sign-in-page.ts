@@ -370,7 +370,7 @@ export class SignInPage {
     const result = await this.auth.signIn({ email: email.trim(), password });
     this.submitting.set(false);
     if (result.ok) {
-      await this.router.navigateByUrl(afterAuthUrl(this.returnTo));
+      await this.router.navigateByUrl(afterAuthUrl(this.returnTo), { replaceUrl: true });
       return;
     }
     this.showFailure(result);

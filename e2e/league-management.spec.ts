@@ -1,10 +1,3 @@
-// The league management page and its create-season form (#125):
-// `/app/organizations/:orgSlug/leagues/:leagueSlug`, a Client route behind sign-in (approved design
-// design/mockups/125-126-seasons.html; the text of each state is compared with the mockup in
-// league-management-mockup.spec.ts). Every test signs up its own user through the real form, then
-// gives it a role in a seeded organization (`testing:addMembership`, `testing:addLeagueOrganizer`),
-// so the tests need the local Convex backend and are skipped with E2E_BASE_URL set. They run at
-// both widths.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -43,10 +36,6 @@ const SOFTBALL = 'draft-softball';
 
 type Role = 'orgAdmin' | 'leagueOrganizer' | null;
 
-/**
- * Signs up a user and gives it `role` in a new seeded organization with the leagues above. A
- * league organizer is assigned `assigned` (league slugs).
- */
 async function memberOf(page: Page, role: Role, assigned: string[] = [COED]) {
   const user = newUser(role === 'orgAdmin' ? 'Admin' : 'Organizer');
   await signUp(page, user);
@@ -72,7 +61,6 @@ const form = (page: Page) => page.locator('#create-season form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft season/ });
 const rows = (page: Page) => page.locator('#seasons-list > li');
 
-/** The issue's season: "Fall 2026" (`fall-2026`), 7v7, with the minimum the format sets. */
 async function fillFall2026(page: Page, minimum?: string) {
   await page.locator('#name').fill('Fall 2026');
   await expect(page.locator('#slug')).toHaveValue('fall-2026');
@@ -163,7 +151,6 @@ test.describe('League management: an org admin', () => {
   });
 
   test.describe('the slug is used', () => {
-    // The rejected mutation logs one console error.
     test.use({ expectedConvexErrors: ['seasons:create'] });
 
     test('shows the message with the slug, and the same slug in another league is allowed', async ({
@@ -183,7 +170,6 @@ test.describe('League management: an org admin', () => {
       await expect(page.locator('#slug')).toBeFocused();
       await expect(rows(page)).toHaveCount(1);
 
-      // Beach volleyball's formats, and the same slug in the other league.
       await page.goto(`${base}/leagues/${SAND}`);
       await page.locator('#name').fill('Fall 2026');
       await page.locator('#start-date').fill('2026-09-01');
@@ -228,7 +214,6 @@ test.describe('League management: an org admin', () => {
       'Published',
       'Published',
     ]);
-    // The admin sidebar keeps Leagues highlighted (on a phone it is in the menu sheet).
     if (page.viewportSize()!.width < 1024) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
     }
@@ -248,7 +233,6 @@ test.describe('League management: an org admin', () => {
     await page.locator('#start-date').fill('2026-09-01');
     await page.locator('#end-date').fill('2026-11-15');
     await page.locator('#registration-deadline').fill('2026-08-25');
-    // Softball has one format.
     await expect(page.getByRole('radio')).toHaveCount(1);
     await page.getByRole('radio', { name: '10 v 10' }).check();
     await submit(page).click();
@@ -265,7 +249,6 @@ test.describe('League management: an assigned league organizer', () => {
     await page.goto(`${base}/leagues/${COED}`);
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
     const nav = page.getByRole('navigation', { name: `${tenant.name} leagues` });
-    // On a phone the sidebar is in the menu sheet; on desktop it is the column.
     if (page.viewportSize()!.width < 1024) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
     }
@@ -312,7 +295,6 @@ test.describe('League management: an assigned league organizer', () => {
       await expect(list('Coed 7v7 Rec')).not.toHaveAttribute('aria-current', /.*/);
       await expect(list('Draft Softball')).not.toHaveAttribute('aria-current', /.*/);
       await expect(list('Draft Softball')).toHaveAttribute('href', `${base}/leagues/${SOFTBALL}`);
-      // The link goes to the other league, whose page marks it instead.
       await page.goto((await list('Coed 7v7 Rec').getAttribute('href'))!);
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
       await expect(list('Coed 7v7 Rec')).toHaveAttribute('aria-current', 'page');

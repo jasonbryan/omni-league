@@ -1,8 +1,3 @@
-// Sign-in with email and password (#63; ADR 0008 "Rate limits and lockout"; approved design
-// design/mockups/63-sign-in.html). /sign-in is a Client route: the server sends the empty shell and
-// no auth code runs there. Every test that signs in a seeded user, or reads or seeds the throttle,
-// needs the local Convex backend and is skipped with E2E_BASE_URL set (a preview has no seeded user
-// and no test functions); the cases that need neither also run against a preview.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -19,7 +14,6 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 const LOCAL_ONLY = 'seeds a user or the throttle on the local Convex backend';
 const SIGN_IN_PATH = '/api/auth/sign-in/email';
 
-/** Sign-in form order (mockup 63 "Focus order"): no top bar Sign in on this page (decision 2). */
 const SIGN_IN_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
@@ -45,7 +39,6 @@ async function fillForm(page: Page, email: string, password: string): Promise<vo
   await field(page, 'password').fill(password);
 }
 
-/** Presses Sign in and waits for the sign-in request to be answered. */
 async function press(page: Page): Promise<number> {
   const answered = page.waitForResponse((response) => response.url().endsWith(SIGN_IN_PATH));
   await submit(page).click();
@@ -61,7 +54,7 @@ async function signInAs(page: Page, user: TestUser, path = '/sign-in'): Promise<
 
 test.describe('sign-in', () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
-  // intercept and count (e2e/support/no-service-worker.ts).
+  // intercept and count.
   test.beforeEach(async ({ context }) => {
     if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
   });
@@ -76,7 +69,6 @@ test.describe('sign-in', () => {
         expect(headers['cache-control']?.replace(/\s+/g, ''), path).toBe(
           'public,max-age=0,must-revalidate',
         );
-        // No server render: no auth code ran on the server, and no query string is in the HTML.
         expect(html, path).toMatch(/<app-root><\/app-root>/);
         expect(html, path).not.toMatch(/<h1\b/);
         expect(html, path).not.toContain('returnTo');
@@ -95,13 +87,12 @@ test.describe('sign-in', () => {
     for (const absent of [/Forgot password/i, /Google/, /verif/i, /at least 15/i]) {
       await expect(page.getByText(absent)).toHaveCount(0);
     }
-    // "Create an account" keeps the returnTo (mockup state 1); the top bar has no Sign in.
     await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute(
       'href',
       '/sign-up?returnTo=%2Fleagues%2Fsandbar-summer-doubles%2Fregister',
     );
     await expect(page.locator('header').getByText('Sign in')).toHaveCount(0);
-    // 36px controls, and 16px input text on phones so iOS does not zoom (PR #96 decision 5).
+    // Phones use 16px input text so iOS does not zoom.
     const show = page.getByRole('button', { name: 'Show password' });
     for (const control of [field(page, 'email'), field(page, 'password'), show, submit(page)]) {
       expect((await control.boundingBox())?.height).toBe(36);
@@ -167,7 +158,6 @@ test.describe('sign-in', () => {
       await tokens;
       expect((await accountByEmail(user.email))?.sessions).toBeGreaterThanOrEqual(1);
 
-      // Signed in, /sign-in goes straight on to /app.
       await page.goto('/sign-in');
       await expect(page).toHaveURL(`${baseURL}/app`);
     },
@@ -213,7 +203,6 @@ test.describe('sign-in', () => {
     );
   }
 
-  // A signed-in visitor opening /sign-in or /sign-up goes to the valid returnTo, else /app.
   for (const page of ['/sign-in', '/sign-up']) {
     test(
       `a signed-in visitor opening ${page} goes to the valid returnTo, else /app`,
@@ -246,8 +235,6 @@ test.describe('sign-in', () => {
   test.describe('a wrong password', () => {
     test.use({ expectedFailedRequests: [{ status: 401, path: SIGN_IN_PATH }] });
 
-    // The same text, status, and look for a wrong password and for an email with no account, and
-    // both entered values stay (PR #96 decision 6).
     test('a wrong password and an unknown email get the same answer; the values stay', async ({
       page,
     }, testInfo) => {
@@ -263,7 +250,6 @@ test.describe('sign-in', () => {
         await expect(alert(page)).toBeVisible();
         answers.push({ status, text: (await alert(page).innerText()).replace(/\s+/g, ' ') });
         await expect(alert(page)).toBeFocused();
-        // Neither field is marked invalid, and both keep their values.
         for (const id of ['email', 'password']) {
           await expect(field(page, id)).not.toHaveAttribute('aria-invalid', 'true');
           await expect(fieldError(page, id)).toHaveCount(0);
@@ -291,7 +277,6 @@ test.describe('sign-in', () => {
       ),
     });
 
-    /** Five 401s, then a sixth attempt with the correct password that gets 429 and the wait. */
     async function fiveWrongThenCorrect(page: Page, known: boolean): Promise<TestUser> {
       const user = await seedUser();
       const email = known ? user.email : newUser('Ghost').email;
@@ -301,7 +286,6 @@ test.describe('sign-in', () => {
       for (let attempt = 1; attempt <= 5; attempt++) {
         expect(await press(page), `attempt ${attempt}`).toBe(401);
       }
-      // The sixth attempt carries the correct password for the known address.
       await field(page, 'password').fill(user.password);
       expect(await press(page)).toBe(429);
       await expect(alert(page)).toContainText('Too many attempts. Try again in 1 minute.');
@@ -310,7 +294,6 @@ test.describe('sign-in', () => {
       );
       await expect(page).toHaveURL(`${baseURL}/sign-in`);
       await expect(field(page, 'email')).toHaveValue(email);
-      // No countdown and no disabled button: the text states the wait.
       await expect(submit(page)).not.toHaveAttribute('aria-disabled', 'true');
       return user;
     }
@@ -341,7 +324,6 @@ test.describe('sign-in', () => {
   test.describe('the hard limit', () => {
     test.use({ expectedFailedRequests: [{ status: 429, path: SIGN_IN_PATH }] });
 
-    /** An address with 100 failures: the correct password still gets 429 and the lock text. */
     async function lockedWithCorrectPassword(page: Page, known: boolean): Promise<TestUser> {
       const user = await seedUser();
       const email = known ? user.email : newUser('Ghost').email;
