@@ -39,7 +39,6 @@ import {
 } from '../admin/field-classes';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
 
-/** The three date fields, in form order: the field, its element id, and its label. */
 const DATE_FIELDS = [
   {
     field: 'startDate',
@@ -62,7 +61,6 @@ const DATE_FIELDS = [
   },
 ] as const;
 
-/** The element to focus for each field: its input, or the first radio of the format group. */
 const FOCUS_SELECTOR: Record<SeasonField, string> = {
   name: '#name',
   slug: '#slug',
@@ -73,19 +71,6 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
   minimumRosterSize: '#minimum-roster-size',
 };
 
-/**
- * The create form of the league management page (#125; design/mockups/125-126-seasons.html states
- * 4 to 11), inside the page's `#create-season` section: Name, Slug (filled from the name until
- * edited), Start date, End date, Registration deadline (native date fields), a Format radio group
- * of the league's sport with no default (a sport with one format, softball, has it chosen), and Minimum roster size (set when a format is chosen,
- * which the organizer may raise). The limits fieldset of the mockup is #143 and #144's. Errors
- * show after a submit, under their field or group; focus goes to the first invalid field (the
- * first format for the group), or to the form alert for a failure that is not about one field. On
- * success "<season> created as a draft." appears in a status above the fields, the fields clear,
- * and focus stays on the button; the page's live list shows the new row. Like every form that
- * calls a mutation it carries the offline refusal of design/mockups/88-offline-note.html
- * (angular.md, State and data).
- */
 @Component({
   selector: 'app-season-create-form',
   imports: [AdminAlert, FormField, NgIcon],
@@ -444,21 +429,15 @@ export class SeasonCreateForm implements OnInit {
   protected readonly radioIndicatorClass = RADIO_INDICATOR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} mt-6 w-full`;
 
-  /** The class of every radio's wrapper: its edge turns red while the group shows an error. */
   protected readonly radioClass = computed(
     () => `${RADIO_ITEM} ${this.form.errors.format() ? RADIO_EDGE_INVALID : RADIO_EDGE}`,
   );
 
-  /** The season just created, for the status above the fields; cleared by the next press. */
   protected readonly created = signal<string | null>(null);
 
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
-  /**
-   * `aria-describedby`: the field's description when it has one, then its error while one is
-   * shown. `null` when neither applies (Start date has no description).
-   */
   protected describedBy(
     field: SeasonField,
     description: string | null,

@@ -9,7 +9,6 @@ import {
 } from './index';
 import { FakeConvexClient } from './testing/fake-convex-client';
 
-/** `navigator.onLine` as the test sets it; jsdom reports true. */
 function stubNavigatorOnLine(value: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
 }
@@ -24,7 +23,6 @@ function goOnline(): void {
   window.dispatchEvent(new Event('online'));
 }
 
-/** Creates the app's `online` signal the way the app does (provideConvex, app initializer). */
 function start(options: {
   client?: FakeConvexClient | null;
   platform?: 'browser' | 'server';
@@ -40,7 +38,7 @@ function start(options: {
   });
   if (options.platform === 'server') TestBed.overrideProvider(CONVEX_CLIENT, { useValue: client });
   const online = TestBed.runInInjectionContext(injectOnline);
-  TestBed.tick(); // runs the app initializer's afterNextRender work
+  TestBed.tick();
   return online;
 }
 

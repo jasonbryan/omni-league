@@ -4,16 +4,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCloudOff, lucideRotateCw } from '@ng-icons/lucide';
 import { setServerErrorStatus } from '../core/server-error-status';
 
-/**
- * The server-error view: the `server-error` state of design/mockups/60-organization-page.html,
- * approved through gate:ui-design in #73. A public page renders it inside its app shell, with no
- * sidebar, when its primary Convex query fails or times out (#60). After hydration the page's live
- * subscription replaces it as soon as a result arrives.
- *
- * On the server it sets status 503 and `Cache-Control: no-store` (`setServerErrorStatus`). It
- * never shows the error's message, which on the server is the real one (Convex adapter README,
- * "Server rendering").
- */
+/** It never shows the error's message, which on the server is the real one. */
 @Component({
   selector: 'app-server-error-view',
   imports: [NgIcon],
@@ -36,8 +27,7 @@ import { setServerErrorStatus } from '../core/server-error-status';
         Omni League could not load it just now. It will appear here as soon as it loads, or you can
         try again.
       </p>
-      <!-- A plain link, so it works before hydration. The classes are the not-found view's
-           hlmBtn size="lg" plus mt-8 (server-error-view.spec.ts checks they match). -->
+      <!-- A plain link, so it works before hydration. The classes are the not-found view's hlmBtn size="lg" plus mt-8. -->
       <a
         [href]="retryHref()"
         data-slot="button"

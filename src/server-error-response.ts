@@ -1,9 +1,6 @@
 /**
- * Plain-text responses of the SSR entry (`src/server.ts`), carried over from the Express error
- * handler of #30 and #24 / PR #38. Bodies never contain a stack trace, error message, or file path.
- *
- * Web-API-only: this module is bundled into the Netlify edge function, so it must not read the
- * environment or import `node:` modules (enforced by ESLint for `src/server*.ts`).
+ * Bodies never contain a stack trace, error message, or file path.
+ * Web-API-only: this module is bundled into the Netlify edge function, so it must not read the environment or import `node:` modules (enforced by ESLint for `src/server*.ts`).
  */
 
 const TEXT_PLAIN = { 'Content-Type': 'text/plain; charset=utf-8' };
@@ -12,27 +9,21 @@ function textResponse(status: number, body: string): Response {
   return new Response(body, { status, headers: TEXT_PLAIN });
 }
 
-/** `400 Bad Request`: the request path cannot be percent-decoded (a client error). */
 export function badRequestResponse(): Response {
   return textResponse(400, 'Bad Request');
 }
 
-/** `404 Not found`: no route matched, so the engine returned `null`. */
 export function notFoundResponse(): Response {
   return textResponse(404, 'Not found');
 }
 
-/** `500 Internal Server Error`: anything thrown or rejected while handling the request. */
 export function internalServerErrorResponse(): Response {
   return textResponse(500, 'Internal Server Error');
 }
 
 /**
- * True when the request path (`URL.pathname`, without the query string) has percent-encoding that
- * `decodeURIComponent` rejects. Only the path counts: the engine renders a path whose query string
- * is malformed without that query string (`hasUndecodableQuery` in
- * `src/app/core/url-serializer.ts`, #91), and a `URIError` from the engine means app code threw,
- * which is a 500 (#24 / PR #38).
+ * Only the path counts: the engine renders a path whose query string is malformed without that query string (`hasUndecodableQuery` in `src/app/core/url-serializer.ts`),
+ * and a `URIError` from the engine means app code threw, which is a 500.
  */
 export function isMalformedPath(pathname: string): boolean {
   try {
@@ -43,16 +34,10 @@ export function isMalformedPath(pathname: string): boolean {
   }
 }
 
-/** Logged when a thrown value cannot be turned into text at all. */
 const UNPRINTABLE = '<unprintable thrown value>';
 
-/** Causes logged after the error itself; also ends a cyclic `cause` chain. */
 const MAX_CAUSES = 5;
 
-/**
- * Text of one thrown value, always a string. Throws for values that cannot be printed; the caller
- * catches.
- */
 function describeThrown(value: unknown): string {
   if (value instanceof Error) {
     // `stack` is an ordinary writable property, so it can hold anything (a number, a Symbol).
@@ -76,10 +61,8 @@ function describeOrFallback(value: unknown): string {
 }
 
 /**
- * Error text for the log with every query string replaced by `?<redacted>`: a query string can
- * carry a one-time token (ADR 0008), and error messages and stacks can embed the request URL.
- * The `cause` chain follows, up to {@link MAX_CAUSES} deep (a failed fetch keeps its reason
- * there). Never throws, whatever was thrown.
+ * A query string can carry a one-time token, and error messages and stacks can embed the request URL.
+ * The `cause` chain follows, up to {@link MAX_CAUSES} deep (a failed fetch keeps its reason there). Never throws, whatever was thrown.
  */
 export function redactedErrorText(error: unknown): string {
   let text = describeOrFallback(error);

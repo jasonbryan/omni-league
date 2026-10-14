@@ -36,16 +36,13 @@ import { ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 import { adminPath } from './admin/admin-path';
 
-/** Every message the page adds to the shared ones (design/mockups/64-create-organization.html). */
 export const MESSAGES = {
   failedTitle: 'The organization could not be created.',
   failedDescription: 'Check your connection and try again.',
-  // design/mockups/88-offline-note.html state 3, shared by every form that needs the server.
   offlineTitle: "You're offline. Nothing was sent.",
   offlineDescription: "Your details are still here. Try again when you're connected.",
 } as const;
 
-/** The reserved slug the format message names; the page prints it in bold. */
 const RESERVED_SLUG = 'new';
 
 type FieldName = 'name' | 'slug';
@@ -56,17 +53,13 @@ interface CreateModel {
   slug: string;
 }
 
-/** A failure that is not about one field: the form alert above the fields. */
 type FormAlert = 'offline' | 'failed';
 
-/** A refusal about one field, as `organizations.create` throws it (`ConvexError` data). */
 interface ServerError {
   text: string;
-  /** Set when the slug is taken: the message repeats it in bold. */
   taken: string | null;
 }
 
-/** The `OrganizationInputError` a `ConvexError` carries, or `null` for any other failure. */
 function inputErrorOf(failure: unknown): OrganizationInputError | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
@@ -77,21 +70,8 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
   return { field, code: code as OrganizationInputError['code'], message };
 }
 
-// Every class string below is the approved mockup's (helm Nova, with #61's focus change: no
-// halo), written as a static attribute so Angular sets it before the element is inserted, as in
-// the sign-up page. The buttons carry `buttonVariants` output unmerged, as the mockup draws them;
-// create-organization-page.spec.ts checks them.
+// Class strings are the approved mockup's, written as static attributes so Angular sets them before the element is inserted; the buttons carry unmerged `buttonVariants` output.
 
-/**
- * `/app/organizations/new` (#64), a `RenderMode.Client` route behind `requireSignedIn`, approved in
- * design/mockups/64-create-organization.html: Name and Slug. Typing a name fills Slug with
- * `slugify(name)` until the user edits Slug; the public address under Slug follows it. Errors show
- * under their field when the user leaves a field they changed and after a submit, and clear once
- * the field is valid; focus goes to the first invalid field, or to the form alert for a failure that is not about one field. The first form
- * that calls a Convex mutation, so it carries the offline refusal of design/mockups/88-offline-note.html
- * (angular.md, State and data). After success the browser lands on the new organization's admin Overview, with its "Get set up" list
- * (#65, decision 5), not on the public page.
- */
 @Component({
   selector: 'app-create-organization-page',
   imports: [FormField, NgIcon, RouterLink, Shell],
@@ -320,7 +300,6 @@ export class CreateOrganizationPage {
 
   protected readonly messages = MESSAGES;
   protected readonly online = injectOnline();
-  /** The host of the public address under Slug: this page is a client route, so it is known. */
   protected readonly host = inject(DOCUMENT).location.host;
 
   private readonly model = signal<CreateModel>({ name: '', slug: '' });
@@ -331,15 +310,12 @@ export class CreateOrganizationPage {
     required(path.slug);
   });
 
-  /** Set when the user types in Slug; from then on the name no longer changes it (decision 3). */
   protected readonly slugEdited = signal(false);
   protected readonly submitting = signal(false);
   protected readonly formAlert = signal<FormAlert | null>(null);
 
-  /** The slug in the public address under the field: as typed, a placeholder while empty. */
   protected readonly addressSlug = computed(() => this.model().slug || 'your-slug');
 
-  /** The first client-side error of each field, whether or not it is shown. */
   private readonly clientErrors: Record<FieldName, Signal<string | null>> = {
     name: computed(() => {
       const checked = checkOrganizationName(this.model().name);
@@ -348,11 +324,6 @@ export class CreateOrganizationPage {
     slug: computed(() => checkOrganizationSlug(this.model().slug)?.message ?? null),
   };
 
-  /**
-   * Whether each field's client error shows: after a submit, or when the user leaves the field
-   * after changing it; cleared once the field is valid (mockup state 7, #205). Slug counts as
-   * changed when the user typed in Name, which fills it.
-   */
   private readonly shown: Record<FieldName, ShownUntilValid> = {
     name: new ShownUntilValid(
       () => this.clientErrors.name() !== null,
@@ -364,27 +335,20 @@ export class CreateOrganizationPage {
     ),
   };
 
-  /** A server answer about one field, until that field's value changes. */
   private readonly serverErrors: Record<FieldName, WritableSignal<ServerError | null>> = {
     name: this.untilChanged(() => this.model().name),
     slug: this.untilChanged(() => this.model().slug),
   };
 
-  /** The error each field shows now, or `null`. */
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
     name: this.shownError('name'),
     slug: this.shownError('slug'),
   };
 
-  /** The slug named by the "taken" message while that message is the one Slug shows. */
   protected readonly takenSlug = computed(() =>
     this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
   );
 
-  /**
-   * The format message split around the reserved slug it names, so the page can bold `new` as the
-   * mockup does (states 8 and 9); `null` for any other slug message. The string stays shared.
-   */
   protected readonly reservedParts = computed(() => {
     if (this.errors.slug() !== ORGANIZATION_MESSAGES.slugInvalid) return null;
     const message = ORGANIZATION_MESSAGES.slugInvalid;
@@ -397,17 +361,14 @@ export class CreateOrganizationPage {
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
   private readonly alert = viewChild<ElementRef<HTMLElement>>('alert');
 
-  /** `aria-describedby`: the field's description, then its error while one is shown. */
   protected describedBy(field: FieldName, description: string): string {
     return this.errors[field]() ? `${description} ${field}-error` : description;
   }
 
-  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   protected left(field: FieldName): void {
     this.shown[field].left();
   }
 
-  /** The user typed in Name: while Slug is untouched it follows (empty name, empty slug). */
   protected nameTyped(event: Event): void {
     if (this.slugEdited()) return;
     // Read from the event, so the order of this handler and the form field's does not matter.
@@ -431,9 +392,8 @@ export class CreateOrganizationPage {
       return;
     }
 
-    // A press while offline is refused here; one the adapter refuses at call time (the 3-second
-    // check, before the note has appeared) takes the same path below.
-    if (!this.online()) {
+    const pressedOffline = !this.online();
+    if (pressedOffline) {
       this.showAlert('offline');
       return;
     }

@@ -6,8 +6,7 @@ import { provideSpartanHlm } from '../ui/utils';
 import { App } from '../app';
 import { SidebarTestPage } from './testing/test-pages';
 
-// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each
-// test (see dom-globals.ts).
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
@@ -52,23 +51,19 @@ describe('Shell server render', () => {
     expect(button?.getAttribute('aria-haspopup')).toBe('dialog');
     expect(button?.hasAttribute('aria-controls')).toBe(false);
     expect(body.querySelector('[role="dialog"]')).toBeNull();
-    // The sheet is imported on the first press in the browser, never on the server.
     expect(body.querySelector('app-shell-sheet, hlm-sheet')).toBeNull();
     expect(html).not.toContain('Close navigation');
 
-    // The server HTML never holds the query string (PR #90): the CDN may store it, and a query
-    // string can carry a one-time token. The browser adds the query after hydration.
+    // The server HTML never holds the query string: the CDN may store it, and a query string can carry a one-time token. The browser adds the query after hydration.
     expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test#main');
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('y=1');
   });
 
-  // #63: every public page renders "Sign in" for everyone, whoever asks (no auth code runs on the
-  // server), and its returnTo is the path alone, for the same reason: the CDN may store the HTML.
+  // Every public page renders "Sign in" for everyone, whoever asks (no auth code runs on the server), and its returnTo is the path alone, for the same reason: the CDN may store the HTML.
   it('renders the Sign in link with the path as returnTo and no query string', async () => {
     const html = await render();
     const body = new DOMParser().parseFromString(html, 'text/html').body;
-    // The router writes the server's links with the request's origin, as for the brand link.
     const link = body.querySelector('header a[routerlink="/sign-in"]');
     expect(link?.textContent.trim()).toBe('Sign in');
     const href = new URL(link?.getAttribute('href') ?? '', 'http://localhost');

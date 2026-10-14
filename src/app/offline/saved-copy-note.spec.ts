@@ -40,7 +40,6 @@ describe('SavedCopyNote', () => {
     expect(note?.querySelector('ng-icon[name="lucideHistory"]')?.getAttribute('aria-hidden')).toBe(
       'true',
     );
-    // Plain text read after the heading, not a live region.
     expect(host.querySelector('[role="status"], [role="alert"], [aria-live]')).toBeNull();
   });
 

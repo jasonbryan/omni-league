@@ -109,7 +109,7 @@ describe('injectQuery (browser, fake client)', () => {
     client.subscriptions[0].emit(['Sharks']);
 
     leagueId.set({ leagueId: 'b' });
-    client.subscriptions[0].emit(['Sharks-late']); // old subscription still active until the next tick
+    client.subscriptions[0].emit(['Sharks-late']);
     expect(teams.value()).toBeUndefined();
     expect(teams.isLoading()).toBe(true);
 
@@ -218,5 +218,4 @@ describe('injectQuery without a client', () => {
       );
     });
   }
-  // The server platform with a URL is covered by server-query.spec.ts (#24).
 });

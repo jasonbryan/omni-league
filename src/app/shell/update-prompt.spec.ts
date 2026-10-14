@@ -8,7 +8,6 @@ import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
 import { provideUpdatePrompt, UpdatePrompt } from './update-prompt';
 
-/** Stands in for `ResizeObserver` (jsdom has none): keeps the callback so a test can fire it. */
 class FakeResizeObserver {
   static last: FakeResizeObserver | undefined;
   disconnected = false;
@@ -135,13 +134,12 @@ describe('UpdatePrompt', () => {
       expect(reload).not.toHaveBeenCalled();
     });
 
-    // PR #119 review: focus must not fall to <body> when Later removes the focused button.
+    // Focus must not fall to <body> when Later removes the focused button.
     describe('focus after Later', () => {
       let main: HTMLElement;
       let input: HTMLInputElement;
 
       beforeEach(() => {
-        // The shell's main region (`shell.ts`), and a control on the page.
         main = document.createElement('main');
         main.id = 'main';
         main.tabIndex = -1;

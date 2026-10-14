@@ -7,20 +7,10 @@ import { AccountLink } from './account-link';
 import { injectCurrentUrl } from './current-url';
 
 /**
- * The right end of the top bar (#63; PR #96 decisions 1 and 2): signed out, a "Sign in" link on
- * every page except `/sign-in`; signed in, the account link. Whether the visitor is signed in is
- * known only in the browser, and only after the session store answers. Until then (a server
- * render, and hydration) the link is "Sign in", so the browser's first render equals the server's
- * and the account link replaces it afterwards, with no hydration mismatch.
- *
- * `returnTo` is the current page, validated by `safeReturnTo`. On `/sign-up` it is that page's own
- * `returnTo` (`/app` when it has none or it is not valid), because the page the visitor came from
- * is not this one. As in the skip link (`skipLinkHref`), a server render leaves the query string
- * out of the link: Netlify's CDN may store the HTML (PR #90), and the browser adds it after
- * hydration.
- *
- * The classes are `buttonVariants({ variant: 'outline', size: 'lg' })` unmerged, as the mockup
- * draws them, plus `ms-auto`; top-bar-account.spec.ts checks them.
+ * Whether the visitor is signed in is known only in the browser, and only after the session store answers. Until then (a server render, and hydration) the link is "Sign in",
+ * so the browser's first render equals the server's and the account link replaces it afterwards, with no hydration mismatch.
+ * On `/sign-up` `returnTo` is that page's own `returnTo` (`/app` when it has none or it is not valid), because the page the visitor came from is not this one.
+ * As in the skip link (`skipLinkHref`), a server render leaves the query string out of the link: Netlify's CDN may store the HTML, and the browser adds it after hydration.
  */
 @Component({
   selector: 'app-top-bar-account',
@@ -47,7 +37,6 @@ export class TopBarAccount {
   private readonly url = injectCurrentUrl();
   private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
 
-  /** Where "Sign in" returns to, or `null` on `/sign-in`, where the link is absent. */
   protected readonly returnTo = computed(() => {
     const tree = this.router.parseUrl(this.url());
     const path = (tree.root.children[PRIMARY_OUTLET]?.segments ?? []).map((s) => s.path).join('/');

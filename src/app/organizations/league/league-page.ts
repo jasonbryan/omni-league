@@ -10,23 +10,6 @@ import { LeagueNoAccess } from './league-no-access';
 import { leaguePath } from './league-path';
 import { LeagueSidebar } from './league-sidebar';
 
-/**
- * The league management page, `/app/organizations/:orgSlug/leagues/:leagueSlug` (#125), a
- * `RenderMode.Client` route behind `requireSignedIn`; approved in
- * design/mockups/125-126-seasons.html. Unlike the admin area (#65) it admits the league's assigned
- * league organizers as well as org admins. It asks one question before anything else:
- * `leagues.getOrganizerContext` (`LeagueContext`).
- *
- * - Org admin: the app shell with the admin sidebar (Leagues highlighted), and the page.
- * - League organizer: the app shell with the league organizer's sidebar, and the same page.
- * - `null` (unknown organization or league, or a draft league for someone who is not staff): #23's
- *   not-found view, top bar only.
- * - `FORBIDDEN`: the no-access view, top bar only.
- * - Pending: the loading view; any other failure: the temporarily-unavailable view.
- *
- * Only the `ready` state renders the page, so no season data is requested before the caller is
- * known to organize this league.
- */
 @Component({
   selector: 'app-league-page',
   imports: [
@@ -76,7 +59,6 @@ import { LeagueSidebar } from './league-sidebar';
 export class LeaguePage {
   protected readonly context = inject(LeagueContext);
 
-  /** "Try again" for the failure view: this page, built from the route's slugs. */
   protected readonly path = computed(() =>
     leaguePath(this.context.orgSlug(), this.context.leagueSlug()),
   );

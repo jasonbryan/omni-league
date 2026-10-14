@@ -1,9 +1,5 @@
 import type { PublicOrganizationPage } from '../organization-path';
 
-/**
- * The organization page's data for specs: the mockup's populated organization (#73), as
- * `getPublicPage` and page 1 of the two list queries return it. Test-only.
- */
 export const GULF_COAST: PublicOrganizationPage = {
   name: 'Gulf Coast Sport & Social',
   slug: 'gulf-coast-sport-social',
@@ -60,11 +56,6 @@ export const GULF_COAST: PublicOrganizationPage = {
   ],
 };
 
-/**
- * The results of the page's three queries for `page`, by function name: the header with its
- * totals, and page 1 of each list (5 rows per page, at most 40 pages, as the queries serve them).
- * Test-only.
- */
 export function queryResults(page: PublicOrganizationPage): Record<string, unknown> {
   const { leagues, locations, ...header } = page;
   const list = (rows: unknown[], total: number) => ({
@@ -80,7 +71,6 @@ export function queryResults(page: PublicOrganizationPage): Record<string, unkno
   };
 }
 
-/** The mockup's empty organization: no leagues and no locations. Test-only. */
 export const PORT_ARANSAS: PublicOrganizationPage = {
   name: 'Port Aransas Beach Volleyball Club',
   slug: 'port-aransas-beach-volleyball-club',

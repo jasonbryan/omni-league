@@ -16,7 +16,6 @@ import {
 
 import { snapshotDomGlobals } from './testing/dom-globals';
 
-// Captured before any render in this file runs.
 const JSDOM_EVENT = Event;
 const JSDOM_NODE = Node;
 const JSDOM_NODE_FILTER = NodeFilter; // a function in jsdom; domino's is a plain object
@@ -33,10 +32,6 @@ afterEach(() => {
 const listTeams = makeFunctionReference<'query', { leagueId: string }, string[]>('teams:list');
 const KEY = 'cvx:teams:list:{"leagueId":"a"}';
 
-/**
- * Spec-only component following the README "Server rendering" rules: it branches on the error and
- * shows its own wording, never `error().message`.
- */
 @Component({
   selector: 'app-render-probe',
   template: `
@@ -54,7 +49,6 @@ class RenderProbe {
   readonly teams = injectQuery(listTeams, { leagueId: 'a' });
 }
 
-/** A fake HTTP client that settles after a real delay, so the render must wait for it. */
 function delayedClient(settle: () => Promise<unknown>): ConvexHttpClientLike {
   return {
     query: () =>
@@ -95,7 +89,6 @@ function ngState(html: string): Record<string, unknown> {
 
 const LEAGUE_ID = new InjectionToken<string>('LEAGUE_ID');
 
-/** Spec-only component whose args differ per render (as route params would). */
 @Component({
   selector: 'app-render-probe',
   template: `<p class="teams">{{ teams.value()?.join(', ') ?? 'Loading teams' }}</p>`,
@@ -108,14 +101,12 @@ class LeagueProbe {
 describe('concurrent server renders', () => {
   it('keep their own data: no client, cache entry, or TransferState is shared across overlapping renders', async () => {
     const queriesPerClient: unknown[][] = [];
-    // One factory shared by both renders, as the default factory is; it must still be called per render.
     const factory = vi.fn(() => {
       const seen: unknown[] = [];
       queriesPerClient.push(seen);
       const client: ConvexHttpClientLike = {
         query: ((_fn: unknown, args: { leagueId: string }) => {
           seen.push(args);
-          // The first render's query settles last, so the two renders overlap completely.
           const delay = args.leagueId === 'a' ? 40 : 5;
           return new Promise((resolve) =>
             setTimeout(() => resolve([`team of ${args.leagueId}`]), delay),
@@ -198,7 +189,7 @@ describe('after the server renders in this file', () => {
     expect(Event).toBe(JSDOM_EVENT);
     expect(Node).toBe(JSDOM_NODE);
     expect(NodeFilter).toBe(JSDOM_NODE_FILTER);
-    expect('HTMLParser' in globalThis).toBe(false); // domino-only class added by the render
+    expect('HTMLParser' in globalThis).toBe(false);
     expect(() => document.createElement('div').dispatchEvent(new Event('probe'))).not.toThrow();
   });
 });

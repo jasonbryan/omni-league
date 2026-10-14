@@ -22,19 +22,14 @@ import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
 
-// ADR 0008 "Passwords": 15 to 128 characters, no composition rules. Counted as the server counts
-// (`String.length`), so the page and Better Auth agree on the limits.
+// Counted as the server counts (`String.length`), so the page and Better Auth agree on the limits.
 export const MIN_PASSWORD = 15;
 export const MAX_PASSWORD = 128;
 
-/**
- * An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses
- * exactly what the server would.
- */
+/** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
-/** Every message on the page (design/mockups/62-sign-up.html, "Messages and attributes"). */
 export const MESSAGES = {
   nameEmpty: 'Enter your name.',
   emailEmpty: 'Enter your email address.',
@@ -43,9 +38,7 @@ export const MESSAGES = {
   passwordShort: (n: number) => `Use at least ${MIN_PASSWORD} characters. This password has ${n}.`,
   passwordLong: (n: number) => `Use ${MAX_PASSWORD} characters or fewer. This password has ${n}.`,
   adult: 'Confirm that you are 18 or older to create an account.',
-  // "Sign in instead" is a link to /sign-in with the same returnTo (#63), drawn by the template. The
-  // link does not wrap (whitespace-nowrap, which the mockup lacks): a link split over two lines has
-  // its centre between them, where a pointer or a focus check lands on the text around it.
+  // The link does not wrap (whitespace-nowrap, which the mockup lacks): a link split over two lines has its centre between them, where a pointer or a focus check lands on the text around it.
   exists: 'An account with this email already exists. Sign in instead.',
   breached:
     'This password has appeared in a data breach, so it is not safe to use. Choose a different one.',
@@ -64,25 +57,11 @@ interface SignUpModel {
   adult: boolean;
 }
 
-/** A failure that is not about one field: the form alert above the fields. */
 type FormAlert = 'check-unavailable' | 'unexpected';
 
-// Every class string below is the approved mockup's (helm Nova, with #61's focus change: no
-// halo), written as a static attribute so Angular sets it before the element is inserted: a
-// `[class]` binding could land after the first style pass, and `transition-all` would then animate
-// it. The buttons carry `buttonVariants` output unmerged, as the mockup draws it, so
-// `border-transparent` stays beside `border-border` and the outline button shows no edge;
-// sign-up-page.spec.ts checks them against `buttonVariants`.
+// Class strings are the approved mockup's, written as static attributes so Angular sets them before the element is inserted: a `[class]` binding could land after the first style pass, and `transition-all` would then animate it.
+// The buttons carry `buttonVariants` output unmerged, as the mockup draws it, so `border-transparent` stays beside `border-border` and the outline button shows no edge.
 
-/**
- * `/sign-up` (#62), a `RenderMode.Client` route, approved in #96
- * (design/mockups/62-sign-up.html): name, email, password with the policy text and a Show
- * control beside it, and the required 18+ confirmation. Errors show under their field
- * (`aria-invalid`, `aria-describedby`) when the user leaves a field they changed, and after a submit
- * for every invalid field; each clears once its field is valid; focus goes
- * to the first invalid field, or to the form alert for a failure that is not about one field.
- * After sign-up the browser goes to the validated `returnTo`, else `/app`.
- */
 @Component({
   selector: 'app-sign-up-page',
   imports: [Checkbox, FormField, NgIcon, RouterLink, PublicLayout],
@@ -270,8 +249,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                   class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
                   >Password</label
                 >
-                <!-- Password and Show are one group: the check waits until focus leaves both, so
-                     tabbing or clicking to Show does not talk over its status (#205). -->
+                <!-- Password and Show are one group: the check waits until focus leaves both, so tabbing or clicking to Show does not talk over its status. -->
                 <div
                   class="flex items-center gap-2"
                   (focusout)="focusLeftGroup($event) && left('password')"
@@ -292,8 +270,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                     [attr.data-matches-spartan-invalid]="errors.password() ? 'true' : null"
                     class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm flex-1"
                   />
-                  <!-- The space after the sr-only span (&ngsp;) is kept on purpose: Chrome lays it
-                       out as a flex item, so the button gets the approved mockup's width. -->
+                  <!-- The space after the sr-only span (&ngsp;) is kept on purpose: Chrome lays it out as a flex item, so the button gets the approved mockup's width. -->
                   <button
                     type="button"
                     data-slot="button"
@@ -433,7 +410,6 @@ export class SignUpPage {
   private readonly injector = inject(Injector);
   private readonly returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
 
-  /** The sign-in links keep a valid `returnTo`; one that is not valid becomes `/app` (#63). */
   protected readonly signInReturnTo = returnToOrApp(this.returnTo);
 
   protected readonly messages = MESSAGES;
@@ -466,7 +442,6 @@ export class SignUpPage {
   protected readonly submitting = signal(false);
   protected readonly formAlert = signal<FormAlert | null>(null);
 
-  /** The first client-side error of each field, whether or not it is shown. */
   private readonly clientErrors: Record<FieldName, Signal<string | null>> = {
     name: computed(() => this.fields.name().errors()[0]?.message ?? null),
     email: computed(() => this.fields.email().errors()[0]?.message ?? null),
@@ -474,10 +449,6 @@ export class SignUpPage {
     adult: computed(() => this.fields.adult().errors()[0]?.message ?? null),
   };
 
-  /**
-   * Whether each field's client error shows: after a submit, or when the user leaves the field
-   * after changing it; cleared once the field is valid (mockup state 4, #205).
-   */
   private readonly shown: Record<FieldName, ShownUntilValid> = {
     name: this.shownUntilValid('name'),
     email: this.shownUntilValid('email'),
@@ -485,7 +456,6 @@ export class SignUpPage {
     adult: this.shownUntilValid('adult'),
   };
 
-  /** A server answer about one field, until that field's value changes. */
   private readonly serverErrors: Record<FieldName, WritableSignal<string | null>> = {
     name: this.untilChanged(() => this.model().name),
     email: this.untilChanged(() => this.model().email),
@@ -493,7 +463,6 @@ export class SignUpPage {
     adult: this.untilChanged(() => this.model().adult),
   };
 
-  /** The error each field shows now, or `null`. */
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
     name: this.shownError('name'),
     email: this.shownError('email'),
@@ -507,13 +476,11 @@ export class SignUpPage {
   private readonly adultCheckbox = viewChild.required(Checkbox);
   private readonly alert = viewChild<ElementRef<HTMLElement>>('alert');
 
-  /** `aria-describedby`: the field's description, then its error while one is shown. */
   protected describedBy(field: FieldName, description?: string): string | null {
     const ids = [description, this.errors[field]() ? `${field}-error` : undefined].filter(Boolean);
     return ids.length > 0 ? ids.join(' ') : null;
   }
 
-  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   protected left(field: FieldName): void {
     this.shown[field].left();
   }

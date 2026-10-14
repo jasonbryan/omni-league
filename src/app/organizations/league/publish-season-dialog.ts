@@ -33,10 +33,6 @@ import {
 import { AdminAlert } from '../admin/admin-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 
-/**
- * The season the dialog asks about: its id for `seasons.publish`, its name and registration
- * deadline (a `YYYY-MM-DD` date) for the copy, and the name of its league.
- */
 export interface PublishSeasonTarget {
   seasonId: Id<'seasons'>;
   name: string;
@@ -44,14 +40,12 @@ export interface PublishSeasonTarget {
   leagueName: string;
 }
 
-/** How the dialog ended: the season that was asked about, and whether it is now published. */
 export interface PublishSeasonOutcome {
   seasonId: Id<'seasons'>;
   name: string;
   published: boolean;
 }
 
-/** The text of each failure alert (design/mockups/125-126-seasons.html states 20 and 21). */
 function alertText(kind: PublishAlert, name: string): { title: string; description: string } {
   return kind === 'offline'
     ? {
@@ -67,17 +61,8 @@ function alertText(kind: PublishAlert, name: string): { title: string; descripti
 type PublishAlert = 'failed' | 'offline';
 
 /**
- * The season publish confirmation (#126; design/mockups/125-126-seasons.html states 17 to 21),
- * built as #69's `PublishLeagueDialog` is: a helm-style alert dialog from the brain `alert-dialog`
- * primitives with the mockup's classes as static strings. `open(season)` opens it for one season
- * from the row's Publish button, and the copy names the league's public page and the
- * registration deadline. Focus starts on Cancel. Cancel and Escape close it and write nothing
- * (Escape is handled here, because the brain dialog reads `disableClose` only when it opens); a
- * press outside does not. While `seasons.publish` runs the button reads "Publishing…" and the
- * dialog stays open and cannot be dismissed. A failure (or the offline refusal of angular.md,
- * State and data) shows the destructive alert inside the dialog, takes focus, and leaves the
- * season a draft. Focus is not restored by the dialog: `dismissed` tells the page how it ended,
- * and the page puts focus where it belongs once the page behind is no longer inert.
+ * Its scrim is the phone-menu sheet's `bg-foreground/50` with no blur, not helm's. Escape is handled here, because the brain dialog reads `disableClose` only when it opens.
+ * Focus is not restored by the dialog: `dismissed` tells the page how it ended, and the page puts focus where it belongs once the page behind is no longer inert.
  */
 @Component({
   selector: 'app-publish-season-dialog',
@@ -174,7 +159,6 @@ export class PublishSeasonDialog {
   private readonly injector = inject(Injector);
   private readonly publishSeason = injectMutation(api.seasons.publish);
 
-  /** The dialog ended, after it left the page: the season and whether it was published. */
   readonly dismissed = output<PublishSeasonOutcome>();
 
   protected readonly online = injectOnline();
@@ -206,10 +190,8 @@ export class PublishSeasonDialog {
   private readonly alertBox = viewChild<AdminAlert>('alertBox');
   private published = false;
 
-  /** Whether the dialog is open: the page behind it is inert while it is. */
   readonly isOpen = computed(() => this.dialog().stateComputed() === 'open');
 
-  /** Opens the confirmation for `season`. */
   open(season: PublishSeasonTarget): void {
     this.target.set(season);
     this.failure.set(null);
@@ -239,7 +221,6 @@ export class PublishSeasonDialog {
     this.dialog().close();
   }
 
-  /** The dialog has left the page. */
   protected onClosed(): void {
     const target = this.target();
     if (!target) return;

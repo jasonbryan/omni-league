@@ -14,18 +14,7 @@ import { organizationPath } from '../organization-path';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
 import type { PublicSeasonView } from './public-season-view';
 
-/**
- * The public season page's content column (#128, design/mockups/127-128-public-seasons.html
- * state 9): the breadcrumb organization, league, season; the season as the page's `<h1>`; the
- * sport badge and the league's name; and the Season details panel, a definition list of the dates
- * (each a `<time>` with its stored `YYYY-MM-DD`), the format, "Teams need at least N players",
- * and the locations. It shows no price and no registration action: #129, #133, and #143 add their
- * panel beside the details. With `savedAt` set (a saved copy shown offline, #82), the saved-copy
- * note sits right under the `h1`.
- *
- * The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the
- * server and a browser in any time zone render the same text.
- */
+/** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-season-content',
   imports: [NgIcon, RouterLink, SavedCopyNote],
@@ -77,7 +66,6 @@ import type { PublicSeasonView } from './public-season-view';
       <app-saved-copy-note [savedAt]="savedAt" />
     }
     <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-      <!-- The mockup's badge: helm's hlmBadge variant="secondary" classes. -->
       <span
         data-slot="badge"
         data-variant="secondary"
@@ -146,7 +134,6 @@ import type { PublicSeasonView } from './public-season-view';
 })
 export class PublicSeasonContent {
   readonly view = input.required<PublicSeasonView>();
-  /** When the saved copy shown was saved; set only while offline (`PublicSeasonPage`). */
   readonly savedAt = input<number | undefined>(undefined);
 
   protected readonly season = computed(() => this.view().season);

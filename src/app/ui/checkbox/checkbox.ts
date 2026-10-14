@@ -12,21 +12,15 @@ import type { FormCheckboxControl } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck } from '@ng-icons/lucide';
 
-/**
- * A checkbox for signal forms (`[formField]`, `FormCheckboxControl`): a `button role="checkbox"`
- * with the markup and classes of the approved mockup's helm checkbox. The id, description, and
- * shown-invalid state come from the page, which decides when an error is shown.
- */
 @Component({
   selector: 'app-checkbox',
   imports: [NgIcon],
   providers: [provideIcons({ lucideCheck })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { 'data-slot': 'checkbox', class: 'contents peer' },
-  // helm checkbox (Nova) classes with #61's change, as design/mockups/62-sign-up.html draws them:
-  // no focus halo, so the base layer's `:focus-visible` outline is the focus indicator. Static, so
-  // they are set before the button is inserted. The mockup's invalid box has `border-destructive`
-  // in place of `border-input`; `data-invalid` gives the same edge without a class binding.
+  // helm checkbox (Nova) classes with no focus halo, so the base layer's `:focus-visible` outline is the focus indicator, as the approved mockup draws them.
+  // Static, so they are set before the button is inserted. The mockup's invalid box has `border-destructive` in place of `border-input`;
+  // `data-invalid` gives the same edge without a class binding.
   template: `
     <button
       #box
@@ -56,13 +50,11 @@ import { lucideCheck } from '@ng-icons/lucide';
 })
 export class Checkbox implements FormCheckboxControl {
   readonly checked = model(false);
-  /** Bound by `[formField]` from the field's `required()` rule. */
   readonly required = input(false, { transform: booleanAttribute });
   readonly touch = output();
 
   readonly controlId = input.required<string>();
   readonly describedBy = input<string | null>(null);
-  /** True while the page shows this field's error (after a submit, until the field is valid). */
   readonly showInvalid = input(false);
 
   private readonly box = viewChild.required<ElementRef<HTMLButtonElement>>('box');

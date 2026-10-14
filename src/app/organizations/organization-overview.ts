@@ -71,7 +71,6 @@ import { publicLeaguePath } from './public-league/public-league-path';
                     </p>
                   }
                 </div>
-                <!-- The mockup's badge: helm's hlmBadge variant="secondary" classes plus mt-0.5. -->
                 <span
                   data-slot="badge"
                   data-variant="secondary"
@@ -135,13 +134,9 @@ import { publicLeaguePath } from './public-league/public-league-path';
 })
 export class OrganizationOverview {
   readonly page = input.required<PublicOrganizationPage>();
-  /** When the saved copy shown was saved; set only while offline (`OrganizationPage`). */
   readonly savedAt = input<number | undefined>(undefined);
 
-  /**
-   * The organization's league, location, and sport totals (#73 decision 4), from
-   * `getPublicPage`: never the number of rows shown, which is at most 5 per list (#100).
-   */
+  /** From `getPublicPage`: never the number of rows shown, which is at most 5 per list. */
   protected readonly tiles = computed(() => {
     const { leagueCount, locationCount, sportCount } = this.page();
     return [

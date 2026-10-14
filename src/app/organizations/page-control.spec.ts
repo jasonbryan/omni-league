@@ -164,7 +164,6 @@ describe('PageControl', () => {
     const gaps = [...nav.querySelectorAll('li[aria-hidden="true"]')];
     expect(gaps).toHaveLength(3);
     expect(gaps.map((gap) => gap.className)).toEqual(['sm:hidden', 'sm:hidden', 'max-sm:hidden']);
-    // The pages only a wide screen shows are hidden below 640px.
     const hiddenNarrow = [...nav.querySelectorAll('li.max-sm\\:hidden:not([aria-hidden])')];
     expect(hiddenNarrow.map(text)).toEqual(['Page 2', 'Page 4']);
   });
@@ -186,7 +185,6 @@ describe('PageControl', () => {
       a.addEventListener('click', (event) => event.preventDefault());
       a.click();
     }
-    // Previous, 1, (2 is current), 3, Next.
     expect(activated).toEqual([1, 1, 3, 3]);
   });
 
@@ -223,7 +221,6 @@ describe('PageControl', () => {
     set('page', 3);
     set('pageCount', 6);
     set('total', 26);
-    // The other list (locations) is on page 2; leagues is the list this control pages.
     set('queryFor', (page: number) => ({ ...(page > 1 ? { leagues: page } : {}), locations: 2 }));
     fixture.detectChanges();
     expect(

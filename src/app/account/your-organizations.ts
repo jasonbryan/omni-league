@@ -16,7 +16,6 @@ import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
 import { adminPath } from '../organizations/admin/admin-path';
 
-/** The first letters of the first two words of the name: "Coastal Bend Rec Club" gives "CB". */
 export function organizationInitials(name: string): string {
   return name
     .trim()
@@ -30,21 +29,8 @@ export function organizationInitials(name: string): string {
 
 const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' } as const;
 
-// Every class string below is the approved mockup's, written as a static attribute
-// (design/mockups/64-create-organization.html, 141-app-leagues.html); the buttons carry
-// `buttonVariants` output unmerged, as the mockup draws them, and your-organizations.spec.ts
-// checks them.
+// Class strings are the approved mockup's, written as static attributes; buttons carry unmerged `buttonVariants` output.
 
-/**
- * "Your organizations" on `/app` (#64; design/mockups/64-create-organization.html states 1 to 4):
- * one row per membership from `organizations.listMine`, sorted by name by the query, with the
- * organization's initials, name, role, and a "Public page" link, then "Manage" (the admin area, #65)
- * for org admins only. A league organizer's row also lists their assigned leagues, each a link to
- * its management page (#141; design/mockups/141-app-leagues.html), or says none are assigned.
- * Loading shows two placeholder rows and a polite status; none shows the empty state with "Create
- * an organization". The query is asked only once Convex has accepted the token, so the
- * first answer is the caller's own.
- */
 @Component({
   selector: 'app-your-organizations',
   imports: [NgIcon, RouterLink],
@@ -252,9 +238,7 @@ export class YourOrganizations {
       initials: organizationInitials(name),
       roleName: ROLE_NAMES[role],
       publicPath: `/organizations/${slug}`,
-      // Only an org admin manages: the admin area is not for league organizers (#65).
       managePath: role === 'orgAdmin' ? adminPath(slug) : null,
-      // A league organizer has no admin area: their assigned leagues are listed instead (#141).
       isLeagueOrganizer: role === 'leagueOrganizer',
       leaguesLabelId: `${slug}-leagues-label`,
       leagues: leagues.map((league) => ({

@@ -46,10 +46,7 @@ function menuButton(harness: RouterTestingHarness): HTMLButtonElement {
 
 const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>('[role="dialog"]');
 
-/**
- * Records every view attached to `ApplicationRef`. The shell attaches the sheet's host view there
- * (#94): it has no view container in its template, so the sheet's host element is in no document.
- */
+/** The shell attaches the sheet's host view there: it has no view container in its template, so the sheet's host element is in no document. */
 function trackAppViews(onAttach?: (view: ViewRef) => void): {
   attached: ViewRef[];
   detached: ViewRef[];
@@ -71,14 +68,12 @@ function trackAppViews(onAttach?: (view: ViewRef) => void): {
   return { attached, detached };
 }
 
-/** The `<app-shell-sheet>` host element of the sheet's (component host) view. */
 function sheetHostElement(view: ViewRef): Element {
   const [element] = (view as EmbeddedViewRef<unknown>).rootNodes as Node[];
   if (!(element instanceof Element)) throw new Error('the sheet view has no host element');
   return element;
 }
 
-/** Lets the sheet's afterNextRender work (initial focus, close) and its close promise finish. */
 async function settle(harness: RouterTestingHarness): Promise<void> {
   for (let i = 0; i < 3; i++) await harness.fixture.whenStable();
 }
@@ -166,7 +161,6 @@ describe('Shell', () => {
       expect(home?.getAttribute('href')).toBe('/');
       expect(home?.textContent.trim()).toBe('Omni League');
       expect(home?.querySelector('ng-icon[aria-hidden="true"] svg')).not.toBeNull();
-      // The visitor's own link follows the brand (#63; top-bar-account.spec.ts covers it).
       expect(
         [...header!.querySelectorAll('a')].map((a) => [
           a.textContent.trim(),
@@ -200,8 +194,6 @@ describe('Shell', () => {
       expect(dialog()).toBeNull();
     });
 
-    // The button is plain markup, so it carries the helm button's classes itself, plus the shell's
-    // own offset and its hiding from 1024px.
     it('styles the menu button as hlmBtn variant="ghost" size="icon-lg", hidden from 1024px', async () => {
       const harness = await render(SidebarTestPage);
       const expected = hlm(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), '-ms-1.5');
@@ -238,15 +230,12 @@ describe('Shell', () => {
       vi.restoreAllMocks();
     });
 
-    /** The views attached to ApplicationRef since the last `open()` or `trackAppViews()`. */
     let views: { attached: ViewRef[]; detached: ViewRef[] };
 
-    /** Presses the menu button and waits for the sheet to open. */
     async function press(harness: RouterTestingHarness): Promise<void> {
       const button = menuButton(harness);
       button.focus();
       button.click();
-      // The first press imports the sheet before it opens.
       await vi.waitFor(() => {
         expect(dialog()).not.toBeNull();
       });
@@ -330,9 +319,8 @@ describe('Shell', () => {
       expect(document.documentElement.classList).toContain('cdk-global-scrollblock');
     });
 
-    // The sheet has no view container in the server-rendered template (#94): its host view is
-    // attached to ApplicationRef, and its host element stays out of the document. Only the CDK
-    // overlay container, which holds the dialog, is added to the body.
+    // The sheet has no view container in the server-rendered template: its host view is attached to ApplicationRef, and its host element stays out of the document.
+    // Only the CDK overlay container, which holds the dialog, is added to the body.
     it('keeps the sheet host out of the document: only the overlay container joins the body', async () => {
       const harness = await render(SidebarTestPage);
       views = trackAppViews();
@@ -362,7 +350,6 @@ describe('Shell', () => {
 
     it('destroys a sheet whose first render throws, so the next press creates only one sheet', async () => {
       const harness = await render(SidebarTestPage);
-      // The first sheet's first render throws; later sheets render normally.
       let failures = 1;
       views = trackAppViews((view) => {
         if (failures-- > 0) {
@@ -431,7 +418,7 @@ describe('Shell', () => {
       expect(scrolled).toEqual([false]);
     });
 
-    it('keeps the current query string on a link to the current path, and replaces the fragment (#95)', async () => {
+    it('keeps the current query string on a link to the current path, and replaces the fragment', async () => {
       const harness = await open(undefined, '/organizations/test?utm_source=x&ott=abc#top');
       const router = TestBed.inject(Router);
       const target = host(harness).querySelector<HTMLElement>('#row-2');
@@ -447,7 +434,7 @@ describe('Shell', () => {
       expect(scrolled).toEqual([false]);
     });
 
-    it('navigates through the router to the link URL, with its own query string, for another path on the site (#95)', async () => {
+    it('navigates through the router to the link URL, with its own query string, for another path on the site', async () => {
       const loadPage = vi.fn<(url: string) => void>();
       TestBed.configureTestingModule({ providers: [{ provide: LOAD_PAGE, useValue: loadPage }] });
       const harness = await open(undefined, '/organizations/test?utm_source=x');
@@ -462,7 +449,7 @@ describe('Shell', () => {
       expect(loadPage).not.toHaveBeenCalled();
     });
 
-    it('loads a link to another origin as a full page, with no router navigation (#95)', async () => {
+    it('loads a link to another origin as a full page, with no router navigation', async () => {
       const loadPage = vi.fn<(url: string) => void>();
       TestBed.configureTestingModule({ providers: [{ provide: LOAD_PAGE, useValue: loadPage }] });
       const harness = await open(undefined, '/organizations/test?utm_source=x');
@@ -490,7 +477,6 @@ describe('Shell', () => {
     }
 
     describe('a press waiting on the sheet chunk', () => {
-      /** Holds the sheet's import back until `release()`. */
       function holdSheetImport(): { release: () => void; loads: () => number } {
         let release!: () => void;
         const held = new Promise<void>((resolve) => {
@@ -519,7 +505,6 @@ describe('Shell', () => {
         await flush();
         expectNoSheetLeft();
         expect(document.querySelector('app-shell-sheet')).toBeNull();
-        // No sheet was created, so none is left attached to ApplicationRef.
         expect(views.attached).toEqual([]);
       });
 
@@ -608,7 +593,6 @@ describe('Shell', () => {
         await settle(harness);
         expect(router.url).toBe('/plain');
         expectNoSheetLeft();
-        // A sheet created as the shell went away was destroyed with it.
         expect(views.attached.every((view) => view.destroyed)).toBe(true);
       });
     });

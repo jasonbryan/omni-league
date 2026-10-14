@@ -15,9 +15,6 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Staff (#67), design/mockups/67-organization-staff.html states 1 to 11 and "Staff messages" and
-// "Staff attributes", plus design/mockups/88-offline-note.html states 2 and 3.
-
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
 const URL = `/app/organizations/${COASTAL.slug}/staff`;
 const LIST_MEMBERS = 'memberships:listForOrganization';
@@ -28,7 +25,6 @@ const REVOKE = 'invites:revoke';
 const RESTORE = 'invites:restore';
 const tokens = (value: string) => value.split(' ').sort();
 
-/** The mockup's "today", at midday UTC so the shown date is the same in every time zone. */
 const NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -73,7 +69,6 @@ const PENDING = [
   },
 ];
 
-/** What `leagues.listForAdmin` returns: the form lists each league, drafts included. */
 const LEAGUES = [
   {
     leagueId: 'lg_7v7',
@@ -125,10 +120,6 @@ describe('AdminStaff', () => {
     vi.restoreAllMocks();
   });
 
-  /**
-   * Opens the page as an org admin. Each list is emitted unless it is `undefined`, which leaves
-   * it loading.
-   */
   async function open(
     lists: { members?: unknown[]; pending?: unknown[]; leagues?: unknown[] } = {},
   ) {
@@ -178,13 +169,11 @@ describe('AdminStaff', () => {
     await o.flush();
   }
 
-  /** Fills the form validly as a league organizer for the Wednesday league. */
   async function fill() {
     await type('email', 'Jordan.Mills@Example.com ');
     await toggleLeague(4);
   }
 
-  /** Submits the filled form and answers the action with the token. */
   async function createInvite() {
     await fill();
     await submit();
@@ -363,7 +352,6 @@ describe('AdminStaff', () => {
       expect(document.activeElement).toBe(input('email'));
     });
 
-    // #180: the press came before the leagues answered, so the form (and Email) did not exist yet.
     describe('pressed while the leagues are still loading', () => {
       const jump = () => page.querySelector<HTMLAnchorElement>('main a[data-slot="button"]')!;
 
@@ -632,7 +620,6 @@ describe('AdminStaff', () => {
       await o.harness.fixture.whenStable();
     }
 
-    /** Focus moving from a league checkbox to `to` (null: out of the page). */
     async function leaveLeagues(n: number, to: HTMLElement | null) {
       league(n).dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
       await o.harness.fixture.whenStable();
@@ -951,7 +938,7 @@ describe('AdminStaff', () => {
       expect(text(submitButton())).toBe('Create invite link');
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+    describe('offline', () => {
       async function goOffline() {
         vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
         window.dispatchEvent(new Event('offline'));
@@ -1012,7 +999,6 @@ describe('AdminStaff', () => {
       await openFull();
       await press(0);
       o.convex.calls[0].resolve(null);
-      // The live list drops the revoked invite, so the button the focus was on is gone.
       o.subscription(LIST_PENDING)!.emit([PENDING[1]]);
       await o.flush();
       const box = statusBox()!;
@@ -1020,7 +1006,6 @@ describe('AdminStaff', () => {
       expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
         'Invite to dana.whitlock@example.com revoked.',
       );
-      // The description is followed by Undo.
       expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
         'Its link no longer works. You can invite this address again. Undo revoking the invite to dana.whitlock@example.com',
       );
@@ -1114,7 +1099,6 @@ describe('AdminStaff', () => {
       );
     const revokeButton = (n: number) => pending()[n].querySelector<HTMLButtonElement>('button')!;
 
-    /** Revokes Dana's invite and lets the live list drop it: the status now offers Undo. */
     async function revokeDana(rest: unknown[] = [PENDING[1]]) {
       await openFull();
       revokeButton(0).click();
@@ -1167,7 +1151,6 @@ describe('AdminStaff', () => {
       expect(text(pendingUndo)).toBe('Undoing…');
       expect(pendingUndo.getAttribute('aria-disabled')).toBe('true');
       expect(pendingUndo.hasAttribute('disabled')).toBe(false);
-      // A second press while one is in flight sends nothing more.
       await pressUndo();
       expect(o.convex.calls).toHaveLength(2);
     });
@@ -1283,7 +1266,6 @@ describe('AdminStaff', () => {
         'The invite is still revoked.',
       );
       expect(document.activeElement).toBe(box);
-      // Undo stays, to try again when connected.
       expect(undoButton()).toBeDefined();
     });
 

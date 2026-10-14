@@ -12,8 +12,6 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
-// The public season page (#128), drawn in design/mockups/127-128-public-seasons.html state 9.
-
 const SEASON = 'seasons:getPublicPage';
 const LEAGUE_PATH = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s';
 const PATH = `${LEAGUE_PATH}/seasons/summer-2027`;
@@ -64,7 +62,6 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
-/** The details list as `[term, definition]` pairs. */
 function details(harness: RouterTestingHarness): [string, string][] {
   return [...host(harness).querySelectorAll('main dl > div')].map((row) => [
     text(row.querySelector('dt')),
@@ -72,8 +69,7 @@ function details(harness: RouterTestingHarness): [string, string][] {
   ]);
 }
 
-// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
-// next one, nor a later spec file (spec files share one global).
+// Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
 });
@@ -138,7 +134,6 @@ describe('PublicSeasonPage populated', () => {
       PATH,
     ]);
     expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
-    // The separators are decoration.
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Summer 2027');
@@ -273,7 +268,6 @@ describe('PublicSeasonPage populated', () => {
     expect(metaContent('og:description')).toBe(
       'Jun 13 – Sep 5, 2027. 4v4, teams need at least 6 players.',
     );
-    // The same elements: the page was not torn down and rebuilt.
     expect(host(harness).querySelector('main h1')).toBe(h1);
   });
 });

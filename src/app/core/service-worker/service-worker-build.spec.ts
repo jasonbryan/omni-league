@@ -1,7 +1,5 @@
 import { SERVICE_WORKER_BUILD, serviceWorkerRegistration } from './service-worker-build';
 
-// The kill switch is one setting (ADR 0013 section 4, PR #119 review): angular.json's
-// `serviceWorker` option, which `npm run build` passes to the app as `__SERVICE_WORKER__`.
 describe('serviceWorkerRegistration', () => {
   it('registers in a production build with the serviceWorker option, 30 s after the app is stable', () => {
     expect(serviceWorkerRegistration(true, false)).toEqual({

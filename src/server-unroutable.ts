@@ -2,27 +2,10 @@ import { PRIMARY_OUTLET, type UrlSegmentGroup } from '@angular/router';
 import { QueryTolerantUrlSerializer } from './app/core/url-serializer';
 
 /**
- * Paths the router can never render (#23, PR #90). Their pathname has one leading slash, so
- * `src/server-redirect.ts` lets them through, but the router reads them as one of:
- * - a URL whose own form starts with `//`: `/(//evil.com)` is an empty first segment, which the
- *   router writes as `//evil.com`. Angular then throws NG05702 (a protocol-relative URL);
- * - a route for a named outlet (`/(a:b)`, `/x/(a:b//c:d)`). The app has no named
- *   `<router-outlet>` (`src/server.spec.ts` fails when a route names one), so none can match;
- * - a URL it cannot parse (`/a(b`, `/a(?q=1`). The router warns NG04018 and renders `/` with
- *   status 200;
- * - an empty URL for a path that is not `/` (`/(`, `/()x`, `/()`, #91). The router parses each of
- *   these to `/` without a warning, and the engine renders the home page with status 200 and the
- *   public `Cache-Control`.
- *
- * Angular logs most such requests, the first with a stack, so a crawler could fill the
- * edge-function log, and the CDN would store the home page under each of the others. The handler
- * answers them with the plain 404 before the engine runs.
- *
- * A query string the router cannot decode (`?q=%`) is not a reason for the 404: the engine renders
- * the same path without it (`hasUndecodableQuery`, #91). The path is checked with the serializer
- * the app's router uses (`QueryTolerantUrlSerializer` in `src/app/core/url-serializer.ts`), which
- * reads such a URL without its query string.
- *
+ * Their pathname has one leading slash, so `src/server-redirect.ts` lets them through, but the router reads them as `//evil.com` (`/(//evil.com)`, which Angular rejects with NG05702),
+ * as a named outlet (`/(a:b)`; the app has none), as unparseable (`/a(b`; the router warns NG04018 and renders `/` with status 200), or as `/` for a path that is not `/` (`/(`, `/()x`).
+ * Angular logs most such requests, so a crawler could fill the edge-function log, and the CDN would store the home page under each. The handler answers them with the plain 404 before the engine runs.
+ * A query string the router cannot decode is not a reason: the engine renders the path without it, and the path is checked with the app router's serializer (`QueryTolerantUrlSerializer` in `src/app/core/url-serializer.ts`).
  * Web-API-only: bundled into the Netlify edge function (ESLint enforces it for `src/server*.ts`).
  */
 
@@ -56,7 +39,6 @@ function isUnroutable(path: string, search: string): boolean {
   return /^[/\\]{2}/.test(serialized) || hasNamedOutlet(tree.root) || readsAsRoot(path, serialized);
 }
 
-/** True when the router reads a path other than `/` as `/` (`/(`, `/()x`, `/()`, `/(/`). */
 function readsAsRoot(path: string, serialized: string): boolean {
   return path !== '' && path !== '/' && serialized.split(/[?#]/, 1)[0] === '/';
 }

@@ -45,7 +45,7 @@ describe('provideConvex', () => {
     configure('browser', 'https://happy-otter-123.convex.cloud');
     TestBed.inject(CONVEX_CLIENT);
 
-    TestBed.resetTestingModule(); // destroys the application's root injector
+    TestBed.resetTestingModule();
 
     expect(created[0].lifecycle).toEqual(['close']);
   });
@@ -108,7 +108,6 @@ describe('normalizeConvexUrl', () => {
 
 describe('wrapConvexClient', () => {
   it('delegates close and clearAuth to the real client', () => {
-    // Never connects, so the test makes no network call.
     class NoopWebSocket {
       readyState = 0;
       send = vi.fn();

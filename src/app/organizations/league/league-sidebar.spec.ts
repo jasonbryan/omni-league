@@ -11,10 +11,6 @@ import {
   MINE_AS_ORGANIZER,
 } from './testing/league-harness';
 
-// The league organizer's sidebar (#196; design/mockups/125-126-seasons.html state 12): "Your
-// leagues" lists every league assigned to the caller in this organization, from
-// `organizations.listMine`, with the one being managed marked.
-
 const CURRENT_CLASS =
   'flex min-h-8 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground';
 const OTHER_CLASS =

@@ -20,19 +20,6 @@ import { PageControl } from '../page-control';
 import { seasonDates } from '../league/season-dates';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
-/**
- * The public league page's content column (#127, design/mockups/127-128-public-seasons.html): the
- * breadcrumb organization, sport, league; the league as the page's `<h1>`; the sport badge and the
- * locations; and the Seasons panel with one row per published season on this page (a link to the
- * season page, its dates, and its format), the empty state, and #103's numbered control when the
- * league has more than 5 published seasons. With `savedAt` set (a saved copy shown offline, #82),
- * the saved-copy note sits right under the `h1`.
- *
- * `busy` marks the list `aria-busy` while the next page loads (the page keeps the old rows until
- * then). A plain click on a page link remembers that the visitor asked for a page, and when the
- * seasons shown change, focus moves to the panel heading, as the mockup states. A live update of
- * the shown page never moves focus.
- */
 @Component({
   selector: 'app-public-league-content',
   imports: [NgIcon, PageControl, RouterLink, SavedCopyNote],
@@ -53,7 +40,6 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
         </li>
         <li>
-          <!-- Plain text until #114 adds the sport view (/organizations/<org>/sports/<segment>). -->
           <span class="font-medium">{{ view().league.sportName }}</span>
         </li>
         <li aria-hidden="true">
@@ -73,7 +59,6 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
       <app-saved-copy-note [savedAt]="savedAt" />
     }
     <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <!-- The mockup's badge: helm's hlmBadge variant="secondary" classes. -->
       <span
         data-slot="badge"
         data-variant="secondary"
@@ -122,7 +107,6 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
                     /><span><span class="sr-only">Dates: </span>{{ season.dates }}</span>
                   </p>
                 </div>
-                <!-- The mockup's badge: helm's hlmBadge variant="secondary" classes plus mt-0.5. -->
                 <span
                   data-slot="badge"
                   data-variant="secondary"
@@ -160,15 +144,12 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
 })
 export class PublicLeagueContent {
   readonly view = input.required<PublicLeagueView>();
-  /** The next page of seasons is loading: the rows shown are the previous page's. */
   readonly busy = input(false);
-  /** When the saved copy shown was saved; set only while offline (`PublicLeaguePage`). */
   readonly savedAt = input<number | undefined>(undefined);
 
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly injector = inject(Injector);
 
-  /** A visitor activated a link to another page, so focus follows when its seasons arrive. */
   protected pageRequested = false;
 
   protected readonly organizationHref = computed(() =>

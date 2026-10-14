@@ -1,15 +1,7 @@
 /**
- * Requests whose path starts with two slashes (#23). Angular refuses to render a protocol-relative
- * request URL (`NG05702`, thrown before any component runs), which the SSR entry would answer with
- * a 500. The URL parser has already turned `/\x`, `/x/..//x`, `/%2e%2e//x`, and a tab or newline
- * into the same `//x`, so the parsed pathname is the one place to check.
- *
- * Such a path gets a permanent redirect to the same path and query string with one leading slash,
- * where the router renders the page or the not-found view. The `Location` is relative and starts
- * with exactly one `/` followed by neither `/` nor `\`, so a browser resolves it on this site: it
- * is not an open redirect (`//evil.com/x` goes to `/evil.com/x` here, never to `evil.com`). It is
- * `no-store`, because it carries the request's query string (PR #90).
- *
+ * Angular refuses to render a protocol-relative request URL (`NG05702`), so a path starting with `//` gets a permanent `no-store` redirect to the same path and query string with one leading slash.
+ * The URL parser has already turned `/\x`, `/x/..//x`, `/%2e%2e//x`, and a tab or newline into `//x`, so the parsed pathname is the one place to check.
+ * The `Location` starts with exactly one `/` followed by neither `/` nor `\`, so a browser resolves it on this site: it is not an open redirect.
  * Web-API-only: bundled into the Netlify edge function (ESLint enforces it for `src/server*.ts`).
  */
 
@@ -17,7 +9,6 @@ import { notFoundResponse } from './server-error-response';
 
 const LEADING_SLASHES = /^[/\\]+/;
 
-/** The redirect for a path with a doubled leading slash, or `null` for any other path. */
 export function leadingSlashesRedirect(url: URL): Response | null {
   if (!/^[/\\]{2}/.test(url.pathname)) return null;
   const location = url.pathname.replace(LEADING_SLASHES, '/') + url.search;
@@ -30,16 +21,8 @@ export function leadingSlashesRedirect(url: URL): Response | null {
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
- * `response` with its redirect made safe for a shared cache (PR #90, round 2). A response without
- * a `Location` is returned as it is. Any other response:
- * - is `Cache-Control: no-store`, because its `Location` can carry the request's query string
- *   (Angular conventions, Rendering, "Query strings and the CDN");
- * - keeps a redirect status (301, 302, 303, 307, 308) and its `Location`;
- * - with any other status becomes a 302 with an empty body. The router normalizes some URLs
- *   (`/x//` to `/x/`, `/x/(y)` to `/x`), and the engine then sends a redirect with the status the
- *   route set: a 404 with a `Location` in a production build, which a browser shows as its own
- *   error page. Its `Location` becomes a path on this site with one leading slash, followed by
- *   the query string the engine wrote. A `Location` that is not a URL gives the plain 404.
+ * Any response with a `Location` is `no-store`, because the `Location` can carry the request's query string. A redirect status keeps its `Location`; any other status becomes a 302,
+ * since the engine sends a redirect with the route's status and a 404 with a `Location` shows as the browser's own error page. A `Location` that is not a URL gives the plain 404.
  */
 export function withSafeRedirect(response: Response, requestUrl: URL): Response {
   const location = response.headers.get('Location');

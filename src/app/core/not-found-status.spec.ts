@@ -3,15 +3,13 @@ import { REQUEST, RESPONSE_INIT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { setNotFoundStatus } from './not-found-status';
 
-// `@angular/ssr` redirects when the request URL and the URL the router left in `PlatformLocation`
-// differ once serialized (PR #90, round 2). The status must then stay unset, so the engine sends a
-// 302 rather than a 404 with a Location (production) or a throw (development).
+// `@angular/ssr` redirects when the request URL and the URL the router left in `PlatformLocation` differ once serialized.
+// The status must then stay unset, so the engine sends a 302 rather than a 404 with a Location (production) or a throw (development).
 
 interface Setup {
   responseInit?: ResponseInit;
   request?: string;
   headers?: Record<string, string>;
-  /** Path, query string, and hash the router left in `PlatformLocation`. */
   location?: string;
   baseHref?: string;
 }
