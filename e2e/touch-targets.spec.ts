@@ -47,7 +47,6 @@ interface Measured {
  *   such as a list row's title, is measured;
  * - breadcrumb links, which meet WCAG 2.5.8 (24 px) and are outside the touch-target scope;
  * - check boxes and radio buttons, whose hit area is the label row (`checkableRows`).
- * A stretched link (an `::after` covering its positioned row) is measured as that row.
  */
 async function undersizedControls(scope: Locator): Promise<Measured> {
   return scope.evaluate((root, target): Measured => {
@@ -68,7 +67,7 @@ async function undersizedControls(scope: Locator): Promise<Measured> {
       if (getComputedStyle(el).display === 'inline' && !wholeBlock) continue;
       if (el.closest('nav[aria-label="Breadcrumb"]')) continue;
       const stretched = getComputedStyle(el, '::after').position === 'absolute';
-      const hitArea = stretched ? (el.closest('.relative') ?? el) : el;
+      const hitArea = stretched ? (el.offsetParent ?? el) : el;
       const box = hitArea.getBoundingClientRect();
       if (box.width <= 1 || box.height <= 1) continue;
       count++;
