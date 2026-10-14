@@ -64,6 +64,7 @@ import { LocationFields } from './location-fields';
         [fields]="form.fields"
         [errors]="form.errors"
         [descriptions]="descriptions"
+        (fieldLeft)="form.left($event)"
       />
       <button
         #submitButton
