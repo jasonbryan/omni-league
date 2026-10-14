@@ -1,19 +1,12 @@
-// The service worker on a production build (#81, ADR 0013 sections 1 and 4): the app opens
-// offline from the worker, the worker caches only the build files ngsw.json lists, and the
-// new-version prompt and the unrecoverable message pass the accessibility checks.
-//
-// Development builds register no worker (e2e/smoke.spec.ts), so this spec runs only with
-// E2E_BASE_URL set, against a production build: locally `npm run build`, `npm run serve:ssr`, then
-// `E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts` (not `npm run e2e`, which
-// rebuilds dist/ in development mode), or a preview with the Netlify Drawer off. A local build has
-// no Convex URL, so the offline note follows `navigator.onLine` (docs/process/hosting.md, Service
-// worker). A preview has one; its Convex sockets are routed (`routeConvexSockets`). `ci` sets no
-// E2E_BASE_URL, so it skips this spec. chromium-mobile only (ADR 0013, CI minutes): nothing here
-// depends on the browser project.
-//
-// The saved-copy tests (#82) need page data: a build against a backend seeded by `seed:demo` (a
-// preview, or the local sequence in docs/process/hosting.md, Service worker). Without it they are
-// skipped with that reason.
+// Development builds register no worker, so this spec runs only with E2E_BASE_URL set, against a
+// production build: locally `npm run build`, `npm run serve:ssr`, then
+// `E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts` (not `npm run e2e`,
+// which rebuilds dist/ in development mode), or a preview with the Netlify Drawer off. A local
+// build has no Convex URL, so the offline note follows `navigator.onLine` (docs/process/hosting.md,
+// Service worker). A preview has one; its Convex sockets are routed (`routeConvexSockets`). The
+// saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
+// the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
+// that reason.
 import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
@@ -25,22 +18,17 @@ interface NgswManifest {
   assetGroups: { name: string; urls: string[] }[];
 }
 
-/** Whether `setOffline` last took the context offline. */
 let offline = false;
-/** Field wifi with no internet: every Convex socket is refused while `navigator.onLine` stays true. */
 let fieldWifi = false;
 
-/** A Convex sync socket: `wss://<name>.convex.cloud/api/<v>/sync`, or a local backend's `ws://`. */
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 
 /**
- * A build with a Convex URL (a preview, or a local build against the local backend) connects to
- * its backend. Offline, Chromium logs every socket that fails to connect as a console error
- * (`net::ERR_INTERNET_DISCONNECTED`), which the console fixture reports. So the context's Convex
- * sockets are routed: while `setOffline` has the context offline, or in field-wifi mode, the route
- * closes them at once and never calls `connectToServer()` (Playwright would otherwise open a
- * mocked socket, which the client counts as connected); otherwise they go to the server. A local
- * build with no Convex URL opens no socket.
+ * Offline, Chromium logs every socket that fails to connect as a console error
+ * (`net::ERR_INTERNET_DISCONNECTED`), which the console fixture reports. So while `setOffline` has
+ * the context offline, or in field-wifi mode, the route closes the Convex sockets at once and never
+ * calls `connectToServer()` (Playwright would otherwise open a mocked socket, which the client
+ * counts as connected); otherwise they go to the server.
  */
 async function routeConvexSockets(context: BrowserContext): Promise<void> {
   offline = false;
@@ -51,13 +39,11 @@ async function routeConvexSockets(context: BrowserContext): Promise<void> {
   });
 }
 
-/** `context.setOffline`, and the Convex socket route follows it (`routeConvexSockets`). */
 async function setOffline(context: BrowserContext, value: boolean): Promise<void> {
   offline = value;
   await context.setOffline(value);
 }
 
-/** Every Cache Storage cache of the page's origin and the URLs it holds. */
 async function cacheContents(page: Page): Promise<Record<string, string[]>> {
   return page.evaluate(async () => {
     const contents: Record<string, string[]> = {};
@@ -69,10 +55,6 @@ async function cacheContents(page: Page): Promise<Record<string, string[]>> {
   });
 }
 
-/**
- * Loads `/`, waits for the worker to control the page and to finish prefetching the shell group,
- * then loads `/` once more under the worker, which caches the lazy assets the page uses (fonts).
- */
 async function installWorker(page: Page): Promise<NgswManifest> {
   const manifest = (await (await page.request.get('/ngsw.json')).json()) as NgswManifest;
   const shell = manifest.assetGroups.find((group) => group.name === 'shell');
@@ -99,14 +81,12 @@ async function installWorker(page: Page): Promise<NgswManifest> {
   return manifest;
 }
 
-/** Posts a worker event to the page as `ngsw-worker.js` does, so the page's SwUpdate sees it. */
 async function workerEvent(page: Page, data: object): Promise<void> {
   await page.evaluate((message) => {
     navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: message }));
   }, data);
 }
 
-/** Removes focus from the focused element, so a screenshot shows no focus ring. */
 async function blurActiveElement(page: Page): Promise<void> {
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -155,7 +135,6 @@ test.describe('service worker (production build)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
     await expect(note).toBeVisible();
 
-    // Back online: the note goes within 10 s, with no reload.
     const url = page.url();
     await setOffline(context, false);
     await expect(note).toBeHidden({ timeout: 10_000 });
@@ -188,8 +167,6 @@ test.describe('service worker (production build)', () => {
     }
   });
 
-  // Lazily loaded chunks, such as the phone sheet's (PR #107 testing), come from the worker
-  // offline before their first use. sw-config-check fails the build when a chunk is not prefetched.
   test('serves every JavaScript chunk offline, including lazily loaded ones never used online', async ({
     page,
     context,
@@ -231,18 +208,25 @@ test.describe('service worker (production build)', () => {
     await expect(status).toHaveText('A new version of Omni League is ready.');
     expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 
+    const PHONE_CARD_INSET = 12;
+    const DESKTOP_CARD_INSET = 16;
+    const DESKTOP_CARD_WIDTH = 384;
     for (const [width, height, gap] of [
-      [360, 800, 12],
-      [1280, 720, 16],
+      [360, 800, PHONE_CARD_INSET],
+      [1280, 720, DESKTOP_CARD_INSET],
     ] as const) {
       await page.setViewportSize({ width, height });
       const box = await card.boundingBox();
       if (!box) throw new Error('no card box');
-      // Full width less 12px on phones; 384px at the bottom end corner from 640px.
       expect(box.y + box.height).toBeCloseTo(height - gap, 0);
-      if (width === 360) expect(box).toMatchObject({ x: 12, width: 336 });
-      else expect(box).toMatchObject({ x: width - 16 - 384, width: 384 });
-      // The page makes room for the card and its gap (WCAG 2.4.11); a resize re-measures it.
+      if (width === 360) {
+        expect(box).toMatchObject({ x: PHONE_CARD_INSET, width: width - 2 * PHONE_CARD_INSET });
+      } else {
+        expect(box).toMatchObject({
+          x: width - DESKTOP_CARD_INSET - DESKTOP_CARD_WIDTH,
+          width: DESKTOP_CARD_WIDTH,
+        });
+      }
       await expect
         .poll(() =>
           card.evaluate((section, cardGap) => {
@@ -265,7 +249,6 @@ test.describe('service worker (production build)', () => {
       await expectAccessible(page);
     }
 
-    // Mockup state 2: with the offline note, the note at the top and the card at the bottom.
     await page.setViewportSize({ width: 360, height: 800 });
     await setOffline(context, true);
     const note = page.locator('header + [role="status"] [data-offline-note]');
@@ -285,8 +268,6 @@ test.describe('service worker (production build)', () => {
     await setOffline(context, false);
     await expect(note).toBeHidden({ timeout: 10_000 });
 
-    // Later: the card goes for this page session, focus moves to the main region (not <body>), and
-    // the page loses its padding.
     await card.getByRole('button', { name: 'Later' }).click();
     await expect(card).toHaveCount(0);
     await expect(page.locator('main#main')).toBeFocused();
@@ -315,20 +296,17 @@ test.describe('service worker (production build)', () => {
   });
 });
 
-// #82: saved copies of public pages (ADR 0013 section 3), design/mockups/82-offline-pages.html.
 const [SAVED_ORG, UNUSABLE_ORG, NOT_SAVED_ORG, FIELD_WIFI_ORG] = DEMO;
 const orgPath = (slug: string) => `/organizations/${slug}`;
 const SAVED_PATH = orgPath(SAVED_ORG.organization.slug);
 const savedKey = (slug: string) =>
   `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug })}`;
-/** Page 1 of each list, which the organization page also keeps as saved copies (#100). */
 const savedListKeys = (slug: string) =>
   ['listPublicLeagues', 'listPublicLocations'].map(
     (name) => `cvx-saved:organizations:${name}:${JSON.stringify({ page: 1, slug })}`,
   );
 const NOT_SAVED_HEADING = "This page isn't saved on this device";
 
-/** The saved copy's `savedAt` for `slug` in the page's localStorage, or null. */
 async function savedAtOf(page: Page, slug: string): Promise<number | null> {
   return page.evaluate((key) => {
     const raw = localStorage.getItem(key);
@@ -336,14 +314,12 @@ async function savedAtOf(page: Page, slug: string): Promise<number | null> {
   }, savedKey(slug));
 }
 
-/** Every link on the page has no `aria-disabled` (links stay enabled offline). */
 async function expectLinksEnabled(page: Page): Promise<void> {
   const links = page.locator('a[href]');
   expect(await links.count()).toBeGreaterThan(0);
   expect(await page.locator('a[aria-disabled], a[disabled]').count()).toBe(0);
 }
 
-/** Screenshots at 360px and 1280px, each followed by the axe helper; ends at 360px. */
 async function screenshotsAndAxe(page: Page, testInfo: TestInfo, name: string): Promise<void> {
   for (const [width, height] of [
     [360, 800],
@@ -401,7 +377,6 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
     await expect(savedNote).toHaveCount(0);
 
-    // Offline reload: the worker serves the shell and the page renders its saved copy.
     await setOffline(context, true);
     const reload = await page.reload();
     expect(reload?.fromServiceWorker()).toBe(true);
@@ -416,7 +391,6 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     }
     await expect(offlineNote).toBeVisible();
     await expect(savedNote).toBeVisible();
-    // Right under the h1, with the time in the device's locale and time zone.
     expect(
       await page.evaluate(() => document.querySelector('main h1')?.nextElementSibling?.tagName),
     ).toBe('APP-SAVED-COPY-NOTE');
@@ -435,7 +409,6 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     await expectLinksEnabled(page);
     await screenshotsAndAxe(page, testInfo, 'saved-copy-offline');
 
-    // Back online: the live result replaces the saved copy in place, with no reload.
     await page.evaluate(() => {
       (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
     });
@@ -449,8 +422,6 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     ).toBe(true);
   });
 
-  // #100: the organization page needs its header and both lists saved. Any one missing is the
-  // not-saved view, and the page opens again once the copy is back.
   test('offline, the page needs the header and both lists saved: any one missing shows the not-saved view', async ({
     page,
     context,
@@ -517,8 +488,8 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     await expectLinksEnabled(page);
     await screenshotsAndAxe(page, testInfo, 'not-saved-offline');
 
-    // The top bar's home link still works offline (an in-app navigation). The axe helper's Tab
-    // walk leaves focus on the skip link, which then covers the home link: blur it first.
+    // The axe helper's Tab walk leaves focus on the skip link, which then covers the home link:
+    // blur it first.
     await blurActiveElement(page);
     await page.getByRole('banner').getByRole('link', { name: 'Omni League' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
@@ -539,9 +510,8 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     expect(await page.evaluate(() => navigator.onLine)).toBe(true);
   });
-  // PR #136's test FAIL: a saved value that is not a getPublicPage result of this build crashed
-  // the page offline and logged errors online. Each is now removed and treated as not saved; the
-  // console fixture fails the test on any console error.
+  // A saved value that is not a getPublicPage result of this build is removed and treated as not
+  // saved; the console fixture fails the test on any console error.
   test('a saved value of the wrong shape or version is removed: not-saved view offline, the live page online', async ({
     page,
     context,
@@ -600,8 +570,9 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       expect(await savedAtOf(page, organization.slug), label).toBeNull();
     }
 
-    // Online, the worker serves the shell, so no transferred value: the saved copy would show
-    // until the live result arrives. An unusable one is removed instead, and the live result saved.
+    // Online, the worker serves the shell, so there is no transferred value: the saved copy would
+    // show until the live result arrives. An unusable one is removed instead, and the live result
+    // saved.
     await setOffline(context, false);
     for (const [label, stored] of unusable) {
       await plant(stored);

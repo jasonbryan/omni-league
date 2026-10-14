@@ -1,10 +1,3 @@
-// The Leagues page of the admin area and the Overview's league tile (#66):
-// `/app/organizations/:slug/leagues`, a Client route behind sign-in (approved design
-// design/mockups/66-69-organization-leagues.html; publishing is in organization-leagues-
-// publish.spec.ts). Every test signs
-// up its own user through the real form, then gives it a role in a seeded organization
-// (`testing:addMembership`), so the tests need the local Convex backend and are skipped with
-// E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible } from './support/a11y';
@@ -30,7 +23,6 @@ const LOCATIONS = [
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
-/** Signs up a user and gives it `role` in a new seeded organization built from `seed`. */
 async function memberOf(page: Page, role: Role | null, seed: TenantSeed = {}) {
   const user = newUser('Admin');
   await signUp(page, user);
@@ -98,7 +90,6 @@ test.describe('Leagues: creating a draft', () => {
     await screenshot(page, testInfo, '66-leagues-created');
     await expectAccessible(page);
 
-    // Not on the public page: the server-rendered HTML, and the hydrated page.
     const raw = await fetchRawHtml(request, tenant.path);
     expect(raw.status).toBe(200);
     expect(raw.html).not.toContain('Sunday Reverse Coed 4s');
@@ -202,7 +193,6 @@ test.describe('Leagues: creating a draft', () => {
   });
 
   test.describe('a slug used by a league of the organization', () => {
-    // The rejected mutation logs one console error, as for a taken organization slug (#64).
     test.use({ expectedConvexErrors: ['leagues:create'] });
 
     test('is refused with the slug named; the next slug works', async ({ page }, testInfo) => {
@@ -418,7 +408,6 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
         .getByRole('link', { name: 'Overview' })
         .click();
     }
-    // A draft is not on the public page: the tile counts it as a draft, and the list stays.
     await expect(leagueTile(page).locator('dd').first()).toHaveText('1');
     await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 draft');
     await expect(page.getByRole('region', { name: 'Get set up' })).toBeVisible();
@@ -426,7 +415,6 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
 });
 
 test.describe('who may open Leagues', () => {
-  /** Every WebSocket message the page sends, so a test can show what it asked for. */
   function sentFrames(page: Page): string[] {
     const frames: string[] = [];
     page.on('websocket', (socket) => {
@@ -478,7 +466,6 @@ test.describe('who may open Leagues', () => {
     );
   }
 
-  // The view is the same for every role, so one run of it is saved as a screenshot and scanned.
   test('the no-access view is saved as a screenshot and passes the axe helper', async ({
     page,
   }, testInfo) => {
