@@ -14,6 +14,12 @@ const MAX_LOG_N = 20;
 const MAX_R = 32;
 const MAX_P = 16;
 
+const SCRYPT_MAXMEM_HEADROOM_BYTES = 1024 * 1024;
+
+function scryptWorkingMemoryBytes(r: number, logN: number): number {
+  return 128 * r * 2 ** logN;
+}
+
 const HEX = /^(?:[0-9a-f]{2})+$/;
 const INTEGER = /^[1-9][0-9]{0,2}$/;
 
@@ -34,8 +40,8 @@ async function derive(
     r,
     p,
     dkLen,
-    // 128 * r * N bytes of working memory, plus headroom; the default cap is 1 GiB.
-    maxmem: 128 * r * 2 ** logN + 1024 * 1024,
+    // Without this, the library's 1 GiB default cap would reject the larger parameters `parse` accepts.
+    maxmem: scryptWorkingMemoryBytes(r, logN) + SCRYPT_MAXMEM_HEADROOM_BYTES,
   });
 }
 

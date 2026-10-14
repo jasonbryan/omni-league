@@ -21,6 +21,10 @@ const schema = defineSchema({
 });
 fixture.schema = schema;
 
+type FunctionRegistrationMarkers = Partial<
+  Record<'isQuery' | 'isMutation' | 'isAction' | 'isInternal' | 'isPublic', boolean>
+>;
+
 const HOUR = 60 * 60 * 1000;
 
 function setup() {
@@ -143,10 +147,7 @@ describe('convex/testing.ts exports', () => {
       'seedTenant',
     ]);
     for (const [name, fn] of exports) {
-      // The markers `internalQuery`/`internalMutation`/`internalAction` set (convex/server).
-      const markers = fn as Partial<
-        Record<'isQuery' | 'isMutation' | 'isAction' | 'isInternal' | 'isPublic', boolean>
-      >;
+      const markers = fn as FunctionRegistrationMarkers;
       const kinds = [markers.isQuery, markers.isMutation, markers.isAction].filter(Boolean);
       expect({ name, kinds: kinds.length }).toEqual({ name, kinds: 1 });
       expect({ name, isInternal: markers.isInternal }).toEqual({ name, isInternal: true });

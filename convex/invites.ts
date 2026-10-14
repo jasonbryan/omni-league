@@ -17,20 +17,15 @@ import {
   INVITE_LIFETIME_MS,
   INVITE_MESSAGES,
   INVITE_RESTORE_WINDOW_MS,
-  type InviteInputError,
   type InviteRestoreError,
 } from './lib/inviteInput';
 import { findUsableInvite } from './lib/inviteLookup';
 import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator, type Role } from './lib/roles';
+import { refuse } from './lib/refuse';
 
 export const PENDING_INVITES_LIMIT = 200;
-
-function refuse(error: InviteInputError): never {
-  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
-  throw new ConvexError({ ...error });
-}
 
 // An action: Convex seeds the randomness of queries and mutations, which does not suit a bearer
 // secret.

@@ -1,19 +1,11 @@
-import { ConvexError, v } from 'convex/values';
+import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireLocationAdmin, requireOrgAdmin } from './lib/access';
-import {
-  checkLocationAddress,
-  checkLocationName,
-  type LocationInputError,
-} from './lib/locationInput';
+import { checkLocationAddress, checkLocationName } from './lib/locationInput';
 import { insertLocation, updateLocation } from './lib/tenantWrites';
+import { refuse } from './lib/refuse';
 
 export const ADMIN_LOCATIONS_LIMIT = 200;
-
-function refuse(error: LocationInputError): never {
-  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
-  throw new ConvexError({ ...error });
-}
 
 function checkedInput(name: string, address: string): { name: string; address: string } {
   const checkedName = checkLocationName(name);

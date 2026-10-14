@@ -1,4 +1,4 @@
-import { ConvexError, v } from 'convex/values';
+import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdminOrForbidden, requireUser } from './lib/access';
@@ -7,7 +7,6 @@ import {
   checkOrganizationName,
   checkOrganizationSlug,
   ORGANIZATION_MESSAGES,
-  type OrganizationInputError,
 } from './lib/organizationInput';
 import { pageOf, pageRows, PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import {
@@ -20,6 +19,7 @@ import { isSlug } from './lib/slugs';
 import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from './lib/sports';
 import { insertOrganization, organizationSlugTaken, sortName } from './lib/tenantWrites';
 import { getCurrentUser } from './lib/users';
+import { refuse } from './lib/refuse';
 
 export { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE };
 
@@ -220,11 +220,6 @@ export const listMine = query({
     return rows;
   },
 });
-
-function refuse(error: OrganizationInputError): never {
-  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
-  throw new ConvexError({ ...error });
-}
 
 export const create = mutation({
   args: { name: v.string(), slug: v.string() },

@@ -1,4 +1,4 @@
-import { ConvexError, v } from 'convex/values';
+import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import {
@@ -11,7 +11,6 @@ import {
   checkLeagueName,
   checkLeagueSlug,
   LEAGUE_MESSAGES,
-  type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { leagueLocationNames } from './lib/publicLeague';
@@ -20,13 +19,9 @@ import { roleValidator } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import { sportName, sportValidator } from './lib/sports';
 import { insertDraftLeague, leagueSlugTaken, publishLeague } from './lib/tenantWrites';
+import { refuse } from './lib/refuse';
 
 export const ADMIN_LEAGUES_LIMIT = 200;
-
-function refuse(error: LeagueInputError): never {
-  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
-  throw new ConvexError({ ...error });
-}
 
 export const listForAdmin = query({
   args: { organizationId: v.id('organizations') },
