@@ -16,7 +16,6 @@ import { ConvexOfflineError } from '../../core/data/convex';
 import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 
 export type { LeagueField };
-/** The fields in the order focus and errors follow (design/mockups/66-69-organization-leagues.html). */
 export const LEAGUE_FIELDS: readonly LeagueField[] = ['name', 'slug', 'sport', 'locations'];
 
 export interface LeagueTextModel {
@@ -24,7 +23,6 @@ export interface LeagueTextModel {
   slug: string;
 }
 
-/** What `leagues.create` is called with, besides the organization. */
 export interface LeagueValues {
   name: string;
   slug: string;
@@ -32,10 +30,8 @@ export interface LeagueValues {
   locationIds: Id<'locations'>[];
 }
 
-/** A failure that is not about one field: the form alert above the fields. */
 export type LeagueFormAlertKind = 'offline' | 'failed';
 
-/** The text of each form alert ("League messages"; design/mockups/88-offline-note.html state 3). */
 export const LEAGUE_FORM_ALERTS = {
   failed: {
     title: 'The league could not be created.',
@@ -47,23 +43,18 @@ export const LEAGUE_FORM_ALERTS = {
   },
 } as const;
 
-/** What a submit leaves the component to do: where focus goes, or nothing more. */
 export type LeagueSubmitOutcome =
   | { sent: true; values: LeagueValues }
   | { sent: false; focus: LeagueField }
   | { sent: false; alert: LeagueFormAlertKind };
 
-/** The reserved slug the format message names; the page prints it in bold (#64). */
 const RESERVED_SLUG = 'new';
 
-/** A refusal about one field, as `leagues.create` throws it (`ConvexError` data). */
 interface ServerError {
   text: string;
-  /** Set when the slug is taken: the message repeats it in bold. */
   taken: string | null;
 }
 
-/** The `LeagueInputError` a `ConvexError` carries, or `null` for any other failure. */
 function inputErrorOf(failure: unknown): LeagueInputError | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
@@ -76,46 +67,26 @@ function inputErrorOf(failure: unknown): LeagueInputError | null {
   return { field: field as LeagueField, code: code as LeagueInputError['code'], message };
 }
 
-/**
- * The state of the create-league form (#66): the signal form for Name and Slug, the chosen sport
- * and locations, the messages each field shows, and the submit sequence. Like `LocationForm`,
- * errors show under their field when the user leaves a field they changed (`left`, `leftGroup`) and
- * after a submit, and clear once the field is valid; a server refusal about a field shows until
- * that field changes. Typing a name fills Slug with
- * `slugify(name)` until the user edits Slug (decision 3). Construct it in an injection context (a
- * component field initializer); `available` returns the ids of the organization's locations, in
- * the order the list shows them.
- */
 export class LeagueForm {
   readonly model: WritableSignal<LeagueTextModel> = signal({ name: '', slug: '' });
   readonly fields: FieldTree<LeagueTextModel>;
   readonly sport = signal<Sport | null>(null);
-  /** The checked locations; `chosen()` is those that still exist, in list order. */
   readonly selected = signal<ReadonlySet<Id<'locations'>>>(new Set());
-  /** Set when the user types in Slug; from then on the name no longer changes it. */
   readonly slugEdited = signal(false);
   readonly submitting = signal(false);
   readonly alert = signal<LeagueFormAlertKind | null>(null);
 
-  /** The chosen locations, in the order of the list. */
   readonly chosen: Signal<Id<'locations'>[]>;
 
   private readonly clientErrors: Record<LeagueField, Signal<string | null>>;
   private readonly shown: Record<LeagueField, ShownUntilValid>;
-  /** True once the user has checked or unchecked a location. */
   private readonly locationsChanged = changedSince(() => this.selected());
   private readonly serverErrors: Record<LeagueField, WritableSignal<ServerError | null>>;
 
-  /** The error each field shows now, or `null`. */
   readonly errors: Record<LeagueField, Signal<string | null>>;
 
-  /** The slug named by the "taken" message while that message is the one Slug shows. */
   readonly takenSlug: Signal<string | null>;
 
-  /**
-   * The format message split around the reserved slug it names, so the page can bold `new` as for
-   * organizations; `null` for any other slug message. The string stays shared.
-   */
   readonly reservedParts: Signal<{ before: string; after: string } | null>;
 
   constructor(available: () => readonly Id<'locations'>[]) {
@@ -173,7 +144,6 @@ export class LeagueForm {
     });
   }
 
-  /** The user typed in Name: while Slug is untouched it follows (an empty name, an empty slug). */
   nameTyped(name: string): void {
     if (this.slugEdited()) return;
     this.model.update((m) => ({ ...m, name, slug: name.trim() === '' ? '' : slugify(name) }));
@@ -188,7 +158,6 @@ export class LeagueForm {
     });
   }
 
-  /** Empties every field (after a create succeeded). */
   clear(): void {
     this.model.set({ name: '', slug: '' });
     this.slugEdited.set(false);
@@ -198,22 +167,14 @@ export class LeagueForm {
     this.locationsChanged.set(false);
   }
 
-  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   left(field: LeagueField): void {
     this.shown[field].left();
   }
 
-  /** A `focusout` in a group of checkboxes: checked once focus leaves the whole group. */
   leftGroup(field: LeagueField, event: FocusEvent): void {
     if (focusLeftGroup(event)) this.left(field);
   }
 
-  /**
-   * One press of the submit button. Clears the form alert and checks every field; an invalid one
-   * shows its message, and focus goes to the first (Name, Slug, Sport, Locations). Valid and
-   * offline: the offline alert, nothing sent. Otherwise `send` runs with the trimmed name; a
-   * refusal about a field shows on it, and any other failure shows the form alert.
-   */
   async submit(
     online: boolean,
     send: (values: LeagueValues) => Promise<unknown>,

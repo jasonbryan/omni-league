@@ -11,9 +11,6 @@ import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client
 import { buttonVariants } from '../ui/button/hlm-button';
 import { CreateOrganizationPage } from './create-organization-page';
 
-// /app/organizations/new (#64), design/mockups/64-create-organization.html states 5 to 12 and
-// design/mockups/88-offline-note.html states 2 and 3.
-
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
 
@@ -157,7 +154,6 @@ describe('CreateOrganizationPage', () => {
       await type('name', 'Another Name Entirely');
       expect(input('slug').value).toBe('my-own-slug');
       expect(address()).toBe(`${location.host}/organizations/my-own-slug`);
-      // Also after the user emptied Slug themselves.
       await type('slug', '');
       await type('name', 'Third Name');
       expect(input('slug').value).toBe('');
@@ -369,7 +365,6 @@ describe('CreateOrganizationPage', () => {
       expect(status()?.getAttribute('role')).toBe('status');
       await submit();
       expect(convex.calls).toHaveLength(1);
-      // The values stay while in flight.
       expect(input('name').value).toBe(NAME);
     });
 
@@ -459,7 +454,6 @@ describe('CreateOrganizationPage', () => {
       expect(input('name').value).toBe(NAME);
       expect(input('slug').value).toBe(SLUG);
       expect(box?.textContent).not.toContain('Connection lost');
-      // A later press clears the alert.
       await submit();
       expect(alert()).toBeNull();
     });

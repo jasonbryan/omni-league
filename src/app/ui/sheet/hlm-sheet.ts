@@ -16,9 +16,7 @@ import { HlmSheetOverlay } from './hlm-sheet-overlay';
       provide: BrnSheet,
       useExisting: forwardRef(() => HlmSheet),
     },
-    provideBrnDialogDefaultOptions({
-      // add custom options here
-    }),
+    provideBrnDialogDefaultOptions({}),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

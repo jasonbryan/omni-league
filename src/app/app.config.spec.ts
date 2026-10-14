@@ -15,7 +15,6 @@ import { QueryTolerantUrlSerializer } from './core/url-serializer';
 const isTestOnlyHydrationWarning = (args: unknown[]) =>
   typeof args[0] === 'string' && args[0].startsWith('NG0505:');
 
-// No Convex URL in the test build, as in CI and the e2e build (#11).
 describe('appConfig with no Convex URL', () => {
   it('registers the Convex provider, creates no client, and renders the placeholder silently', async () => {
     const factory = vi.fn();
@@ -51,13 +50,10 @@ describe('appConfig with no Convex URL', () => {
     TestBed.configureTestingModule({ providers: [...appConfig.providers] });
 
     expect(TestBed.inject(CONVEX_AUTH)).toBe(TestBed.inject(AuthService));
-    // No Convex site URL in the test build, so no client is created.
     expect(TestBed.inject(AUTH_CLIENT)).toBeNull();
     expect(TestBed.inject(AuthService).signedIn()).toBe(false);
   });
 
-  // ADR 0013 section 1 (#81): the worker registers 30 s after the app is stable, and only in
-  // production builds. Unit tests run in development mode, like `ng serve` and the e2e build.
   it('provides the service worker, off in development builds, and adds no update prompt', async () => {
     TestBed.configureTestingModule({ providers: [...appConfig.providers] });
 
@@ -72,7 +68,6 @@ describe('appConfig with no Convex URL', () => {
     expect(document.body.querySelector('app-update-prompt')).toBeNull();
   });
 
-  // The server handler and the browser's router read a URL the same way (PR #105, tester round 2).
   it('reads a URL with an undecodable query string as its path, without a warning', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     TestBed.configureTestingModule({ providers: [...appConfig.providers] });

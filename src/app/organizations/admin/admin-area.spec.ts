@@ -12,9 +12,6 @@ import {
   text,
 } from './testing/admin-harness';
 
-// The admin area's shell (#65), design/mockups/65-organization-admin-locations.html states 1, 3,
-// 4, 5, and 6: what `organizations.getAdminContext` decides, and the sidebar.
-
 @Component({ template: '<p id="child">child</p>' })
 class Child {}
 

@@ -22,7 +22,6 @@ import { ConvexSavedCopies } from './saved-copies';
 import { ConvexServerQueryLoader, transferKey } from './server-query-loader';
 import { ConvexHydrationWindow, decodeTransferred, type TransferredQuery } from './transfer';
 
-/** Args value that keeps a query helper idle: no subscription, `isLoading()` false. */
 export const skipToken = Symbol('convex.skipToken');
 export type SkipToken = typeof skipToken;
 
@@ -30,11 +29,6 @@ export interface QueryRef<T> {
   readonly value: Signal<T | undefined>;
   readonly isLoading: Signal<boolean>;
   readonly error: Signal<Error | undefined>;
-  /**
-   * When the value shown was saved, in epoch milliseconds, while `value()` is a saved copy (an
-   * allow-listed query in the browser with no transferred value and no live result yet, ADR 0013
-   * section 3); `undefined` otherwise, and from the first live result on.
-   */
   readonly savedAt: Signal<number | undefined>;
 }
 
@@ -42,11 +36,6 @@ function isArgsFn<A>(args: A | (() => A | SkipToken)): args is () => A | SkipTok
   return typeof args === 'function';
 }
 
-/**
- * Convex query as signals, owned by the current (or given) injector: a live subscription in the
- * browser (seeded from the server render during hydration), one HTTP fetch during a server render.
- * See README.md; the behaviour is fixed by ADR 0006 "Query helper".
- */
 export function injectQuery<Q extends FunctionReference<'query'>>(
   query: Q,
   args: FunctionArgs<Q> | (() => FunctionArgs<Q> | SkipToken),
@@ -68,7 +57,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
     }
 
     const readArgs = (): FunctionArgs<Q> | SkipToken => (isArgsFn(args) ? args() : args);
-    // Structural comparison: a new object with equal content keeps the same Request (no resubscribe).
+    // Equal content keeps the same Request, so there is no resubscribe.
     const request = computed<Request | SkipToken>(
       () => {
         const current = readArgs();
@@ -79,11 +68,9 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
     );
 
     const server = isPlatformServer(inject(PLATFORM_ID));
-    // Server: the per-render HTTP loader, only with a URL. Browser: the app's live client.
     const loader = server && inject(CONVEX_URL) !== null ? inject(ConvexServerQueryLoader) : null;
     const client = server ? null : inject(CONVEX_CLIENT);
     if (!loader && !client) {
-      // No URL (either platform): no client, no network, nothing logged.
       const error = new ConvexNotConfiguredError();
       return {
         value: signal<FunctionReturnType<Q> | undefined>(undefined).asReadonly(),
@@ -93,10 +80,8 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       };
     }
 
-    // Hydration seed: decided once, on the first read of the args (inputs are bound after
-    // construction, so the args function must not run here). The seed is taken only if that first
-    // read is ready and the hydration window is still open. A first read of skipToken, or a first
-    // read after stable, never seeds, and later args changes never use transferred entries.
+    // The seed is decided once, on the first read of the args: inputs are bound after construction, so the args function must not run here.
+    // Only a ready first read inside the hydration window seeds; later args changes never use transferred entries.
     const transferState = inject(TransferState);
     const hydrationWindow = server ? null : inject(ConvexHydrationWindow);
     let seedDecided = false;
@@ -117,9 +102,7 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
       return req;
     };
 
-    // Saved copies (ADR 0013 section 3): browser only, allow-listed queries only, and only for a
-    // request with no transferred seed. Read once per request, synchronously, so a page opened
-    // offline renders its saved copy on the first render. The server never reads them.
+    // Read once per request, synchronously, so a page opened offline renders its saved copy on the first render.
     const savedCopies = client ? inject(ConvexSavedCopies) : null;
     const saved = computed<Result | undefined>(() => {
       const req = readRequest();
@@ -131,7 +114,6 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
     });
 
     // A result counts only for the request that produced it, so an args change reads as loading.
-    // Precedence: the live result, then the transferred seed, then a saved copy, then loading.
     const result = signal<Result | undefined>(undefined);
     const current = computed(() => {
       const req = readRequest();
@@ -158,7 +140,6 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
           req.args,
           (value) => {
             result.set({ request: req, value });
-            // Each live result becomes the saved copy; `null` removes it. Not listed: no-op.
             savedCopies?.write(query, req.args, value);
           },
           (error) => result.set({ request: req, error }),

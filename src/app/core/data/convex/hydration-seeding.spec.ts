@@ -30,7 +30,6 @@ describe('injectQuery hydration seeding (browser)', () => {
     });
   });
 
-  /** Pre-populates TransferState as the browser app would read it from the server's ng-state script. */
   function transfer(entry: unknown, key = KEY) {
     TestBed.inject(TransferState).set(makeStateKey(key), entry);
   }
@@ -45,7 +44,6 @@ describe('injectQuery hydration seeding (browser)', () => {
     transfer({ v: convexToJson({ count: 5n, names: ['Sharks'] }) });
     const teams = create();
 
-    // Before the first effect run: no subscription yet, value already seeded.
     expect(client.subscriptions).toHaveLength(0);
     expect(teams.value()).toEqual({ count: 5n, names: ['Sharks'] });
     expect(teams.isLoading()).toBe(false);
@@ -190,10 +188,9 @@ describe('injectQuery hydration seeding (browser)', () => {
 
   it('does not seed when the args are first read after stable, even if they were ready at creation', async () => {
     transfer({ v: convexToJson(['Sharks']) });
-    const teams = create(); // ready args at creation, inside the hydration window, but not read yet
+    const teams = create();
     await TestBed.inject(ApplicationRef).whenStable();
 
-    // The seed is decided on the first read of the args; after stable, entries are ignored (ADR 0006).
     expect(teams.value()).toBeUndefined();
     expect(teams.isLoading()).toBe(true);
 
@@ -205,9 +202,8 @@ describe('injectQuery hydration seeding (browser)', () => {
   it('keeps the seed decided on the first read (inside the window) after the app becomes stable', async () => {
     transfer({ v: convexToJson(['Sharks']) });
     const teams = create();
-    expect(teams.value()).toEqual(['Sharks']); // first read, inside the hydration window
+    expect(teams.value()).toEqual(['Sharks']);
     await TestBed.inject(ApplicationRef).whenStable();
-    // Removing the entry proves the seed is held from the first read, not looked up again.
     TestBed.inject(TransferState).remove(makeStateKey(KEY));
 
     expect(teams.value()).toEqual(['Sharks']);

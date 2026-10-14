@@ -27,7 +27,6 @@ describe('NotSavedView', () => {
       "Pages you open while connected stay available here offline. This one will appear as soon as you're connected, or you can try again.",
     );
     expect(host.querySelector('ng-icon[name="lucideWifiOff"]')).not.toBeNull();
-    // Not a live region: the title and h1 are announced as on any route change.
     expect(host.querySelector('[role="status"], [role="alert"], [aria-live]')).toBeNull();
   });
 

@@ -37,7 +37,6 @@ import { BADGE_SECONDARY } from './field-classes';
 import { formatDay } from './format-day';
 import { StaffInvitePanel } from './staff-invite-panel';
 
-/** What the status above the pending list says: a revoke done, failed, or refused offline. */
 type RevokeNotice = { kind: 'revoked'; email: string } | { kind: 'failed' } | { kind: 'offline' };
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -46,17 +45,8 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 /**
- * Staff, `/app/organizations/:slug/staff` (#67; design/mockups/67-organization-staff.html): the
- * organization's members from `memberships.listForOrganization`, its pending invites from
- * `invites.listPending` (live, each with Revoke; an invite whose expiry has passed stays listed as
- * "Expired <date>" until it is revoked, decision 8), and the invite panel beside them from 1024px
- * and after them below. Below 1024px the header's "Invite staff" link jumps to the panel and puts
- * focus on its first control.
- *
- * Revoke acts at once, with no confirmation (decision 7): a status above the list says so and
- * takes focus, because the button that had it is gone; inviting the address again is the undo.
- * Every query here is org-admin only; the area's parent has already shown the no-access view to
- * anyone else, so none is asked for them (`AdminArea`).
+ * Revoke acts at once, with no confirmation: a status above the list says so and takes focus, because the button that had it is gone; inviting the address again is the undo.
+ * Every query here is org-admin only; the area's parent has already shown the no-access view to anyone else, so none is asked for them.
  */
 @Component({
   selector: 'app-admin-staff',
@@ -83,8 +73,7 @@ const ROLE_LABEL: Record<Role, string> = {
             Org admins manage everything here. League organizers run the leagues you assign them.
           </p>
         </div>
-        <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to
-             the home page. A plain click scrolls to the panel and focuses its first control. -->
+        <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to the home page. -->
         <a
           [href]="invitePath()"
           data-slot="button"
@@ -350,7 +339,6 @@ export class AdminStaff {
   protected readonly pendingFailed = computed(() => this.pendingList.error() !== undefined);
   protected readonly leaguesFailed = computed(() => this.leagueList.error() !== undefined);
 
-  /** The pending invites, each marked expired once its `expiresAt` has passed (decision 8). */
   protected readonly pendingRows = computed(() => {
     const rows = this.pendingList.value();
     if (rows === undefined) return undefined;
@@ -358,7 +346,6 @@ export class AdminStaff {
     return rows.map((row) => ({ ...row, expired: row.expiresAt <= now }));
   });
 
-  /** The organization's leagues for the form, drafts included, or `undefined` while they load. */
   protected readonly leagueChoices = computed(() =>
     this.leagueList.value()?.map(({ leagueId, name }) => ({ leagueId, name })),
   );
@@ -367,7 +354,6 @@ export class AdminStaff {
     () => `${adminPath(this.context.slug(), 'staff')}#invite`,
   );
 
-  /** The status above the pending list: the last revoke's outcome, until the next press. */
   protected readonly notice = signal<RevokeNotice | null>(null);
 
   private readonly panel = viewChild(StaffInvitePanel);
@@ -381,7 +367,6 @@ export class AdminStaff {
     return ROLE_LABEL[role];
   }
 
-  /** A plain click on "Invite staff" (phones): scroll to the panel and focus its first control. */
   protected jumpToPanel(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
     const panel = this.panel();
@@ -392,11 +377,6 @@ export class AdminStaff {
     panel.focusFirst();
   }
 
-  /**
-   * Revoke at once, no confirmation (decision 7). Offline, nothing is sent and the offline alert
-   * shows; a failure shows the destructive alert. Either way the alert takes focus. On success the
-   * live list drops the invite, and the status takes focus because the button that had it is gone.
-   */
   protected async revoke(inviteId: Id<'invites'>, email: string): Promise<void> {
     if (this.revokeCall.pending()) return;
     this.notice.set(null);

@@ -36,19 +36,6 @@ import {
   type PublishTarget,
 } from './publish-league-dialog';
 
-/**
- * Leagues, `/app/organizations/:slug/leagues` (#66, #69; design/mockups/66-69-organization-
- * leagues.html): the organization's leagues from
- * `leagues.listForAdmin` (live, sorted by name, drafts included), each with its status, sport, and
- * locations, and the create form beside the list from 1024px and after it below. Below 1024px the
- * header's "Create a league" link jumps to the form and puts focus on its first field. An
- * organization with no locations sees "Add a location first" in place of the form, because a
- * league needs at least one. Each Draft row has a Publish button (#69) that opens
- * `PublishLeagueDialog`; once the league is published a status above the list says so, with a
- * link to the public page, and takes focus, because the button that had it is gone. The page
- * behind the dialog is inert while it is open. Each league's name links to its management page
- * (#125; design/mockups/125-126-seasons.html state 16).
- */
 @Component({
   selector: 'app-admin-leagues',
   imports: [AdminAlert, LeagueCreateForm, NgIcon, PublishLeagueDialog, RouterLink],
@@ -80,9 +67,7 @@ import {
             Drafts are visible only to your staff. Publish a league to put it on your public page.
           </p>
         </div>
-        <!-- The fragment link is explicit: a bare #create-league would resolve against <base
-             href="/"> to the home page. A plain click scrolls to the form and focuses its first
-             field. -->
+        <!-- The fragment link is explicit: a bare #create-league would resolve against <base href="/"> to the home page. -->
         <a [href]="createPath()" data-slot="button" [class]="jumpClass" (click)="jumpToForm($event)"
           ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
           league</a
@@ -303,7 +288,6 @@ export class AdminLeagues {
   );
   protected readonly locationsPath = computed(() => adminPath(this.context.slug(), 'locations'));
 
-  /** The league's management page (#125), from the route's organization slug and the row's. */
   protected leaguePath(leagueSlug: string): string {
     return leaguePath(this.context.slug(), leagueSlug);
   }
@@ -312,7 +296,6 @@ export class AdminLeagues {
   private readonly publishDialog = viewChild(PublishLeagueDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
-  /** The league just published, for the status above the list; cleared by the next dialog. */
   protected readonly published = signal<PublishTarget | null>(null);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
   protected readonly publicPath = computed(
@@ -323,17 +306,12 @@ export class AdminLeagues {
     bindAdminTitle('Leagues');
   }
 
-  /** The row's Publish button: asks to confirm, and clears the last result. */
   protected publish(row: PublishTarget): void {
     this.published.set(null);
     this.publishDialog()?.open({ leagueId: row.leagueId, name: row.name });
   }
 
-  /**
-   * The dialog has left the page and the page is no longer inert. A published league moves focus
-   * to the status, because the button that had it is gone; a dialog that was cancelled puts focus
-   * back on that row's Publish button.
-   */
+  /** A published league moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on that row's Publish button. */
   protected publishDismissed(outcome: PublishOutcome): void {
     if (outcome.published) {
       this.published.set({ leagueId: outcome.leagueId, name: outcome.name });
@@ -349,7 +327,6 @@ export class AdminLeagues {
     );
   }
 
-  /** A plain click on "Create a league" (phones): scroll to the form and focus its first field. */
   protected jumpToForm(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
     const section = this.createSection()?.nativeElement;

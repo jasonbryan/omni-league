@@ -13,24 +13,14 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideWifiOff } from '@ng-icons/lucide';
 import { injectOnline } from '../core/data/convex';
 
-/** How long "Back online." stays in the status region for screen readers. */
 export const BACK_ONLINE_MS = 5_000;
 
-/** Custom property on `<html>` holding the note's height; base.css and the shell offset by it. */
 export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
 
 /**
- * The offline note (#88; design/mockups/88-offline-note.html): one status region directly below the
- * top bar. While the adapter's `online` signal is false it shows "You're offline. Changes need a
- * connection."; otherwise it is empty, apart from a screen-reader-only "Back online." for 5 seconds
- * after the note goes. It holds no control, so it adds no Tab stop. On the server `online` is always
- * true, so the server HTML holds an empty region.
- *
  * The host is the region itself, so `sticky` works against the shell's column rather than a wrapper.
- *
- * In the browser it keeps `--offline-note-h` on `<html>` equal to its measured height (unset while
- * empty). html's `scroll-padding-top`, the header's negative scroll margin, and the sidebar's
- * sticky offset add it, so they follow the note however many lines it wraps to (two at 320px).
+ * In the browser it keeps `--offline-note-h` on `<html>` equal to its measured height (unset while empty).
+ * html's `scroll-padding-top`, the header's negative scroll margin, and the sidebar's sticky offset add it, so they follow the note however many lines it wraps to (two at 320px).
  */
 @Component({
   selector: 'app-offline-note',
@@ -56,7 +46,7 @@ export class OfflineNote {
   constructor() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let wasOffline = false;
-    // Starts and clears a timer, which leaves Angular (Angular conventions, State and data).
+    // Starts and clears a timer, which leaves Angular.
     effect(() => {
       clearTimeout(timer);
       if (!this.online()) {
@@ -73,7 +63,6 @@ export class OfflineNote {
     this.trackHeight(destroyRef);
   }
 
-  /** Mirrors the region's height into `--offline-note-h` (browser only: afterNextRender). */
   private trackHeight(destroyRef: DestroyRef): void {
     const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
     const root = inject(DOCUMENT).documentElement;

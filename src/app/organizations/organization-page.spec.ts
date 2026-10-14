@@ -35,14 +35,12 @@ const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
 
-/** The one active subscription to the query `name` (the header query by default). */
 function subscription(name = HEADER): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
   expect(active, name).toHaveLength(1);
   return active[0];
 }
 
-/** Emits the header and page 1 of both lists for `page`, as the three queries return them. */
 function emit(page: PublicOrganizationPage): void {
   for (const [name, value] of Object.entries(queryResults(page))) subscription(name).emit(value);
 }
@@ -64,8 +62,7 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
-// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
-// next one, nor a later spec file (spec files share one global).
+// Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
 });
@@ -173,7 +170,6 @@ describe('OrganizationPage', () => {
       expect(rows.map((row) => text(row.querySelector('h3 a')))).toEqual(
         GULF_COAST.leagues.map((league) => league.name),
       );
-      // Their layout is otherwise unchanged: the name is the row's h3, and the locations are not links.
       expect(rows.every((row) => row.querySelector('p a') === null)).toBe(true);
       const locations = host(harness).querySelectorAll(
         'section[aria-labelledby="locations-heading"] h3 a',
@@ -198,10 +194,8 @@ describe('OrganizationPage', () => {
       expect(nav.getAttribute('aria-label')).toBe('Gulf Coast Sport & Social');
       expect(nav.querySelectorAll('[id]')).toHaveLength(0);
       expect(nav.querySelectorAll('[aria-labelledby]')).toHaveLength(0);
-      // The initials tile and the name.
       expect(text(nav.querySelector('[aria-hidden="true"].size-10'))).toBe('GC');
       expect(nav.textContent).toContain('Gulf Coast Sport & Social');
-      // The menu button exists because the page supplies a sidebar.
       expect(host(harness).querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
     });
 
@@ -227,7 +221,6 @@ describe('OrganizationPage', () => {
           `/organizations/gulf-coast-sport-social#location-${i + 1}`,
         ]),
       );
-      // Every fragment names a row in the page content.
       for (const a of nav?.querySelectorAll('a[href*="#"]') ?? []) {
         const id = (a.getAttribute('href') ?? '').split('#')[1];
         expect(host(harness).querySelector(`main [id="${id}"]`), id).not.toBeNull();
@@ -248,8 +241,6 @@ describe('OrganizationPage', () => {
     });
 
     it('updates the rows, sidebar, and tiles in place when page 1 or the totals change', async () => {
-      // A league that sorts first joins: page 1 gains it and drops its last row, and the totals
-      // grow. The same subscriptions deliver it.
       const before = client.subscriptions.length;
       emit({
         ...GULF_COAST,
@@ -269,7 +260,7 @@ describe('OrganizationPage', () => {
         'Adult League',
         ...GULF_COAST.leagues.slice(0, 4).map((league) => league.name),
       ]);
-      expect(host(harness).querySelector('#league-1 p')).toBeNull(); // no locations: no line
+      expect(host(harness).querySelector('#league-1 p')).toBeNull();
       const sidebarLinks = host(harness).querySelectorAll('nav ul[aria-label="Leagues"] a');
       expect([...sidebarLinks].map(text)).toEqual(names);
       expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual(['6', '4', '3']);
@@ -301,7 +292,6 @@ describe('OrganizationPage', () => {
     emit(GULF_COAST);
     await settle(harness);
     host(harness).querySelector<HTMLButtonElement>('button[aria-label="Open navigation"]')?.click();
-    // The sheet's chunk loads on the first press.
     await vi.waitFor(() => {
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     });
@@ -311,7 +301,6 @@ describe('OrganizationPage', () => {
     expect(document.querySelector('[role="dialog"] nav')).toBe(navs[1]);
     const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
-    // Close the sheet so its overlay does not leak into later specs.
     document.querySelector<HTMLButtonElement>('button[aria-label="Close navigation"]')?.click();
     await settle(harness);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -345,7 +334,7 @@ describe('OrganizationPage', () => {
       expect(
         [...(nav?.querySelectorAll('p') ?? [])].map(text).filter((t) => t === 'None yet'),
       ).toHaveLength(2);
-      expect(nav?.querySelectorAll('ul')).toHaveLength(1); // only the Overview list
+      expect(nav?.querySelectorAll('ul')).toHaveLength(1);
     });
   });
 

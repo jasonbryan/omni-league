@@ -25,7 +25,6 @@ describe('Placeholder', () => {
     expect(column?.children[0].textContent).toBe('Omni League');
   });
 
-  // The approved placeholder is the `home-shell` state of design/mockups/61-token-sheet.html (#75).
   it('uses the classes of the approved mockup state', async () => {
     const fixture = TestBed.createComponent(Placeholder);
     await fixture.whenStable();

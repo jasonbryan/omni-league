@@ -56,12 +56,11 @@ describe('NotFoundView', () => {
     const icons = host.querySelectorAll('ng-icon');
     expect(icons).toHaveLength(2);
     for (const icon of icons) expect(icon.getAttribute('aria-hidden')).toBe('true');
-    expect(icons[0].querySelector('svg circle')).not.toBeNull(); // lucideCompass
-    expect(icons[1].closest('a')).not.toBeNull(); // lucideHouse, inside the link
+    expect(icons[0].querySelector('svg circle')).not.toBeNull();
+    expect(icons[1].closest('a')).not.toBeNull();
     expect(icons[1].getAttribute('data-icon')).toBe('inline-start');
   });
 
-  // The approved markup is the `not-found` state of design/mockups/23-not-found.html (#73).
   it('uses the classes of the approved mockup state', async () => {
     const host = await render();
     expect(classList(host)).toEqual(
@@ -106,8 +105,6 @@ describe('NotFoundView', () => {
     );
   });
 
-  // The link is plain markup, so it carries the helm button's classes itself (hlmBtn size="lg",
-  // default variant) plus the mockup's top margin, and the view needs none of the helm code.
   it('styles the home link as hlmBtn size="lg" with mt-8', async () => {
     const host = await render();
     const link = host.querySelector('a');

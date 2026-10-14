@@ -6,9 +6,6 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { buttonVariants } from '../ui/button/hlm-button';
 import { MESSAGES, SignUpPage } from './sign-up-page';
 
-// /sign-up (#62), design/mockups/62-sign-up.html. Each case drives the real AuthService through a
-// fake Better Auth client.
-
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
 
@@ -95,7 +92,6 @@ describe('SignUpPage', () => {
       expect(footer?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
         'Already have an account? Sign in',
       );
-      // No returnTo: sign-up lands on /app, so sign-in does too (mockup 62).
       expect(footer?.querySelector('a')?.getAttribute('href')).toBe('/sign-in?returnTo=%2Fapp');
     });
 
@@ -134,7 +130,6 @@ describe('SignUpPage', () => {
       expect(page.querySelector('#password-description')?.textContent?.trim()).toBe(
         'At least 15 characters; a phrase of several words works.',
       );
-      // No maxlength, so a long paste is never cut silently.
       expect(input('password').hasAttribute('maxlength')).toBe(false);
       expect(input('password').hasAttribute('minlength')).toBe(false);
     });
@@ -180,7 +175,6 @@ describe('SignUpPage', () => {
       await harness.fixture.whenStable();
       expect(input('password').type).toBe('text');
       expect(button.textContent?.replace(/\s+/g, ' ').trim()).toBe('Hide password');
-      // The password field's own status, not the shell's offline note (also `role="status"`, #115).
       const status = input('password')
         .closest('[data-slot="field"]')
         ?.querySelector('[role="status"]');
@@ -259,7 +253,6 @@ describe('SignUpPage', () => {
       expect(input('name').hasAttribute('aria-invalid')).toBe(false);
       await type('name', '');
       expect(error('name')).toBeNull();
-      // The others are still shown.
       expect(error('email')).toBe(MESSAGES.emailEmpty);
     });
   });
@@ -417,11 +410,9 @@ describe('SignUpPage', () => {
       expect(input('email').getAttribute('aria-invalid')).toBe('true');
       expect(document.activeElement).toBe(input('email'));
       expect(url()).toBe('/sign-up');
-      // "Sign in instead" is a link to /sign-in with the same returnTo (#63).
       const link = page.querySelector<HTMLAnchorElement>('#email-error a');
       expect(link?.textContent?.trim()).toBe('Sign in instead');
       expect(link?.getAttribute('href')).toBe('/sign-in?returnTo=%2Fapp');
-      // Values stay.
       expect(input('name').value).toBe(NAME);
       expect(input('password').value).toBe(PASSWORD);
       await type('email', 'other@example.com');
@@ -453,7 +444,6 @@ describe('SignUpPage', () => {
       expect(document.activeElement).toBe(box);
       expect(input('email').value).toBe(EMAIL);
 
-      // A later successful press clears it.
       client.nextSignUpError = null;
       await submit();
       expect(url()).toBe('/app');

@@ -20,22 +20,12 @@ const CURRENT =
 const OTHER =
   'flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted';
 
-/** A path with its query string and fragment removed, and no trailing slash. */
 function pathOf(url: string): string {
   const path = url.split(/[?#]/, 1)[0] ?? '';
   return path.length > 1 ? path.replace(/\/+$/, '') : path;
 }
 
-/**
- * The admin area's sidebar (#65; design/mockups/65-organization-admin-locations.html, "Admin
- * sidebar"), rendered in the app shell's sidebar slot: the organization, then Overview and
- * Locations, Leagues, and Staff (#67), then Public page and Your organizations. The
- * current section carries `aria-current="page"`; on a league management page (#125) the Leagues
- * entry is highlighted the same and carries `aria-current="true"`.
- *
- * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
- * so it carries no `id`.
- */
+/** The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`. */
 @Component({
   selector: 'app-admin-sidebar',
   imports: [NgIcon, RouterLink],
@@ -128,8 +118,7 @@ export class AdminSidebar {
   protected readonly sections = computed(() => {
     const { slug } = this.organization();
     const here = pathOf(this.url());
-    // `page` on the section's own path; `true` below it (a league management page, #125, is a
-    // page of the Leagues section, not the section's page).
+    // `page` on the section's own path; `true` below it (a league management page is a page of the Leagues section, not the section's page).
     const mark = (path: string, below = false): 'page' | 'true' | null =>
       here === path ? 'page' : below && here.startsWith(`${path}/`) ? 'true' : null;
     return [

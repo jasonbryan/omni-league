@@ -14,24 +14,9 @@ import {
 import { isPlatformServer } from '@angular/common';
 import { CONVEX_CLIENT } from './client-token';
 
-/** How long the socket may be down before `online` turns false (ADR 0013, section 3). */
 export const OFFLINE_SIGNAL_DELAY_MS = 5_000;
-/** How long `run()` waits for a connection before it refuses a change (ADR 0013, Decision 3A). */
 export const CALL_CONNECTION_WAIT_MS = 3_000;
 
-/**
- * The app's view of its connection (ADR 0013, section 3 and Decision 3A). Created once in the
- * browser by `provideConvex()`, so the 5-second rule counts from the start of the app.
- *
- * - `online` drives the offline note and the disabled look of submit buttons. It is false at once
- *   when the browser reports offline, and false once the socket has been down for 5 seconds
- *   (including a client that has not connected 5 seconds after start). It is true again as soon
- *   as the socket is connected and the browser reports online. Always true on the server; with no
- *   client (no Convex URL) it follows `navigator.onLine` only.
- * - `canSend()` and `waitUntilCanSend()` are the call-time check of `run()`: the socket must be
- *   connected and `navigator.onLine` true at the moment the client is called, with no 5-second
- *   grace.
- */
 @Injectable({ providedIn: 'root' })
 export class ConvexConnection {
   private readonly client = inject(CONVEX_CLIENT, { optional: true }) ?? null;
@@ -78,17 +63,12 @@ export class ConvexConnection {
     );
   }
 
-  /** True when a change may be handed to the client now. Always false on the server. */
   canSend(): boolean {
     const win = this.window;
     if (!win || !this.client) return false;
     return this.client.connectionState().isWebSocketConnected && win.navigator.onLine;
   }
 
-  /**
-   * Resolves true as soon as `canSend()` holds, or with its value after `timeoutMs`. Checks again
-   * on every connection-state change and on the browser's `online` event.
-   */
   waitUntilCanSend(timeoutMs: number): Promise<boolean> {
     const win = this.window;
     const client = this.client;
@@ -125,10 +105,6 @@ export class ConvexConnection {
   }
 }
 
-/**
- * The app's `online` signal (see `ConvexConnection`): false while the offline note shows and submit
- * buttons look disabled. Call it in an injection context.
- */
 export function injectOnline(): Signal<boolean> {
   assertInInjectionContext(injectOnline);
   return inject(ConvexConnection).online;

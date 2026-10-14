@@ -21,15 +21,6 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 import { LocationRow } from './location-row';
 
-/**
- * Locations, `/app/organizations/:slug/locations` (#65; design/mockups/65-organization-admin-
- * locations.html states 7 to 16): the organization's locations from `locations.listForAdmin`
- * (live, sorted by name), each with an Edit button that turns the row into a form in place, and
- * the add form beside the list from 1024px and after it below. Below 1024px the header's "Add
- * location" link jumps to the form and puts focus on its first field. After a save, "<name>
- * saved." is a status above the list. Edit is ignored while a row's save is in flight (#161): that
- * form stays until the save settles, so its outcome ("<name> saved." or the form's alert) shows.
- */
 @Component({
   selector: 'app-admin-locations',
   imports: [AddLocationForm, AdminAlert, LocationRow, NgIcon],
@@ -48,8 +39,7 @@ import { LocationRow } from './location-row';
             Where your leagues play. Changes show on your public page straight away.
           </p>
         </div>
-        <!-- The fragment link is explicit: a bare #add-location would resolve against <base href="/">
-             to the home page. A plain click scrolls to the form and focuses its first field. -->
+        <!-- The fragment link is explicit: a bare #add-location would resolve against <base href="/"> to the home page. -->
         <a [href]="addPath()" data-slot="button" [class]="jumpClass" (click)="jumpToForm($event)"
           ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Add location</a
         >
@@ -161,14 +151,11 @@ export class AdminLocations {
     () => `${adminPath(this.context.slug(), 'locations')}#add-location`,
   );
 
-  /** The row being edited, if any: one at a time. */
   protected readonly editing = signal<Id<'locations'> | null>(null);
-  /** The name just saved, for the status above the list; cleared when the next edit starts. */
   protected readonly savedName = signal<string | null>(null);
 
   private readonly addSection = viewChild<ElementRef<HTMLElement>>('addSection');
   private readonly rowViews = viewChildren(LocationRow);
-  /** A row's save is in flight: its form stays until the save settles and shows the outcome. */
   private readonly saving = computed(() => this.rowViews().some((row) => row.saving()));
 
   constructor() {
@@ -186,7 +173,6 @@ export class AdminLocations {
     if (this.editing() === id) this.editing.set(null);
   }
 
-  /** A plain click on "Add location" (phones): scroll to the form and focus its first field. */
   protected jumpToForm(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
     const section = this.addSection()?.nativeElement;

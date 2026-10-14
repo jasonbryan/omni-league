@@ -3,7 +3,6 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { OfflineNote } from './offline-note';
 
-/** Stands in for `ResizeObserver` (jsdom has none): records what it observes and its callback. */
 class FakeResizeObserver {
   static last: FakeResizeObserver | undefined;
   readonly observed: Element[] = [];

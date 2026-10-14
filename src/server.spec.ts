@@ -3,9 +3,6 @@ import type { Route } from '@angular/router';
 import { routes } from './app/app.routes';
 import { netlifyAppEngineHandler, setAppEngineForTesting, setNoindexForTesting } from './server';
 
-// Error behaviour of the SSR entry (#37, carried over from #30 and #24 / PR #38). Every case calls
-// the exported `netlifyAppEngineHandler`, the function the Netlify edge function runs.
-
 type Handle = AngularAppEngine['handle'];
 
 function useEngine(handle: Handle) {
@@ -207,10 +204,8 @@ describe('netlifyAppEngineHandler', () => {
   });
 });
 
-// A request path that starts with two slashes (after URL parsing, so also `/\x`, `/x/..//x`, and
-// `/%2e%2e//x`) makes Angular throw NG05702 before any component renders (#23). The handler answers
-// with a permanent redirect to the same path with one leading slash: a relative `Location` that
-// cannot name another host, so it is not an open redirect.
+// A request path that starts with two slashes (after URL parsing, so also `/\x`, `/x/..//x`, and `/%2e%2e//x`) makes Angular throw NG05702 before any component renders.
+// The handler answers with a permanent redirect to the same path with one leading slash: a relative `Location` that cannot name another host, so it is not an open redirect.
 describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
   afterEach(() => {
     setAppEngineForTesting(undefined);
@@ -218,7 +213,6 @@ describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
     vi.restoreAllMocks();
   });
 
-  /** `Location` resolved the way a browser does, against the URL it came from. */
   function resolvedLocation(response: Response, path: string): URL {
     return new URL(response.headers.get('Location') ?? '', `http://localhost${path}`);
   }
@@ -322,9 +316,7 @@ describe('netlifyAppEngineHandler, a path with a leading double slash', () => {
   });
 });
 
-// `noindex` on non-production Netlify builds (#15, ADR 0010 item 6). The flag is the build-time
-// `__NOINDEX__` define set by scripts/ng-convex.mjs from Netlify's CONTEXT; the server entry reads no
-// environment at runtime.
+// `noindex` on non-production Netlify builds. The flag is the build-time `__NOINDEX__` define set by scripts/ng-convex.mjs from Netlify's CONTEXT; the server entry reads no environment at runtime.
 describe('netlifyAppEngineHandler X-Robots-Tag', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -406,11 +398,9 @@ describe('netlifyAppEngineHandler X-Robots-Tag', () => {
   });
 });
 
-// Netlify's CDN stores an edge-function response whose Cache-Control allows it, and on PR #90's
-// preview it keyed the stored response by path alone: `/x?token=B` got the HTML rendered for
-// `/x?token=A`, and `//x` got a 301 whose Location held another visitor's query string. Every
-// response from the handler therefore varies the cache key by the whole query string, and the
-// redirect, whose Location copies the query string, is never stored.
+// Netlify's CDN stores an edge-function response whose Cache-Control allows it and keyed it by path alone: `/x?token=B` got the HTML rendered for `/x?token=A`,
+// and `//x` got a 301 whose Location held another visitor's query string. Every response from the handler therefore varies the cache key by the whole query string,
+// and the redirect, whose Location copies the query string, is never stored.
 describe('netlifyAppEngineHandler cache key', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -489,11 +479,9 @@ describe('netlifyAppEngineHandler cache key', () => {
   });
 });
 
-// The router normalizes some URLs (`/x//` to `/x/`, `/x/(y)` to `/x`), and the engine then answers
-// with a redirect that takes the status the route set. With the not-found view's 404 a production
-// build sent 404 with a Location, an empty body, and the route's public Cache-Control, which the CDN
-// stored; a development build threw "Invalid redirect status code: 404" (PR #90, round 2). A
-// redirect's Location can carry the request's query string, so no shared cache may store one.
+// The router normalizes some URLs (`/x//` to `/x/`, `/x/(y)` to `/x`), and the engine then answers with a redirect that takes the status the route set.
+// With the not-found view's 404 a production build sent 404 with a Location, an empty body, and the route's public Cache-Control, which the CDN stored;
+// a development build threw "Invalid redirect status code: 404". A redirect's Location can carry the request's query string, so no shared cache may store one.
 describe('netlifyAppEngineHandler, an engine response with a Location', () => {
   afterEach(() => {
     setAppEngineForTesting(undefined);
@@ -647,7 +635,7 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     '/a(?token=A/B',
     '/x/(?q=1',
     '/(/?q=1',
-    // The router parses these to `/` and renders the home page for a path that is not `/` (#91).
+    // The router parses these to `/` and renders the home page for a path that is not `/`.
     '/(',
     '/()x',
     '/()',
@@ -661,7 +649,7 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     '/()/x',
     '/()%20',
     '/()?q=1',
-    // The unroutable path wins over a malformed query string (#91).
+    // The unroutable path wins over a malformed query string.
     '/(?q=%',
     '/()?q=%',
   ])('answers %s with the plain 404 without calling the engine', async (path) => {
@@ -714,10 +702,8 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     },
   );
 
-  // The router cannot decode the query string, so it would warn NG04018 and render `/` whatever
-  // the path was (#91). The handler renders the page as if there were no query string. Not a
-  // redirect: Netlify copies the request's query string into a Location that has none, so a
-  // redirect to the bare path would loop (PR #105).
+  // The router cannot decode the query string, so it would warn NG04018 and render `/` whatever the path was. The handler renders the page as if there were no query string.
+  // Not a redirect: Netlify copies the request's query string into a Location that has none, so a redirect to the bare path would loop.
   it.each([
     ['/x?q=%', '/x'],
     ['/?q=%', '/'],
@@ -754,10 +740,8 @@ describe('netlifyAppEngineHandler, a path the router cannot render', () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
-  // Angular's `Location` drops one trailing slash before the router parses the URL, so the router
-  // reads `/x//?q=%` as `/x/?q=%`, cannot decode it, warns NG04018, and renders `/` with the public
-  // Cache-Control. `DefaultUrlSerializer.parse('/x//?q=%')` stops at `//` without reading the query
-  // string, so a check on the raw pathname misses it (PR #105, tester).
+  // Angular's `Location` drops one trailing slash before the router parses the URL, so the router reads `/x//?q=%` as `/x/?q=%`, cannot decode it, warns NG04018, and renders `/` with the public Cache-Control.
+  // `DefaultUrlSerializer.parse('/x//?q=%')` stops at `//` without reading the query string, so a check on the raw pathname misses it.
   it.each([
     ['/x//?q=%', '/x//'],
     ['/x/y//?q=%', '/x/y//'],

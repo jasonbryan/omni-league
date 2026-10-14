@@ -22,8 +22,7 @@ import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { provideSpartanHlm } from '../ui/utils';
 import { GULF_COAST, queryResults } from './testing/pages';
 
-// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each
-// test (see dom-globals.ts).
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
@@ -63,14 +62,8 @@ interface Rendered {
   queries: { name: string; args: unknown }[];
 }
 
-/** Answers each query with its `GULF_COAST` result. */
 const gulfCoast = (name: string) => Promise.resolve(queryResults(GULF_COAST)[name]);
 
-/**
- * Renders `path` through the app's real routes the way `@angular/ssr` does for a Server route:
- * REQUEST is the request, and RESPONSE_INIT starts with the route's headers. `query` answers each
- * Convex query by function name (`organizations:getPublicPage`).
- */
 async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
@@ -136,14 +129,13 @@ describe('OrganizationPage server render', () => {
       gulfCoast,
     );
 
-    // One fetch per query, with the route's slug and page 1 only.
     const slug = 'gulf-coast-sport-social';
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'organizations:getPublicPage', args: { slug } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1 } },
       { name: 'organizations:listPublicLocations', args: { slug, page: 1 } },
     ]);
-    expect(responseInit.status).toBeUndefined(); // 200
+    expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
@@ -179,7 +171,6 @@ describe('OrganizationPage server render', () => {
     }
     expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
 
-    // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');

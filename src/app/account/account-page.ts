@@ -9,17 +9,8 @@ import { Shell } from '../shell';
 import { initialsOf } from '../shell/initials';
 import { YourOrganizations } from './your-organizations';
 
-// The top bar's account link (#63) shares it.
 export { initialsOf };
 
-/**
- * `/app` (#62), the first signed-in route (`RenderMode.Client`, behind `requireSignedIn`), approved
- * in #96 (design/mockups/62-sign-up.html, state 10): "Signed in as <name>" from `users.me`, and
- * Sign out, which deletes the session and goes to `/`.
- * "Your organizations" (#64) is below the account panel. Sign out's classes are `buttonVariants`
- * output, unmerged, as the mockup draws it (no visible edge), in a static attribute;
- * account-page.spec.ts checks them.
- */
 @Component({
   selector: 'app-account-page',
   imports: [NgIcon, Shell, YourOrganizations],

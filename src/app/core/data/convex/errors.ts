@@ -1,4 +1,3 @@
-/** No Convex URL was configured at build time (CI, e2e build, fresh clone). */
 export class ConvexNotConfiguredError extends Error {
   override readonly name = 'ConvexNotConfiguredError';
   constructor() {
@@ -6,7 +5,6 @@ export class ConvexNotConfiguredError extends Error {
   }
 }
 
-/** A mutation or action was called during a server render, where none may run. */
 export class ConvexServerCallError extends Error {
   override readonly name = 'ConvexServerCallError';
   constructor() {
@@ -14,19 +12,10 @@ export class ConvexServerCallError extends Error {
   }
 }
 
-/**
- * Browser-side stand-in for a query that failed during the server render. Its message is the fixed
- * text from the transferred marker, never the server's real error.
- */
 export class ConvexServerQueryError extends Error {
   override readonly name = 'ConvexServerQueryError';
 }
 
-/**
- * A mutation or action was refused because the app had no usable connection when it was called
- * and none came back within the adapter's wait (ADR 0013, Decision 3A). The Convex client was
- * never called, so nothing was queued and nothing is sent later.
- */
 export class ConvexOfflineError extends Error {
   override readonly name = 'ConvexOfflineError';
   constructor() {

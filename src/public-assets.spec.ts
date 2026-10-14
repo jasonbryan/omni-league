@@ -2,13 +2,10 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
-// ADR 0010 item 3: netlify.toml gives `Cache-Control: public, max-age=31536000, immutable` to the
-// content-hashed build outputs (`/media/*`, `/main-*.js`, `/chunk-*.js`, `/polyfills-*.js`,
-// `/styles-*.css`). Files copied from `public/` must never take those names, or an unhashed file
-// would be cached by browsers for a year.
+// netlify.toml gives `Cache-Control: public, max-age=31536000, immutable` to the content-hashed build outputs (`/media/*`, `/main-*.js`, `/chunk-*.js`, `/polyfills-*.js`, `/styles-*.css`).
+// Files copied from `public/` must never take those names, or an unhashed file would be cached by browsers for a year.
 const hashedFileName = /^(?:(?:main|chunk|polyfills)-.*\.js|styles-.*\.css)$/;
 
-/** Paths under `dir` (relative, sorted) that collide with the long-cached build outputs. */
 function hashedNameCollisions(dir: string): string[] {
   return readdirSync(dir, { recursive: true, withFileTypes: true })
     .map((entry) => ({ entry, path: relative(dir, join(entry.parentPath, entry.name)) }))

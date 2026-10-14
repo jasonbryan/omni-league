@@ -2,7 +2,6 @@ import type { ConnectionState } from 'convex/browser';
 import { getFunctionName, type FunctionReference } from 'convex/server';
 import type { ConvexClientLike } from '../client-token';
 
-/** One `onUpdate` registration on the fake client. */
 export interface FakeSubscription {
   readonly name: string;
   readonly args: unknown;
@@ -11,7 +10,6 @@ export interface FakeSubscription {
   fail(error: Error): void;
 }
 
-/** One `mutation` or `action` call on the fake client, settled by the test. */
 export interface FakeCall {
   readonly kind: 'mutation' | 'action';
   readonly name: string;
@@ -20,15 +18,9 @@ export interface FakeCall {
   reject(error: Error): void;
 }
 
-/**
- * Test double for `ConvexClientLike`. It implements only the surface the adapter uses, typed against
- * the real `ConvexClient` through `ConvexClientLike`, so a `convex` change to that surface is a type
- * error here. Test-only: never imported by app code.
- */
 export class FakeConvexClient implements ConvexClientLike {
   readonly subscriptions: FakeSubscription[] = [];
   readonly calls: FakeCall[] = [];
-  /** Names of `setAuth`, `clearAuth`, and `close` calls, in order. */
   readonly lifecycle: string[] = [];
 
   get activeSubscriptions(): FakeSubscription[] {
@@ -77,7 +69,6 @@ export class FakeConvexClient implements ConvexClientLike {
   };
   private readonly stateListeners = new Set<(state: ConnectionState) => void>();
 
-  /** Number of `subscribeToConnectionState` callbacks still subscribed. */
   get connectionStateListeners(): number {
     return this.stateListeners.size;
   }
@@ -91,10 +82,6 @@ export class FakeConvexClient implements ConvexClientLike {
     return () => this.stateListeners.delete(cb);
   }
 
-  /**
-   * Sets the connection state (connected by default) and notifies subscribers. `connected: false`
-   * before any `true` models a client that has never connected.
-   */
   setConnected(connected: boolean, options: { neverConnected?: boolean } = {}): void {
     this.state = {
       ...this.state,
@@ -105,7 +92,6 @@ export class FakeConvexClient implements ConvexClientLike {
     for (const listener of [...this.stateListeners]) listener(this.connectionState());
   }
 
-  /** The arguments of each `setAuth` call, in order. */
   readonly setAuthCalls: Parameters<ConvexClientLike['setAuth']>[] = [];
 
   setAuth(...args: Parameters<ConvexClientLike['setAuth']>): void {

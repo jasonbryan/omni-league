@@ -5,16 +5,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCompass, lucideHouse } from '@ng-icons/lucide';
 import { setNotFoundStatus } from '../core/not-found-status';
 
-/**
- * The not-found view (#23): the `not-found` state of design/mockups/23-not-found.html, approved
- * through gate:ui-design in #73. It goes inside `<main>` of an app shell with no sidebar: the `**`
- * route's page wraps it, and a public page renders it in its own shell for an unknown slug
- * (ADR 0006, "Status codes").
- *
- * On the server it sets the response status to 404 through `RESPONSE_INIT` (`setNotFoundStatus`),
- * which is `null` in the browser, during prerender, and in unit tests. It reads no data and
- * nothing per visitor, so the server and the browser render the same DOM.
- */
+/** It reads no data and nothing per visitor, so the server and the browser render the same DOM. */
 @Component({
   selector: 'app-not-found-view',
   imports: [NgIcon, RouterLink],
@@ -36,8 +27,7 @@ import { setNotFoundStatus } from '../core/not-found-status';
       <p class="mt-3 text-balance text-muted-foreground">
         Check the address for typos, or start again from the home page.
       </p>
-      <!-- The classes are those of hlmBtn size="lg" plus mt-8 (not-found-view.spec.ts checks them),
-           so the view needs none of the helm button code. -->
+      <!-- The classes are those of hlmBtn size="lg" plus mt-8, so the view needs none of the helm button code. -->
       <a
         routerLink="/"
         data-slot="button"

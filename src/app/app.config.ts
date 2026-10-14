@@ -19,18 +19,14 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    // A query string the router cannot decode (`?ref=%`) is dropped, as the server handler drops
-    // it, so the page stays after hydration instead of the router navigating to `/` (#91).
+    // A query string the router cannot decode (`?ref=%`) is dropped, as the server handler drops it, so hydration keeps the page instead of navigating to `/`.
     { provide: UrlSerializer, useClass: QueryTolerantUrlSerializer },
     provideClientHydration(),
     provideConvex(),
-    // ADR 0008 "Angular wiring": the browser Convex client authenticates with Better Auth's JWT.
-    // The server ignores it: AUTH_CLIENT is null there and server renders stay anonymous.
+    // The browser Convex client authenticates with Better Auth's JWT. The server ignores it: AUTH_CLIENT is null there, so server renders stay anonymous.
     provideConvexAuth(AuthService),
     provideSpartanHlm(),
-    // ADR 0013 sections 1 and 4 (#81): production builds with angular.json's `serviceWorker`
-    // option only, so development builds (including the e2e build) and the kill-switch build
-    // register no worker. Never registered by hand anywhere else (Angular conventions).
+    // Registers a worker only in production builds with angular.json's `serviceWorker` option, so development and kill-switch builds register none.
     provideServiceWorker(
       'ngsw-worker.js',
       serviceWorkerRegistration(SERVICE_WORKER_BUILD, isDevMode()),

@@ -21,14 +21,10 @@ import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 
-/**
- * An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses
- * exactly what the server would. The same pattern as the sign-up page's.
- */
+/** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
-/** Every message on the page (design/mockups/63-sign-in.html, "Messages and attributes"). */
 export const MESSAGES = {
   emailEmpty: 'Enter your email address.',
   emailMalformed: 'Enter an email address like name@example.com.',
@@ -52,28 +48,15 @@ interface SignInModel {
   password: string;
 }
 
-/** A refusal that is not about one field: the form alert above the fields. */
 interface FormAlert {
   title: string;
   description: string;
 }
 
-// Every class string below is the approved mockup's (helm Nova, with #61's focus change: no
-// halo), written as a static attribute so Angular sets it before the element is inserted: a
-// `[class]` binding could land after the first style pass, and `transition-all` would then animate
-// it. The buttons carry `buttonVariants` output unmerged, as the mockup draws it, so
-// `border-transparent` stays beside `border-border` and the outline button shows no edge;
-// sign-in-page.spec.ts checks them. They are the sign-up page's (#62).
+// Class strings are the approved mockup's, written as static attributes so Angular sets them before the element is inserted: a `[class]` binding could land after the first style pass, and `transition-all` would then animate it.
+// The buttons carry `buttonVariants` output unmerged, as the mockup draws it, so `border-transparent` stays beside `border-border` and the outline button shows no edge.
 
-/**
- * `/sign-in` (#63), a `RenderMode.Client` route, approved in #96 (design/mockups/63-sign-in.html):
- * email and password with a Show control beside the password. Errors show under their field
- * (`aria-invalid`, `aria-describedby`) when the user leaves a field they changed, and after a
- * submit for every invalid field; each clears once its field is valid; focus goes to the first invalid field, or to the form alert for an answer from the server. A wrong
- * password and an address with no account get the same alert, with neither field marked invalid,
- * so the page reveals nothing about which addresses exist; the entered values stay. After sign-in
- * the browser goes to the validated `returnTo`, else `/app`.
- */
+/** A wrong password and an address with no account get the same alert, with neither field marked invalid, so the page reveals nothing about which addresses exist. */
 @Component({
   selector: 'app-sign-in-page',
   imports: [FormField, NgIcon, RouterLink, Shell],
@@ -204,8 +187,7 @@ interface FormAlert {
                     [attr.data-matches-spartan-invalid]="errors.password() ? 'true' : null"
                     class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm flex-1"
                   />
-                  <!-- The space after the sr-only span (&ngsp;) is kept on purpose: Chrome lays it
-                       out as a flex item, so the button gets the approved mockup's width. -->
+                  <!-- The space after the sr-only span (&ngsp;) is kept on purpose: Chrome lays it out as a flex item, so the button gets the approved mockup's width. -->
                   <button
                     type="button"
                     data-slot="button"
@@ -287,7 +269,6 @@ export class SignInPage {
   private readonly injector = inject(Injector);
   private readonly returnTo = inject(ActivatedRoute).snapshot.queryParamMap.get('returnTo');
 
-  /** The sign-up page keeps the valid `returnTo`; one that is not valid becomes `/app`. */
   protected readonly signUpReturnTo = returnToOrApp(this.returnTo);
 
   private readonly model = signal<SignInModel>({ email: '', password: '' });
@@ -298,7 +279,7 @@ export class SignInPage {
       if (email === '') return { kind: 'blank', message: MESSAGES.emailEmpty };
       return EMAIL.test(email) ? undefined : { kind: 'email', message: MESSAGES.emailMalformed };
     });
-    // No length check: older passwords are not re-checked against today's policy (ADR 0008).
+    // No length check: older passwords are not re-checked against today's policy.
     required(path.password, { message: MESSAGES.passwordEmpty });
   });
 
@@ -306,28 +287,21 @@ export class SignInPage {
   protected readonly submitting = signal(false);
   protected readonly formAlert = signal<FormAlert | null>(null);
 
-  /** The first client-side error of each field, whether or not it is shown. */
   private readonly clientErrors: Record<FieldName, Signal<string | null>> = {
     email: computed(() => this.fields.email().errors()[0]?.message ?? null),
     password: computed(() => this.fields.password().errors()[0]?.message ?? null),
   };
 
-  /**
-   * Whether each field's client error shows: after a submit, or when the user leaves the field
-   * after changing it; cleared once the field is valid (mockup state 3, #205).
-   */
   private readonly shown: Record<FieldName, ShownUntilValid> = {
     email: this.shownUntilValid('email'),
     password: this.shownUntilValid('password'),
   };
 
-  /** A server answer about the email field, until its value changes. */
   private readonly serverEmailError = linkedSignal<string, string | null>({
     source: () => this.model().email,
     computation: () => null,
   });
 
-  /** The error each field shows now, or `null`. */
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
     email: computed(() =>
       this.shown.email.shown() ? this.clientErrors.email() : this.serverEmailError(),
@@ -339,12 +313,10 @@ export class SignInPage {
   private readonly passwordInput = viewChild.required<ElementRef<HTMLInputElement>>('password');
   private readonly alert = viewChild<ElementRef<HTMLElement>>('alert');
 
-  /** `aria-describedby`: the field's error while one is shown. */
   protected describedBy(field: FieldName): string | null {
     return this.errors[field]() ? `${field}-error` : null;
   }
 
-  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   protected left(field: FieldName): void {
     this.shown[field].left();
   }

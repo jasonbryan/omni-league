@@ -17,23 +17,19 @@ export interface LocationModel {
   address: string;
 }
 
-/** A failure that is not about one field: the form alert above the fields. */
 export type FormAlertKind = 'offline' | 'failed';
 
-/** The text of each form alert (design/mockups/65-organization-admin-locations.html, state 12). */
 export const FORM_ALERTS = {
   failed: {
     title: 'The location could not be saved.',
     description: 'Check your connection and try again.',
   },
-  // design/mockups/88-offline-note.html state 3, shared by every form that needs the server.
   offline: {
     title: "You're offline. Nothing was sent.",
     description: "Your details are still here. Try again when you're connected.",
   },
 } as const;
 
-/** The `LocationInputError` a `ConvexError` carries, or `null` for any other failure. */
 function inputErrorOf(failure: unknown): LocationInputError | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
@@ -44,32 +40,21 @@ function inputErrorOf(failure: unknown): LocationInputError | null {
   return { field, code: code as LocationInputError['code'], message };
 }
 
-/** What a submit leaves the component to do: where focus goes, or nothing more. */
 export type SubmitOutcome =
   | { sent: true; values: LocationModel }
   | { sent: false; focus: LocationField }
   | { sent: false; alert: FormAlertKind };
 
-/**
- * The state of one location form, the add form and a row's edit form alike (#65): the signal form,
- * the messages each field shows, and the submit sequence. Errors show under their field when the
- * user leaves a field they changed (`left`) and after a submit, and clear once the field is valid;
- * a server refusal about a field shows until that field changes. Construct it in an injection context (a component field initializer).
- */
 export class LocationForm {
   readonly model: WritableSignal<LocationModel>;
   readonly fields: FieldTree<LocationModel>;
   readonly submitting = signal(false);
   readonly alert = signal<FormAlertKind | null>(null);
 
-  /** The first client-side error of each field, whether or not it is shown. */
   private readonly clientErrors: Record<LocationField, Signal<string | null>>;
-  /** Whether each field's client error shows; cleared once the field is valid. */
   private readonly shown: Record<LocationField, ShownUntilValid>;
-  /** A server answer about one field, until that field's value changes. */
   private readonly serverErrors: Record<LocationField, WritableSignal<string | null>>;
 
-  /** The error each field shows now, or `null`. */
   readonly errors: Record<LocationField, Signal<string | null>>;
 
   constructor(initial: LocationModel) {
@@ -101,23 +86,15 @@ export class LocationForm {
     this.errors = { name: this.shownError('name'), address: this.shownError('address') };
   }
 
-  /** Empties both fields (after an add succeeded); the next pass through them shows nothing. */
   clear(): void {
     this.model.set({ name: '', address: '' });
     this.fields().reset();
   }
 
-  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   left(field: LocationField): void {
     this.shown[field].left();
   }
 
-  /**
-   * One press of the submit button. Clears the form alert and checks both fields; an invalid one
-   * shows its message, and focus goes to the first (Name, else Address). Valid and offline: the
-   * offline alert, nothing sent. Otherwise `send` runs with the trimmed values; a refusal about a
-   * field shows on it, and any other failure shows the form alert.
-   */
   async submit(
     online: boolean,
     send: (values: LocationModel) => Promise<unknown>,

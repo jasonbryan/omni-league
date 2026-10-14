@@ -11,19 +11,15 @@ import {
   type FakeSubscription,
 } from '../../../core/data/convex/testing/fake-convex-client';
 
-/** Test-only: the pieces the admin-area specs share (#65). */
-
 @Component({ template: 'elsewhere' })
 export class Elsewhere {}
 
-/** What `organizations.getAdminContext` returns for the mockup's organization. */
 export const COASTAL = {
   organizationId: 'org_coastal',
   name: 'Coastal Bend Rec Club',
   slug: 'coastal-bend-rec-club',
 };
 
-/** What `locations.listForAdmin` returns for it (the mockup's populated state, sorted by name). */
 export const COASTAL_LOCATIONS = [
   {
     locationId: 'loc_pelican',
@@ -44,18 +40,12 @@ export const COASTAL_LOCATIONS = [
 
 export const GET_ADMIN_CONTEXT = 'organizations:getAdminContext';
 export const LIST_FOR_ADMIN = 'locations:listForAdmin';
-/** The top bar's account link (#63) asks this in every signed-in shell. */
 export const ME = 'users:me';
 
-/** The error `organizations.getAdminContext` throws for a caller who may not manage. */
 export function forbiddenError(): ConvexError<{ code: string }> {
   return new ConvexError({ code: 'FORBIDDEN' });
 }
 
-/**
- * Opens `url` with `routes`, a signed-in browser (Convex has not accepted its token yet), and a
- * fake Convex client. `answer` makes Convex accept the token, as the page's queries wait for.
- */
 export async function openAdmin(routes: Routes, url: string) {
   const convex = new FakeConvexClient();
   const auth = new FakeAuthClient();
@@ -78,13 +68,11 @@ export async function openAdmin(routes: Routes, url: string) {
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
   };
-  /** The active subscription to `name`, or `undefined`. */
   const subscription = (name: string): FakeSubscription | undefined =>
     convex.activeSubscriptions.find((s) => s.name === name);
   return { convex, auth, harness, page, flush, acceptToken, subscription };
 }
 
-/** Routes that serve `AdminArea` with the given children, and `/app` as a stub. */
 export function adminRoutes(AdminArea: Type<unknown>, children: Routes): Routes {
   return [
     { path: 'app/organizations/:slug', component: AdminArea, children },

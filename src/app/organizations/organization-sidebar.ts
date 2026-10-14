@@ -5,7 +5,6 @@ import { lucideLayoutDashboard, lucideMapPin, lucideTrophy } from '@ng-icons/luc
 import { FollowLink } from '../shell/follow-link';
 import { organizationPath, type PublicOrganizationPage } from './organization-path';
 
-/** Up to two letters for the initials tile: the first letter or digit of the first two words. */
 export function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -17,16 +16,9 @@ export function initials(name: string): string {
 }
 
 /**
- * The organization page's sidebar content (#60, #73 decision 3), rendered in the app shell's
- * sidebar slot: the initials tile and the name, Overview (the current page), then the leagues and
- * the locations shown on this page (at most 5 of each, #100), each a link to its row on this page
- * until league and location pages exist.
- * After hydration a plain click on one of those links goes through the router with the visitor's
- * query string kept (#95); without JavaScript it loads `/path#row`.
- *
- * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
- * so it carries no `id`, and its groups are labelled with `aria-label`. Each `href` is built from
- * the query result's slug (`organizationPath`), so it never holds the request's query string.
+ * After hydration a plain click on one of those links goes through the router with the visitor's query string kept; without JavaScript it loads `/path#row`.
+ * The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`, and its groups are labelled with `aria-label`.
+ * Each `href` is built from the query result's slug (`organizationPath`), so it never holds the request's query string.
  */
 @Component({
   selector: 'app-organization-sidebar',
@@ -115,7 +107,6 @@ export class OrganizationSidebar {
 
   protected readonly path = computed(() => organizationPath(this.page().slug));
   protected readonly initials = computed(() => initials(this.page().name));
-  /** One link per league, to `#league-<n>` in the sorted order, as the page content numbers them. */
   protected readonly leagues = computed(() =>
     this.page().leagues.map((league, i) => ({
       name: league.name,

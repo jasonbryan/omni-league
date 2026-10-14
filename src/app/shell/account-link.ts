@@ -7,15 +7,8 @@ import { injectCurrentUrl } from './current-url';
 import { initialsOf } from './initials';
 
 /**
- * The top bar's link for a signed-in visitor (#63; PR #96 decision 1; design/mockups/63-sign-in.html
- * states 11 and 12): a ghost button to `/app` with the initials in a circle and the name, which
- * ends in an ellipsis past 144px on phones (256px from 768px). It exists only in the browser for a
- * signed-in visitor, so a page without one makes no `users.me` query and a server render never
- * reaches it. Nothing shows until `users.me` answers, so a signed-in visitor is not shown "Sign in"
- * in between. The accessible name is "Account: <name>", whole whatever the screen shows.
- *
- * The classes are `buttonVariants({ variant: 'ghost', size: 'lg' })` unmerged, as the mockup draws
- * them, with the mockup's own additions; top-bar-account.spec.ts checks them.
+ * It exists only in the browser for a signed-in visitor, so a page without one makes no `users.me` query and a server render never reaches it.
+ * Nothing shows until `users.me` answers, so a signed-in visitor is not shown "Sign in" in between.
  */
 @Component({
   selector: 'app-account-link',
@@ -53,10 +46,6 @@ export class AccountLink {
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
 
-  /**
-   * The name; `null` when there is no `users` row or the query failed (the link then reads
-   * "Account"); `undefined` until `users.me` answers (no link yet).
-   */
   protected readonly name = computed(() => {
     const me = this.me.value();
     if (me === undefined) return this.me.error() ? null : undefined;

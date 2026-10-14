@@ -1,7 +1,7 @@
-/* Design tokens in spartan's naming (ADR 0007). The utilities that read them (`bg-primary`,
+/* Design tokens in spartan's naming. The utilities that read them (`bg-primary`,
    `text-muted-foreground`, `rounded-lg`, `font-sans`) come from brain's hlm-tailwind-preset.css.
 
-   Indigo palette, light theme only, approved through gate:ui-design in #73. The values are the
+   Indigo palette, light theme only. The values are the
    `:root` block in design/mockups/61-token-sheet.html ("For src/styles/tokens.css").
 
    scripts/token-contrast.test.mjs checks the pairs below (npm run test:scripts):

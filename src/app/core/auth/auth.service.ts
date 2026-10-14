@@ -2,7 +2,6 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import type { ConvexAuthSource } from '../data/convex';
 import { AUTH_CLIENT, type AuthClientLike } from './auth-client';
 
-/** Why a sign-up was refused, as the sign-up page shows it (design/mockups/62-sign-up.html). */
 export type SignUpFailure =
   | 'exists'
   | 'breached'
@@ -21,10 +20,7 @@ export interface SignUpInput {
   password: string;
 }
 
-/**
- * Why a sign-in was refused, as the sign-in page shows it (design/mockups/63-sign-in.html).
- * `incorrect` is the answer for a wrong password and for an email with no account alike.
- */
+/** `incorrect` covers a wrong password and an email with no account alike, so the answer does not reveal which emails have accounts. */
 export type SignInFailure = 'incorrect' | 'throttled' | 'locked' | 'invalid-email' | 'unexpected';
 
 export type SignInResult =
@@ -37,10 +33,8 @@ export interface SignInInput {
   password: string;
 }
 
-/** The wait shown when a throttled answer carries none. */
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 
-/** What Better Auth's client reports for a refused request. */
 interface AuthError {
   status: number;
   code?: string;
@@ -51,13 +45,9 @@ interface AuthError {
 
 type SessionState = 'unknown' | 'signed-in' | 'signed-out';
 
-/**
- * A session cookie with a value in the crossDomain plugin's store (`better-auth.session_token=…`).
- * An empty value is the sign-out response's, which the session store's refetch then removes.
- */
+/** An empty value is the sign-out response's, which the session store's refetch then removes. */
 const STORED_SESSION = /(?:^|; )[^=;]*session_token=[^;]/;
 
-/** Better Auth error codes, and the 18+ code from convex/auth.ts, by the failure they mean. */
 const FAILURE_BY_CODE: Record<string, SignUpFailure> = {
   USER_ALREADY_EXISTS: 'exists',
   USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'exists',
@@ -68,34 +58,23 @@ const FAILURE_BY_CODE: Record<string, SignUpFailure> = {
   ADULT_CONFIRMATION_REQUIRED: 'adult-required',
 };
 
-/**
- * The browser's auth state and actions (ADR 0008 "Angular wiring"), and the `ConvexAuthSource`
- * that `provideConvexAuth()` hands to the Convex client (ADR 0006). Without a client (a server
- * render, or no Convex URL) it is signed out and does nothing.
- */
 @Injectable({ providedIn: 'root' })
 export class AuthService implements ConvexAuthSource {
-  /** The client from its lazy chunk; `null` without one. A failed load counts as no client. */
   private readonly client: Promise<AuthClientLike | null> | null =
     inject(AUTH_CLIENT)?.catch(() => null) ?? null;
 
   private readonly session = signal<SessionState>(this.client ? 'unknown' : 'signed-out');
-  /** True while Better Auth has a session for this browser. */
   readonly signedIn = computed(() => this.session() === 'signed-in');
 
   private readonly convexAuth = signal(false);
-  /** True once the Convex client has accepted a token (its `onChange`). */
   readonly convexAuthenticated = this.convexAuth.asReadonly();
 
   private readonly destroyRef = inject(DestroyRef);
   private cachedToken: string | null = null;
-  /** The token request in flight, which a call that does not force a refresh shares. */
   private pendingToken: Promise<string | null> | null = null;
-  /** Rises each time the token is forgotten (sign-out, sign-up, or a signed-out answer). */
   private tokenGeneration = 0;
   private watching = false;
   private resolveKnown: () => void = () => undefined;
-  /** Settles once the session store has given its first answer. */
   private readonly known = new Promise<void>((resolve) => (this.resolveKnown = resolve));
 
   constructor() {
@@ -105,8 +84,7 @@ export class AuthService implements ConvexAuthSource {
     }
     void this.client.then((client) => {
       if (this.destroyRef.destroyed) return;
-      // No stored session token (never signed in, or signed out): signed out with no get-session
-      // request, so an anonymous page view makes none (ADR 0008 "Cost").
+      // No stored session token (never signed in, or signed out): signed out with no get-session request, so an anonymous page view makes none.
       if (!client || !hasStoredSession(client)) {
         this.setSession('signed-out');
         return;
@@ -115,7 +93,6 @@ export class AuthService implements ConvexAuthSource {
     });
   }
 
-  /** Follows Better Auth's session store; subscribing starts its first get-session request. */
   private watchSession(client: AuthClientLike): void {
     if (this.watching || this.destroyRef.destroyed) return;
     this.watching = true;
@@ -127,18 +104,14 @@ export class AuthService implements ConvexAuthSource {
     this.destroyRef.onDestroy(unsubscribe);
   }
 
-  /** Whether the browser is signed in, once the session store has answered (route guards). */
   async isSignedIn(): Promise<boolean> {
     await this.known;
     return this.signedIn();
   }
 
   /**
-   * The Convex JWT for the Convex client (`setAuth`). Signed out, it returns `null` without a
-   * request, so an anonymous page view makes no token request. The token is cached until the
-   * Convex client asks for a fresh one before it expires (15 minutes, ADR 0008). Calls that do not
-   * force a refresh share the request in flight, so the Convex client's overlapping `setAuth` calls
-   * on a signed-in load make one request.
+   * Signed out, it returns `null` without a request. The token is cached until the Convex client asks for a fresh one before it expires (15 minutes).
+   * Calls that do not force a refresh share the request in flight, so the Convex client's overlapping `setAuth` calls on a signed-in load make one request.
    */
   readonly fetchToken = async ({
     forceRefreshToken,
@@ -169,9 +142,8 @@ export class AuthService implements ConvexAuthSource {
         return null;
       }
     })().then((token) => {
-      // A request from a session that has since ended answers `null`, even if another user has
-      // signed in meanwhile, and fills no cache. One that a newer forced request replaced in the
-      // same session answers with its token but leaves the cache to the newer one.
+      // A request from a session that has since ended answers `null`, even if another user has signed in meanwhile, and fills no cache.
+      // One that a newer forced request replaced in the same session answers with its token but leaves the cache to the newer one.
       if (generation !== this.tokenGeneration) return null;
       if (this.pendingToken !== request) return token;
       this.pendingToken = null;
@@ -186,11 +158,6 @@ export class AuthService implements ConvexAuthSource {
     this.convexAuth.set(isAuthenticated);
   };
 
-  /**
-   * Creates the account and signs it in. The 18+ confirmation is sent as `adultConfirmed`, which
-   * the server requires (convex/auth.ts). Never throws: a refusal or a network failure is a
-   * `SignUpFailure`.
-   */
   async signUp({ name, email, password }: SignUpInput): Promise<SignUpResult> {
     const client = await this.client;
     if (!client) return { ok: false, error: 'unexpected' };
@@ -210,12 +177,6 @@ export class AuthService implements ConvexAuthSource {
     return { ok: true };
   }
 
-  /**
-   * Signs in with email and password (ADR 0008). Never throws: a refusal or a network failure is a
-   * `SignInFailure`. A wrong password and an unknown email are both `incorrect`, so the page cannot
-   * tell them apart. Like `signUp`, a success is known at once from the response, and only then is
-   * the session store watched, so a page with no stored session makes no get-session request.
-   */
   async signIn({ email, password }: SignInInput): Promise<SignInResult> {
     const client = await this.client;
     if (!client) return { ok: false, error: 'unexpected' };
@@ -232,11 +193,6 @@ export class AuthService implements ConvexAuthSource {
     return { ok: true };
   }
 
-  /**
-   * Deletes the session on the server and forgets it here (ADR 0008 "Sign-out"). Never throws: the
-   * client clears the stored session before the request, so a failed request still signs this
-   * browser out.
-   */
   async signOut(): Promise<void> {
     this.forgetToken();
     try {
@@ -260,10 +216,7 @@ export class AuthService implements ConvexAuthSource {
   }
 }
 
-/**
- * Whether the crossDomain plugin's store holds a session token. `getCookie()` throws when the
- * stored value is `null` or holds a `null` entry (#62 tester); that is no stored session.
- */
+/** `getCookie()` throws when the stored value is `null` or holds a `null` entry; that is no stored session. */
 function hasStoredSession(client: AuthClientLike): boolean {
   try {
     return STORED_SESSION.test(client.getCookie());
@@ -273,8 +226,7 @@ function hasStoredSession(client: AuthClientLike): boolean {
 }
 
 /**
- * Better Auth's body validation (`VALIDATION_ERROR`, 400) joins one `[body.<field>] <message>` per
- * issue with `; `. A malformed email gives `[body.email] Invalid email address`. Only a refusal
+ * Better Auth's body validation (`VALIDATION_ERROR`, 400) joins one `[body.<field>] <message>` per issue with `; `. Only a refusal
  * whose every issue is on `email` is the Email field's error; any other field is unexpected here.
  */
 function isEmailValidationError(message: string | undefined): boolean {
@@ -312,7 +264,7 @@ function failureOf(error: AuthError): SignUpFailure {
   if (error.code === 'VALIDATION_ERROR' && isEmailValidationError(error.message)) {
     return 'invalid-email';
   }
-  // The breached-password check fails closed with a 500 whose message starts this way (ADR 0008).
+  // The breached-password check fails closed with a 500 whose message starts this way.
   if (error.status === 500 && error.message?.startsWith('Failed to check password')) {
     return 'check-unavailable';
   }

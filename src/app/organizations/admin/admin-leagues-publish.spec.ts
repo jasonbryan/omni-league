@@ -13,10 +13,6 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Publishing from the Leagues page (#69), design/mockups/66-69-organization-leagues.html states 3
-// and 9 to 12: the Publish button on a Draft row, the confirmation dialog, the publishing state,
-// the result, and the failure.
-
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
 const LIST_LEAGUES = 'leagues:listForAdmin';
@@ -82,7 +78,6 @@ describe('AdminLeagues: publishing (#69)', () => {
     await o.flush();
   }
 
-  /** Confirms and lets `leagues.publish` answer; the list then shows the league as published. */
   async function confirmAndPublish(league = DRAFT) {
     dialogButton('Publish league').click();
     await o.flush();
@@ -191,12 +186,10 @@ describe('AdminLeagues: publishing (#69)', () => {
       expect(busy.getAttribute('aria-disabled')).toBe('true');
       expect(busy.hasAttribute('disabled')).toBe(false);
       expect(dialog()).not.toBeNull();
-      // Cancel reads as disabled too, and does nothing, while the call is out.
       const cancel = dialogButton('Cancel');
       expect(cancel.getAttribute('aria-disabled')).toBe('true');
       expect(cancel.hasAttribute('disabled')).toBe(false);
       cancel.click();
-      // A second press, and Escape, do nothing while the call is out.
       busy.click();
       document.activeElement!.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
@@ -227,7 +220,6 @@ describe('AdminLeagues: publishing (#69)', () => {
       const link = region.querySelector('a')!;
       expect(link.getAttribute('href')).toBe('/organizations/coastal-bend-rec-club');
       expect(text(link)).toBe('View public page');
-      // Above the list.
       const list = page.querySelector('#leagues-list')!;
       expect(region.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(document.activeElement).toBe(region);

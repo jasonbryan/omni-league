@@ -20,7 +20,6 @@ describe('AuthService', () => {
     return TestBed.inject(AuthService);
   }
 
-  /** Lets the client's lazy chunk (here a resolved promise) reach AuthService. */
   const loaded = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   beforeEach(() => {
@@ -56,8 +55,6 @@ describe('AuthService', () => {
       expect(auth.signedIn()).toBe(true);
     });
 
-    // ADR 0008 "Cost": a browser with no stored session token (one that never signed in, or signed
-    // out) is signed out without a get-session request, so an anonymous page view makes none.
     it.each([
       ['nothing stored', ''],
       ['other cookies only', 'better-auth.two_factor=x'],
@@ -73,8 +70,7 @@ describe('AuthService', () => {
       expect(client.tokenRequests).toBe(0);
     });
 
-    // Tester (#62, round 3): the crossDomain plugin's getCookie() throws when the stored value is
-    // `null` or holds a `null` entry. That is no stored session, not a check that never settles.
+    // The crossDomain plugin's getCookie() throws when the stored value is `null` or holds a `null` entry. That is no stored session, not a check that never settles.
     it('is signed out without subscribing when reading the stored session throws', async () => {
       client.getCookieThrows = new TypeError("Cannot read properties of null (reading 'expires')");
       const auth = configure();
@@ -92,7 +88,6 @@ describe('AuthService', () => {
       await expect(auth.isSignedIn()).resolves.toBe(false);
     });
 
-    // #111: the server revoked or expired the stored session, so its answer is signed out.
     it('with a stored session the server rejects, asks once and ends signed out', async () => {
       const auth = configure();
       await loaded();
@@ -104,10 +99,8 @@ describe('AuthService', () => {
       expect(client.tokenRequests).toBe(0);
     });
 
-    // #111: the stored-session test runs on the crossDomain plugin's real store, not only on the
-    // fake's cookie string. The entry lives in localStorage under `better-auth_cookie`, as
-    // `{ "<cookie name>": { value, expires: ISO date | null } }` (@convex-dev/better-auth,
-    // plugins/cross-domain/client.js), and the plugin's getCookie() drops expired entries.
+    // The stored-session test runs on the crossDomain plugin's real store: the entry lives in localStorage under `better-auth_cookie` as
+    // `{ "<cookie name>": { value, expires: ISO date | null } }`, and getCookie() drops expired entries.
     describe('with the real crossDomain store', () => {
       const KEY = 'better-auth_cookie';
       const TOKEN = 'better-auth.session_token';
@@ -115,9 +108,8 @@ describe('AuthService', () => {
         JSON.stringify({ [TOKEN]: { value, expires } });
       const HOUR = 60 * 60 * 1000;
 
-      // ADR 0004: unit tests open no network connection. The real client's session store sends
-      // `GET <site>/api/auth/get-session` once subscribed, so `fetch` is stubbed to answer with a
-      // `null` session, and the tests count what reaches it.
+      // Unit tests open no network connection. The real client's session store sends `GET <site>/api/auth/get-session` once subscribed,
+      // so `fetch` is stubbed to answer with a `null` session, and the tests count what reaches it.
       const SESSION_URL = 'https://happy-otter-123.convex.site/api/auth/get-session';
       const requestedUrl = (input: Parameters<typeof fetch>[0]) =>
         input instanceof Request ? input.url : String(input);
@@ -178,7 +170,6 @@ describe('AuthService', () => {
         const { auth, subscribe, requests } = await configureReal(stored);
         await loaded();
         expect(subscribe).toHaveBeenCalledTimes(1);
-        // The request leaves a few ticks after the subscription; wait for it, then for any more.
         await vi.waitFor(() => expect(requests()).toEqual([SESSION_URL]));
         await loaded();
         expect(requests()).toEqual([SESSION_URL]);
@@ -193,7 +184,6 @@ describe('AuthService', () => {
       await expect(auth.signUp(INPUT)).resolves.toEqual({ ok: true });
       expect(auth.signedIn()).toBe(true);
       expect(client.sessionListeners).toBe(1);
-      // Pending (the store's first fetch) keeps the sign-up's answer.
       expect(auth.signedIn()).toBe(true);
       client.emitSession(null);
       expect(auth.signedIn()).toBe(false);
@@ -283,8 +273,7 @@ describe('AuthService', () => {
       expect(client.tokenRequests).toBe(2);
     });
 
-    // Tester (#62, round 3): the Convex client calls setAuth again when signedIn turns true while
-    // its first fetchToken waits, so two calls overlap. They share one request.
+    // The Convex client calls setAuth again when signedIn turns true while its first fetchToken waits, so two calls overlap. They share one request.
     it('shares one token request between overlapping calls', async () => {
       const auth = configure();
       client.nextToken = 'jwt-1';
@@ -304,7 +293,6 @@ describe('AuthService', () => {
       const forced = auth.fetchToken({ forceRefreshToken: true });
       await loaded();
       expect(client.tokenRequests).toBe(2);
-      // A later plain call shares the newest request.
       const later = auth.fetchToken({ forceRefreshToken: false });
       await loaded();
       expect(client.tokenRequests).toBe(2);
@@ -386,8 +374,6 @@ describe('AuthService', () => {
       await expect(stale).resolves.toBeNull();
     });
 
-    // PR #102 tester round 4: the old user's token never reaches a caller once the next user has
-    // signed in, even though the Convex client would drop it.
     it('returns null from a request in flight at sign-out that finishes after the next sign-in', async () => {
       const auth = configure();
       client.emitSession({ id: 's1' });
@@ -400,15 +386,12 @@ describe('AuthService', () => {
       expect(auth.signedIn()).toBe(true);
       client.releaseTokens();
       await expect(stale).resolves.toBeNull();
-      // Nor does it fill the cache: the next call asks again.
       client.holdTokens = false;
       client.nextToken = 'jwt-new';
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-new');
       expect(client.tokenRequests).toBe(2);
     });
 
-    // PR #102 tester round 5: a session that ends by the session store's answer (expired or revoked
-    // on the server), not by signOut(), also ends the request in flight.
     it('returns null from a request in flight when the session store answers signed out, even after a new session', async () => {
       const auth = configure();
       await loaded();
@@ -427,8 +410,6 @@ describe('AuthService', () => {
       expect(client.tokenRequests).toBe(2);
     });
 
-    // PR #102 tester round 5: in the same session, a request that a forced refresh replaced still
-    // answers its own caller with its token, and the cache keeps the forced request's token.
     it('answers a request replaced by a forced refresh with its own token, and caches the newer one', async () => {
       const auth = configure();
       client.emitSession({ id: 's1' });
@@ -444,7 +425,6 @@ describe('AuthService', () => {
       const forced = auth.fetchToken({ forceRefreshToken: true });
       await loaded();
       expect(releases).toHaveLength(2);
-      // The forced request finishes first; the replaced one finishes later with an older token.
       releases[1]('jwt-forced');
       await expect(forced).resolves.toBe('jwt-forced');
       releases[0]('jwt-first');
@@ -483,7 +463,6 @@ describe('AuthService', () => {
       await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
     });
 
-    // Tester (#62, round 4): many simultaneous callers, before and after the session check settles.
     describe('with many simultaneous callers', () => {
       const CALLERS = 50;
       const many = (auth: AuthService, forceRefreshToken = false) =>
@@ -532,7 +511,6 @@ describe('AuthService', () => {
         const tokens = await Promise.all(calls);
         expect(new Set(tokens)).toEqual(new Set([null]));
         expect(client.tokenRequests).toBe(1);
-        // Nothing failed is cached: the next caller asks again.
         client.tokenThrows = null;
         client.nextToken = 'jwt-2';
         await expect(auth.fetchToken({ forceRefreshToken: false })).resolves.toBe('jwt-2');
@@ -616,7 +594,7 @@ describe('AuthService', () => {
         'check-unavailable',
       ],
       ['400 invalid email', { status: 400, code: 'INVALID_EMAIL' }, 'invalid-email'],
-      // Better Auth 1.6 answers a malformed email with its body-validation error (#62 tester).
+      // Better Auth 1.6 answers a malformed email with its body-validation error.
       [
         '400 validation error on the email',
         { status: 400, code: 'VALIDATION_ERROR', message: '[body.email] Invalid email address' },
@@ -636,7 +614,6 @@ describe('AuthService', () => {
         },
         'unexpected',
       ],
-      // Tester (#62, round 2): the server's own messages (convex/auth.test.ts), in its order.
       [
         '400 validation error, the server message for a missing password and a bad email',
         {
@@ -681,7 +658,6 @@ describe('AuthService', () => {
       ['400 too long', { status: 400, code: 'PASSWORD_TOO_LONG' }, 'password-too-long'],
       ['400 no 18+', { status: 400, code: 'ADULT_CONFIRMATION_REQUIRED' }, 'adult-required'],
       ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, 'unexpected'],
-      // #111: no message of their own yet; the dedicated over-long-name text is #117.
       ['400 name invalid', { status: 400, code: 'NAME_INVALID' }, 'unexpected'],
       ['503 auth not configured', { status: 503, code: 'AUTH_NOT_CONFIGURED' }, 'unexpected'],
       ['429', { status: 429 }, 'unexpected'],
@@ -721,8 +697,6 @@ describe('AuthService', () => {
       await expect(auth.isSignedIn()).resolves.toBe(true);
     });
 
-    // #111: no get-session request on a page with no stored session, and the response sets the
-    // state, as sign-up does. Only after the sign-in does the service watch the session store.
     it('makes no session request before it, then follows the session store', async () => {
       client.storedCookie = '';
       const auth = configure();

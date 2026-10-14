@@ -13,24 +13,20 @@ import { ConvexOfflineError } from '../../core/data/convex';
 import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 
 export type { InviteField };
-/** The fields in the order focus and errors follow (design/mockups/67-organization-staff.html). */
 export const INVITE_FIELDS: readonly InviteField[] = ['email', 'leagues'];
 
 export interface InviteTextModel {
   email: string;
 }
 
-/** What `invites.create` is called with, besides the organization. */
 export interface InviteValues {
   email: string;
   role: Role;
   leagueIds: Id<'leagues'>[];
 }
 
-/** A failure that is not about one field: the form alert above the fields. */
 export type InviteFormAlertKind = 'offline' | 'failed';
 
-/** The text of each form alert ("Staff messages"; design/mockups/88-offline-note.html state 3). */
 export const INVITE_FORM_ALERTS = {
   failed: {
     title: 'The invite could not be created.',
@@ -42,13 +38,11 @@ export const INVITE_FORM_ALERTS = {
   },
 } as const;
 
-/** What a submit leaves the component to do: where focus goes, or the invite that was made. */
 export type InviteSubmitOutcome<R> =
   | { sent: true; values: InviteValues; result: R }
   | { sent: false; focus: InviteField }
   | { sent: false; alert: InviteFormAlertKind };
 
-/** The `InviteInputError` a `ConvexError` carries, or `null` for any other failure. */
 function inputErrorOf(failure: unknown): InviteInputError | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
@@ -61,40 +55,24 @@ function inputErrorOf(failure: unknown): InviteInputError | null {
   return { field: field as InviteField, code: code as InviteInputError['code'], message };
 }
 
-/**
- * The state of the invite form (#67): the signal form for Email, the chosen role and leagues, the
- * messages each field shows, and the submit sequence. Like `LeagueForm`, errors show under their
- * field when the user leaves a field they changed (`left`, `leftGroup`) and after a submit, and
- * clear once the field is valid; a server refusal about a field shows until that field changes. Role defaults to League organizer, the least access (decision
- * 9); with no league in the organization it is Org admin and League organizer is unavailable. The
- * leagues chosen are kept while Org admin is chosen and come back with League organizer. Construct
- * it in an injection context (a component field initializer); `available` returns the ids of the
- * organization's leagues, in the order the list shows them.
- */
+/** Role defaults to League organizer, the least access; with no league in the organization it is Org admin and League organizer is unavailable. */
 export class InviteForm {
   readonly model: WritableSignal<InviteTextModel> = signal({ email: '' });
   readonly fields: FieldTree<InviteTextModel>;
-  /** The role the user chose; `role()` is what applies, since League organizer needs a league. */
   readonly chosenRole = signal<Role>('leagueOrganizer');
-  /** The checked leagues; `chosen()` is those that still exist, in list order. */
   readonly selected = signal<ReadonlySet<Id<'leagues'>>>(new Set());
   readonly submitting = signal(false);
   readonly alert = signal<InviteFormAlertKind | null>(null);
 
-  /** Whether the organization has a league, so League organizer can be chosen. */
   readonly canChooseOrganizer: Signal<boolean>;
-  /** The role the form sends. */
   readonly role: Signal<Role>;
-  /** The chosen leagues, in the order of the list. */
   readonly chosen: Signal<Id<'leagues'>[]>;
 
   private readonly clientErrors: Record<InviteField, Signal<string | null>>;
   private readonly shown: Record<InviteField, ShownUntilValid>;
-  /** True once the user has checked or unchecked a league. */
   private readonly leaguesChanged = changedSince(() => this.selected());
   private readonly serverErrors: Record<InviteField, WritableSignal<string | null>>;
 
-  /** The error each field shows now, or `null`. */
   readonly errors: Record<InviteField, Signal<string | null>>;
 
   constructor(available: () => readonly Id<'leagues'>[]) {
@@ -146,7 +124,6 @@ export class InviteForm {
     });
   }
 
-  /** Empties every field and returns to the default role (for the next invite). */
   clear(): void {
     this.model.set({ email: '' });
     this.chosenRole.set('leagueOrganizer');
@@ -156,22 +133,14 @@ export class InviteForm {
     this.alert.set(null);
   }
 
-  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
   left(field: InviteField): void {
     this.shown[field].left();
   }
 
-  /** A `focusout` in a group of checkboxes: checked once focus leaves the whole group. */
   leftGroup(field: InviteField, event: FocusEvent): void {
     if (focusLeftGroup(event)) this.left(field);
   }
 
-  /**
-   * One press of the submit button. Clears the form alert and checks every field; an invalid one
-   * shows its message, and focus goes to the first (Email, then Leagues). Valid and offline: the
-   * offline alert, nothing sent. Otherwise `send` runs with the normalised email; a refusal about a
-   * field shows on it, and any other failure shows the form alert.
-   */
   async submit<R>(
     online: boolean,
     send: (values: InviteValues) => Promise<R>,

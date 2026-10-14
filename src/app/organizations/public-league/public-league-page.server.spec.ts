@@ -22,8 +22,7 @@ import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { provideSpartanHlm } from '../../ui/utils';
 import { leagueQueryResults, NO_SEASONS, seasonsPage } from './testing/league-data';
 
-// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each
-// test (see dom-globals.ts).
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
@@ -63,14 +62,8 @@ interface Rendered {
   queries: { name: string; args: unknown }[];
 }
 
-/** Answers each query with its result for page 1 of the demo league. */
 const sunday = (name: string) => Promise.resolve(leagueQueryResults()[name]);
 
-/**
- * Renders `path` through the app's real routes the way `@angular/ssr` does for a Server route:
- * REQUEST is the request, and RESPONSE_INIT starts with the route's headers. `query` answers each
- * Convex query by function name (`leagues:getPublicPage`).
- */
 async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
@@ -126,7 +119,6 @@ async function render(
 
 const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
-/** A link's path, query string, and fragment: a router link's `href` is absolute in this render. */
 const href = (link: Element | null | undefined) => {
   const url = new URL(link?.getAttribute('href') ?? '', ORIGIN);
   return `${url.pathname}${url.search}${url.hash}`;
@@ -139,7 +131,6 @@ const slugs = { orgSlug: 'gulf-coast-sport-social', leagueSlug: 'sunday-reverse-
 const SERVER_ERROR = 'This page is temporarily unavailable';
 const CONNECTION_REFUSED = 'connect ECONNREFUSED internal-db.corp.example:443';
 
-/** Answers each query with its result for `options`. */
 const answer =
   (options: Parameters<typeof leagueQueryResults>[0] = {}) =>
   (name: string) =>
@@ -152,13 +143,12 @@ describe('PublicLeaguePage server render', () => {
       sunday,
     );
 
-    // One fetch per query, with the route's slugs and page 1 only.
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'leagues:getPublicPage', args: slugs },
       { name: 'organizations:getPublicPage', args: { slug: 'gulf-coast-sport-social' } },
       { name: 'seasons:listPublic', args: { ...slugs, page: 1 } },
     ]);
-    expect(responseInit.status).toBeUndefined(); // 200
+    expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
@@ -181,12 +171,11 @@ describe('PublicLeaguePage server render', () => {
     ]);
     expect(text(body.querySelector('nav[aria-label="Seasons pages"] p'))).toBe('1–5 of 7 seasons');
     const sidebar = body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    // The sport is marked current and is plain text until #114 adds the sport view.
     expect(text(sidebar?.querySelector('[aria-current="true"]'))).toContain('Beach volleyball');
     expect(sidebar?.querySelector('a[href*="/sports/"]')).toBeNull();
     expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
 
-    // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).
+    // Neither the token nor any other query parameter reaches the cacheable HTML.
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
@@ -216,8 +205,6 @@ describe('PublicLeaguePage server render', () => {
     expect(html).not.toContain('utm_source');
   });
 
-  // The query is asked for the page the URL names (`parseListPage`), and answers the effective
-  // page: page 1 for one past the last page, as `seasons.listPublic` does.
   it.each([
     ['?page=0', 1, 'page=0'],
     ['?page=9', 9, 'page=9'],

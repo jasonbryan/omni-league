@@ -17,17 +17,12 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Leagues (#66), design/mockups/66-69-organization-leagues.html states 1 to 8 (#69's publishing
-// states are in admin-leagues-publish.spec.ts) and "League messages" and "League attributes", plus design/mockups/88-offline-note.html
-// states 2 and 3.
-
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const CREATE = 'leagues:create';
 const tokens = (value: string) => value.split(' ').sort();
 
-/** What `leagues.listForAdmin` returns for the mockup's populated state, sorted by name. */
 const LEAGUES = [
   {
     leagueId: 'lg_7v7',
@@ -60,10 +55,6 @@ describe('AdminLeagues', () => {
   let o: Opened;
   let page: HTMLElement;
 
-  /**
-   * Opens the page as an org admin. `leagues` and `locations` answer the two lists (undefined
-   * leaves a list loading).
-   */
   async function open(leagues?: unknown[], locations: unknown[] | null = COASTAL_LOCATIONS) {
     o = await openAdmin(ROUTES, URL);
     page = o.page;
@@ -109,7 +100,6 @@ describe('AdminLeagues', () => {
     await o.flush();
   }
 
-  /** Fills every field validly: the mockup's "Create, filled" state with Pelican Shoals chosen. */
   async function fill() {
     await type('name', 'Sunday Reverse Coed 4s');
     await chooseSport('beachVolleyball');
@@ -194,7 +184,6 @@ describe('AdminLeagues', () => {
       expect(tokens(links[0].className)).toEqual(
         tokens('inline-block underline underline-offset-4 hover:text-primary'),
       );
-      // The Publish button is still the only button of a draft's row.
       expect(items()[1].querySelectorAll('button')).toHaveLength(1);
     });
 
@@ -422,7 +411,6 @@ describe('AdminLeagues', () => {
         await o.harness.fixture.whenStable();
       }
 
-      /** Focus moving from a location checkbox to `to` (null: out of the page). */
       async function leaveLocations(n: number, to: HTMLElement | null) {
         location(n).dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
         await o.harness.fixture.whenStable();
@@ -560,10 +548,8 @@ describe('AdminLeagues', () => {
       expect(document.activeElement).toBe(submitButton());
       expect(text(submitButton())).toBe('Create draft league');
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
-      // Slug follows the name again after the form cleared.
       await type('name', 'Next One');
       expect(input('slug').value).toBe('next-one');
-      // The next press clears the message.
       await submit();
       expect(form().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
     });
@@ -586,7 +572,6 @@ describe('AdminLeagues', () => {
       expect(page.querySelector('#slug-error strong')?.textContent).toBe('sunday-reverse-coed-4s');
       expect(document.activeElement).toBe(input('slug'));
       expect(input('slug').getAttribute('aria-invalid')).toBe('true');
-      // The values stay, and the error goes once the slug changes.
       expect(input('name').value).toBe('Sunday Reverse Coed 4s');
       await type('slug', 'sunday-reverse-coed-4s-b');
       expect(error('slug')).toBeNull();

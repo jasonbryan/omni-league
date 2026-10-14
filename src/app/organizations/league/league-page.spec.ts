@@ -13,10 +13,6 @@ import {
   SEASONS,
 } from './testing/league-harness';
 
-// The league management page (#125), design/mockups/125-126-seasons.html states 1 to 3 and 12 to
-// 15: what `leagues.getOrganizerContext` decides, the sidebar for each role, and the seasons list.
-// The create form is in season-create-form.spec.ts.
-
 const tokens = (value: string) => value.split(' ').sort();
 
 describe('LeaguePage', () => {

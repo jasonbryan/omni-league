@@ -2,11 +2,8 @@ import type { Routes } from '@angular/router';
 import { Elsewhere } from '../../admin/testing/admin-harness';
 import { LeaguePage } from '../league-page';
 
-/** Test-only: what the league management page specs share (#125). */
-
 export const GULF = { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' };
 
-/** What `leagues.getOrganizerContext` returns for an org admin of the mockup's published league. */
 export const COED = {
   leagueId: 'lg_coed',
   name: 'Coed 7v7 Rec',
@@ -18,10 +15,8 @@ export const COED = {
   organization: GULF,
 };
 
-/** The same league for its assigned league organizer. */
 export const COED_AS_ORGANIZER = { ...COED, role: 'leagueOrganizer' };
 
-/** What `seasons.listForOrganizer` returns for it (the mockup's populated state, newest first). */
 export const SEASONS = [
   {
     seasonId: 'se_fall27',
@@ -53,11 +48,6 @@ export const CREATE_SEASON = 'seasons:create';
 export const PUBLISH_SEASON = 'seasons:publish';
 export const LIST_MINE = 'organizations:listMine';
 
-/**
- * What `organizations.listMine` returns for the league organizer of the mockup's organization
- * (design/mockups/125-126-seasons.html state 12): three assigned leagues, sorted by name, and
- * another organization the caller organizes a league of.
- */
 export const MINE_AS_ORGANIZER = [
   {
     name: GULF.name,
@@ -79,7 +69,6 @@ export const MINE_AS_ORGANIZER = [
 
 export const LEAGUE_URL = `/app/organizations/${GULF.slug}/leagues/${COED.slug}`;
 
-/** Routes that serve `LeaguePage` as the app does, and stubs for the places its links go. */
 export const LEAGUE_ROUTES: Routes = [
   { path: 'app/organizations/:orgSlug/leagues/:leagueSlug', component: LeaguePage },
   { path: 'app/organizations/:slug', component: Elsewhere },

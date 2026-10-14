@@ -12,8 +12,6 @@ import { AcceptInvitePage } from './accept-invite-page';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY } from './invite-token-store';
 
-// /invites/accept (#70), design/mockups/70-accept-invite.html states 1 to 10.
-
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
 const GET_BY_TOKEN = 'invites:getByToken';
 const ACCEPT = 'invites:accept';
@@ -127,7 +125,6 @@ describe('AcceptInvitePage', () => {
         expect(block.className).toContain('motion-safe:animate-pulse');
         expect(block.closest('[aria-hidden="true"]')).not.toBeNull();
       }
-      // The only live region is the sr-only status; nothing spins.
       const statuses = page.querySelectorAll('main [role="status"]');
       expect(statuses).toHaveLength(1);
       expect(statuses[0].className).toContain('sr-only');
@@ -139,7 +136,6 @@ describe('AcceptInvitePage', () => {
       const { page, flush, emitInvite } = await open({ signedIn: true });
       await emitInvite(ORGANIZER);
       await flush();
-      // Signed in, but the account has not answered yet.
       expect(page.querySelector('[data-testid="invite-skeleton"]')).not.toBeNull();
       expect(page.querySelector('h1')).toBeNull();
     });

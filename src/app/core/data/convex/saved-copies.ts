@@ -4,11 +4,8 @@ import { convexToJson, jsonToConvex, type JSONValue, type Value } from 'convex/v
 import { matchesValidator } from './matches-validator';
 import { OFFLINE_SAVED_QUERIES, type OfflineSavedQuery } from './offline-saved-queries';
 
-/** Prefix of every saved-copy key in `localStorage`. */
 export const SAVED_COPY_PREFIX = 'cvx-saved:';
-/** At most this many saved copies; the least recently used goes first (ADR 0013 section 3). */
 export const SAVED_COPY_MAX_ENTRIES = 50;
-/** A saved copy older than this is not used, and is removed (ADR 0013 section 3). */
 export const SAVED_COPY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 /**
  * A saved time later than now by more than this is not used, and is removed: the device clock was
@@ -16,23 +13,16 @@ export const SAVED_COPY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
  */
 export const SAVED_COPY_MAX_FUTURE_MS = 60 * 1000;
 /**
- * The saved copies' keys and values together stay under this many UTF-16 code units (about 2 MB),
- * well under the browser's `localStorage` quota, so they never crowd out the rest of the app's
- * storage (the sign-in session, ADR 0008). A single result larger than this is not saved.
+ * The saved copies' keys and values together stay under this many UTF-16 code units (about 2 MB), well under the browser's `localStorage` quota,
+ * so they never crowd out the rest of the app's storage (the sign-in session). A single result larger than this is not saved.
  */
 export const SAVED_COPY_MAX_TOTAL_LENGTH = 1_000_000;
 
-/** A saved copy as `read()` returns it. */
 export interface SavedCopy {
   readonly value: unknown;
-  /** When the live result was saved, in epoch milliseconds. */
   readonly savedAt: number;
 }
 
-/**
- * The stored value: the result as Convex JSON, when it was saved, when it was last used, and the
- * allow-list entry's `version` when it was saved.
- */
 interface StoredCopy {
   v: JSONValue;
   savedAt: number;
@@ -53,22 +43,17 @@ function sortKeys(value: JSONValue): JSONValue {
   return value;
 }
 
-/** `cvx-saved:<function>:<JSON args with sorted keys>` (ADR 0013 section 3). */
 export function savedCopyKey(query: FunctionReference<'query'>, args: object): string {
   return `${SAVED_COPY_PREFIX}${getFunctionName(query)}:${JSON.stringify(sortKeys(convexToJson(args as Value)))}`;
 }
 
-/** The function name in a saved-copy key: args are always a JSON object, so it ends at `:{`. */
+/** Args are always a JSON object, so the function name ends at `:{`. */
 function functionNameOf(key: string): string {
   const rest = key.slice(SAVED_COPY_PREFIX.length);
   const end = rest.indexOf(':{');
   return end < 0 ? rest : rest.slice(0, end);
 }
 
-/**
- * The stored copy in `raw`, if it is one written by this build for `entry` and still usable at
- * `now`: saved at most 14 days ago and not in the future, with the entry's version.
- */
 function parseStored(raw: string, entry: OfflineSavedQuery, now: number): StoredCopy | undefined {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -90,7 +75,6 @@ function parseStored(raw: string, entry: OfflineSavedQuery, now: number): Stored
   }
 }
 
-/** The stored result as a Convex value, if it decodes and matches `entry`'s `returns`; never null. */
 function decodeValue(stored: StoredCopy, entry: OfflineSavedQuery): { value: Value } | undefined {
   try {
     const value = jsonToConvex(stored.v);
@@ -103,16 +87,8 @@ function decodeValue(stored: StoredCopy, entry: OfflineSavedQuery): { value: Val
 }
 
 /**
- * Saved copies of allow-listed public query results, kept in `localStorage` (ADR 0013 section 3,
- * #82). Browser only: the query helper injects it only when it has a live client, so a server
- * render never reads or writes storage.
- *
- * Reads are synchronous, so the first render of a page opened offline already shows its saved
- * copy. A copy is shown only if it matches the query's `returns` validator and the allow-list
- * entry's version (`OFFLINE_SAVED_QUERIES`), so a corrupt entry, or one saved by a build whose
- * result had another shape, is removed rather than shown. Every storage error (no storage in a
- * private window, quota exceeded, a value that is not a saved copy) is ignored: the page then
- * behaves as if nothing were saved.
+ * Every storage error (no storage in a private window, quota exceeded, a value that is not a saved copy) is ignored:
+ * the page then behaves as if nothing were saved.
  */
 @Injectable({ providedIn: 'root' })
 export class ConvexSavedCopies {
@@ -121,17 +97,10 @@ export class ConvexSavedCopies {
     OFFLINE_SAVED_QUERIES.map((entry) => [getFunctionName(entry.query), entry]),
   );
 
-  /** Whether `query` is on `OFFLINE_SAVED_QUERIES`. Nothing else is ever read or written. */
   isListed(query: FunctionReference<'query'>): boolean {
     return this.listed.has(getFunctionName(query));
   }
 
-  /**
-   * The saved copy for `query` and `args`, if one exists, is at most 14 days old and not in the
-   * future, has the allow-list entry's version, and matches the query's `returns` validator. Any
-   * other entry under that key is removed. A read counts as a use for the least-recently-used
-   * limit.
-   */
   read(query: FunctionReference<'query'>, args: object): SavedCopy | undefined {
     const entry = this.listed.get(getFunctionName(query));
     if (!entry) return undefined;
@@ -155,11 +124,6 @@ export class ConvexSavedCopies {
     }
   }
 
-  /**
-   * Saves a live result of `query` for `args`. A result of `null` or `undefined` (the record was
-   * unpublished or deleted), or one that does not match the query's `returns` validator (a backend
-   * of another release), removes the saved entry instead. Not listed: does nothing.
-   */
   write(query: FunctionReference<'query'>, args: object, value: unknown): void {
     const entry = this.listed.get(getFunctionName(query));
     if (!entry) return;
@@ -188,16 +152,10 @@ export class ConvexSavedCopies {
       // Only a new entry or a larger one can take the copies past a limit.
       if (previous === null || raw.length > previous.length) this.prune(storage, key);
     } catch {
-      // Ignored (see the class comment).
+      // A storage error leaves the page as if nothing were saved.
     }
   }
 
-  /**
-   * Removes expired and unreadable entries, entries of a query no longer listed or of another
-   * version, then the least recently used ones until at most
-   * `SAVED_COPY_MAX_ENTRIES` remain within `SAVED_COPY_MAX_TOTAL_LENGTH`. `keep` (the entry just
-   * written) counts as the most recently used.
-   */
   private prune(storage: Storage, keep: string): void {
     const now = Date.now();
     const keys: string[] = [];

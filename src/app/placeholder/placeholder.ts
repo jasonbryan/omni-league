@@ -1,10 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { Shell } from '../shell';
 
-/**
- * Home placeholder: the `home-shell` state of design/mockups/61-token-sheet.html, approved through
- * gate:ui-design in #73. It renders in the app shell with the top bar only (no sidebar template).
- */
 @Component({
   selector: 'app-placeholder',
   imports: [Shell],

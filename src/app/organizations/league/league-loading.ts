@@ -4,12 +4,7 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
 const PANEL =
   'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
 
-/**
- * The league management page while `leagues.getOrganizerContext` has not answered (#125;
- * design/mockups/125-126-seasons.html state 1): #65's skeleton with a list panel and a form panel,
- * and a polite "Loading the league." Nothing is clickable and nothing else is requested. There is
- * no sidebar column yet: the shell draws one only once there is a sidebar to show.
- */
+/** There is no sidebar column yet: the shell draws one only once there is a sidebar to show. */
 @Component({
   selector: 'app-league-loading',
   changeDetection: ChangeDetectionStrategy.OnPush,

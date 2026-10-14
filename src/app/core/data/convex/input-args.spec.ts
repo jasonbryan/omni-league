@@ -26,7 +26,6 @@ const listTeams = makeFunctionReference<'query', { leagueId: string }, unknown>(
 const KEY = 'cvx:teams:list:{"leagueId":"a"}';
 const DEPLOYMENT_URL = 'https://happy-otter-123.convex.cloud';
 
-/** Args from a required input, the pattern `angular.md` prescribes (inputs are bound after construction). */
 @Component({
   selector: 'app-required-input-probe',
   template: `{{ teams.isLoading() ? 'loading' : teams.value() }}`,
@@ -37,7 +36,6 @@ class RequiredInputProbe {
   readonly teams = injectQuery(listTeams, () => ({ leagueId: this.leagueId() }));
 }
 
-/** Args from an input with a default: the default is never the args the render used. */
 @Component({
   selector: 'app-default-input-probe',
   template: `{{ teams.isLoading() ? 'loading' : teams.value() }}`,
@@ -48,7 +46,6 @@ class DefaultInputProbe {
   readonly teams = injectQuery(listTeams, () => ({ leagueId: this.leagueId() }));
 }
 
-/** Rendered text of a probe fixture. */
 const text = (fixture: ComponentFixture<unknown>) =>
   (fixture.nativeElement as HTMLElement).textContent;
 
@@ -73,8 +70,8 @@ describe('injectQuery with args from component inputs (browser, during hydration
   });
 
   /**
-   * Pre-populates TransferState as the browser app reads it from ng-state. Called synchronously in
-   * the test: injecting in beforeEach would let the app become stable (closing the window) first.
+   * Pre-populates TransferState as the browser app reads it from ng-state. Called synchronously in the test:
+   * injecting in beforeEach would let the app become stable (closing the window) first.
    */
   const transfer = () =>
     TestBed.inject(TransferState).set(makeStateKey<unknown>(KEY), { v: convexToJson('Sharks') });
@@ -87,10 +84,8 @@ describe('injectQuery with args from component inputs (browser, during hydration
       fixture.componentRef.setInput('leagueId', 'a');
       fixture.detectChanges();
 
-      // First browser render matches the server HTML: no loading flash.
       expect(text(fixture)).toBe('Sharks');
 
-      // The live subscription opens for the bound args and its first result replaces the seed.
       expect(client.activeSubscriptions).toHaveLength(1);
       expect(client.subscriptions[0]).toMatchObject({
         name: 'teams:list',
@@ -151,7 +146,6 @@ describe('injectQuery with args from component inputs (server render)', () => {
   );
 });
 
-/** The README "Queries" pattern: an optional input, and args that are skipToken until it is set. */
 @Component({
   selector: 'app-optional-input-probe',
   template: `{{ teams.isLoading() ? 'loading' : (teams.value() ?? 'idle') }}`,
@@ -165,7 +159,6 @@ class OptionalInputProbe {
   });
 }
 
-/** A parent that binds the child's optional input in its template, as a Server-route page would. */
 @Component({
   selector: 'app-optional-input-host',
   imports: [OptionalInputProbe],
@@ -189,7 +182,6 @@ describe('injectQuery with the README skipToken-until-input-set pattern (browser
     });
   });
 
-  // Set synchronously in each test, for the same reason as `transfer()` above.
   const transfer = () =>
     TestBed.inject(TransferState).set(makeStateKey<unknown>(KEY), { v: convexToJson('Sharks') });
 

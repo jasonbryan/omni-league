@@ -6,15 +6,8 @@ import { organizationPath, type PublicOrganizationHeader } from '../organization
 import { initials } from '../organization-sidebar';
 
 /**
- * The public league page's sidebar (#127; design/mockups/127-128-public-seasons.html, states 1 to
- * 3), rendered in the app shell's sidebar slot: the organization's initials tile and name,
- * Overview, its sports with their league counts, and Locations with its total. The league's sport
- * is the current section (`aria-current="true"`, the sidebar's decision 7), found by its display
- * name among the organization's sports; none is marked if the organization lists no such sport.
- *
- * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
- * so it carries no `id`, and its groups are labelled with `aria-label`. Each `href` is built from
- * the query results' slugs, so it never holds the request's query string.
+ * The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`, and its groups are labelled with `aria-label`.
+ * Each `href` is built from the query results' slugs, so it never holds the request's query string.
  */
 @Component({
   selector: 'app-public-league-sidebar',
@@ -99,15 +92,10 @@ import { initials } from '../organization-sidebar';
 })
 export class PublicLeagueSidebar {
   readonly organization = input.required<PublicOrganizationHeader>();
-  /** The league's sport display name, whose entry among the organization's sports is current. */
   readonly sportName = input.required<string>();
 
   protected readonly linkClass =
     'flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted';
-  /**
-   * A sport is plain text until #114 adds the sport view, `/organizations/<org>/sports/<segment>`,
-   * which the link would 404 on; #114 makes each a link (`linkClass`) again.
-   */
   protected readonly plainClass =
     'flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground';
   protected readonly currentClass =

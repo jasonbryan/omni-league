@@ -18,18 +18,8 @@ import { lucideCircleAlert, lucideRefreshCw, lucideRotateCw } from '@ng-icons/lu
 import { AppUpdates } from '../core/service-worker/app-updates';
 
 /**
- * The new-version prompt and the unrecoverable message (#81; design/mockups/81-update-prompt.html):
- * one card fixed at the bottom of the window, full width less 12px on phones and 384px at the
- * bottom end corner from 640px. It never blocks the page and never takes focus. `AppUpdates`
- * decides which card shows.
- *
- * While a card shows, the page gets bottom padding and `scroll-padding-bottom` equal to the card's
- * height plus its gap to the window edge, so a focused control is never hidden under it
- * (WCAG 2.4.11).
- *
- * The button classes are those of hlmBtn (default, and ghost for Later), written out as in the
- * shell's menu button, so the prompt needs none of the helm button code (update-prompt.spec.ts
- * checks them).
+ * While a card shows, the page gets bottom padding and `scroll-padding-bottom` equal to the card's height plus its gap to the window edge, so a focused control is never hidden under it (WCAG 2.4.11).
+ * The button classes are those of hlmBtn (default, and ghost for Later), written out as in the shell's menu button, so the prompt needs none of the helm button code.
  */
 @Component({
   selector: 'app-update-prompt',
@@ -130,7 +120,6 @@ export class UpdatePrompt {
   constructor() {
     const root = this.document.documentElement;
     const body = this.document.body;
-    // Measures the card and writes the page's padding: imperative DOM, after rendering.
     afterRenderEffect((onCleanup) => {
       const card = this.card()?.nativeElement;
       if (!card) return;
@@ -152,11 +141,7 @@ export class UpdatePrompt {
     });
   }
 
-  /**
-   * Later hides the card. When focus was in it, focus moves to the main region (the skip link's
-   * target, `tabindex="-1"`) without scrolling, so it does not fall to `<body>` and the next Tab
-   * starts in the page content (PR #119 review).
-   */
+  /** When focus was in the card, focus moves to the main region (the skip link's target, `tabindex="-1"`) without scrolling, so it does not fall to `<body>` and the next Tab starts in the page content. */
   protected later(): void {
     const hadFocus = this.card()?.nativeElement.contains(this.document.activeElement) ?? false;
     this.updates.later();
@@ -164,11 +149,7 @@ export class UpdatePrompt {
   }
 }
 
-/**
- * Starts `AppUpdates` and, when the service worker is on, adds the prompt at the end of `<body>`,
- * after the app, so Tab reaches it after the page content. It is created in the browser only and
- * never in the server render, so the server HTML that crawlers see does not change.
- */
+/** Added at the end of `<body>`, after the app, so Tab reaches it after the page content. It is created in the browser only and never in the server render, so the server HTML that crawlers see does not change. */
 export function provideUpdatePrompt(): EnvironmentProviders {
   return makeEnvironmentProviders([
     provideAppInitializer(() => {

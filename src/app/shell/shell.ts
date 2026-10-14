@@ -30,17 +30,10 @@ import { ShellSidebar } from './shell-sidebar';
 import { TopBarAccount } from './top-bar-account';
 
 /**
- * The skip link's `href`: the router's current URL with its fragment set to `main`. A bare `#main`
- * would resolve to `/#main` (the home page) because of `<base href="/">`. The router's URL is the
- * source, not `location` or the request URL, which keep a doubled leading slash. The serializer
- * collapses `//evil.com/x` to `/evil.com/x`, but an empty primary segment beside an auxiliary
- * route still serializes with a leading `//` (`/(//evil.com)` gives `//evil.com`, which is also
- * `router.url` for that request). So leading slashes and backslashes, which a browser reads as the
- * start of another host, collapse to one slash.
- *
- * With `withQuery` false the query string is dropped. The server render does that: Netlify's CDN
- * may store the HTML of a public page, and a query string can carry a one-time token (ADR 0008),
- * so server HTML never holds it (PR #90; Angular conventions, Rendering).
+ * A bare `#main` would resolve to `/#main` (the home page) because of `<base href="/">`. The router's URL is the source, not `location` or the request URL, which keep a doubled leading slash.
+ * The serializer collapses `//evil.com/x` to `/evil.com/x`, but an empty primary segment beside an auxiliary route still serializes with a leading `//`
+ * (`/(//evil.com)` gives `//evil.com`, which is also `router.url` for that request). So leading slashes and backslashes, which a browser reads as the start of another host, collapse to one slash.
+ * With `withQuery` false the query string is dropped. The server render does that: Netlify's CDN may store the HTML of a public page, and a query string can carry a one-time token, so server HTML never holds it.
  */
 export function skipLinkHref(router: Router, url: string, withQuery = true): string {
   const tree = router.parseUrl(url);
@@ -56,24 +49,12 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
 );
 
 /**
- * The app shell (#75; "App shell" in design/mockups/61-token-sheet.html): skip link, top bar (with
- * the visitor's "Sign in" or account link, #63), the offline note (#88), the page's sidebar when it
- * supplies an `<ng-template appShellSidebar>` (a column from 1024px, a sheet behind the menu button
- * below), and `<main>`. Each routed page wraps its content column in it.
  * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
- *
- * The menu button is plain markup, rendered on the server and hydrated as is. The sheet
- * (`ShellSheet`: the helm sheet, the CDK dialog, and the helm class merging) is imported on the
- * button's first press, so a page downloads none of that code until a visitor opens the sheet.
- * A press waiting on that import is dropped by Escape, by the start of a navigation, or by the
- * shell's destruction, so the sheet never opens over the next page.
- *
- * The sheet has no anchor in this template (#94). A view container here would be server-rendered,
- * and creating the sheet in it on the first press made hydration log "no hydration info available
- * for a given TNode" in development builds. The sheet is created with `createComponent` and its
- * host view attached to `ApplicationRef` for change detection. Its host element stays out of the
- * document: the helm sheet renders its content through the CDK overlay, which needs no host in the
- * page. The shell destroys the sheet when it is destroyed itself.
+ * The sheet (`ShellSheet`: the helm sheet, the CDK dialog, and the helm class merging) is imported on the menu button's first press, so a page downloads none of that code until a visitor opens the sheet.
+ * A press waiting on that import is dropped by Escape, by the start of a navigation, or by the shell's destruction, so the sheet never opens over the next page.
+ * The sheet has no anchor in this template: a view container here would be server-rendered, and creating the sheet in it on the first press made hydration log "no hydration info available for a given TNode" in development builds.
+ * The sheet is created with `createComponent` and its host view attached to `ApplicationRef` for change detection. Its host element stays out of the document:
+ * the helm sheet renders its content through the CDK overlay, which needs no host in the page.
  */
 @Component({
   selector: 'app-shell',
@@ -89,16 +70,12 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       >Skip to main content</a
     >
     <div class="flex min-h-dvh flex-col">
-      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css, which adds the
-           offline note's height, --offline-note-h) on the header and everything in it. The header
-           is always in view, so focusing one of its controls (by Tab, or focus returning to the
-           menu button as the sheet closes) must not scroll the page. -->
+      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css) on the header and everything in it. The header is always in view, so focusing one of its controls (by Tab, or focus returning to the menu button as the sheet closes) must not scroll the page. -->
       <header
         class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
       >
         @if (sidebar()) {
-          <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg" (shell.spec.ts checks
-               them), so the server-rendered button needs none of the helm button code. -->
+          <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg", so the server-rendered button needs none of the helm button code. -->
           <button
             #menuButton
             type="button"
@@ -121,7 +98,6 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       <div class="flex flex-1">
         @if (sidebar(); as sidebar) {
           <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
-            <!-- Sticks below the top bar and the offline note (--offline-note-h, set by the note). -->
             <div
               class="sticky top-[calc(3.5rem+var(--offline-note-h,0px))] max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))] overflow-y-auto px-3 py-5"
             >
@@ -172,14 +148,10 @@ export class Shell {
     skipLinkHref(this.router, this.url(), !this.onServer),
   );
 
-  /** The phone sheet, once the first press of the menu button has loaded it. */
   protected readonly sheet = signal<ShellSheet | null>(null);
   protected readonly sheetOpen = computed(() => this.sheet()?.isOpen() ?? false);
-  /** The sheet, or null when the shell was destroyed while its chunk loaded. */
   private sheetLoad: Promise<ShellSheet | null> | null = null;
-  /** Set by a press of the menu button, and cleared once the press opens the sheet or is dropped. */
   private openPending = false;
-  /** The sheet's component, destroyed with the shell. */
   private sheetRef: ComponentRef<ShellSheet> | null = null;
 
   constructor() {
@@ -248,7 +220,6 @@ export class Shell {
     this.sheetRef = ref;
     this.appRef.attachView(ref.hostView);
     try {
-      // Renders the helm sheet and registers its content template, which open() needs.
       ref.changeDetectorRef.detectChanges();
     } catch (error) {
       // A sheet that failed to render must not stay attached: the next press creates its own.
