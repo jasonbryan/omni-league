@@ -198,7 +198,7 @@ describe('checkMinimumRosterSize', () => {
     expect(checkMinimumRosterSize('soccer', '7v7', 6)).toEqual({
       field: 'minimumRosterSize',
       code: 'minimumBelowFormat',
-      message: '7 v 7 needs at least 7 players. Enter 7 or more.',
+      message: '7v7 needs at least 7 players. Enter 7 or more.',
     });
   });
 
@@ -253,7 +253,7 @@ describe('checkSeasonFields and firstSeasonError', () => {
   test('checks the minimum against the format chosen', () => {
     expect(
       checkSeasonFields('soccer', { ...valid, format: '11v11' }).minimumRosterSize?.message,
-    ).toBe('11 v 11 needs at least 11 players. Enter 11 or more.');
+    ).toBe('11v11 needs at least 11 players. Enter 11 or more.');
     expect(checkSeasonFields('soccer', { ...valid, format: null }).format?.message).toBe(
       'Choose a format.',
     );

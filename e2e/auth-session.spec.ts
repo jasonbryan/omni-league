@@ -1,7 +1,3 @@
-// AuthService's session and Convex token handling in a real browser (#62 tester, after the #115
-// merge). A browser with no stored session token is signed out without a get-session request; a
-// stored one is asked about once; sign-out removes it. A failed or refused token request never
-// authenticates the Convex client, so `users.me` never answers with a name.
 import { test as base, type Page } from '@playwright/test';
 import { TOKEN_PATH as TOKEN, tokensSettled } from './support/auth-tokens';
 import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from './support/env';
@@ -12,11 +8,9 @@ import { seedTenant } from './support/tenant';
 import { newUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
-/** The crossDomain plugin's store in `localStorage` (`@convex-dev/better-auth`). */
 const STORE_KEY = 'better-auth_cookie';
 const GET_SESSION = '/api/auth/get-session';
 
-/** Every `/api/auth/*` request path the page makes, in order. */
 function authRequests(page: Page): string[] {
   const seen: string[] = [];
   page.on('request', (request) => {
@@ -28,7 +22,6 @@ function authRequests(page: Page): string[] {
 
 const count = (seen: readonly string[], path: string) => seen.filter((p) => p === path).length;
 
-/** True when the crossDomain store holds a session token with a value (empty means cleared). */
 async function storesSessionToken(page: Page): Promise<boolean> {
   const raw = await page.evaluate((key) => localStorage.getItem(key), STORE_KEY);
   const parsed = JSON.parse(raw ?? '{}') as Record<string, { value?: string } | null>;
@@ -49,14 +42,13 @@ async function signUp(page: Page, user: TestUser): Promise<void> {
 
 const panel = (page: Page) => page.getByRole('region', { name: 'Signed-in account' });
 
-/** Waits until the page's network is quiet, so the lazy auth chunk has loaded and answered. */
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle');
 }
 
 test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
-  // intercept and count (e2e/support/no-service-worker.ts).
+  // intercept and count.
   test.beforeEach(async ({ context }) => {
     if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
   });
@@ -73,11 +65,9 @@ test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
       page.getByRole('heading', { level: 1, name: 'Create your account' }),
     ).toBeVisible();
     await settle(page);
-    // The sign-in page (#63) asks nothing either: the top bar's account link is for signed-in visitors.
     await page.goto('/sign-in');
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
     await settle(page);
-    // The guard needs the answer, so this proves the auth chunk loaded and answered signed out.
     await page.goto('/app');
     await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
     await settle(page);
@@ -99,10 +89,9 @@ test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
     await page.reload();
     await expect(panel(page)).toContainText(user.name);
     await reloadTokens;
-    // #111: a stored session is asked about exactly once per load.
     expect(count(seen, GET_SESSION)).toBe(1);
     // Two token requests: the first, and the fresh one the Convex client asks for once the server
-    // confirms it. The Convex client's second setAuth shares the first (#62 tester, round 3).
+    // confirms it.
     expect(count(seen, TOKEN)).toBe(2);
 
     await panel(page).getByRole('button', { name: 'Sign out' }).click();
@@ -110,7 +99,7 @@ test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
     expect(await storesSessionToken(page)).toBe(false);
     // The sign-out response stores an empty session token; the session store's refetch removes it.
     await settle(page);
-    // #111: the key may still be present after sign-out, so its presence is not the test.
+    // The key may still be present after sign-out, so its presence is not the test.
     expect(await page.evaluate((key) => localStorage.getItem(key) !== null, STORE_KEY)).toBe(true);
 
     seen.length = 0;
@@ -177,7 +166,7 @@ test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
 
 /**
  * Failure injection: an aborted request logs a resource error that the console fixture would
- * report, so these use the plain `test` and check page errors and console errors themselves.
+ * report, so these use the plain `test` and check page and console errors themselves.
  */
 base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
   base.beforeEach(async ({ context }) => {
@@ -229,7 +218,6 @@ base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
             if (failure === 'http-500') {
               return route.fulfill({ status: 500, headers, body: '{"message":"boom"}' });
             }
-            // A well-formed JWT with a signature the deployment never issued.
             const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
             const token = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64({ sub: 'x', iss: 'x', aud: 'convex', exp: 4102444800 })}.c2ln`;
             return route.fulfill({ status: 200, headers, body: JSON.stringify({ token }) });
@@ -244,7 +232,6 @@ base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
         await expect(panel(page)).toHaveCount(0);
         expect(meAnswers).toEqual([]);
         expect(pageErrors).toEqual([]);
-        // Only the browser's own resource message for the injected failure may appear.
         const unexpected = consoleErrors.filter(
           (text) =>
             !text.includes('Failed to load resource') &&
@@ -256,14 +243,9 @@ base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
   }
 });
 
-/**
- * Tester (#62, round 4): adversarial checks of the round-3 fixes. A corrupt store never hangs
- * fetchToken; a signed-in load makes exactly 2 token requests, one after the other; a token
- * request in flight at sign-out never authenticates Convex, before or after another user signs in.
- */
-test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
+test.describe('auth session store: edge cases', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
-  // intercept and count (e2e/support/no-service-worker.ts).
+  // intercept and count.
   test.beforeEach(async ({ context }) => {
     if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
   });
@@ -344,8 +326,8 @@ test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
     ]) {
       events.length = 0;
       await load();
-      // Wait for both, then for a spell in which a third request would show: on a preview, the
-      // server's confirmation of the first token can take more than a second.
+      // Waits for a spell in which a third request would show: on a preview, the server's
+      // confirmation of the first token can take more than a second.
       await expect.poll(() => events.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(4);
       await page.waitForTimeout(1_500);
       expect(events).toEqual(['start', 'end', 'start', 'end']);
@@ -384,8 +366,8 @@ test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
     await expect(panel(page)).toContainText(alice.name);
     await first;
 
-    // Hold the second token request of the next load (the Convex client's forced refresh) with
-    // Alice's real token in it, until after she signs out and Bob signs in.
+    // Holds the Convex client's forced refresh, with Alice's real token in it, until Bob has signed
+    // in.
     let intercepted = 0;
     let heldToken = '';
     let release: () => void = () => undefined;
@@ -446,7 +428,6 @@ test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
     await page.getByRole('button', { name: /Create account/ }).click();
     await expect(page).toHaveURL(`${baseURL}/app`);
     await expect(panel(page)).toContainText(bob.name);
-    // Bob's tokens were new requests, not Alice's held one.
     expect(intercepted).toBeGreaterThanOrEqual(3);
 
     afterRelease = true;
@@ -459,7 +440,7 @@ test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
   });
 });
 
-base.describe('auth token failures, round 4', VIEWPORT_AGNOSTIC, () => {
+base.describe('auth token failures: a slow token request', VIEWPORT_AGNOSTIC, () => {
   base.beforeEach(async ({ context }) => {
     if (!remoteBaseUrl) return;
     await stubNetlifyDrawer(context);
@@ -501,8 +482,8 @@ base.describe('auth token failures, round 4', VIEWPORT_AGNOSTIC, () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
         await page.waitForTimeout(5_000);
         await expect(panel(page)).toHaveCount(0);
-        // Both setAuth calls share the first (slow) request; the Convex client's own forced
-        // refetch after a null token is the second. Unshared, the first two would start together.
+        // Both setAuth calls share the first (slow) request; the forced refetch after a null token
+        // is the second. Unshared, the first two would start together.
         expect(starts).toHaveLength(2);
         expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(1_400);
         expect(pageErrors).toEqual([]);
@@ -511,16 +492,16 @@ base.describe('auth token failures, round 4', VIEWPORT_AGNOSTIC, () => {
   }
 });
 
-test.describe('auth token refresh, round 4', VIEWPORT_AGNOSTIC, () => {
+test.describe('auth token refresh', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
-  // intercept and count (e2e/support/no-service-worker.ts).
+  // intercept and count.
   test.beforeEach(async ({ context }) => {
     if (remoteBaseUrl) await holdServiceWorkerRegistration(context);
   });
 
   // The second token request of a signed-in load is the Convex client's forced refresh
-  // (forceRefreshToken: true, once the server confirms the first token). A cache that answered
-  // it would make one request, and the client would never authenticate with a fresh token.
+  // (forceRefreshToken: true). A cache that answered it would make one request, and the client
+  // would never authenticate with a fresh token.
   test('the forced refresh makes its own request, and Convex authenticates with its token', async ({
     page,
   }) => {
@@ -530,7 +511,6 @@ test.describe('auth token refresh, round 4', VIEWPORT_AGNOSTIC, () => {
     await expect(panel(page)).toContainText(user.name);
     await first;
 
-    // Each token's response; the Convex client sends the last one it fetched.
     const tokens: string[] = [];
     page.on('response', async (response) => {
       if (new URL(response.url()).pathname !== TOKEN || response.status() !== 200) return;

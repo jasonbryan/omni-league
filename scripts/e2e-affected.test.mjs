@@ -160,7 +160,7 @@ describe('selectSpecs: mapped areas', () => {
 
   it('maps the public organization page files to the specs that open that page', () => {
     const specs = specsFor(['src/app/organizations/organization-overview.ts']);
-    for (const name of ['organization-page', 'organization-page-links', 'offline', 'pwa']) {
+    for (const name of ['organization-page', 'offline', 'pwa']) {
       assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
     }
     assert.ok(!specs.includes('FULL'));
@@ -177,13 +177,10 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public league page and its sidebar and paths to the league page, season page, and cache-key specs (#127, #128)', () => {
-    // The season page shows the league page's sidebar, builds its links from its paths, and is
-    // reached from the league page's rows.
+  it('maps the public league page and its paths to the league page, season page, and cache-key specs', () => {
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
-      'src/app/organizations/public-league/public-league-sidebar.ts',
       'src/app/organizations/public-league/public-league-path.ts',
     ]) {
       assert.deepEqual(
@@ -226,16 +223,22 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['src/app/core/forms/shown-errors.spec.ts']), want());
   });
 
-  it('maps the focus helper to the league page and season page specs, which assert the focus move (#127, #128)', () => {
+  it('runs the full suite for the focus handler, which moves focus after every route change', () => {
+    assert.deepEqual(specsFor(['src/app/core/focus-main.ts']), ['FULL']);
+    assert.deepEqual(specsFor(['src/app/app.config.ts']), ['FULL']);
+  });
+
+  it('maps the create organization page and the navigation spec to the specs that assert the Back and focus moves', () => {
+    const specs = specsFor(['src/app/organizations/create-organization-page.ts']);
+    assert.ok(specs.includes('e2e/create-organization.spec.ts'));
+    assert.ok(specs.includes('e2e/navigation-focus.spec.ts'));
     assert.deepEqual(
-      specsFor(['src/app/core/focus-main.ts']),
-      want(
-        'e2e/cache-key.spec.ts',
-        'e2e/league-page-offline.spec.ts',
-        'e2e/league-page.spec.ts',
-        'e2e/season-page.spec.ts',
-      ),
+      specsFor(['e2e/navigation-focus.spec.ts']),
+      want('e2e/navigation-focus.spec.ts'),
     );
+    for (const file of ['src/app/sign-in/sign-in-page.ts', 'src/app/sign-up/sign-up-page.ts']) {
+      assert.ok(specsFor([file]).includes('e2e/navigation-focus.spec.ts'), file);
+    }
   });
 
   it('maps the public season page, its content, and its paths to the season page and cache-key specs (#128)', () => {
@@ -326,9 +329,29 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public organization page files to the season page spec, because the season page shows the organization sidebar (#128)', () => {
-    const specs = specsFor(['src/app/organizations/organization-sidebar.ts']);
-    assert.ok(specs.includes('e2e/season-page.spec.ts'));
+  it('maps the shared initials helper to the admin specs and the public page specs, without the full suite', () => {
+    const specs = specsFor(['src/app/organizations/initials.ts']);
+    assert.ok(specs.includes('e2e/organization-admin.spec.ts'));
+    assert.ok(specs.includes('e2e/organization-page.spec.ts'));
+    assert.ok(!specs.includes('FULL'));
+  });
+
+  it('maps the public layout to its own spec, the specs that open a public page, and every session spec', () => {
+    const specs = specsFor(['src/app/public-layout/public-layout.ts']);
+    for (const name of [
+      'public-layout',
+      'organization-page',
+      'league-page',
+      'season-page',
+      'not-found',
+      'accept-invite',
+      'smoke',
+      'offline',
+      'sign-in',
+      'sign-up',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
     assert.ok(!specs.includes('FULL'));
   });
 
@@ -374,7 +397,7 @@ describe('selectSpecs: mapped areas', () => {
 
   it('maps the offline views to the public-page specs', () => {
     const specs = specsFor(['src/app/offline/saved-copy-note.ts']);
-    for (const name of ['offline', 'organization-page', 'organization-page-links', 'top-bar']) {
+    for (const name of ['offline', 'organization-page', 'top-bar']) {
       assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
     }
   });

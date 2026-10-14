@@ -63,16 +63,16 @@ export interface SportFormat {
 
 export const SPORT_FORMATS: Readonly<Record<Sport, readonly SportFormat[]>> = {
   beachVolleyball: [
-    { key: '2v2', name: '2 v 2', minimumRosterSize: 2 },
-    { key: '4v4', name: '4 v 4', minimumRosterSize: 4 },
-    { key: '6v6', name: '6 v 6', minimumRosterSize: 6 },
+    { key: '2v2', name: '2v2', minimumRosterSize: 2 },
+    { key: '4v4', name: '4v4', minimumRosterSize: 4 },
+    { key: '6v6', name: '6v6', minimumRosterSize: 6 },
   ],
   soccer: [
-    { key: '5v5', name: '5 v 5', minimumRosterSize: 5 },
-    { key: '7v7', name: '7 v 7', minimumRosterSize: 7 },
-    { key: '11v11', name: '11 v 11', minimumRosterSize: 11 },
+    { key: '5v5', name: '5v5', minimumRosterSize: 5 },
+    { key: '7v7', name: '7v7', minimumRosterSize: 7 },
+    { key: '11v11', name: '11v11', minimumRosterSize: 11 },
   ],
-  softball: [{ key: '10v10', name: '10 v 10', minimumRosterSize: 10 }],
+  softball: [{ key: '10v10', name: '10v10', minimumRosterSize: 10 }],
 };
 
 export const ROSTER_SIZE_INPUT_MAX = 99;

@@ -77,6 +77,15 @@ describe('SignUpPage', () => {
     await harness.fixture.whenStable();
   }
 
+  it('renders in the public layout: top bar and footer, no sidebar', async () => {
+    await open();
+    expect(page.firstElementChild?.tagName).toBe('APP-PUBLIC-LAYOUT');
+    expect(page.querySelectorAll('header')).toHaveLength(1);
+    expect(page.querySelectorAll('footer')).toHaveLength(1);
+    expect(page.querySelector('main#main')).not.toBeNull();
+    expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+  });
+
   describe('fields (mockup "Sign-up field attributes")', () => {
     beforeEach(() => open());
 
@@ -371,6 +380,14 @@ describe('SignUpPage', () => {
         { name: NAME, email: EMAIL, password: PASSWORD, adultConfirmed: true },
       ]);
       expect(url()).toBe('/app');
+    });
+
+    it('replaces /sign-up in the history, so Back skips the finished form', async () => {
+      await open();
+      await fill();
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      await submit();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/app', { replaceUrl: true });
     });
 
     it.each([

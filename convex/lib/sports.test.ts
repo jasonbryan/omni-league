@@ -54,7 +54,7 @@ describe('formatMinimumRosterSize', () => {
 
 describe('formatName', () => {
   test('returns the placeholder display name', () => {
-    expect(formatName('soccer', '7v7')).toBe('7 v 7');
+    expect(formatName('soccer', '7v7')).toBe('7v7');
   });
 });
 

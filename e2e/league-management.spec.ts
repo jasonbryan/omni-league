@@ -1,10 +1,3 @@
-// The league management page and its create-season form (#125):
-// `/app/organizations/:orgSlug/leagues/:leagueSlug`, a Client route behind sign-in (approved design
-// design/mockups/125-126-seasons.html; the text of each state is compared with the mockup in
-// league-management-mockup.spec.ts). Every test signs up its own user through the real form, then
-// gives it a role in a seeded organization (`testing:addMembership`, `testing:addLeagueOrganizer`),
-// so the tests need the local Convex backend and are skipped with E2E_BASE_URL set. They run at
-// both widths.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -43,10 +36,6 @@ const SOFTBALL = 'draft-softball';
 
 type Role = 'orgAdmin' | 'leagueOrganizer' | null;
 
-/**
- * Signs up a user and gives it `role` in a new seeded organization with the leagues above. A
- * league organizer is assigned `assigned` (league slugs).
- */
 async function memberOf(page: Page, role: Role, assigned: string[] = [COED]) {
   const user = newUser(role === 'orgAdmin' ? 'Admin' : 'Organizer');
   await signUp(page, user);
@@ -72,20 +61,19 @@ const form = (page: Page) => page.locator('#create-season form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft season/ });
 const rows = (page: Page) => page.locator('#seasons-list > li');
 
-/** The issue's season: "Fall 2026" (`fall-2026`), 7v7, with the minimum the format sets. */
 async function fillFall2026(page: Page, minimum?: string) {
   await page.locator('#name').fill('Fall 2026');
   await expect(page.locator('#slug')).toHaveValue('fall-2026');
   await page.locator('#start-date').fill('2026-09-01');
   await page.locator('#end-date').fill('2026-11-15');
   await page.locator('#registration-deadline').fill('2026-08-25');
-  await page.getByRole('radio', { name: '7 v 7' }).check();
+  await page.getByRole('radio', { name: '7v7' }).check();
   await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
   if (minimum !== undefined) await page.locator('#minimum-roster-size').fill(minimum);
 }
 
 test.describe('League management: an org admin', () => {
-  test('creates Fall 2026 as a draft: listed as Draft with 7 v 7, the minimum, and the deadline', async ({
+  test('creates Fall 2026 as a draft: listed as Draft with 7v7, the minimum, and the deadline', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
@@ -104,7 +92,7 @@ test.describe('League management: an org admin', () => {
     await expect(status).toContainText('Fall 2026 created as a draft.');
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#minimum-roster-size')).toHaveValue('');
-    await expect(page.getByRole('radio', { name: '7 v 7' })).not.toBeChecked();
+    await expect(page.getByRole('radio', { name: '7v7' })).not.toBeChecked();
     await expect(submit(page)).toBeFocused();
 
     await expect(rows(page)).toHaveCount(1);
@@ -113,12 +101,12 @@ test.describe('League management: an org admin', () => {
     await expect(row.locator('[data-slot="badge"]')).toHaveText(['Draft']);
     await expect(row).toContainText('Sep 1 – Nov 15, 2026');
     await expect(row).toContainText('Registration deadline Aug 25, 2026');
-    await expect(row).toContainText('7 v 7 · at least 7 players');
+    await expect(row).toContainText('7v7 · at least 7 players');
     await screenshot(page, testInfo, '125-league-created');
     await expectAccessible(page);
   });
 
-  test('a minimum of 6 for 7 v 7 creates nothing and names 7; 9 creates the season with 9', async ({
+  test('a minimum of 6 for 7v7 creates nothing and names 7; 9 creates the season with 9', async ({
     page,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin');
@@ -126,7 +114,7 @@ test.describe('League management: an org admin', () => {
     await fillFall2026(page, '6');
     await submit(page).click();
     await expect(page.locator('#minimum-roster-size-error')).toHaveText(
-      '7 v 7 needs at least 7 players. Enter 7 or more.',
+      '7v7 needs at least 7 players. Enter 7 or more.',
     );
     await expect(page.locator('#minimum-roster-size')).toBeFocused();
     await expect(rows(page)).toHaveCount(0);
@@ -135,7 +123,7 @@ test.describe('League management: an org admin', () => {
     await page.locator('#minimum-roster-size').fill('9');
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first()).toContainText('7 v 7 · at least 9 players');
+    await expect(rows(page).first()).toContainText('7v7 · at least 9 players');
   });
 
   test('refuses a deadline on the start date and an end before the start, then accepts the day before', async ({
@@ -163,7 +151,6 @@ test.describe('League management: an org admin', () => {
   });
 
   test.describe('the slug is used', () => {
-    // The rejected mutation logs one console error.
     test.use({ expectedConvexErrors: ['seasons:create'] });
 
     test('shows the message with the slug, and the same slug in another league is allowed', async ({
@@ -183,17 +170,16 @@ test.describe('League management: an org admin', () => {
       await expect(page.locator('#slug')).toBeFocused();
       await expect(rows(page)).toHaveCount(1);
 
-      // Beach volleyball's formats, and the same slug in the other league.
       await page.goto(`${base}/leagues/${SAND}`);
       await page.locator('#name').fill('Fall 2026');
       await page.locator('#start-date').fill('2026-09-01');
       await page.locator('#end-date').fill('2026-11-15');
       await page.locator('#registration-deadline').fill('2026-08-25');
       await expect(page.getByRole('radio')).toHaveCount(3);
-      await page.getByRole('radio', { name: '4 v 4' }).check();
+      await page.getByRole('radio', { name: '4v4' }).check();
       await submit(page).click();
       await expect(rows(page)).toHaveCount(1);
-      await expect(rows(page).first()).toContainText('4 v 4 · at least 4 players');
+      await expect(rows(page).first()).toContainText('4v4 · at least 4 players');
     });
   });
 
@@ -228,7 +214,6 @@ test.describe('League management: an org admin', () => {
       'Published',
       'Published',
     ]);
-    // The admin sidebar keeps Leagues highlighted (on a phone it is in the menu sheet).
     if (page.viewportSize()!.width < 1024) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
     }
@@ -248,12 +233,11 @@ test.describe('League management: an org admin', () => {
     await page.locator('#start-date').fill('2026-09-01');
     await page.locator('#end-date').fill('2026-11-15');
     await page.locator('#registration-deadline').fill('2026-08-25');
-    // Softball has one format.
     await expect(page.getByRole('radio')).toHaveCount(1);
-    await page.getByRole('radio', { name: '10 v 10' }).check();
+    await page.getByRole('radio', { name: '10v10' }).check();
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first()).toContainText('10 v 10 · at least 10 players');
+    await expect(rows(page).first()).toContainText('10v10 · at least 10 players');
   });
 });
 
@@ -265,7 +249,6 @@ test.describe('League management: an assigned league organizer', () => {
     await page.goto(`${base}/leagues/${COED}`);
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
     const nav = page.getByRole('navigation', { name: `${tenant.name} leagues` });
-    // On a phone the sidebar is in the menu sheet; on desktop it is the column.
     if (page.viewportSize()!.width < 1024) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
     }
@@ -312,7 +295,6 @@ test.describe('League management: an assigned league organizer', () => {
       await expect(list('Coed 7v7 Rec')).not.toHaveAttribute('aria-current', /.*/);
       await expect(list('Draft Softball')).not.toHaveAttribute('aria-current', /.*/);
       await expect(list('Draft Softball')).toHaveAttribute('href', `${base}/leagues/${SOFTBALL}`);
-      // The link goes to the other league, whose page marks it instead.
       await page.goto((await list('Coed 7v7 Rec').getAttribute('href'))!);
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
       await expect(list('Coed 7v7 Rec')).toHaveAttribute('aria-current', 'page');
