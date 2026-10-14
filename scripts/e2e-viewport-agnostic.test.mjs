@@ -1,6 +1,3 @@
-// Tests for the `VIEWPORT_AGNOSTIC` e2e tag (#181). Run with `npm run test:scripts` (node:test).
-// Part 1 runs the guard on synthetic sources. Part 2 runs it on the real e2e sources. Part 3 asks
-// Playwright which projects run each tagged test.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -9,7 +6,6 @@ import { checkE2eDirectory, describeViolation, findViolations } from './e2e-view
 
 const root = join(import.meta.dirname, '..');
 
-/** Violations of one spec source, plus optional support sources. */
 const check = (spec, ...support) =>
   findViolations([
     { path: 'e2e/example.spec.ts', text: spec },
@@ -190,11 +186,8 @@ describe('the real e2e sources', () => {
   });
 });
 
-/**
- * `playwright test --list` as JSON, one entry per test: `{ title, tags, projects }`. Playwright
- * lists a test once for each project that runs it, so the entries are merged by file, line, and
- * title.
- */
+// Playwright lists a test once for each project that runs it, so the entries are merged by file,
+// line, and title.
 function listTests(env = {}) {
   const run = spawnSync(
     process.execPath,

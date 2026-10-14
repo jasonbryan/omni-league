@@ -1,6 +1,3 @@
-// Checks that the committed app icons match their SVG sources and the approved mockup (#80).
-// Run with `npm run test:scripts` (node:test). Node built-ins only, no browser needed except for
-// the re-render check, which skips itself where Chromium is not installed.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -24,7 +21,6 @@ const WHITE = [255, 255, 255];
 
 const read = (path) => readFile(join(root, path));
 
-/** The RGBA of the pixel at fractions (fx, fy) of the image. */
 function pixelAt({ width, height, rgba }, fx, fy) {
   const x = Math.min(width - 1, Math.floor(fx * width));
   const y = Math.min(height - 1, Math.floor(fy * height));
@@ -32,7 +28,6 @@ function pixelAt({ width, height, rgba }, fx, fy) {
   return [...rgba.subarray(at, at + 4)];
 }
 
-/** True when the pixel's colour is within `tolerance` (sum of channel differences) of `color`. */
 function isColor([r, g, b, a], color, tolerance = 24) {
   return (
     a === 255 &&
@@ -66,7 +61,6 @@ describe('committed icon files', () => {
 
       it('has the art in the right place', async () => {
         const image = decodePng(await read(icon.path));
-        // Trophy cup and base are white, the background around the top edge is indigo.
         assert.ok(isColor(pixelAt(image, 0.5, 0.39), WHITE), 'cup');
         assert.ok(isColor(pixelAt(image, 0.5, icon.maskable ? 0.676 : 0.713), WHITE), 'base');
         assert.ok(isColor(pixelAt(image, 0.5, 0.05), INDIGO), 'background');

@@ -1,5 +1,3 @@
-// Every local e2e run binds the same ports (3210, 3211, 4000) and resets the same backend, so two
-// runs on one machine cannot overlap.
 // The lock file is created with a hard link so it never exists without its PID.
 import { linkSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';

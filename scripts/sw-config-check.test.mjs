@@ -1,5 +1,3 @@
-// Unit tests for scripts/sw-config-check.mjs (#81, ADR 0013 section 1). Run with
-// `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,7 +12,6 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 
-/** An angular.json with or without the `serviceWorker` build option. */
 function angularJson({ option = true, inConfiguration = false } = {}) {
   const options = { browser: 'src/main.ts', outputMode: 'server' };
   const production = { outputHashing: 'all' };
@@ -30,7 +27,6 @@ function angularJson({ option = true, inConfiguration = false } = {}) {
   };
 }
 
-/** The shape `@angular/build` writes for ngsw-config.json (ADR 0013 section 1), hashes shortened. */
 function ngswJson(overrides = {}) {
   return {
     configVersion: 1,
@@ -69,7 +65,6 @@ function ngswJson(overrides = {}) {
   };
 }
 
-/** A data group as `@angular/build` writes it. */
 const DATA_GROUP = {
   name: 'pages',
   patterns: ['^\\/organizations\\/.*$'],
@@ -81,14 +76,12 @@ const DATA_GROUP = {
   version: 1,
 };
 
-/** ngsw.json with `url` added to the shell group's URLs. */
 function withShellUrl(url) {
   const manifest = ngswJson();
   manifest.assetGroups[0].urls.push(url);
   return manifest;
 }
 
-/** Writes angular.json and (unless `ngsw` is undefined) browser/ngsw.json into a temporary root. */
 async function withBuild({ angular, ngsw, files = [] }, run) {
   const dir = await mkdtemp(join(tmpdir(), 'sw-config-check-'));
   try {
@@ -233,8 +226,8 @@ describe('swConfigCheck', () => {
     for (const line of lines) assert.match(line, /^sw-config-check: FAIL /);
   });
 
-  // A lazily loaded chunk (the phone sheet, PR #107 testing) must be prefetched, or the feature
-  // that imports it fails offline until it has been used online once.
+  // A lazily loaded chunk must be prefetched, or the feature that imports it fails offline until it
+  // has been used online once.
   describe('content-hashed build files in browser/', () => {
     const BUILT = [
       'chunk-ABCDEF12.js',
@@ -303,7 +296,7 @@ describe('swConfigCheck', () => {
 });
 
 describe('checkNgswManifest', () => {
-  it('returns no problems for the ADR 0013 shape', () => {
+  it('returns no problems for the expected manifest shape', () => {
     assert.deepEqual(checkNgswManifest(ngswJson()), []);
   });
 });
@@ -316,8 +309,6 @@ describe('serviceWorkerOptionSet', () => {
   });
 });
 
-// The kill switch is one setting (PR #119 review): the `serviceWorker` option decides both whether
-// the build writes the worker and whether the app registers it.
 describe('serviceWorkerDefine', () => {
   it('turns registration on exactly when angular.json sets the serviceWorker option', () => {
     assert.equal(serviceWorkerDefine(angularJson()), '--define=__SERVICE_WORKER__=true');
@@ -332,7 +323,7 @@ describe('serviceWorkerDefine', () => {
   });
 });
 
-describe('the repository configuration (ADR 0013 section 1)', () => {
+describe('the repository configuration', () => {
   it('angular.json sets serviceWorker to ngsw-config.json in the build options of every configuration', async () => {
     const angular = JSON.parse(await readFile(join(ROOT, 'angular.json'), 'utf8'));
     const build = angular.projects['omni-league'].architect.build;
@@ -342,7 +333,7 @@ describe('the repository configuration (ADR 0013 section 1)', () => {
     }
   });
 
-  it('ngsw-config.json is the ADR config: performance navigations, no data groups, two asset groups', async () => {
+  it('ngsw-config.json has performance navigations, no data groups, and two asset groups', async () => {
     const config = JSON.parse(await readFile(join(ROOT, 'ngsw-config.json'), 'utf8'));
     assert.equal(config.index, '/index.csr.html');
     assert.equal(config.navigationRequestStrategy, 'performance');
@@ -392,7 +383,6 @@ describe('the repository configuration (ADR 0013 section 1)', () => {
 
   it('npm run build and npm start pass __SERVICE_WORKER__ from the serviceWorker option', async () => {
     const source = await readFile(join(ROOT, 'scripts', 'ng-convex.mjs'), 'utf8');
-    // At the top level, for both commands, from the repository's angular.json.
     assert.match(
       source,
       /^const swDefine = serviceWorkerDefine\(JSON\.parse\(readFileSync\(join\(root, 'angular\.json'\)/m,

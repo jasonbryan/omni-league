@@ -1,32 +1,6 @@
-// The anonymous local Convex backend for e2e (ADR 0005 as amended by ADR 0009, #59). Node built-ins
-// only. Every Convex CLI call of the e2e run goes through this file:
-//
-//   node scripts/e2e-convex.mjs push             `convex dev --once`: push functions, run codegen
-//   node scripts/e2e-convex.mjs serve            `convex dev`: the backend (Playwright webServer)
-//   node scripts/e2e-convex.mjs setup            globalSetup: `env set` IS_TEST, SITE_URL, and a new
-//                                                random BETTER_AUTH_SECRET; `run testing:reset`.
-//                                                Each `env set` retries with backoff for up to 60 s
-//                                                while the backend does not accept admin requests (#156)
-//   node scripts/e2e-convex.mjs run <fn> [json]  `run` one test function; prints its JSON result
-//   node scripts/e2e-convex.mjs seed-demo        `env set PREVIEW_ORIGIN_PATTERN`, `run seed:demo`:
-//                                                the demo data of a production-build PWA run (#82)
-//
-// TARGETING (security). The CLI follows `.env.local`, which may name a contributor's cloud dev
-// deployment, and `convex dev` rewrites `.env.local`. So the CLI never runs from the repository
-// root. It runs from its own project directory, `.convex-e2e/` (gitignored), whose `convex.json`
-// points at `../convex/`; the CLI's `.env.local`, `.gitignore`, and backend state stay there.
-// - Every variable named CONVEX_* is removed from the CLI's environment (a deploy key, a deployment
-//   name, a self-hosted URL), and CONVEX_AGENT_MODE=anonymous is set.
-// - `convex dev` selects the anonymous deployment with `--env-file select.env`, pinned to the
-//   backend version and ports in e2e/support/convex-backend.json (the one place they live).
-// - `env set` and `run` go through `runConvex`, which first checks the target: the CLI config in
-//   `.convex-e2e/` must name the anonymous deployment on http://127.0.0.1:3210, and the backend
-//   answering there must report that name. Only then does it call the CLI, with the explicit URL and
-//   admin key in `--env-file target.env`. A backend of the same name from another checkout has
-//   another admin key, so it rejects the call.
-// - `push` and `serve` first check that ports 3210 and 3211 are free, so they never push to (and
-//   Playwright never resets) a backend another session started.
-// - With E2E_BASE_URL set, every command refuses: that run uses no local backend.
+// The CLI follows `.env.local`, which may name a contributor's cloud dev deployment, and `convex dev`
+// rewrites it. So the CLI never runs from the repository root: it runs from its own project
+// directory, `.convex-e2e/`, whose `convex.json` points at `../convex/`.
 import { spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -35,35 +9,30 @@ import { constants, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 export const ROOT = join(import.meta.dirname, '..');
-/** The CLI's own project directory: never the repository root, where `.env.local` lives. */
 export const PROJECT_DIR = join(ROOT, '.convex-e2e');
-/** The pinned backend release and local ports (patch-level bump, no gate; ADR 0005). */
 export const BACKEND = Object.freeze(
   JSON.parse(readFileSync(join(ROOT, 'e2e', 'support', 'convex-backend.json'), 'utf8')),
 );
 export const LOCAL_CONVEX_URL = `http://127.0.0.1:${BACKEND.cloudPort}`;
-/** The e2e app's origin (e2e/support/env.ts LOCAL_BASE_URL), Better Auth's SITE_URL (ADR 0008). */
+// Must equal LOCAL_BASE_URL in e2e/support/env.ts.
 export const E2E_SITE_URL = 'http://localhost:4000';
 
-/** The name the CLI gives the anonymous deployment when CONVEX_AGENT_MODE=anonymous. */
+// The name the CLI gives the anonymous deployment when CONVEX_AGENT_MODE=anonymous.
 export const DEPLOYMENT_NAME = 'anonymous-agent';
 
 const CLI = join(ROOT, 'node_modules', 'convex', 'bin', 'main.js');
 const SELECT_FILE = 'select.env';
-/** How long `setup` waits for the backend to accept an `env set` (#156), and the backoff steps. */
 export const READY_TIMEOUT_MS = 60_000;
 const BACKOFF_FIRST_MS = 250;
 const BACKOFF_MAX_MS = 5_000;
-/** Under the home directory, where an older CLI kept every checkout's anonymous deployments. */
+// Where an older CLI kept every checkout's anonymous deployments, under the home directory.
 export const SHARED_STATE_DIRNAME = Object.freeze(['.convex', 'anonymous-convex-backend-state']);
 const USAGE =
   'usage: node scripts/e2e-convex.mjs <push|serve|setup|seed-demo|run <function> [json-args]>';
 
-/**
- * The CLI calls of `seed-demo`, in order. `seed:demo` writes only where `PREVIEW_ORIGIN_PATTERN`
- * is the preview constant (convex/seed.ts), so the local backend gets that value first. It admits
- * only this project's Netlify preview origins, so it opens nothing on a local backend.
- */
+// seed:demo writes only where PREVIEW_ORIGIN_PATTERN is the preview constant, so the local backend
+// gets that value first. It admits only this project's Netlify preview origins, so it opens nothing
+// on a local backend.
 export function seedDemoCalls(previewOriginPattern) {
   return [
     ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', previewOriginPattern],
@@ -71,12 +40,9 @@ export function seedDemoCalls(previewOriginPattern) {
   ];
 }
 
-/**
- * `PREVIEW_ORIGIN_PATTERN` from convex/lib/previewOrigin.ts, the single source (Node strips the
- * types of that one constant file). The repo's package.json has no `type`, so Node warns
- * `MODULE_TYPELESS_PACKAGE_JSON` when it reparses the file as a module; only that warning is held
- * back, for this one import.
- */
+// Node strips the types of convex/lib/previewOrigin.ts, a file of one constant. The repo's
+// package.json has no `type`, so Node warns `MODULE_TYPELESS_PACKAGE_JSON` when it reparses the file
+// as a module; only that warning is held back, for this one import.
 export async function previewOriginPattern() {
   const emitWarning = process.emitWarning;
   process.emitWarning = function (warning, ...rest) {
@@ -92,13 +58,13 @@ export async function previewOriginPattern() {
   }
 }
 
-/** E2E_BASE_URL when it is a non-empty string (the same rule as e2e/support/env.ts). */
+// The same rule as e2e/support/env.ts.
 export function remoteBaseUrl(env) {
   const value = env['E2E_BASE_URL'];
   return value !== undefined && value !== '' ? value : undefined;
 }
 
-/** The CLI's environment: the caller's, minus every CONVEX_* variable, in anonymous mode. */
+// A deploy key, a deployment name, or a self-hosted URL in the environment would redirect the CLI.
 export function convexCliEnv(env) {
   const out = {};
   for (const [name, value] of Object.entries(env)) {
@@ -108,7 +74,6 @@ export function convexCliEnv(env) {
   return out;
 }
 
-/** `convex dev` arguments: the anonymous deployment, the pinned version, the fixed ports. */
 export function devArgs({ once }) {
   return [
     'dev',
@@ -129,12 +94,9 @@ export function devArgs({ once }) {
   ];
 }
 
-/**
- * Throws when the CLI would pick the shared `~/.convex/anonymous-convex-backend-state/anonymous-agent/`
- * (CLI 1.46 selects it for `anonymous:anonymous-agent` when it exists): `push` would then push into
- * that legacy deployment and `setup` would find no local deployment in `.convex-e2e/`. Fine once
- * `.convex-e2e/` has its own local deployment config.
- */
+// CLI 1.46 selects the shared `~/.convex/anonymous-convex-backend-state/anonymous-agent/` for
+// `anonymous:anonymous-agent` when it exists: `push` would then push into that legacy deployment and
+// `setup` would find no local deployment in `.convex-e2e/`.
 export function assertNoSharedState({ homeDir = homedir(), projectDir = PROJECT_DIR } = {}) {
   const shared = join(homeDir, ...SHARED_STATE_DIRNAME, DEPLOYMENT_NAME);
   const own = join(projectDir, '.convex', 'local', 'default', 'config.json');
@@ -147,19 +109,10 @@ export function assertNoSharedState({ homeDir = homedir(), projectDir = PROJECT_
   }
 }
 
-/**
- * An error a retry cannot fix (a refused target, a missing deployment config). `retryUntilReady`
- * rethrows it at once; any other error may be a backend that is still starting.
- */
 function permanent(message) {
   return Object.assign(new Error(message), { permanent: true });
 }
 
-/**
- * Runs `attempt` until it succeeds, retrying any non-permanent failure with exponential backoff
- * until `timeoutMs` has passed. On timeout it throws one error naming `label` and the wait, then
- * the last failure's text with every occurrence of `redact` (a secret the call was setting) removed.
- */
 export async function retryUntilReady(
   attempt,
   { label, redact = '', timeoutMs = READY_TIMEOUT_MS, sleep = defaultSleep, now = Date.now },
@@ -193,7 +146,6 @@ function defaultSleep(ms) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 
-/** Writes the CLI's project files into `dir` (idempotent). */
 export function prepareProjectDir(dir = PROJECT_DIR) {
   mkdirSync(dir, { recursive: true });
   const files = {
@@ -206,10 +158,6 @@ export function prepareProjectDir(dir = PROJECT_DIR) {
   writeFileSync(join(dir, SELECT_FILE), `CONVEX_DEPLOYMENT=anonymous:${DEPLOYMENT_NAME}\n`);
 }
 
-/**
- * The target check: throws unless the target is the anonymous local backend on
- * http://127.0.0.1:3210, read from the e2e project directory.
- */
 export function assertLocalTarget({ url, deploymentName, projectDir }, expectedDir = PROJECT_DIR) {
   const problems = [];
   if (url !== LOCAL_CONVEX_URL) problems.push(`URL ${url} is not ${LOCAL_CONVEX_URL}`);
@@ -226,7 +174,7 @@ export function assertLocalTarget({ url, deploymentName, projectDir }, expectedD
   }
 }
 
-/** The local deployment the CLI recorded in `projectDir`. Never reads `.env.local`. */
+// Never reads `.env.local`.
 export function readLocalDeployment(projectDir) {
   const file = join(projectDir, '.convex', 'local', 'default', 'config.json');
   if (!existsSync(file)) {
@@ -245,7 +193,6 @@ export function readLocalDeployment(projectDir) {
   };
 }
 
-/** The instance name the backend at `url` reports. */
 async function fetchInstanceName(url) {
   let response;
   try {
@@ -257,7 +204,6 @@ async function fetchInstanceName(url) {
   return (await response.text()).trim();
 }
 
-/** The checked target: the recorded deployment, which must also be the backend answering there. */
 export async function resolveTarget({
   projectDir = PROJECT_DIR,
   expectedProjectDir = PROJECT_DIR,
@@ -274,7 +220,6 @@ export async function resolveTarget({
   return deployment;
 }
 
-/** Runs the CLI with output captured (for `env set` and `run`). */
 function captureCli(args, { cwd, env }) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [CLI, ...args], {
@@ -291,7 +236,6 @@ function captureCli(args, { cwd, env }) {
   });
 }
 
-/** Runs the CLI with inherited output until it exits, forwarding SIGINT and SIGTERM. */
 function startCli(args, { cwd, env }) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [CLI, ...args], {
@@ -314,10 +258,7 @@ function startCli(args, { cwd, env }) {
   });
 }
 
-/**
- * `convex env set` or `convex run` against the checked local target only: the target check runs
- * first, and the CLI gets the explicit URL and admin key. Returns the CLI's stdout.
- */
+// A backend of the same name from another checkout has another admin key, so the call fails there.
 export async function runConvex(
   args,
   {
@@ -355,7 +296,6 @@ export async function runConvex(
   return result.stdout;
 }
 
-/** True when something accepts TCP connections on 127.0.0.1:`port`. */
 export function isListening(port) {
   return new Promise((resolvePromise) => {
     const socket = connect({ port, host: '127.0.0.1' });
@@ -369,7 +309,6 @@ export function isListening(port) {
   });
 }
 
-/** Rejects, naming each port another process holds. */
 export async function assertPortsFree(ports) {
   const busy = [];
   for (const port of ports) if (await isListening(port)) busy.push(port);
@@ -386,7 +325,6 @@ export async function assertPortsFree(ports) {
   }
 }
 
-/** Runs one command; returns the exit code. */
 export async function main(
   argv,
   {
@@ -429,7 +367,7 @@ export async function main(
       }
       case 'setup': {
         // The webServer is up once `/version` answers, but the backend can still refuse admin
-        // requests for a moment (#156), so each `env set` retries until it accepts one.
+        // requests for a moment, so each `env set` retries until it accepts one.
         const setEnv = (name, value, { redact = '' } = {}) =>
           retryUntilReady(() => runConvex(['env', 'set', name, value], target), {
             ...wait,
@@ -438,9 +376,9 @@ export async function main(
           });
         await setEnv('IS_TEST', 'true');
         await setEnv('SITE_URL', E2E_SITE_URL);
-        // A new secret every run (ADR 0005, ADR 0008), so none is stored anywhere. It is never
-        // printed: on failure only its name is. It is hex (256 bits), never base64url: a base64url
-        // value starts with `-` in 1 run of 64, and `convex env set` reads that as an option (#191).
+        // A new secret every run, so none is stored anywhere. It is never printed: on failure only
+        // its name is. It is hex (256 bits), never base64url: a base64url value starts with `-` in 1
+        // run of 64, and `convex env set` reads that as an option.
         // `testing:reset` then clears the component's `jwks`, whose signing key the previous run's
         // secret encrypted.
         const secret = random(32).toString('hex');
