@@ -1,6 +1,6 @@
-// Screenshot command for the tester role (dev cycle Phase 5): one full-page PNG per Chromium
-// viewport at e2e/screenshots/<route-slug>-<width>.png (gitignored; uploaded by CI as e2e-report).
-// Routes: E2E_SCREENSHOT_ROUTES, comma-separated, default "/". Run with `npm run e2e:screenshots`.
+// Writes e2e/screenshots/<route-slug>-<width>.png (gitignored; uploaded by CI as e2e-report) for
+// each route in E2E_SCREENSHOT_ROUTES, comma-separated, default "/". Run with `npm run
+// e2e:screenshots`.
 import { join } from 'node:path';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -10,7 +10,6 @@ const routes = (process.env['E2E_SCREENSHOT_ROUTES'] ?? '/')
   .map((route) => route.trim())
   .filter(Boolean);
 
-/** `/` -> `home`; `/leagues/abc?x=1` -> `leagues-abc-x-1`. */
 function routeSlug(route: string): string {
   const slug = route
     .replace(/^\/+|\/+$/g, '')
@@ -20,14 +19,13 @@ function routeSlug(route: string): string {
   return slug || 'home';
 }
 
-/** `/sign-up` and everything under `/app` are `RenderMode.Client` (app.routes.server.ts). */
 function isClientRoute(route: string): boolean {
   return /^\/(?:sign-up|sign-in|app)(?:[/?#]|$)/.test(route);
 }
 
 test.describe('screenshots', () => {
-  // A route may be a 404 document (the not-found page, #23): its own 404 resource message is
-  // allowed, and the status is printed beside the path. Every other console rule still applies.
+  // A route may be a 404 document: its own 404 resource message is allowed, and the status is
+  // printed beside the path. Every other console rule still applies.
   test.use({ expectedDocumentStatus: 404 });
 
   for (const route of routes) {
@@ -37,7 +35,7 @@ test.describe('screenshots', () => {
         'screenshots use the two Chromium projects (ADR 0005)',
       );
       const response = await page.goto(route);
-      // Client routes (#62) render in the browser only, so they never log hydration.
+      // Client routes render in the browser only, so they never log hydration.
       if (isClientRoute(route)) await expect(page.locator('main h1')).toBeVisible();
       else if (!remoteBaseUrl) await expect.poll(() => consoleGuard.hydrated).toBe(true);
       await page.evaluate(() => document.fonts.ready);

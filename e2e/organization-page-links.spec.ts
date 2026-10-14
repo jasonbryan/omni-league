@@ -1,6 +1,3 @@
-// Tester probes for #95 (PR #120): the query-keeping same-path links of the organization page,
-// beyond the implementer's league-2 / location-3 jumps: the last row of a tall page below the
-// offline note, modified clicks, a repeated click, and several query strings.
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -13,7 +10,6 @@ test.skip(
 
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
-/** The last location row of the tall tenant: a list shows at most 5 (#100). */
 const LAST = 5;
 
 function tallTenant() {
@@ -56,7 +52,7 @@ async function tap(page: Page, control: Locator): Promise<void> {
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-test.describe('organization page links (#95, tester probes)', () => {
+test.describe('organization page links', () => {
   test('the last row of a tall page lands below the top bar and the offline note, query kept', async ({
     page,
     context,
@@ -116,11 +112,10 @@ test.describe('organization page links (#95, tester probes)', () => {
     await page.goto(`${tenant.path}?utm_source=x`);
     await hydrated(consoleGuard);
     await arm(page);
-    // What a modified click does natively depends on the platform: Ctrl+click opens a tab on
-    // Linux and Windows, Cmd+click on macOS, and the other chord follows the link in this tab.
-    // The test therefore does not rely on the browser's default action. A window listener, which
-    // runs after the app's handlers, records whether the app cancelled the event, then cancels it
-    // itself so no platform follows the link (and nothing opens a tab to wait for).
+    // What a modified click does natively depends on the platform (Ctrl+click opens a tab on Linux
+    // and Windows, Cmd+click on macOS), so the test does not rely on the browser's default action.
+    // A window listener, which runs after the app's handlers, records whether the app cancelled the
+    // event, then cancels it itself so no platform follows the link.
     await page.evaluate(() => {
       const seen: { type: string; defaultPrevented: boolean }[] = [];
       (window as Window & { e2eClicks?: typeof seen }).e2eClicks = seen;
@@ -150,7 +145,6 @@ test.describe('organization page links (#95, tester probes)', () => {
       const label = JSON.stringify(options);
       await link.click(options);
       if (type) expected.push({ type, defaultPrevented: false });
-      // One event per click, and the app did not cancel it: a router navigation would have.
       const seen = await page.evaluate(
         () =>
           (window as Window & { e2eClicks?: { type: string; defaultPrevented: boolean }[] })
@@ -162,7 +156,6 @@ test.describe('organization page links (#95, tester probes)', () => {
       expect(await marker(page), label).toBe(true);
     }
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
-    // Control: a plain click is cancelled by the app and navigates through the router.
     await link.click();
     await expect(page).toHaveURL(`${tenant.path}?utm_source=x#league-2`);
     expect(await marker(page)).toBe(true);

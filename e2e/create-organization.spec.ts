@@ -1,8 +1,3 @@
-// Create an organization (#64): `/app/organizations/new` and "Your organizations" on `/app`, both
-// Client routes behind sign-up (approved design design/mockups/64-create-organization.html). Every
-// test signs up its own user through the real form, so each runs against a preview too; the ones
-// that seed a tenant (a taken slug) need the local Convex backend and are skipped with
-// E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -16,11 +11,9 @@ import { randomBytes } from 'node:crypto';
 
 const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 
-/** The format message for every malformed, too short or long, and reserved slug. */
 const FORMAT_MESSAGE =
   'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.';
 
-/** Form order (mockup "Focus order"), with the top bar's account link (#63). */
 const FORM_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
@@ -36,7 +29,6 @@ const fieldError = (page: Page, id: string) => page.locator(`#${id}-error`);
 const createButton = (page: Page) => page.getByRole('button', { name: /Create organization/ });
 const organizations = (page: Page) => page.getByRole('region', { name: 'Your organizations' });
 
-/** A name and slug no other test or run uses. */
 function newOrganization(label = 'Org') {
   const id = randomBytes(4).toString('hex');
   return { name: `E2E ${label} ${id}`, slug: `e2e-${label.toLowerCase()}-${id}` };
@@ -156,7 +148,6 @@ test.describe('create an organization', () => {
     await signUp(page, newUser('Leave'));
     await openForm(page);
 
-    // Tabbing through Name without changing it shows nothing; typing a bad slug shows nothing yet.
     await field(page, 'name').focus();
     await page.keyboard.press('Tab');
     await expect(field(page, 'slug')).toBeFocused();
@@ -164,7 +155,6 @@ test.describe('create an organization', () => {
     await page.keyboard.type('Bad-Slug');
     await expect(fieldError(page, 'slug')).toHaveCount(0);
 
-    // Leaving Slug shows the error, linked to the field, and the page passes axe with it shown.
     await page.keyboard.press('Tab');
     await expect(fieldError(page, 'slug')).toHaveText(FORMAT_MESSAGE);
     await expect(field(page, 'slug')).toHaveAttribute('aria-invalid', 'true');
@@ -174,7 +164,6 @@ test.describe('create an organization', () => {
     );
     await expectAccessible(page, { expectedOrder: FORM_ORDER });
 
-    // Fixing it clears the error on the keystroke that makes the slug valid.
     await field(page, 'slug').fill('fixed-slug');
     await expect(fieldError(page, 'slug')).toHaveCount(0);
     await expect(field(page, 'slug')).not.toHaveAttribute('aria-invalid', 'true');
@@ -192,7 +181,6 @@ test.describe('create an organization', () => {
     await expect(fieldError(page, 'name')).toHaveText('Enter your organization’s name.');
     await expect(field(page, 'name')).toBeFocused();
 
-    // The error stays while the name is invalid, and says what is wrong now.
     await field(page, 'name').fill('n'.repeat(101));
     await expect(fieldError(page, 'name')).toHaveText(
       'Use 100 characters or fewer. This name has 101.',
@@ -260,7 +248,6 @@ test.describe('create an organization', () => {
       await screenshot(page, testInfo, '64-new-taken');
       await expectAccessible(page, { expectedOrder: FORM_ORDER });
 
-      // Editing the slug clears the message; the organization then goes through.
       const free = newOrganization('Free');
       await field(page, 'slug').fill(free.slug);
       await expect(fieldError(page, 'slug')).toHaveCount(0);
@@ -279,12 +266,10 @@ test.describe('create an organization', () => {
     await field(page, 'slug').fill(org.slug);
     await createButton(page).click();
 
-    // The admin Overview with its "Get set up" list (#65 decision 5), not the public page.
     await expect(page).toHaveURL(`${baseURL}/app/organizations/${org.slug}`);
     await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Get set up' })).toBeVisible();
 
-    // The public page, with #60's empty states.
     await page.goto(`/organizations/${org.slug}`);
     await expect(page.getByRole('heading', { level: 1, name: org.name })).toBeVisible();
     await expect(page.getByText('No leagues yet').first()).toBeVisible();
@@ -299,7 +284,6 @@ test.describe('create an organization', () => {
     await expect(
       row.getByRole('link', { name: new RegExp(`^Public page ?: ${org.name}$`) }),
     ).toHaveAttribute('href', `/organizations/${org.slug}`);
-    // "Manage" (#65) leads to the admin area, and its name includes the organization.
     await expect(row.getByRole('link', { name: `Manage ${org.name}` })).toHaveAttribute(
       'href',
       `/app/organizations/${org.slug}`,
@@ -352,8 +336,8 @@ test.describe('create an organization', () => {
       await openForm(page);
       await field(page, 'name').fill(name);
       await createButton(page).click();
-      // The slug filled from the name, so the landing page is known (the form's own path also
-      // contains "/organizations/").
+      // Fills the slug from the name so the landing page is known; the form's own path also
+      // contains "/organizations/".
       await expect(page).toHaveURL(
         `${baseURL}/app/organizations/${name.toLowerCase().replaceAll(' ', '-')}`,
       );
