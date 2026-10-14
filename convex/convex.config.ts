@@ -10,6 +10,10 @@ const app = defineApp({
     BETTER_AUTH_SECRET: v.optional(v.string()),
     // Set on preview and staging deployments, never on production.
     PREVIEW_ORIGIN_PATTERN: v.optional(v.string()),
+    // The shared password of the demo accounts, set by the owner as a Convex default preview
+    // variable. Secret; read only by `seed:demo`, never logged, and never on production
+    // (scripts/check-deploy-env.mjs production fails when it is set).
+    DEMO_ACCOUNT_PASSWORD: v.optional(v.string()),
   },
 });
 

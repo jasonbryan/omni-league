@@ -230,7 +230,7 @@ describe('leagues.publishedSeasonCount: testing:seedSeason', () => {
 describe('leagues.publishedSeasonCount: seed:demo', () => {
   test('after a run on an empty deployment, and again after a second run, every league’s counter equals a recount', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     await expectCountersMatch(t);
     const all = await counters(t);
     expect(all['gulf-coast-sport-social/sunday-reverse-coed-4s']).toEqual({
@@ -243,7 +243,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       recount: 0,
     });
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     await expectCountersMatch(t);
     expect(await counters(t)).toEqual(all);
   });
@@ -267,12 +267,12 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
     });
     expect(await stored(t, league._id)).toBeUndefined();
 
-    const first = await t.mutation(internal.seed.demo, {});
+    const first = await t.mutation(internal.seed.insertDemoData, {});
     expect(first.backfilled.leagues).toBeGreaterThanOrEqual(1);
     expect(await stored(t, league._id)).toBe(2);
     await expectCountersMatch(t);
 
-    const second = await t.mutation(internal.seed.demo, {});
+    const second = await t.mutation(internal.seed.insertDemoData, {});
     expect(second.backfilled).toEqual({
       organizations: 0,
       locations: 0,
@@ -290,7 +290,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       await insertSeason(ctx, league, season(1), 'published');
       await ctx.db.patch('leagues', league._id, { publishedSeasonCount: 5 });
     });
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     expect(await stored(t, league._id)).toBe(5);
   });
 
@@ -315,7 +315,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       organizations: await ctx.db.query('organizations').collect(),
     }));
     vi.stubEnv('PREVIEW_ORIGIN_PATTERN', 'https://wrong.example');
-    await expect(t.mutation(internal.seed.demo, {})).rejects.toThrow(/seed:demo refused/);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).rejects.toThrow(/seed:demo refused/);
     const after = await t.run(async (ctx) => ({
       leagues: await ctx.db.query('leagues').collect(),
       seasons: await ctx.db.query('seasons').collect(),
