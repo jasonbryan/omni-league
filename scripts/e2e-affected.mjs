@@ -43,13 +43,14 @@ const LEAGUE_ADMIN = [
   'organization-leagues-publish-states',
 ];
 const LOCATION_ADMIN = ['organization-admin', 'sign-in-admin'];
-const STAFF = ['organization-staff', 'accept-invite'];
+const STAFF = ['organization-staff', 'organization-staff-undo', 'accept-invite'];
 /** Every spec that opens the admin area. */
 const ADMIN = [
   ...new Set([
     'organization-admin',
     ...LEAGUE_ADMIN,
     'organization-staff',
+    'organization-staff-undo',
     'sign-in-admin',
     'accept-invite',
     'create-organization',
@@ -219,7 +220,8 @@ export const AREAS = [
         'location-form',
         'location-row',
       ])(file),
-    specs: LOCATION_ADMIN,
+    // validate-on-blur (#205) fills in the location form and leaves its fields.
+    specs: [...LOCATION_ADMIN, 'validate-on-blur'],
   },
   {
     // The mockup spec compares the real leagues page text with the approved mockup, so a changed
@@ -231,7 +233,7 @@ export const AREAS = [
       'league-create-form',
       'league-form',
     ]),
-    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup'],
+    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup', 'validate-on-blur'],
   },
   {
     name: 'admin leagues publish dialog',
@@ -246,7 +248,7 @@ export const AREAS = [
       'staff-invite-panel',
       'format-day',
     ]),
-    specs: STAFF,
+    specs: [...STAFF, 'validate-on-blur'],
   },
   { name: 'admin area', test: inDir('src/app/organizations/admin/'), specs: ADMIN },
   {
@@ -291,6 +293,13 @@ export const AREAS = [
     name: 'list page helper',
     test: named('src/app/core/', ['list-page']),
     specs: LEAGUE_PAGE,
+  },
+  {
+    // The field-error rule every form shares (#205): sign-up, sign-in, create organization, the
+    // admin forms (locations, leagues, staff invites), and the create-season form.
+    name: 'form helper',
+    test: named('src/app/core/forms/', ['shown-errors']),
+    specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT],
   },
   {
     // The focus move after a route change (#127), also asserted on the season page (#128).

@@ -260,6 +260,83 @@ describe('AdminLocations', () => {
       expect(error('name')).toBeNull();
     });
 
+    describe('checking a field when the user leaves it', () => {
+      async function leave(id: string) {
+        input(id).dispatchEvent(new Event('blur'));
+        await o.harness.fixture.whenStable();
+      }
+
+      it('shows the error with aria-invalid and aria-describedby once a changed field is left', async () => {
+        await open([]);
+        await type('name', 'n'.repeat(101));
+        await leave('name');
+        expect(error('name')).toBe('Use 100 characters or fewer. This name has 101.');
+        expect(input('name').getAttribute('aria-invalid')).toBe('true');
+        expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
+        await type('address', 'a');
+        await type('address', '');
+        await leave('address');
+        expect(error('address')).toBe(LOCATION_MESSAGES.addressEmpty);
+      });
+
+      it('shows nothing while the user types an invalid partial value', async () => {
+        await open([]);
+        await type('name', 'n'.repeat(101));
+        expect(error('name')).toBeNull();
+        expect(input('name').hasAttribute('aria-invalid')).toBe(false);
+      });
+
+      it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+        await open([]);
+        await leave('name');
+        await leave('address');
+        expect(error('name')).toBeNull();
+        expect(error('address')).toBeNull();
+        await submitAdd();
+        expect(error('name')).toBe(LOCATION_MESSAGES.nameEmpty);
+        expect(error('address')).toBe(LOCATION_MESSAGES.addressEmpty);
+      });
+
+      it('clears the error on the keystroke that makes the value valid', async () => {
+        await open([]);
+        await type('name', 'n'.repeat(101));
+        await leave('name');
+        await type('name', 'Redfish Flats Fields');
+        expect(error('name')).toBeNull();
+        expect(input('name').hasAttribute('aria-invalid')).toBe(false);
+      });
+
+      it('a form emptied after an add starts again: passing through its fields shows nothing', async () => {
+        await open([]);
+        await type('name', 'Redfish Flats Fields');
+        await type('address', '880 Redfish Flats Ln, Rockport, TX 78382');
+        await submitAdd();
+        o.convex.calls[0]?.resolve({ locationId: 'loc_new' });
+        await flushNow();
+        expect(input('name').value).toBe('');
+        await leave('name');
+        await leave('address');
+        expect(error('name')).toBeNull();
+        expect(error('address')).toBeNull();
+      });
+
+      it('a server refusal about a field shows under it until the field changes', async () => {
+        await open([]);
+        await type('name', 'Redfish Flats Fields');
+        await type('address', '880 Redfish Flats Ln, Rockport, TX 78382');
+        await submitAdd();
+        o.convex.calls[0]?.reject(
+          new ConvexError({ field: 'name', code: 'nameTooLong', message: 'The server says no.' }),
+        );
+        await flushNow();
+        expect(error('name')).toBe('The server says no.');
+        await leave('name');
+        expect(error('name')).toBe('The server says no.');
+        await type('name', 'Redfish Flats Fields 2');
+        expect(error('name')).toBeNull();
+      });
+    });
+
     it('sends the trimmed values to locations.create; while in flight the button says so (state 10)', async () => {
       await open([]);
       await type('name', '  Redfish Flats Fields ');
@@ -494,6 +571,30 @@ describe('AdminLocations', () => {
       await flushNow();
       expect(error('edit-address')).toBe('Use 200 characters or fewer. This address has 201.');
       expect(document.activeElement).toBe(input('edit-address'));
+      expect(calls()).toEqual([]);
+    });
+
+    it('checks a field of the edit form when it is left after a change', async () => {
+      await open(COASTAL_LOCATIONS);
+      await startEdit();
+      const leave = async (id: string) => {
+        input(id).dispatchEvent(new Event('blur'));
+        await o.harness.fixture.whenStable();
+      };
+      // The values the form starts with are not a change: passing through shows nothing.
+      await leave('edit-name');
+      await leave('edit-address');
+      expect(error('edit-name')).toBeNull();
+      await type('edit-name', '');
+      expect(error('edit-name')).toBeNull();
+      await leave('edit-name');
+      expect(error('edit-name')).toBe(LOCATION_MESSAGES.nameEmpty);
+      expect(input('edit-name').getAttribute('aria-invalid')).toBe('true');
+      expect(input('edit-name').getAttribute('aria-describedby')).toBe(
+        'edit-name-description edit-name-error',
+      );
+      await type('edit-name', 'Valid');
+      expect(error('edit-name')).toBeNull();
       expect(calls()).toEqual([]);
     });
 
