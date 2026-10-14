@@ -1,8 +1,8 @@
 // Unit tests for scripts/e2e-affected-local.mjs: the branch's changed files become the arguments
 // of `npm run e2e`. Run with `npm run test:scripts` (node:test). No browser or backend runs.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -137,6 +137,71 @@ describe('changedFiles', () => {
         execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: 'pipe' });
       git('init', '-q', '-b', 'main');
       assert.throws(() => changedFiles((args) => git(...args)));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('npm run e2e:affected entry point', () => {
+  /**
+   * A repository holding copies of the two scripts and a stand-in `e2e.mjs` whose `runE2e` prints
+   * its arguments and returns 7, so the test sees what the entry point hands to the e2e run.
+   */
+  function project() {
+    const dir = mkdtempSync(join(tmpdir(), 'e2e-affected-entry-test-'));
+    const git = (...args) =>
+      execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
+        encoding: 'utf8',
+      });
+    mkdirSync(join(dir, 'scripts'));
+    mkdirSync(join(dir, 'e2e'));
+    for (const name of ['e2e-affected-local.mjs', 'e2e-affected.mjs']) {
+      copyFileSync(join(import.meta.dirname, name), join(dir, 'scripts', name));
+    }
+    writeFileSync(
+      join(dir, 'scripts', 'e2e.mjs'),
+      'export async function runE2e(args) { console.log(JSON.stringify(args)); return 7; }\n',
+    );
+    writeFileSync(join(dir, 'README.md'), 'a');
+    git('init', '-q', '-b', 'main');
+    git('add', '.');
+    git('commit', '-q', '-m', 'base');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('checkout', '-q', '-b', 'branch');
+    return { dir, git };
+  }
+
+  function run(dir, args) {
+    return spawnSync(process.execPath, [join(dir, 'scripts', 'e2e-affected-local.mjs'), ...args], {
+      encoding: 'utf8',
+    });
+  }
+
+  it('runs the selected specs and the extra arguments, and exits with the run’s code', () => {
+    const { dir } = project();
+    try {
+      writeFileSync(join(dir, 'README.md'), 'edited');
+      const result = run(dir, ['--project=chromium-desktop']);
+      assert.deepEqual(JSON.parse(result.stdout), [
+        ...[...ALWAYS].sort(),
+        '--project=chromium-desktop',
+      ]);
+      assert.equal(result.status, 7);
+      assert.match(result.stderr, /e2e:affected: running /);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the full suite when a changed file is shared code', () => {
+    const { dir } = project();
+    try {
+      mkdirSync(join(dir, 'src', 'app', 'shell'), { recursive: true });
+      writeFileSync(join(dir, 'src', 'app', 'shell', 'shell.ts'), 'new');
+      const result = run(dir, []);
+      assert.deepEqual(JSON.parse(result.stdout), []);
+      assert.match(result.stderr, /need the full suite/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
