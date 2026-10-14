@@ -126,7 +126,7 @@ describe('leagues.publishedSeasonCount: the writers', () => {
     await expectCountersMatch(t);
   });
 
-  test('a league without a counter reads as 0, and the writers start it from 0 (a league #66 creates after the seed)', async () => {
+  test('a league without a counter reads as 0, and the writers start it from 0', async () => {
     const t = setup();
     const league = await tenant(t);
     await t.run(async (ctx) => {

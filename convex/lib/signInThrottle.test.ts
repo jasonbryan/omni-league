@@ -11,7 +11,7 @@ import {
 
 const MINUTE = 60_000;
 
-describe('waitAfterFailures (ADR 0008 "Rate limits and lockout")', () => {
+describe('waitAfterFailures', () => {
   test('5 failures are free, then 1 minute doubling to a 1 hour cap', () => {
     expect(FREE_FAILURES).toBe(5);
     expect(MAX_WAIT_MS).toBe(60 * MINUTE);

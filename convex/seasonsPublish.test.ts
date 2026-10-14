@@ -123,7 +123,7 @@ describe('seasons.publish', () => {
     );
   });
 
-  test('writes no organization row, and the only league row it changes is the league’s publishedSeasonCount (#127)', async () => {
+  test('writes no organization row, and the only league row it changes is the league’s publishedSeasonCount', async () => {
     const s = await setup();
     const leagueL = await s.t.run(
       async (ctx) => (await ctx.db.get('seasons', s.seasonL))!.leagueId,
@@ -277,7 +277,7 @@ describe('seasons.publish', () => {
   });
 });
 
-describe('seasons.publish (tester probes)', () => {
+describe('seasons.publish edge cases', () => {
   test('concurrent publishes of one season, by an org admin and by its league organizer, all succeed and leave one published row', async () => {
     const s = await setup();
     const before = await seasons(s.t);

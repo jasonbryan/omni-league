@@ -64,7 +64,7 @@ async function stored(t: T, organizationId: Id<'organizations'>) {
   });
 }
 
-describe('tester probes: the sport filter at the page cap with real rows (#101)', () => {
+describe('the sport filter at the page cap with real rows', () => {
   async function seedBig(t: T) {
     const names = (prefix: string, n: number) =>
       Array.from({ length: n }, (_, i) => `${prefix} ${String(i).padStart(3, '0')}`);
@@ -157,7 +157,7 @@ describe('tester probes: the sport filter at the page cap with real rows (#101)'
   });
 });
 
-describe('tester probes: a league written before the backfill, then the backfill (#101)', () => {
+describe('a league written before the backfill, then the backfill', () => {
   async function oldOrganization(t: T) {
     return t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
@@ -298,7 +298,7 @@ describe('tester probes: a league written before the backfill, then the backfill
   });
 });
 
-describe('tester probes: several writes at once (#101)', () => {
+describe('several writes at once', () => {
   test('five concurrent insertLeague calls at one shared location count 5 leagues, 1 location, and one row of 5', async () => {
     const t = setup();
     const organizationId = await t.run((ctx) =>

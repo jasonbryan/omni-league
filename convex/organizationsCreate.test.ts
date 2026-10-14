@@ -268,7 +268,7 @@ describe('organizations.listMine', () => {
   });
 });
 
-describe('organizations.create, edge cases (tester)', () => {
+describe('organizations.create, edge cases', () => {
   test('two simultaneous calls for one slug create exactly one organization and one membership', async () => {
     const { t, a, b } = await setup();
     const results = await Promise.allSettled([

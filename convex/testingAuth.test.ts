@@ -190,7 +190,7 @@ describe('testing:reset and the auth component', () => {
   }, 30_000);
 });
 
-describe('testing:seedSignInFailures (#63 e2e: reach the hard limit without 100 attempts)', () => {
+describe('testing:seedSignInFailures reaches the hard limit without 100 attempts', () => {
   const failureRows = (t: T) => t.run((ctx) => ctx.db.query('signInFailures').collect());
 
   test.each([
@@ -255,7 +255,7 @@ describe('testing:accountByEmail', () => {
   }, 30_000);
 });
 
-describe('testing:addMembership (#65)', () => {
+describe('testing:addMembership', () => {
   const MEMBER = { organizationSlug: TENANT.organization.slug, email: USER.email };
 
   test('throws without IS_TEST', async () => {

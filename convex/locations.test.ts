@@ -453,7 +453,7 @@ describe('locations.update', () => {
   });
 });
 
-describe('locations edge cases (#65 tester)', () => {
+describe('locations edge cases', () => {
   test('allows two locations with the same name in one organization, each its own row and count', async () => {
     const s = await setup();
     const input = { organizationId: s.organizationA, name: 'Twin Courts', address: '5 Twin St' };

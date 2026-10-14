@@ -142,7 +142,7 @@ describe('sign-in', () => {
   }, 30_000);
 });
 
-describe('per-address throttle (ADR 0008)', () => {
+describe('per-address throttle', () => {
   test('after 5 failures, a sixth attempt with the correct password gets 429 and the wait', async () => {
     const t = setup();
     await signUp(t);
@@ -244,7 +244,7 @@ describe('per-address throttle (ADR 0008)', () => {
   }, 30_000);
 });
 
-describe('hard limit (ADR 0008)', () => {
+describe('hard limit', () => {
   const seedFailures = (t: T, email: string, failures: number) =>
     t.run((ctx) =>
       ctx.db.insert('signInFailures', { email, failures, blockedUntil: Date.now() - 1 }),
@@ -293,7 +293,7 @@ describe('hard limit (ADR 0008)', () => {
   }, 30_000);
 });
 
-describe('only internal functions read or write signInFailures (ADR 0008)', () => {
+describe('only internal functions read or write signInFailures', () => {
   const sources = import.meta.glob<string>(['./**/*.ts', '!./**/*.test.ts', '!./_generated/**'], {
     eager: true,
     query: '?raw',
@@ -321,8 +321,8 @@ describe('only internal functions read or write signInFailures (ADR 0008)', () =
   });
 });
 
-describe('per-IP limiter (ADR 0008, #63)', () => {
-  test('the limiter ships off until #163 shows the header is the caller’s address', () => {
+describe('per-IP limiter', () => {
+  test('the limiter ships off until the header is known to be the caller’s address', () => {
     // Off: a shared bucket would block every user after three sign-ins in ten seconds.
     const options = createAuth({} as GenericCtx<DataModel>).options;
     expect(options.rateLimit).toEqual({ enabled: false, storage: 'database' });

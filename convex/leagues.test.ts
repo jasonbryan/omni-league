@@ -414,7 +414,7 @@ describe('leagues.listForAdmin', () => {
   });
 });
 
-describe('drafts stay off the public page (#66)', () => {
+describe('drafts stay off the public page', () => {
   test('listPublicLeagues returns only the published league and getPublicPage counts one', async () => {
     const s = await setup();
     await s.adminA.mutation(api.leagues.create, valid(s));
@@ -480,7 +480,7 @@ describe('drafts stay off the public page (#66)', () => {
   });
 });
 
-describe('tenantWrites league slugs and status (#66)', () => {
+describe('tenantWrites league slugs and status', () => {
   test('a generated league slug is always one a user could choose', async () => {
     const s = await setup();
     const slugs = await s.t.run(async (ctx) => {
@@ -583,7 +583,7 @@ describe('tenantWrites league slugs and status (#66)', () => {
   });
 });
 
-describe('tester probes (#66)', () => {
+describe('league edge cases', () => {
   test('two creates of the same slug at once leave one league and one refusal', async () => {
     const s = await setup();
     const results = await Promise.allSettled([

@@ -96,7 +96,7 @@ async function assign(
   });
 }
 
-describe('organizations.listMine: leagues (#141)', () => {
+describe('organizations.listMine: leagues', () => {
   test("a league organizer's row lists their assigned leagues, drafts included, and not an unassigned one", async () => {
     const { as } = await setup();
     const rows = await as('organizer').query(api.organizations.listMine, {});
@@ -295,7 +295,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     });
   }
 
-  test('one LIST_MINE_LEAGUES_LIMIT budget covers all memberships, spent in organization-name order (#196)', async () => {
+  test('one LIST_MINE_LEAGUES_LIMIT budget covers all memberships, spent in organization-name order', async () => {
     const { t, as } = await setup();
     // "Org 0" sorts before "Org A", but its membership is the later one.
     const zero = await t.run((ctx) =>
@@ -314,7 +314,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     ]);
   });
 
-  test('the budget one organization leaves goes to the next, and the total never exceeds the limit (#196)', async () => {
+  test('the budget one organization leaves goes to the next, and the total never exceeds the limit', async () => {
     const { t, as, organizationA, organizationB } = await setup();
     const aLeagues = await leaguesOf(t, organizationA, 'Alpha Field', 'A extra', 59);
     await assign(t, organizationA, 'leagueOrganizer', aLeagues);
@@ -327,7 +327,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     ]);
   });
 
-  test('an org admin membership spends none of the budget (#196)', async () => {
+  test('an org admin membership spends none of the budget', async () => {
     const { t, as } = await setup();
     // "Org 0" sorts before "Org A" and holds LIST_MINE_LEAGUES_LIMIT ids for an org admin, so the
     // budget would be gone before Org A if an org admin spent it.
@@ -347,7 +347,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     ]);
   });
 
-  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once (#196)", async () => {
+  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once", async () => {
     const { t, as, organizationA, organizationB } = await setup();
     // Org A (first by name) names LIST_MINE_LEAGUES_LIMIT - 1 foreign leagues (all of organization
     // B's) plus a repeat of one. Every distinct id is read and none is listed. The repeat is not
@@ -370,7 +370,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     expect(JSON.stringify(rows)).not.toContain('Foreign');
   });
 
-  test("another user's assignments never spend the caller's budget or appear in their rows (#196)", async () => {
+  test("another user's assignments never spend the caller's budget or appear in their rows", async () => {
     const { t, as, organizationA } = await setup();
     const many = await leaguesOf(t, organizationA, 'Alpha Field', 'Many', LIST_MINE_LEAGUES_LIMIT);
     await t.run(async (ctx) => {

@@ -288,7 +288,7 @@ describe('breached-password check (Pwned Passwords, mocked fetch)', () => {
 });
 
 // Better Auth skips the origin check by default when NODE_ENV is "test" or TEST is set.
-describe('origin check under a test environment (tester)', () => {
+describe('origin check under a test environment', () => {
   test('Vitest runs with NODE_ENV "test", the case Better Auth skips the check by default', () => {
     // Better Auth reads process.env.NODE_ENV itself (@better-auth/core/env), not the typed `env`.
     // eslint-disable-next-line @convex-dev/no-process-env -- asserts the variable Better Auth reads
@@ -340,7 +340,7 @@ describe('origin check under a test environment (tester)', () => {
   });
 });
 
-describe('the password is never echoed or logged (tester)', () => {
+describe('the password is never echoed or logged', () => {
   test('across success and every refusal path', async () => {
     const secret = 'unique tester passphrase 7f3a9c';
     const logged: string[] = [];
@@ -381,7 +381,7 @@ describe('the password is never echoed or logged (tester)', () => {
 
 // Pins the message format that the client's `VALIDATION_ERROR` mapping reads
 // (src/app/core/auth/auth.service.ts), and that the refused value is never echoed.
-describe('body validation messages the client maps (tester)', () => {
+describe('body validation messages the client maps', () => {
   test.each([
     ['a malformed email', { email: 'not-an-email' }, '[body.email] Invalid email address'],
     ['an empty email', { email: '' }, '[body.email] Invalid email address'],
@@ -411,7 +411,7 @@ describe('body validation messages the client maps (tester)', () => {
   });
 });
 
-describe('auth not configured (#111)', () => {
+describe('auth not configured', () => {
   const NOT_CONFIGURED = {
     code: 'AUTH_NOT_CONFIGURED',
     message: 'Authentication is not available.',
@@ -556,7 +556,7 @@ describe('auth not configured (#111)', () => {
   });
 });
 
-describe('name bounds (#111)', () => {
+describe('name bounds', () => {
   test.each([
     ['empty', ''],
     ['spaces only', '   '],
@@ -612,7 +612,7 @@ describe('name bounds (#111)', () => {
   });
 });
 
-describe('name bounds and refusal, tester probes (#111)', () => {
+describe('name bounds and refusal, edge cases', () => {
   test.each([
     ['tabs and newlines only', '\t\n\r '],
     ['no-break and ideographic spaces only', ' 　'],

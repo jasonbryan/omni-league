@@ -86,7 +86,7 @@ const counted = (s: Awaited<ReturnType<typeof setup>>) =>
     };
   });
 
-describe('leagues.publish at the same time (#69)', () => {
+describe('leagues.publish at the same time', () => {
   test('the same draft published by an admin and its organizer at once counts once', async () => {
     const s = await setup();
     const results = await Promise.allSettled([
@@ -131,7 +131,7 @@ describe('leagues.publish at the same time (#69)', () => {
   });
 });
 
-describe('leagues.publish inputs (#69)', () => {
+describe('leagues.publish inputs', () => {
   test('a league that names a location twice counts the location once', async () => {
     const s = await setup();
     await s.admin.mutation(api.leagues.publish, { leagueId: s.twice });

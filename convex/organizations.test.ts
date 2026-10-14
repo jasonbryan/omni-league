@@ -532,7 +532,7 @@ describe('organizations module source', () => {
   });
 });
 
-describe('organizations: totals and page bounds against a recount (#100, tester)', () => {
+describe('organizations: totals and page bounds against a recount', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -662,7 +662,7 @@ function seedSports(t: T, slug: string) {
   });
 }
 
-describe('organizations:getPublicPage sports (#101)', () => {
+describe('organizations:getPublicPage sports', () => {
   test('lists each sport with a league: key, segment, name, and league and location counts', async () => {
     const t = setup();
     await seedSports(t, 'sandy');
@@ -825,7 +825,7 @@ describe('organizations:getPublicPage sports (#101)', () => {
   });
 });
 
-describe('organizations:listPublicLeagues with a sport (#101)', () => {
+describe('organizations:listPublicLeagues with a sport', () => {
   const SOCCER_NAMES = THIRTEEN.slice(0, 12);
   const SOCCER_SORTED = [...SOCCER_NAMES].sort((a, b) =>
     a.toLowerCase() < b.toLowerCase() ? -1 : 1,
@@ -973,7 +973,7 @@ describe('organizations:listPublicLeagues with a sport (#101)', () => {
   });
 });
 
-describe('organizations module source (#101)', () => {
+describe('organizations module source', () => {
   test('the sport list reads through the sport index with the same offset read', () => {
     expect(organizationsSource).toMatch(/by_organizationId_and_sport_and_status_and_sortName/);
     expect(organizationsSource.match(/\.take\(page \* PUBLIC_LIST_PAGE_SIZE\)/g)).toHaveLength(2);

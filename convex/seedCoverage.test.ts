@@ -57,7 +57,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('seed:demo coverage (#230)', () => {
+describe('seed:demo coverage', () => {
   test('on an empty backend, every schema table outside SEED_EXCEPTIONS has at least one row, and no exception is stale or on a seeded table', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});

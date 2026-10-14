@@ -260,7 +260,7 @@ describe('invites.accept', () => {
     });
   });
 
-  test('it returns the organization slug and each league name and slug, keeping leagueNames (#212)', async () => {
+  test('it returns the organization slug and each league name and slug, keeping leagueNames', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed, s.sand]);
     const result = await s.asDana.mutation(api.invites.accept, { token });
@@ -272,7 +272,7 @@ describe('invites.accept', () => {
     ]);
   });
 
-  test('an org admin accept returns the organization slug and no leagues (#212)', async () => {
+  test('an org admin accept returns the organization slug and no leagues', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test');
     expect(await s.asDana.mutation(api.invites.accept, { token })).toEqual({
@@ -284,7 +284,7 @@ describe('invites.accept', () => {
     });
   });
 
-  test('the slugs are not in what getByToken shows a visitor (#212)', async () => {
+  test('the slugs are not in what getByToken shows a visitor', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed]);
     const text = JSON.stringify(await s.t.query(api.invites.getByToken, { token }));
@@ -423,7 +423,7 @@ describe('invites.accept', () => {
   });
 });
 
-describe('invites.accept: probes added by the tester (#70)', () => {
+describe('invites.accept: edge cases', () => {
   async function refusal(promise: Promise<unknown>): Promise<unknown> {
     try {
       await promise;

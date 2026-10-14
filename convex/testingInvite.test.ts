@@ -58,7 +58,7 @@ describe('testing:addInvite', () => {
     expect(rows[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  test('with a token, its hash is stored, so the token opens the invite (#70 e2e)', async () => {
+  test('with a token, its hash is stored, so the token opens the invite', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = await setup();
     const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
