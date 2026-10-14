@@ -53,7 +53,7 @@ Read the matching conventions file before writing or reviewing code in that laye
 ## Code comments
 
 - Names, types, small functions, and named constants say what the code does. Where a comment would explain what, rename, extract a function, or name a constant instead.
-- A comment gives a why the code cannot express: an external constraint, a workaround for a library or platform bug (a link to the upstream bug is allowed), or a security reason. One line where possible.
+- A comment only gives a why the code cannot express: an external constraint, a workaround for a library or platform bug (a link to the upstream bug is allowed), or a security reason. One line where possible.
 - History, the reason for a change, and references to this repo's issues, PRs, ADRs, reviews, or agent roles go in commits, PRs, and ADRs.
 - Future work lives in an issue, not in code. Remove an existing pointer once an open issue names that code; if none does, open one first.
 - Test titles describe behaviour and carry no issue numbers.
