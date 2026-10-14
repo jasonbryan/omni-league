@@ -7,8 +7,6 @@ import { insertSeason, insertTenant, publishSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `seasons.publish` (#126). Identities are faked the way ADR 0008 "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -28,14 +26,6 @@ const fall = {
   minimumRosterSize: 7,
 };
 
-/**
- * Organization A (`org-a`) with a published soccer league L, a published beach volleyball league M,
- * and a draft softball league D; organization B with a published soccer league. Each league has a
- * draft season (`seasonL`, `seasonM`, `seasonD`, `seasonB`), and L has a published one
- * (`publishedL`). Users: `admin-a`, `organizer-l` (assigned L), `organizer-m` (assigned M),
- * `organizer-d` (assigned D), `admin-b`, `stranger` (no membership), and `ghost` (an identity with
- * no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -128,13 +118,12 @@ describe('seasons.publish', () => {
       ...before.find((season) => season._id === s.seasonL)!,
       status: 'published',
     });
-    // Every other season is untouched.
     expect(after.filter((season) => season._id !== s.seasonL)).toEqual(
       before.filter((season) => season._id !== s.seasonL),
     );
   });
 
-  test('writes no organization row, and the only league row it changes is the league’s publishedSeasonCount (#127)', async () => {
+  test('writes no organization row, and the only league row it changes is the league’s publishedSeasonCount', async () => {
     const s = await setup();
     const leagueL = await s.t.run(
       async (ctx) => (await ctx.db.get('seasons', s.seasonL))!.leagueId,
@@ -146,7 +135,6 @@ describe('seasons.publish', () => {
     expect(after.leagues).toHaveLength(before.leagues.length);
     for (const league of before.leagues) {
       const changed = after.leagues.find((candidate) => candidate._id === league._id);
-      // L already held one published season (`publishedL`): the publish makes it two.
       expect(changed).toEqual(
         league._id === leagueL
           ? { ...league, publishedSeasonCount: (league.publishedSeasonCount ?? 0) + 1 }
@@ -289,10 +277,7 @@ describe('seasons.publish', () => {
   });
 });
 
-// Tester probes (#126): concurrent publishes, and that a published season is on no public surface
-// yet (the public queries read only counters and published leagues, and no public query returns a
-// season until #127 and #128).
-describe('seasons.publish (tester probes)', () => {
+describe('seasons.publish edge cases', () => {
   test('concurrent publishes of one season, by an org admin and by its league organizer, all succeed and leave one published row', async () => {
     const s = await setup();
     const before = await seasons(s.t);
@@ -359,7 +344,6 @@ describe('seasons.publish (tester probes)', () => {
     const before = await publicResults();
     await s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL });
     expect(await publicResults()).toEqual(before);
-    // Nothing the public queries return names a season.
     expect(JSON.stringify(await publicResults())).not.toMatch(/season|fall-2027|Fall 2027/i);
     const leagueId = (await seasons(s.t)).find((season) => season._id === s.seasonL)!.leagueId;
     await expect(s.t.query(api.seasons.listForOrganizer, { leagueId })).rejects.toThrow(

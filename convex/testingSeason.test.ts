@@ -1,6 +1,4 @@
 /// <reference types="vite/client" />
-// `testing:seedSeason` and `testing:addLeagueOrganizer` (#125), against the real schema. Each
-// throws without IS_TEST before touching data.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';

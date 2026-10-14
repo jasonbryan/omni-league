@@ -9,12 +9,8 @@ import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `seasons.listPublic` (#127): the published seasons of a published league, newest start date
-// first, 5 per page.
-
 const seasonsSource = readFileSync(new URL('./seasons.ts', import.meta.url), 'utf8');
 
-/** A season starting on day `n` of 2027, so a higher `n` starts later and sorts first. */
 function season(n: number, overrides: Partial<NewSeason> = {}): NewSeason {
   const day = String(n).padStart(2, '0');
   return {
@@ -29,11 +25,6 @@ function season(n: number, overrides: Partial<NewSeason> = {}): NewSeason {
   };
 }
 
-/**
- * Organization A (`org-a`) with a published soccer league `coed-7v7` (the league under test), a
- * draft league `draft-league`, and a published league `empty-league` with no season; organization
- * B (`org-b`) with its own published `coed-7v7`.
- */
 async function setup() {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
@@ -72,7 +63,6 @@ async function leagueOf(t: T, orgSlug: string, leagueSlug: string): Promise<Doc<
   });
 }
 
-/** Inserts seasons `from` to `to` (inclusive) of the league, published unless `status` says not. */
 async function addSeasons(
   t: T,
   orgSlug: string,
@@ -101,7 +91,6 @@ describe('seasons.listPublic', () => {
   test('lists the published seasons newest start date first, 5 per page, with the total and page count, and no draft', async () => {
     const t = await setup();
     await addSeasons(t, 'org-a', 'coed-7v7', 1, 7);
-    // A draft that starts later than every published season, and one that starts earlier.
     await addSeasons(t, 'org-a', 'coed-7v7', 30, 30, 'draft');
     await addSeasons(t, 'org-a', 'coed-7v7', 0, 0, 'draft', {
       slug: 'early-draft',
@@ -158,7 +147,6 @@ describe('seasons.listPublic', () => {
 
   test('reaches 40 pages and no more: page 40 serves the 196th to 200th, and page 41 serves page 1', async () => {
     const t = await setup();
-    // Spread over 2 leagues' worth of days is not needed: the start dates only have to be unique.
     await addSeasons(t, 'org-a', 'coed-7v7', 1, 205);
     const last = await list(t, PUBLIC_LIST_MAX_PAGE);
     expect(last).toMatchObject({ page: 40, pageCount: 40, total: 205 });
@@ -186,9 +174,7 @@ describe('seasons.listPublic', () => {
   test("a league slug of another organization gives that organization's seasons or none, never the first one's", async () => {
     const t = await setup();
     await addSeasons(t, 'org-a', 'coed-7v7', 1, 3);
-    // org-b has a league with the same slug and no season.
     expect(await list(t, 1, 'org-b', 'coed-7v7')).toEqual(EMPTY);
-    // org-a's league slug under org-b's slug that org-b does not have.
     expect(await list(t, 1, 'org-b', 'empty-league')).toEqual(EMPTY);
     expect((await list(t, 1, 'org-a', 'coed-7v7')).total).toBe(3);
   });
@@ -224,7 +210,6 @@ describe('seasons.listPublic', () => {
   test('is public: an anonymous caller reads it, and no argument names an id', async () => {
     const t = await setup();
     await addSeasons(t, 'org-a', 'coed-7v7', 1, 1);
-    // No identity is set on `t`.
     expect((await list(t, 1)).total).toBe(1);
   });
 

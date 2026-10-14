@@ -18,12 +18,9 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-/** What one run on an empty deployment inserts. */
 const ROWS = { organizations: 5, locations: 10, customLevels: 1, leagues: 16, seasons: 4 };
-/** What a run backfills when it changes no row. */
 const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
-/** The result of a run that inserts every demo row and backfills nothing. */
 const FULL = { ...ROWS, backfilled: NONE };
 
 async function counts(t: T) {
@@ -36,7 +33,6 @@ async function counts(t: T) {
   }));
 }
 
-/** Every row of the three tables, to prove a run changed nothing. */
 async function snapshot(t: T) {
   return t.run(async (ctx) => ({
     organizations: await ctx.db.query('organizations').collect(),
@@ -46,11 +42,6 @@ async function snapshot(t: T) {
   }));
 }
 
-/**
- * The sport counters and `sportLocations` rows a recount of the leagues gives, per organization
- * slug (#101): the leagues of each sport, the distinct locations of each sport, and the
- * leagues of each sport at each location (as `sport:location name`).
- */
 async function sportRecount(t: T) {
   return t.run(async (ctx) => {
     const leagues = await ctx.db.query('leagues').collect();
@@ -88,7 +79,6 @@ async function sportRecount(t: T) {
   });
 }
 
-/** What the database holds for the same shape as `sportRecount`: the counters and the rows. */
 async function sportStored(t: T) {
   return t.run(async (ctx) => {
     const locations = await ctx.db.query('locations').collect();
@@ -116,7 +106,6 @@ async function sportStored(t: T) {
   });
 }
 
-/** An organization with two locations and two leagues, inserted with none of #100's fields. */
 async function insertRaw(t: T): Promise<void> {
   await t.run(async (ctx) => {
     const organizationId = await ctx.db.insert('organizations', {
@@ -147,7 +136,6 @@ async function insertRaw(t: T): Promise<void> {
 }
 
 beforeEach(() => {
-  // Every preview and staging deployment has this Convex default preview variable (hosting.md).
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
 });
 
@@ -162,7 +150,7 @@ describe('seed:demo', () => {
     expect(await counts(t)).toEqual(ROWS);
   });
 
-  test('adds the two demo draft seasons (#125) and the two published ones (#126) of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
+  test('adds the two demo draft seasons and the two published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
     const rows = await t.run(async (ctx) => {
@@ -243,7 +231,6 @@ describe('seed:demo', () => {
         status: 'published',
       },
     ]);
-    // Each follows the rules of seasons.create for its league's sport.
     for (const { sport, season } of rows) {
       expect(
         checkSeasonFields(sport, {
@@ -259,11 +246,9 @@ describe('seed:demo', () => {
     }
   });
 
-  test('leaves a season already under a demo slug alone, whatever its status, and inserts the other (#125)', async () => {
+  test('leaves a season already under a demo slug alone, whatever its status, and inserts the other', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
-    // A reused staging: a published season took the slug of one demo draft, and a demo season
-    // was deleted.
     await t.run(async (ctx) => {
       const seasons = await ctx.db.query('seasons').collect();
       const coed = seasons.find((s) => s.slug === 'fall-2027' && s.playersPerSide === 7)!;
@@ -286,10 +271,9 @@ describe('seed:demo', () => {
     ).toMatchObject({ status: 'published', minimumRosterSize: 9 });
   });
 
-  test('on a deployment where #125’s seed already ran, inserts the two published summer-2027 seasons, leaves the fall-2027 drafts unchanged, and a second run inserts nothing (#126)', async () => {
+  test('on a deployment where the draft seasons were already seeded, inserts the two published summer-2027 seasons, leaves the fall-2027 drafts unchanged, and a second run inserts nothing', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
-    // #125's seed inserted the two fall-2027 drafts and no summer-2027 season.
     await t.run(async (ctx) => {
       for (const season of await ctx.db.query('seasons').collect()) {
         if (season.slug === 'summer-2027') await ctx.db.delete('seasons', season._id);
@@ -325,7 +309,7 @@ describe('seed:demo', () => {
     expect(await snapshot(t)).toEqual(settled);
   });
 
-  test('the published demo seasons write no organization row, and a league’s only change is its publishedSeasonCount (#126, #127)', async () => {
+  test('the published demo seasons write no organization row, and a league’s only change is its publishedSeasonCount', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
     const before = await t.run(async (ctx) => ({
@@ -349,7 +333,7 @@ describe('seed:demo', () => {
     ).toEqual(before);
   });
 
-  test('every demo organization slug is a valid slug and reserved, so a created organization never gets demo rows (#64)', () => {
+  test('every demo organization slug is a valid slug and reserved, so a created organization never gets demo rows', () => {
     expect(seed.DEMO.map((tenant) => tenant.organization.slug).sort()).toEqual(
       [...DEMO_ORGANIZATION_SLUGS].sort(),
     );
@@ -359,7 +343,7 @@ describe('seed:demo', () => {
     }
   });
 
-  test('keeps the two mockup organizations (#73) exactly as the mockup shows them', async () => {
+  test('keeps the two mockup organizations exactly as the mockup shows them', async () => {
     const t = setup();
     await t.mutation(internal.seed.demo, {});
 
@@ -468,7 +452,6 @@ describe('seed:demo', () => {
       'port-aransas-beach-volleyball-club',
     ]);
 
-    // Every league is held at locations of its own organization.
     for (const league of leagues) {
       expect(league.locationIds.length).toBeGreaterThan(0);
       for (const locationId of league.locationIds) {
@@ -501,8 +484,6 @@ describe('seed:demo', () => {
 
   test('inserts exactly a missing demo location and a missing demo league, with its links', async () => {
     const t = setup();
-    // The Gulf Coast organization holds part of its demo rows, written through the shared writers:
-    // every location but Flour Bluff Softball Park, and every league but the softball one held there.
     const gulfId = await t.run((ctx) =>
       insertTenant(ctx, {
         organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
@@ -545,7 +526,6 @@ describe('seed:demo', () => {
     });
 
     const after = await snapshot(t);
-    // Every earlier location and league is unchanged; the organization gained one of each.
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
     const DIVISION = ['gender', 'playersPerSide', 'level', 'ageGroup'] as const;
     const withoutBackfill = (league: Doc<'leagues'>) => ({
@@ -586,8 +566,6 @@ describe('seed:demo', () => {
   test('every counter equals a recount after the writers, testing:addLeague, and an incremental run', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    // A demo organization holding one of its locations and one league, written by insertTenant,
-    // then a location and a league added by insertLocation and insertLeague.
     await t.run(async (ctx) => {
       const id = await insertTenant(ctx, {
         organization: { name: 'Front Range Rec Sports', slug: 'front-range-rec-sports' },
@@ -608,7 +586,6 @@ describe('seed:demo', () => {
         locations: ['Bluebird Softball Complex'],
       });
     });
-    // A league that is not a demo row, added by the e2e seed.
     await t.mutation(internal.testing.addLeague, {
       organizationSlug: 'front-range-rec-sports',
       name: 'Extra League',
@@ -633,7 +610,6 @@ describe('seed:demo', () => {
     for (const row of [...locations, ...leagues]) {
       expect(row.sortName, row.name).toBe(row.name.toLowerCase());
     }
-    // The sport counters and sportLocations rows equal a recount (#101).
     const stored = await sportStored(t);
     expect(stored).toEqual(await sportRecount(t));
     expect(stored['front-range-rec-sports']).toEqual({
@@ -687,10 +663,8 @@ describe('seed:demo', () => {
     });
   });
 
-  test('backfills sortName and the counters on rows written before #100, once', async () => {
+  test('backfills sortName and the counters on rows written before they existed, once', async () => {
     const t = setup();
-    // As on a reused staging deployment: rows with none of the new fields, including a demo
-    // organization that holds one of its locations.
     await insertRaw(t);
     await t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
@@ -724,7 +698,6 @@ describe('seed:demo', () => {
         locations.filter((location) => location.organizationId === organization._id).length,
       ]);
     }
-    // The sport counters and sportLocations rows equal a recount (#101).
     const stored = await sportStored(t);
     expect(stored).toEqual(await sportRecount(t));
     expect(stored['old-club']).toEqual({
@@ -779,10 +752,8 @@ describe('seed:demo', () => {
     expect(await snapshot(t)).toEqual(before);
   });
 
-  test('backfills only the sport counters and sportLocations rows on an organization that has #100 fields, once', async () => {
+  test('backfills only the sport counters and sportLocations rows on an organization that has the league and location counts, once', async () => {
     const t = setup();
-    // As on staging after #100's backfill: leagueCount and locationCount are set, the sport
-    // counters are not, and a repeated location in one league counts once.
     await t.run(async (ctx) => {
       const organizationId = await ctx.db.insert('organizations', {
         name: 'Mid Club',
@@ -818,7 +789,6 @@ describe('seed:demo', () => {
       }
     });
 
-    // The three leagues were written before #66, so the backfill also sets their status.
     await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
       ...ROWS,
       backfilled: { ...NONE, organizations: 1, leagues: 3, leagueDivisions: 3 },
@@ -864,8 +834,6 @@ describe('seed:demo', () => {
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    // `DEMO` is the plain data array e2e/pwa.spec.ts reads (#82), and `DEMO_SEASONS` the seasons
-    // (#125): no function, nothing to call.
     const { DEMO, DEMO_SEASONS, ...functions } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
@@ -879,8 +847,7 @@ describe('seed:demo', () => {
   });
 });
 
-describe('seed:demo backfill against a recount (#100, tester)', () => {
-  /** Each organization's counters next to a recount of its rows, and every row's sortName. */
+describe('seed:demo backfill against a recount', () => {
   async function expectCountersMatchRecount(t: T) {
     const { organizations, locations, leagues } = await snapshot(t);
     for (const organization of organizations) {
@@ -973,11 +940,10 @@ describe('seed:demo backfill against a recount (#100, tester)', () => {
   });
 });
 
-describe('seed:demo and league status (#66, tester probes)', () => {
+describe('seed:demo and league status', () => {
   test('a legacy league without a status becomes published before the recount, a draft stays out of it, and a second run changes nothing', async () => {
     const t = setup();
     await t.run(async (ctx) => {
-      // No counters at all (a deployment from before #100): the recount counts published leagues.
       const bare = await ctx.db.insert('organizations', { name: 'Bare Club', slug: 'bare-club' });
       const field = await ctx.db.insert('locations', {
         organizationId: bare,
@@ -999,7 +965,6 @@ describe('seed:demo and league status (#66, tester probes)', () => {
         locationIds: [field],
         status: 'draft',
       });
-      // Counters already set, as on a deployment after #100/#101 but before #66.
       const counted = await ctx.db.insert('organizations', {
         name: 'Counted Club',
         slug: 'counted-club',
@@ -1065,7 +1030,6 @@ describe('seed:demo and league status (#66, tester probes)', () => {
   });
 });
 
-/** The organization counters equal a recount of the published leagues only. */
 async function expectCountersMatchRecountPublished(t: T) {
   await t.run(async (ctx) => {
     for (const organization of await ctx.db.query('organizations').collect()) {

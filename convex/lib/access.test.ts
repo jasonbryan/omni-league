@@ -6,9 +6,6 @@ import { modules } from '../test.setup';
 import { requireLeagueOrganizer, requireOrgAdmin } from './access';
 import { insertTenant } from './tenantWrites';
 
-// The access helpers every staff function uses from #64 on (convex.md, Functions). Identities are
-// faked the way ADR 0008 "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -18,12 +15,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A with leagues L1 and L2, organization B with league LB, and these users:
- * `admin-a` (org admin of A), `organizer-l1` (league organizer of L1 in A), `organizer-lb` (league
- * organizer of LB in B), `admin-b` (org admin of B), `stranger` (no membership), `ghost` (an
- * identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -155,7 +146,6 @@ describe('requireLeagueOrganizer', () => {
     await expect(t.run((ctx) => requireLeagueOrganizer(ctx, l1))).rejects.toThrow(
       'Sign in required',
     );
-    // A league deleted after its id was handed out: refused, not an error that names the league.
     const gone = await t.run(async (ctx) => {
       const id = await ctx.db.insert('leagues', {
         organizationId: (await ctx.db.query('organizations').first())!._id,
