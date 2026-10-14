@@ -96,7 +96,7 @@ async function blurActiveElement(page: Page): Promise<void> {
 function skipUnlessMobile(testInfo: TestInfo): void {
   test.skip(
     testInfo.project.name !== 'chromium-mobile',
-    'one browser project only (ADR 0013, CI minutes)',
+    'one browser project only, to save CI minutes',
   );
 }
 
@@ -534,16 +534,13 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     const unusable: [string, Record<string, unknown>][] = [
       ['{"name":"Shape Only"}', { v: { name: 'Shape Only' }, version }],
       [
-        'the shape before #100 (lists, no totals)',
+        'the earlier shape (lists, no totals)',
         {
           v: { name: organization.name, slug: organization.slug, leagues: [], locations: [] },
           version,
         },
       ],
-      [
-        'the shape before #101 (totals, no sports)',
-        { v: { ...valid, sports: undefined }, version },
-      ],
+      ['the later shape (totals, no sports)', { v: { ...valid, sports: undefined }, version }],
       ['42', { v: 42, version }],
       ['"x"', { v: 'x', version }],
       ['[1,2]', { v: [1, 2], version }],

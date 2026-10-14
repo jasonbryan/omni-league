@@ -57,6 +57,7 @@ Read the matching conventions file before writing or reviewing code in that laye
 - History, the reason for a change, and references to this repo's issues, PRs, ADRs, reviews, or agent roles go in commits, PRs, and ADRs.
 - Future work lives in an issue, not in code. Remove an existing pointer once an open issue names that code; if none does, open one first.
 - Test titles describe behaviour and carry no issue numbers.
+- `npm run lint` enforces the tracker-reference rule on comments, test titles, `test.skip`/`fixme`/`fail`/`slow` reasons, and ESLint rule messages (`scripts/comment-refs.mjs`).
 - Comments a tool reads stay, without tracker references: `eslint-disable*`, `@ts-expect-error`, `prettier-ignore`, `// @ts-check`, `/// <reference types>`, JSDoc type tags in `.js`/`.mjs` (`@type`, `@param {T}`, `@returns {T}`, `@typedef`), and the `# vX.Y.Z` after a pinned action ([ADR 0009](docs/decisions/0009-ci-pipeline.md)). Notes on vendored code keep their why.
 
 ## Secrets

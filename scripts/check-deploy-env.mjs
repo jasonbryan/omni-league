@@ -23,34 +23,35 @@ export async function checkDeployEnv(mode, reader) {
   const failures = [];
   if (mode === 'preview') {
     if (names.has('IS_TEST')) {
-      failures.push(
-        'IS_TEST is set; it must not be set on a preview deployment (ADR 0005, ADR 0008).',
-      );
+      failures.push('IS_TEST is set; it must not be set on a preview deployment.');
     }
     if (!names.has('AUTH_EMAIL_DISABLED')) {
       failures.push(
-        'AUTH_EMAIL_DISABLED is not set; it must be exactly true on a preview deployment (ADR 0011).',
+        'AUTH_EMAIL_DISABLED is not set; it must be exactly true on a preview deployment.',
       );
     } else if ((await reader.value('AUTH_EMAIL_DISABLED')) !== 'true') {
       failures.push(
-        'AUTH_EMAIL_DISABLED is set but not exactly true; it must be exactly true on a preview deployment (ADR 0011).',
+        'AUTH_EMAIL_DISABLED is set but not exactly true; it must be exactly true on a preview deployment.',
       );
     }
     if (names.has('RESEND_API_KEY')) {
-      failures.push(
-        'RESEND_API_KEY is set; it must not be set on a preview deployment (ADR 0011).',
-      );
+      failures.push('RESEND_API_KEY is set; it must not be set on a preview deployment.');
     }
   } else if (mode === 'production') {
     if (names.has('IS_TEST')) {
-      failures.push('IS_TEST is set; it must not be set on production (ADR 0005, ADR 0008).');
+      failures.push('IS_TEST is set; it must not be set on production.');
     }
     if (names.has('AUTH_EMAIL_DISABLED')) {
-      failures.push('AUTH_EMAIL_DISABLED is set; it must not be set on production (ADR 0011).');
+      failures.push('AUTH_EMAIL_DISABLED is set; it must not be set on production.');
     }
     if (names.has('PREVIEW_ORIGIN_PATTERN')) {
       failures.push(
         'PREVIEW_ORIGIN_PATTERN is set; it must not be set on production (it admits preview origins and lets seed:demo write).',
+      );
+    }
+    if (names.has('DEMO_ACCOUNT_PASSWORD')) {
+      failures.push(
+        'DEMO_ACCOUNT_PASSWORD is set; it must not be set on production (it is the shared password of the demo accounts).',
       );
     }
   } else {
@@ -59,12 +60,12 @@ export async function checkDeployEnv(mode, reader) {
   // Names only: these values are secrets or origins and are never read.
   if (!names.has('BETTER_AUTH_SECRET')) {
     failures.push(
-      'BETTER_AUTH_SECRET is not set; it must be set on every deployment, or auth would sign with a public default secret (ADR 0008).',
+      'BETTER_AUTH_SECRET is not set; it must be set on every deployment, or auth would sign with a public default secret.',
     );
   }
   if (!names.has('SITE_URL')) {
     failures.push(
-      'SITE_URL is not set; it must be set on every deployment, or no browser origin is trusted (ADR 0008).',
+      'SITE_URL is not set; it must be set on every deployment, or no browser origin is trusted.',
     );
   }
   return failures;
