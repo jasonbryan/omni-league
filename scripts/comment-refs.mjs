@@ -42,6 +42,12 @@ const TITLE_MEMBERS = new Set([
   'concurrent',
 ]);
 
+// `test.skip(condition, 'reason')`: the second argument is prose a reader sees in the report.
+const REASON_MEMBERS = new Set(['skip', 'fixme', 'fail', 'slow']);
+
+// ESLint rule messages reach the developer whose code a rule rejects.
+const RULE_MESSAGE_FILE = 'eslint.config.mjs';
+
 const SCAN_DIRECTORIES = ['src', 'convex', 'e2e', 'scripts', '.github/workflows'];
 const SCAN_ROOT_FILES = [
   '.github/dependabot.yml',
@@ -200,6 +206,25 @@ function titleCallee(expression) {
   return TITLE_ROOTS.has(current.text) && names.every((member) => TITLE_MEMBERS.has(member));
 }
 
+function isReasonCall(node) {
+  const callee = node.expression;
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    REASON_MEMBERS.has(callee.name.text) &&
+    titleCallee(callee)
+  );
+}
+
+function isRuleMessage(node) {
+  const owner = node.parent;
+  if (ts.isPropertyAssignment(owner)) return owner.name.getText() === 'message';
+  return (
+    ts.isVariableDeclaration(owner) &&
+    ts.isIdentifier(owner.name) &&
+    /message$/i.test(owner.name.text)
+  );
+}
+
 function insideComponentDecorator(node) {
   for (let current = node.parent; current; current = current.parent) {
     if (
@@ -236,6 +261,15 @@ function scanScript(path, text, findings) {
       if (stringLike(title)) {
         checkText(path, text, titleText(title), title.getStart(sourceFile), findings);
       }
+    }
+    if (ts.isCallExpression(node) && isReasonCall(node) && node.arguments[1]) {
+      const [, reason] = node.arguments;
+      if (stringLike(reason)) {
+        checkText(path, text, titleText(reason), reason.getStart(sourceFile), findings);
+      }
+    }
+    if (basename(path) === RULE_MESSAGE_FILE && stringLike(node) && isRuleMessage(node)) {
+      checkText(path, text, titleText(node), node.getStart(sourceFile), findings);
     }
     if (stringLike(node)) {
       const inline = inlineKind(node);

@@ -297,6 +297,60 @@ describe('the test titles', () => {
   });
 });
 
+describe('the skip reasons', () => {
+  const reasons = [
+    "test.skip(isMobile, 'one browser project (ADR 0013)');",
+    "test.fixme(isMobile, 'not yet, see #12');",
+    "test.skip(({ browserName }) => browserName === 'webkit', 'issue 12');",
+    "test.describe.fixme(true, 'PR 90');",
+    'test.skip(true, `x ${name} (ADR 0005)`);',
+  ];
+
+  for (const form of reasons) {
+    it(`flags a tracker reference in ${form.slice(0, form.indexOf('('))} with a condition`, () => {
+      flagged('e2e/a.spec.ts', form);
+    });
+  }
+
+  it('reports the line of the reason', () => {
+    assert.deepEqual(lines('e2e/a.spec.ts', "test.skip(\n  isMobile,\n  'issue 12',\n);"), [3]);
+  });
+
+  it('accepts a reason that gives a why', () => {
+    accepted(
+      'e2e/a.spec.ts',
+      "test.skip(isMobile, 'one browser project only, to save CI minutes');",
+    );
+  });
+
+  it('does not check the second argument of a call that is not a test', () => {
+    accepted('e2e/a.spec.ts', "other.skip(isMobile, 'issue 12');");
+  });
+});
+
+describe('the ESLint rule messages', () => {
+  it('flags a message property and a message constant', () => {
+    flagged(
+      'eslint.config.mjs',
+      "export default [{ rules: { x: ['error', { message: 'no (ADR 0010).' }] } }];",
+    );
+    flagged('eslint.config.mjs', "const REACT_MESSAGE = 'not approved (ADR 0008).';");
+    flagged('eslint.config.mjs', "const rule = { message:\n 'see issue 12' };");
+  });
+
+  it('accepts a message that gives a why', () => {
+    accepted(
+      'eslint.config.mjs',
+      "const rule = { message: 'Server-entry files must not read the environment.' };",
+    );
+  });
+
+  it('checks only messages, and only in the ESLint config', () => {
+    accepted('eslint.config.mjs', "const rule = { name: 'issue 12' };");
+    accepted('scripts/a.mjs', "const rule = { message: 'issue 12' };");
+  });
+});
+
 describe('the scope', () => {
   it('skips Markdown, docs, design, and agent files', () => {
     accepted('README.md', '<!-- see #12 -->');
