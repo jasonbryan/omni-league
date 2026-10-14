@@ -1,5 +1,3 @@
-// Checks of netlify.toml's build commands (#60, #97). Run with `npm run test:scripts` (node:test).
-// Node built-ins only: each context's `command` is read with a regular expression, not a TOML parser.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,7 +5,6 @@ import { describe, it } from 'node:test';
 
 const toml = readFileSync(join(import.meta.dirname, '..', 'netlify.toml'), 'utf8');
 
-/** The `command` of `[context.<name>]`, or undefined when the table or its command is missing. */
 function command(context) {
   const table = new RegExp(
     `^\\[context\\.${context}\\]\\s*$([\\s\\S]*?)(?=^\\[|(?![\\s\\S]))`,
@@ -17,20 +14,15 @@ function command(context) {
   return /^\s*command\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/m.exec(body)?.[1];
 }
 
-/**
- * What each context passes to `npx convex deploy`: the TOML-escaped quoted preview name and the
- * flag. PR previews use `--preview-create` (a fresh backend per push); staging uses
- * `--preview-name`, which reuses the `main` deployment and its data (#222).
- */
 const PREVIEW = {
   'deploy-preview': { name: String.raw`\"pr-$REVIEW_ID\"`, flag: '--preview-create' },
   'branch-deploy': { name: String.raw`\"$HEAD\"`, flag: '--preview-name' },
 };
 
 // The app registers the service worker only when `scripts/ng-convex.mjs` passes
-// `__SERVICE_WORKER__=true` (#81, PR #119); a plain `ng build` keeps angular.json's `false`, so a
+// `__SERVICE_WORKER__=true`; a plain `ng build` keeps angular.json's `false`, so a
 // deploy built that way would ship the worker but never register it, and skip sw-config-check.
-describe('netlify.toml builds through npm run build (#81)', () => {
+describe('netlify.toml builds through npm run build', () => {
   for (const context of ['deploy-preview', 'branch-deploy', 'production']) {
     it(`${context} builds with npm run build and never with ng build`, () => {
       const cmd = command(context);
@@ -41,7 +33,7 @@ describe('netlify.toml builds through npm run build (#81)', () => {
   }
 });
 
-describe('netlify.toml demo seed (#97)', () => {
+describe('netlify.toml demo seed', () => {
   for (const [context, { name, flag }] of Object.entries(PREVIEW)) {
     it(`${context} runs seed:demo on its preview after the deploy and the environment check`, () => {
       const cmd = command(context);
@@ -63,7 +55,7 @@ describe('netlify.toml demo seed (#97)', () => {
     });
   }
 
-  it('only deploy previews recreate their backend; staging reuses it and its data (#222)', () => {
+  it('only deploy previews recreate their backend; staging reuses it and its data', () => {
     const recreating = Object.keys(PREVIEW).filter((context) =>
       /--preview-create\b/.test(command(context) ?? ''),
     );
@@ -93,11 +85,10 @@ describe('netlify.toml demo seed (#97)', () => {
   });
 });
 
-// Static files added for installing the app (#80). Only content-hashed build outputs may be
-// cached for a year; the manifest and the icons keep Netlify's default `max-age=0,
-// must-revalidate`, so a changed icon or name reaches users on the next load.
+// Only content-hashed build outputs may be cached for a year; the manifest and the icons keep
+// Netlify's default `max-age=0, must-revalidate`, so a changed icon or name reaches users on the next
+// load.
 
-/** The `[[headers]]` tables as `{ for, values }`, read with regular expressions. */
 function headerRules() {
   return [...toml.matchAll(/^\[\[headers\]\]\s*$([\s\S]*?)(?=^\[|(?![\s\S]))/gm)].map(
     ([, body]) => ({
@@ -111,13 +102,12 @@ function headerRules() {
   );
 }
 
-/** True when a Netlify `for` pattern (`*` matches anything, including `/`) matches `path`. */
 function matches(pattern, path) {
   const source = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*');
   return new RegExp(`^${source}$`).test(path);
 }
 
-describe('netlify.toml install files (#80)', () => {
+describe('netlify.toml install files', () => {
   const rules = headerRules();
 
   it('serves the manifest as application/manifest+json', () => {

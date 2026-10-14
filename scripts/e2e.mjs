@@ -1,21 +1,11 @@
-// `npm run e2e [-- <playwright test args>]` (ADR 0005, #13, #59). Node built-ins only.
-//
-// Local run: `convex dev --once` pushes the functions to the anonymous local backend
-// (scripts/e2e-convex.mjs push), the development build compiles in that backend's URL, and
-// `playwright test` starts the backend and the SSR server (playwright.config.ts).
-// With E2E_BASE_URL set: no Convex step and no Convex URL override; the build runs as before and
-// Playwright targets the given URL with no local server.
-//
-// A local run holds the machine-wide lock (scripts/e2e-lock.mjs) from before the push until the
-// last step ends, because every local run uses the same ports and resets the same backend. A run
-// against a URL starts neither, and CI has the machine to itself, so neither takes the lock.
+// A local run holds the machine-wide lock from before the push until the last step ends, because
+// every local run uses the same ports and resets the same backend.
 import { spawn } from 'node:child_process';
 import { constants } from 'node:os';
 import { join } from 'node:path';
 import { LOCAL_CONVEX_URL, remoteBaseUrl, ROOT } from './e2e-convex.mjs';
 import { withLock } from './e2e-lock.mjs';
 
-/** The steps of one e2e run, in order. */
 export function e2ePlan({ env }, playwrightArgs) {
   const remote = remoteBaseUrl(env) !== undefined;
   const node = process.execPath;
@@ -45,7 +35,6 @@ export function e2ePlan({ env }, playwrightArgs) {
   return steps;
 }
 
-/** Runs `step` with inherited output; resolves to its exit code (128 + n for a signal). */
 function runStep(step) {
   return new Promise((resolve, reject) => {
     const child = spawn(step.command, step.args, { env: step.env, stdio: 'inherit' });
