@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { Shell } from '../shell';
 import { ShellSidebar } from '../shell-sidebar';
 
-/** Test-only page with no sidebar template, like the placeholder home and the not-found view. */
 @Component({
   selector: 'app-plain-test-page',
   imports: [Shell],
@@ -15,7 +14,6 @@ import { ShellSidebar } from '../shell-sidebar';
 })
 export class PlainTestPage {}
 
-/** Test-only page that supplies a sidebar template, as an organization page does (#60). */
 @Component({
   selector: 'app-sidebar-test-page',
   imports: [Shell, ShellSidebar],

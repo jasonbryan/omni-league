@@ -1,4 +1,3 @@
-/** Up to two initials: the first letters of the first and last words of the name. */
 export function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const first = words[0];

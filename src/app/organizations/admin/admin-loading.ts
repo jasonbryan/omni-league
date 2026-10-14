@@ -2,13 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
 
-/**
- * The admin area while `organizations.getAdminContext` has not answered (#65;
- * design/mockups/65-organization-admin-locations.html state 4): a sidebar placeholder from 1024px
- * (the shell draws the real column, and the menu button, only once there is a sidebar to show, so
- * the placeholder sits inside `<main>` and takes the column's place), placeholder panels, and a
- * polite status. Nothing is clickable and nothing else is requested.
- */
+/** The shell draws the real sidebar column, and the menu button, only once there is a sidebar to show, so the placeholder sits inside `<main>` and takes the column's place. */
 @Component({
   selector: 'app-admin-loading',
   changeDetection: ChangeDetectionStrategy.OnPush,

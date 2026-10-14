@@ -15,16 +15,9 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 
 /**
- * Overview, `/app/organizations/:slug` (#65, #66;
- * design/mockups/65-organization-admin-locations.html states 1 and 2): the organization, a "View
- * public page" link, a count tile for each section, and the "Get set up" list. The Locations tile
- * counts what `locations.listForAdmin` returns. The Leagues tile splits "N published, M drafts":
- * the published count is the organization's counter (`leagues.publishedCount`, #172), which holds
- * past the 200 rows the league list stops at, and the drafts are counted from that list, so a
- * draft past row 200 is not counted. The list hides once any league is published (by the counter),
- * and is not drawn while the counter loads, so an established organization never sees it flash.
- * The Staff tile (#67) counts `memberships.listForOrganization` and `invites.listPending`, the
- * staff screen's own queries.
+ * The published count is the organization's counter, which holds past the 200 rows the league list stops at, and the drafts are counted from that list,
+ * so a draft past row 200 is not counted. The list hides once any league is published (by the counter), and is not drawn while the counter loads,
+ * so an established organization never sees it flash.
  */
 @Component({
   selector: 'app-admin-overview',
@@ -236,12 +229,6 @@ export class AdminOverview {
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
-  /**
-   * The Leagues tile, or `null` while either source loads: the published leagues (the counter)
-   * plus the drafts (counted from the admin list), split as "N published, M drafts" with a part
-   * that is 0 left out. A failed counter reads "–"; a failed list keeps the published count and
-   * says the drafts could not be loaded.
-   */
   protected readonly leagueTile = computed(() => {
     if (this.published.error()) return { count: '–', note: 'Could not be loaded' };
     const published = this.published.value();
@@ -272,10 +259,6 @@ export class AdminOverview {
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
-  /**
-   * The Staff tile, or `null` while either list loads: the members and "N pending invites". A
-   * failed member list reads "–"; a failed pending list keeps the member count and says so.
-   */
   protected readonly staffTile = computed(() => {
     if (this.members.error()) return { count: '–', note: 'Could not be loaded' };
     const members = this.members.value();
@@ -291,18 +274,13 @@ export class AdminOverview {
     return { count, note };
   });
 
-  /**
-   * Whether the "Get set up" list shows: not while the counter loads, and not once any league is
-   * published (decision 2). A failed counter shows it, because it cannot say a league is
-   * published.
-   */
+  /** A failed counter shows it, because it cannot say a league is published. */
   protected readonly showSetup = computed(() => {
     if (this.published.error()) return true;
     const count = this.published.value();
     return count !== undefined && count < 1;
   });
 
-  /** The Locations tile, or `null` while the list loads. */
   protected readonly locationTile = computed(() => {
     if (this.locations.error()) return { count: '–', note: 'Could not be loaded' };
     const rows = this.locations.value();

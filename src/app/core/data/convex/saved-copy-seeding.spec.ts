@@ -74,7 +74,6 @@ describe('injectQuery saved copies (browser)', () => {
     expect(page.error()).toBeUndefined();
     expect(page.savedAt()).toBe(SAVED_AT);
 
-    // The live subscription still opens; its first result replaces the copy and clears savedAt.
     TestBed.tick();
     expect(client.activeSubscriptions).toHaveLength(1);
     client.subscriptions[0].emit(LIVE);

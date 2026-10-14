@@ -47,43 +47,23 @@ import {
 import { INVITE_FORM_ALERTS, InviteForm, type InviteField } from './invite-form';
 import { formatDay } from './format-day';
 
-/** A league the invite can name: the organization's own, from `leagues.listForAdmin`. */
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
   name: string;
 }
 
-/** The invite just created: what the link panel shows, until the user leaves it. */
 interface CreatedInvite {
   email: string;
   expiresAt: number;
   link: string;
 }
 
-/** The result of pressing "Copy link". */
 type CopyOutcome = 'copied' | 'blocked' | null;
 
-/** The helm textarea's classes, as design/mockups/67-organization-staff.html draws it. */
 const TEXTAREA =
   'border-input dark:bg-input/30 rounded-lg border bg-transparent px-2.5 py-2 text-base transition-colors md:text-sm placeholder:text-muted-foreground flex field-sizing-content min-h-16 w-full disabled:cursor-not-allowed disabled:opacity-50 resize-none font-mono break-all';
 
-/**
- * The "Invite staff" panel of the Staff page (#67; design/mockups/67-organization-staff.html
- * states 1, 3 to 10), the section `#invite`.
- *
- * - The form: Email, Role (League organizer by default, the least access; decision 9), and for
- *   League organizer the organization's leagues, drafts included. With no league, League organizer
- *   is unavailable and the form says why. Errors show after a submit, under their field or group;
- *   focus goes to the first invalid field (the first league for the group), or to the form alert
- *   for a failure that is not about one field. Like every form that calls the backend it carries
- *   the offline refusal of design/mockups/88-offline-note.html (angular.md, State and data).
- * - The link panel: after `invites.create` answers, the panel becomes "Invite link ready" with
- *   focus on its heading, the whole link in a read-only text area, and "Copy link". The token
- *   lives only in this component's signal: it is shown once, never stored, logged, or put in the
- *   address. "Invite someone else" drops it and returns the form.
- *
- * Nothing is emailed: no sending domain exists before production (ADR 0011).
- */
+/** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-staff-invite-panel',
   imports: [AdminAlert, Checkbox, FormField, NgIcon],
@@ -468,7 +448,6 @@ export class StaffInvitePanel {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
-  /** The organization's leagues, or `undefined` while they load. */
   readonly leagues = input<readonly InviteLeagueChoice[] | undefined>();
   readonly leaguesFailed = input(false);
 
@@ -495,15 +474,10 @@ export class StaffInvitePanel {
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly day = formatDay;
 
-  /** The invite just created, while its link panel shows. Never persisted. */
   protected readonly created = signal<CreatedInvite | null>(null);
   protected readonly copied = signal<CopyOutcome>(null);
 
-  /**
-   * `focusFirst` was called before the form rendered: Email takes focus when it does. Holds the
-   * element that had focus at the press; if focus has moved since, the request is dropped.
-   */
-  private readonly focusPending = signal<{ readonly from: Element | null } | null>(null);
+  private readonly pendingFocusRequest = signal<{ readonly from: Element | null } | null>(null);
 
   private readonly section = viewChild<ElementRef<HTMLElement>>('section');
   private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('email');
@@ -513,34 +487,29 @@ export class StaffInvitePanel {
 
   constructor() {
     effect(() => {
-      const pending = this.focusPending();
-      if (!pending) return;
+      const request = this.pendingFocusRequest();
+      if (!request) return;
       const email = this.emailInput();
       if (email) {
-        this.focusPending.set(null);
+        this.pendingFocusRequest.set(null);
         // Focus moved since the press (Revoke, the menu sheet): leave it there.
-        if (this.document.activeElement !== pending.from) return;
+        if (this.document.activeElement !== request.from) return;
         // Not `preventScroll`: the form grew the section after the jump, so Email may be below it.
         email.nativeElement.focus();
       } else if (this.leaguesFailed()) {
         // The leagues did not load, so there is no form to focus; do not steal focus later.
-        this.focusPending.set(null);
+        this.pendingFocusRequest.set(null);
       }
     });
   }
 
-  /**
-   * Puts focus on the panel's first control: Email, or the link panel's heading. The page's
-   * "Invite staff" link (phones) calls it after scrolling to `#invite`. While the leagues load
-   * there is no form yet, so the request waits and Email takes focus when the form renders (#180).
-   */
+  /** While the leagues load there is no form yet, so the request waits and Email takes focus when the form renders. */
   focusFirst(): void {
     const target = this.emailInput() ?? this.linkHeading();
     if (target) target.nativeElement.focus({ preventScroll: true });
-    else this.focusPending.set({ from: this.document.activeElement });
+    else this.pendingFocusRequest.set({ from: this.document.activeElement });
   }
 
-  /** The panel's section, for the page's jump link to scroll to. */
   scrollTarget(): HTMLElement | undefined {
     return this.section()?.nativeElement;
   }
@@ -565,7 +534,7 @@ export class StaffInvitePanel {
     }
   }
 
-  /** `<origin>/invites/accept#<token>`: the token stays in the fragment (#70 reads it there). */
+  /** `<origin>/invites/accept#<token>`: the token stays in the fragment. */
   private linkFor(token: string): string {
     return `${this.document.location.origin}/invites/accept#${token}`;
   }
@@ -581,7 +550,6 @@ export class StaffInvitePanel {
     }
   }
 
-  /** "Invite someone else": drops the link, empties the form, and puts focus on Email. */
   protected another(): void {
     this.created.set(null);
     this.copied.set(null);

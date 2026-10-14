@@ -40,7 +40,6 @@ export function injectAction<A extends FunctionReference<'action'>>(
   );
 }
 
-/** Shared mutation/action behaviour (ADR 0006 "Mutation and action helpers"). */
 function createCallRef<Args, R>(
   injector: Injector,
   call: (client: ConvexClientLike, args: Args) => Promise<Awaited<R>>,
@@ -53,7 +52,6 @@ function createCallRef<Args, R>(
     const error = signal<Error | undefined>(undefined);
 
     async function run(args: Args): Promise<Awaited<R>> {
-      // Mutations and actions are user interactions; they never run during a server render.
       if (onServer || !client) {
         const unavailable = onServer ? new ConvexServerCallError() : new ConvexNotConfiguredError();
         error.set(unavailable);
@@ -62,9 +60,6 @@ function createCallRef<Args, R>(
 
       inFlight.update((n) => n + 1);
       try {
-        // Changes are refused offline (ADR 0013, Decision 3A): the client is called only while the
-        // socket is connected and the browser reports online, so nothing is queued to be sent later.
-        // A call made in the first seconds of a drop waits up to 3 s for the connection to return.
         if (!connection.canSend()) {
           await connection.waitUntilCanSend(CALL_CONNECTION_WAIT_MS);
           if (!connection.canSend()) throw new ConvexOfflineError();

@@ -1,7 +1,3 @@
-// Tests for the global styles wiring (#61). Run with `npm run test:scripts` (node:test).
-// The values themselves are checked by token-contrast.test.mjs; this file checks that the tokens,
-// the shared base file, and the two stylesheets that import it stay wired together, and that no
-// colour literal lives in src/ outside src/styles/tokens.css.
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
@@ -23,7 +19,6 @@ const SIDEBAR_TOKENS = [
   '--sidebar-ring',
 ];
 
-/** Replaces each comment with its newlines, so line numbers survive. */
 const withoutComments = (text) =>
   text
     .replace(/\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ''))
@@ -85,7 +80,7 @@ describe('the two stylesheets that import the base file', () => {
 
   // @ng-icons/core puts its host `color: var(--ng-icon__color, currentColor)` in `@layer ng-icon`,
   // and a layer declared later wins. Declared before Tailwind's layers, a colour utility on an
-  // <ng-icon> wins over it, as in the mockup kit (#60).
+  // <ng-icon> wins over it, as in the mockup kit.
   it('src/styles.css declares the ng-icon layer first, before Tailwind declares its layers', async () => {
     const css = withoutComments(await read('src', 'styles.css'));
     const statement = /@layer\s+ng-icon\s*;/.exec(css);
@@ -95,7 +90,6 @@ describe('the two stylesheets that import the base file', () => {
   });
 });
 
-/** Every file under `dir` with one of the extensions, as paths relative to the repo root. */
 async function filesUnder(dir, extensions) {
   const found = [];
   for (const entry of await readdir(dir, { withFileTypes: true, recursive: true })) {
@@ -106,8 +100,7 @@ async function filesUnder(dir, extensions) {
   return found.sort();
 }
 
-describe('focus treatment in the app shell and the vendored sheet (#75)', () => {
-  // The search from #75 criterion 9 (`rg -n`), run on the raw source, comments included.
+describe('focus treatment in the app shell and the vendored sheet', () => {
   const HALO = /outline-none|ring-ring\/50|focus-visible:ring-3/;
 
   it("finds only main's focus:outline-none in src/app/shell/ and src/app/ui/sheet/", async () => {
@@ -134,11 +127,11 @@ describe('focus treatment in the app shell and the vendored sheet (#75)', () => 
 });
 
 describe('colour literals in src/', () => {
-  // The search from #61, run on the source with comments removed: an issue reference such as
-  // `#100` in a comment is not a colour. A hex literal is not followed by a hyphen either, so the
-  // fragment `#add-location` (#65, the jump link to the add form) is not one.
+  // Run on the source with comments removed, because a `#` followed by digits in a comment is not a
+  // colour. A hex literal is not followed by a hyphen either, so the fragment `#add-location` (the
+  // jump link to the add form) is not one.
   const COLOUR = /#[0-9a-fA-F]{3,8}(?![\w-])|rgba?\(|hsla?\(|oklch\(/;
-  // The install colours (#80) cannot be tokens: the theme-color meta and the manifest are read by
+  // The install colours cannot be tokens: the theme-color meta and the manifest are read by
   // the browser and the operating system, which know no CSS variable. These four lines are the only
   // ones allowed. Each entry is an exact file and full trimmed line, allowed at most once.
   const ALLOWED = [
@@ -151,7 +144,6 @@ describe('colour literals in src/', () => {
     { file: join('src', 'pwa-assets.spec.ts'), line: "background_color: '#f6f7fa'," },
   ];
 
-  /** Colour literals in `sources` ({ file: text }) that the allow-list does not cover. */
   function findColourLiterals(sources) {
     const used = new Map();
     const matches = [];
@@ -181,7 +173,6 @@ describe('colour literals in src/', () => {
     const sources = {};
     for (const file of files) sources[file] = await read(file);
     assert.deepEqual(findColourLiterals(sources), []);
-    // Each allowed line still exists exactly once, so the list cannot go stale.
     for (const { file, line } of ALLOWED) {
       const count = sources[file].split('\n').filter((l) => l.trim() === line).length;
       assert.equal(count, 1, `${file}: ${line}`);
@@ -197,12 +188,10 @@ describe('colour literals in src/', () => {
       [assets1.file]: `${assets1.line}\n${assets2.line}\n`,
     };
     assert.deepEqual(findColourLiterals(ok), []);
-    // A second theme-color meta, even identical, exceeds the max count of 1.
     assert.equal(
       findColourLiterals({ ...ok, [html.file]: `${html.line}\n${html.line}\n` }).length,
       1,
     );
-    // A different theme-color meta is not on the list.
     assert.equal(
       findColourLiterals({
         ...ok,
@@ -210,7 +199,6 @@ describe('colour literals in src/', () => {
       }).length,
       1,
     );
-    // An extra hex line in an allowed file, and the same line in another file.
     assert.equal(
       findColourLiterals({
         ...ok,
@@ -239,7 +227,7 @@ describe('colour literals in src/', () => {
     }
   });
 
-  it('still catches every hex form, and does not read a jump-link fragment as a colour (#65)', () => {
+  it('still catches every hex form, and does not read a jump-link fragment as a colour', () => {
     for (const line of [
       'color: #FFF;',
       'color:#abc',

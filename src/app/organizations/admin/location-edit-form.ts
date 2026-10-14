@@ -20,23 +20,12 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
 
-/** A location as `locations.listForAdmin` returns it. */
 export interface AdminLocation {
   locationId: Id<'locations'>;
   name: string;
   address: string;
 }
 
-/**
- * The form a row turns into when its Edit button is pressed (#65; design/mockups/65-organization-
- * admin-locations.html, states 13 to 16), starting from the stored values with focus on Name.
- * Save changes sends `locations.update` for the row's own id; errors are as in the add form.
- * Cancel and Escape emit `cancelled` and Save emits `saved` with the stored (trimmed) name; the row
- * then returns focus to its Edit button. Cancel and Escape do nothing while a save is in flight,
- * and `saving` tells the page to ignore Edit on another row until the save settles (#161), so the
- * outcome always shows here. A form removed during its save (its row left the list, or the page
- * was left) shows and emits nothing.
- */
 @Component({
   selector: 'app-location-edit-form',
   imports: [AdminAlert, LocationFields, NgIcon],
@@ -103,7 +92,6 @@ export class LocationEditForm implements OnInit {
 
   readonly location = input.required<AdminLocation>();
   readonly cancelled = output();
-  /** The stored name of the location just saved. */
   readonly saved = output<string>();
 
   protected readonly online = injectOnline();
@@ -115,16 +103,14 @@ export class LocationEditForm implements OnInit {
     address: 'Up to 200 characters.',
   };
   protected readonly form = new LocationForm({ name: '', address: '' });
-  /** True while `locations.update` is in flight. */
   readonly saving = this.form.submitting.asReadonly();
 
   private readonly locationFields = viewChild.required<LocationFields>('locationFields');
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
 
   /**
-   * Starts from the values at the moment Edit was pressed (inputs are bound after construction,
-   * so not in a field initializer). A live change to the row while the user types does not
-   * overwrite their text.
+   * Inputs are bound after construction, so this starts from the values at the moment Edit was pressed, not in a field initializer.
+   * A live change to the row while the user types does not overwrite their text.
    */
   ngOnInit(): void {
     const { name, address } = this.location();

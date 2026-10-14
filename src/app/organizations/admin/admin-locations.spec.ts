@@ -16,9 +16,6 @@ import {
   text,
 } from './testing/admin-harness';
 
-// Locations (#65), design/mockups/65-organization-admin-locations.html states 7 to 16 and
-// "Location messages", plus design/mockups/88-offline-note.html states 2 and 3.
-
 const ROUTES = adminRoutes(AdminArea, [{ path: 'locations', component: AdminLocations }]);
 const URL = `/app/organizations/${COASTAL.slug}/locations`;
 const CREATE = 'locations:create';
@@ -30,7 +27,6 @@ describe('AdminLocations', () => {
   let o: Opened;
   let page: HTMLElement;
 
-  /** Opens the page as an org admin; `rows` answers the list (undefined leaves it loading). */
   async function open(rows?: unknown[]) {
     o = await openAdmin(ROUTES, URL);
     page = o.page;
@@ -356,7 +352,6 @@ describe('AdminLocations', () => {
       expect(addSubmit().getAttribute('aria-disabled')).toBe('true');
       expect(addSubmit().disabled).toBe(false);
       expect(text(addStatus())).toBe('Adding the location.');
-      // The values stay while in flight, and a second press sends nothing.
       expect(input('name').value).toBe('  Redfish Flats Fields ');
       await submitAdd();
       expect(o.convex.calls).toHaveLength(1);
@@ -385,7 +380,6 @@ describe('AdminLocations', () => {
       expect(document.activeElement).toBe(addSubmit());
       expect(text(addSubmit())).toBe('Add location');
       expect(addSubmit().hasAttribute('aria-disabled')).toBe(false);
-      // The next press (here, empty) clears the message.
       await submitAdd();
       expect(addForm().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
     });
@@ -435,7 +429,7 @@ describe('AdminLocations', () => {
       expect(text(addSubmit())).toBe('Add location');
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+    describe('offline', () => {
       afterEach(() => vi.restoreAllMocks());
 
       async function goOffline() {
@@ -511,7 +505,6 @@ describe('AdminLocations', () => {
       expect(text(cancel())).toBe('Cancel');
       expect(tokens(cancel().className)).toEqual(tokens(OUTLINE_BUTTON));
       expect(document.activeElement).toBe(input('edit-name'));
-      // The other rows are untouched.
       expect(text(rows()[0].querySelector('h3'))).toBe('Pelican Shoals Sand Courts');
     });
 
@@ -525,7 +518,6 @@ describe('AdminLocations', () => {
       expect(text(rows()[1].querySelector('h3'))).toBe('Redfish Flats Fields');
       expect(document.activeElement).toBe(editButton(1));
       expect(calls()).toEqual([]);
-      // Editing again starts from the stored values.
       await startEdit();
       expect(input('edit-name').value).toBe('Redfish Flats Fields');
     });
@@ -581,7 +573,6 @@ describe('AdminLocations', () => {
         input(id).dispatchEvent(new Event('blur'));
         await o.harness.fixture.whenStable();
       };
-      // The values the form starts with are not a change: passing through shows nothing.
       await leave('edit-name');
       await leave('edit-address');
       expect(error('edit-name')).toBeNull();
@@ -632,7 +623,6 @@ describe('AdminLocations', () => {
       await flushNow();
       o.convex.calls[0].resolve(null);
       await flushNow();
-      // The live list now carries the new name.
       o.subscription(LIST_FOR_ADMIN)!.emit([
         COASTAL_LOCATIONS[0],
         { ...COASTAL_LOCATIONS[1], name: 'Redfish Flats Soccer Fields' },
@@ -647,7 +637,6 @@ describe('AdminLocations', () => {
         'Redfish Flats Soccer Fields saved.',
       );
       expect(status.querySelector('[data-slot="alert-description"]')).toBeNull();
-      // Above the list.
       expect(
         status.compareDocumentPosition(page.querySelector('#locations-list')!) &
           Node.DOCUMENT_POSITION_FOLLOWING,
@@ -660,7 +649,6 @@ describe('AdminLocations', () => {
     describe('Edit on another row while a save is in flight', () => {
       const panel = () => page.querySelector('section[aria-labelledby="locations-heading"]')!;
 
-      /** Row 1 is saving (the call is pending), and Edit is pressed on row 0. */
       async function pressOtherEditWhileSaving() {
         await open(COASTAL_LOCATIONS);
         await startEdit();

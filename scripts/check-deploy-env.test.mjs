@@ -1,5 +1,3 @@
-// Unit tests for scripts/check-deploy-env.mjs (#15, #97). Run with `npm run test:scripts` (node:test).
-// The Convex CLI is never called: each case passes a stub reader.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -16,7 +14,6 @@ const SECRET = {
   AUTH_EMAIL_DISABLED_WRONG: 'sentinel-yes-2a6f',
 };
 
-/** A reader over `vars`; `value` may be called only for AUTH_EMAIL_DISABLED. */
 function stubReader(vars) {
   const reads = [];
   return {
@@ -29,7 +26,6 @@ function stubReader(vars) {
   };
 }
 
-/** The allowed preview variables (prerequisite 4), with AUTH_EMAIL_DISABLED=true. */
 const ALLOWED_PREVIEW = {
   SITE_URL: SECRET.SITE_URL,
   PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN,
@@ -37,13 +33,11 @@ const ALLOWED_PREVIEW = {
   AUTH_EMAIL_DISABLED: 'true',
 };
 
-/** The variables a production deployment must have (#111); none of the forbidden ones. */
 const ALLOWED_PRODUCTION = {
   SITE_URL: SECRET.SITE_URL,
   BETTER_AUTH_SECRET: SECRET.BETTER_AUTH_SECRET,
 };
 
-/** Runs `runCheck` with a stub reader and captures everything it writes. */
 async function run(mode, vars) {
   const out = [];
   const err = [];
@@ -146,7 +140,7 @@ describe('checkDeployEnv, production mode', () => {
     assert.match(failures[0], /^IS_TEST /);
   });
 
-  it('fails when PREVIEW_ORIGIN_PATTERN is set, without reading its value (#97)', async () => {
+  it('fails when PREVIEW_ORIGIN_PATTERN is set, without reading its value', async () => {
     const reader = stubReader({
       ...ALLOWED_PRODUCTION,
       PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN,
@@ -169,9 +163,9 @@ describe('checkDeployEnv, production mode', () => {
   }
 });
 
-// #111: a deployment with no BETTER_AUTH_SECRET would sign with Better Auth's public default
+// A deployment with no BETTER_AUTH_SECRET would sign with Better Auth's public default
 // secret, and one with no SITE_URL trusts no origin. Names only: the values are never read.
-describe('checkDeployEnv, required auth variables (#111)', () => {
+describe('checkDeployEnv, required auth variables', () => {
   const without = (vars, ...names) =>
     Object.fromEntries(Object.entries(vars).filter(([name]) => !names.includes(name)));
 

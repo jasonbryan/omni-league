@@ -8,10 +8,9 @@ import { HlmButton } from '../button';
 import { classes } from '../utils';
 import { HlmSheetClose } from './hlm-sheet-close';
 
-// Vendored from spartan helm 1.6.0 (Nova style). Local changes (#75), to keep when re-copying from
-// upstream:
+// Vendored from spartan helm 1.6.0 (Nova style). Local changes, to keep when re-copying from upstream:
 // - no `effect()` writing `data-state` with `Renderer2.setAttribute`. The host binding below
-//   already sets it, and ADR 0007 caveat 3 allows DOM writes only through `classes()`;
+//   already sets it, and DOM writes are allowed only through `classes()`;
 // - the built-in close button has `type="button"`, so it cannot submit an enclosing form.
 @Component({
   selector: 'hlm-sheet-content',

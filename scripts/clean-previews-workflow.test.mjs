@@ -1,6 +1,3 @@
-// Checks of .github/workflows/clean-previews.yml (#158). Run with `npm run test:scripts` (node:test).
-// Node built-ins only: the file is read with regular expressions, not a YAML parser. The rules come
-// from docs/process/ci.md (Workflow security) plus the owner's exception for CONVEX_TEAM_TOKEN.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,7 +14,6 @@ const code = workflow
   .filter((line) => !line.trimStart().startsWith('#'))
   .join('\n');
 
-/** The steps of the `clean` job, each as its text block. */
 function steps() {
   const job = /^ {2}clean:\n([\s\S]*?)(?![\s\S])/m.exec(code)?.[1] ?? '';
   return [...job.matchAll(/^ {6}- ([\s\S]*?)(?=^ {6}- |(?![\s\S]))/gm)].map((match) => match[1]);
@@ -163,7 +159,6 @@ describe('clean-previews workflow dry run on dispatch', () => {
   });
 });
 
-/** The `run:` script of the step whose text matches `pattern`, dedented. */
 function runScript(pattern) {
   const step = steps().find((candidate) => pattern.test(candidate)) ?? '';
   const body = /^ {8}run: \|\n((?: {10}.*\n|\n)+)/m.exec(step)?.[1] ?? '';
@@ -171,7 +166,6 @@ function runScript(pattern) {
   return body.replace(/^ {10}/gm, '');
 }
 
-/** Runs a workflow script in bash with a fake `node` that records its arguments. */
 function bash(script, env, event) {
   const dir = mkdtempSync(join(tmpdir(), 'clean-previews-'));
   try {
@@ -272,9 +266,7 @@ describe('clean-previews workflow scripts, executed', () => {
     assert.equal(result.status, 0);
     assert.equal(result.nodeArgs.trim(), pr(12));
     assert.equal(result.stdout.match(/::notice title=Skipped an oversized number/g)?.length, 2);
-    // Nine digits is still a PR number.
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push('c (#999999999)')), pr(999999999));
-    // Only an oversized number: no run, exit 0.
     const only = bash(deleteScript, { GITHUB_EVENT_NAME: 'push' }, push(`d (#${big})`));
     assert.equal(only.status, 0);
     assert.equal(only.nodeArgs, '');
@@ -285,10 +277,8 @@ describe('clean-previews workflow scripts, executed', () => {
     const subject = `feat: x ${numbers.map((n) => `(#${n})`).join(' ')}`;
     const kept = numbers.slice(-20);
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(subject)), pr(...kept));
-    // Across commits: the newest commit's numbers come last and win.
     const commits = numbers.map((n) => `fix: c${n} (#${n})`);
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(...commits)), pr(...kept));
-    // The PR number need not be the highest: the last match is kept, counted at its last place.
     const lowLast = `feat: y ${[...numbers, 5].map((n) => `(#${n})`).join(' ')}`;
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(lowLast)), pr(5, ...numbers.slice(11)));
   });

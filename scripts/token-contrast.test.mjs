@@ -1,5 +1,3 @@
-// Unit tests for scripts/token-contrast.mjs (#58). Run with `npm run test:scripts` (node:test).
-// The failing fixture is a test input: the test passes when the checker reports its bad pairs.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -19,7 +17,6 @@ const tokensCss = () => readFile(join(here, '..', 'src', 'styles', 'tokens.css')
 const failingCss = () =>
   readFile(join(here, 'fixtures', 'token-contrast', 'failing-tokens.css'), 'utf8');
 
-/** Each channel within 2/255 of the expected 8-bit sRGB value. */
 function assertRgb(color, [r, g, b]) {
   const actual = [color.r, color.g, color.b].map((v) => v * 255);
   [r, g, b].forEach((expected, i) => {
@@ -77,7 +74,7 @@ describe('parseRootTokens', () => {
 });
 
 describe('PAIRS', () => {
-  it('lists the pairs from the issue with their WCAG thresholds', () => {
+  it('lists the required token pairs with their WCAG thresholds', () => {
     const names = PAIRS.map(({ fg, bg, min }) => `${fg} on ${bg} ${min}`);
     assert.deepEqual(names, [
       '--foreground on --background 4.5',

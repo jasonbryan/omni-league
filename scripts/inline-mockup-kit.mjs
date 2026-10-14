@@ -1,19 +1,3 @@
-// Writes the built mockup kit into each static mockup (ADR 0007, "How a self-contained mockup gets
-// the same tokens and styles"; #58). Node built-ins only.
-//
-//   npm run design:css                      build the kit, then inline it into design/mockups/**/*.html
-//   npm run design:css -- --skip-build      reuse dist/mockup-kit/browser from an earlier build
-//   npm run design:css -- a.html b.html     inline into these files instead of design/mockups/
-//
-// The kit is `ng build --configuration production,mockup-kit`, which emits mockup-kit.css beside the
-// normal output without referencing it from index.html. Each mockup gets one
-// `<!-- prettier-ignore --><style id="mockup-kit">…</style>` block in its <head>, with every font
-// url(...) rewritten as a base64 data: URI, so the file still opens offline as a single file. Only
-// the Latin @font-face rules are kept (about 65 KB); the other subsets would add hundreds of KB.
-//
-// The build scans a copy of the mockups with the kit block removed (dist/mockup-kit-source), not the
-// mockups themselves. Scanning the block would turn words in the CSS into utilities and keep classes
-// that were removed from the markup, so a second run would change the file.
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -23,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const KIT_OUTPUT = join(root, 'dist', 'mockup-kit', 'browser');
 const MOCKUPS_DIR = join(root, 'design', 'mockups');
-// Where the kit's `@source` looks for classes (design/mockup-kit/mockup-kit.css): a copy of the
-// mockups with their kit blocks removed, so the build never reads its own earlier output.
+// The kit's `@source` scans this copy of the mockups with their kit blocks removed: scanning a block
+// would turn words in the CSS into utilities and keep classes removed from the markup, so a second run
+// would change the file.
 export const KIT_SOURCES = join(root, 'dist', 'mockup-kit-source');
 
 const MIME = {
@@ -34,7 +19,7 @@ const MIME = {
   '.otf': 'font/otf',
 };
 
-/** Rewrites every `url(...)` in `css` as a base64 `data:` URI, reading files relative to `baseDir`. */
+// A mockup opens offline as a single file, so fonts are inlined as `data:` URIs.
 export function inlineFonts(css, baseDir) {
   return css.replace(/url\(\s*(['"]?)([^'")]+?)\1\s*\)/g, (match, quote, ref) => {
     if (ref.startsWith('data:')) return match;
@@ -57,7 +42,7 @@ export function inlineFonts(css, baseDir) {
   });
 }
 
-/** Drops `@font-face` rules whose `unicode-range` has no Latin (U+0000-00FF) part. */
+// The Latin subset is about 65 KB; the other subsets would add hundreds of KB.
 export function keepLatinFontFaces(css) {
   return css.replace(/@font-face\s*\{[^}]*\}/g, (rule) => {
     const range = /unicode-range\s*:\s*([^;}]+)/i.exec(rule);
@@ -68,12 +53,10 @@ export function keepLatinFontFaces(css) {
 const BLOCK =
   /(?:<!-- prettier-ignore -->[ \t]*\r?\n[ \t]*)?<style id="mockup-kit">[\s\S]*?<\/style>/;
 
-/** Returns `html` without its mockup-kit block (and the `<!-- prettier-ignore -->` line before it). */
 export function stripKitFromHtml(html) {
   return html.replace(new RegExp(`[ \\t]*${BLOCK.source}[ \\t]*\\r?\\n?`, 'g'), '');
 }
 
-/** Puts `css` into `html` as the mockup-kit block, replacing an earlier block if there is one. */
 export function inlineKitIntoHtml(html, css) {
   const oneLine = css.trim();
   const make = (indent) =>
@@ -91,7 +74,6 @@ export function inlineKitIntoHtml(html, css) {
   return html.replace(/^([ \t]*)<\/head>/m, () => `${indent}${make(indent)}\n${head[0]}`);
 }
 
-/** Inlines the kit CSS file (and its fonts) into one HTML file. Returns true when the file changed. */
 export async function inlineKitIntoFile(htmlPath, cssPath) {
   const css = inlineFonts(keepLatinFontFaces(await readFile(cssPath, 'utf8')), dirname(cssPath));
   const before = await readFile(htmlPath, 'utf8');
@@ -112,10 +94,6 @@ async function htmlFilesUnder(dir) {
     .sort();
 }
 
-/**
- * Replaces `destDir` with a copy of every `.html` file under `mockupsDir` (same relative paths) with
- * the mockup-kit block removed. Returns the number of files copied.
- */
 export async function prepareKitSources(mockupsDir, destDir) {
   await rm(destDir, { recursive: true, force: true });
   await mkdir(destDir, { recursive: true });
@@ -147,10 +125,6 @@ function buildKit() {
   });
 }
 
-/**
- * One `npm run design:css` pass. The directories and the build step are parameters so a test can run
- * the real orchestration on a fixture with a fake build.
- */
 export async function main(
   argv,
   {

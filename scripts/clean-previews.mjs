@@ -1,44 +1,4 @@
-// Deletes the Convex preview deployments of closed and merged PRs (#158). Node built-ins only.
-//
-//   npm run previews:clean                 list, ask for one `y`, then delete
-//   npm run previews:clean -- --yes        delete without the prompt
-//   npm run previews:clean -- --dry-run    list only; never deletes (wins over --yes)
-//   node scripts/clean-previews.mjs --yes --pr <n>
-//                                          consider only the preview pr-<n> (the workflow on a push to main)
-//
-// WHY. The Convex team caps deployments (40), and every PR creates a preview deployment `pr-<n>`
-// that nothing removes before Convex's own 5-day expiry. At the cap the next preview build fails
-// with `DeploymentQuotaReached`. Running this frees the slots of PRs that are already done.
-//
-// It uses the Convex Management API (https://api.convex.dev/v1) with a team access token:
-//   GET  /teams/{team}/projects/{project}                       resolve the project id from its slug
-//   GET  /projects/{id}/list_deployments?deploymentType=preview list the preview deployments
-//   POST /deployments/{name}/delete                             delete one
-// and `gh pr view <n> --json state` for the state of the PR.
-//
-// SAFETY. A deployment is deleted only when ALL of these hold; each is tested:
-//   - it is in the omni-league project (resolved from the team slug and project slug, and the
-//     deployment's own projectId matches), is type `preview`, and is a cloud deployment;
-//   - its preview name matches `^pr-[1-9][0-9]*$` (so never `main`, a branch name, dev, or prod);
-//   - `gh pr view <n> --json state` succeeded and says CLOSED or MERGED. OPEN, an unknown state,
-//     and a failed lookup all keep the deployment;
-//   - it was listed to the user and, unless --yes, confirmed with a single `y`.
-//
-// THE TOKEN. It comes from CONVEX_TEAM_TOKEN, or a silent TTY prompt (nothing echoed). It is held
-// in memory only and sent only as the Authorization header of the requests above. It is never
-// printed, logged, put on a command line, passed to `gh`, or written to a file; error text built
-// here never includes a response body or the original error message, only the HTTP status.
-// The owner creates the token: Convex dashboard, Team Settings, Access Tokens. See
-// docs/process/hosting.md.
-//
-// AUTOMATION (#158). .github/workflows/clean-previews.yml runs this on a push to main (`--yes --pr <n>`
-// per PR in the commit subjects) and on a daily schedule (`--yes`), with the environment secret
-// CONVEX_TEAM_TOKEN of `preview-cleanup` (readable only on main) and the built-in
-// workflow token for `gh`. `--pr` narrows the list; every safety rule above still applies,
-// including the CLOSED or MERGED check. `npm run previews:clean` stays as a manual fallback.
-//
-// Exit codes: 0 done (including nothing to delete, or declined), 1 an API error or a delete
-// failed, 2 bad usage or no token.
+// Node built-ins only: the workflow runs it without installing dependencies.
 import { execFile as execFileCallback } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { promisify } from 'node:util';
@@ -71,11 +31,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-/**
- * The preview name of a deployment: its `previewIdentifier`, or the part of its `reference` after
- * `preview/` when it has none. Undefined when neither names a preview, and also when both do and
- * disagree: such a deployment is kept, never deleted.
- */
+/** Undefined when `previewIdentifier` and `reference` disagree, so the deployment is kept. */
 export function previewNameOf(deployment) {
   const id =
     typeof deployment.previewIdentifier === 'string' ? deployment.previewIdentifier : undefined;
@@ -87,7 +43,6 @@ export function previewNameOf(deployment) {
   return id ?? ref;
 }
 
-/** True when `previewIdentifier` and a `preview/` `reference` both exist and differ. */
 function namesDisagree(deployment) {
   return (
     typeof deployment.previewIdentifier === 'string' &&
@@ -97,7 +52,6 @@ function namesDisagree(deployment) {
   );
 }
 
-/** Why `deployment` may not be considered at all, or undefined when it may. */
 function ineligibleReason(deployment, projectId, previewName) {
   if (deployment.kind !== undefined && deployment.kind !== 'cloud') return 'not a cloud deployment';
   if (deployment.projectId !== projectId) return 'other project';
@@ -116,9 +70,7 @@ function ineligibleReason(deployment, projectId, previewName) {
 }
 
 /**
- * Splits the listed deployments into those that may be checked against GitHub and those that are
- * kept regardless. Nothing here decides deletion: the PR state still has to say CLOSED or MERGED.
- *
+ * Nothing here decides deletion: the PR state must still be CLOSED or MERGED.
  * @returns {{
  *   candidates: { deployment: object, previewName: string, pr: number }[],
  *   kept: { deployment: object, previewName: string | undefined, reason: string }[],
@@ -139,10 +91,7 @@ export function selectCandidates(deployments, projectId) {
   return { candidates, kept };
 }
 
-/**
- * The Convex Management API client. `fetchFn` is Node's `fetch`, or a stub in tests. Thrown
- * messages carry the request and the HTTP status only: no body, no original error text.
- */
+// Thrown messages carry the request and the HTTP status only: no body, no original error text.
 export function createApi({ fetch: fetchFn, token }) {
   async function request(method, path) {
     let response;
@@ -181,7 +130,7 @@ export function createApi({ fetch: fetchFn, token }) {
       if (!Array.isArray(list)) throw new Error('deployment list was not an array');
       return list;
     },
-    /** A 404 means the deployment is already gone (Convex expired it), which is the goal. */
+    // A 404 means Convex already expired the deployment, which is the goal.
     async deleteDeployment(name) {
       try {
         await request('POST', `/deployments/${encodeURIComponent(name)}/delete`);
@@ -193,9 +142,7 @@ export function createApi({ fetch: fetchFn, token }) {
 }
 
 /**
- * Reads a PR's state with the GitHub CLI: `gh pr view <n> --json state`. No shell, and the team
- * token is removed from the child's environment. Rejects on any failure or unexpected output.
- *
+ * The team token is removed from the child's environment.
  * @returns {(pr: number) => Promise<string>}
  */
 export function createGhState({ execFile = promisify(execFileCallback), env = process.env } = {}) {
@@ -217,8 +164,6 @@ const row = (name, preview, status) =>
   `${name.padEnd(32)} ${(preview ?? '-').padEnd(10)} ${status}`;
 
 /**
- * Lists, confirms, and deletes. Returns the exit code.
- *
  * @param {{ yes: boolean, dryRun: boolean, pr?: number }} options
  * @param {{
  *   api: ReturnType<typeof createApi>,
@@ -234,7 +179,6 @@ export async function runClean({ yes, dryRun, pr }, { api, getPrState, confirm, 
     const projectId = await api.projectId();
     selection = selectCandidates(await api.listPreviewDeployments(projectId), projectId);
     if (pr !== undefined) {
-      // One PR only: everything else is out of scope, so it is neither listed nor checked.
       selection = {
         candidates: selection.candidates.filter((candidate) => candidate.pr === pr),
         kept: [],
@@ -299,7 +243,6 @@ export async function runClean({ yes, dryRun, pr }, { api, getPrState, confirm, 
   return failed === 0 ? 0 : 1;
 }
 
-/** Reads a line from the TTY without echoing it. Rejects on Ctrl-C. */
 function promptSecret(question) {
   return new Promise((resolve, reject) => {
     const { stdin, stderr } = process;
@@ -329,7 +272,6 @@ function promptSecret(question) {
   });
 }
 
-/** Asks one question on the terminal and returns the answer line. */
 async function ask(question) {
   const readline = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -339,7 +281,6 @@ async function ask(question) {
   }
 }
 
-/** The team token from CONVEX_TEAM_TOKEN, else a silent prompt. Undefined when neither works. */
 async function readToken() {
   const fromEnv = process.env['CONVEX_TEAM_TOKEN']?.trim();
   if (fromEnv) return fromEnv;

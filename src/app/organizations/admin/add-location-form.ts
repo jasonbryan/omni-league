@@ -19,15 +19,6 @@ import { PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
 
-/**
- * The add form of the Locations page (#65; design/mockups/65-organization-admin-locations.html,
- * states 7 and 9 to 12), inside the page's `#add-location` section. Errors show after a submit,
- * under their field; focus goes to the first invalid field, or to the form alert for a failure
- * that is not about one field. On success "<name> added." and "It’s on your public page now."
- * appear in a status above the fields, the fields clear, and focus stays on the button. The page's
- * live list shows the new row. Like every form that calls a mutation it carries the offline
- * refusal of design/mockups/88-offline-note.html (angular.md, State and data).
- */
 @Component({
   selector: 'app-add-location-form',
   imports: [AdminAlert, LocationFields, NgIcon],
@@ -105,7 +96,6 @@ export class AddLocationForm {
       'Street, city, state, and ZIP code, so visitors can find it on a map. Up to 200 characters.',
   };
 
-  /** The name just added, for the status above the fields; cleared by the next press. */
   protected readonly added = signal<string | null>(null);
 
   private readonly locationFields = viewChild.required<LocationFields>('locationFields');

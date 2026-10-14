@@ -1,16 +1,8 @@
-// The failing e2e tests of a Playwright JSON report, for the nightly issue (#186, docs/process/ci.md).
-// Node built-ins only. Usage: `node scripts/e2e-failures.mjs [report.json]` (default test-results/results.json).
-// Prints one `failures=<JSON array of strings>` line for $GITHUB_OUTPUT: a test that failed every
-// attempt (`unexpected`; a `flaky` test passed on retry), as `project: e2e/file:line: title` (Playwright reports the file relative to e2e/), at most
-// MAX_LISTED of them with a final "and N more" entry, then the first line of any run-level error
-// (a failed global setup, a config error). A report that is missing or unreadable gives `[]`; the
-// issue then names the run and says no failing test was recorded.
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const MAX_LISTED = 30;
 
-/** The first line of a message with terminal colour codes removed, capped in length. */
 function firstLine(message) {
   const text = String(message ?? '')
     // eslint-disable-next-line no-control-regex -- ANSI escapes in Playwright messages
@@ -21,7 +13,7 @@ function firstLine(message) {
 }
 
 /**
- * @param {unknown} report Parsed Playwright JSON report.
+ * @param {unknown} report
  * @returns {string[]}
  */
 export function failingTests(report) {
@@ -34,8 +26,10 @@ export function failingTests(report) {
     }
     for (const found of suite.specs ?? []) {
       for (const test of found.tests ?? []) {
+        // `unexpected` failed every attempt; a `flaky` test passed on retry.
         if (test.status !== 'unexpected') continue;
         const title = [...titles, found.title].join(' › ');
+        // Playwright reports the file relative to e2e/.
         failures.push(`${test.projectName}: e2e/${found.file}:${found.line}: ${title}`);
       }
     }

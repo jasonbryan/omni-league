@@ -1,4 +1,3 @@
-// Public surface of the Convex adapter (ADR 0006). Code outside this folder imports only from here.
 export { CONVEX_CLIENT, type ConvexClientLike } from './client-token';
 export {
   CONVEX_AUTH,

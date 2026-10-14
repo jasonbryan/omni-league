@@ -1,8 +1,5 @@
 import { AFTER_AUTH_DEFAULT, afterAuthUrl, safeReturnTo, returnToOrApp } from './return-to';
 
-// ADR 0008 "Return-to-registration URL": `returnTo` is accepted only when it starts with `/`, does
-// not start with `//` or `/\`, and keeps a placeholder origin when parsed against it; anything else
-// becomes `/`. Shared by sign-up (#62) and sign-in (#63).
 describe('safeReturnTo', () => {
   it.each([
     ['/app', '/app'],
@@ -33,7 +30,6 @@ describe('safeReturnTo', () => {
     '',
     '?returnTo=/app',
     '#/app',
-    // Dot segments that resolve to `//host` or `/\host` (#62 tester).
     '/..//evil.example/x',
     '/.//evil.example/x',
     '/a/..//evil.example/x',
@@ -62,10 +58,6 @@ describe('afterAuthUrl', () => {
   });
 });
 
-// #63: a visitor who is already signed in and opens /sign-in or /sign-up goes to a valid returnTo,
-// and to /app when there is none or it is not valid. The same value is the returnTo that the links
-// between the two pages and the top bar's Sign in carry. After a sign-in or sign-up an unsafe
-// returnTo still lands on / (afterAuthUrl).
 describe('returnToOrApp', () => {
   it.each([
     [null, '/app'],
@@ -97,9 +89,8 @@ describe('returnToOrApp', () => {
   });
 });
 
-// Tester (#62): dot segments and encoded dots resolve to a path that starts with `//` or `/\`
-// after parsing. The router gets the parsed result, so the result itself must never name another
-// host (`//host` is protocol-relative to `history.pushState` and to any later `callbackURL` use).
+// Dot segments and encoded dots resolve to a path that starts with `//` or `/\` after parsing. The router gets the parsed result,
+// so the result itself must never name another host (`//host` is protocol-relative to `history.pushState` and to any later `callbackURL` use).
 describe('safeReturnTo, dot segments that resolve to another host', () => {
   it.each([
     '/..//evil.example/x',
@@ -127,9 +118,6 @@ describe('safeReturnTo, dot segments that resolve to another host', () => {
   );
 });
 
-// Tester (#62, round 2): whatever `returnTo` holds, the result is a path on this site that starts
-// with exactly one `/`, holds no backslash or tab/newline in its path, resolves to the base's own
-// origin against any base, and is stable when checked again.
 describe('safeReturnTo, invariants over generated input', () => {
   const BASES = [
     'https://app.example',
@@ -150,8 +138,6 @@ describe('safeReturnTo, invariants over generated input', () => {
     expect(safeReturnTo(result), context).toBe(result);
   }
 
-  // Dot segments (plain and percent-encoded), encoded and literal slashes and backslashes, ASCII
-  // whitespace the URL parser drops, schemes, userinfo, and Unicode look-alikes of `/`, `\`, `.`.
   const ATOMS = [
     '/',
     '\\',

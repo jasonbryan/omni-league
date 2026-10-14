@@ -3,11 +3,6 @@ import { convexToJson, type Value } from 'convex/values';
 import { OFFLINE_SAVED_QUERIES } from '../offline-saved-queries';
 import { savedCopyKey } from '../saved-copies';
 
-/**
- * Writes a saved copy of `value` for a listed `query` and `args` straight to `localStorage`, as
- * `ConvexSavedCopies.write` would at `savedAt` (with the entry's current version), or with the
- * fields in `stored` replacing those. Test-only.
- */
 export function plantSavedCopy(
   query: FunctionReference<'query'>,
   args: object,

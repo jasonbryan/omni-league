@@ -17,11 +17,6 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicLeaguePage } from './public-league-page';
 import { leagueQueryResults, NO_SEASONS, SUNDAY_4S } from './testing/league-data';
 
-// #127: saved copies on the public league page, the not-saved view, and a removed league
-// (design/mockups/127-128-public-seasons.html states 7 and 8, design/mockups/82-offline-pages.html).
-// "Offline" is the adapter's `online` signal (#88): false at once with navigator.onLine false, and
-// 5 s after start when the socket never connects (field wifi with no internet).
-
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
 const ORG_SLUG = 'gulf-coast-sport-social';
@@ -34,7 +29,6 @@ const ORG = 'organizations:getPublicPage';
 const LEAGUE = 'leagues:getPublicPage';
 const SEASONS = 'seasons:listPublic';
 
-/** The saved-copy allow-list entries' functions and the args the page asks them with (page 1). */
 const queries = [
   { fn: api.organizations.getPublicPage, name: ORG, args: { slug: ORG_SLUG } },
   {
@@ -49,7 +43,6 @@ const queries = [
   },
 ];
 
-/** Saves the three results the page's queries return for page 1. */
 function plant(results = leagueQueryResults(), savedAt = SAVED_AT): void {
   for (const { fn, name, args } of queries) plantSavedCopy(fn, args, results[name], savedAt);
 }
@@ -63,7 +56,6 @@ function stubOnLine(value: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
 }
 
-/** Opens `url` with a fake client; `socket: 'down'` models a client that has not connected yet. */
 async function open(
   url = PATH,
   options: { socket?: 'up' | 'down' } = {},
@@ -173,7 +165,6 @@ describe('PublicLeaguePage offline', () => {
         v: { name: 'Sunday Live' },
         savedAt: NOW,
       });
-      // The seasons are kept too, so the next visit offline opens with them.
       expect(JSON.parse(savedEntry(SEASONS) ?? 'null')).toMatchObject({ savedAt: NOW });
     });
   });
@@ -200,7 +191,7 @@ describe('PublicLeaguePage offline', () => {
     expect(note(harness)).toBeNull();
   });
 
-  describe('a page link while offline (82-offline-pages.html state 2)', () => {
+  describe('a page link while offline', () => {
     const nextLink = (harness: RouterTestingHarness) =>
       host(harness).querySelector<HTMLAnchorElement>(
         'nav[aria-label="Seasons pages"] a[href$="?page=2#seasons"]',
@@ -326,7 +317,7 @@ describe('PublicLeaguePage offline', () => {
     });
   });
 
-  it("a live null removes the saved league and shows #23's not-found view with no note", async () => {
+  it('a live null removes the saved league and shows the not-found view with no note', async () => {
     plant();
     stubOnLine(true);
     const harness = await open();

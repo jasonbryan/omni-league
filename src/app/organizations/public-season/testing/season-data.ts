@@ -1,10 +1,6 @@
 import { ORGANIZATION } from '../../public-league/testing/league-data';
 import type { PublicSeasonData, PublicSeasonView } from '../public-season-view';
 
-/**
- * The public season page's data for specs: design/mockups/127-128-public-seasons.html's state 9
- * (Summer 2027 of Sunday Reverse Coed 4s), as `seasons:getPublicPage` returns it. Test-only.
- */
 export { ORGANIZATION };
 
 export const SUMMER_2027: PublicSeasonData = {
@@ -23,7 +19,6 @@ export const SUMMER_2027: PublicSeasonData = {
   minimumRosterSize: 4,
 };
 
-/** The result of the page's query, by function name. */
 export function seasonQueryResults(
   options: { season?: PublicSeasonData | null } = {},
 ): Record<string, unknown> {
