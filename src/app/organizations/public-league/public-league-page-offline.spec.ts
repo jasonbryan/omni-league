@@ -191,7 +191,7 @@ describe('PublicLeaguePage offline', () => {
     expect(note(harness)).toBeNull();
   });
 
-  describe('a page link while offline (82-offline-pages.html state 2)', () => {
+  describe('a page link while offline', () => {
     const nextLink = (harness: RouterTestingHarness) =>
       host(harness).querySelector<HTMLAnchorElement>(
         'nav[aria-label="Seasons pages"] a[href$="?page=2#seasons"]',
