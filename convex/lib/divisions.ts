@@ -163,6 +163,9 @@ export interface DerivedDivision {
   level?: StandardLevel;
 }
 
+// iOS types this character for the apostrophe.
+const TYPOGRAPHIC_APOSTROPHE = '\u2019';
+
 const WORD_BEFORE = "(?<![\\p{L}\\p{N}'])";
 const WORD_AFTER = "(?![\\p{L}\\p{N}'])";
 
@@ -182,8 +185,7 @@ const CASE_INSENSITIVE_LEVELS: ReadonlySet<StandardLevel> = new Set([
 ]);
 
 export function deriveDivisionFromName(name: string, sport: Sport): DerivedDivision {
-  // iOS types U+2019 for the apostrophe.
-  const text = name.replaceAll('’', "'");
+  const text = name.replaceAll(TYPOGRAPHIC_APOSTROPHE, "'");
   const derived: DerivedDivision = {};
 
   let earliest = Number.POSITIVE_INFINITY;
