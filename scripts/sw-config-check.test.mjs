@@ -297,7 +297,7 @@ describe('swConfigCheck', () => {
 });
 
 describe('checkNgswManifest', () => {
-  it('returns no problems for the ADR 0013 shape', () => {
+  it('returns no problems for the expected manifest shape', () => {
     assert.deepEqual(checkNgswManifest(ngswJson()), []);
   });
 });
@@ -326,7 +326,7 @@ describe('serviceWorkerDefine', () => {
   });
 });
 
-describe('the repository configuration (ADR 0013 section 1)', () => {
+describe('the repository configuration', () => {
   it('angular.json sets serviceWorker to ngsw-config.json in the build options of every configuration', async () => {
     const angular = JSON.parse(await readFile(join(ROOT, 'angular.json'), 'utf8'));
     const build = angular.projects['omni-league'].architect.build;
@@ -336,7 +336,7 @@ describe('the repository configuration (ADR 0013 section 1)', () => {
     }
   });
 
-  it('ngsw-config.json is the ADR config: performance navigations, no data groups, two asset groups', async () => {
+  it('ngsw-config.json has performance navigations, no data groups, and two asset groups', async () => {
     const config = JSON.parse(await readFile(join(ROOT, 'ngsw-config.json'), 'utf8'));
     assert.equal(config.index, '/index.csr.html');
     assert.equal(config.navigationRequestStrategy, 'performance');

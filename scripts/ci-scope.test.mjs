@@ -195,7 +195,7 @@ describe('command line', () => {
   });
 });
 
-describe('scripts the build, e2e, or deploy run are app (#165)', () => {
+describe('scripts the build, e2e, or deploy run are app', () => {
   const runByBuild = [
     'scripts/ng-convex.mjs',
     'scripts/edge-bundle.mjs',
@@ -374,7 +374,7 @@ describe('scripts the build, e2e, or deploy run are app (#165)', () => {
   });
 });
 
-describe('files a test reads are not docs (#165)', () => {
+describe('files a test reads are not docs', () => {
   it('lists every docs file that a Convex test reads as app', () => {
     const convexTests = readdirSync(join(repoRoot, 'convex'), { recursive: true })
       .filter((path) => /\.test\.[cm]?ts$/.test(String(path)))

@@ -24,7 +24,7 @@ const PREVIEW = {
 // The app registers the service worker only when `scripts/ng-convex.mjs` passes
 // `__SERVICE_WORKER__=true`; a plain `ng build` keeps angular.json's `false`, so a
 // deploy built that way would ship the worker but never register it, and skip sw-config-check.
-describe('netlify.toml builds through npm run build (#81)', () => {
+describe('netlify.toml builds through npm run build', () => {
   for (const context of ['deploy-preview', 'branch-deploy', 'production']) {
     it(`${context} builds with npm run build and never with ng build`, () => {
       const cmd = command(context);
@@ -35,7 +35,7 @@ describe('netlify.toml builds through npm run build (#81)', () => {
   }
 });
 
-describe('netlify.toml demo seed (#97)', () => {
+describe('netlify.toml demo seed', () => {
   for (const [context, { name, flag }] of Object.entries(PREVIEW)) {
     it(`${context} runs seed:demo on its preview after the deploy and the environment check`, () => {
       const cmd = command(context);
@@ -57,7 +57,7 @@ describe('netlify.toml demo seed (#97)', () => {
     });
   }
 
-  it('only deploy previews recreate their backend; staging reuses it and its data (#222)', () => {
+  it('only deploy previews recreate their backend; staging reuses it and its data', () => {
     const recreating = Object.keys(PREVIEW).filter((context) =>
       /--preview-create\b/.test(command(context) ?? ''),
     );
@@ -108,7 +108,7 @@ function matches(pattern, path) {
   return new RegExp(`^${source}$`).test(path);
 }
 
-describe('netlify.toml install files (#80)', () => {
+describe('netlify.toml install files', () => {
   const rules = headerRules();
 
   it('serves the manifest as application/manifest+json', () => {

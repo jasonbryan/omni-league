@@ -46,7 +46,7 @@ describe('ci workflow step order', () => {
     );
   });
 
-  it('runs the build-dependent steps only for app scope (#165)', () => {
+  it('runs the build-dependent steps only for app scope', () => {
     const appOnly = [
       'audit signatures',
       'test',
@@ -61,7 +61,7 @@ describe('ci workflow step order', () => {
     }
   });
 
-  it('runs lint, typecheck, and actionlint for every scope but docs (#165)', () => {
+  it('runs lint, typecheck, and actionlint for every scope but docs', () => {
     const expected = { lint: 'checks', typecheck: 'typecheck', actionlint: 'checks' };
     for (const [name, output] of Object.entries(expected)) {
       const step = ciSteps().find((candidate) => candidate.name === name);
@@ -70,13 +70,13 @@ describe('ci workflow step order', () => {
     }
   });
 
-  it('runs scope first, before release age and install (#165)', () => {
+  it('runs scope first, before release age and install', () => {
     const names = ciSteps().map((step) => step.name);
     assert.equal(names[0], 'scope');
     assert.ok(names.indexOf('release age') < names.indexOf('install'));
   });
 
-  it('feeds scope from scripts/ci-scope.mjs and falls back to every check (#165)', () => {
+  it('feeds scope from scripts/ci-scope.mjs and falls back to every check', () => {
     assert.match(workflow, /node scripts\/ci-scope\.mjs/);
     assert.match(workflow, /scope=app\\napp=true\\nchecks=true\\ntypecheck=true\\n/);
   });
@@ -137,7 +137,7 @@ function runScopeStep(prepare) {
   }
 }
 
-describe('the scope step (#165)', () => {
+describe('the scope step', () => {
   const commit = (repo, message) => {
     for (const args of [
       ['add', 'docs'],

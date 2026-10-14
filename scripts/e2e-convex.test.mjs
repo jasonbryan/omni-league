@@ -439,7 +439,7 @@ describe('main', () => {
   }
 });
 
-describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
+describe('main setup (globalSetup)', () => {
   function fakeClock() {
     let time = 0;
     const sleeps = [];
@@ -515,7 +515,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.deepEqual(first.clock.sleeps, [], 'a backend that is ready costs no wait');
   });
 
-  it('sets the secret when the random bytes would give a leading "-" in base64url (#191)', async () => {
+  it('sets the secret when the random bytes would give a leading "-" in base64url', async () => {
     // 0xfb encodes to "-" as the first base64url character; the CLI reads such a value as an option.
     const bytes = Buffer.alloc(32, 0xfb);
     assert.ok(bytes.toString('base64url').startsWith('-'), 'the fixture forces a leading -');
@@ -530,7 +530,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.ok(!output.includes(secret), 'the secret is printed');
   });
 
-  it('never generates a secret that starts with "-", whatever the random bytes (#191)', async () => {
+  it('never generates a secret that starts with "-", whatever the random bytes', async () => {
     for (const byte of [0x00, 0x7f, 0xfb, 0xff]) {
       const { code, calls } = await setup({ randomBytes: () => Buffer.alloc(32, byte) });
       assert.equal(code, 0);
@@ -548,7 +548,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.ok(calls.every((args) => args[0] !== 'run'));
   });
 
-  it('retries `env set` while the backend is not ready: fails twice, then succeeds (#156)', async () => {
+  it('retries `env set` while the backend is not ready: fails twice, then succeeds', async () => {
     const { code, calls, output, clock } = await setup({
       failures: { IS_TEST: 2, BETTER_AUTH_SECRET: 2 },
     });
@@ -570,7 +570,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.ok(clock.sleeps[1] > clock.sleeps[0]);
   });
 
-  it('times out with a clear message, naming the call and the wait, never the secret (#156)', async () => {
+  it('times out with a clear message, naming the call and the wait, never the secret', async () => {
     const clock = fakeClock();
     const { code, calls, output } = await setup({ fail: 'BETTER_AUTH_SECRET', clock });
     assert.equal(code, 1);
@@ -655,7 +655,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
   });
 });
 
-describe('main seed-demo (#82)', () => {
+describe('main seed-demo', () => {
   it('checks the target like setup and run: the given project dir and instance name', async () => {
     const dir = projectDir({ config: LOCAL_CONFIG });
     const calls = [];

@@ -100,7 +100,7 @@ async function filesUnder(dir, extensions) {
   return found.sort();
 }
 
-describe('focus treatment in the app shell and the vendored sheet (#75)', () => {
+describe('focus treatment in the app shell and the vendored sheet', () => {
   // A plain `rg -n` search, run on the raw source, comments included.
   const HALO = /outline-none|ring-ring\/50|focus-visible:ring-3/;
 
@@ -232,7 +232,7 @@ describe('colour literals in src/', () => {
     }
   });
 
-  it('still catches every hex form, and does not read a jump-link fragment as a colour (#65)', () => {
+  it('still catches every hex form, and does not read a jump-link fragment as a colour', () => {
     for (const line of [
       'color: #FFF;',
       'color:#abc',

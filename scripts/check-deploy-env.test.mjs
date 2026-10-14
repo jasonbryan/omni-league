@@ -140,7 +140,7 @@ describe('checkDeployEnv, production mode', () => {
     assert.match(failures[0], /^IS_TEST /);
   });
 
-  it('fails when PREVIEW_ORIGIN_PATTERN is set, without reading its value (#97)', async () => {
+  it('fails when PREVIEW_ORIGIN_PATTERN is set, without reading its value', async () => {
     const reader = stubReader({
       ...ALLOWED_PRODUCTION,
       PREVIEW_ORIGIN_PATTERN: SECRET.PREVIEW_ORIGIN_PATTERN,
@@ -165,7 +165,7 @@ describe('checkDeployEnv, production mode', () => {
 
 // A deployment with no BETTER_AUTH_SECRET would sign with Better Auth's public default
 // secret, and one with no SITE_URL trusts no origin. Names only: the values are never read.
-describe('checkDeployEnv, required auth variables (#111)', () => {
+describe('checkDeployEnv, required auth variables', () => {
   const without = (vars, ...names) =>
     Object.fromEntries(Object.entries(vars).filter(([name]) => !names.includes(name)));
 

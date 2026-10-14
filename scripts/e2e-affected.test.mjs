@@ -160,7 +160,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(!specs.includes('FULL'));
   });
 
-  it('maps the public organization page files to the league page spec too, because the league rows link to it (#127)', () => {
+  it('maps the public organization page files to the league page spec too, because the league rows link to it', () => {
     for (const file of [
       'src/app/organizations/organization-overview.ts',
       'src/app/organizations/organization-page.ts',
@@ -171,7 +171,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public league page and its sidebar and paths to the league page, season page, and cache-key specs (#127, #128)', () => {
+  it('maps the public league page and its sidebar and paths to the league page, season page, and cache-key specs', () => {
     // The season page shows the league page's sidebar, builds its links from its paths, and is
     // reached from the league page's rows.
     for (const file of [
@@ -193,7 +193,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the numbered control and the page helper to the league page specs only (#127)', () => {
+  it('maps the numbered control and the page helper to the league page specs only', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
       assert.deepEqual(
         specsFor([file]),
@@ -203,7 +203,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the form field-error helper to the specs that fill in a form, and its unit spec to none (#205)', () => {
+  it('maps the form field-error helper to the specs that fill in a form, and its unit spec to none', () => {
     const specs = specsFor(['src/app/core/forms/shown-errors.ts']);
     assert.ok(!specs.includes('FULL'));
     for (const name of [
@@ -220,7 +220,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['src/app/core/forms/shown-errors.spec.ts']), want());
   });
 
-  it('maps the focus helper to the league page and season page specs, which assert the focus move (#127, #128)', () => {
+  it('maps the focus helper to the league page and season page specs, which assert the focus move', () => {
     assert.deepEqual(
       specsFor(['src/app/core/focus-main.ts']),
       want(
@@ -232,7 +232,7 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the public season page, its content, and its paths to the season page and cache-key specs (#128)', () => {
+  it('maps the public season page, its content, and its paths to the season page and cache-key specs', () => {
     for (const file of [
       'src/app/organizations/public-season/public-season-page.ts',
       'src/app/organizations/public-season/public-season-content.ts',
@@ -246,7 +246,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('keeps the unit specs and test data of the season page out of the e2e run (#128)', () => {
+  it('keeps the unit specs and test data of the season page out of the e2e run', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/public-season/public-season-page.spec.ts']),
       want(),
@@ -266,11 +266,11 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['convex/seasonsPublicPage.test.ts']), want());
   });
 
-  it('maps a changed season page spec to itself (#128)', () => {
+  it('maps a changed season page spec to itself', () => {
     assert.deepEqual(specsFor(['e2e/season-page.spec.ts']), want('e2e/season-page.spec.ts'));
   });
 
-  it('maps the not-found and offline views to the league page and season page specs that assert them (#127, #128)', () => {
+  it('maps the not-found and offline views to the league page and season page specs that assert them', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));
     assert.ok(notFound.includes('e2e/season-page.spec.ts'));
@@ -281,7 +281,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(!notFound.includes('FULL') && !offline.includes('FULL'));
   });
 
-  it('keeps the other core files in the full suite, and the test data of the league page out of it (#127)', () => {
+  it('keeps the other core files in the full suite, and the test data of the league page out of it', () => {
     assert.deepEqual(specsFor(['src/app/core/list-page.spec.ts']), want());
     assert.deepEqual(specsFor(['src/app/core/focus-main.spec.ts']), want());
     assert.deepEqual(specsFor(['src/app/organizations/page-control.spec.ts']), want());
@@ -294,7 +294,7 @@ describe('selectSpecs: mapped areas', () => {
     ]);
   });
 
-  it('maps convex/seasons.ts to the league page and league management specs (#127)', () => {
+  it('maps convex/seasons.ts to the league page and league management specs', () => {
     const specs = specsFor(['convex/seasons.ts']);
     for (const name of [
       'league-page',
@@ -311,7 +311,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(specsFor(['convex/organizations.ts']).includes('e2e/league-page.spec.ts'));
   });
 
-  it('maps convex/seasons.ts and convex/organizations.ts to the season page specs (#128)', () => {
+  it('maps convex/seasons.ts and convex/organizations.ts to the season page specs', () => {
     for (const file of ['convex/seasons.ts', 'convex/organizations.ts']) {
       const specs = specsFor([file]);
       assert.ok(specs.includes('e2e/season-page.spec.ts'), file);
@@ -320,7 +320,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public organization page files to the season page spec, because the season page shows the organization sidebar (#128)', () => {
+  it('maps the public organization page files to the season page spec, because the season page shows the organization sidebar', () => {
     const specs = specsFor(['src/app/organizations/organization-sidebar.ts']);
     assert.ok(specs.includes('e2e/season-page.spec.ts'));
     assert.ok(!specs.includes('FULL'));
