@@ -1,7 +1,14 @@
 import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
-import { action, internalMutation, mutation, query, type QueryCtx } from './_generated/server';
+import {
+  action,
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from './_generated/server';
 import { requireOrgAdmin, requireUser } from './lib/access';
 import { authEmailOf, authUserIdByEmail } from './lib/authUsers';
 import {
@@ -9,12 +16,14 @@ import {
   checkInviteLeagues,
   INVITE_LIFETIME_MS,
   INVITE_MESSAGES,
+  INVITE_RESTORE_WINDOW_MS,
   type InviteInputError,
+  type InviteRestoreError,
 } from './lib/inviteInput';
 import { findUsableInvite } from './lib/inviteLookup';
 import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
-import { roleValidator } from './lib/roles';
+import { roleValidator, type Role } from './lib/roles';
 
 /**
  * Pending invites `listPending` returns at most. The staff screen is one page with no paging
@@ -71,6 +80,80 @@ export const create = action({
 });
 
 /**
+ * What `create` and `restore` both require before an invite is pending for an address, so the two
+ * cannot drift: a well-formed email, the role's leagues (an org admin carries none; a
+ * league organizer needs at least one, each in the organization, else `invalidLeague` throws), no
+ * current member of the organization at that address (`alreadyMember`), and no other pending
+ * invite to it (`alreadyInvited`, an expired one included). Returns the normalised address and the
+ * de-duplicated leagues. A refusal about the address or the league count is a `ConvexError` whose
+ * data is the `InviteInputError`.
+ */
+async function checkInviteAllowed(
+  ctx: Pick<MutationCtx, 'db' | 'runQuery'>,
+  args: {
+    organizationId: Id<'organizations'>;
+    email: string;
+    role: Role;
+    leagueIds: Id<'leagues'>[];
+  },
+  invalidLeague: () => never,
+): Promise<{ email: string; leagueIds: Id<'leagues'>[] }> {
+  const checked = checkInviteEmail(args.email);
+  if (!checked.ok) refuse(checked.error);
+  const { email } = checked;
+
+  const leagueIds = [...new Set(args.leagueIds)];
+  if (args.role === 'orgAdmin') {
+    if (leagueIds.length > 0) throw new Error('An org admin invite carries no leagues');
+  } else {
+    const leaguesError = checkInviteLeagues(leagueIds.length);
+    if (leaguesError) refuse(leaguesError);
+    for (const id of leagueIds) {
+      const league = await ctx.db.get('leagues', id);
+      if (league?.organizationId !== args.organizationId) invalidLeague();
+    }
+  }
+
+  const authUserId = await authUserIdByEmail(ctx, email);
+  if (authUserId) {
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    const member = user
+      ? await ctx.db
+          .query('memberships')
+          .withIndex('by_userId_and_organizationId', (q) =>
+            q.eq('userId', user._id).eq('organizationId', args.organizationId),
+          )
+          .unique()
+      : null;
+    if (member) {
+      refuse({
+        field: 'email',
+        code: 'alreadyMember',
+        message: INVITE_MESSAGES.alreadyMember(email),
+      });
+    }
+  }
+
+  const pending = await ctx.db
+    .query('invites')
+    .withIndex('by_organizationId_and_email_and_status', (q) =>
+      q.eq('organizationId', args.organizationId).eq('email', email).eq('status', 'pending'),
+    )
+    .first();
+  if (pending) {
+    refuse({
+      field: 'email',
+      code: 'alreadyInvited',
+      message: INVITE_MESSAGES.alreadyInvited(email),
+    });
+  }
+  return { email, leagueIds };
+}
+
+/**
  * The transaction behind `create`: authorizes the caller (`requireOrgAdmin`), checks the email and
  * the role's leagues, refuses a current member and an address with a pending invite (an expired
  * one counts until it is revoked), and stores the invite as `pending` with the hash it was given,
@@ -88,58 +171,9 @@ export const insertPending = internalMutation({
   returns: v.object({ inviteId: v.id('invites'), expiresAt: v.number() }),
   handler: async (ctx, args) => {
     await requireOrgAdmin(ctx, args.organizationId);
-    const checked = checkInviteEmail(args.email);
-    if (!checked.ok) refuse(checked.error);
-    const { email } = checked;
-
-    const leagueIds = [...new Set(args.leagueIds)];
-    if (args.role === 'orgAdmin') {
-      if (leagueIds.length > 0) throw new Error('An org admin invite carries no leagues');
-    } else {
-      const leaguesError = checkInviteLeagues(leagueIds.length);
-      if (leaguesError) refuse(leaguesError);
-      for (const id of leagueIds) {
-        const league = await ctx.db.get('leagues', id);
-        if (league?.organizationId !== args.organizationId) throw new Error('Not allowed');
-      }
-    }
-
-    const authUserId = await authUserIdByEmail(ctx, email);
-    if (authUserId) {
-      const user = await ctx.db
-        .query('users')
-        .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
-        .unique();
-      const member = user
-        ? await ctx.db
-            .query('memberships')
-            .withIndex('by_userId_and_organizationId', (q) =>
-              q.eq('userId', user._id).eq('organizationId', args.organizationId),
-            )
-            .unique()
-        : null;
-      if (member) {
-        refuse({
-          field: 'email',
-          code: 'alreadyMember',
-          message: INVITE_MESSAGES.alreadyMember(email),
-        });
-      }
-    }
-
-    const pending = await ctx.db
-      .query('invites')
-      .withIndex('by_organizationId_and_email_and_status', (q) =>
-        q.eq('organizationId', args.organizationId).eq('email', email).eq('status', 'pending'),
-      )
-      .first();
-    if (pending) {
-      refuse({
-        field: 'email',
-        code: 'alreadyInvited',
-        message: INVITE_MESSAGES.alreadyInvited(email),
-      });
-    }
+    const { email, leagueIds } = await checkInviteAllowed(ctx, args, () => {
+      throw new Error('Not allowed');
+    });
 
     const expiresAt = Date.now() + INVITE_LIFETIME_MS;
     const inviteId = await ctx.db.insert('invites', {
@@ -170,7 +204,52 @@ export const revoke = mutation({
     if (!invite) throw new Error('Not allowed');
     await requireOrgAdmin(ctx, invite.organizationId);
     if (invite.status !== 'pending') throw new Error('Only a pending invite can be revoked');
-    await ctx.db.patch('invites', inviteId, { status: 'revoked' });
+    await ctx.db.patch('invites', inviteId, { status: 'revoked', revokedAt: Date.now() });
+    return null;
+  },
+});
+
+/**
+ * Undoes a revoke: sets a revoked invite back to `pending` with the same token hash and
+ * expiry, so the link the org admin already sent works again. Org admins of the invite's
+ * organization only, the organization taken from the stored invite. It refuses, writing nothing:
+ * an invite that is not `revoked` or has no `revokedAt`, more than `INVITE_RESTORE_WINDOW_MS` after the revoke (`windowPassed`), an invite whose
+ * `expiresAt` has passed (`expired`), and everything `create` would refuse for the same invite
+ * (`checkInviteAllowed`: `alreadyMember`, `alreadyInvited`, and `leaguesGone` for a league that no
+ * longer exists in the organization). Refusals with a code are a `ConvexError`; the window is
+ * enforced here, never by the page.
+ */
+export const restore = mutation({
+  args: { inviteId: v.id('invites') },
+  returns: v.null(),
+  handler: async (ctx, { inviteId }) => {
+    await requireUser(ctx);
+    const invite = await ctx.db.get('invites', inviteId);
+    if (!invite) throw new Error('Not allowed');
+    await requireOrgAdmin(ctx, invite.organizationId);
+    if (invite.status !== 'revoked' || invite.revokedAt === undefined) {
+      throw new Error('Only a revoked invite can be restored');
+    }
+    const now = Date.now();
+    if (now - invite.revokedAt > INVITE_RESTORE_WINDOW_MS) {
+      throw new ConvexError({
+        code: 'windowPassed',
+        message: INVITE_MESSAGES.restoreWindowPassed,
+      } satisfies InviteRestoreError);
+    }
+    if (invite.expiresAt <= now) {
+      throw new ConvexError({
+        code: 'expired',
+        message: INVITE_MESSAGES.restoreExpired,
+      } satisfies InviteRestoreError);
+    }
+    await checkInviteAllowed(ctx, invite, () => {
+      throw new ConvexError({
+        code: 'leaguesGone',
+        message: INVITE_MESSAGES.restoreLeaguesGone,
+      } satisfies InviteRestoreError);
+    });
+    await ctx.db.patch('invites', inviteId, { status: 'pending', revokedAt: undefined });
     return null;
   },
 });
