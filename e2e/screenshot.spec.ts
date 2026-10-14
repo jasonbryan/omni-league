@@ -32,7 +32,7 @@ test.describe('screenshots', () => {
     test(`full-page screenshot of ${route}`, async ({ page, consoleGuard }, testInfo) => {
       test.skip(
         testInfo.project.use.browserName !== 'chromium',
-        'screenshots use the two Chromium projects (ADR 0005)',
+        'screenshots use the two Chromium projects',
       );
       const response = await page.goto(route);
       // Client routes render in the browser only, so they never log hydration.

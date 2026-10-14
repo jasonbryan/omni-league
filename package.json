@@ -17,7 +17,7 @@
     "design:css": "node scripts/inline-mockup-kit.mjs",
     "icons": "node scripts/build-icons.mjs",
     "previews:clean": "node scripts/clean-previews.mjs",
-    "lint": "eslint . --max-warnings=0",
+    "lint": "eslint . --max-warnings=0 && node scripts/comment-refs.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
