@@ -305,12 +305,7 @@ describe('only internal functions read or write signInFailures', () => {
       .filter(([, text]) => text.includes('signInFailures'))
       .map(([path]) => path)
       .sort();
-    expect(users).toEqual([
-      './lib/signInThrottle.ts',
-      './schema.ts',
-      './signInThrottle.ts',
-      './testing.ts',
-    ]);
+    expect(users).toEqual(['./schema.ts', './signInThrottle.ts', './testing.ts']);
   });
 
   test('convex/signInThrottle.ts registers internal functions only', () => {
