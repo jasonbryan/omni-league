@@ -20,8 +20,6 @@
 [[plugins]]
   package = "@netlify/angular-runtime"
 
-# Nothing in public/ may use these hashed-output names.
-#
 # The web app manifest is a plain file in public/, so a changed name or icon reaches users on the
 # next load. Only its content type is set, so every deploy answers with the manifest media type, not
 # a guessed one.
@@ -30,6 +28,7 @@
   [headers.values]
     Content-Type = "application/manifest+json"
 
+# Nothing in public/ may use these hashed-output names.
 [[headers]]
   for = "/media/*"
   [headers.values]
