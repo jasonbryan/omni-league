@@ -225,6 +225,53 @@ describe('SignInPage', () => {
     });
   });
 
+  describe('checking a field when the user leaves it', () => {
+    beforeEach(() => open());
+
+    async function leave(id: string) {
+      input(id).dispatchEvent(new Event('blur'));
+      await harness.fixture.whenStable();
+    }
+
+    it('shows the error with aria-invalid and aria-describedby once a changed field is left', async () => {
+      await type('email', 'maya.okafor.example.com');
+      await leave('email');
+      expect(error('email')).toBe(MESSAGES.emailMalformed);
+      expect(input('email').getAttribute('aria-invalid')).toBe('true');
+      expect(input('email').getAttribute('aria-describedby')).toBe('email-error');
+
+      await type('password', 'x');
+      await type('password', '');
+      await leave('password');
+      expect(error('password')).toBe(MESSAGES.passwordEmpty);
+      expect(input('password').getAttribute('aria-describedby')).toBe('password-error');
+    });
+
+    it('shows nothing while the user types an invalid partial value', async () => {
+      await type('email', 'maya');
+      expect(error('email')).toBeNull();
+      expect(input('email').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+      await leave('email');
+      await leave('password');
+      expect(error('email')).toBeNull();
+      expect(error('password')).toBeNull();
+      await submit();
+      expect(error('email')).toBe(MESSAGES.emailEmpty);
+      expect(error('password')).toBe(MESSAGES.passwordEmpty);
+    });
+
+    it('clears the error on the keystroke that makes the value valid', async () => {
+      await type('email', 'maya');
+      await leave('email');
+      expect(error('email')).toBe(MESSAGES.emailMalformed);
+      await type('email', EMAIL);
+      expect(error('email')).toBeNull();
+    });
+  });
+
   describe('submitting', () => {
     it('sends the trimmed email and the password, and goes to /app with no returnTo', async () => {
       await open();

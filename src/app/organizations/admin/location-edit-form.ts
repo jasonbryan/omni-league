@@ -67,6 +67,7 @@ export interface AdminLocation {
         [fields]="form.fields"
         [errors]="form.errors"
         [descriptions]="descriptions"
+        (fieldLeft)="form.left($event)"
       />
       <div class="mt-5 flex flex-wrap gap-2">
         <button
