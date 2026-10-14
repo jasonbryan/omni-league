@@ -9,40 +9,27 @@ import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
-import { Shell, ShellSidebar } from '../../shell';
+import { PublicLayout } from '../../public-layout/public-layout';
 import { PublicLeagueContent } from './public-league-content';
 import {
   publicLeagueCanonicalPath,
   type PublicLeagueSeasons,
   type PublicLeagueView,
 } from './public-league-path';
-import { PublicLeagueSidebar } from './public-league-sidebar';
 
 /**
- * The page asked for is `?page=N`, read with `parseListPage` from every value of the parameter, so the server and the browser ask for the same page
- * and the server HTML holds only the page number the query result gives.
+ * `?page=N` is read with `parseListPage` from every value of the parameter, so the server and the
+ * browser ask for the same page and the server HTML holds only the page number the query returns.
+ * A failed or timed-out query renders the server-error view (503, `no-store`) so the CDN never
+ * stores it.
  */
 @Component({
   selector: 'app-public-league-page',
-  imports: [
-    NotFoundView,
-    NotSavedView,
-    PublicLeagueContent,
-    PublicLeagueSidebar,
-    ServerErrorView,
-    Shell,
-    ShellSidebar,
-  ],
+  imports: [NotFoundView, NotSavedView, PublicLayout, PublicLeagueContent, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (view(); as view) {
-        <ng-template appShellSidebar>
-          <app-public-league-sidebar
-            [organization]="view.organization"
-            [sportName]="view.league.sportName"
-          />
-        </ng-template>
         <app-public-league-content [view]="view" [busy]="busy()" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -51,7 +38,7 @@ import { PublicLeagueSidebar } from './public-league-sidebar';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="retryHref()" />
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class PublicLeaguePage {
@@ -64,6 +51,7 @@ export class PublicLeaguePage {
     this.route.paramMap.pipe(map((params) => params.get('leagueSlug') ?? '')),
     { requireSync: true },
   );
+  /** The page asked for, from every `page` value in the URL (`parseListPage`). */
   private readonly requestedPage = toSignal(
     this.route.queryParamMap.pipe(map((params) => parseListPage(params.getAll('page')))),
     { requireSync: true },
@@ -84,8 +72,12 @@ export class PublicLeaguePage {
   private readonly online = injectOnline();
 
   /**
-   * Offline, a page that has no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL,
-   * and the load would never end. Another league's seasons are never kept.
+   * The seasons to show: the query's result, or, only while online, the previous page's result of
+   * the same league while the next page loads (args change: `value()` returns to `undefined` until
+   * the first result). Offline, a page that has no saved copy shows nothing, so the not-saved view
+   * takes its place (design/mockups/82-offline-pages.html state 2): the previous rows would sit
+   * under another page's URL, and the load would never end. Another league's seasons are never
+   * kept.
    */
   private readonly shownSeasons = linkedSignal<
     { key: string; value: PublicLeagueSeasons | undefined; online: boolean },
@@ -102,14 +94,17 @@ export class PublicLeaguePage {
     },
   });
 
+  /** The page for "Try again" when there is no result to build it from: the page asked for. */
   protected readonly retryHref = computed(() =>
     publicLeagueCanonicalPath(this.orgSlug(), this.leagueSlug(), this.requestedPage()),
   );
 
+  /** The page of seasons shown is the previous one: the asked-for page has not arrived yet. */
   protected readonly busy = computed(
     () => this.shownSeasons() !== undefined && this.seasons.value() === undefined,
   );
 
+  /** Any of the three failed, including a missing Convex URL; never its message (adapter README). */
   private readonly failed = computed(
     () =>
       this.organization.error() !== undefined ||
@@ -117,6 +112,10 @@ export class PublicLeaguePage {
       this.seasons.error() !== undefined,
   );
 
+  /**
+   * The organization, the league, and the seasons shown, once found and all three arrived. A
+   * failure takes the page away, also when it is the next page's subscription that failed.
+   */
   protected readonly view = computed((): PublicLeagueView | undefined => {
     if (this.failed()) return undefined;
     const organization = this.organization.value();
@@ -126,6 +125,10 @@ export class PublicLeaguePage {
     return { organization, league, seasons: seasons.value };
   });
 
+  /**
+   * When the oldest saved copy on screen was saved, only while offline (the note is hidden online)
+   * and only while some of the three results is still a saved copy.
+   */
   protected readonly savedAt = computed(() => {
     if (this.online()) return undefined;
     const times = [
@@ -140,8 +143,8 @@ export class PublicLeaguePage {
     if (this.view()) return 'page';
     if (this.league.value() === null || this.organization.value() === null) return 'not-found';
     if (this.failed()) return 'error';
-    const offlineWithoutSavedCopy = !this.online();
-    if (offlineWithoutSavedCopy) return 'not-saved';
+    // Offline with nothing to show (never on the server, where `online` is always true).
+    if (!this.online()) return 'not-saved';
     return 'loading';
   });
 

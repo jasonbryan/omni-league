@@ -19,10 +19,12 @@ import {
   type ConvexHttpClientLike,
 } from '../../core/data/convex';
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
+import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
 import { provideSpartanHlm } from '../../ui/utils';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
-// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each
+// test (see dom-globals.ts).
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
@@ -62,6 +64,11 @@ interface Rendered {
   queries: { name: string; args: unknown }[];
 }
 
+/**
+ * Renders `path` through the app's real routes the way `@angular/ssr` does for a Server route:
+ * REQUEST is the request, and RESPONSE_INIT starts with the route's headers. `query` answers each
+ * Convex query by function name (`seasons:getPublicPage`).
+ */
 async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
@@ -117,6 +124,7 @@ async function render(
 
 const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+/** A link's path, query string, and fragment: a router link's `href` is absolute in this render. */
 const href = (link: Element | null | undefined) => {
   const url = new URL(link?.getAttribute('href') ?? '', ORIGIN);
   return `${url.pathname}${url.search}${url.hash}`;
@@ -134,23 +142,24 @@ const slugs = {
 const SERVER_ERROR = 'This page is temporarily unavailable';
 const CONNECTION_REFUSED = 'connect ECONNREFUSED internal-db.corp.example:443';
 
+/** Answers each query with its result for `options`. */
 const answer =
   (options: Parameters<typeof seasonQueryResults>[0] = {}) =>
   (name: string) =>
     Promise.resolve(seasonQueryResults(options)[name]);
 
 describe('PublicSeasonPage server render', () => {
-  it('renders the page, meta, sidebar, and details from the queries, with no query string anywhere', async () => {
+  it('renders the page, meta, and details from the queries, with no query string anywhere', async () => {
     const { html, body, head, responseInit, queries } = await render(
       `${SEASON_PATH}?ott=SECRET&x=1`,
       answer(),
     );
 
+    // One fetch per query, with the route's slugs only.
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
-      { name: 'organizations:getPublicPage', args: { slug: 'gulf-coast-sport-social' } },
       { name: 'seasons:getPublicPage', args: slugs },
     ]);
-    expect(responseInit.status).toBeUndefined();
+    expect(responseInit.status).toBeUndefined(); // 200
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
@@ -159,7 +168,7 @@ describe('PublicSeasonPage server render', () => {
     expect(meta(head, 'og:title')).toBe('Summer 2027');
     expect(meta(head, 'og:type')).toBe('website');
     expect(meta(head, 'og:description')).toBe(
-      'Jun 6 – Aug 29, 2027. 4 v 4, teams need at least 4 players.',
+      'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
     );
     expect(meta(head, 'og:url')).toBe(`${ORIGIN}${SEASON_PATH}`);
     const canonicals = head.querySelectorAll('link[rel="canonical"]');
@@ -176,19 +185,21 @@ describe('PublicSeasonPage server render', () => {
     ]);
     expect([...body.querySelectorAll('main dl > div')].map((row) => text(row))).toEqual([
       'Dates Jun 6 – Aug 29, 2027',
-      'Format 4 v 4',
+      'Format 4v4',
       'Team size Teams need at least 4 players',
       'Location North Beach Sand Courts',
     ]);
     expect(
       [...body.querySelectorAll('main dl time')].map((time) => time.getAttribute('datetime')),
     ).toEqual(['2027-06-06', '2027-08-29']);
-    const sidebar = body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(text(sidebar?.querySelector('[aria-current="true"]'))).toContain('Beach volleyball');
-    expect(sidebar?.querySelector('a[href*="/sports/"]')).toBeNull();
-    expect(body.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
+    const frame = publicFrame(body);
+    expect({ ...frame, navs: [] }).toEqual({ ...PUBLIC_FRAME, navs: [] });
+    expect(frame.navs.at(-1)).toBe('Footer');
+    expect(frame.navs).not.toContain('Gulf Coast Sport & Social');
+    expect(body.querySelector('a')?.getAttribute('href')).toBe(`${SEASON_PATH}#main`);
+    expect([...body.querySelectorAll('header a')].map(text)).toEqual(['Omni League', 'Sign in']);
 
-    // Neither the token nor any other query parameter reaches the cacheable HTML.
+    // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
@@ -202,23 +213,22 @@ describe('PublicSeasonPage server render', () => {
   });
 
   it.each([
-    ['a null season (a draft, or an unknown one)', { season: null }],
-    ['an unknown organization', { organization: null, season: null }],
+    ['a null season (a draft, or an unknown organization, league, or season)', { season: null }],
   ])(
-    'renders the not-found view with status 404, the public Cache-Control, and no sidebar for %s',
+    'renders the not-found view in the public layout with status 404 and the public Cache-Control for %s',
     async (_label, options) => {
       const { body, head, responseInit } = await render(SEASON_PATH, answer(options));
       expect(responseInit.status).toBe(404);
       expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
       expect(text(body.querySelector('main h1'))).toBe('Page not found');
-      expect(body.querySelector('nav')).toBeNull();
+      expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
       expect(body.querySelector('button')).toBeNull();
       expect(head.querySelector('title')?.textContent).toBe('Page not found | Omni League');
       expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
     },
   );
 
-  it('renders the server-error view with 503 and Cache-Control: no-store when the queries fail', async () => {
+  it('renders the server-error view in the public layout with 503 and Cache-Control: no-store when the queries fail', async () => {
     const { html, body, head, responseInit } = await render(`${SEASON_PATH}?ott=SECRET`, () =>
       Promise.reject(new Error(CONNECTION_REFUSED)),
     );
@@ -227,7 +237,7 @@ describe('PublicSeasonPage server render', () => {
     expect(responseInit.headers.get('Content-Type')).toBe('text/html;charset=UTF-8');
     expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
     expect(body.querySelector('main a')?.getAttribute('href')).toBe(SEASON_PATH);
-    expect(body.querySelector('nav')).toBeNull();
+    expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     expect(body.querySelector('button')).toBeNull();
     expect(head.querySelector('title')?.textContent).toBe('Temporarily unavailable | Omni League');
     expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
@@ -246,7 +256,7 @@ describe('PublicSeasonPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
   });
 
-  for (const failing of ['seasons:getPublicPage', 'organizations:getPublicPage']) {
+  for (const failing of ['seasons:getPublicPage']) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
       const { html, body, head, responseInit } = await render(
         `${SEASON_PATH}?ott=SECRET`,
@@ -256,7 +266,7 @@ describe('PublicSeasonPage server render', () => {
       expect(responseInit.status).toBe(503);
       expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
       expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
-      expect(body.querySelector('nav')).toBeNull();
+      expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
       expect(body.querySelector('main dl')).toBeNull();
       expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
       expect(html).not.toContain('internal-db');
@@ -272,7 +282,7 @@ describe('PublicSeasonPage server render', () => {
       expect(responseInit.status).toBe(503);
       expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
       expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
-      expect(body.querySelector('nav')).toBeNull();
+      expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     });
   }
 

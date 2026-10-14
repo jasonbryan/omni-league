@@ -8,9 +8,6 @@ import { insertSeason, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `seasons.create` and `seasons.listForOrganizer` (#125). Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -20,13 +17,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A (`org-a`) with a published soccer league L (`coed-7v7`), a published beach
- * volleyball league M (`sand-2s`), and a draft softball league D (`draft-softball`); organization B
- * with a published soccer league that also has the slug `coed-7v7`. Users: `admin-a`,
- * `organizer-l` (a league organizer of L), `organizer-m` (of M), `admin-b`, `stranger` (no
- * membership), and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -89,7 +79,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** A valid season of L, the soccer league: `fall-2026`, 7v7, minimum 7. */
 const fall2026 = (s: Setup) => ({
   leagueId: s.leagueL,
   name: 'Fall 2026',
@@ -103,7 +92,6 @@ const fall2026 = (s: Setup) => ({
 
 const seasons = (t: Setup['t']) => t.run((ctx) => ctx.db.query('seasons').collect());
 
-/** The `ConvexError` data a refused call carries, or fails the test. */
 async function refusal(call: Promise<unknown>) {
   const error = await call.then(
     () => null,
@@ -113,7 +101,6 @@ async function refusal(call: Promise<unknown>) {
   return (error as ConvexError<{ field: string; code: string; message: string }>).data;
 }
 
-/** Every caller that must be refused for league L: how to call, and the error text. */
 function refusedCallers(s: Setup) {
   return [
     ['unauthenticated', s.t, 'Sign in required'],
@@ -230,7 +217,6 @@ describe('seasons.create', () => {
       await expect(
         s.adminA.mutation(api.seasons.create, {
           ...fall2026(s),
-          // `3v3` is no format of any sport; argument validation refuses it.
           format: '3v3' as unknown as '7v7',
         }),
       ).rejects.toThrow();
@@ -369,7 +355,7 @@ describe('seasons.create', () => {
       ).toEqual({
         field: 'minimumRosterSize',
         code: 'minimumBelowFormat',
-        message: '7 v 7 needs at least 7 players. Enter 7 or more.',
+        message: '7v7 needs at least 7 players. Enter 7 or more.',
       });
       expect(await seasons(s.t)).toEqual([]);
 
@@ -444,7 +430,7 @@ describe('seasons.listForOrganizer', () => {
         startDate: '2026-09-01',
         endDate: '2026-11-15',
         registrationDeadline: '2026-08-25',
-        formatName: '7 v 7',
+        formatName: '7v7',
         minimumRosterSize: 9,
         status: 'draft',
       },

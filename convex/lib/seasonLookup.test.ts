@@ -6,8 +6,6 @@ import { modules } from '../test.setup';
 import { findLeagueBySlugs, findSeasonBySlugs } from './seasonLookup';
 import { insertSeason, insertTenant } from './tenantWrites';
 
-// #125: the slug lookup every season route shares. It applies no status or access rule.
-
 const SEASON = {
   name: 'Fall 2026',
   slug: 'fall-2026',
@@ -18,11 +16,6 @@ const SEASON = {
   minimumRosterSize: 7,
 };
 
-/**
- * Organization A with a published league `coed-7v7` (season `fall-2026`, draft) and a draft league
- * `draft-league`, and a second league `sand-2s` in A; organization B with a league `sand-2s` too.
- * Season `fall-2026` belongs to A's `coed-7v7` only.
- */
 async function setup() {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {

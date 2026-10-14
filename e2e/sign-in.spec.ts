@@ -22,6 +22,10 @@ const SIGN_IN_ORDER = [
   'button[aria-controls="password"]',
   'button[type="submit"]',
   'main p a[href^="/sign-up"]',
+  'footer a[href="/"]',
+  'footer a[href="/app"]',
+  'footer a[href="/app/organizations/new"]',
+  'footer a[href^="/sign-in"]',
 ];
 
 const field = (page: Page, id: string) => page.locator(`#${id}`);

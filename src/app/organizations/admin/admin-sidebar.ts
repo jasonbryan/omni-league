@@ -11,7 +11,7 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
-import { initials } from '../organization-sidebar';
+import { initials } from '../initials';
 import type { AdminOrganization } from './admin-context';
 import { adminPath } from './admin-path';
 

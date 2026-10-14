@@ -2,9 +2,6 @@ import { describe, expect, test } from 'vitest';
 import { trustedOrigins } from './authOrigins';
 import { PREVIEW_ORIGIN_PATTERN } from './previewOrigin';
 
-// #62: `trustedOrigins` is SITE_URL, plus the request's Origin only when PREVIEW_ORIGIN_PATTERN is
-// set, equals the constant in previewOrigin.ts, and the Origin matches it (ADR 0008, ADR 0010).
-
 const SITE_URL = 'https://main--charming-longma-28c00d.netlify.app';
 const PREVIEW = 'https://deploy-preview-62--charming-longma-28c00d.netlify.app';
 

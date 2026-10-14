@@ -1,6 +1,4 @@
 /// <reference types="vite/client" />
-// The per-test tenant seeds of `convex/testing.ts` (ADR 0005, #60), against the real schema.
-// `testing.test.ts` covers ping and reset with a fixture schema.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -116,7 +114,7 @@ describe('testing:seedLeague', () => {
     ]);
   });
 
-  test("sets each row's sortName and the organization's counters (#100)", async () => {
+  test("sets each row's sortName and the organization's counters", async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
     await t.action(internal.testing.seedLeague, {
@@ -264,8 +262,7 @@ describe('testing:addLeague', () => {
   });
 });
 
-describe('sport counters and sportLocations (#101)', () => {
-  /** What a recount of the leagues gives for the organization with this slug. */
+describe('sport counters and sportLocations', () => {
   async function stored(t: T, slug: string) {
     return t.run(async (ctx) => {
       const organization = await ctx.db
@@ -372,7 +369,7 @@ describe('sport counters and sportLocations (#101)', () => {
   }, 30_000);
 });
 
-describe('the optional seed status (#66, tester probes)', () => {
+describe('the optional seed status', () => {
   test('a seeded draft is neither counted nor listed publicly, and a seed without status is published', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();

@@ -19,7 +19,7 @@ import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
-import { Shell } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
 
 // Counted as the server counts (`String.length`), so the page and Better Auth agree on the limits.
@@ -64,11 +64,11 @@ type FormAlert = 'check-unavailable' | 'unexpected';
 
 @Component({
   selector: 'app-sign-up-page',
-  imports: [Checkbox, FormField, NgIcon, RouterLink, Shell],
+  imports: [Checkbox, FormField, NgIcon, RouterLink, PublicLayout],
   providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
         <div
           class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
@@ -401,7 +401,7 @@ type FormAlert = 'check-unavailable' | 'unexpected';
           </p>
         </div>
       </div>
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class SignUpPage {

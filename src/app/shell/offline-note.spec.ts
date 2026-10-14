@@ -53,7 +53,7 @@ describe('OfflineNote', () => {
   it('is an empty, sticky status region below the top bar while online', () => {
     expect(region.getAttribute('role')).toBe('status');
     expect(region.classList).toContain('sticky');
-    expect(region.classList).toContain('top-14');
+    expect(region.classList).toContain('top-[var(--top-bar-h,3.5rem)]');
     expect(region.textContent.trim()).toBe('');
     expect(region.querySelector('a, button, input, [tabindex]')).toBeNull();
   });

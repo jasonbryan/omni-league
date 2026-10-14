@@ -24,6 +24,10 @@ const SIGN_UP_ORDER = [
   '#adult',
   'button[type="submit"]',
   'main p a[href^="/sign-in"]',
+  'footer a[href="/"]',
+  'footer a[href="/app"]',
+  'footer a[href="/app/organizations/new"]',
+  'footer a[href^="/sign-in"]',
 ];
 
 const password = (page: Page) => page.locator('#password');

@@ -8,35 +8,24 @@ import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
-import { Shell, ShellSidebar } from '../../shell';
+import { PublicLayout } from '../../public-layout/public-layout';
 import { seasonDates } from '../league/season-dates';
 import { publicSeasonPath } from '../public-league/public-league-path';
-import { PublicLeagueSidebar } from '../public-league/public-league-sidebar';
 import { PublicSeasonContent } from './public-season-content';
 import type { PublicSeasonView } from './public-season-view';
 
-/** The query arguments are the route's slugs only; the query string is never read, so the server HTML holds none of it. */
+/**
+ * The query arguments are the route's slugs only and the query string is never read, so the server
+ * HTML holds none of it. A failed or timed-out query renders the server-error view (503,
+ * `no-store`) so the CDN never stores it.
+ */
 @Component({
   selector: 'app-public-season-page',
-  imports: [
-    NotFoundView,
-    NotSavedView,
-    PublicLeagueSidebar,
-    PublicSeasonContent,
-    ServerErrorView,
-    Shell,
-    ShellSidebar,
-  ],
+  imports: [NotFoundView, NotSavedView, PublicLayout, PublicSeasonContent, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (view(); as view) {
-        <ng-template appShellSidebar>
-          <app-public-league-sidebar
-            [organization]="view.organization"
-            [sportName]="view.season.league.sportName"
-          />
-        </ng-template>
         <app-public-season-content [view]="view" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -45,7 +34,7 @@ import type { PublicSeasonView } from './public-season-view';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="path()" />
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class PublicSeasonPage {
@@ -63,9 +52,6 @@ export class PublicSeasonPage {
     { requireSync: true },
   );
 
-  private readonly organization = injectQuery(api.organizations.getPublicPage, () => ({
-    slug: this.orgSlug(),
-  }));
   private readonly season = injectQuery(api.seasons.getPublicPage, () => ({
     orgSlug: this.orgSlug(),
     leagueSlug: this.leagueSlug(),
@@ -73,36 +59,29 @@ export class PublicSeasonPage {
   }));
   private readonly online = injectOnline();
 
+  /** The page's own path, for "Try again": built from the slugs, never the request URL. */
   protected readonly path = computed(() =>
     publicSeasonPath(this.orgSlug(), this.leagueSlug(), this.seasonSlug()),
   );
 
-  private readonly failed = computed(
-    () => this.organization.error() !== undefined || this.season.error() !== undefined,
-  );
+  /** Failed, including a missing Convex URL; never its message (adapter README). */
+  private readonly failed = computed(() => this.season.error() !== undefined);
 
   protected readonly view = computed((): PublicSeasonView | undefined => {
     if (this.failed()) return undefined;
-    const organization = this.organization.value();
     const season = this.season.value();
-    if (!organization || !season) return undefined;
-    return { organization, season };
+    return season ? { season } : undefined;
   });
 
-  protected readonly savedAt = computed(() => {
-    if (this.online()) return undefined;
-    const times = [this.organization.savedAt(), this.season.savedAt()].filter(
-      (time) => time !== undefined,
-    );
-    return times.length > 0 ? Math.min(...times) : undefined;
-  });
+  /** When the saved copy on screen was saved, only while offline (the note is hidden online). */
+  protected readonly savedAt = computed(() => (this.online() ? undefined : this.season.savedAt()));
 
   protected readonly state = computed(() => {
     if (this.view()) return 'page';
-    if (this.season.value() === null || this.organization.value() === null) return 'not-found';
+    if (this.season.value() === null) return 'not-found';
     if (this.failed()) return 'error';
-    const offlineWithoutSavedCopy = !this.online();
-    if (offlineWithoutSavedCopy) return 'not-saved';
+    // Offline with nothing to show (never on the server, where `online` is always true).
+    if (!this.online()) return 'not-saved';
     return 'loading';
   });
 

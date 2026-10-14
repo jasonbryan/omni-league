@@ -36,7 +36,7 @@ export const SEASONS = [
   slug,
   startDate,
   endDate,
-  formatName: '4 v 4',
+  formatName: '4v4',
 }));
 
 export function seasonsPage(page: number, total = SEASONS.length): PublicLeagueSeasons {

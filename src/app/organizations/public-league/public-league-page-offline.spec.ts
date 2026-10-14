@@ -125,15 +125,12 @@ describe('PublicLeaguePage offline', () => {
       harness = await open(PATH, { socket: 'down' });
     });
 
-    it('shows the league, its seasons, and the sidebar from the saved copies', () => {
+    it('shows the league, its seasons, from the saved copies', () => {
       const main = host(harness).querySelector('main');
       expect(text(main?.querySelector('h1'))).toBe(SUNDAY_4S.name);
       expect([...(main?.querySelectorAll('section#seasons > ul > li h3') ?? [])].map(text)).toEqual(
         ['Summer 2027', 'Spring 2027', 'Fall 2026', 'Summer 2026', 'Spring 2026'],
       );
-      expect(
-        host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]'),
-      ).not.toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Sunday Reverse Coed 4s | Gulf Coast Sport & Social | Omni League',
       );
@@ -271,7 +268,7 @@ describe('PublicLeaguePage offline', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe(`${PATH}?page=2`);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('main nav')).toBeNull();
       expect(host(harness).querySelector('button')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
     });

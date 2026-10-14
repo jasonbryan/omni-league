@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { Shell } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 import { NotFoundView } from './not-found-view';
 
 @Component({
   selector: 'app-not-found-page',
-  imports: [NotFoundView, Shell],
+  imports: [NotFoundView, PublicLayout],
   template: `
-    <app-shell>
+    <app-public-layout>
       <app-not-found-view />
-    </app-shell>
+    </app-public-layout>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

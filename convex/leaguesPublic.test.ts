@@ -6,14 +6,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `leagues.getPublicPage` (#127): the public league page's header, for a published league only.
-
-/**
- * Organization A (`org-a`) with locations "Alpha Field" and "Beta Courts", a published beach
- * volleyball league `sand-2s` at both, a draft league `draft-league`, and a published league
- * `coed-7v7`; organization B (`org-b`) with a published league `sand-2s` of its own and a location
- * named "B Field".
- */
 async function setup() {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
@@ -52,14 +44,12 @@ describe('leagues.getPublicPage', () => {
       sportName: 'Beach volleyball',
       locationNames: ['Beta Courts', 'Alpha Field'],
     });
-    // No document id, creation time, status, or counter reaches a visitor.
     expect(JSON.stringify(page)).not.toMatch(/_id|_creationTime|Id"|status|Count/);
   });
 
   test('is null for a draft league, a league stored without a status, an unknown league, and an unknown organization', async () => {
     const t = await setup();
     expect(await get(t, 'org-a', 'draft-league')).toBeNull();
-    // A row written before #66 has no status: no reader treats that as published.
     await t.run(async (ctx) => {
       const orgA = (await ctx.db
         .query('organizations')

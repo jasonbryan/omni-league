@@ -7,14 +7,15 @@ describe('Placeholder', () => {
     TestBed.configureTestingModule({ providers: [provideRouter([])] });
   });
 
-  it('renders in the app shell, top bar only, with a single h1 reading "Omni League" in main', async () => {
+  it('renders in the public layout, with a single h1 reading "Omni League" in main', async () => {
     const fixture = TestBed.createComponent(Placeholder);
     await fixture.whenStable();
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.children).toHaveLength(1);
-    expect(host.children[0].tagName).toBe('APP-SHELL');
+    expect(host.children[0].tagName).toBe('APP-PUBLIC-LAYOUT');
     expect(host.querySelectorAll('header')).toHaveLength(1);
+    expect(host.querySelectorAll('footer')).toHaveLength(1);
     expect(host.querySelector('button')).toBeNull();
     const main = host.querySelector('main#main');
     expect(main?.children).toHaveLength(1);

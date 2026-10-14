@@ -13,7 +13,6 @@ import { PublicLeaguePage } from './public-league-page';
 import {
   leagueQueryResults,
   NO_SEASONS,
-  ORGANIZATION,
   SEASONS,
   seasonsPage,
   SUNDAY_4S,
@@ -42,12 +41,14 @@ async function open(url = PATH): Promise<RouterTestingHarness> {
   return harness;
 }
 
+/** The one active subscription to the query `name`. */
 function subscription(name: string): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
   expect(active, name).toHaveLength(1);
   return active[0];
 }
 
+/** Emits the three results, as the page's queries return them. */
 function emit(results: Record<string, unknown> = leagueQueryResults()): void {
   for (const [name, value] of Object.entries(results)) subscription(name).emit(value);
 }
@@ -67,7 +68,8 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
-// Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
+// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
+// next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
 });
@@ -116,14 +118,14 @@ describe('PublicLeaguePage queries', () => {
     expect(subscription(SEASONS_QUERY).args).toMatchObject({ page });
   });
 
-  it('shows nothing but the shell until all three results have arrived', async () => {
+  it('shows nothing but the layout until all three results have arrived', async () => {
     const harness = await open();
     const results = leagueQueryResults();
     subscription(ORG).emit(results[ORG]);
     subscription(LEAGUE).emit(results[LEAGUE]);
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     subscription(SEASONS_QUERY).emit(results[SEASONS_QUERY]);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
@@ -142,6 +144,7 @@ describe('PublicLeaguePage populated', () => {
     const main = host(harness).querySelector('main');
     const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
     const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
+    // The sport is plain text until #114 adds the sport view.
     expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Sunday Reverse Coed 4s']);
     expect(links.map((a) => a?.getAttribute('href'))).toEqual([
       '/organizations/gulf-coast-sport-social',
@@ -150,6 +153,7 @@ describe('PublicLeaguePage populated', () => {
     expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, 'page']);
     expect(text(crumbs[2])).toBe('Beach volleyball');
     expect(crumbs[2].querySelector('a')).toBeNull();
+    // The separators are decoration.
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s');
@@ -192,7 +196,7 @@ describe('PublicLeaguePage populated', () => {
     );
     expect(text(rows[0].querySelector('p'))).toBe('Dates: Jun 6 – Aug 29, 2027');
     expect(text(rows[2].querySelector('p'))).toBe('Dates: Sep 13 – Nov 15, 2026');
-    expect(text(rows[0].querySelector('[data-slot="badge"]'))).toBe('4 v 4');
+    expect(text(rows[0].querySelector('[data-slot="badge"]'))).toBe('4v4');
   });
 
   it('shows the range and the numbered control of page 1 of 2', () => {
@@ -221,46 +225,22 @@ describe('PublicLeaguePage populated', () => {
     expect(canonical()).toBe(`${window.location.origin}${PATH}`);
   });
 
-  it('marks the league’s sport as the current section of the sidebar, with the league counts', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav).not.toBeNull();
-    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
-    expect(
-      sports.map((a) => [
-        text(a.querySelector('span.min-w-0')),
-        text(a.querySelector('span.ms-auto')),
-        a.getAttribute('aria-current'),
-      ]),
-    ).toEqual([
-      ['Beach volleyball', '2 leagues', 'true'],
-      ['Soccer', '2 leagues', null],
-      ['Softball', '1 league', null],
-    ]);
-    expect(sports[0].className).toContain('bg-sidebar-accent');
-    expect(sports[1].className).not.toContain('bg-sidebar-accent');
+  it('renders in the public layout: top bar and footer, no organization sidebar and no menu button', () => {
+    const root = host(harness);
+    expect(root.querySelector('app-public-layout')).not.toBeNull();
+    expect(root.querySelector('app-shell')).toBeNull();
+    expect(root.querySelectorAll('header')).toHaveLength(1);
+    expect(root.querySelectorAll('footer')).toHaveLength(1);
+    const names = [...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'));
+    expect(names).toContain('Footer');
+    expect(names).not.toContain('Gulf Coast Sport & Social');
+    expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
-  it('links the sidebar’s Overview to the organization page and its Locations to the locations list, with the total', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    const overview = [...(nav?.querySelectorAll('a') ?? [])].find((a) => text(a) === 'Overview');
-    expect(overview?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
-    expect(overview?.hasAttribute('aria-current')).toBe(false);
-    const locations = [...(nav?.querySelectorAll('a') ?? [])].find((a) =>
-      text(a).startsWith('Locations'),
-    );
-    expect(locations?.getAttribute('href')).toBe(
-      '/organizations/gulf-coast-sport-social#locations',
-    );
-    expect(text(locations?.querySelector('span.min-w-0'))).toBe('Locations');
-    expect(text(locations?.querySelector('span.ms-auto'))).toBe('3 locations');
-  });
-
-  it('does not mark any sport when the league’s sport has no entry in the organization’s sports', async () => {
+  it('names a sport the organization does not list in the breadcrumb, without a link', async () => {
     emit(leagueQueryResults({ league: { ...SUNDAY_4S, sportName: 'Curling' } }));
     await settle(harness);
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav?.querySelectorAll('[aria-current]')).toHaveLength(0);
+    // The breadcrumb names the sport but cannot link it.
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
     expect(text(crumbs)).toContain('Curling');
     expect([...(crumbs?.querySelectorAll('a') ?? [])].map(text)).not.toContain('Curling');
@@ -309,6 +289,7 @@ describe('PublicLeaguePage page 2', () => {
   });
 
   it('serves page 1 when the query says so, and its canonical is the bare path', async () => {
+    // ?page=9 is past the last page: the query answers page 1.
     const harness = await open(`${PATH}?page=9`);
     emit(leagueQueryResults({ seasons: seasonsPage(1) }));
     await settle(harness);
@@ -321,12 +302,12 @@ describe('PublicLeaguePage page 2', () => {
 });
 
 describe('PublicLeaguePage not found and errors', () => {
-  it('shows the not-found view with no sidebar for a null league', async () => {
+  it('shows the not-found view in the public layout for a null league', async () => {
     const harness = await open();
     emit(leagueQueryResults({ league: null, seasons: NO_SEASONS }));
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     expect(TestBed.inject(Title).getTitle()).toBe('Page not found | Omni League');
     expect(canonical()).toBeNull();
     expect(metaContent('og:title')).toBeNull();
@@ -352,7 +333,7 @@ describe('PublicLeaguePage not found and errors', () => {
         'This page is temporarily unavailable',
       );
       expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=3`);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('main nav')).toBeNull();
       expect(host(harness).textContent).not.toContain('internal-db');
       expect(host(harness).textContent).not.toContain('SECRET');
     },
@@ -384,6 +365,7 @@ describe('PublicLeaguePage page changes', () => {
     )!;
     next.click();
     await settle(harness);
+    // The new subscription has not emitted: page 1 stays, marked busy, with no focus move.
     const subscriptions = client.activeSubscriptions.filter((s) => s.name === SEASONS_QUERY);
     expect(subscriptions).toHaveLength(1);
     expect(subscriptions[0].args).toMatchObject({ page: 2 });
@@ -489,11 +471,5 @@ describe('PublicLeaguePage page changes', () => {
       'This page is temporarily unavailable',
     );
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=2`);
-  });
-});
-
-describe('PublicLeaguePage sanity', () => {
-  it('uses the organization fixture for its sidebar', () => {
-    expect(ORGANIZATION.sports.map((sport) => sport.name)).toContain(SUNDAY_4S.sportName);
   });
 });
