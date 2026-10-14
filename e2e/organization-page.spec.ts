@@ -476,43 +476,41 @@ test.describe('organization page: hero, divisions, and sports', () => {
 test.describe('organization page: first load', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  test(
-    'never shows the skeleton, keeps the server-rendered h1 element, and leaves focus where it was',
-    VIEWPORT_AGNOSTIC,
-    async ({ page, consoleGuard }) => {
-      const tenant = await smallTenant();
-      await page.addInitScript(() => {
-        const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
-        watch.e2eSkeletonSeen = false;
-        const check = () => {
-          const first = document.querySelector('main h1');
-          if (first && !watch.e2eFirstH1) watch.e2eFirstH1 = first;
-          if (document.body.textContent.includes('Loading the organization.')) {
-            watch.e2eSkeletonSeen = true;
-          }
-        };
-        new MutationObserver(check).observe(document, {
-          subtree: true,
-          childList: true,
-          characterData: true,
-        });
+  test('never shows the skeleton, keeps the server-rendered h1 element, and leaves focus where it was', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await smallTenant();
+    await page.addInitScript(() => {
+      const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
+      watch.e2eSkeletonSeen = false;
+      const check = () => {
+        const first = document.querySelector('main h1');
+        if (first && !watch.e2eFirstH1) watch.e2eFirstH1 = first;
+        if (document.body.textContent.includes('Loading the organization.')) {
+          watch.e2eSkeletonSeen = true;
+        }
+      };
+      new MutationObserver(check).observe(document, {
+        subtree: true,
+        childList: true,
+        characterData: true,
       });
-      await page.goto(tenant.path);
-      await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
-      await hydrated(consoleGuard);
-      const watched = await page.evaluate(() => {
-        const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
-        return {
-          skeletonSeen: watch.e2eSkeletonSeen,
-          sameH1:
-            watch.e2eFirstH1 !== undefined &&
-            watch.e2eFirstH1 === document.querySelector('main h1'),
-          mainFocused: document.activeElement === document.querySelector('main#main'),
-        };
-      });
-      expect(watched).toEqual({ skeletonSeen: false, sameH1: true, mainFocused: false });
-    },
-  );
+    });
+    await page.goto(tenant.path);
+    await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
+    await hydrated(consoleGuard);
+    const watched = await page.evaluate(() => {
+      const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
+      return {
+        skeletonSeen: watch.e2eSkeletonSeen,
+        sameH1:
+          watch.e2eFirstH1 !== undefined && watch.e2eFirstH1 === document.querySelector('main h1'),
+        mainFocused: document.activeElement === document.querySelector('main#main'),
+      };
+    });
+    expect(watched).toEqual({ skeletonSeen: false, sameH1: true, mainFocused: false });
+  });
 });
 
 test.describe('organization page: after an in-app navigation', () => {

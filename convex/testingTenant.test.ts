@@ -208,11 +208,12 @@ describe('testing:addLeague', () => {
       page: 1,
     });
     expect(leagues.rows.map((league) => league.name)).toEqual(['League A', 'League B', 'League C']);
-    expect(leagues.rows[2]).toMatchObject({
+    expect(leagues.rows[2]).toEqual({
       name: 'League C',
       slug: 'league-c',
       sportName: 'Beach volleyball',
       locationNames: ['Field One'],
+      divisionLabel: 'Coed · 2v2 · Rec',
     });
     expect(leagues.total).toBe(3);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'e2e-org-a1b2' })).toMatchObject({

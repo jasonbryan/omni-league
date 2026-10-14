@@ -12,8 +12,8 @@ export const SPORT_NAMES: Record<Sport, string> = {
 export interface DivisionSeed {
   gender: 'coed' | 'mens' | 'womens';
   playersPerSide: number;
-  level: string;
-  ageGroup: string;
+  level: 'rec' | 'b' | 'bb' | 'a' | 'aa' | 'open' | 'intermediate' | 'competitive';
+  ageGroup: 'adult' | 'over30' | 'over35' | 'over40' | 'over50' | 'over55' | 'over60';
 }
 
 export interface LeagueSeed {

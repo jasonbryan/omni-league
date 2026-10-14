@@ -12,16 +12,11 @@ const changes = (message: string | Buffer): Change[] =>
   (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
 
 export interface HeldQueries {
-  /** True once the server has answered one of the queries and the answer is being kept back. */
   isHolding: () => boolean;
-  /** Sends every kept frame to the page and stops holding. */
   release: () => void;
 }
 
-/**
- * Keeps back the server's answer to the first subscription of each named query, and every frame after
- * it, because Convex applies transitions in order. Frames before the page subscribes pass through.
- */
+// Frames after a held answer are kept too, because Convex applies transitions in order.
 export async function holdQueries(page: Page, udfPaths: readonly string[]): Promise<HeldQueries> {
   const queryIds = new Set<number>();
   const kept: (string | Buffer)[] = [];

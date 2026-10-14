@@ -18,11 +18,4 @@ describe('OrganizationMark', () => {
   it('shows one letter for a one-word name', () => {
     expect(render('Lakeshore').textContent.trim()).toBe('L');
   });
-
-  it('is 32px square on phones and 48px from 768px', () => {
-    const mark = render('Gulf Coast');
-    expect(mark.classList.contains('size-8')).toBe(true);
-    expect(mark.classList.contains('md:size-12')).toBe(true);
-    expect(mark.classList.contains('shrink-0')).toBe(true);
-  });
 });

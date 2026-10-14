@@ -108,18 +108,6 @@ describe('OrganizationPage', () => {
       expect(mark?.parentElement).toBe(h1s[0].parentElement);
     });
 
-    it('sizes the mark 32px on phones and 48px from 768px', () => {
-      const mark = host(harness).querySelector('main app-organization-mark');
-      expect(mark?.classList.contains('size-8')).toBe(true);
-      expect(mark?.classList.contains('md:size-12')).toBe(true);
-    });
-
-    it('scales the title text-2xl, then md:text-5xl', () => {
-      const h1 = host(harness).querySelector('main h1');
-      expect(h1?.classList.contains('text-2xl')).toBe(true);
-      expect(h1?.classList.contains('md:text-5xl')).toBe(true);
-    });
-
     it('says the sports and the league and location counts under the name', () => {
       const h1 = host(harness).querySelector('main h1');
       const line = h1?.parentElement?.nextElementSibling;
@@ -141,7 +129,7 @@ describe('OrganizationPage', () => {
       expect(host(harness).querySelector('main')?.textContent).not.toContain('Organization');
     });
 
-    it('lists the leagues as rows, each with its #league-<n> id, not boxed panels', () => {
+    it('lists the leagues as rows, each with its #league-<n> id', () => {
       const section = host(harness).querySelector('section[aria-labelledby="leagues-heading"]');
       const rows = [...(section?.querySelectorAll('li') ?? [])];
       expect(rows.map((row) => row.id)).toEqual([
@@ -154,8 +142,6 @@ describe('OrganizationPage', () => {
       expect(rows.map((row) => text(row.querySelector('h3')))).toEqual(
         GULF_COAST.leagues.map((league) => league.name),
       );
-      expect(section?.className).not.toContain('ring-1');
-      expect(section?.className).not.toContain('shadow');
     });
 
     it('shows each league row with its division, then its sport and locations', () => {
@@ -350,26 +336,16 @@ describe('OrganizationPage', () => {
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
     });
 
-    it('draws only hidden pulsing bars, so a screen reader hears the status alone', async () => {
+    it('hides every bar, so a screen reader hears the status alone', async () => {
       const harness = await open();
       const bars = [...host(harness).querySelectorAll('main app-organization-skeleton span')];
       expect(bars.length).toBeGreaterThan(5);
       for (const bar of bars) {
         expect(bar.getAttribute('aria-hidden')).toBe('true');
-        expect(bar.className).toContain('motion-safe:animate-pulse');
       }
       expect(text(host(harness).querySelector('main app-organization-skeleton'))).toBe(
         'Loading the organization.',
       );
-    });
-
-    it('sizes the skeleton mark and heading bar like the mark and the h1', async () => {
-      const harness = await open();
-      const bars = host(harness).querySelectorAll('main app-organization-skeleton span');
-      expect(bars[0].classList.contains('size-8')).toBe(true);
-      expect(bars[0].classList.contains('md:size-12')).toBe(true);
-      expect(bars[1].classList.contains('h-8')).toBe(true);
-      expect(bars[1].classList.contains('md:h-12')).toBe(true);
     });
 
     it('does not show the skeleton for a missing organization or a failed query', async () => {

@@ -39,11 +39,16 @@ async function publicDivisionLabel(
   }
   const customLevel =
     customLevelId === undefined ? null : await ctx.db.get('customLevels', customLevelId);
+  // A level of another organization or sport falls back to the standard level, so bad data cannot fail the page.
+  const ownCustomLevel =
+    customLevel?.organizationId === league.organizationId && customLevel.sport === league.sport
+      ? customLevel
+      : null;
   return divisionLabel({
     gender,
     playersPerSide,
-    levelLabel: customLevel
-      ? customLevelLabel(customLevel.name, customLevel.standardLevel, league.sport)
+    levelLabel: ownCustomLevel
+      ? customLevelLabel(ownCustomLevel.name, ownCustomLevel.standardLevel, league.sport)
       : levelLabel(level),
     ...(ageGroup !== undefined && { ageGroup }),
   });

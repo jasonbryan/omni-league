@@ -6,7 +6,7 @@ import { SavedCopyNote } from '../offline/saved-copy-note';
 import { OrganizationMark } from './organization-mark';
 import type { PublicOrganizationPage } from './organization-path';
 import { publicLeaguePath } from './public-league/public-league-path';
-import { sportList, sportPhrase } from './sport-list';
+import { sportsCommaList, sportsInSentence } from './sport-list';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -138,7 +138,7 @@ export class OrganizationOverview {
       plural(leagueCount, 'league'),
       ...(locationCount > 0 ? [`at ${plural(locationCount, 'location')}`] : []),
     ].join(' ');
-    const names = sportPhrase(sports.map((sport) => sport.name));
+    const names = sportsInSentence(sports.map((sport) => sport.name));
     return names ? `${names} · ${counts}` : counts;
   });
 
@@ -165,7 +165,7 @@ export class OrganizationOverview {
       id: `location-${i + 1}`,
       name: location.name,
       address: location.address,
-      sports: sportList(location.sportNames ?? []),
+      sports: sportsCommaList(location.sportNames ?? []),
     })),
   );
 }

@@ -572,6 +572,48 @@ describe('organizations:listPublicLeagues rows', () => {
     expect(leagues.rows[0]?.divisionLabel).toBe("Men's · 10v10 · D (Rec)");
   });
 
+  test('a league whose custom level belongs to another organization or sport shows the standard level and the page still loads', async () => {
+    const t = setup();
+    const organizationId = await seed(t, {
+      organization: { name: 'Bad Data Club', slug: 'bad-data-club' },
+      locations: [{ name: 'Home Field', address: '1 Home Road' }],
+      leagues: [],
+    });
+    const otherId = await seedB(t);
+    await t.run(async (ctx) => {
+      const otherLevel = await insertCustomLevel(ctx, otherId, {
+        sport: 'soccer',
+        name: 'Z',
+        standardLevel: 'rec',
+      });
+      const beachLevel = await insertCustomLevel(ctx, organizationId, {
+        sport: 'beachVolleyball',
+        name: 'Y',
+        standardLevel: 'bb',
+      });
+      for (const [name, customLevelId] of [
+        ['Other Org Level', otherLevel],
+        ['Other Sport Level', beachLevel],
+      ] as const) {
+        const { leagueId } = await insertLeague(ctx, organizationId, {
+          name,
+          sport: 'soccer',
+          locations: ['Home Field'],
+          division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+        });
+        await ctx.db.patch('leagues', leagueId, { customLevelId });
+      }
+    });
+    const leagues = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'bad-data-club',
+      page: 1,
+    });
+    expect(leagues.rows.map((row) => [row.name, row.divisionLabel])).toEqual([
+      ['Other Org Level', 'Coed · 7v7 · Rec'],
+      ['Other Sport Level', 'Coed · 7v7 · Rec'],
+    ]);
+  });
+
   test('a league at a location outside the first 5 locations still shows its name', async () => {
     const t = setup();
     const locations = numbered(13).map((name) => ({ name, address: `${name} address` }));
