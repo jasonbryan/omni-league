@@ -499,7 +499,12 @@ describe('skipping a night that is already tested', () => {
     }
   }
 
-  const night = (id, headSha, status = 'completed') => ({ databaseId: id, headSha, status });
+  const night = (id, headSha, status = 'completed', conclusion = 'success') => ({
+    databaseId: id,
+    headSha,
+    status,
+    conclusion,
+  });
 
   it('asks for the completed scheduled runs of ci.yml on main, newest first', { skip }, () => {
     const { calls } = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('success') } });
@@ -548,6 +553,14 @@ describe('skipping a night that is already tested', () => {
 
   it('runs the suite after a cancelled ci', { skip }, () => {
     const run = runGate({ runs: [night(5, MAIN)], jobs: { 5: tested('cancelled') } });
+    assert.equal(run.outputs, 'skip=false\n');
+  });
+
+  it('runs the suite after a run that was cancelled between the gate and ci', { skip }, () => {
+    const run = runGate({
+      runs: [night(5, MAIN, 'completed', 'cancelled')],
+      jobs: { 5: tested('skipped') },
+    });
     assert.equal(run.outputs, 'skip=false\n');
   });
 

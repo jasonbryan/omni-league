@@ -45,12 +45,12 @@ jobs:
       HEAD_SHA: ${{ github.sha }}
     steps:
       # A night counts as tested when its job `ci` concluded success or failure, or the gate skipped it.
-      # A startup failure, a cancelled run, or a run with no `ci` job tested nothing.
+      # A startup failure, a cancelled run (even one whose jobs read as a gate skip), or a run with no `ci` job tested nothing.
       - name: last tested night
         id: last-tested
         run: |
           last=''
-          runs="$(gh run list --workflow ci.yml --event schedule --branch main --status completed --limit 10 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')" || runs=''
+          runs="$(gh run list --workflow ci.yml --event schedule --branch main --status completed --limit 10 --json databaseId,headSha,conclusion --jq '.[] | select(.conclusion != "cancelled") | "\(.databaseId) \(.headSha)"')" || runs=''
           while read -r id sha; do
             [ -n "$id" ] || continue
             state="$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.name == "ci" or .name == "nightly-gate") | {key: .name, value: .conclusion}] | from_entries | if (.ci == "success" or .ci == "failure") or (.ci == "skipped" and .["nightly-gate"] == "success") then "tested" else "untested" end')" || break
@@ -93,7 +93,8 @@ jobs:
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "$(git rev-parse --verify --quiet 'HEAD^2' || true)" != "$PR_HEAD_SHA" ]; then
+          second_parent="$(git rev-parse --verify --quiet 'HEAD^2' || true)"
+          if [ -z "$PR_HEAD_SHA" ] || [ "$second_parent" != "$PR_HEAD_SHA" ]; then
             echo "::error::stale merge ref: the merge commit's second parent is not the PR head ${PR_HEAD_SHA:0:7}; remove ready-to-merge and add it again"
             exit 1
           fi

@@ -619,6 +619,15 @@ describe('the merge ref step', () => {
     assert.match(run.output, /stale merge ref/);
   });
 
+  it('fails with stale merge ref when the event gives no head and the commit is not a merge', () => {
+    const run = runMergeRef((repo, git) => {
+      commitFile(repo, git, 'a', 'only\n');
+      return '';
+    });
+    assert.notEqual(run.status, 0);
+    assert.match(run.output, /stale merge ref/);
+  });
+
   it('fails with stale merge ref when the checked-out commit is not a merge commit', () => {
     const run = runMergeRef((repo, git) => {
       commitFile(repo, git, 'a', 'only\n');
