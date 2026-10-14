@@ -94,13 +94,13 @@ describe('seed:demo division backfill', () => {
     ]);
     const seasonId = await addSeason(t, organizationId, ids['Beta League'], { format: '4v4' });
 
-    const first = await t.mutation(internal.seed.demo, {});
+    const first = await t.mutation(internal.seed.insertDemoData, {});
     const row = await t.run((ctx) => ctx.db.get('seasons', seasonId));
     expect(row?.playersPerSide).toBe(4);
     expect(row).not.toHaveProperty('format');
     expect(first.backfilled.seasons).toBe(1);
 
-    const second = await t.mutation(internal.seed.demo, {});
+    const second = await t.mutation(internal.seed.insertDemoData, {});
     expect(second.backfilled).toEqual(ZERO_BACKFILL);
   });
 
@@ -111,7 +111,7 @@ describe('seed:demo division backfill', () => {
       ["Men's Modified Fast-Pitch", 'softball'],
     ]);
 
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
 
     expect(result.backfilled.leagueDivisions).toBe(2);
     expect(await leagueRow(t, ids['Coed 6v6 Indoor'])).toMatchObject({
@@ -134,7 +134,7 @@ describe('seed:demo division backfill', () => {
       ["Men's D Division Slow-Pitch", 'softball'],
     ]);
 
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
 
     const levels = await t.run((ctx) => ctx.db.query('customLevels').collect());
     expect(levels).toHaveLength(1);
@@ -173,7 +173,7 @@ describe('seed:demo division backfill', () => {
       minimumRosterSize: 8,
     });
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     expect(await leagueRow(t, ids['Tuesday 5s'])).toMatchObject({
       gender: 'coed',
@@ -199,7 +199,7 @@ describe('seed:demo division backfill', () => {
     const { organizationId, ids } = await insertLegacy(t, 'other-club', [['Plain', 'soccer']]);
     await addSeason(t, organizationId, ids['Plain'], { playersPerSide: 7, minimumRosterSize: 7 });
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     expect(await leagueRow(t, ids['Plain'])).toMatchObject({ playersPerSide: 7 });
     expect(await leagueRow(t, ids['Plain'])).not.toHaveProperty('minimumRosterSize');
@@ -237,7 +237,7 @@ describe('seed:demo division backfill', () => {
       }),
     );
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     expect(await leagueRow(t, ids['Tuesday 5s'])).toMatchObject({
       gender: 'womens',
@@ -252,7 +252,7 @@ describe('seed:demo division backfill', () => {
     const { ids } = await insertLegacy(t, 'other-club', [['Tuesday 5s', 'beachVolleyball']]);
     await t.run((ctx) => ctx.db.patch('leagues', ids['Tuesday 5s'], { gender: 'mens' }));
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     expect(await leagueRow(t, ids['Tuesday 5s'])).toMatchObject({
       gender: 'mens',
@@ -266,7 +266,7 @@ describe('seed:demo division backfill', () => {
 describe('seed:demo divisions on an empty deployment', () => {
   test('gives every demo league its division, and the custom level to the league that uses it', async () => {
     const t = setup();
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
     expect(result.backfilled).toEqual(ZERO_BACKFILL);
 
     const stored = await t.run(async (ctx) => {
@@ -307,7 +307,7 @@ describe('seed:demo divisions on an empty deployment', () => {
 
   test('raises the minimum roster size of Coed 6v6 Indoor to 8 and adds the youth league U10 Girls Fall Rec', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const leagues = await t.run((ctx) => ctx.db.query('leagues').collect());
     expect(leagues.find((league) => league.name === 'Coed 6v6 Indoor')).toMatchObject({
       playersPerSide: 6,
@@ -328,7 +328,7 @@ describe('seed:demo divisions on an empty deployment', () => {
 
   test('a second run inserts nothing and changes nothing', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const read = () =>
       t.run(async (ctx) => ({
         leagues: await ctx.db.query('leagues').collect(),
@@ -337,7 +337,7 @@ describe('seed:demo divisions on an empty deployment', () => {
       }));
     const before = await read();
 
-    await expect(t.mutation(internal.seed.demo, {})).resolves.toEqual({
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       organizations: 0,
       locations: 0,
       customLevels: 0,
@@ -351,7 +351,7 @@ describe('seed:demo divisions on an empty deployment', () => {
 
   test('the demo seasons store players per side and no format', async () => {
     const t = setup();
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const seasons = await t.run((ctx) => ctx.db.query('seasons').collect());
     expect(seasons.map((row) => formatLabel(row.playersPerSide!)).sort()).toEqual([
       '4v4',
@@ -381,7 +381,9 @@ describe('seed:demo divisions on an empty deployment', () => {
       }));
     const before = await snapshot();
 
-    await expect(t.mutation(internal.seed.demo, {})).rejects.toThrow(/PREVIEW_ORIGIN_PATTERN/);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).rejects.toThrow(
+      /PREVIEW_ORIGIN_PATTERN/,
+    );
 
     expect(await snapshot()).toEqual(before);
   });

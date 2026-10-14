@@ -49,6 +49,11 @@ export async function checkDeployEnv(mode, reader) {
         'PREVIEW_ORIGIN_PATTERN is set; it must not be set on production (it admits preview origins and lets seed:demo write).',
       );
     }
+    if (names.has('DEMO_ACCOUNT_PASSWORD')) {
+      failures.push(
+        'DEMO_ACCOUNT_PASSWORD is set; it must not be set on production (it is the shared password of the demo accounts).',
+      );
+    }
   } else {
     throw new Error(USAGE);
   }

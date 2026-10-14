@@ -33,9 +33,12 @@ const USAGE =
 // seed:demo writes only where PREVIEW_ORIGIN_PATTERN is the preview constant, so the local backend
 // gets that value first. It admits only this project's Netlify preview origins, so it opens nothing
 // on a local backend.
-export function seedDemoCalls(previewOriginPattern) {
+export function seedDemoCalls(previewOriginPattern, demoAccountPassword = '') {
   return [
     ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', previewOriginPattern],
+    ...(demoAccountPassword === ''
+      ? []
+      : [['env', 'set', 'DEMO_ACCOUNT_PASSWORD', demoAccountPassword]]),
     ['run', 'seed:demo'],
   ];
 }
@@ -392,8 +395,16 @@ export async function main(
       }
       case 'seed-demo': {
         let inserted = '';
-        for (const args of seedDemoCalls(await previewOriginPattern())) {
-          inserted = await runConvex(args, target);
+        const password = env['DEMO_ACCOUNT_PASSWORD'] ?? '';
+        try {
+          for (const args of seedDemoCalls(await previewOriginPattern(), password)) {
+            inserted = await runConvex(args, target);
+          }
+        } catch (failure) {
+          // Only the redacted text may reach the output; no `cause`.
+          const text = failure instanceof Error ? failure.message : String(failure);
+          // eslint-disable-next-line preserve-caught-error -- a cause would carry the unredacted text.
+          throw new Error(password === '' ? text : text.split(password).join('<secret>'));
         }
         log(
           `e2e-convex: seed:demo on ${LOCAL_CONVEX_URL} inserted ` +
