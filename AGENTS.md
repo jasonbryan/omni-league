@@ -52,13 +52,11 @@ Read the matching conventions file before writing or reviewing code in that laye
 
 ## Code comments
 
-The code explains itself. A comment gives only a why the code cannot express.
-
 - Names, types, small functions, and named constants say what the code does. Where a comment would explain what, rename, extract a function, or name a constant instead.
-- A comment appears only for a why the code cannot express: an external constraint, a workaround for a library or platform bug (a link to the upstream bug is allowed), or a security reason. One line where possible.
-- History, the reason for a change, and references to this repo's issues, PRs, ADRs, reviews, or agent roles go in commits, PRs, and ADRs, never in code.
-- No TODOs or other pointers to future work in code. Such a comment goes only once an open issue names that code; if none does, open one first.
-- Test titles describe behaviour, with no issue numbers.
+- A comment gives a why the code cannot express: an external constraint, a workaround for a library or platform bug (a link to the upstream bug is allowed), or a security reason. One line where possible.
+- History, the reason for a change, and references to this repo's issues, PRs, ADRs, reviews, or agent roles go in commits, PRs, and ADRs.
+- Future work lives in an issue, not in code. Remove an existing pointer once an open issue names that code; if none does, open one first.
+- Test titles describe behaviour and carry no issue numbers.
 - Comments a tool reads stay, without tracker references: `eslint-disable*`, `@ts-expect-error`, `prettier-ignore`, `// @ts-check`, `/// <reference types>`, JSDoc type tags in `.js`/`.mjs` (`@type`, `@param {T}`, `@returns {T}`, `@typedef`), and the `# vX.Y.Z` after a pinned action ([ADR 0009](docs/decisions/0009-ci-pipeline.md)). Notes on vendored code keep their why.
 
 ## Secrets
