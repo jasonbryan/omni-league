@@ -1,5 +1,5 @@
 import type { GenericDatabaseWriter, GenericDataModel } from 'convex/server';
-import { type GenericId, v } from 'convex/values';
+import { type GenericId, type Infer, v } from 'convex/values';
 import { components, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import {
@@ -42,24 +42,18 @@ export const ping = internalQuery({
 // the calling transaction.
 const RESET_BATCH = 500;
 
-interface ResetCounts {
-  documents: number;
-  authDocuments: number;
-  scheduledFunctions: number;
-  files: number;
-}
+const resetCountsValidator = v.object({
+  documents: v.number(),
+  authDocuments: v.number(),
+  scheduledFunctions: v.number(),
+  files: v.number(),
+});
 
-// An action that clears the deployment one batch per transaction, so any amount of leftovers resets
-// without one transaction reading them all.
+// An action: each batch is its own transaction, under the read limit.
 export const reset = internalAction({
   args: {},
-  returns: v.object({
-    documents: v.number(),
-    authDocuments: v.number(),
-    scheduledFunctions: v.number(),
-    files: v.number(),
-  }),
-  handler: async (ctx): Promise<ResetCounts> => {
+  returns: resetCountsValidator,
+  handler: async (ctx): Promise<Infer<typeof resetCountsValidator>> => {
     assertTestDeployment();
     let documents = 0;
     for (const table of Object.keys(schema.tables)) {
@@ -79,17 +73,17 @@ export const reset = internalAction({
         if (count < RESET_BATCH) break;
       }
     }
-    // Cancelling keeps the row, so each batch starts after the last row the previous one saw.
+    // Cancelling keeps the row, so each batch resumes from the previous one's cursor.
     let scheduledFunctions = 0;
-    let after: number | null = null;
+    let cursor: string | null = null;
     for (;;) {
-      const batch: { cancelled: number; last: number | null } = await ctx.runMutation(
+      const batch: { cancelled: number; cursor: string; isDone: boolean } = await ctx.runMutation(
         internal.testing.resetScheduledBatch,
-        { after },
+        { cursor },
       );
       scheduledFunctions += batch.cancelled;
-      if (batch.last === null) break;
-      after = batch.last;
+      if (batch.isDone) break;
+      cursor = batch.cursor;
     }
     let files = 0;
     for (;;) {
@@ -133,22 +127,21 @@ export const resetAuthBatch = internalMutation({
 });
 
 export const resetScheduledBatch = internalMutation({
-  args: { after: v.union(v.null(), v.number()) },
-  returns: v.object({ cancelled: v.number(), last: v.union(v.null(), v.number()) }),
-  handler: async (ctx, { after }) => {
+  args: { cursor: v.union(v.null(), v.string()) },
+  returns: v.object({ cancelled: v.number(), cursor: v.string(), isDone: v.boolean() }),
+  handler: async (ctx, { cursor }) => {
     assertTestDeployment();
-    const jobs = await ctx.db.system
+    const { page, continueCursor, isDone } = await ctx.db.system
       .query('_scheduled_functions')
-      .withIndex('by_creation_time', (q) => (after === null ? q : q.gt('_creationTime', after)))
-      .take(RESET_BATCH);
+      .paginate({ numItems: RESET_BATCH, cursor });
     let cancelled = 0;
-    for (const job of jobs) {
+    for (const job of page) {
       if (job.state.kind === 'pending' || job.state.kind === 'inProgress') {
         await ctx.scheduler.cancel(job._id);
         cancelled++;
       }
     }
-    return { cancelled, last: jobs.at(-1)?._creationTime ?? null };
+    return { cancelled, cursor: continueCursor, isDone };
   },
 });
 

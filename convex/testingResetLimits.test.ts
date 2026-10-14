@@ -11,8 +11,8 @@ import { modules } from './test.setup';
 // the separate `documentsRead` limit (32,000 by default), so this limit stands in for the real
 // backend, where each delete counts as a read. convex-test counts each deleted document about twice
 // (once from the query, once from the delete).
-const LIMITS = { documentsRead: 4_096 };
 const READ_LIMIT = 4_096;
+const LIMITS = { documentsRead: READ_LIMIT };
 const HOUR = 60 * 60 * 1000;
 const CHUNK = 200;
 const PENDING_ARGS = { email: 'pending@example.test', failures: 1 };
@@ -45,8 +45,7 @@ function seedSignInFailures(t: T, total: number, prefix = 'row') {
   );
 }
 
-// `total` rows split between `user` and `session`, plus one `jwks` row.
-async function seedAuthRows(t: T, total: number): Promise<number> {
+async function seedUsersWithSessionsAndJwks(t: T, total: number): Promise<number> {
   const users = Math.floor(total / 2);
   const now = Date.now();
   const create = (ctx: Parameters<Parameters<T['run']>[0]>[0], input: Record<string, unknown>) =>
@@ -147,7 +146,7 @@ describe('testing:reset under the read limit', () => {
 
   test('clears more Better Auth rows than a transaction may read, jwks included', async () => {
     const t = setup();
-    const seeded = await seedAuthRows(t, READ_LIMIT + 104);
+    const seeded = await seedUsersWithSessionsAndJwks(t, READ_LIMIT + 104);
     expect(seeded).toBeGreaterThan(READ_LIMIT);
     expect(await nonEmptyAuthTables(t)).toEqual(['user', 'session', 'jwks']);
 
@@ -164,7 +163,7 @@ describe('testing:reset under the read limit', () => {
     const t = setup();
     const schemaRows = READ_LIMIT - 96;
     await seedSignInFailures(t, schemaRows);
-    const authRows = await seedAuthRows(t, READ_LIMIT - 96);
+    const authRows = await seedUsersWithSessionsAndJwks(t, READ_LIMIT - 96);
     await t.run(async (ctx) => {
       for (let i = 0; i < 3; i++)
         await ctx.scheduler.runAfter(HOUR, internal.testing.seedSignInFailures, PENDING_ARGS);
@@ -183,6 +182,8 @@ describe('testing:reset under the read limit', () => {
     expect(await fileCount(t)).toBe(0);
   }, 120_000);
 
+  // convex-test gives every row a distinct `_creationTime`, so this cannot force the equal timestamps
+  // that would break a `_creationTime` bound; the pagination cursor does not depend on them.
   test('finishes when old canceled and completed jobs outnumber a batch, and cancels the pending ones among them', async () => {
     const t = setup();
     const done = 600;
@@ -251,9 +252,9 @@ describe('IS_TEST guard on the reset batches', () => {
     await expect(t.mutation(internal.testing.resetAuthBatch, { model: 'user' })).rejects.toThrow(
       /IS_TEST/,
     );
-    await expect(t.mutation(internal.testing.resetScheduledBatch, { after: null })).rejects.toThrow(
-      /IS_TEST/,
-    );
+    await expect(
+      t.mutation(internal.testing.resetScheduledBatch, { cursor: null }),
+    ).rejects.toThrow(/IS_TEST/);
     await expect(t.mutation(internal.testing.resetFilesBatch, {})).rejects.toThrow(/IS_TEST/);
     expect(await signInFailureCount(t)).toBe(3);
   });
