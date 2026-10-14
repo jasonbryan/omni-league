@@ -273,10 +273,6 @@ export function tabKey(page: Page): 'Tab' | 'Alt+Tab' {
   return browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab';
 }
 
-/**
- * CSS visual reordering is not detected (manual check). A page with no focusable elements passes.
- * Shadow roots and iframe contents are not walked.
- */
 const TAB_ROUNDS = 2;
 const STEP_MARGIN = 5;
 const EXTRA_PRESSES_PER_DATE_FIELD = 5;
@@ -289,18 +285,22 @@ function defaultMaxSteps(focusableCount: number, dateFieldCount: number): number
   );
 }
 
+/**
+ * CSS visual reordering is not detected (manual check). A page with no focusable elements passes.
+ * Shadow roots and iframe contents are not walked.
+ */
 export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise<TabWalkResult> {
   const domOrder = await page.evaluate(setUpWalk, WALK_KEY);
   const failures: string[] = [];
   const tab = tabKey(page);
-  const multiPartFields = await page.evaluate(
+  const dateFieldCount = await page.evaluate(
     () =>
       document.querySelectorAll(
         'input[type="date"], input[type="month"], input[type="week"], input[type="time"], ' +
           'input[type="datetime-local"]',
       ).length,
   );
-  const maxSteps = options.maxSteps ?? defaultMaxSteps(domOrder.length, multiPartFields);
+  const maxSteps = options.maxSteps ?? defaultMaxSteps(domOrder.length, dateFieldCount);
   const same = (a: StepInfo | undefined, b: StepInfo): boolean =>
     !!a && a.where === 'element' && a.index === b.index && a.description === b.description;
   // A fresh Tab sequence starts once focus first leaves the page, so positive tabindex values are
