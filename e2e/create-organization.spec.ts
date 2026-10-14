@@ -77,6 +77,7 @@ test.describe('create an organization', () => {
 
   test('the empty form: labels, the address under Slug, axe, and Tab order', async ({
     page,
+    hasTouch,
   }, testInfo) => {
     await signUp(page, newUser('Form'));
     await openForm(page);
@@ -86,10 +87,10 @@ test.describe('create an organization', () => {
     await expect(page.locator('#slug-description')).toContainText(
       `Your public page will be at ${host}/organizations/your-slug`,
     );
-    // 36px controls, and 16px input text on phones so iOS does not zoom.
+    // 36px controls (44px on touch screens), and 16px input text on phones so iOS does not zoom.
     const phone = (page.viewportSize()?.width ?? 0) < 768;
     for (const control of [field(page, 'name'), field(page, 'slug'), createButton(page)]) {
-      expect((await control.boundingBox())?.height).toBe(36);
+      expect((await control.boundingBox())?.height).toBe(hasTouch ? 44 : 36);
     }
     for (const id of ['name', 'slug']) {
       await expect(field(page, id)).toHaveCSS('font-size', phone ? '16px' : '14px');

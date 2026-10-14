@@ -429,6 +429,9 @@ export async function expectAccessible(
   page: Page,
   options: AccessibilityOptions = {},
 ): Promise<void> {
+  // The sticky top bar covers whatever scrolled under it, and axe's target-size rule counts a control
+  // with a sliver showing as too small.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const results = await axeScan(page, options);
   await test.info().attach('axe-results', {
     body: JSON.stringify(
