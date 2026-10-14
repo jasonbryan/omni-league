@@ -369,7 +369,7 @@ describe('seasons.create', () => {
       ).toEqual({
         field: 'minimumRosterSize',
         code: 'minimumBelowFormat',
-        message: '7 v 7 needs at least 7 players. Enter 7 or more.',
+        message: '7v7 needs at least 7 players. Enter 7 or more.',
       });
       expect(await seasons(s.t)).toEqual([]);
 
@@ -444,7 +444,7 @@ describe('seasons.listForOrganizer', () => {
         startDate: '2026-09-01',
         endDate: '2026-11-15',
         registrationDeadline: '2026-08-25',
-        formatName: '7 v 7',
+        formatName: '7v7',
         minimumRosterSize: 9,
         status: 'draft',
       },

@@ -168,7 +168,7 @@ describe('PublicSeasonPage server render', () => {
     expect(meta(head, 'og:title')).toBe('Summer 2027');
     expect(meta(head, 'og:type')).toBe('website');
     expect(meta(head, 'og:description')).toBe(
-      'Jun 6 – Aug 29, 2027. 4 v 4, teams need at least 4 players.',
+      'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
     );
     expect(meta(head, 'og:url')).toBe(`${ORIGIN}${SEASON_PATH}`);
     const canonicals = head.querySelectorAll('link[rel="canonical"]');
@@ -185,7 +185,7 @@ describe('PublicSeasonPage server render', () => {
     ]);
     expect([...body.querySelectorAll('main dl > div')].map((row) => text(row))).toEqual([
       'Dates Jun 6 – Aug 29, 2027',
-      'Format 4 v 4',
+      'Format 4v4',
       'Team size Teams need at least 4 players',
       'Location North Beach Sand Courts',
     ]);

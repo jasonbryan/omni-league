@@ -67,13 +67,13 @@ async function fillFall2026(page: Page, minimum?: string) {
   await page.locator('#start-date').fill('2026-09-01');
   await page.locator('#end-date').fill('2026-11-15');
   await page.locator('#registration-deadline').fill('2026-08-25');
-  await page.getByRole('radio', { name: '7 v 7' }).check();
+  await page.getByRole('radio', { name: '7v7' }).check();
   await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
   if (minimum !== undefined) await page.locator('#minimum-roster-size').fill(minimum);
 }
 
 test.describe('League management: an org admin', () => {
-  test('creates Fall 2026 as a draft: listed as Draft with 7 v 7, the minimum, and the deadline', async ({
+  test('creates Fall 2026 as a draft: listed as Draft with 7v7, the minimum, and the deadline', async ({
     page,
   }, testInfo) => {
     const { tenant, base } = await memberOf(page, 'orgAdmin');
@@ -92,7 +92,7 @@ test.describe('League management: an org admin', () => {
     await expect(status).toContainText('Fall 2026 created as a draft.');
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#minimum-roster-size')).toHaveValue('');
-    await expect(page.getByRole('radio', { name: '7 v 7' })).not.toBeChecked();
+    await expect(page.getByRole('radio', { name: '7v7' })).not.toBeChecked();
     await expect(submit(page)).toBeFocused();
 
     await expect(rows(page)).toHaveCount(1);
@@ -101,12 +101,12 @@ test.describe('League management: an org admin', () => {
     await expect(row.locator('[data-slot="badge"]')).toHaveText(['Draft']);
     await expect(row).toContainText('Sep 1 – Nov 15, 2026');
     await expect(row).toContainText('Registration deadline Aug 25, 2026');
-    await expect(row).toContainText('7 v 7 · at least 7 players');
+    await expect(row).toContainText('7v7 · at least 7 players');
     await screenshot(page, testInfo, '125-league-created');
     await expectAccessible(page);
   });
 
-  test('a minimum of 6 for 7 v 7 creates nothing and names 7; 9 creates the season with 9', async ({
+  test('a minimum of 6 for 7v7 creates nothing and names 7; 9 creates the season with 9', async ({
     page,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin');
@@ -114,7 +114,7 @@ test.describe('League management: an org admin', () => {
     await fillFall2026(page, '6');
     await submit(page).click();
     await expect(page.locator('#minimum-roster-size-error')).toHaveText(
-      '7 v 7 needs at least 7 players. Enter 7 or more.',
+      '7v7 needs at least 7 players. Enter 7 or more.',
     );
     await expect(page.locator('#minimum-roster-size')).toBeFocused();
     await expect(rows(page)).toHaveCount(0);
@@ -123,7 +123,7 @@ test.describe('League management: an org admin', () => {
     await page.locator('#minimum-roster-size').fill('9');
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first()).toContainText('7 v 7 · at least 9 players');
+    await expect(rows(page).first()).toContainText('7v7 · at least 9 players');
   });
 
   test('refuses a deadline on the start date and an end before the start, then accepts the day before', async ({
@@ -176,10 +176,10 @@ test.describe('League management: an org admin', () => {
       await page.locator('#end-date').fill('2026-11-15');
       await page.locator('#registration-deadline').fill('2026-08-25');
       await expect(page.getByRole('radio')).toHaveCount(3);
-      await page.getByRole('radio', { name: '4 v 4' }).check();
+      await page.getByRole('radio', { name: '4v4' }).check();
       await submit(page).click();
       await expect(rows(page)).toHaveCount(1);
-      await expect(rows(page).first()).toContainText('4 v 4 · at least 4 players');
+      await expect(rows(page).first()).toContainText('4v4 · at least 4 players');
     });
   });
 
@@ -234,10 +234,10 @@ test.describe('League management: an org admin', () => {
     await page.locator('#end-date').fill('2026-11-15');
     await page.locator('#registration-deadline').fill('2026-08-25');
     await expect(page.getByRole('radio')).toHaveCount(1);
-    await page.getByRole('radio', { name: '10 v 10' }).check();
+    await page.getByRole('radio', { name: '10v10' }).check();
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first()).toContainText('10 v 10 · at least 10 players');
+    await expect(rows(page).first()).toContainText('10v10 · at least 10 players');
   });
 });
 

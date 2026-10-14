@@ -139,7 +139,7 @@ describe('seasons.listPublic', () => {
         slug: 'summer-2027',
         startDate: '2027-06-02',
         endDate: '2027-08-25',
-        formatName: '7 v 7',
+        formatName: '7v7',
       },
     ]);
     expect(JSON.stringify(result)).not.toMatch(/_id|_creationTime|organizationId|leagueId|status/);
