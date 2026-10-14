@@ -1,9 +1,3 @@
-// Publishing a draft league (#69), tester coverage beyond organization-leagues-publish.spec.ts, at
-// 375px and 1280px: the dialog's semantics and axe in every state (confirm, Publishing, failure,
-// result), the focus trap and Escape (also after a press on the scrim), the failure state through a
-// held mutation, an offline press that sends nothing, a keyboard-only publish that leaves a visible
-// focus ring on the result and moves the Overview tile, and two admins publishing the same league at
-// once. Local backend only; the explicit widths run in the chromium-desktop project.
 import type { Page, WebSocketRoute } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -67,7 +61,6 @@ const publishButton = (page: Page, league: string) =>
 const result = (page: Page) =>
   page.getByRole('main').locator('section[aria-labelledby="leagues-heading"] [role="status"]');
 
-/** Holds every `leagues:publish` mutation the page sends, and counts the ones sent. */
 async function holdPublish(page: Page) {
   const state = {
     held: [] as { requestId: number }[],
@@ -123,7 +116,6 @@ for (const width of [375, 1280]) {
         await trigger.focus();
         await page.keyboard.press('Enter');
         await expect(dialog(page)).toBeVisible();
-        // Semantics of the dialog.
         const semantics = await dialog(page).evaluate((element) => {
           const labelledby = element.getAttribute('aria-labelledby');
           const describedby = element.getAttribute('aria-describedby');
@@ -143,17 +135,14 @@ for (const width of [375, 1280]) {
         expect(semantics.modal).toBe('true');
         expect(semantics.name).toBe('Publish Sunday Reverse Coed 4s?');
         expect(semantics.description).toContain('It will appear on your public page');
-        // The alertdialog container has the dialog's own box, inside the viewport.
         expect(semantics.width).toBeGreaterThan(0);
         expect(semantics.left).toBeGreaterThanOrEqual(0);
         expect(semantics.right).toBeLessThanOrEqual(width);
-        // Everything outside the overlay is hidden from assistive technology while it is open.
         await expect(page.locator('app-root')).toHaveAttribute('aria-hidden', 'true');
         await expect(dialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
         await shot(page, '69t-confirm');
         expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
 
-        // Focus trap: many Tabs and Shift+Tabs never leave the dialog.
         const inside = () =>
           page.evaluate(() => !!document.activeElement?.closest('[role="alertdialog"]'));
         for (let i = 0; i < 8; i++) {
@@ -165,8 +154,6 @@ for (const width of [375, 1280]) {
           expect(await inside(), `Shift+Tab ${i}`).toBe(true);
         }
 
-        // A press on the scrim does not close it. Focus is on the page for a moment, and Tab goes
-        // into the dialog, never to the shell behind it; Escape still closes it afterwards.
         await page.mouse.click(2, 2);
         await expect(dialog(page)).toBeVisible();
         await page.keyboard.press('Tab');
@@ -175,7 +162,6 @@ for (const width of [375, 1280]) {
         await expect(dialog(page)).toHaveCount(0);
         await expect(trigger).toBeFocused();
 
-        // Publishing: held mutation, "Publishing…", dialog stays, Escape and Cancel do nothing.
         await trigger.click();
         await dialog(page).getByRole('button', { name: 'Publish league' }).click();
         await expect(dialog(page).getByRole('button', { name: /Publishing/ })).toBeVisible();
@@ -189,13 +175,11 @@ for (const width of [375, 1280]) {
         await expect(cancel).toHaveAttribute('aria-disabled', 'true');
         await cancel.click({ force: true });
         await expect(dialog(page)).toBeVisible();
-        // A second press while publishing sends nothing more.
         await dialog(page)
           .getByRole('button', { name: /Publishing/ })
           .click({ force: true });
         expect(control.held).toHaveLength(1);
 
-        // Failure: the server answers the held mutation with an error.
         control.ws!.send(
           JSON.stringify({
             type: 'MutationResponse',
@@ -217,7 +201,6 @@ for (const width of [375, 1280]) {
           page.locator('#leagues-list > li').filter({ hasText: 'Sunday' }),
         ).toContainText('Draft');
 
-        // Success: release the mutation (new try, not held).
         control.hold = false;
         await trigger.click();
         await dialog(page).getByRole('button', { name: 'Publish league' }).click();
@@ -279,7 +262,6 @@ test('two admins publish the same league at once: it is counted once', async ({
         { timeout: 15_000 },
       );
     }
-    // The public page: 2 published leagues (Coed 7v7 Rec, Sunday), 1 beach volleyball league.
     const visitor = await browser.newPage({ baseURL });
     await visitor.goto(tenant.path);
     await expect(visitor.locator('body')).toContainText('Sunday Reverse Coed 4s');

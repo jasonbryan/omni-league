@@ -1,5 +1,5 @@
-// Child Playwright run for `console-fixture.spec.ts` (#62 tester): the outcome of a test that
-// skips itself can only be read from outside the run. No web server: the probes use setContent.
+// The outcome of a test that skips itself can only be read from outside the run. No web server: the
+// probes use setContent.
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({

@@ -1,5 +1,3 @@
-// Install to the Home Screen (#80, ADR 0013): the head tags, the web app manifest, and the icons.
-// One test, one page load, chromium-desktop only: the checks do not depend on a viewport.
 // Installability itself is the owner's device check: `Page.getInstallabilityErrors` needs Chrome's
 // browser layer (the headless shell lacks it) and Playwright contexts report `in-incognito`.
 import type { APIRequestContext } from '@playwright/test';
@@ -27,7 +25,6 @@ const EXPECTED_MANIFEST = {
   ],
 };
 
-/** Raw-HTML head tags, in any attribute order: `[name, pattern]`. */
 const HEAD_TAGS: readonly (readonly [string, RegExp])[] = [
   [
     'manifest link',
@@ -44,7 +41,6 @@ const HEAD_TAGS: readonly (readonly [string, RegExp])[] = [
   ],
 ];
 
-/** `/` answers 200, the Client routes `/app`, `/sign-up` (#62), and `/sign-in` (#63) 200, an unknown path 404. */
 const PAGES = [
   ['/', 200],
   ['/app', 200],
@@ -53,7 +49,6 @@ const PAGES = [
   ['/this-page-does-not-exist', 404],
 ] as const;
 
-/** The width and height in a PNG's IHDR chunk (8-byte signature, 4-byte length, `IHDR`). */
 function pngSize(body: Buffer): string {
   expect(body.subarray(1, 4).toString('latin1')).toBe('PNG');
   expect(body.toString('latin1', 12, 16)).toBe('IHDR');
@@ -78,7 +73,6 @@ test.describe('install to the Home Screen', () => {
     request,
     context,
   }) => {
-    // 1. Raw HTML (no JavaScript) carries the head on a client route, a missing route, and `/`.
     for (const [path, status] of PAGES) {
       const { status: actual, html } = await fetchRawHtml(request, path);
       expect(actual, path).toBe(status);
@@ -86,13 +80,11 @@ test.describe('install to the Home Screen', () => {
       expect(html, path).not.toContain('apple-touch-startup-image');
     }
 
-    // 2. The manifest: 200, a JSON media type, exactly the scoped fields and values.
     const manifestResponse = await request.get('/manifest.webmanifest');
     expect(manifestResponse.status()).toBe(200);
     expect(manifestResponse.headers()['content-type']).toMatch(/^application\/(manifest\+)?json/);
     expect(await manifestResponse.json()).toEqual(EXPECTED_MANIFEST);
 
-    // 3. Every icon the manifest names, and the apple-touch icon: 200, image/png, declared size.
     for (const icon of EXPECTED_MANIFEST.icons) {
       await expectPng(request, `/${icon.src}`, icon.sizes);
     }
@@ -101,11 +93,9 @@ test.describe('install to the Home Screen', () => {
     expect(favicon.status()).toBe(200);
     expect(favicon.headers()['content-type']).toMatch(/icon/);
 
-    // 4. Chrome's own read of the page's manifest (Chrome DevTools Protocol): no errors, and the
-    // raw `data` string, parsed as JSON, equals the scoped manifest. The parsed `manifest` field
-    // is experimental and its shape varies (colours as rgba(), display as an enum name, no
-    // short_name), so when it is present only the fields it carries are checked, with URLs
-    // resolved against the manifest's own URL.
+    // The parsed `manifest` field is experimental and its shape varies (colours as rgba(), display
+    // as an enum name, no short_name), so when it is present only the fields it carries are
+    // checked, with URLs resolved against the manifest's own URL.
     await page.goto('/');
     const session = await context.newCDPSession(page);
     const result = (await session.send('Page.getAppManifest')) as {

@@ -10,20 +10,15 @@ export const SPORT_NAMES: Record<Sport, string> = {
 };
 
 export interface TenantSeed {
-  /** Display name before the unique suffix; default "E2E Org". */
   name?: string;
   locations?: { name: string; address: string }[];
-  /** A league is `published` unless the seed says `draft` (#66). */
   leagues?: { name: string; sport: Sport; locations: string[]; status?: 'draft' | 'published' }[];
 }
 
 export interface Tenant {
-  /** The organization's name, with this test's unique suffix. */
   name: string;
   slug: string;
-  /** `/organizations/<slug>`. */
   path: string;
-  /** Sorted by name, as the page lists them. */
   locations: { name: string; address: string }[];
   leagues: { name: string; sport: Sport; locations: string[]; status?: 'draft' | 'published' }[];
 }
@@ -35,12 +30,9 @@ const byName = <T extends { name: string }>(items: T[]): T[] =>
   });
 
 /**
- * Creates a tenant through `testing:seedLeague` (ADR 0005, per-test tenant fixture): an
- * organization with a unique name and slug, with the given locations and leagues. Call it from the
- * test, so tests assert only on their own tenant and no reset runs between them. A worker-scoped
- * fixture may call it once for read-only tests to share, and a test that writes still seeds its
- * own; a test whose click path ends in a refusal may share one only under the rules in ADR 0005,
- * "Amendment: worker-scoped tenants for read-only tests (#125)". Local runs only.
+ * Call it from the test, so tests assert only on their own tenant and no reset runs between them. A
+ * worker-scoped fixture may call it once for read-only tests to share; a test that writes still
+ * seeds its own. Local runs only.
  */
 export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
   const id = randomBytes(4).toString('hex');
@@ -58,7 +50,6 @@ export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
   };
 }
 
-/** `count` locations named "Location 01", "Location 02", ... so their order is their number. */
 export function numberedLocations(count: number): { name: string; address: string }[] {
   return Array.from({ length: count }, (_, i) => ({
     name: `Location ${String(i + 1).padStart(2, '0')}`,
@@ -66,20 +57,17 @@ export function numberedLocations(count: number): { name: string; address: strin
   }));
 }
 
-/** A season to seed (`testing:seedSeason`): a published one unless the seed says `draft`. */
 export interface SeasonSeed {
   name: string;
   slug: string;
-  /** `YYYY-MM-DD`; the public league page lists the newest start date first. */
   startDate: string;
   endDate: string;
   status?: 'draft' | 'published';
 }
 
 /**
- * `count` published seasons "Season 01", "Season 02", ... (slugs `season-01`, ...), season n
- * starting on the 1st of a month n months after December 2025, so the higher the number the later
- * it starts and the earlier the public league page lists it.
+ * Season n starts on the 1st of a month n months after December 2025, so the higher the number the
+ * later it starts and the earlier the public league page lists it.
  */
 export function numberedSeasons(count: number): SeasonSeed[] {
   return Array.from({ length: count }, (_, i) => {
@@ -95,10 +83,7 @@ export function numberedSeasons(count: number): SeasonSeed[] {
   });
 }
 
-/**
- * Adds seasons to a beach volleyball (4v4) league of the tenant through `testing:seedSeason`
- * (#125), in one go. Local runs only.
- */
+/** Local runs only. */
 export async function seedSeasons(
   tenant: Tenant,
   leagueSlug: string,
@@ -124,9 +109,8 @@ export async function seedSeasons(
 }
 
 /**
- * The five locations of a tall page, the most a list shows (#100): numbered as above, with
- * addresses that wrap over several lines, so the fifth row starts below the fold at 1280x720 and
- * at 360x800.
+ * Addresses that wrap over several lines, so the fifth row starts below the fold at 1280x720 and at
+ * 360x800.
  */
 export function tallLocations(): { name: string; address: string }[] {
   return numberedLocations(5).map((location, i) => ({

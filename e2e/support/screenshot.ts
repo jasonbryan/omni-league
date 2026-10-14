@@ -3,9 +3,8 @@ import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 /**
- * The file a screenshot is saved to: `screenshots/<name>-<width>.png`, with `-<browser>` added for
- * a browser other than Chromium, because `webkit-mobile` and `chromium-mobile` share the 360 px
- * width and two workers would otherwise write the same file.
+ * `-<browser>` is added for a browser other than Chromium, because `webkit-mobile` and
+ * `chromium-mobile` share the 360 px width and two workers would otherwise write the same file.
  */
 export function screenshotFile(
   rootDir: string,
@@ -18,10 +17,9 @@ export function screenshotFile(
 }
 
 /**
- * A full-page PNG for the tester's mockup comparison, at this project's width. Give each test its
- * own `name` (add the role or case to a name a loop reuses): two tests that run on different
- * workers and share a name still write one file, and the last one wins. The write goes to a
- * temporary file first and is renamed into place, so the file is never half written.
+ * Give each test its own `name` (add the role or case to a name a loop reuses): two tests that run
+ * on different workers and share a name still write one file, and the last one wins. The write goes
+ * to a temporary file first and is renamed into place, so the file is never half written.
  */
 export async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
