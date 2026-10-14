@@ -6,7 +6,6 @@ import {
   redactedErrorText,
 } from './server-error-response';
 
-// Plain-text responses and the path-only 400 rule of the SSR entry (#37, from #24 / PR #38).
 describe('server error responses', () => {
   it.each(['/%E0%A4%A', '/o/%', '/o/%E0%A4%A', '/%'])('treats %s as a malformed path', (path) => {
     expect(isMalformedPath(path)).toBe(true);

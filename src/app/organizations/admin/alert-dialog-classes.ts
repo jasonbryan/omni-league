@@ -1,9 +1,6 @@
-// The mockups' classes for the publish confirmation (helm Nova alert dialog, size default), unmerged
-// and as static strings, so the admin chunks load no class-merging code (button-classes.ts). Shared
-// by the league dialog (#69) and the season dialog (#126). The mockups centre the content with
-// `fixed` and a translate; here the CDK's global position strategy centres the pane, and the
-// content is its normal-flow child, so the `role="alertdialog"` container that wraps it has the
-// dialog's own box (a container around a fixed child has none, and reads as hidden).
+// Unmerged, as static strings, so the admin chunks load no class-merging code (button-classes.ts). The mockups centre the content with `fixed` and a translate;
+// here the CDK's global position strategy centres the pane and the content is its normal-flow child, so the `role="alertdialog"` container that wraps it has
+// the dialog's own box (a container around a fixed child has none, and reads as hidden).
 
 export const ALERT_DIALOG_CONTENT =
   'group/alert-dialog-content grid w-[calc(100vw-2rem)] bg-popover text-popover-foreground ring-foreground/10 gap-4 rounded-xl p-4 ring-1 shadow-xl data-[size=default]:max-w-xs data-[size=default]:sm:max-w-sm';

@@ -35,14 +35,12 @@ const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
 
-/** The one active subscription to the query `name` (the header query by default). */
 function subscription(name = HEADER): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
   expect(active, name).toHaveLength(1);
   return active[0];
 }
 
-/** Emits the header and page 1 of both lists for `page`, as the three queries return them. */
 function emit(page: PublicOrganizationPage): void {
   for (const [name, value] of Object.entries(queryResults(page))) subscription(name).emit(value);
 }
@@ -64,8 +62,7 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
-// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
-// next one, nor a later spec file (spec files share one global).
+// Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
 });
@@ -173,7 +170,6 @@ describe('OrganizationPage', () => {
       expect(rows.map((row) => text(row.querySelector('h3 a')))).toEqual(
         GULF_COAST.leagues.map((league) => league.name),
       );
-      // Their layout is otherwise unchanged: the name is the row's h3, and the locations are not links.
       expect(rows.every((row) => row.querySelector('p a') === null)).toBe(true);
       const locations = host(harness).querySelectorAll(
         'section[aria-labelledby="locations-heading"] h3 a',
@@ -229,8 +225,6 @@ describe('OrganizationPage', () => {
     });
 
     it('updates the rows and tiles in place when page 1 or the totals change', async () => {
-      // A league that sorts first joins: page 1 gains it and drops its last row, and the totals
-      // grow. The same subscriptions deliver it.
       const before = client.subscriptions.length;
       emit({
         ...GULF_COAST,
@@ -250,7 +244,7 @@ describe('OrganizationPage', () => {
         'Adult League',
         ...GULF_COAST.leagues.slice(0, 4).map((league) => league.name),
       ]);
-      expect(host(harness).querySelector('#league-1 p')).toBeNull(); // no locations: no line
+      expect(host(harness).querySelector('#league-1 p')).toBeNull();
       expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual(['6', '4', '3']);
     });
 

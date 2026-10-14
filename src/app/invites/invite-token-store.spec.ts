@@ -6,9 +6,6 @@ import { routes } from '../app.routes';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY, InviteTokenStore } from './invite-token-store';
 
-// The token of an invite link lives in the fragment of `/invites/accept#<token>`, which no request
-// carries. The route guard moves it into sessionStorage and takes it out of the URL (#70).
-
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
 
 @Component({ template: 'accept' })

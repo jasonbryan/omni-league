@@ -15,21 +15,7 @@ const compareNames = (x: string, y: string) => {
   return a < b ? -1 : a > b ? 1 : 0;
 };
 
-/**
- * The sidebar of a league organizer on the league management page (#125;
- * design/mockups/125-126-seasons.html states 12 and 13), rendered in the app shell's sidebar slot:
- * the organization and "League organizer", "Your leagues" with every league assigned to the caller
- * in this organization (#196, from `organizations.listMine`, in the order it gives) and the one
- * being managed marked, then Public page and Your organizations. A league organizer has no admin
- * area (#65), so this replaces the admin sidebar. While the list loads, and if it fails, "Your
- * leagues" holds only the current league, which is always listed.
- *
- * Every class string below is the approved mockup's, written as a static attribute
- * (design/mockups/125-126-seasons.html state 12); league-sidebar.spec.ts checks them.
- *
- * The shell renders this twice while the phone sheet is open (the desktop column and the sheet),
- * so it carries no `id`: the list takes its name from `aria-label`.
- */
+/** The shell renders this twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`: the list takes its name from `aria-label`. */
 @Component({
   selector: 'app-league-sidebar',
   imports: [NgIcon, RouterLink],
@@ -116,11 +102,6 @@ export class LeagueSidebar {
   );
 
   protected readonly initials = computed(() => initials(this.league().organization.name));
-  /**
-   * The caller's assigned leagues in this organization, as `listMine` gives them (sorted by name),
-   * with the league being managed marked. Until the answer comes, and if it fails or does not hold
-   * the current league, the current league is listed on its own or added in name order.
-   */
   protected readonly leagues = computed(() => {
     const { name, slug, organization } = this.league();
     const assigned =

@@ -4,12 +4,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideRotateCw, lucideWifiOff } from '@ng-icons/lucide';
 
 /**
- * The not-saved view (#82, design/mockups/82-offline-pages.html state 2): what a public page shows
- * when the app is offline (`injectOnline()` false) and the page has no value, live, transferred,
- * or saved. It goes inside `<main>` of an app shell with no sidebar, in the server-error view's
- * card. The page's live subscription stays open, so the page replaces this view by itself when
- * the connection returns.
- *
+ * The page's live subscription stays open, so the page replaces this view by itself when the connection returns.
  * It renders only in the browser (`online` is always true on the server), so it sets no status.
  */
 @Component({
@@ -34,8 +29,7 @@ import { lucideRotateCw, lucideWifiOff } from '@ng-icons/lucide';
         Pages you open while connected stay available here offline. This one will appear as soon as
         you're connected, or you can try again.
       </p>
-      <!-- A plain link to the same path, as the server-error view's (not-saved-view.spec.ts checks
-           the classes match). A full load also restarts a connection stuck in back-off. -->
+      <!-- A plain link to the same path, as the server-error view's. A full load also restarts a connection stuck in back-off. -->
       <a
         [href]="retryHref()"
         data-slot="button"

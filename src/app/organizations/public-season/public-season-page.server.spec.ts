@@ -23,8 +23,7 @@ import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
 import { provideSpartanHlm } from '../../ui/utils';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
-// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each
-// test (see dom-globals.ts).
+// renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
@@ -64,11 +63,6 @@ interface Rendered {
   queries: { name: string; args: unknown }[];
 }
 
-/**
- * Renders `path` through the app's real routes the way `@angular/ssr` does for a Server route:
- * REQUEST is the request, and RESPONSE_INIT starts with the route's headers. `query` answers each
- * Convex query by function name (`seasons:getPublicPage`).
- */
 async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
@@ -124,7 +118,6 @@ async function render(
 
 const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
-/** A link's path, query string, and fragment: a router link's `href` is absolute in this render. */
 const href = (link: Element | null | undefined) => {
   const url = new URL(link?.getAttribute('href') ?? '', ORIGIN);
   return `${url.pathname}${url.search}${url.hash}`;
@@ -142,7 +135,6 @@ const slugs = {
 const SERVER_ERROR = 'This page is temporarily unavailable';
 const CONNECTION_REFUSED = 'connect ECONNREFUSED internal-db.corp.example:443';
 
-/** Answers each query with its result for `options`. */
 const answer =
   (options: Parameters<typeof seasonQueryResults>[0] = {}) =>
   (name: string) =>
@@ -155,11 +147,10 @@ describe('PublicSeasonPage server render', () => {
       answer(),
     );
 
-    // One fetch per query, with the route's slugs only.
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'seasons:getPublicPage', args: slugs },
     ]);
-    expect(responseInit.status).toBeUndefined(); // 200
+    expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
@@ -199,7 +190,7 @@ describe('PublicSeasonPage server render', () => {
     expect(body.querySelector('a')?.getAttribute('href')).toBe(`${SEASON_PATH}#main`);
     expect([...body.querySelectorAll('header a')].map(text)).toEqual(['Omni League', 'Sign in']);
 
-    // Neither the token nor any other query parameter reaches the cacheable HTML (PR #90).
+    // Neither the token nor any other query parameter reaches the cacheable HTML.
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');

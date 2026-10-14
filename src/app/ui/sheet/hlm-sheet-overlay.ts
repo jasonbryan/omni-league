@@ -4,9 +4,8 @@ import { BrnSheetOverlay } from '@spartan-ng/brain/sheet';
 import { hlm } from '../utils';
 import type { ClassValue } from 'clsx';
 
-// Vendored from spartan helm 1.6.0 (Nova style). Local change (#75), to keep when re-copying from
-// upstream: the scrim is the approved `bg-foreground/50` with no backdrop blur (App shell spec in
-// design/mockups/61-token-sheet.html), in place of Nova's 10% black with a blur.
+// Vendored from spartan helm 1.6.0 (Nova style). Local change, to keep when re-copying from upstream:
+// the scrim is the approved `bg-foreground/50` with no backdrop blur, in place of Nova's 10% black with a blur.
 @Directive({
   selector: '[hlmSheetOverlay],hlm-sheet-overlay',
   hostDirectives: [BrnSheetOverlay],

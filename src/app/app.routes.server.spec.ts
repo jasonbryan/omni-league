@@ -21,13 +21,9 @@ import { Placeholder } from './placeholder/placeholder';
 import { SignInPage } from './sign-in/sign-in-page';
 import { SignUpPage } from './sign-up/sign-up-page';
 
-// ADR 0006's public-page header: the not-found render is anonymous and the same for every visitor.
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
-// ADR 0010 item 4 (amended, PR #102): a Client route's shell names this build's hashed bundles, so no
-// shared cache keeps it past a deploy.
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 
-/** The directives of a `Cache-Control` value, by lower-case name (`true` when it has no value). */
 function directives(value: string): Map<string, string | true> {
   return new Map(
     value
@@ -41,27 +37,21 @@ function directives(value: string): Map<string, string | true> {
   );
 }
 
-// Route tables fixed by ADR 0006 "Rendering specification" for the scaffold (#10), with the
-// `app/**` shell header from ADR 0010 item 4 (#37), the `**` not-found header (#23), the public
-// organization page (#60), and sign-up and the signed-in app (#62).
 describe('Route tables', () => {
   it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, organizations/:orgSlug Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
-      // #62: no auth code runs on the server, so these render in the browser only.
       {
         path: 'sign-up',
         renderMode: RenderMode.Client,
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
       },
       {
-        // #63: the same, for sign-in.
         path: 'sign-in',
         renderMode: RenderMode.Client,
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
       },
       {
-        // #70: the invite link's token is a bearer secret, so the page is never given a referrer.
         path: 'invites/accept',
         renderMode: RenderMode.Client,
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
@@ -77,19 +67,16 @@ describe('Route tables', () => {
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
       },
       {
-        // ADR 0006: a public page that reads Convex data, anonymous and cacheable.
         path: 'organizations/:orgSlug',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },
       {
-        // #127: the public league page, the same.
         path: 'organizations/:orgSlug/leagues/:leagueSlug',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },
       {
-        // #128: the public season page, the same.
         path: 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
@@ -102,9 +89,6 @@ describe('Route tables', () => {
     ]);
   });
 
-  // PR #102 tester round 4: an edge copy of a Client shell stored as a deploy went live kept naming
-  // the previous build's deleted `main-*.js` (a blank page) for as long as its `s-maxage`. Netlify
-  // deletes the old build's hashed files at once, so no Client shell may live in a shared cache.
   it.each(
     serverRoutes
       .filter((route) => route.renderMode === RenderMode.Client)
@@ -143,7 +127,6 @@ describe('Route tables', () => {
     const [home] = routes;
     expect(home.component).toBeUndefined();
     expect(await home.loadComponent?.()).toBe(Placeholder);
-    // The not-found view sets its own title, so a later navigation home must set it back.
     expect(home.title).toBe('Omni League');
   });
 
@@ -211,18 +194,13 @@ describe('Route tables', () => {
     expect(app?.canActivate).toBeUndefined();
     const [account, create, league, admin, notFound, ...rest] = app?.children ?? [];
     expect(rest).toEqual([]);
-    // #64: ahead of the not-found route, so /app/organizations/new is not a 404.
     expect(create?.path).toBe('organizations/new');
     expect(create?.title).toBe('Create an organization | Omni League');
     expect(create?.canActivate).toEqual([requireSignedIn]);
     expect(await create?.loadComponent?.()).toBe(CreateOrganizationPage);
-    // #125: the league management page, a Client route like the rest of /app/** (so no shared cache
-    // keeps its shell). Ahead of the admin area, whose `organizations/:slug` is a shorter prefix.
     expect(league?.path).toBe('organizations/:orgSlug/leagues/:leagueSlug');
     expect(league?.canActivate).toEqual([requireSignedIn]);
     expect(await league?.loadComponent?.()).toBe(LeaguePage);
-    // #65: after organizations/new (the reserved slug `new` keeps them apart), ahead of not-found.
-    // Overview is the area's own path; Locations, Leagues (#66), and Staff (#67) are below it.
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);

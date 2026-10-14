@@ -10,16 +10,9 @@ import {
   type CallRef,
 } from './index';
 
-// The call-time offline guard (#88, ADR 0013 Decision 3A) against the real `ConvexClient` from
-// `convex` 1.46, with only its WebSocket replaced. The other guard specs use the fake client, whose
-// connection state is set by hand; these check that the real client reports a closed socket as
-// disconnected, notifies the guard on reconnect, and that a refused change never reaches any socket,
-// not even the one opened after the connection returns (nothing is queued and sent later).
-
 const createTeam = makeFunctionReference<'mutation', { tag: string }, string>('teams:create');
 const sendInvite = makeFunctionReference<'action', { tag: string }, string>('invites:send');
 
-/** A WebSocket the test opens and drops by hand; it records every frame the client sends. */
 class TestSocket {
   static instances: TestSocket[] = [];
   readonly sent: string[] = [];
@@ -41,12 +34,10 @@ class TestSocket {
     this.readyState = 3;
     queueMicrotask(() => this.onclose?.({ code: 1000, reason: '' }));
   }
-  /** The server accepts the connection. */
   open(): void {
     this.readyState = 1;
     this.onopen?.();
   }
-  /** The network drops the connection (abnormal closure). */
   drop(): void {
     this.readyState = 3;
     this.onclose?.({ code: 1006, reason: '' });
@@ -55,7 +46,6 @@ class TestSocket {
 
 const latestSocket = () => TestSocket.instances[TestSocket.instances.length - 1];
 
-/** Mutation and action frames sent on any socket, as `<type>:<tag>`. */
 function changeFrames(): string[] {
   return TestSocket.instances.flatMap((socket) =>
     socket.sent

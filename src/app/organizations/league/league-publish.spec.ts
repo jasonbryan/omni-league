@@ -13,10 +13,6 @@ import {
   SEASONS,
 } from './testing/league-harness';
 
-// Publishing from the league management page (#126), design/mockups/125-126-seasons.html states 16
-// to 23: the Publish button on a Draft row, the confirmation dialog, the publishing state, the
-// result, the failure, the offline refusal, and the message of a draft league for each role.
-
 const FALL = SEASONS[0];
 const SUMMER = SEASONS[1];
 const SPRING_DRAFT = {
@@ -64,7 +60,6 @@ describe('LeagueManagement: publishing a season', () => {
     await o.flush();
   }
 
-  /** Confirms and lets `seasons.publish` answer; the list then shows the season as published. */
   async function confirmAndPublish(season = FALL) {
     dialogButton('Publish season').click();
     await o.flush();
@@ -199,7 +194,6 @@ describe('LeagueManagement: publishing a season', () => {
       expect(cancel.getAttribute('aria-disabled')).toBe('true');
       expect(cancel.hasAttribute('disabled')).toBe(false);
       cancel.click();
-      // A second press, and Escape, do nothing while the call is out.
       busy.click();
       document.activeElement!.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
@@ -227,7 +221,6 @@ describe('LeagueManagement: publishing a season', () => {
       expect(text(region.querySelector('[data-slot="alert-description"]'))).toBe(
         'It’s on the league’s public page now. View public page',
       );
-      // The link to the league's public page (#127), built from the route's slugs.
       const link = region.querySelector('a')!;
       expect(text(link)).toBe('View public page');
       expect(link.getAttribute('href')).toBe(
@@ -311,7 +304,7 @@ describe('LeagueManagement: publishing a season', () => {
     });
   });
 
-  describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+  describe('offline', () => {
     afterEach(() => vi.restoreAllMocks());
 
     it('the button looks disabled but stays focusable; a press shows the offline alert and sends nothing', async () => {
@@ -367,7 +360,6 @@ describe('LeagueManagement: publishing a season', () => {
       const link = note.querySelector('a')!;
       expect(link.getAttribute('href')).toBe('/app/organizations/gulf-coast-sport-social/leagues');
       expect(text(link)).toBe('Publish Coed 7v7 Rec in Leagues');
-      // The link flows inline with the sentence, as in the mockup.
       expect(link.classList.contains('inline-block')).toBe(false);
       expect(page.querySelector('#seasons-list button')).toBeNull();
       expect(page.querySelector('app-publish-season-dialog')).toBeNull();

@@ -41,14 +41,12 @@ async function open(url = PATH): Promise<RouterTestingHarness> {
   return harness;
 }
 
-/** The one active subscription to the query `name`. */
 function subscription(name: string): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
   expect(active, name).toHaveLength(1);
   return active[0];
 }
 
-/** Emits the three results, as the page's queries return them. */
 function emit(results: Record<string, unknown> = leagueQueryResults()): void {
   for (const [name, value] of Object.entries(results)) subscription(name).emit(value);
 }
@@ -68,8 +66,7 @@ const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
-// Each live result is saved to localStorage (#82); a saved copy from one test must not seed the
-// next one, nor a later spec file (spec files share one global).
+// Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
 });
@@ -144,7 +141,6 @@ describe('PublicLeaguePage populated', () => {
     const main = host(harness).querySelector('main');
     const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
     const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
-    // The sport is plain text until #114 adds the sport view.
     expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Sunday Reverse Coed 4s']);
     expect(links.map((a) => a?.getAttribute('href'))).toEqual([
       '/organizations/gulf-coast-sport-social',
@@ -153,7 +149,6 @@ describe('PublicLeaguePage populated', () => {
     expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, 'page']);
     expect(text(crumbs[2])).toBe('Beach volleyball');
     expect(crumbs[2].querySelector('a')).toBeNull();
-    // The separators are decoration.
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s');
@@ -240,7 +235,6 @@ describe('PublicLeaguePage populated', () => {
   it('names a sport the organization does not list in the breadcrumb, without a link', async () => {
     emit(leagueQueryResults({ league: { ...SUNDAY_4S, sportName: 'Curling' } }));
     await settle(harness);
-    // The breadcrumb names the sport but cannot link it.
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
     expect(text(crumbs)).toContain('Curling');
     expect([...(crumbs?.querySelectorAll('a') ?? [])].map(text)).not.toContain('Curling');
@@ -289,7 +283,6 @@ describe('PublicLeaguePage page 2', () => {
   });
 
   it('serves page 1 when the query says so, and its canonical is the bare path', async () => {
-    // ?page=9 is past the last page: the query answers page 1.
     const harness = await open(`${PATH}?page=9`);
     emit(leagueQueryResults({ seasons: seasonsPage(1) }));
     await settle(harness);
@@ -365,7 +358,6 @@ describe('PublicLeaguePage page changes', () => {
     )!;
     next.click();
     await settle(harness);
-    // The new subscription has not emitted: page 1 stays, marked busy, with no focus move.
     const subscriptions = client.activeSubscriptions.filter((s) => s.name === SEASONS_QUERY);
     expect(subscriptions).toHaveLength(1);
     expect(subscriptions[0].args).toMatchObject({ page: 2 });

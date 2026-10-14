@@ -14,11 +14,7 @@ import { publicSeasonPath } from '../public-league/public-league-path';
 import { PublicSeasonContent } from './public-season-content';
 import type { PublicSeasonView } from './public-season-view';
 
-/**
- * The query arguments are the route's slugs only and the query string is never read, so the server
- * HTML holds none of it. A failed or timed-out query renders the server-error view (503,
- * `no-store`) so the CDN never stores it.
- */
+/** The query arguments are the route's slugs only; the query string is never read, so the server HTML holds none of it. */
 @Component({
   selector: 'app-public-season-page',
   imports: [NotFoundView, NotSavedView, PublicLayout, PublicSeasonContent, ServerErrorView],
@@ -59,12 +55,10 @@ export class PublicSeasonPage {
   }));
   private readonly online = injectOnline();
 
-  /** The page's own path, for "Try again": built from the slugs, never the request URL. */
   protected readonly path = computed(() =>
     publicSeasonPath(this.orgSlug(), this.leagueSlug(), this.seasonSlug()),
   );
 
-  /** Failed, including a missing Convex URL; never its message (adapter README). */
   private readonly failed = computed(() => this.season.error() !== undefined);
 
   protected readonly view = computed((): PublicSeasonView | undefined => {
@@ -73,15 +67,14 @@ export class PublicSeasonPage {
     return season ? { season } : undefined;
   });
 
-  /** When the saved copy on screen was saved, only while offline (the note is hidden online). */
   protected readonly savedAt = computed(() => (this.online() ? undefined : this.season.savedAt()));
 
   protected readonly state = computed(() => {
     if (this.view()) return 'page';
     if (this.season.value() === null) return 'not-found';
     if (this.failed()) return 'error';
-    // Offline with nothing to show (never on the server, where `online` is always true).
-    if (!this.online()) return 'not-saved';
+    const offlineWithoutSavedCopy = !this.online();
+    if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
 

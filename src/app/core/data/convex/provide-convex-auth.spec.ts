@@ -11,10 +11,6 @@ import {
 } from './index';
 import { FakeConvexClient } from './testing/fake-convex-client';
 
-// ADR 0006 "Auth extension point", implemented for #62: with an auth source, the browser client
-// calls setAuth on creation, clearAuth when `signedIn` goes from true to false, and setAuth again
-// when it goes from false to true. On the server, the source is ignored.
-
 function source(signedIn = false) {
   return {
     fetchToken: vi.fn(() => Promise.resolve<string | null>(null)),
@@ -71,7 +67,6 @@ describe('provideConvexAuth', () => {
     TestBed.tick();
     expect(created[0].lifecycle).toEqual(['setAuth', 'clearAuth']);
 
-    // No change, no call.
     auth.signedIn.set(false);
     TestBed.tick();
     expect(created[0].lifecycle).toEqual(['setAuth', 'clearAuth']);

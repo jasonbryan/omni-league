@@ -50,7 +50,7 @@ describe('injectQuery on the server platform', () => {
   afterEach(() => {
     vi.useRealTimers();
     for (const spy of consoleSpies) {
-      expect(spy).not.toHaveBeenCalled(); // nothing is logged by the adapter
+      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     }
   });
@@ -72,7 +72,6 @@ describe('injectQuery on the server platform', () => {
     });
   }
 
-  /** Counts `PendingTasks.add()` calls and the release of each returned remover. */
   function trackPendingTasks() {
     const tasks = TestBed.inject(PendingTasks);
     const add = tasks.add.bind(tasks);
@@ -151,7 +150,7 @@ describe('injectQuery on the server platform', () => {
       httpClients[render - 1].queries[0].resolve([`render ${render}`]);
       await stable();
       expect(teams.value()).toEqual([`render ${render}`]);
-      TestBed.resetTestingModule(); // the next bootstrap is a new application
+      TestBed.resetTestingModule();
     }
     expect(httpClients.map((c) => c.queries.length)).toEqual([1, 1]);
   });
@@ -186,7 +185,6 @@ describe('injectQuery on the server platform', () => {
     expect(teams.value()).toEqual({ count: 5n, names: ['Sharks'] });
     const entry = transferred() as { v: JSONValue };
     expect(Object.keys(entry)).toEqual(['v']);
-    // Round trip through the serialised ng-state blob, as the browser receives it.
     const blob = JSON.parse(TestBed.inject(TransferState).toJson()) as Record<
       string,
       { v: JSONValue }
@@ -228,7 +226,7 @@ describe('injectQuery on the server platform', () => {
     vi.useFakeTimers();
     configure({ timeoutMs: 1234 });
     const tasks = trackPendingTasks();
-    const teams = createQuery(); // the fake query never settles
+    const teams = createQuery();
 
     await vi.advanceTimersByTimeAsync(1233);
     expect(teams.isLoading()).toBe(true);
@@ -320,8 +318,8 @@ describe('injectQuery on the server platform', () => {
     vi.useFakeTimers();
     configure();
     const teams = createQuery();
-    await vi.advanceTimersByTimeAsync(0); // let the scheduler's own timers run
-    expect(vi.getTimerCount()).toBe(1); // the loader's timeout
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
 
     httpClients[0].queries[0].resolve(['Sharks']);
     await vi.advanceTimersByTimeAsync(0);

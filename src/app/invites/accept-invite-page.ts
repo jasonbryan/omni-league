@@ -43,7 +43,6 @@ import { ACCEPT_INVITE_PATH } from './capture-invite-token';
 import { InviteAlert } from './invite-alert';
 import { InviteTokenStore } from './invite-token-store';
 
-/** What a visitor may see of an invite: the answer of `invites.getByToken` for a valid token. */
 interface InviteSummary {
   organizationName: string;
   role: Role;
@@ -51,11 +50,7 @@ interface InviteSummary {
   expiresAt?: number;
 }
 
-/**
- * What `invites.accept` returns to the caller who just accepted (#212): the summary plus the slugs
- * that build the "Open" link. The slugs are optional so an answer from a backend one release
- * behind still shows the page (the link then goes to `/app`).
- */
+/** The slugs are optional so an answer from a backend one release behind still shows the page (the link then goes to `/app`). */
 interface AcceptedInvite extends InviteSummary {
   organizationSlug?: string;
   leagues?: { name: string; slug: string }[];
@@ -63,10 +58,8 @@ interface AcceptedInvite extends InviteSummary {
 
 type View = 'checking' | 'loadFailed' | 'invalid' | 'signedOut' | 'ready' | 'accepted';
 
-/** Why the Accept press did not make the visitor a member. `null` while nothing is wrong. */
 type Refusal = 'emailMismatch' | 'alreadyMember' | 'failed' | 'offline';
 
-/** The text of each refusal (design/mockups/70-accept-invite.html states 7, 8, and 10). */
 const REFUSALS = {
   emailMismatch: {
     title: 'This invite was sent to a different email address.',
@@ -84,7 +77,6 @@ const REFUSALS = {
 
 const LIST = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
 
-/** The `code` of an `invites.accept` refusal, or `null` for any other failure. */
 function refusalCode(failure: unknown): AcceptRefusal | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
@@ -93,9 +85,8 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
 }
 
 /**
- * `captureInviteToken` has already moved the token from the link's fragment into `sessionStorage`,
- * so it is in no `returnTo`, address bar, or request URL; the page sends it only as the argument
- * of `invites.getByToken` and `invites.accept`.
+ * `captureInviteToken` has already moved the token into `sessionStorage` and taken it out of the URL, so it is in no `returnTo`, address bar, or request URL.
+ * The page sends it only as the argument of `invites.getByToken` and `invites.accept`.
  */
 @Component({
   selector: 'app-accept-invite-page',
@@ -369,13 +360,10 @@ export class AcceptInvitePage {
   private readonly store = inject(InviteTokenStore);
   private readonly title = inject(Title);
 
-  /** The three detail rows of the invite card's skeleton: organization, role, and expiry. */
   protected readonly skeletonRows = [0, 1, 2];
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
-  /** The only query sign-up and sign-in get: the page's own path, which holds no token. */
   protected readonly returnToParams = { returnTo: ACCEPT_INVITE_PATH };
-  /** Where "Try again" on the load-failure view goes: the page itself, which holds no token. */
   protected readonly path = ACCEPT_INVITE_PATH;
 
   /**
@@ -402,12 +390,10 @@ export class AcceptInvitePage {
   protected readonly accepting = signal(false);
   protected readonly online = injectOnline();
   protected readonly switching = signal(false);
-  // What happened to the current token; a different token starts over.
   protected readonly refusal = linkedSignal<string | null, Refusal | null>({
     source: this.token,
     computation: () => null,
   });
-  /** `invites.accept` found the invite unusable (another answer than `getByToken`'s). */
   private readonly refusedAsInvalid = linkedSignal<string | null, boolean>({
     source: this.token,
     computation: () => false,
@@ -464,11 +450,7 @@ export class AcceptInvitePage {
     return `You’re a league organizer for ${LIST.format(done?.leagueNames ?? [])}.`;
   });
 
-  /**
-   * Where the primary button goes once the invite is accepted (#212): the organization for an org
-   * admin, the league for a league organizer of one league, and the account page otherwise
-   * (several leagues, none left, or no slug). The link holds slugs only, never the token.
-   */
+  /** The link holds slugs only, never the token. */
   protected readonly destination = computed<{ label: string; link: string[] }>(() => {
     const done = this.accepted();
     const organization = done?.organizationSlug;
@@ -497,7 +479,6 @@ export class AcceptInvitePage {
     void this.auth.isSignedIn().then(() => this.sessionKnown.set(true));
     effect(() => {
       const view = this.view();
-      // The load-failure view sets its own title.
       if (view !== 'loadFailed') {
         this.title.setTitle(
           view === 'accepted'
@@ -551,7 +532,6 @@ export class AcceptInvitePage {
       if (code === 'invalid') {
         this.refusedAsInvalid.set(true);
       } else {
-        // An invite that cannot change the role has nothing more to offer: forget its token.
         if (code === 'alreadyMember') this.store.clear();
         this.refusal.set(code ?? (failure instanceof ConvexOfflineError ? 'offline' : 'failed'));
         this.focusAfterRender('alert');

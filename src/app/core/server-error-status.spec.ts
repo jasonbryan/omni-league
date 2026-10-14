@@ -42,8 +42,7 @@ describe('setServerErrorStatus', () => {
     expect(new Headers(responseInit.headers).get('Cache-Control')).toBe('no-store');
   });
 
-  // As with the 404 (PR #90): when the engine will redirect a URL the router normalized, a 5xx
-  // status would go out with the Location. The redirect is no-store already (src/server.ts).
+  // As with the 404: when the engine will redirect a URL the router normalized, a 5xx status would go out with the Location. The redirect is no-store already (src/server.ts).
   it('leaves the response alone when the router normalized the URL', () => {
     const responseInit: ResponseInit = { headers: { 'Cache-Control': 'public, s-maxage=60' } };
     run(responseInit, '/organizations/x//', '/organizations/x/');

@@ -6,9 +6,6 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { buttonVariants } from '../ui/button/hlm-button';
 import { MESSAGES, SignInPage } from './sign-in-page';
 
-// /sign-in (#63), design/mockups/63-sign-in.html. Each case drives the real AuthService through a
-// fake Better Auth client.
-
 @Component({ template: 'elsewhere' })
 class Elsewhere {}
 
@@ -129,7 +126,6 @@ describe('SignInPage', () => {
           expect(element.getAttribute(name), `${id} ${name}`).toBe(value);
         }
       }
-      // No maxlength: a long paste is never cut silently.
       expect(input('password').hasAttribute('maxlength')).toBe(false);
     });
 
@@ -339,7 +335,6 @@ describe('SignInPage', () => {
   describe('server answers', () => {
     beforeEach(() => open());
 
-    // The same text for a wrong password and for an email with no account: the page cannot tell.
     it('401: "Email or password is incorrect." in the form alert, which takes focus', async () => {
       await fill();
       client.nextSignInError = { status: 401, code: 'INVALID_EMAIL_OR_PASSWORD' };
@@ -350,7 +345,6 @@ describe('SignInPage', () => {
       expect(alertDescription()).toBe('Check both and try again.');
       expect(document.activeElement).toBe(alert());
       expect(url()).toBe('/sign-in');
-      // Neither field is marked invalid: the screen says nothing about which address exists.
       for (const id of ['email', 'password']) {
         expect(input(id).hasAttribute('aria-invalid'), id).toBe(false);
         expect(error(id), id).toBeNull();
@@ -393,7 +387,6 @@ describe('SignInPage', () => {
         'Sign-in for this email address is paused after several incorrect passwords.',
       );
       expect(document.activeElement).toBe(alert());
-      // No countdown and no disabled button: the text states the wait.
       expect(submitButton().getAttribute('aria-disabled')).toBeNull();
       expect(input('email').value).toBe(EMAIL);
     });

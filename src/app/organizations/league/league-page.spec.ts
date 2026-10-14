@@ -13,10 +13,6 @@ import {
   SEASONS,
 } from './testing/league-harness';
 
-// The league management page (#125), design/mockups/125-126-seasons.html states 1 to 3 and 12 to
-// 15: what `leagues.getOrganizerContext` decides, the sidebar for each role, and the seasons list.
-// The create form is in season-create-form.spec.ts.
-
 const tokens = (value: string) => value.split(' ').sort();
 
 describe('LeaguePage', () => {
@@ -264,7 +260,7 @@ describe('LeaguePage', () => {
   });
 
   describe('an unknown league (state 15)', () => {
-    it('shows #23’s not-found view, with no sidebar and no season data requested', async () => {
+    it('shows the not-found view, with no sidebar and no season data requested', async () => {
       o = await openAdmin(LEAGUE_ROUTES, `/app/organizations/${GULF.slug}/leagues/does-not-exist`);
       page = o.page;
       o.acceptToken();

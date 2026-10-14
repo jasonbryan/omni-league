@@ -1,10 +1,6 @@
 import { signal } from '@angular/core';
 import { changedSince, focusLeftGroup, ShownUntilValid } from './shown-errors';
 
-// ux.md, Task flows, Validation (#205): a field is checked when the user leaves it after changing
-// it, re-checked as they type until it is valid, never on the first keystroke; a submit checks it
-// regardless.
-
 describe('ShownUntilValid', () => {
   function setup() {
     const value = signal('');
@@ -90,7 +86,6 @@ describe('changedSince', () => {
 });
 
 describe('focusLeftGroup', () => {
-  /** What `focusLeftGroup` says for a `focusout` from `from` to `to`, as the group's handler sees it. */
   function leftGroup(from: HTMLElement, to: HTMLElement | null, root: HTMLElement): boolean {
     let left: boolean | null = null;
     root.addEventListener('focusout', (e) => (left = focusLeftGroup(e)), {

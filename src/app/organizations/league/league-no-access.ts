@@ -4,13 +4,6 @@ import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowLeft, lucideLock } from '@ng-icons/lucide';
 
-/**
- * The no-access view of the league management page (#125; design/mockups/125-126-seasons.html
- * state 14), shown in the app shell with no sidebar when `leagues.getOrganizerContext` throws
- * `FORBIDDEN`: a signed-in league organizer of another league, an org admin of another
- * organization, or a member of none, for a published league. It is #65's view with copy for
- * leagues. It reads no data, and nothing about the league is on screen.
- */
 @Component({
   selector: 'app-league-no-access',
   imports: [NgIcon, RouterLink],

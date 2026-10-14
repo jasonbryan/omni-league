@@ -40,23 +40,11 @@ import {
 } from './field-classes';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
 
-/** A location the league can be held at: the organization's own, from `locations.listForAdmin`. */
 export interface LeagueLocationChoice {
   locationId: Id<'locations'>;
   name: string;
 }
 
-/**
- * The create form of the Leagues page (#66; design/mockups/66-69-organization-leagues.html states
- * 4 to 8), inside the page's `#create-league` section: Name, Slug (filled from the name until
- * edited), a Sport radio group with no default, and a Locations checkbox group (one is enough).
- * Errors show after a submit, under their field or group; focus goes to the first invalid field
- * (the first sport or location for a group), or to the form alert for a failure that is not about
- * one field. On success "<league> created as a draft." appears in a status above the fields, the
- * fields clear, and focus stays on the button; the page's live list shows the new row. Like every
- * form that calls a mutation it carries the offline refusal of design/mockups/88-offline-note.html
- * (angular.md, State and data).
- */
 @Component({
   selector: 'app-league-create-form',
   imports: [AdminAlert, Checkbox, FormField, NgIcon],
@@ -364,12 +352,10 @@ export class LeagueCreateForm {
   protected readonly radioIndicatorClass = RADIO_INDICATOR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} mt-6 w-full`;
 
-  /** The class of every radio's wrapper: its edge turns red while the group shows an error. */
   protected readonly radioClass = computed(
     () => `${RADIO_ITEM} ${this.form.errors.sport() ? RADIO_EDGE_INVALID : RADIO_EDGE}`,
   );
 
-  /** The league just created, for the status above the fields; cleared by the next press. */
   protected readonly created = signal<string | null>(null);
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
@@ -379,7 +365,6 @@ export class LeagueCreateForm {
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
-  /** `aria-describedby`: the field's description, then its error while one is shown. */
   protected describedBy(field: 'name' | 'slug', description: string): string {
     return this.form.errors[field]() ? `${description} ${field}-error` : description;
   }

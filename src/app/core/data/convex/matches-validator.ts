@@ -10,14 +10,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Whether `value` (a Convex value, as `jsonToConvex` returns it) has the shape `validator`
- * describes, so a page can read it as the query's result (#82, saved copies). The check walks the
- * same validator object the Convex function declares as `returns`.
- *
- * One difference from Convex's own check: an object may carry fields the validator does not name.
- * A page reads only the fields its build knows, so a copy saved by a build whose result gained a
- * field (the expand step of ADR 0013 section 4's 14-day compatibility) still reads. A validator
- * kind this function does not know fails the check.
+ * One difference from Convex's own check: an object may carry fields the validator does not name, so a copy saved by a build whose
+ * result gained a field still reads. A validator kind this function does not know fails the check.
  */
 export function matchesValidator(value: unknown, validator: GenericValidator): boolean {
   switch (validator.kind) {
