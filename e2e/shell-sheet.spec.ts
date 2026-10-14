@@ -134,9 +134,22 @@ test.describe('the phone sheet on the admin area', () => {
     page,
   }) => {
     await openAdminOverview(page);
+    // The overview's tiles arrive from separate queries and shift the layout until they are in.
+    const pageHeight = () => page.evaluate(() => document.documentElement.scrollHeight);
+    await expect
+      .poll(async () => {
+        const before = await pageHeight();
+        await page.waitForTimeout(500);
+        return before === (await pageHeight());
+      })
+      .toBe(true);
     await makeTall(page);
-    await page.evaluate(() => window.scrollTo(0, 300));
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(300);
+    await expect
+      .poll(async () => {
+        await page.evaluate(() => window.scrollTo(0, 300));
+        return page.evaluate(() => window.scrollY);
+      })
+      .toBe(300);
     const close = dialogOf(page).getByRole('button', { name: 'Close navigation' });
     const closers: [string, () => Promise<void>][] = [
       ['Escape', () => page.keyboard.press('Escape')],
