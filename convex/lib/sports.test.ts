@@ -8,6 +8,8 @@ import {
   formatValidator,
   SPORT_SEGMENTS,
   isFormatOfSport,
+  playersPerSideOfFormat,
+  seasonPlayersPerSide,
   sportFromSegment,
   sportSegment,
   type Sport,
@@ -103,5 +105,20 @@ describe('SPORT_SEGMENTS', () => {
     'hasOwnProperty',
   ])('gives no sport for the segment %j', (segment) => {
     expect(sportFromSegment(segment)).toBeUndefined();
+  });
+});
+
+describe('players per side of a season', () => {
+  test('is the number a format key names', () => {
+    expect(formatValidator.members.map((member) => playersPerSideOfFormat(member.value))).toEqual([
+      2, 4, 6, 5, 7, 11, 10,
+    ]);
+  });
+
+  test('reads playersPerSide, else the number in format, and throws for neither', () => {
+    expect(seasonPlayersPerSide({ playersPerSide: 7 })).toBe(7);
+    expect(seasonPlayersPerSide({ format: '11v11' })).toBe(11);
+    expect(seasonPlayersPerSide({ playersPerSide: 4, format: '6v6' })).toBe(4);
+    expect(() => seasonPlayersPerSide({})).toThrow(/neither/);
   });
 });

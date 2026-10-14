@@ -27,20 +27,49 @@
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
+import {
+  ageGroupValidator,
+  customLevelNameKey,
+  deriveDivisionFromName,
+  genderValidator,
+  isLevelOfSport,
+  playersPerSideOfSport,
+  standardLevelValidator,
+  type AgeGroup,
+  type Gender,
+  type StandardLevel,
+} from './divisions';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
-import { sportValidator, type Format, type Sport, type SportCounts } from './sports';
+import { seasonPlayersPerSide, sportValidator, type Sport, type SportCounts } from './sports';
+
+/**
+ * A league's division as a seed writes it. `customLevel` names a custom level of the league's
+ * organization and sport, which must exist and map to `level`.
+ */
+export const divisionSeedValidator = v.object({
+  gender: genderValidator,
+  playersPerSide: v.number(),
+  level: standardLevelValidator,
+  customLevel: v.optional(v.string()),
+  ageGroup: ageGroupValidator,
+  minimumRosterSize: v.optional(v.number()),
+});
+
+export type DivisionSeed = Infer<typeof divisionSeedValidator>;
 
 /**
  * A league to create; `locations` names locations of the same organization. `status` is
  * `published` when left out, so a seed's pages are public; only the e2e seeds ask for a `draft`.
+ * A league without a `division` is written without one.
  */
 export const leagueSeedValidator = v.object({
   name: v.string(),
   sport: sportValidator,
   locations: v.array(v.string()),
   status: v.optional(leagueStatusValidator),
+  division: v.optional(divisionSeedValidator),
 });
 
 /** An organization with its locations and leagues. */
@@ -227,13 +256,29 @@ export async function insertLeague(
     locationIds.push(location._id);
   }
   const slug = await uniqueLeagueSlug(ctx, organizationId, slugify(league.name));
+  const division = league.division
+    ? await resolveDivision(ctx, organizationId, league.sport, league.division)
+    : undefined;
   const leagueId = await insertLeagueRow(
     ctx,
     organizationId,
-    { name: league.name, slug, sport: league.sport, locationIds },
+    { name: league.name, slug, sport: league.sport, locationIds, division },
     league.status ?? 'published',
   );
   return { leagueId, slug };
+}
+
+/**
+ * A league's division as stored: `customLevelId` is the label shown in place of `level`, and
+ * `minimumRosterSize` is set only when the organization raised it above the players per side.
+ */
+export interface LeagueDivision {
+  gender: Gender;
+  playersPerSide: number;
+  level: StandardLevel;
+  customLevelId?: Id<'customLevels'>;
+  ageGroup: AgeGroup;
+  minimumRosterSize?: number;
 }
 
 /** A league to insert: its slug is final and its locations are ids of the organization's. */
@@ -242,6 +287,74 @@ export interface NewLeague {
   slug: string;
   sport: Sport;
   locationIds: Id<'locations'>[];
+  division?: LeagueDivision | undefined;
+}
+
+async function resolveDivision(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  { customLevel, ...division }: DivisionSeed,
+): Promise<LeagueDivision> {
+  if (customLevel === undefined) return division;
+  const found = await findCustomLevel(ctx, organizationId, sport, customLevel);
+  if (!found) {
+    throw new Error(`No custom level ${JSON.stringify(customLevel)} exists for ${sport}`);
+  }
+  if (found.standardLevel !== division.level) {
+    throw new Error(
+      `Custom level ${JSON.stringify(customLevel)} maps to ${found.standardLevel}, not ${division.level}`,
+    );
+  }
+  return { ...division, customLevelId: found._id };
+}
+
+/** A custom level to insert; `name` is trimmed and its inner whitespace collapsed by the caller. */
+export interface NewCustomLevel {
+  sport: Sport;
+  name: string;
+  standardLevel: StandardLevel;
+}
+
+/** The custom level of the organization and sport with this name, ignoring case and spacing. */
+export async function findCustomLevel(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  name: string,
+): Promise<Doc<'customLevels'> | null> {
+  return ctx.db
+    .query('customLevels')
+    .withIndex('by_organizationId_and_sport_and_nameKey', (q) =>
+      q
+        .eq('organizationId', organizationId)
+        .eq('sport', sport)
+        .eq('nameKey', customLevelNameKey(name)),
+    )
+    .unique();
+}
+
+/**
+ * Inserts a custom level of `organizationId` with its `nameKey` and creation time: the one writer
+ * of the `customLevels` table. Throws when the standard level is not a level of the sport. The
+ * caller has checked access, the name, and that the name is not already used.
+ */
+export async function insertCustomLevel(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  level: NewCustomLevel,
+): Promise<Id<'customLevels'>> {
+  if (!isLevelOfSport(level.sport, level.standardLevel)) {
+    throw new Error(`Level ${level.standardLevel} is not a level of ${level.sport}`);
+  }
+  return ctx.db.insert('customLevels', {
+    organizationId,
+    sport: level.sport,
+    name: level.name,
+    nameKey: customLevelNameKey(level.name),
+    standardLevel: level.standardLevel,
+    createdAt: Date.now(),
+  });
 }
 
 /**
@@ -277,14 +390,14 @@ export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): P
   await countLeagueInSport(ctx, league.organizationId, league.sport, league.locationIds);
 }
 
-/** A season to insert: its slug is final, and its dates and format have been checked. */
+/** A season to insert: its slug is final, and its dates and players per side have been checked. */
 export interface NewSeason {
   name: string;
   slug: string;
   startDate: string;
   endDate: string;
   registrationDeadline: string;
-  format: Format;
+  playersPerSide: number;
   minimumRosterSize: number;
 }
 
@@ -312,7 +425,7 @@ export async function insertSeason(
     startDate: season.startDate,
     endDate: season.endDate,
     registrationDeadline: season.registrationDeadline,
-    format: season.format,
+    playersPerSide: season.playersPerSide,
     minimumRosterSize: season.minimumRosterSize,
     status,
   });
@@ -379,12 +492,24 @@ async function insertLeagueRow(
     sortName: sortName(league.name),
     status,
     publishedSeasonCount: 0,
+    ...divisionFields(league.division),
   });
   if (status === 'published') {
     await increment(ctx, organizationId, 'leagueCount');
     await countLeagueInSport(ctx, organizationId, league.sport, league.locationIds);
   }
   return leagueId;
+}
+
+/** The stored fields of a division, leaving out the optional ones it does not set. */
+function divisionFields(division: LeagueDivision | undefined) {
+  if (!division) return {};
+  const { customLevelId, minimumRosterSize, ...required } = division;
+  return {
+    ...required,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
 }
 
 /** Whether a league of the organization already has this slug, drafts included. */
@@ -572,6 +697,112 @@ export async function backfillTenantFields(
       sportLocationCounts,
     });
     backfilled.organizations++;
+  }
+  return backfilled;
+}
+
+/** Rows the division backfill changed, per table. */
+export const divisionBackfilledValidator = v.object({
+  seasons: v.number(),
+  leagueDivisions: v.number(),
+});
+
+/** A demo league's division, found by its organization's slug and its name. */
+export interface DemoDivision {
+  organizationSlug: string;
+  leagueName: string;
+  division: DivisionSeed;
+}
+
+type LeagueDivisionPatch = Partial<
+  Pick<
+    Doc<'leagues'>,
+    'gender' | 'playersPerSide' | 'level' | 'customLevelId' | 'ageGroup' | 'minimumRosterSize'
+  >
+>;
+
+/**
+ * Gives a season written with a `format` its `playersPerSide` and drops the `format`, and gives a
+ * league missing part of its division the rest of it. A league's values come from, in order: the
+ * demo table when it is a demo league; its newest season by start date, any status (read as the
+ * readers do, so a season this pass has not reached yet still counts); its name
+ * (`deriveDivisionFromName`); then Coed, the smallest players per side of its sport, Rec, and
+ * Adult. Its `minimumRosterSize` is set only together with its `playersPerSide`: the demo table's,
+ * else its newest season's when that is above the players per side. Reads at most
+ * `BACKFILL_SCAN_LIMIT` rows per table. Returns the number of rows changed per table; a second run
+ * changes none. Run by `seed:demo` under its deployment guard, before its inserts, after the
+ * demo custom levels of existing organizations exist; it is removed once the fields are required.
+ */
+export async function backfillDivisionFields(
+  ctx: MutationCtx,
+  demoDivisions: readonly DemoDivision[],
+): Promise<Infer<typeof divisionBackfilledValidator>> {
+  const backfilled = { seasons: 0, leagueDivisions: 0 };
+  for (const season of await ctx.db.query('seasons').take(BACKFILL_SCAN_LIMIT)) {
+    if (season.playersPerSide !== undefined || season.format === undefined) continue;
+    await ctx.db.patch('seasons', season._id, {
+      playersPerSide: seasonPlayersPerSide(season),
+      format: undefined,
+    });
+    backfilled.seasons++;
+  }
+
+  const organizationSlugs = new Map<Id<'organizations'>, string | undefined>();
+  for (const league of await ctx.db.query('leagues').take(BACKFILL_SCAN_LIMIT)) {
+    if (
+      league.playersPerSide !== undefined &&
+      league.gender !== undefined &&
+      league.level !== undefined &&
+      league.ageGroup !== undefined
+    ) {
+      continue;
+    }
+    if (!organizationSlugs.has(league.organizationId)) {
+      const organization = await ctx.db.get('organizations', league.organizationId);
+      organizationSlugs.set(league.organizationId, organization?.slug);
+    }
+    const organizationSlug = organizationSlugs.get(league.organizationId);
+    const demo = demoDivisions.find(
+      (entry) => entry.organizationSlug === organizationSlug && entry.leagueName === league.name,
+    )?.division;
+    const derived = deriveDivisionFromName(league.name, league.sport);
+    const newest = await ctx.db
+      .query('seasons')
+      .withIndex('by_leagueId_and_startDate', (q) => q.eq('leagueId', league._id))
+      .order('desc')
+      .first();
+
+    const playersPerSide =
+      league.playersPerSide ??
+      demo?.playersPerSide ??
+      (newest ? seasonPlayersPerSide(newest) : undefined) ??
+      derived.playersPerSide ??
+      playersPerSideOfSport(league.sport)[0];
+    const patch: LeagueDivisionPatch = {
+      gender: league.gender ?? demo?.gender ?? derived.gender ?? 'coed',
+      playersPerSide,
+      level: league.level ?? demo?.level ?? derived.level ?? 'rec',
+      ageGroup: league.ageGroup ?? demo?.ageGroup ?? 'adult',
+    };
+    if (demo?.customLevel !== undefined && league.customLevelId === undefined) {
+      const customLevel = await findCustomLevel(
+        ctx,
+        league.organizationId,
+        league.sport,
+        demo.customLevel,
+      );
+      if (customLevel) patch.customLevelId = customLevel._id;
+    }
+    if (league.playersPerSide === undefined) {
+      const minimum = demo
+        ? demo.minimumRosterSize
+        : newest && newest.minimumRosterSize > playersPerSide
+          ? newest.minimumRosterSize
+          : undefined;
+      if (minimum !== undefined) patch.minimumRosterSize = minimum;
+    }
+    await ctx.db.patch('leagues', league._id, patch);
+    backfilled.leagueDivisions++;
   }
   return backfilled;
 }

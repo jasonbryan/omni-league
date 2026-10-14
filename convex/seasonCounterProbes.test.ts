@@ -27,7 +27,7 @@ const season = (n: number): NewSeason => ({
   startDate: `2027-${String(n).padStart(2, '0')}-01`,
   endDate: '2027-12-31',
   registrationDeadline: '2026-12-01',
-  format: '7v7',
+  playersPerSide: 7,
   minimumRosterSize: 7,
 });
 
@@ -163,7 +163,7 @@ describe('publishedSeasonCount under concurrency', () => {
       leagueSlug: 'coed-7v7',
       endDate: '2027-12-31',
       registrationDeadline: '2026-12-01',
-      format: '7v7' as const,
+      playersPerSide: 7,
       minimumRosterSize: 7,
     };
     await Promise.all([

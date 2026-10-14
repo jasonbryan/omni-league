@@ -421,3 +421,62 @@ describe('the optional seed status (#66, tester probes)', () => {
     ).rejects.toThrow(/IS_TEST/);
   });
 });
+
+describe('the optional seed division', () => {
+  test('a seeded league without one is Coed, the smallest players per side of its sport, Rec, and Adult', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, TENANT);
+    await t.mutation(internal.testing.addLeague, {
+      organizationSlug: TENANT.organization.slug,
+      name: 'League C',
+      sport: 'beachVolleyball',
+      locations: [],
+    });
+    const leagues = await t.run((ctx) => ctx.db.query('leagues').collect());
+    expect(
+      leagues
+        .map(({ name, gender, playersPerSide, level, ageGroup }) => ({
+          name,
+          gender,
+          playersPerSide,
+          level,
+          ageGroup,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    ).toEqual([
+      { name: 'League A', gender: 'coed', playersPerSide: 4, level: 'rec', ageGroup: 'adult' },
+      { name: 'League B', gender: 'coed', playersPerSide: 9, level: 'rec', ageGroup: 'adult' },
+      { name: 'League C', gender: 'coed', playersPerSide: 2, level: 'rec', ageGroup: 'adult' },
+    ]);
+  });
+
+  test('a division the test gives is written as given', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = setup();
+    await t.action(internal.testing.seedLeague, TENANT);
+    await t.mutation(internal.testing.addLeague, {
+      organizationSlug: TENANT.organization.slug,
+      name: 'League D',
+      sport: 'soccer',
+      locations: [],
+      division: {
+        gender: 'womens',
+        playersPerSide: 7,
+        level: 'intermediate',
+        ageGroup: 'u12',
+        minimumRosterSize: 9,
+      },
+    });
+    const league = (await t.run((ctx) => ctx.db.query('leagues').collect())).find(
+      (row) => row.name === 'League D',
+    );
+    expect(league).toMatchObject({
+      gender: 'womens',
+      playersPerSide: 7,
+      level: 'intermediate',
+      ageGroup: 'u12',
+      minimumRosterSize: 9,
+    });
+  });
+});

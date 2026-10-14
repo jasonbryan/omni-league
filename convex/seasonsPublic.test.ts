@@ -23,7 +23,7 @@ function season(n: number, overrides: Partial<NewSeason> = {}): NewSeason {
     startDate: `2027-${String(1 + Math.floor((n - 1) / 28)).padStart(2, '0')}-${String(1 + ((n - 1) % 28)).padStart(2, '0')}`,
     endDate: '2028-12-31',
     registrationDeadline: '2026-12-01',
-    format: '7v7',
+    playersPerSide: 7,
     minimumRosterSize: 7,
     ...overrides,
   };

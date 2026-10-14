@@ -17,13 +17,15 @@ import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { formatValidator } from './lib/sports';
+import { playersPerSideOfSport } from './lib/divisions';
+import type { Sport } from './lib/sports';
 import {
   insertLeague,
   insertSeason,
   insertTenant,
   leagueSeedValidator,
   tenantValidator,
+  type LeagueSeed,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES } from './lib/testOnly';
@@ -98,6 +100,26 @@ export const reset = internalMutation({
   },
 });
 
+/**
+ * The league with the division Coed, the smallest players per side of its sport, Rec, and Adult
+ * when the test gives none.
+ */
+function withDivision(league: LeagueSeed): LeagueSeed {
+  return {
+    ...league,
+    division: league.division ?? {
+      gender: 'coed',
+      playersPerSide: smallestPlayersPerSide(league.sport),
+      level: 'rec',
+      ageGroup: 'adult',
+    },
+  };
+}
+
+function smallestPlayersPerSide(sport: Sport): number {
+  return playersPerSideOfSport(sport)[0];
+}
+
 /** A password user for `seedLeague`: the test generates the password per run, never stored. */
 const seedUserValidator = v.object({ name: v.string(), email: v.string(), password: v.string() });
 
@@ -133,7 +155,7 @@ export const seedTenant = internalMutation({
   returns: v.object({ slug: v.string() }),
   handler: async (ctx, tenant) => {
     assertTestDeployment();
-    await insertTenant(ctx, tenant);
+    await insertTenant(ctx, { ...tenant, leagues: tenant.leagues.map(withDivision) });
     return { slug: tenant.organization.slug };
   },
 });
@@ -154,7 +176,7 @@ export const addLeague = internalMutation({
     if (!organization) {
       throw new Error(`No organization has the slug ${JSON.stringify(organizationSlug)}`);
     }
-    const { slug } = await insertLeague(ctx, organization._id, league);
+    const { slug } = await insertLeague(ctx, organization._id, withDivision(league));
     return { slug };
   },
 });
@@ -293,7 +315,7 @@ export const seedSeason = internalMutation({
     startDate: v.string(),
     endDate: v.string(),
     registrationDeadline: v.string(),
-    format: formatValidator,
+    playersPerSide: v.optional(v.number()),
     minimumRosterSize: v.number(),
     status: v.optional(seasonStatusValidator),
   },
@@ -308,7 +330,7 @@ export const seedSeason = internalMutation({
       )
       .unique();
     if (!league) throw new Error(`No league has the slug ${JSON.stringify(leagueSlug)}`);
-    await insertSeason(ctx, league, season, status);
+    await insertSeason(ctx, league, withPlayersPerSide(league, season), status);
     return { slug: season.slug };
   },
 });
@@ -320,7 +342,7 @@ const seasonSeedValidator = v.object({
   startDate: v.string(),
   endDate: v.string(),
   registrationDeadline: v.string(),
-  format: formatValidator,
+  playersPerSide: v.optional(v.number()),
   minimumRosterSize: v.number(),
   status: v.optional(seasonStatusValidator),
 });
@@ -350,11 +372,23 @@ export const seedSeasons = internalMutation({
       .unique();
     if (!league) throw new Error(`No league has the slug ${JSON.stringify(leagueSlug)}`);
     for (const { status, ...season } of seasons) {
-      await insertSeason(ctx, league, season, status);
+      await insertSeason(ctx, league, withPlayersPerSide(league, season), status);
     }
     return { count: seasons.length };
   },
 });
+
+/** The season with its players per side, defaulting to the league's, else its sport's smallest. */
+function withPlayersPerSide<S extends { playersPerSide?: number | undefined }>(
+  league: Doc<'leagues'>,
+  season: S,
+): Omit<S, 'playersPerSide'> & { playersPerSide: number } {
+  return {
+    ...season,
+    playersPerSide:
+      season.playersPerSide ?? league.playersPerSide ?? smallestPlayersPerSide(league.sport),
+  };
+}
 
 async function organizationBySlug(
   ctx: Pick<MutationCtx, 'db'>,

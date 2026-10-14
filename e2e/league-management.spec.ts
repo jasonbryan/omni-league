@@ -200,7 +200,7 @@ test.describe('League management: an org admin', () => {
         startDate,
         endDate: '2027-12-01',
         registrationDeadline: '2027-01-01',
-        format: '7v7',
+        playersPerSide: 7,
         minimumRosterSize: 7,
         status,
       });

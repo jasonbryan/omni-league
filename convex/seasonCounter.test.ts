@@ -27,7 +27,7 @@ const season = (n: number): NewSeason => ({
   startDate: `2027-0${n}-01`,
   endDate: '2027-12-31',
   registrationDeadline: '2026-12-01',
-  format: '7v7',
+  playersPerSide: 7,
   minimumRosterSize: 7,
 });
 
@@ -212,7 +212,7 @@ describe('leagues.publishedSeasonCount: testing:seedSeason', () => {
       leagueSlug: 'coed-7v7',
       endDate: '2027-12-31',
       registrationDeadline: '2026-12-01',
-      format: '7v7' as const,
+      playersPerSide: 7,
       minimumRosterSize: 7,
     };
     await t.mutation(internal.testing.seedSeason, {
@@ -282,7 +282,13 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
     await expectCountersMatch(t);
 
     const second = await t.mutation(internal.seed.demo, {});
-    expect(second.backfilled).toEqual({ organizations: 0, locations: 0, leagues: 0 });
+    expect(second.backfilled).toEqual({
+      organizations: 0,
+      locations: 0,
+      leagues: 0,
+      seasons: 0,
+      leagueDivisions: 0,
+    });
     expect(await stored(t, league._id)).toBe(2);
   });
 

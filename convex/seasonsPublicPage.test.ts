@@ -18,7 +18,7 @@ const SUMMER: NewSeason = {
   startDate: '2027-06-06',
   endDate: '2027-08-29',
   registrationDeadline: '2027-05-30',
-  format: '4v4',
+  playersPerSide: 4,
   minimumRosterSize: 5,
 };
 
@@ -72,7 +72,13 @@ async function setup() {
     await insertSeason(
       ctx,
       league('coed-7v7', 'org-a'),
-      { ...SUMMER, name: 'Coed Summer', slug: 'coed-summer', format: '7v7', minimumRosterSize: 7 },
+      {
+        ...SUMMER,
+        name: 'Coed Summer',
+        slug: 'coed-summer',
+        playersPerSide: 7,
+        minimumRosterSize: 7,
+      },
       'published',
     );
     await insertSeason(

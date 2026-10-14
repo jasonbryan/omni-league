@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { roleValidator } from './lib/roles';
@@ -129,6 +130,15 @@ export default defineSchema({
      * `seed:demo` sets it from a recount; #104 or a named follow-up makes it required.
      */
     publishedSeasonCount: v.optional(v.number()),
+    gender: v.optional(genderValidator),
+    /** The players on the field for each side; every season of the league uses it. */
+    playersPerSide: v.optional(v.number()),
+    /** Always a standard level, the value filters use; `customLevelId` is the label shown instead. */
+    level: v.optional(standardLevelValidator),
+    customLevelId: v.optional(v.id('customLevels')),
+    ageGroup: v.optional(ageGroupValidator),
+    /** Absent means `playersPerSide`; when set it is at least that, and at most `ROSTER_SIZE_INPUT_MAX`. */
+    minimumRosterSize: v.optional(v.number()),
   })
     .index('by_organizationId_and_name', ['organizationId', 'name'])
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
@@ -141,7 +151,21 @@ export default defineSchema({
       'sport',
       'status',
       'sortName',
-    ]),
+    ])
+    // Whether any league still uses a custom level, so deleting one reads an index, not the table.
+    .index('by_customLevelId', ['customLevelId']),
+
+  // A level an organization names for one sport (a letter class such as "D"), mapped to the
+  // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed
+  // and lower-cased, so names that differ only in case or spacing are one level.
+  customLevels: defineTable({
+    organizationId: v.id('organizations'),
+    sport: sportValidator,
+    name: v.string(),
+    nameKey: v.string(),
+    standardLevel: standardLevelValidator,
+    createdAt: v.number(),
+  }).index('by_organizationId_and_sport_and_nameKey', ['organizationId', 'sport', 'nameKey']),
 
   // How many leagues of one sport are held at one location (#101). A row exists while that number
   // is at least 1, so the rows of a sport are its distinct locations: the count a delete can keep
@@ -169,7 +193,10 @@ export default defineSchema({
     startDate: v.string(),
     endDate: v.string(),
     registrationDeadline: v.string(),
-    format: formatValidator,
+    /** The league's players per side when the season was created. */
+    playersPerSide: v.optional(v.number()),
+    /** The key a season was created with, such as `4v4`; superseded by `playersPerSide`. */
+    format: v.optional(formatValidator),
     minimumRosterSize: v.number(),
     status: seasonStatusValidator,
   })

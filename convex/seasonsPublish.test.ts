@@ -24,7 +24,7 @@ const fall = {
   startDate: '2027-09-08',
   endDate: '2027-11-10',
   registrationDeadline: '2027-08-25',
-  format: '7v7' as const,
+  playersPerSide: 7,
   minimumRosterSize: 7,
 };
 
@@ -71,8 +71,8 @@ async function setup() {
       { ...fall, name: 'Summer 2027', slug: 'summer-2027' },
       'published',
     );
-    const seasonM = await insertSeason(ctx, leagueM, { ...fall, format: '4v4' });
-    const seasonD = await insertSeason(ctx, leagueD, { ...fall, format: '10v10' });
+    const seasonM = await insertSeason(ctx, leagueM, { ...fall, playersPerSide: 4 });
+    const seasonD = await insertSeason(ctx, leagueD, { ...fall, playersPerSide: 10 });
     const seasonB = await insertSeason(ctx, leagueB, fall);
     const member = async (
       authUserId: string,

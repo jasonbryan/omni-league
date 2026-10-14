@@ -134,3 +134,18 @@ export function formatName(sport: Sport, format: Format): string {
   }
   return found.name;
 }
+
+/** The players on the field that a format key names: `4v4` gives 4. */
+export function playersPerSideOfFormat(format: Format): number {
+  return Number.parseInt(format, 10);
+}
+
+/**
+ * A season's players per side: its `playersPerSide`, else the number in the `format` of a row not
+ * yet migrated. Throws for a row that has neither.
+ */
+export function seasonPlayersPerSide(season: { playersPerSide?: number; format?: Format }): number {
+  if (season.playersPerSide !== undefined) return season.playersPerSide;
+  if (season.format !== undefined) return playersPerSideOfFormat(season.format);
+  throw new Error('The season has neither playersPerSide nor format');
+}

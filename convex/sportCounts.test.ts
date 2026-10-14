@@ -232,9 +232,10 @@ describe('tester probes: a league written before the backfill, then the backfill
     expect(second).toEqual({
       organizations: 0,
       locations: 0,
+      customLevels: 0,
       leagues: 0,
       seasons: 0,
-      backfilled: { organizations: 0, locations: 0, leagues: 0 },
+      backfilled: { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 },
     });
     expect(await stored(t, organizationId)).toEqual(before);
   });
