@@ -195,7 +195,7 @@ describe('a league written before the backfill, then the backfill', () => {
       rows: [],
     });
 
-    const first = await t.mutation(internal.seed.demo, {});
+    const first = await t.mutation(internal.seed.insertDemoData, {});
     expect(first.backfilled.organizations).toBe(1);
     const after = await stored(t, organizationId);
     const expected = await recount(t, organizationId);
@@ -217,9 +217,9 @@ describe('a league written before the backfill, then the backfill', () => {
     await t.run((ctx) =>
       insertLeague(ctx, organizationId, { name: 'One', sport: 'soccer', locations: ['Field A'] }),
     );
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const before = await stored(t, organizationId);
-    const second = await t.mutation(internal.seed.demo, {});
+    const second = await t.mutation(internal.seed.insertDemoData, {});
     expect(second).toEqual({
       organizations: 0,
       locations: 0,
@@ -237,7 +237,7 @@ describe('a league written before the backfill, then the backfill', () => {
     await t.run((ctx) =>
       insertLeague(ctx, organizationId, { name: 'One', sport: 'soccer', locations: ['Field A'] }),
     );
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     await t.run((ctx) =>
       insertLeague(ctx, organizationId, {
         name: 'Two',
@@ -274,7 +274,7 @@ describe('a league written before the backfill, then the backfill', () => {
         leagueCount: 7,
       });
     });
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
     const after = await stored(t, organizationId);
     expect(after.rows.map(([, count]) => count)).toEqual([1]);
     expect(after.locationCounts).toEqual({ soccer: 1 });
@@ -291,7 +291,7 @@ describe('a league written before the backfill, then the backfill', () => {
       });
       await ctx.db.patch('organizations', organizationId, { sportLeagueCounts: { soccer: 99 } });
     });
-    const run = await t.mutation(internal.seed.demo, {});
+    const run = await t.mutation(internal.seed.insertDemoData, {});
     expect(run.backfilled.organizations).toBe(1);
     const after = await stored(t, organizationId);
     expect(after.leagueCounts).toEqual({ soccer: 1 });

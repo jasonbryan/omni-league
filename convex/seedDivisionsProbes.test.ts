@@ -139,7 +139,7 @@ describe('division backfill probes', () => {
     await add('draft-newest', '2027-01-01', 'draft', 7);
     await add('published-oldest', '2025-01-01', 'published', 11);
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     expect(await leagueRow(t, leagueId)).toMatchObject({ playersPerSide: 7 });
   });
@@ -155,7 +155,7 @@ describe('division backfill probes', () => {
       'draft',
     );
 
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
 
     expect(result.backfilled.leagueDivisions).toBe(1);
     expect(await leagueRow(t, leagueId)).toMatchObject({
@@ -172,7 +172,7 @@ describe('division backfill probes', () => {
     const organizationId = await insertOrganization(t, 'other-club');
     const leagueId = await insertLegacyLeague(t, organizationId, 'Coed 6v6 Indoor', 'soccer');
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     const row = await leagueRow(t, leagueId);
     expect(row).toMatchObject({ gender: 'coed', playersPerSide: 6, level: 'rec' });
@@ -200,7 +200,7 @@ describe('division backfill probes', () => {
       }),
     );
 
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
 
     expect(result.customLevels).toBe(0);
     expect(await t.run((ctx) => ctx.db.query('customLevels').collect())).toHaveLength(1);
@@ -215,7 +215,7 @@ describe('division backfill probes', () => {
       ctx.db.insert('seasons', { ...seasonFields, organizationId, leagueId, format: '11v11' }),
     );
 
-    await t.mutation(internal.seed.demo, {});
+    await t.mutation(internal.seed.insertDemoData, {});
 
     expect(await t.run((ctx) => ctx.db.get('seasons', seasonId))).toMatchObject({
       playersPerSide: 11,
@@ -237,7 +237,7 @@ describe('division backfill probes', () => {
       }),
     );
 
-    const result = await t.mutation(internal.seed.demo, {});
+    const result = await t.mutation(internal.seed.insertDemoData, {});
 
     expect(result.backfilled.seasons).toBe(1);
     const row = await t.run((ctx) => ctx.db.get('seasons', seasonId));
