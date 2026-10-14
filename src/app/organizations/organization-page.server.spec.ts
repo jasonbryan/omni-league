@@ -21,7 +21,7 @@ import {
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { provideSpartanHlm } from '../ui/utils';
-import { GULF_COAST, queryResults } from './testing/pages';
+import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -120,6 +120,7 @@ async function render(
 
 const text = (el: Element | null | undefined) =>
   (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+const lines = (el: Element | null) => [...(el?.querySelectorAll('h3, p') ?? [])].map(text);
 const meta = (head: HTMLHeadElement, property: string) =>
   head.querySelector(`meta[property="${property}"]`)?.getAttribute('content');
 
@@ -155,7 +156,24 @@ describe('OrganizationPage server render', () => {
     );
 
     expect(text(body.querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
-    expect([...body.querySelectorAll('main dl dd')].map(text)).toEqual(['5', '3', '3']);
+    expect(text(body.querySelector('main h1')?.previousElementSibling)).toBe('GC');
+    expect(body.querySelector('main h1')?.previousElementSibling?.getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+    expect(text(body.querySelector('main h1')?.parentElement?.nextElementSibling)).toBe(
+      'Beach volleyball, soccer, and softball · 5 leagues at 3 locations',
+    );
+    expect(lines(body.querySelector('#league-2'))).toEqual([
+      "Men's Over-30 11v11",
+      "Men's · 11v11 · Rec · 30+",
+      'Soccer · Bayside Athletic Complex',
+    ]);
+    expect(lines(body.querySelector('#location-1'))).toEqual([
+      'Bayside Athletic Complex',
+      '4410 Ocean Dr, Corpus Christi, TX 78412',
+      'Soccer, softball',
+    ]);
+    expect(body.querySelector('main [role="status"]')).toBeNull();
 
     expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     expect(body.querySelector('a')?.getAttribute('href')).toBe(
@@ -167,6 +185,19 @@ describe('OrganizationPage server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
+  });
+
+  it('renders the empty hero line and no Leagues or Locations section for an organization with no leagues', async () => {
+    const { body, responseInit } = await render(
+      '/organizations/port-aransas-beach-volleyball-club',
+      (name) => Promise.resolve(queryResults(PORT_ARANSAS)[name]),
+    );
+    expect(responseInit.status).toBeUndefined();
+    expect(text(body.querySelector('main h1')?.parentElement?.nextElementSibling)).toBe(
+      'No leagues published yet',
+    );
+    expect(text(body.querySelector('main h2'))).toBe('No leagues yet');
+    expect(body.querySelector('main section')).toBeNull();
   });
 
   it('renders the not-found view in the public layout with status 404 and the public Cache-Control', async () => {
@@ -186,7 +217,7 @@ describe('OrganizationPage server render', () => {
     expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
   });
 
-  it('shows the totals in the tiles and the rows of page 1 when a list has more than 5', async () => {
+  it('shows the totals and the rows of page 1 when a list has more than 5', async () => {
     const { body } = await render('/organizations/gulf-coast-sport-social', (name) => {
       const results = queryResults({
         ...GULF_COAST,
@@ -196,7 +227,10 @@ describe('OrganizationPage server render', () => {
       });
       return Promise.resolve(results[name]);
     });
-    expect([...body.querySelectorAll('main dl dd')].map(text)).toEqual(['13', '13', '3']);
+    expect(text(body.querySelector('main h1')?.parentElement?.nextElementSibling)).toBe(
+      'Beach volleyball, soccer, and softball · 13 leagues at 13 locations',
+    );
+    expect(text(body.querySelector('#leagues-heading')?.nextElementSibling)).toBe('13 leagues');
     expect(
       body.querySelectorAll('main section[aria-labelledby="leagues-heading"] li'),
     ).toHaveLength(5);

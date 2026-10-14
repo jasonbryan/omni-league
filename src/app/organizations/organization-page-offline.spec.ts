@@ -123,12 +123,13 @@ describe('OrganizationPage offline', () => {
       expect(TestBed.inject(Title).getTitle()).toBe(`${GULF_COAST.name} | Omni League`);
     });
 
-    it('shows the saved-copy note right under the h1, with the saved time', () => {
+    it('shows the saved-copy note under the hero text, with the saved time', () => {
       const expected = formatSavedTime(SAVED_AT, NOW);
-      const h1 = host(harness).querySelector('main h1');
+      const heroText = host(harness).querySelector('main h1')?.parentElement?.nextElementSibling;
       const shown = note(harness);
-      expect(h1?.nextElementSibling?.tagName).toBe('APP-SAVED-COPY-NOTE');
-      expect(h1?.nextElementSibling?.firstElementChild).toBe(shown);
+      expect(text(heroText)).toContain('5 leagues at 3 locations');
+      expect(heroText?.nextElementSibling?.tagName).toBe('APP-SAVED-COPY-NOTE');
+      expect(heroText?.nextElementSibling?.firstElementChild).toBe(shown);
       expect(text(shown)).toBe(`Saved copy from ${expected.text}. It may have changed since.`);
       expect(shown?.querySelector('time')?.getAttribute('datetime')).toBe(expected.datetime);
     });
@@ -162,9 +163,29 @@ describe('OrganizationPage offline', () => {
     });
 
     it('shows page 1 of the leagues and locations lists and the totals from their saved copies', () => {
-      const tiles = [...host(harness).querySelectorAll('main dl > div dd')].map(text);
-      expect(tiles).toEqual(['5', '3', '3']);
+      const main = host(harness).querySelector('main');
+      expect(text(main?.querySelector('h1')?.parentElement?.nextElementSibling)).toBe(
+        'Beach volleyball, soccer, and softball · 5 leagues at 3 locations',
+      );
+      expect(text(main?.querySelector('#leagues-heading')?.nextElementSibling)).toBe('5 leagues');
     });
+  });
+
+  it('shows a copy saved before the division and sports lines existed, without them', async () => {
+    localStorage.clear();
+    const stripped = structuredClone(GULF_COAST);
+    for (const league of stripped.leagues) delete league.divisionLabel;
+    for (const location of stripped.locations) delete location.sportNames;
+    plant(stripped);
+    stubOnLine(false);
+    const offline = await open(PATH, { socket: 'down' });
+    const main = host(offline).querySelector('main');
+    expect(text(main?.querySelector('h1'))).toBe(GULF_COAST.name);
+    expect([...(main?.querySelectorAll('#league-1 h3, #league-1 p') ?? [])].map(text)).toEqual([
+      'Coed 7v7 Rec',
+      'Soccer · Bayside Athletic Complex',
+    ]);
+    expect(host(offline).querySelector('app-not-saved-view')).toBeNull();
   });
 
   it('dates the note by the oldest saved copy on screen', async () => {
@@ -300,10 +321,12 @@ describe('OrganizationPage offline', () => {
       stubOnLine(true);
       const harness = await open(PATH, { socket: 'down' });
       expect(host(harness).querySelector('main h1')).toBeNull();
+      expect(host(harness).querySelector('main app-organization-skeleton')).not.toBeNull();
       expect(host(harness).querySelector('app-not-saved-view')).toBeNull();
       vi.advanceTimersByTime(5_000);
       await settle(harness);
       expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+      expect(host(harness).querySelector('app-organization-skeleton')).toBeNull();
     });
 
     it('online and connected: keeps the loading view', async () => {
@@ -312,6 +335,7 @@ describe('OrganizationPage offline', () => {
       vi.advanceTimersByTime(10_000);
       await settle(harness);
       expect(host(harness).querySelector('main h1')).toBeNull();
+      expect(host(harness).querySelector('main app-organization-skeleton')).not.toBeNull();
       expect(host(harness).querySelector('app-not-saved-view')).toBeNull();
     });
   });

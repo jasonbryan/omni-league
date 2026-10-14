@@ -89,19 +89,6 @@ describe('OrganizationPage', () => {
     ]);
   });
 
-  it('shows nothing but the layout until all three results have arrived', async () => {
-    const harness = await open();
-    const results = queryResults(GULF_COAST);
-    subscription().emit(results[HEADER]);
-    subscription(LEAGUES).emit(results[LEAGUES]);
-    await settle(harness);
-    expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('main nav')).toBeNull();
-    subscription(LOCATIONS).emit(results[LOCATIONS]);
-    await settle(harness);
-    expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
-  });
-
   describe('populated', () => {
     let harness: RouterTestingHarness;
     beforeEach(async () => {
@@ -110,30 +97,53 @@ describe('OrganizationPage', () => {
       await settle(harness);
     });
 
-    it('renders the name as the only h1, after the "Organization" eyebrow', () => {
+    it('renders the name as the only h1, on the line of the organization mark', () => {
       const h1s = host(harness).querySelectorAll('main h1');
       expect(h1s).toHaveLength(1);
       expect(text(h1s[0])).toBe('Gulf Coast Sport & Social');
-      expect(text(h1s[0].previousElementSibling)).toBe('Organization');
+      const mark = h1s[0].previousElementSibling;
+      expect(mark?.tagName).toBe('APP-ORGANIZATION-MARK');
+      expect(text(mark)).toBe('GC');
+      expect(mark?.getAttribute('aria-hidden')).toBe('true');
+      expect(mark?.parentElement).toBe(h1s[0].parentElement);
     });
 
-    it('shows league, location, and distinct sport counts in three tiles', () => {
-      const tiles = [...host(harness).querySelectorAll('main dl > div')].map((tile) => [
-        text(tile.querySelector('dt')),
-        text(tile.querySelector('dd')),
-      ]);
-      expect(tiles).toEqual([
-        ['Leagues', '5'],
-        ['Locations', '3'],
-        ['Sports', '3'],
-      ]);
-      expect(host(harness).querySelector('main dl')?.className).toContain('grid-cols-3');
+    it('sizes the mark 32px on phones and 48px from 768px', () => {
+      const mark = host(harness).querySelector('main app-organization-mark');
+      expect(mark?.classList.contains('size-8')).toBe(true);
+      expect(mark?.classList.contains('md:size-12')).toBe(true);
     });
 
-    it('lists the leagues with sport badges and locations, each row with its #league-<n> id', () => {
-      const rows = [
-        ...host(harness).querySelectorAll('section[aria-labelledby="leagues-heading"] li'),
-      ];
+    it('scales the title text-2xl, then md:text-5xl', () => {
+      const h1 = host(harness).querySelector('main h1');
+      expect(h1?.classList.contains('text-2xl')).toBe(true);
+      expect(h1?.classList.contains('md:text-5xl')).toBe(true);
+    });
+
+    it('says the sports and the league and location counts under the name', () => {
+      const h1 = host(harness).querySelector('main h1');
+      const line = h1?.parentElement?.nextElementSibling;
+      expect(text(line)).toBe('Beach volleyball, soccer, and softball · 5 leagues at 3 locations');
+    });
+
+    it('shows the league total beside the Leagues heading, not the number of rows', async () => {
+      const section = () =>
+        host(harness).querySelector('section[aria-labelledby="leagues-heading"]');
+      expect(text(section()?.querySelector('h2'))).toBe('Leagues');
+      expect(text(section()?.querySelector('h2')?.nextElementSibling)).toBe('5 leagues');
+      emit({ ...GULF_COAST, leagueCount: 13 });
+      await settle(harness);
+      expect(text(section()?.querySelector('h2')?.nextElementSibling)).toBe('13 leagues');
+    });
+
+    it('has no tiles and no eyebrow', () => {
+      expect(host(harness).querySelector('main dl')).toBeNull();
+      expect(host(harness).querySelector('main')?.textContent).not.toContain('Organization');
+    });
+
+    it('lists the leagues as rows, each with its #league-<n> id, not boxed panels', () => {
+      const section = host(harness).querySelector('section[aria-labelledby="leagues-heading"]');
+      const rows = [...(section?.querySelectorAll('li') ?? [])];
       expect(rows.map((row) => row.id)).toEqual([
         'league-1',
         'league-2',
@@ -144,47 +154,81 @@ describe('OrganizationPage', () => {
       expect(rows.map((row) => text(row.querySelector('h3')))).toEqual(
         GULF_COAST.leagues.map((league) => league.name),
       );
-      expect(rows.map((row) => text(row.querySelector('[data-slot="badge"]')))).toEqual([
-        'Soccer',
-        'Soccer',
-        'Beach volleyball',
-        'Beach volleyball',
-        'Softball',
-      ]);
-      expect(text(rows[0].querySelector('p'))).toBe('Location: Bayside Athletic Complex');
-      expect(text(rows[4].querySelector('p'))).toBe(
-        'Locations: Flour Bluff Softball Park, Bayside Athletic Complex',
-      );
-      expect(text(rows[4].querySelector('p .sr-only'))).toBe('Locations:');
+      expect(section?.className).not.toContain('ring-1');
+      expect(section?.className).not.toContain('shadow');
     });
 
-    it('links each league name to its league page, built from the organization and league slugs', () => {
+    it('shows each league row with its division, then its sport and locations', () => {
+      const lines = [
+        ...host(harness).querySelectorAll('section[aria-labelledby="leagues-heading"] li'),
+      ].map((row) => [...row.querySelectorAll('h3, p')].map(text));
+      expect(lines).toEqual([
+        ['Coed 7v7 Rec', 'Coed · 7v7 · Rec', 'Soccer · Bayside Athletic Complex'],
+        ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+", 'Soccer · Bayside Athletic Complex'],
+        ['Sunday Reverse Coed 4s', 'Coed · 4v4 · BB', 'Beach volleyball · North Beach Sand Courts'],
+        ['Thursday Night Coed 2s', 'Coed · 2v2 · B', 'Beach volleyball · North Beach Sand Courts'],
+        [
+          'Wednesday Coed Slow-Pitch',
+          'Coed · 10v10 · Rec',
+          'Softball · Flour Bluff Softball Park, Bayside Athletic Complex',
+        ],
+      ]);
+    });
+
+    it('links each league row to its league page, built from the organization and league slugs', () => {
       const rows = [
         ...host(harness).querySelectorAll('section[aria-labelledby="leagues-heading"] li'),
       ];
-      expect(rows.map((row) => row.querySelector('h3 a')?.getAttribute('href'))).toEqual(
+      expect(rows.map((row) => row.querySelector('a')?.getAttribute('href'))).toEqual(
         GULF_COAST.leagues.map(
           (league) => `/organizations/gulf-coast-sport-social/leagues/${league.slug}`,
         ),
       );
-      expect(rows.map((row) => text(row.querySelector('h3 a')))).toEqual(
-        GULF_COAST.leagues.map((league) => league.name),
-      );
-      expect(rows.every((row) => row.querySelector('p a') === null)).toBe(true);
       const locations = host(harness).querySelectorAll(
-        'section[aria-labelledby="locations-heading"] h3 a',
+        'section[aria-labelledby="locations-heading"] a',
       );
       expect(locations).toHaveLength(0);
     });
 
-    it('lists the locations with addresses, each row with its #location-<n> id', () => {
+    it('lists the locations with address and the sports played there, each row with its #location-<n> id', () => {
       const rows = [
         ...host(harness).querySelectorAll('section[aria-labelledby="locations-heading"] li'),
       ];
       expect(rows.map((row) => row.id)).toEqual(['location-1', 'location-2', 'location-3']);
+      expect(rows.map((row) => [...row.querySelectorAll('h3, p')].map(text))).toEqual([
+        ['Bayside Athletic Complex', '4410 Ocean Dr, Corpus Christi, TX 78412', 'Soccer, softball'],
+        ['Flour Bluff Softball Park', '2001 Waldron Rd, Corpus Christi, TX 78418', 'Softball'],
+        [
+          'North Beach Sand Courts',
+          '3500 Surfside Blvd, Corpus Christi, TX 78402',
+          'Beach volleyball',
+        ],
+      ]);
+    });
+
+    it('shows a league with no division yet without a division line or an error', async () => {
+      const undivided = structuredClone(GULF_COAST);
+      delete undivided.leagues[0].divisionLabel;
+      emit(undivided);
+      await settle(harness);
+      const row = host(harness).querySelector('#league-1');
+      expect([...(row?.querySelectorAll('h3, p') ?? [])].map(text)).toEqual([
+        'Coed 7v7 Rec',
+        'Soccer · Bayside Athletic Complex',
+      ]);
+      expect(host(harness).querySelector('app-server-error-view')).toBeNull();
+    });
+
+    it('shows a location with no sports yet (a copy saved earlier) without a sports line', async () => {
+      const unsorted = structuredClone(GULF_COAST);
+      delete unsorted.locations[0].sportNames;
+      emit(unsorted);
+      await settle(harness);
       expect(
-        rows.map((row) => [text(row.querySelector('h3')), text(row.querySelector('p'))]),
-      ).toEqual(GULF_COAST.locations.map((location) => [location.name, location.address]));
+        [...(host(harness).querySelector('#location-1')?.querySelectorAll('h3, p') ?? [])].map(
+          text,
+        ),
+      ).toEqual(['Bayside Athletic Complex', '4410 Ocean Dr, Corpus Christi, TX 78412']);
     });
 
     it('renders in the public layout: top bar and footer, no sidebar and no menu button', () => {
@@ -200,17 +244,6 @@ describe('OrganizationPage', () => {
       expect(root.querySelector('button')).toBeNull();
     });
 
-    it('keeps the #league-<n> and #location-<n> ids on the rows of its panels', () => {
-      const ids = (heading: string) =>
-        [...host(harness).querySelectorAll(`section[aria-labelledby="${heading}"] li`)].map(
-          (li) => li.id,
-        );
-      expect(ids('leagues-heading')).toEqual(GULF_COAST.leagues.map((_, i) => `league-${i + 1}`));
-      expect(ids('locations-heading')).toEqual(
-        GULF_COAST.locations.map((_, i) => `location-${i + 1}`),
-      );
-    });
-
     it('sets the title, og tags, and canonical from the result, with the path built from the slug', () => {
       const origin = TestBed.inject(DOCUMENT).location.origin;
       expect(TestBed.inject(Title).getTitle()).toBe('Gulf Coast Sport & Social | Omni League');
@@ -224,7 +257,7 @@ describe('OrganizationPage', () => {
       expect(head().querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     });
 
-    it('updates the rows and tiles in place when page 1 or the totals change', async () => {
+    it('updates the rows and the hero line in place when page 1 or the totals change', async () => {
       const before = client.subscriptions.length;
       emit({
         ...GULF_COAST,
@@ -244,19 +277,10 @@ describe('OrganizationPage', () => {
         'Adult League',
         ...GULF_COAST.leagues.slice(0, 4).map((league) => league.name),
       ]);
-      expect(host(harness).querySelector('#league-1 p')).toBeNull();
-      expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual(['6', '4', '3']);
-    });
-
-    it('tiles show the totals, not the rows shown', async () => {
-      emit({ ...GULF_COAST, leagueCount: 13, locationCount: 236, sportCount: 2 });
-      await settle(harness);
-      expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual([
-        '13',
-        '236',
-        '2',
-      ]);
-      expect(host(harness).querySelectorAll('main li')).toHaveLength(8);
+      expect(text(host(harness).querySelector('#league-1 p'))).toBe('Soccer');
+      expect(text(host(harness).querySelector('main h1')?.parentElement?.nextElementSibling)).toBe(
+        'Beach volleyball, soccer, and softball · 6 leagues at 4 locations',
+      );
     });
 
     it('removes its og tags and canonical when the visitor leaves the page', async () => {
@@ -268,27 +292,91 @@ describe('OrganizationPage', () => {
   });
 
   describe('empty organization', () => {
-    it('shows each panel empty state and tiles 0, 0, 0', async () => {
+    it('says no leagues are published, with no Leagues or Locations section', async () => {
       const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
       emit(PORT_ARANSAS);
       await settle(harness);
       const main = host(harness).querySelector('main');
-      expect([...(main?.querySelectorAll('dl dd') ?? [])].map(text)).toEqual(['0', '0', '0']);
+      expect(text(main?.querySelector('h1'))).toBe('Port Aransas Beach Volleyball Club');
+      expect(text(main?.querySelector('h1')?.parentElement?.nextElementSibling)).toBe(
+        'No leagues published yet',
+      );
+      expect(text(main?.querySelector('h2'))).toBe('No leagues yet');
+      expect(text(main?.querySelector('h2')?.nextElementSibling)).toBe(
+        'Leagues this organization runs will be listed here, with their seasons and how to register.',
+      );
+      expect(main?.querySelectorAll('section')).toHaveLength(0);
       expect(main?.querySelectorAll('li')).toHaveLength(0);
-      const panel = (heading: string) => {
-        const section = main?.querySelector(`section[aria-labelledby="${heading}"]`);
-        return [section?.querySelector('h2'), ...(section?.querySelectorAll('p') ?? [])].map(text);
-      };
-      expect(panel('leagues-heading')).toEqual([
-        'Leagues',
-        'No leagues yet',
-        'Leagues this organization runs will be listed here.',
-      ]);
-      expect(panel('locations-heading')).toEqual([
-        'Locations',
-        'No locations yet',
-        'Places where this organization plays will be listed here.',
-      ]);
+      expect(main?.textContent).not.toContain('Locations');
+    });
+  });
+
+  describe('an organization with locations and no league', () => {
+    it('still lists its locations, with the empty state in place of the Leagues section', async () => {
+      const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
+      emit({
+        ...PORT_ARANSAS,
+        locationCount: 1,
+        locations: [{ name: 'Mustang Courts', address: '1 Mustang Way', sportNames: [] }],
+      });
+      await settle(harness);
+      const main = host(harness).querySelector('main');
+      expect(text(main?.querySelector('h1')?.parentElement?.nextElementSibling)).toBe(
+        'No leagues published yet',
+      );
+      expect(text(main?.querySelector('h2'))).toBe('No leagues yet');
+      expect(main?.querySelector('section[aria-labelledby="leagues-heading"]')).toBeNull();
+      expect(
+        [...(main?.querySelectorAll('#location-1 h3, #location-1 p') ?? [])].map(text),
+      ).toEqual(['Mustang Courts', '1 Mustang Way']);
+    });
+  });
+
+  describe('loading', () => {
+    it('shows a skeleton with the status until all three results have arrived', async () => {
+      const harness = await open();
+      const results = queryResults(GULF_COAST);
+      const main = () => host(harness).querySelector('main');
+      expect(text(main()?.querySelector('[role="status"]'))).toBe('Loading the organization.');
+      expect(main()?.querySelector('[role="status"]')?.classList.contains('sr-only')).toBe(true);
+      expect(main()?.querySelector('h1')).toBeNull();
+      subscription().emit(results[HEADER]);
+      subscription(LEAGUES).emit(results[LEAGUES]);
+      await settle(harness);
+      expect(main()?.querySelector('[role="status"]')).not.toBeNull();
+      subscription(LOCATIONS).emit(results[LOCATIONS]);
+      await settle(harness);
+      expect(main()?.querySelector('[role="status"]')).toBeNull();
+      expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
+    });
+
+    it('draws only hidden pulsing bars, so a screen reader hears the status alone', async () => {
+      const harness = await open();
+      const bars = [...host(harness).querySelectorAll('main app-organization-skeleton span')];
+      expect(bars.length).toBeGreaterThan(5);
+      for (const bar of bars) {
+        expect(bar.getAttribute('aria-hidden')).toBe('true');
+        expect(bar.className).toContain('motion-safe:animate-pulse');
+      }
+      expect(text(host(harness).querySelector('main app-organization-skeleton'))).toBe(
+        'Loading the organization.',
+      );
+    });
+
+    it('sizes the skeleton mark and heading bar like the mark and the h1', async () => {
+      const harness = await open();
+      const bars = host(harness).querySelectorAll('main app-organization-skeleton span');
+      expect(bars[0].classList.contains('size-8')).toBe(true);
+      expect(bars[0].classList.contains('md:size-12')).toBe(true);
+      expect(bars[1].classList.contains('h-8')).toBe(true);
+      expect(bars[1].classList.contains('md:h-12')).toBe(true);
+    });
+
+    it('does not show the skeleton for a missing organization or a failed query', async () => {
+      const harness = await open('/organizations/does-not-exist');
+      subscription().emit(null);
+      await settle(harness);
+      expect(host(harness).querySelector('app-organization-skeleton')).toBeNull();
     });
   });
 

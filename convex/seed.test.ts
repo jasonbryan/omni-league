@@ -383,9 +383,28 @@ describe('seed:demo', () => {
       page: 1,
     });
     expect(gulfLocations.rows).toEqual([
-      { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
-      { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
-      { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+      {
+        name: 'Bayside Athletic Complex',
+        address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+        sportNames: ['Soccer', 'Softball'],
+      },
+      {
+        name: 'Flour Bluff Softball Park',
+        address: '2001 Waldron Rd, Corpus Christi, TX 78418',
+        sportNames: ['Softball'],
+      },
+      {
+        name: 'North Beach Sand Courts',
+        address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+        sportNames: ['Beach volleyball'],
+      },
+    ]);
+    expect(gulfLeagues.rows.map((league) => [league.name, league.divisionLabel])).toEqual([
+      ['Coed 7v7 Rec', 'Coed · 7v7 · Rec'],
+      ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+"],
+      ['Sunday Reverse Coed 4s', 'Coed · 4v4 · BB'],
+      ['Thursday Night Coed 2s', 'Coed · 2v2 · B'],
+      ['Wednesday Coed Slow-Pitch', 'Coed · 10v10 · Rec'],
     ]);
     expect(
       gulfLeagues.rows.map((league) => [league.name, league.sportName, league.locationNames]),
@@ -721,7 +740,13 @@ describe('seed:demo', () => {
       }),
     ).toEqual({
       rows: [
-        { name: 'Beta League', slug: 'beta-league', sportName: 'Softball', locationNames: [] },
+        {
+          name: 'Beta League',
+          slug: 'beta-league',
+          sportName: 'Softball',
+          locationNames: [],
+          divisionLabel: 'Coed · 9v9 · Rec',
+        },
       ],
       page: 1,
       pageCount: 1,
@@ -736,8 +761,15 @@ describe('seed:demo', () => {
           slug: 'alpha-league',
           sportName: 'Soccer',
           locationNames: ['Old Field'],
+          divisionLabel: 'Coed · 4v4 · Rec',
         },
-        { name: 'Beta League', slug: 'beta-league', sportName: 'Softball', locationNames: [] },
+        {
+          name: 'Beta League',
+          slug: 'beta-league',
+          sportName: 'Softball',
+          locationNames: [],
+          divisionLabel: 'Coed · 9v9 · Rec',
+        },
       ],
       page: 1,
       pageCount: 1,

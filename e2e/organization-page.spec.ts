@@ -1,6 +1,6 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -15,6 +15,7 @@ import {
   tallLocations,
   type Tenant,
 } from './support/tenant';
+import { holdQueries } from './support/hold-queries';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -35,6 +36,41 @@ function smallTenant(): Promise<Tenant> {
     ],
   });
 }
+
+const GULF_COAST_LOCATIONS = [
+  { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
+  { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
+  { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+];
+
+// Named like the demo organization, so its mark reads "GC".
+function gulfCoastTenant(): Promise<Tenant> {
+  return seedTenant({
+    name: 'Gulf Coast Sport & Social',
+    locations: GULF_COAST_LOCATIONS,
+    leagues: [
+      {
+        name: "Men's Over-30 11v11",
+        sport: 'soccer',
+        locations: ['Bayside Athletic Complex'],
+        division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
+      },
+      {
+        name: 'Sunday Reverse Coed 4s',
+        sport: 'beachVolleyball',
+        locations: ['North Beach Sand Courts'],
+        division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+      },
+      {
+        name: 'Wednesday Coed Slow-Pitch',
+        sport: 'softball',
+        locations: ['Flour Bluff Softball Park', 'Bayside Athletic Complex'],
+      },
+    ],
+  });
+}
+
+const GULF_COAST_LINE = 'Beach volleyball, soccer, and softball · 3 leagues at 3 locations';
 
 function tallTenant(): Promise<Tenant> {
   return seedTenant({
@@ -110,7 +146,9 @@ test.describe('organization page: raw server HTML', () => {
         }
         for (const league of tenant.leagues) {
           expect(html, path).toMatch(new RegExp(`<h3\\b[^>]*>\\s*<a\\b[^>]*>${league.name}</a>`));
-          expect(html, path).toMatch(new RegExp(`>\\s*${SPORT_NAMES[league.sport]}\\s*</span>`));
+          expect(html, path).toMatch(
+            new RegExp(`>\\s*${SPORT_NAMES[league.sport]} · [^<]*\\s*</p>`),
+          );
         }
 
         expect(html, path).toContain(`<title>${tenant.name} | Omni League</title>`);
@@ -127,10 +165,10 @@ test.describe('organization page: raw server HTML', () => {
           expect(html, `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
         }
 
-        expect(
-          [...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n),
-          path,
-        ).toEqual(['2', '2', '2']);
+        expect(html, path).toMatch(
+          />\s*Beach volleyball and soccer · 2 leagues at 2 locations\s*</,
+        );
+        expect(html, path).not.toContain('<dl');
 
         if (query) expect(html, path).not.toContain(query.slice(1));
       }
@@ -142,7 +180,7 @@ test.describe('organization page: more than 5 rows per list', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
   test(
-    'raw: 5 league rows, 5 location rows, and totals in the tiles',
+    'raw: 5 league rows, 5 location rows, and the totals in the hero line and the Leagues heading',
     RAW_HTTP,
     async ({ request }) => {
       const locations = numberedLocations(13);
@@ -184,13 +222,10 @@ test.describe('organization page: more than 5 rows per list', () => {
         expect(content).not.toContain(`>${hidden.name}</h3>`);
         expect(content).not.toContain(`>${hidden.name}</a>`);
       }
-      expect(content).toContain(`${tenant.leagues[0].locations[0]}<`);
+      expect(content).toMatch(new RegExp(`${tenant.leagues[0].locations[0]}\\s*<`));
 
-      expect([...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n)).toEqual([
-        '13',
-        '13',
-        '2',
-      ]);
+      expect(html).toMatch(/>\s*Soccer and softball · 13 leagues at 13 locations\s*</);
+      expect(html).toMatch(/>\s*13 leagues\s*</);
 
       expect(html).not.toContain('utm_source');
     },
@@ -251,7 +286,7 @@ test.describe('organization page in the browser', () => {
   });
 
   test(
-    'a league added after load appears without a reload in its panel and tile',
+    'a league added after load appears without a reload in its list and the hero line',
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const tenant = await smallTenant();
@@ -261,7 +296,7 @@ test.describe('organization page in the browser', () => {
         (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
       });
       const main = page.getByRole('main');
-      await expect(main.locator('dl dd').first()).toHaveText('2');
+      await expect(main.getByText('· 2 leagues at 2 locations')).toBeVisible();
 
       await convexRun('testing:addLeague', {
         organizationSlug: tenant.slug,
@@ -273,7 +308,7 @@ test.describe('organization page in the browser', () => {
       await expect(main.locator('#league-3 h3')).toHaveText('Zulu League');
       await expect(main.locator('#league-3')).toContainText('Softball');
       await expect(main.locator('#league-3')).toContainText('Beta Courts');
-      await expect(main.locator('dl dd')).toHaveText(['3', '2', '3']);
+      await expect(main.getByText('· 3 leagues at 2 locations')).toBeVisible();
       expect(
         await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
       ).toBe(true);
@@ -325,7 +360,7 @@ test.describe('organization page in the browser', () => {
     },
   );
 
-  test('an organization with no leagues and no locations shows the empty states and 0, 0, 0', async ({
+  test('an organization with no leagues shows the empty state and no Leagues or Locations section', async ({
     page,
     consoleGuard,
   }) => {
@@ -334,17 +369,198 @@ test.describe('organization page in the browser', () => {
     await hydrated(consoleGuard);
     const main = page.getByRole('main');
     await expect(main.getByRole('heading', { level: 1 })).toHaveText(tenant.name);
-    await expect(main.locator('dl dd')).toHaveText(['0', '0', '0']);
+    await expect(main.getByText('No leagues published yet')).toBeVisible();
+    await expect(main.getByRole('heading', { level: 2, name: 'No leagues yet' })).toBeVisible();
+    await expect(
+      main.getByText(
+        'Leagues this organization runs will be listed here, with their seasons and how to register.',
+      ),
+    ).toBeVisible();
+    await expect(main.getByRole('heading', { name: /^(Leagues|Locations)$/ })).toHaveCount(0);
     await expect(main.locator('li')).toHaveCount(0);
-    await expect(main.getByText('No leagues yet')).toBeVisible();
-    await expect(
-      main.getByText('Leagues this organization runs will be listed here.'),
-    ).toBeVisible();
-    await expect(main.getByText('No locations yet')).toBeVisible();
-    await expect(
-      main.getByText('Places where this organization plays will be listed here.'),
-    ).toBeVisible();
     await expectAccessible(page);
+  });
+});
+
+test.describe('organization page: hero, divisions, and sports', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'raw: the hidden initials mark, the h1, the hero line, each league with its division, and each location with its sports',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await gulfCoastTenant();
+      const { status, html: rendered } = await fetchRawHtml(request, tenant.path);
+      expect(status).toBe(200);
+      const html = rendered.replaceAll('&#39;', "'");
+
+      expect(html).toMatch(
+        /<app-organization-mark\b[^>]*\baria-hidden="true"[^>]*>\s*GC\s*<\/app-organization-mark>\s*<h1\b/,
+      );
+      expect(html.match(/<h1\b/g)).toHaveLength(1);
+      expect(html).toMatch(
+        new RegExp(`<h1\\b[^>]*>\\s*${tenant.name.replace('&', '&amp;')}\\s*</h1>`),
+      );
+      expect(html).toMatch(new RegExp(`>\\s*${GULF_COAST_LINE}\\s*<`));
+
+      expect(html).toMatch(
+        />\s*Men's · 11v11 · Rec · 30\+\s*<\/p>\s*(?:<!--[^>]*-->\s*)*<p[^>]*>\s*Soccer · Bayside/,
+      );
+      expect(html).toMatch(
+        />\s*Coed · 4v4 · BB\s*<\/p>\s*(?:<!--[^>]*-->\s*)*<p[^>]*>\s*Beach volleyball · North/,
+      );
+      expect(html).toMatch(
+        />\s*Softball · Flour Bluff Softball Park, Bayside Athletic Complex\s*<\/p>/,
+      );
+
+      expect(html).toMatch(
+        /<h3\b[^>]*>\s*Bayside Athletic Complex\s*<\/h3>[\s\S]*?>\s*Soccer, softball\s*<\/p>/,
+      );
+      expect(html).toMatch(
+        /<h3\b[^>]*>\s*North Beach Sand Courts\s*<\/h3>[\s\S]*?>\s*Beach volleyball\s*<\/p>/,
+      );
+      expect(html).not.toContain('Loading the organization.');
+    },
+  );
+
+  test('browser: the mark is 32px on a phone and 48px from 768px, on the h1 line', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await gulfCoastTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const mark = page.locator('app-organization-mark');
+    const h1 = page.getByRole('heading', { level: 1 });
+    const size = (page.viewportSize()?.width ?? 0) >= 768 ? 48 : 32;
+    const markBox = await mark.boundingBox();
+    const h1Box = await h1.boundingBox();
+    expect(markBox?.width).toBe(size);
+    expect(markBox?.height).toBe(size);
+    const markMiddle = (markBox?.y ?? 0) + size / 2;
+    expect(markMiddle).toBeGreaterThan(h1Box?.y ?? Infinity);
+    expect(markMiddle).toBeLessThan((h1Box?.y ?? 0) + (h1Box?.height ?? 0));
+    expect(markBox?.x).toBeLessThan(h1Box?.x ?? 0);
+    await expect(mark).toHaveAttribute('aria-hidden', 'true');
+    await expectAccessible(page);
+  });
+
+  test('browser: the leagues sit beside the locations from 1024px and above them below', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await gulfCoastTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const leagues = await page.locator('#leagues').boundingBox();
+    const locations = await page.locator('#locations').boundingBox();
+    if ((page.viewportSize()?.width ?? 0) >= 1024) {
+      expect(locations?.x).toBeGreaterThan((leagues?.x ?? 0) + (leagues?.width ?? 0) - 1);
+      expect(locations?.y).toBeLessThan((leagues?.y ?? 0) + 100);
+    } else {
+      expect(locations?.y).toBeGreaterThan((leagues?.y ?? 0) + (leagues?.height ?? 0) - 1);
+    }
+  });
+
+  test('browser: nothing scrolls sideways at 320px', async ({ page, consoleGuard }) => {
+    const tenant = await gulfCoastTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+  });
+});
+
+test.describe('organization page: first load', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'never shows the skeleton, keeps the server-rendered h1 element, and leaves focus where it was',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, consoleGuard }) => {
+      const tenant = await smallTenant();
+      await page.addInitScript(() => {
+        const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
+        watch.e2eSkeletonSeen = false;
+        const check = () => {
+          const first = document.querySelector('main h1');
+          if (first && !watch.e2eFirstH1) watch.e2eFirstH1 = first;
+          if (document.body.textContent.includes('Loading the organization.')) {
+            watch.e2eSkeletonSeen = true;
+          }
+        };
+        new MutationObserver(check).observe(document, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+        });
+      });
+      await page.goto(tenant.path);
+      await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
+      await hydrated(consoleGuard);
+      const watched = await page.evaluate(() => {
+        const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
+        return {
+          skeletonSeen: watch.e2eSkeletonSeen,
+          sameH1:
+            watch.e2eFirstH1 !== undefined &&
+            watch.e2eFirstH1 === document.querySelector('main h1'),
+          mainFocused: document.activeElement === document.querySelector('main#main'),
+        };
+      });
+      expect(watched).toEqual({ skeletonSeen: false, sameH1: true, mainFocused: false });
+    },
+  );
+});
+
+test.describe('organization page: after an in-app navigation', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test('shows the skeleton with its status while the data is on its way, then the page within 4px of it, with focus on main', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await smallTenant();
+    const leaguePath = `${tenant.path}/leagues/alpha-league`;
+    const held = await holdQueries(page, [
+      'organizations:getPublicPage',
+      'organizations:listPublicLeagues',
+      'organizations:listPublicLocations',
+    ]);
+    await page.goto(leaguePath);
+    await expect(page.getByRole('heading', { level: 1, name: 'Alpha League' })).toBeVisible();
+    await hydrated(consoleGuard);
+
+    await page
+      .getByRole('navigation', { name: 'Breadcrumb' })
+      .getByRole('link', { name: tenant.name })
+      .click();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+
+    const skeleton = page.getByTestId('organization-skeleton');
+    await expect(skeleton).toBeVisible();
+    await expect(skeleton.getByRole('status')).toHaveText('Loading the organization.');
+    await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
+    await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
+    await expect(page.locator('main[id="main"]')).toBeFocused();
+    const skeletonScan = await axeScan(page);
+    expect(describeViolations(skeletonScan.violations)).toEqual([]);
+    const bar = await skeleton.locator('span').nth(1).boundingBox();
+    const markBar = await skeleton.locator('span').first().boundingBox();
+
+    held.release();
+    const h1 = page.getByRole('heading', { level: 1, name: tenant.name });
+    await expect(h1).toBeVisible();
+    await expect(skeleton).toHaveCount(0);
+    const heading = await h1.boundingBox();
+    expect(Math.abs((heading?.y ?? Infinity) - (bar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+    const mark = await page.locator('app-organization-mark').boundingBox();
+    expect(Math.abs((mark?.y ?? Infinity) - (markBar?.y ?? -Infinity))).toBeLessThanOrEqual(4);
+    expect(mark?.width).toBe(markBar?.width);
+    await expect(page.locator('main[id="main"]')).toBeFocused();
   });
 });
 

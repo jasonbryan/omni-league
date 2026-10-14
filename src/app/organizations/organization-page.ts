@@ -10,12 +10,20 @@ import { NotSavedView } from '../offline/not-saved-view';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview } from './organization-overview';
+import { OrganizationSkeleton } from './organization-skeleton';
 import { organizationPath, type PublicOrganizationPage } from './organization-path';
 
 /** The queries' only arguments are the route's slug and page 1, so the server and the browser use the same `TransferState` keys and the server HTML holds no query string. */
 @Component({
   selector: 'app-organization-page',
-  imports: [NotFoundView, NotSavedView, OrganizationOverview, PublicLayout, ServerErrorView],
+  imports: [
+    NotFoundView,
+    NotSavedView,
+    OrganizationOverview,
+    OrganizationSkeleton,
+    PublicLayout,
+    ServerErrorView,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
@@ -27,6 +35,8 @@ import { organizationPath, type PublicOrganizationPage } from './organization-pa
         <app-server-error-view [retryHref]="path()" />
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="path()" />
+      } @else {
+        <app-organization-skeleton />
       }
     </app-public-layout>
   `,

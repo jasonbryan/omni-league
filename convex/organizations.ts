@@ -1,7 +1,8 @@
 import { ConvexError, v } from 'convex/values';
-import type { Doc } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import { customLevelLabel, divisionLabel, levelLabel } from './lib/divisions';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
   checkOrganizationName,
@@ -14,6 +15,7 @@ import {
   getPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
+  type PublicLocations,
 } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
 import { isSlug } from './lib/slugs';
@@ -26,6 +28,44 @@ export { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE };
 const listArgs = { slug: v.string(), page: v.number() };
 
 const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
+
+async function publicDivisionLabel(
+  ctx: QueryCtx,
+  league: Doc<'leagues'>,
+): Promise<string | undefined> {
+  const { gender, playersPerSide, level, ageGroup, customLevelId } = league;
+  if (gender === undefined || playersPerSide === undefined || level === undefined) {
+    return undefined;
+  }
+  const customLevel =
+    customLevelId === undefined ? null : await ctx.db.get('customLevels', customLevelId);
+  return divisionLabel({
+    gender,
+    playersPerSide,
+    levelLabel: customLevel
+      ? customLevelLabel(customLevel.name, customLevel.standardLevel, league.sport)
+      : levelLabel(level),
+    ...(ageGroup !== undefined && { ageGroup }),
+  });
+}
+
+async function sportNamesAt(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  locationId: Id<'locations'>,
+): Promise<string[]> {
+  const names: string[] = [];
+  for (const sport of Object.keys(SPORT_NAMES) as Sport[]) {
+    const row = await ctx.db
+      .query('sportLocations')
+      .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
+        q.eq('organizationId', organizationId).eq('sport', sport).eq('locationId', locationId),
+      )
+      .unique();
+    if (row && row.leagueCount > 0) names.push(sportName(sport));
+  }
+  return names;
+}
 
 async function organizationBySlug(
   ctx: QueryCtx,
@@ -72,7 +112,7 @@ export const getPublicPage = query({
 export const listPublicLocations = query({
   args: listArgs,
   returns: publicLocationsValidator,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicLocations> => {
     const organization = await organizationBySlug(ctx, args.slug);
     if (!organization) return EMPTY_LIST;
     const total = organization.locationCount ?? 0;
@@ -81,12 +121,15 @@ export const listPublicLocations = query({
       .query('locations')
       .withIndex('by_organizationId_and_sortName', (q) => q.eq('organizationId', organization._id))
       .take(page * PUBLIC_LIST_PAGE_SIZE);
-    return {
-      rows: pageRows(read, page).map(({ name, address }) => ({ name, address })),
-      page,
-      pageCount,
-      total,
-    };
+    const rows = [];
+    for (const location of pageRows(read, page)) {
+      rows.push({
+        name: location.name,
+        address: location.address,
+        sportNames: await sportNamesAt(ctx, organization._id, location._id),
+      });
+    }
+    return { rows, page, pageCount, total };
   },
 });
 
@@ -125,11 +168,13 @@ export const listPublicLeagues = query({
         // Only this organization's locations: a league can never name another organization's.
         if (location?.organizationId === organization._id) locationNames.push(location.name);
       }
+      const label = await publicDivisionLabel(ctx, league);
       rows.push({
         name: league.name,
         slug: league.slug,
         sportName: sportName(league.sport),
         locationNames,
+        ...(label !== undefined && { divisionLabel: label }),
       });
     }
     return { rows, page, pageCount, total };

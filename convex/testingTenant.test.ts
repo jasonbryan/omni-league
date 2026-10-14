@@ -100,16 +100,23 @@ describe('testing:seedLeague', () => {
     });
     const page = { slug: 'e2e-org-a1b2', page: 1 };
     expect((await t.query(api.organizations.listPublicLocations, page)).rows).toEqual([
-      { name: 'Field One', address: '1 Test Road' },
-      { name: 'Field Two', address: '2 Test Road' },
+      { name: 'Field One', address: '1 Test Road', sportNames: ['Soccer', 'Softball'] },
+      { name: 'Field Two', address: '2 Test Road', sportNames: ['Softball'] },
     ]);
     expect((await t.query(api.organizations.listPublicLeagues, page)).rows).toEqual([
-      { name: 'League A', slug: 'league-a', sportName: 'Soccer', locationNames: ['Field One'] },
+      {
+        name: 'League A',
+        slug: 'league-a',
+        sportName: 'Soccer',
+        locationNames: ['Field One'],
+        divisionLabel: 'Coed · 4v4 · Rec',
+      },
       {
         name: 'League B',
         slug: 'league-b',
         sportName: 'Softball',
         locationNames: ['Field Two', 'Field One'],
+        divisionLabel: 'Coed · 9v9 · Rec',
       },
     ]);
   });
@@ -201,7 +208,7 @@ describe('testing:addLeague', () => {
       page: 1,
     });
     expect(leagues.rows.map((league) => league.name)).toEqual(['League A', 'League B', 'League C']);
-    expect(leagues.rows[2]).toEqual({
+    expect(leagues.rows[2]).toMatchObject({
       name: 'League C',
       slug: 'league-c',
       sportName: 'Beach volleyball',

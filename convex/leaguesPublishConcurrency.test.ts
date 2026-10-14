@@ -153,7 +153,7 @@ describe('leagues.publish inputs', () => {
     expect(await counted(s)).toEqual(before);
   });
 
-  test('a publish moves the public league list and the sport view, and not the location list', async () => {
+  test('a publish moves the public league list, the sport view, and the sports of its locations, and not the location rows', async () => {
     const s = await setup();
     const locations = () =>
       s.t.query(api.organizations.listPublicLocations, { slug: 'org', page: 1 });
@@ -161,7 +161,13 @@ describe('leagues.publish inputs', () => {
     const locationsBefore = await locations();
     expect((await leagues()).total).toBe(1);
     await s.admin.mutation(api.leagues.publish, { leagueId: s.one });
-    expect(await locations()).toEqual(locationsBefore);
+    const locationsAfter = await locations();
+    const rowsWithout = (result: typeof locationsAfter) =>
+      result.rows.map(({ name, address }) => ({ name, address }));
+    expect(rowsWithout(locationsAfter)).toEqual(rowsWithout(locationsBefore));
+    expect(locationsAfter.total).toBe(locationsBefore.total);
+    expect(locationsBefore.rows.map((row) => row.sportNames)).toEqual([['Soccer'], []]);
+    expect(locationsAfter.rows.map((row) => row.sportNames)).toEqual([['Soccer'], ['Soccer']]);
     const after = await leagues();
     expect(after.total).toBe(2);
     expect(after.rows.map((row) => row.name)).toEqual(['Draft One', 'Live Soccer']);

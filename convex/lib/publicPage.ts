@@ -26,13 +26,19 @@ export type PublicPage = Infer<typeof publicPageValidator>;
 
 export const getPublicPageReturns = v.union(v.null(), publicPageValidator);
 
-const publicLocationValidator = v.object({ name: v.string(), address: v.string() });
+// `sportNames` and `divisionLabel` are optional so a copy saved before they existed stays valid.
+const publicLocationValidator = v.object({
+  name: v.string(),
+  address: v.string(),
+  sportNames: v.optional(v.array(v.string())),
+});
 
 const publicLeagueValidator = v.object({
   name: v.string(),
   slug: v.string(),
   sportName: v.string(),
   locationNames: v.array(v.string()),
+  divisionLabel: v.optional(v.string()),
 });
 
 function publicListValidator<Row extends Validator<unknown, 'required', string>>(row: Row) {
