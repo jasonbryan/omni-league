@@ -11,12 +11,13 @@ const FS_MODULES = String.raw`(?:node:)?(?:fs|path|module)(?:/[^"']*)?`;
 // A new dependency that reaches the edge bundle is reviewed here first. `xhr2` is Angular's
 // server-side XMLHttpRequest shim.
 const ALLOWED_BARE_IMPORTS = ['xhr2'];
-const QUOTE = '["\'\\x60]';
+const BACKTICK = String.raw`\x60`;
+const QUOTE = `["'${BACKTICK}]`;
 // Only import statements at a statement start and dynamic `import(...)` calls count, so prose in
 // comments and strings of an unminified (development) bundle does not match.
-const BARE_SPECIFIER = String.raw`${QUOTE}(?!node:|\.|/|${FS_MODULES}${QUOTE}|(?:${ALLOWED_BARE_IMPORTS.join('|')})${QUOTE})[^"'\x60]`;
+const BARE_SPECIFIER = String.raw`${QUOTE}(?!node:|\.|/|${FS_MODULES}${QUOTE}|(?:${ALLOWED_BARE_IMPORTS.join('|')})${QUOTE})[^"'${BACKTICK}]`;
 const BARE_IMPORT = new RegExp(
-  String.raw`(?:(?:^|[;}])\s*import\s*(?:[^;"'\x60]*?\bfrom\s*)?|\bimport\s*\(\s*)${BARE_SPECIFIER}`,
+  String.raw`(?:(?:^|[;}])\s*import\s*(?:[^;"'${BACKTICK}]*?\bfrom\s*)?|\bimport\s*\(\s*)${BARE_SPECIFIER}`,
   'm',
 );
 
