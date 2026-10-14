@@ -41,7 +41,6 @@ async function organizationBySlug(
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
   args: { slug: v.string() },
-  // The app checks saved copies against this same validator.
   returns: getPublicPageReturns,
   handler: async (ctx, { slug }) => {
     const organization = await organizationBySlug(ctx, slug);

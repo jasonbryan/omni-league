@@ -110,7 +110,7 @@ async function beginSignIn(ctx: GenericCtx<DataModel>, body: unknown): Promise<v
 function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
   return createAuthMiddleware((ctx) => {
     if (!configured) {
-      // The body never names the variable.
+      // The response does not name the variable; only the log does.
       console.error('BETTER_AUTH_SECRET is not set');
       return Promise.reject(APIError.from('SERVICE_UNAVAILABLE', AUTH_NOT_CONFIGURED));
     }
@@ -152,7 +152,6 @@ function afterSignIn(fnCtx: GenericCtx<DataModel>) {
 // options.
 export function createAuth(ctx: GenericCtx<DataModel>) {
   const siteUrl = env.SITE_URL ?? '';
-  // Read on every call, never at module load.
   const secret = env.BETTER_AUTH_SECRET;
   const configured = secret !== undefined && secret !== '';
   const isTest = env.IS_TEST === 'true';

@@ -1,9 +1,6 @@
-// scrypt with N=2^15, r=8, p=3 (32 MiB): one of OWASP's Password Storage Cheat Sheet settings, and
-// the strongest that fits the Convex runtime's 64 MB memory limit. Better Auth's default (N=2^14,
-// r=16, p=1) does about a quarter of the work. `@noble/hashes` is pure JavaScript, so it runs in the
-// Convex V8 runtime that HTTP actions use.
-// Verification reads the parameters from the stored hash, so they can be raised later without
-// breaking stored hashes.
+// scrypt N=2^15, r=8, p=3 (32 MiB): an OWASP Password Storage Cheat Sheet setting, and the strongest
+// that fits the Convex runtime's 64 MB memory limit. `@noble/hashes` is pure JavaScript, so it runs
+// in the Convex V8 runtime. Each hash stores its parameters, so they can be raised later.
 import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 

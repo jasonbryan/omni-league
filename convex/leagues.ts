@@ -177,7 +177,6 @@ export const getOrganizerContext = query({
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
   args: { orgSlug: v.string(), leagueSlug: v.string() },
-  // The app checks saved copies against this same validator.
   returns: getLeaguePublicPageReturns,
   handler: async (ctx, args) => {
     const found = await findLeagueBySlugs(ctx, args);

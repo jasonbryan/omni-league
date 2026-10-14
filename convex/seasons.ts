@@ -116,7 +116,6 @@ const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const listPublic = query({
   args: { orgSlug: v.string(), leagueSlug: v.string(), page: v.number() },
-  // The app checks saved copies against this same validator.
   returns: publicSeasonsValidator,
   handler: async (ctx, args) => {
     const found = await findLeagueBySlugs(ctx, args);
@@ -150,7 +149,6 @@ export const listPublic = query({
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
   args: seasonSlugsValidator.fields,
-  // The app checks saved copies against this same validator.
   returns: getSeasonPublicPageReturns,
   handler: async (ctx, args) => {
     const found = await findSeasonBySlugs(ctx, args);
