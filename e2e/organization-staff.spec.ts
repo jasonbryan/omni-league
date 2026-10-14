@@ -461,7 +461,7 @@ test.describe('Staff: members and the Overview tile', () => {
     await expect(page.locator('#email')).toBeInViewport();
   });
 
-  test('"Invite staff" pressed while the leagues load focuses Email once the form appears (360, #180)', async ({
+  test('"Invite staff" pressed while the leagues load focuses Email once the form appears (360)', async ({
     page,
   }) => {
     test.skip(isDesktop(page), 'the link is hidden from 1024px');

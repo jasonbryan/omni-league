@@ -74,7 +74,7 @@ test.describe('sign-up', () => {
   );
 
   test(
-    'a signed-out visitor opening /app goes to /sign-in?returnTo=/app (#63)',
+    'a signed-out visitor opening /app goes to /sign-in?returnTo=/app',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
       await page.goto('/app');
@@ -453,7 +453,7 @@ test.describe('sign-up', () => {
   test.describe('an email that already has an account', () => {
     test.use({ expectedFailedRequests: [{ status: 422, path: '/api/auth/sign-up/email' }] });
 
-    test('shows ADR 0008\'s "already exists" message on Email, which takes focus', async ({
+    test('shows the "already exists" message on Email, which takes focus', async ({
       page,
     }, testInfo) => {
       test.skip(!!remoteBaseUrl, LOCAL_ONLY);

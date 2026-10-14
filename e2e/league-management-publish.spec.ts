@@ -95,7 +95,7 @@ const result = (page: Page) =>
 const note = (page: Page) =>
   main(page).locator('section[aria-labelledby="seasons-heading"] [data-slot="alert"]');
 
-test.describe('League management: publishing a season (#126)', () => {
+test.describe('League management: publishing a season', () => {
   test('confirming publishes it: Published in the list, the result announced and focused, and the dialog names the league and the deadline', async ({
     page,
     request,
@@ -223,7 +223,7 @@ test.describe('League management: publishing a season (#126)', () => {
   );
 });
 
-test.describe('League management: a draft league (#126)', () => {
+test.describe('League management: a draft league', () => {
   test(
     'an org admin sees "Publish the league first" with the link to the Leagues page, and no Publish button',
     VIEWPORT_AGNOSTIC,
@@ -276,7 +276,7 @@ test.describe('League management: a draft league (#126)', () => {
   });
 });
 
-test.describe('League management: concurrent publishes (#126, tester)', () => {
+test.describe('League management: concurrent publishes', () => {
   test(
     'an org admin and a league organizer press Publish season for the same season at once: both finish, and it is Published once',
     VIEWPORT_AGNOSTIC,

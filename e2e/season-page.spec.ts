@@ -211,7 +211,7 @@ test.describe('public season page: raw server HTML', () => {
 
 test.describe('public season page: dates and locations in the raw server HTML', () => {
   test(
-    'a season across two years writes both years, a season of one day writes one date, and one location reads "Location" (tester probe)',
+    'a season across two years writes both years, a season of one day writes one date, and one location reads "Location"',
     RAW_HTTP,
     async ({ request }) => {
       const { tenant } = await seed();
@@ -338,7 +338,7 @@ test.describe('public season page in the browser', () => {
 });
 
 test.describe('public season page offline', () => {
-  test('offline (tester probe): a viewed season opens offline from its saved copy with the note; a season never viewed shows the not-saved view', async ({
+  test('offline: a viewed season opens offline from its saved copy with the note; a season never viewed shows the not-saved view', async ({
     page,
     context,
     consoleGuard,

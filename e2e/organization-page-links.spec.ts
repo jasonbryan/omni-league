@@ -52,7 +52,7 @@ async function tap(page: Page, control: Locator): Promise<void> {
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-test.describe('organization page links (#95, tester probes)', () => {
+test.describe('organization page links', () => {
   test('the last row of a tall page lands below the top bar and the offline note, query kept', async ({
     page,
     context,

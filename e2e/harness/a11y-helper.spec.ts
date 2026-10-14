@@ -58,7 +58,7 @@ test.describe('axe helper checks', () => {
     expect(reflow.scrollWidth).toBeGreaterThanOrEqual(700);
   });
 
-  test('1.4.10: an infinite animation (animate-pulse, animate-spin) does not hang reflow or expectAccessible (#167)', async ({
+  test('1.4.10: an infinite animation (animate-pulse, animate-spin) does not hang reflow or expectAccessible', async ({
     page,
   }) => {
     test.setTimeout(15_000);
@@ -74,7 +74,7 @@ test.describe('axe helper checks', () => {
     await expectAccessible(page);
   });
 
-  test('1.4.10: a real overflow still fails while an infinite animation runs beside it (#167)', async ({
+  test('1.4.10: a real overflow still fails while an infinite animation runs beside it', async ({
     page,
   }) => {
     test.setTimeout(15_000);
@@ -129,7 +129,7 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
-  test('2.4.11: an inline link that wraps over lines is not obscured by the text around it (#126)', async ({
+  test('2.4.11: an inline link that wraps over lines is not obscured by the text around it', async ({
     page,
   }) => {
     // The link's bounding box is the union of its line boxes, so its centre can fall in the gap
@@ -162,7 +162,7 @@ test.describe('axe helper checks', () => {
       '<style>body{margin:0}</style>',
     );
 
-  test('2.4.11: a wrapped link with one line under a banner and the other visible passes (#126)', async ({
+  test('2.4.11: a wrapped link with one line under a banner and the other visible passes', async ({
     page,
   }) => {
     await page.setContent(wrappedLink(30));
@@ -175,7 +175,7 @@ test.describe('axe helper checks', () => {
     expect((await tabWalk(page)).failures).toEqual([]);
   });
 
-  test('2.4.11: a wrapped link with every line under a banner fails (#126)', async ({ page }) => {
+  test('2.4.11: a wrapped link with every line under a banner fails', async ({ page }) => {
     await page.setContent(wrappedLink(60));
     expect(await page.evaluate(() => document.querySelector('a')!.getClientRects().length)).toBe(2);
     const walk = await tabWalk(page);
@@ -199,7 +199,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(/^2\.1\.2 No keyboard trap: /)]);
   });
 
-  test('2.1.2: a native date field takes one Tab press per segment and is not a trap (#125)', async ({
+  test('2.1.2: a native date field takes one Tab press per segment and is not a trap', async ({
     page,
   }) => {
     await page.setContent(
@@ -223,7 +223,7 @@ test.describe('axe helper checks', () => {
         `<script>${trapScript}</script>`,
     );
 
-  test('2.1.2: a button that keeps focus on Tab, right after a date field, is still a trap (#125)', async ({
+  test('2.1.2: a button that keeps focus on Tab, right after a date field, is still a trap', async ({
     page,
   }) => {
     await page.setContent(
@@ -235,7 +235,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: a date field that keeps focus on Tab is still a trap (#125)', async ({ page }) => {
+  test('2.1.2: a date field that keeps focus on Tab is still a trap', async ({ page }) => {
     await page.setContent(
       dateAndTrap(
         "document.getElementById('d').addEventListener('keydown', (e) => { if (e.key === 'Tab') e.preventDefault(); });",
@@ -245,9 +245,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: a date field that takes focus back on blur is still a trap (#125)', async ({
-    page,
-  }) => {
+  test('2.1.2: a date field that takes focus back on blur is still a trap', async ({ page }) => {
     await page.setContent(
       dateAndTrap(
         "const d = document.getElementById('d'); d.addEventListener('blur', () => setTimeout(() => d.focus(), 0));",
@@ -257,7 +255,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: two buttons that pass focus back and forth, on a page with a date field, are still a trap (#125)', async ({
+  test('2.1.2: two buttons that pass focus back and forth, on a page with a date field, are still a trap', async ({
     page,
   }) => {
     await page.setContent(
@@ -274,9 +272,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: a trap on a button before the date field is still a trap (#125)', async ({
-    page,
-  }) => {
+  test('2.1.2: a trap on a button before the date field is still a trap', async ({ page }) => {
     await page.setContent(
       fixture(
         '<h1>Trap first</h1><button type="button" id="t">Trap</button>' +
@@ -288,7 +284,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: three date fields in a row, with no trap, still pass (#125)', async ({ page }) => {
+  test('2.1.2: three date fields in a row, with no trap, still pass', async ({ page }) => {
     await page.setContent(
       fixture(
         '<h1>Dates</h1><input id="a" type="date" aria-label="A"><input id="b" type="date" aria-label="B">' +

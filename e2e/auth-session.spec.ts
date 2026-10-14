@@ -243,7 +243,7 @@ base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
   }
 });
 
-test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
+test.describe('auth session store: edge cases', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
   // intercept and count.
   test.beforeEach(async ({ context }) => {
@@ -440,7 +440,7 @@ test.describe('auth session store, round 4', VIEWPORT_AGNOSTIC, () => {
   });
 });
 
-base.describe('auth token failures, round 4', VIEWPORT_AGNOSTIC, () => {
+base.describe('auth token failures: a slow token request', VIEWPORT_AGNOSTIC, () => {
   base.beforeEach(async ({ context }) => {
     if (!remoteBaseUrl) return;
     await stubNetlifyDrawer(context);
@@ -492,7 +492,7 @@ base.describe('auth token failures, round 4', VIEWPORT_AGNOSTIC, () => {
   }
 });
 
-test.describe('auth token refresh, round 4', VIEWPORT_AGNOSTIC, () => {
+test.describe('auth token refresh', VIEWPORT_AGNOSTIC, () => {
   // Remote runs: the production build's service worker would hide the auth requests these tests
   // intercept and count.
   test.beforeEach(async ({ context }) => {

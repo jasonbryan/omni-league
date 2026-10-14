@@ -197,7 +197,7 @@ test.describe('Accept invite: a visitor with no account', () => {
   });
 });
 
-test.describe('Accept invite: while the invite is checked, issue 212', () => {
+test.describe('Accept invite: while the invite is checked', () => {
   test('shows a skeleton of the invite card with a "Checking your invite…" status and no spinner, then the invite', async ({
     page,
   }, testInfo) => {
@@ -465,7 +465,7 @@ async function expectNoTokenShown(page: Page, tokens: string[]) {
   }
 }
 
-test.describe('Accept invite: a link opened on the page that is already open (round 2)', () => {
+test.describe('Accept invite: a link opened on the page that is already open', () => {
   test(
     'two links in sequence, then back and forward: the second replaces the first and neither token is ever in the address bar, a link, or a request',
     VIEWPORT_AGNOSTIC,
@@ -625,7 +625,7 @@ test.describe('Accept invite: a link opened on the page that is already open (ro
   );
 });
 
-test.describe('Accept invite: the invite could not be loaded (round 2)', () => {
+test.describe('Accept invite: the invite could not be loaded', () => {
   test('shows the temporarily-unavailable view; the token stays stored and appears in no URL, link, or Try again; Try again then loads the invite', async ({
     page,
   }, testInfo) => {
@@ -666,7 +666,7 @@ test.describe('Accept invite: the invite could not be loaded (round 2)', () => {
   });
 });
 
-test.describe('Accept invite: offline and a spent token (round 3)', () => {
+test.describe('Accept invite: offline and a spent token', () => {
   test('offline, Accept invite is aria-disabled at half opacity and still focusable; a press shows the offline alert and sends nothing; back online it accepts', async ({
     page,
     context,

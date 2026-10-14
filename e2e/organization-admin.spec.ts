@@ -475,7 +475,7 @@ test.describe('who may open the admin area', () => {
   });
 
   test(
-    'an unknown slug shows #23’s not-found view with no other request',
+    'an unknown slug shows the not-found view with no other request',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
       await signUp(page, newUser('Lost'));

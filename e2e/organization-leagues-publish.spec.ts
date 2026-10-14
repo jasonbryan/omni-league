@@ -59,7 +59,7 @@ const result = (page: Page) =>
   main(page).locator('section[aria-labelledby="leagues-heading"] [role="status"]');
 const leagueTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Leagues' });
 
-test.describe('Leagues: publishing a draft (#69)', () => {
+test.describe('Leagues: publishing a draft', () => {
   test('confirming publishes it: Published in the list, the result announced and focused, and the league on the public page, live and in the raw HTML', async ({
     page,
     request,
