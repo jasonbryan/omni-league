@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
+import { LIST_PAGE_SIZE } from '../src/app/core/list-page';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
@@ -20,11 +21,11 @@ const TARGET = 44;
 const DESKTOP_PROJECT = 'chromium-desktop';
 const COARSE_POINTER = '(pointer: coarse)';
 
-// One league and one organization per list, each long enough for a second page (five rows a page).
-const LOCATIONS = numberedLocations(6);
-const LEAGUE_NAMES = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'].map(
-  (name) => `${name} Sand 2s`,
-);
+const ROWS = LIST_PAGE_SIZE + 1;
+const LOCATIONS = numberedLocations(ROWS);
+const LEAGUE_NAMES = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot']
+  .slice(0, ROWS)
+  .map((name) => `${name} Sand 2s`);
 const LEAGUES: NonNullable<TenantSeed['leagues']> = LEAGUE_NAMES.map((name) => ({
   name,
   sport: 'beachVolleyball',
@@ -32,28 +33,25 @@ const LEAGUES: NonNullable<TenantSeed['leagues']> = LEAGUE_NAMES.map((name) => (
   status: 'published',
 }));
 const FIRST_LEAGUE = 'alpha-sand-2s';
-const SEASONS = numberedSeasons(6);
+const SEASONS = numberedSeasons(ROWS);
 
 interface Measured {
-  /** Bounding boxes under 44 by 44 CSS px, one description each. */
-  small: string[];
+  undersized: string[];
   count: number;
 }
 
 /**
- * Every control a thumb has to hit, found by what it is: links, buttons, fields, and the disabled
- * page-control items. Left out, with the reason:
- * - inline links in running text (WCAG 2.5.8 exempts them; a link that is the whole of its block,
- *   such as a list row's title, is not inline text) and the skip link, which is `sr-only`;
+ * Left out of the measure:
+ * - inline links in running text (WCAG 2.5.8 exempts them); a link that is the whole of its block,
+ *   such as a list row's title, is measured;
  * - breadcrumb links, which meet WCAG 2.5.8 (24 px) and are outside the touch-target scope;
- * - check boxes and radio buttons, whose hit area is the label row (`rowsOf` measures those);
- * - anything not rendered or one pixel wide.
+ * - check boxes and radio buttons, whose hit area is the label row (`checkableRows`).
  */
 async function undersizedControls(scope: Locator): Promise<Measured> {
   return scope.evaluate((root, target): Measured => {
     const SELECTOR =
       'a[href], button, input, select, textarea, summary, [role="button"], [data-slot="button"]';
-    const small: string[] = [];
+    const undersized: string[] = [];
     let count = 0;
     const nodes = [...root.querySelectorAll<HTMLElement>(SELECTOR)];
     if (root.matches(SELECTOR)) nodes.unshift(root as HTMLElement);
@@ -75,30 +73,29 @@ async function undersizedControls(scope: Locator): Promise<Measured> {
           .trim()
           .replace(/\s+/g, ' ')
           .slice(0, 30);
-        small.push(
+        undersized.push(
           `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} "${name}" ` +
             `${Math.round(box.width * 10) / 10}x${Math.round(box.height * 10) / 10}`,
         );
       }
     }
-    return { small, count };
+    return { undersized, count };
   }, TARGET);
 }
 
-/** The row of each check box or radio button: the field that holds the control and its label. */
-const rowsOf = (page: Page) =>
+const checkableRows = (page: Page) =>
   page.locator('[data-slot="field"][data-orientation="horizontal"]').filter({
     has: page.locator('[role="checkbox"], input[type="radio"]'),
   });
 
 async function expectTargets(page: Page, scope: Locator = page.locator('body')): Promise<number> {
-  const { small, count } = await undersizedControls(scope);
-  expect.soft(small, `controls under ${TARGET}x${TARGET} CSS px`).toEqual([]);
+  const { undersized, count } = await undersizedControls(scope);
+  expect.soft(undersized, `controls under ${TARGET}x${TARGET} CSS px`).toEqual([]);
   return count;
 }
 
 async function expectRows(page: Page): Promise<number> {
-  const rows = rowsOf(page);
+  const rows = checkableRows(page);
   const count = await rows.count();
   // Last row first: choosing a staff role shows or hides the league rows after it.
   for (let i = count - 1; i >= 0; i--) {
@@ -113,9 +110,9 @@ async function expectRows(page: Page): Promise<number> {
       );
     const before = await isOn();
     const isRadio = await control.evaluate((el) => el instanceof HTMLInputElement);
-    // The right-hand end of the row, past the label text and the control.
-    await row.tap({ position: { x: (box?.width ?? 0) - 4, y: (box?.height ?? 0) / 2 } });
-    // A radio button that was on stays on; any other control flips.
+    const rightEnd = { x: (box?.width ?? 0) - 4, y: (box?.height ?? 0) / 2 };
+    await row.tap({ position: rightEnd });
+    // Tapping a radio button can only turn it on.
     await expect
       .poll(isOn, { message: `tap on the right end of row ${i}` })
       .toBe(isRadio ? true : !before);
@@ -174,6 +171,20 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     }
     await visit(page, '/sign-up', /Create your account/);
     expect(await expectRows(page)).toBe(1);
+
+    const linkIsHit = await page.evaluate(() => {
+      const description = document.querySelector(
+        '[data-slot="field-description"]#adult-description',
+      );
+      const link = document.createElement('a');
+      link.href = '#probe';
+      link.textContent = 'probe link';
+      description?.append(link);
+      link.scrollIntoView();
+      const box = link.getBoundingClientRect();
+      return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === link;
+    });
+    expect(linkIsHit, 'a link in a check box row description is not covered by the row').toBe(true);
   });
 
   test('the app: Your organizations, create organization, the admin pages, the league page, and the menu sheet', async ({

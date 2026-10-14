@@ -24,9 +24,7 @@
   }
 }
 
-/* Touch screens only: 44 by 44 CSS px. Outside @layer so it beats the size utilities (`h-9`,
-   `size-8`) that many templates repeat as inline class strings; it sets min-height and min-width,
-   which those utilities never set. Desktop sizes stay as the approved mockups draw them. */
+/* Unlayered, so it beats the `h-9`/`size-8` utilities that templates repeat inline. */
 @media (pointer: coarse) {
   [data-slot='button'],
   [data-slot='sheet-close'] {
@@ -48,9 +46,10 @@
     position: absolute;
     inset: 0;
   }
-  /* Above the overlay, so the control itself stays reachable and is not covered when focused. */
+  /* Above the overlay, so the control stays reachable and is not covered when focused, and so a link in the description stays tappable. */
   [data-slot='field'][data-orientation='horizontal'] [role='checkbox'],
-  [data-slot='field'][data-orientation='horizontal'] [data-slot='radio-group-item'] {
+  [data-slot='field'][data-orientation='horizontal'] [data-slot='radio-group-item'],
+  [data-slot='field'][data-orientation='horizontal'] [data-slot='field-description'] a {
     position: relative;
     z-index: 1;
   }

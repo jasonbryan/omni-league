@@ -87,7 +87,7 @@ test.describe('create an organization', () => {
     await expect(page.locator('#slug-description')).toContainText(
       `Your public page will be at ${host}/organizations/your-slug`,
     );
-    // 36px controls (44px on touch screens), and 16px input text on phones so iOS does not zoom.
+    // 16px input text on phones so iOS does not zoom.
     const phone = (page.viewportSize()?.width ?? 0) < 768;
     for (const control of [field(page, 'name'), field(page, 'slug'), createButton(page)]) {
       expect((await control.boundingBox())?.height).toBe(hasTouch ? 44 : 36);
