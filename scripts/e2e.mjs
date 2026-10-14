@@ -68,14 +68,12 @@ export function needsLock({ env }) {
 }
 
 /**
- * Runs every step of an e2e run in order; resolves to the exit code of the first step that fails,
- * or 0. A SIGINT or SIGTERM stops the run (and the wait for the lock) and gives 128 + the signal.
  * @param {string[]} playwrightArgs
  * @param {{
  *   env?: NodeJS.ProcessEnv,
  *   lock?: Parameters<typeof withLock>[1],
  *   plan?: typeof e2ePlan,
- * }} [options] `lock` and `plan` replace the real lock settings and steps in tests.
+ * }} [options]
  */
 export async function runE2e(
   playwrightArgs,

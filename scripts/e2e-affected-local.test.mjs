@@ -1,5 +1,3 @@
-// Unit tests for scripts/e2e-affected-local.mjs: the branch's changed files become the arguments
-// of `npm run e2e`. Run with `npm run test:scripts` (node:test). No browser or backend runs.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,6 +7,7 @@ import { describe, it } from 'node:test';
 import { changedFiles, e2eArgs } from './e2e-affected-local.mjs';
 import { ALWAYS } from './e2e-affected.mjs';
 
+const STUB_EXIT_CODE = 7;
 const sessionSpecs = () => ['e2e/sign-in.spec.ts'];
 const quiet = (task) => {
   const original = console.error;
@@ -52,6 +51,16 @@ describe('e2eArgs', () => {
     assert.equal(specs, undefined);
   });
 
+  it('keeps every spec in a full run that also names a spec', () => {
+    const { args, specs } = e2eArgs(
+      ['src/app/shell/shell.ts'],
+      ['e2e/season-page.spec.ts', '--project=chromium-desktop'],
+      { sessionSpecs },
+    );
+    assert.deepEqual(args, ['e2e/', 'e2e/season-page.spec.ts', '--project=chromium-desktop']);
+    assert.equal(specs, undefined);
+  });
+
   it('runs the full suite when the changed files cannot be listed', () => {
     const { args, specs } = quiet(() =>
       e2eArgs(
@@ -77,8 +86,7 @@ describe('e2eArgs', () => {
 });
 
 describe('changedFiles', () => {
-  /** A repository whose `origin/main` is the first commit; the branch commit adds one file. */
-  function repository() {
+  function repositoryWithOneBranchCommit() {
     const dir = mkdtempSync(join(tmpdir(), 'e2e-affected-local-test-'));
     const git = (...args) =>
       execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
@@ -99,7 +107,7 @@ describe('changedFiles', () => {
   }
 
   it('lists committed, edited, and untracked files against the merge base with origin/main', () => {
-    const { dir, git } = repository();
+    const { dir, git } = repositoryWithOneBranchCommit();
     try {
       writeFileSync(join(dir, 'tracked.ts'), 'edited');
       writeFileSync(join(dir, 'untracked.ts'), 'new');
@@ -113,7 +121,7 @@ describe('changedFiles', () => {
   });
 
   it('ignores commits that landed on main after the branch left it', () => {
-    const { dir, git } = repository();
+    const { dir, git } = repositoryWithOneBranchCommit();
     try {
       git('checkout', '-q', 'main');
       writeFileSync(join(dir, 'src', 'on-main.ts'), 'a');
@@ -144,11 +152,7 @@ describe('changedFiles', () => {
 });
 
 describe('npm run e2e:affected entry point', () => {
-  /**
-   * A repository holding copies of the two scripts and a stand-in `e2e.mjs` whose `runE2e` prints
-   * its arguments and returns 7, so the test sees what the entry point hands to the e2e run.
-   */
-  function project() {
+  function projectWithStubE2eRun() {
     const dir = mkdtempSync(join(tmpdir(), 'e2e-affected-entry-test-'));
     const git = (...args) =>
       execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
@@ -161,7 +165,7 @@ describe('npm run e2e:affected entry point', () => {
     }
     writeFileSync(
       join(dir, 'scripts', 'e2e.mjs'),
-      'export async function runE2e(args) { console.log(JSON.stringify(args)); return 7; }\n',
+      `export async function runE2e(args) { console.log(JSON.stringify(args)); return ${STUB_EXIT_CODE}; }\n`,
     );
     writeFileSync(join(dir, 'README.md'), 'a');
     git('init', '-q', '-b', 'main');
@@ -179,7 +183,7 @@ describe('npm run e2e:affected entry point', () => {
   }
 
   it('runs the selected specs and the extra arguments, and exits with the run’s code', () => {
-    const { dir } = project();
+    const { dir } = projectWithStubE2eRun();
     try {
       writeFileSync(join(dir, 'README.md'), 'edited');
       const result = run(dir, ['--project=chromium-desktop']);
@@ -187,7 +191,7 @@ describe('npm run e2e:affected entry point', () => {
         ...[...ALWAYS].sort(),
         '--project=chromium-desktop',
       ]);
-      assert.equal(result.status, 7);
+      assert.equal(result.status, STUB_EXIT_CODE);
       assert.match(result.stderr, /e2e:affected: running /);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -195,7 +199,7 @@ describe('npm run e2e:affected entry point', () => {
   });
 
   it('runs the full suite when a changed file is shared code', () => {
-    const { dir } = project();
+    const { dir } = projectWithStubE2eRun();
     try {
       mkdirSync(join(dir, 'src', 'app', 'shell'), { recursive: true });
       writeFileSync(join(dir, 'src', 'app', 'shell', 'shell.ts'), 'new');

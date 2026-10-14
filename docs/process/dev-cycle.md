@@ -210,7 +210,7 @@ Sessions share one machine, and default ports (`ng serve` 4200, Convex local bac
 
 It never stops a process the system did not start, whether by name (`pkill`, `killall`) or by a PID found with `lsof`.
 
-Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over, and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
+Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over (a PID reused by another process keeps the lock held until that process ends), and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
 
 ## Escalation
 

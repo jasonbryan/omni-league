@@ -1,18 +1,7 @@
-// A machine-wide lock for local e2e runs. Node built-ins only.
-//
 // Every local e2e run binds the same ports (3210, 3211, 4000) and resets the same backend, so two
-// runs on one machine cannot overlap. A run takes the lock before it starts anything and releases
-// it when it ends. The lock is a file holding the owner's PID: it is created with a hard link, so
-// the file never exists without its content, and a lock whose PID is gone is taken over.
-import {
-  linkSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
+// runs on one machine cannot overlap.
+// The lock file is created with a hard link so it never exists without its PID.
+import { linkSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -31,7 +20,6 @@ export function processIsAlive(pid) {
   }
 }
 
-/** The PID in the lock file, or undefined when the file is missing or holds no PID. */
 function readHolder(path) {
   let text;
   try {
@@ -44,8 +32,7 @@ function readHolder(path) {
   return Number.isInteger(pid) && pid > 0 ? pid : 0;
 }
 
-/** Creates the lock file holding `pid`; false when it already exists. */
-function tryCreate(path, pid) {
+function tryCreateLock(path, pid) {
   mkdirSync(dirname(path), { recursive: true });
   const scratch = `${path}.${pid}.tmp`;
   writeFileSync(scratch, `${pid}\n`);
@@ -60,32 +47,26 @@ function tryCreate(path, pid) {
   }
 }
 
-/**
- * Moves a dead holder's lock out of the way. The rename takes whichever file is at `path` now, so
- * when another waiter already replaced the dead lock with a live one, that file goes back.
- */
-function takeOver(path, deadPid, isAlive, ownPid) {
-  const moved = `${path}.stale.${ownPid}`;
-  try {
-    renameSync(path, moved);
-  } catch (error) {
-    if (/** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT') return;
-    throw error;
-  }
-  const holder = readHolder(moved);
-  if (holder !== undefined && holder !== deadPid && isAlive(holder)) {
-    try {
-      linkSync(moved, path);
-    } catch (error) {
-      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') throw error;
+// Two waiters that both see a dead holder must not both remove the lock: the second removal could
+// discard the lock that the first waiter's successor just took. Only the holder of the guard
+// removes it, and only if it still names the dead holder.
+export function takeOver(path, deadPid, isAlive, ownPid) {
+  const guard = `${path}.takeover`;
+  if (!tryCreateLock(guard, ownPid)) {
+    const guardHolder = readHolder(guard);
+    if (guardHolder === 0 || (guardHolder !== undefined && !isAlive(guardHolder))) {
+      rmSync(guard, { force: true });
     }
+    return;
   }
-  rmSync(moved, { force: true });
+  try {
+    if (readHolder(path) === deadPid) rmSync(path, { force: true });
+  } finally {
+    rmSync(guard, { force: true });
+  }
 }
 
 /**
- * Waits for the lock and takes it. Resolves to a `release` function that removes the lock only
- * while it still names `pid`. Rejects when `signal` aborts first.
  * @param {{
  *   path?: string,
  *   pid?: number,
@@ -107,7 +88,7 @@ export async function acquireLock({
   let announced;
   for (;;) {
     signal?.throwIfAborted();
-    if (tryCreate(path, pid)) return () => release(path, pid);
+    if (tryCreateLock(path, pid)) return () => release(path, pid);
     const holder = readHolder(path);
     if (holder === undefined) continue;
     if (holder === pid) return () => release(path, pid);
@@ -123,7 +104,6 @@ export async function acquireLock({
   }
 }
 
-/** Removes the lock when it names `pid`. */
 export function release(path, pid) {
   if (readHolder(path) !== pid) return;
   try {
@@ -150,7 +130,6 @@ function sleep(ms, signal) {
 }
 
 /**
- * Runs `task` while holding the lock; the lock is released when `task` returns or throws.
  * @template T
  * @param {() => Promise<T>} task
  * @param {Parameters<typeof acquireLock>[0]} [options]

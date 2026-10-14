@@ -1,13 +1,19 @@
-// Unit tests for scripts/e2e-lock.mjs and the way scripts/e2e.mjs takes it. Run with
-// `npm run test:scripts` (node:test). Each case uses its own temporary lock file.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { needsLock } from './e2e.mjs';
-import { acquireLock, processIsAlive, release, withLock } from './e2e-lock.mjs';
+import { acquireLock, processIsAlive, release, takeOver, withLock } from './e2e-lock.mjs';
 
 const temps = [];
 after(() => {
@@ -127,6 +133,72 @@ describe('acquireLock', () => {
   });
 });
 
+describe('takeover by several processes', () => {
+  const lockModule = new URL('./e2e-lock.mjs', import.meta.url).href;
+  const RACERS = 8;
+  const ROUNDS = 5;
+
+  async function exitedProcessPid() {
+    const child = spawn(process.execPath, ['-e', '']);
+    await new Promise((resolve) => child.on('exit', resolve));
+    return /** @type {number} */ (child.pid);
+  }
+
+  it('leaves a live lock alone when the file it saw as dead has since been replaced', () => {
+    const path = lockPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '4002\n');
+    takeOver(path, 4001, (pid) => pid === 4002, 4003);
+    assert.equal(readFileSync(path, 'utf8').trim(), '4002');
+    assert.deepEqual(readdirSync(dirname(path)), ['e2e.lock']);
+  });
+
+  it('does not remove a lock while another waiter holds the takeover guard', () => {
+    const path = lockPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '4001\n');
+    writeFileSync(`${path}.takeover`, '4005\n');
+    takeOver(path, 4001, (pid) => pid === 4005, 4003);
+    assert.equal(readFileSync(path, 'utf8').trim(), '4001');
+  });
+
+  it('clears a takeover guard whose holder is gone', () => {
+    const path = lockPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(`${path}.takeover`, '4005\n');
+    takeOver(path, 4001, () => false, 4003);
+    assert.equal(existsSync(`${path}.takeover`), false);
+  });
+
+  it('lets one process at a time hold a lock that a dead process left', async () => {
+    const path = lockPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${await exitedProcessPid()}\n`);
+    const inside = `${path}.inside`;
+    const source = `
+      import { acquireLock } from ${JSON.stringify(lockModule)};
+      import { rmSync, writeFileSync } from 'node:fs';
+      for (let round = 0; round < ${ROUNDS}; round += 1) {
+        const unlock = await acquireLock({ path: ${JSON.stringify(path)}, pollMs: 2 });
+        writeFileSync(${JSON.stringify(inside)}, 'x', { flag: 'wx' });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        rmSync(${JSON.stringify(inside)});
+        unlock();
+      }
+    `;
+    const racers = Array.from({ length: RACERS }, () => {
+      const child = spawn(process.execPath, ['--input-type=module', '-e', source], {
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => (stderr += chunk));
+      return new Promise((resolve) => child.on('exit', (code) => resolve({ code, stderr })));
+    });
+    for (const { code, stderr } of await Promise.all(racers)) assert.equal(code, 0, stderr);
+    assert.deepEqual(readdirSync(dirname(path)), []);
+  });
+});
+
 describe('processIsAlive', () => {
   it('is true for this process and false for an exited one', async () => {
     assert.equal(processIsAlive(process.pid), true);
@@ -188,8 +260,7 @@ describe('needsLock', () => {
 describe('runE2e', () => {
   const e2eModule = new URL('./e2e.mjs', import.meta.url).href;
 
-  /** Runs runE2e in a child process with one fake step; resolves to the child once it is running. */
-  function runInChild(path, stepScript) {
+  function startRunE2eWithFakeStep(path, stepScript) {
     const source = `
       import { runE2e } from ${JSON.stringify(e2eModule)};
       const plan = () => [{ name: 'fake', command: process.execPath, args: ['-e', ${JSON.stringify(stepScript)}], env: process.env }];
@@ -213,7 +284,7 @@ describe('runE2e', () => {
 
   it('holds the lock during the steps and releases it when they succeed', async () => {
     const path = lockPath();
-    const run = runInChild(path, `setTimeout(() => {}, 300)`);
+    const run = startRunE2eWithFakeStep(path, `setTimeout(() => {}, 300)`);
     await until(() => existsSync(path));
     assert.equal(await run.exited, 0);
     assert.equal(existsSync(path), false);
@@ -221,7 +292,7 @@ describe('runE2e', () => {
 
   it('releases the lock when a step fails and reports its exit code', async () => {
     const path = lockPath();
-    const run = runInChild(path, 'process.exit(3)');
+    const run = startRunE2eWithFakeStep(path, 'process.exit(3)');
     assert.equal(await run.exited, 3);
     assert.match(run.output.stderr, /e2e: fake failed \(exit 3\)/);
     assert.equal(existsSync(path), false);
@@ -229,7 +300,7 @@ describe('runE2e', () => {
 
   it('releases the lock on SIGINT and stops the step', async () => {
     const path = lockPath();
-    const run = runInChild(path, 'setTimeout(() => {}, 60000)');
+    const run = startRunE2eWithFakeStep(path, 'setTimeout(() => {}, 60000)');
     await until(() => existsSync(path));
     await new Promise((resolve) => setTimeout(resolve, 200));
     run.child.kill('SIGINT');
@@ -239,10 +310,10 @@ describe('runE2e', () => {
 
   it('a second run waits for the first, naming its PID, and runs after', async () => {
     const path = lockPath();
-    const first = runInChild(path, `setTimeout(() => {}, 600)`);
+    const first = startRunE2eWithFakeStep(path, `setTimeout(() => {}, 600)`);
     await until(() => existsSync(path));
     const holder = readFileSync(path, 'utf8').trim();
-    const second = runInChild(path, '');
+    const second = startRunE2eWithFakeStep(path, '');
     await until(() => second.output.stderr.includes('waiting'));
     assert.match(second.output.stderr, new RegExp(`process ${holder} `));
     assert.equal(await first.exited, 0);
