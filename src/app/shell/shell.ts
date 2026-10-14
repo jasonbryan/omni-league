@@ -203,7 +203,7 @@ export class Shell {
     const sidebar = this.sidebar();
     const menuButton = this.menuButton()?.nativeElement;
     if (!sidebar || !menuButton) throw new Error('app-shell: no sidebar for the sheet');
-    // The element injector keeps the shell's providers in reach, as a view container here did.
+    // The element injector keeps the shell's providers in reach.
     const ref = createComponent(ShellSheet, {
       environmentInjector: this.environmentInjector,
       elementInjector: this.injector,

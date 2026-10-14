@@ -14,7 +14,6 @@ import { organizationPath, type PublicOrganizationPage } from './organization-pa
 import { OrganizationSidebar } from './organization-sidebar';
 
 /**
- * Any of the three failed or timed out: the server-error view with status 503 and `no-store`, so an error never enters the CDN cache.
  * The queries' only arguments are the route's slug and page 1, so the server and the browser use the same `TransferState` keys and the server HTML holds no query string.
  */
 @Component({
@@ -85,8 +84,6 @@ export class OrganizationPage {
   protected readonly state = computed(() => {
     if (this.page()) return 'page';
     if (this.header.value() === null) return 'not-found';
-    // Any error of any of the three, including a missing Convex URL; never its message (adapter
-    // README).
     if (this.header.error() || this.leagues.error() || this.locations.error()) return 'error';
     const offlineWithoutSavedCopy = !this.online();
     if (offlineWithoutSavedCopy) return 'not-saved';

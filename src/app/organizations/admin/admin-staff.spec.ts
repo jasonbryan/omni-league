@@ -1006,7 +1006,6 @@ describe('AdminStaff', () => {
       expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
         'Invite to dana.whitlock@example.com revoked.',
       );
-      // The description is followed by Undo.
       expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
         'Its link no longer works. You can invite this address again. Undo revoking the invite to dana.whitlock@example.com',
       );
@@ -1100,7 +1099,6 @@ describe('AdminStaff', () => {
       );
     const revokeButton = (n: number) => pending()[n].querySelector<HTMLButtonElement>('button')!;
 
-    /** Revokes Dana's invite and lets the live list drop it: the status now offers Undo. */
     async function revokeDana(rest: unknown[] = [PENDING[1]]) {
       await openFull();
       revokeButton(0).click();
@@ -1153,7 +1151,6 @@ describe('AdminStaff', () => {
       expect(text(pendingUndo)).toBe('Undoing…');
       expect(pendingUndo.getAttribute('aria-disabled')).toBe('true');
       expect(pendingUndo.hasAttribute('disabled')).toBe(false);
-      // A second press while one is in flight sends nothing more.
       await pressUndo();
       expect(o.convex.calls).toHaveLength(2);
     });
@@ -1269,7 +1266,6 @@ describe('AdminStaff', () => {
         'The invite is still revoked.',
       );
       expect(document.activeElement).toBe(box);
-      // Undo stays, to try again when connected.
       expect(undoButton()).toBeDefined();
     });
 

@@ -53,7 +53,7 @@ export class LeagueContext {
   );
 
   constructor() {
-    // `<league> | <organization> | Omni League` while the page is ready; the no-access and not-found views set their own.
+    // The no-access and not-found views set their own title.
     const title = inject(Title);
     effect(() => {
       const league = this.league();
