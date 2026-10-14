@@ -50,6 +50,15 @@ Accepted decisions live in `docs/decisions/` (ADRs). Use only accepted technolog
 
 Read the matching conventions file before writing or reviewing code in that layer, and `docs/conventions/ux.md` as well for any change to a screen or task flow.
 
+## Code comments
+
+- Names, types, small functions, and named constants say what the code does. Where a comment would explain what, rename, extract a function, or name a constant instead.
+- A comment only gives a why the code cannot express: an external constraint, a workaround for a library or platform bug (a link to the upstream bug is allowed), or a security reason. One line where possible.
+- History, the reason for a change, and references to this repo's issues, PRs, ADRs, reviews, or agent roles go in commits, PRs, and ADRs.
+- Future work lives in an issue, not in code. Remove an existing pointer once an open issue names that code; if none does, open one first.
+- Test titles describe behaviour and carry no issue numbers.
+- Comments a tool reads stay, without tracker references: `eslint-disable*`, `@ts-expect-error`, `prettier-ignore`, `// @ts-check`, `/// <reference types>`, JSDoc type tags in `.js`/`.mjs` (`@type`, `@param {T}`, `@returns {T}`, `@typedef`), and the `# vX.Y.Z` after a pinned action ([ADR 0009](docs/decisions/0009-ci-pipeline.md)). Notes on vendored code keep their why.
+
 ## Secrets
 
 Agents use Stripe test-mode keys and Convex dev/preview deployments only. Live keys, production environment variables, and production dashboards are handled by the owner. Secrets never go into the repo, issues, PRs, or logs.

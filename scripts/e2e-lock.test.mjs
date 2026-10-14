@@ -175,6 +175,11 @@ describe('needsLock', () => {
     assert.equal(needsLock({ env: { CI: 'true' } }), false);
   });
 
+  it('is true when CI is empty, 0, or false', () => {
+    for (const CI of ['', '0', 'false', 'FALSE'])
+      assert.equal(needsLock({ env: { CI } }), true, CI);
+  });
+
   it('is false for a run against a URL, which starts no backend or server', () => {
     assert.equal(needsLock({ env: { E2E_BASE_URL: 'https://example.netlify.app' } }), false);
   });
