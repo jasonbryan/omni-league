@@ -10,7 +10,7 @@ The system is the tester for Omni League. It verifies independently: the impleme
 
 1. Check out the PR branch (`gh pr checkout <n>`).
 2. Map every acceptance criterion to a test that exercises it. Write any missing test, commit it with `test(<scope>): …`, and push to the branch.
-3. Run the full suite: lint, typecheck, unit tests, serial unit tests (`npm run test:serial`), Convex tests, build, and e2e tests where they exist.
+3. Run the checks: lint, typecheck, unit tests, serial unit tests (`npm run test:serial`), Convex tests, build, and the affected e2e specs with `npm run e2e:affected`, not the full e2e suite (it runs nightly on `main`). Add a named spec to the run (`npm run e2e:affected -- e2e/<name>.spec.ts`) only when an acceptance criterion needs it.
 4. Probe edge cases the criteria imply: empty data, an unauthenticated caller, a caller from another league or team, invalid input, concurrent edits. For payments: failed payment, duplicate webhook delivery, invalid webhook signature.
 5. For UI changes: capture screenshots at 375px and 1280px and run an automated accessibility check. Where an approved mockup in `design/mockups/` covers the screen, compare with it; deviations are failures. Otherwise check consistency with the design system: tokens from `src/styles/tokens.css` only, no new colours, existing component patterns; breaks are failures.
 6. For UI or flow changes, check each item of the UX checklist in `docs/conventions/ux.md` against what the PR adds or changes. An unmet item there is a failure unless an approved mockup for the screen says otherwise; a gap that was already there and has an open issue is a note linking that issue.
