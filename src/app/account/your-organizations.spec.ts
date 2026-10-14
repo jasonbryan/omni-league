@@ -194,7 +194,7 @@ describe('YourOrganizations', () => {
     ]);
   });
 
-  describe('assigned leagues (issue 141, design/mockups/141-app-leagues.html)', () => {
+  describe('assigned leagues (design/mockups/141-app-leagues.html)', () => {
     const leagueLinks = (row: Element) => [...row.querySelectorAll('ul ul a, li ul a')];
 
     it('one league (state 1): "Your leagues" and a link to the league management page, no Manage', async () => {
@@ -282,7 +282,7 @@ describe('YourOrganizations', () => {
       );
     });
 
-    it('org admin only (state 4): rows are as #64 drew them', async () => {
+    it('org admin only (state 4): rows have no leagues list', async () => {
       await open();
       await answer([COASTAL]);
       expect(rows()[0].textContent).not.toContain('Your leagues');

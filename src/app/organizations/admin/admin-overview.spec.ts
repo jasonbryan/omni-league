@@ -195,7 +195,7 @@ describe('AdminOverview', () => {
     });
   });
 
-  describe('the Staff tile (#67, decision 2)', () => {
+  describe('the Staff tile', () => {
     const tile = (page: HTMLElement) =>
       [...page.querySelectorAll('main dl > div')][2].querySelectorAll('dd');
 

@@ -46,7 +46,7 @@ describe('appConfig with no Convex URL', () => {
     expect(TestBed.inject(OVERLAY_DEFAULT_CONFIG)).toEqual({ usePopover: false });
   });
 
-  it('registers AuthService as the Convex auth source (ADR 0008), with no Better Auth client', () => {
+  it('registers AuthService as the Convex auth source, with no Better Auth client', () => {
     TestBed.configureTestingModule({ providers: [...appConfig.providers] });
 
     expect(TestBed.inject(CONVEX_AUTH)).toBe(TestBed.inject(AuthService));

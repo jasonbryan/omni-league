@@ -92,7 +92,7 @@ const text = (el: Element | null | undefined) =>
 const note = (harness: RouterTestingHarness) =>
   host(harness).querySelector('main [data-saved-copy-note]');
 
-describe('OrganizationPage offline (#82)', () => {
+describe('OrganizationPage offline', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
@@ -316,7 +316,7 @@ describe('OrganizationPage offline (#82)', () => {
     });
   });
 
-  it("a live null removes the saved entry and shows #23's not-found view with no note (state 5)", async () => {
+  it('a live null removes the saved entry and shows the not-found view with no note (state 5)', async () => {
     plant();
     stubOnLine(true);
     const harness = await open();

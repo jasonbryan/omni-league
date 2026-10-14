@@ -152,7 +152,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('forced reload past 14 days (ADR 0013 section 4)', () => {
+  describe('forced reload past 14 days', () => {
     function runningFor(days: number) {
       const activate = vi.spyOn(sw, 'activateUpdate');
       const updates = setUp();

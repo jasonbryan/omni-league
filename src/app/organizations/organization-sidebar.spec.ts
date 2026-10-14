@@ -71,7 +71,7 @@ function click(target: HTMLElement, init: MouseEventInit = {}): { prevented: boo
   return result;
 }
 
-describe('OrganizationSidebar same-path links (#95)', () => {
+describe('OrganizationSidebar same-path links', () => {
   it('keeps the hrefs query-free', async () => {
     const { link } = await render(`${PATH}?utm_source=x`);
     expect(link(`${PATH}#league-2`)).toBeTruthy();

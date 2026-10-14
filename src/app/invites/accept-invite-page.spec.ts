@@ -312,7 +312,7 @@ describe('AcceptInvitePage', () => {
       expect(TestBed.inject(Router).url).toBe('/invites/accept');
     });
 
-    describe('where the primary button goes after accepting, issue 212', () => {
+    describe('where the primary button goes after accepting', () => {
       async function acceptWith(invite: unknown, result: unknown) {
         const ctx = await open({ signedIn: true });
         await ctx.emitInvite(invite);

@@ -185,7 +185,7 @@ describe('SignUpPage', () => {
     });
   });
 
-  describe('the links to sign-in keep a valid returnTo (#63)', () => {
+  describe('the links to sign-in keep a valid returnTo', () => {
     it.each([
       [
         '/sign-up?returnTo=%2Fleagues%2Fx%2Fregister',
@@ -427,7 +427,7 @@ describe('SignUpPage', () => {
       expect(document.activeElement).toBe(input('password'));
     });
 
-    it("breached check unavailable: ADR 0008's exact text in the form alert, which takes focus", async () => {
+    it('breached check unavailable: the exact text in the form alert, which takes focus', async () => {
       await fill();
       client.nextSignUpError = {
         status: 500,

@@ -121,7 +121,7 @@ describe('AdminArea', () => {
   });
 
   describe('unknown slug (state 6)', () => {
-    it('shows #23’s not-found view, with no sidebar and no other query besides the top bar’s', async () => {
+    it('shows the not-found view, with no sidebar and no other query besides the top bar’s', async () => {
       const { page, convex, acceptToken, subscription, flush } = await openAdmin(
         ROUTES,
         '/app/organizations/does-not-exist/locations',

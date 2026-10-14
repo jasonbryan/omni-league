@@ -260,7 +260,7 @@ describe('LeaguePage', () => {
   });
 
   describe('an unknown league (state 15)', () => {
-    it('shows #23’s not-found view, with no sidebar and no season data requested', async () => {
+    it('shows the not-found view, with no sidebar and no season data requested', async () => {
       o = await openAdmin(LEAGUE_ROUTES, `/app/organizations/${GULF.slug}/leagues/does-not-exist`);
       page = o.page;
       o.acceptToken();

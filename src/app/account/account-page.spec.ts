@@ -75,7 +75,7 @@ describe('AccountPage', () => {
     expect(page.querySelectorAll('h1')).toHaveLength(1);
   });
 
-  it('shows "Your organizations" below the account panel (#64)', async () => {
+  it('shows "Your organizations" below the account panel', async () => {
     const page = await open();
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();

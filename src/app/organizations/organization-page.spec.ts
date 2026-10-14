@@ -339,7 +339,7 @@ describe('OrganizationPage', () => {
   });
 
   describe('unknown slug', () => {
-    it("renders #23's not-found view in the shell with the top bar only", async () => {
+    it('renders the not-found view in the shell with the top bar only', async () => {
       const harness = await open('/organizations/does-not-exist');
       subscription().emit(null);
       subscription(LEAGUES).emit({ rows: [], page: 1, pageCount: 0, total: 0 });

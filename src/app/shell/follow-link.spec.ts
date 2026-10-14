@@ -21,7 +21,7 @@ async function setup(url: string) {
   return { followLink: TestBed.inject(FollowLink), router, navigate, loadPage, origin };
 }
 
-describe('FollowLink.follow (#95)', () => {
+describe('FollowLink.follow', () => {
   it('loads another origin as a page, with no router navigation, and keeps its own query string', async () => {
     const { followLink, navigate, loadPage } = await setup('/organizations/a?utm_source=x');
     followLink.follow('https://evil.example/path?own=1#frag');

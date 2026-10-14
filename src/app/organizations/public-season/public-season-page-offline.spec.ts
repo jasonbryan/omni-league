@@ -238,7 +238,7 @@ describe('PublicSeasonPage offline', () => {
     });
   });
 
-  it("a live null removes the saved season and shows #23's not-found view with no note", async () => {
+  it('a live null removes the saved season and shows the not-found view with no note', async () => {
     plant();
     stubOnLine(true);
     const harness = await open();

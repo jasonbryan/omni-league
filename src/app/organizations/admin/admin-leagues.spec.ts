@@ -314,7 +314,7 @@ describe('AdminLeagues', () => {
       );
     });
 
-    it('typing a name fills Slug with slugify(name) until Slug is edited (decision 3)', async () => {
+    it('typing a name fills Slug with slugify(name) until Slug is edited', async () => {
       await open([]);
       await type('name', 'Sunday Reverse Coed 4s');
       expect(input('slug').value).toBe('sunday-reverse-coed-4s');
@@ -379,7 +379,7 @@ describe('AdminLeagues', () => {
       expect(error('name')).toBe(LEAGUE_MESSAGES.nameEmpty);
     });
 
-    it('an invalid slug shows the format message, the reserved word `new` in bold (#64)', async () => {
+    it('an invalid slug shows the format message, the reserved word `new` in bold', async () => {
       await open([]);
       await fill();
       for (const slug of ['Bad Slug', 'ab', 'a'.repeat(61), 'new', '-x-', 'a--b']) {

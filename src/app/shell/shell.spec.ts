@@ -418,7 +418,7 @@ describe('Shell', () => {
       expect(scrolled).toEqual([false]);
     });
 
-    it('keeps the current query string on a link to the current path, and replaces the fragment (#95)', async () => {
+    it('keeps the current query string on a link to the current path, and replaces the fragment', async () => {
       const harness = await open(undefined, '/organizations/test?utm_source=x&ott=abc#top');
       const router = TestBed.inject(Router);
       const target = host(harness).querySelector<HTMLElement>('#row-2');
@@ -434,7 +434,7 @@ describe('Shell', () => {
       expect(scrolled).toEqual([false]);
     });
 
-    it('navigates through the router to the link URL, with its own query string, for another path on the site (#95)', async () => {
+    it('navigates through the router to the link URL, with its own query string, for another path on the site', async () => {
       const loadPage = vi.fn<(url: string) => void>();
       TestBed.configureTestingModule({ providers: [{ provide: LOAD_PAGE, useValue: loadPage }] });
       const harness = await open(undefined, '/organizations/test?utm_source=x');
@@ -449,7 +449,7 @@ describe('Shell', () => {
       expect(loadPage).not.toHaveBeenCalled();
     });
 
-    it('loads a link to another origin as a full page, with no router navigation (#95)', async () => {
+    it('loads a link to another origin as a full page, with no router navigation', async () => {
       const loadPage = vi.fn<(url: string) => void>();
       TestBed.configureTestingModule({ providers: [{ provide: LOAD_PAGE, useValue: loadPage }] });
       const harness = await open(undefined, '/organizations/test?utm_source=x');

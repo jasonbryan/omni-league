@@ -128,7 +128,7 @@ describe('CreateOrganizationPage', () => {
     });
   });
 
-  describe('Slug follows the name until it is edited (decision 3)', () => {
+  describe('Slug follows the name until it is edited', () => {
     beforeEach(() => open());
 
     it('typing a name sets Slug to slugify(name), and the address follows', async () => {
@@ -337,7 +337,7 @@ describe('CreateOrganizationPage', () => {
   describe('submitting (mockup state 11)', () => {
     beforeEach(() => open());
 
-    it('sends the trimmed name and the slug, and lands on the admin Overview (#65)', async () => {
+    it('sends the trimmed name and the slug, and lands on the admin Overview', async () => {
       await type('name', `  ${NAME} `);
       await submit();
       expect(convex.calls.map((c) => [c.kind, c.name, c.args])).toEqual([

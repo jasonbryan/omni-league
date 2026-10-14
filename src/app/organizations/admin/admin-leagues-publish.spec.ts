@@ -45,7 +45,7 @@ const PUBLISHED = {
 const LEAGUES = [PUBLISHED, DRAFT, OTHER_DRAFT];
 const tokens = (value: string) => value.split(' ').sort();
 
-describe('AdminLeagues: publishing (#69)', () => {
+describe('AdminLeagues: publishing', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
   let o: Opened;
   let page: HTMLElement;

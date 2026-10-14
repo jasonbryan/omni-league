@@ -281,7 +281,7 @@ describe('PublicSeasonPage not found and failures', () => {
   it.each([
     ['a null season (a draft or an unknown one)', { season: null }],
     ['an unknown organization', { organization: null, season: null }],
-  ])('shows #23’s not-found view, with no sidebar, for %s', async (_label, options) => {
+  ])('shows the not-found view, with no sidebar, for %s', async (_label, options) => {
     const harness = await open();
     emit(seasonQueryResults(options));
     await settle(harness);

@@ -320,7 +320,7 @@ describe('PublicLeaguePage offline', () => {
     });
   });
 
-  it("a live null removes the saved league and shows #23's not-found view with no note", async () => {
+  it('a live null removes the saved league and shows the not-found view with no note', async () => {
     plant();
     stubOnLine(true);
     const harness = await open();
