@@ -12,7 +12,7 @@ const SEASON = {
   startDate: '2026-09-01',
   endDate: '2026-11-15',
   registrationDeadline: '2026-08-25',
-  format: '7v7' as const,
+  playersPerSide: 7,
   minimumRosterSize: 7,
 };
 

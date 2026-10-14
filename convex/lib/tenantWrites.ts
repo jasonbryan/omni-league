@@ -1,16 +1,47 @@
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
+import {
+  ageGroupValidator,
+  customLevelNameKey,
+  deriveDivisionFromName,
+  genderValidator,
+  isLevelOfSport,
+  isPlayersPerSideOfSport,
+  playersPerSideOfSport,
+  standardLevelValidator,
+  type AgeGroup,
+  type Gender,
+  type StandardLevel,
+} from './divisions';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
-import { sportValidator, type Format, type Sport, type SportCounts } from './sports';
+import {
+  ROSTER_SIZE_INPUT_MAX,
+  seasonPlayersPerSide,
+  sportValidator,
+  type Sport,
+  type SportCounts,
+} from './sports';
+
+export const divisionSeedValidator = v.object({
+  gender: genderValidator,
+  playersPerSide: v.number(),
+  level: standardLevelValidator,
+  customLevel: v.optional(v.string()),
+  ageGroup: ageGroupValidator,
+  minimumRosterSize: v.optional(v.number()),
+});
+
+export type DivisionSeed = Infer<typeof divisionSeedValidator>;
 
 export const leagueSeedValidator = v.object({
   name: v.string(),
   sport: sportValidator,
   locations: v.array(v.string()),
   status: v.optional(leagueStatusValidator),
+  division: v.optional(divisionSeedValidator),
 });
 
 export const tenantValidator = v.object({
@@ -160,13 +191,25 @@ export async function insertLeague(
     locationIds.push(location._id);
   }
   const slug = await uniqueLeagueSlug(ctx, organizationId, slugify(league.name));
+  const division = league.division
+    ? await resolveDivision(ctx, organizationId, league.sport, league.division)
+    : undefined;
   const leagueId = await insertLeagueRow(
     ctx,
     organizationId,
-    { name: league.name, slug, sport: league.sport, locationIds },
+    { name: league.name, slug, sport: league.sport, locationIds, division },
     league.status ?? 'published',
   );
   return { leagueId, slug };
+}
+
+export interface LeagueDivision {
+  gender: Gender;
+  playersPerSide: number;
+  level: StandardLevel;
+  customLevelId?: Id<'customLevels'>;
+  ageGroup: AgeGroup;
+  minimumRosterSize?: number;
 }
 
 export interface NewLeague {
@@ -174,6 +217,68 @@ export interface NewLeague {
   slug: string;
   sport: Sport;
   locationIds: Id<'locations'>[];
+  division?: LeagueDivision | undefined;
+}
+
+async function resolveDivision(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  { customLevel, ...division }: DivisionSeed,
+): Promise<LeagueDivision> {
+  if (customLevel === undefined) return division;
+  const found = await findCustomLevel(ctx, organizationId, sport, customLevel);
+  if (!found) {
+    throw new Error(`No custom level ${JSON.stringify(customLevel)} exists for ${sport}`);
+  }
+  if (found.standardLevel !== division.level) {
+    throw new Error(
+      `Custom level ${JSON.stringify(customLevel)} maps to ${found.standardLevel}, not ${division.level}`,
+    );
+  }
+  return { ...division, customLevelId: found._id };
+}
+
+export interface NewCustomLevel {
+  sport: Sport;
+  name: string;
+  standardLevel: StandardLevel;
+}
+
+export async function findCustomLevel(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  name: string,
+): Promise<Doc<'customLevels'> | null> {
+  return ctx.db
+    .query('customLevels')
+    .withIndex('by_organizationId_and_sport_and_nameKey', (q) =>
+      q
+        .eq('organizationId', organizationId)
+        .eq('sport', sport)
+        .eq('nameKey', customLevelNameKey(name)),
+    )
+    .unique();
+}
+
+// The caller has checked access and that the name is free.
+export async function insertCustomLevel(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  level: NewCustomLevel,
+): Promise<Id<'customLevels'>> {
+  if (!isLevelOfSport(level.sport, level.standardLevel)) {
+    throw new Error(`Level ${level.standardLevel} is not a level of ${level.sport}`);
+  }
+  return ctx.db.insert('customLevels', {
+    organizationId,
+    sport: level.sport,
+    name: level.name,
+    nameKey: customLevelNameKey(level.name),
+    standardLevel: level.standardLevel,
+    createdAt: Date.now(),
+  });
 }
 
 export async function insertDraftLeague(
@@ -199,7 +304,7 @@ export interface NewSeason {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
-  format: Format;
+  playersPerSide: number;
   minimumRosterSize: number;
 }
 
@@ -219,7 +324,7 @@ export async function insertSeason(
     startDate: season.startDate,
     endDate: season.endDate,
     registrationDeadline: season.registrationDeadline,
-    format: season.format,
+    playersPerSide: season.playersPerSide,
     minimumRosterSize: season.minimumRosterSize,
     status,
   });
@@ -263,6 +368,7 @@ async function insertLeagueRow(
   league: NewLeague,
   status: LeagueStatus,
 ): Promise<Id<'leagues'>> {
+  if (league.division) assertDivision(league.sport, league.division);
   const leagueId = await ctx.db.insert('leagues', {
     organizationId,
     name: league.name,
@@ -272,12 +378,45 @@ async function insertLeagueRow(
     sortName: sortName(league.name),
     status,
     publishedSeasonCount: 0,
+    ...divisionFields(league.division),
   });
   if (status === 'published') {
     await increment(ctx, organizationId, 'leagueCount');
     await countLeagueInSport(ctx, organizationId, league.sport, league.locationIds);
   }
   return leagueId;
+}
+
+function assertDivision(sport: Sport, division: LeagueDivision): void {
+  const { playersPerSide, level, minimumRosterSize } = division;
+  if (!isPlayersPerSideOfSport(sport, playersPerSide)) {
+    throw new Error(`${playersPerSide} players per side is not a format of ${sport}`);
+  }
+  if (!isLevelOfSport(sport, level)) {
+    throw new Error(`Level ${level} is not a level of ${sport}`);
+  }
+  if (
+    minimumRosterSize !== undefined &&
+    !(
+      Number.isInteger(minimumRosterSize) &&
+      minimumRosterSize >= playersPerSide &&
+      minimumRosterSize <= ROSTER_SIZE_INPUT_MAX
+    )
+  ) {
+    throw new Error(
+      `Minimum roster size ${minimumRosterSize} must be a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}`,
+    );
+  }
+}
+
+function divisionFields(division: LeagueDivision | undefined) {
+  if (!division) return {};
+  const { customLevelId, minimumRosterSize, ...required } = division;
+  return {
+    ...required,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
 }
 
 export async function leagueSlugTaken(
@@ -436,6 +575,107 @@ export async function backfillTenantFields(
       sportLocationCounts,
     });
     backfilled.organizations++;
+  }
+  return backfilled;
+}
+
+export const divisionBackfilledValidator = v.object({
+  seasons: v.number(),
+  leagueDivisions: v.number(),
+});
+
+export interface DemoDivision {
+  organizationSlug: string;
+  leagueName: string;
+  division: DivisionSeed;
+}
+
+type LeagueDivisionPatch = Partial<
+  Pick<
+    Doc<'leagues'>,
+    'gender' | 'playersPerSide' | 'level' | 'customLevelId' | 'ageGroup' | 'minimumRosterSize'
+  >
+>;
+
+export async function backfillDivisionFields(
+  ctx: MutationCtx,
+  demoDivisions: readonly DemoDivision[],
+): Promise<Infer<typeof divisionBackfilledValidator>> {
+  const backfilled = { seasons: 0, leagueDivisions: 0 };
+  const unmigratedSeasons = await ctx.db
+    .query('seasons')
+    // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers `format`; a temporary pass over a small table
+    .filter((q) => q.neq(q.field('format'), undefined))
+    .take(BACKFILL_SCAN_LIMIT);
+  for (const season of unmigratedSeasons) {
+    await ctx.db.patch('seasons', season._id, {
+      playersPerSide: seasonPlayersPerSide(season),
+      format: undefined,
+    });
+    backfilled.seasons++;
+  }
+
+  const organizationSlugs = new Map<Id<'organizations'>, string | undefined>();
+  const incompleteLeagues = await ctx.db
+    .query('leagues')
+    // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers a missing field; a temporary pass over a small table
+    .filter((q) =>
+      q.or(
+        q.eq(q.field('playersPerSide'), undefined),
+        q.eq(q.field('gender'), undefined),
+        q.eq(q.field('level'), undefined),
+        q.eq(q.field('ageGroup'), undefined),
+      ),
+    )
+    .take(BACKFILL_SCAN_LIMIT);
+  for (const league of incompleteLeagues) {
+    if (!organizationSlugs.has(league.organizationId)) {
+      const organization = await ctx.db.get('organizations', league.organizationId);
+      organizationSlugs.set(league.organizationId, organization?.slug);
+    }
+    const organizationSlug = organizationSlugs.get(league.organizationId);
+    const demo = demoDivisions.find(
+      (entry) => entry.organizationSlug === organizationSlug && entry.leagueName === league.name,
+    )?.division;
+    const derived = deriveDivisionFromName(league.name, league.sport);
+    const newest = await ctx.db
+      .query('seasons')
+      .withIndex('by_leagueId_and_startDate', (q) => q.eq('leagueId', league._id))
+      .order('desc')
+      .first();
+
+    const playersPerSide =
+      league.playersPerSide ??
+      demo?.playersPerSide ??
+      // The season pass may not have reached this season yet.
+      (newest ? seasonPlayersPerSide(newest) : undefined) ??
+      derived.playersPerSide ??
+      playersPerSideOfSport(league.sport)[0];
+    const patch: LeagueDivisionPatch = {
+      gender: league.gender ?? demo?.gender ?? derived.gender ?? 'coed',
+      playersPerSide,
+      level: league.level ?? demo?.level ?? derived.level ?? 'rec',
+      ageGroup: league.ageGroup ?? demo?.ageGroup ?? 'adult',
+    };
+    if (demo?.customLevel !== undefined && league.customLevelId === undefined) {
+      const customLevel = await findCustomLevel(
+        ctx,
+        league.organizationId,
+        league.sport,
+        demo.customLevel,
+      );
+      if (customLevel) patch.customLevelId = customLevel._id;
+    }
+    if (league.playersPerSide === undefined) {
+      const minimum = demo
+        ? demo.minimumRosterSize
+        : newest && newest.minimumRosterSize > playersPerSide
+          ? newest.minimumRosterSize
+          : undefined;
+      if (minimum !== undefined) patch.minimumRosterSize = minimum;
+    }
+    await ctx.db.patch('leagues', league._id, patch);
+    backfilled.leagueDivisions++;
   }
   return backfilled;
 }

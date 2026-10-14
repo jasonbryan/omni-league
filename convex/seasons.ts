@@ -12,7 +12,13 @@ import { leagueLocationNames } from './lib/publicLeague';
 import { getSeasonPublicPageReturns, publicSeasonsValidator } from './lib/publicPage';
 import { findLeagueBySlugs, findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { formatName, formatValidator, sportName } from './lib/sports';
+import { formatLabel } from './lib/divisions';
+import {
+  formatValidator,
+  playersPerSideOfFormat,
+  seasonPlayersPerSide,
+  sportName,
+} from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
@@ -51,7 +57,7 @@ export const create = mutation({
       startDate: args.startDate,
       endDate: args.endDate,
       registrationDeadline: args.registrationDeadline,
-      format: args.format,
+      playersPerSide: playersPerSideOfFormat(args.format),
       minimumRosterSize: args.minimumRosterSize,
     });
     return { seasonId };
@@ -91,7 +97,7 @@ export const listForOrganizer = query({
     }),
   ),
   handler: async (ctx, { leagueId }) => {
-    const { league } = await requireLeagueOrganizer(ctx, leagueId);
+    await requireLeagueOrganizer(ctx, leagueId);
     const seasons = await ctx.db
       .query('seasons')
       .withIndex('by_leagueId_and_startDate', (q) => q.eq('leagueId', leagueId))
@@ -104,7 +110,7 @@ export const listForOrganizer = query({
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: season.registrationDeadline,
-      formatName: formatName(league.sport, season.format),
+      formatName: formatLabel(seasonPlayersPerSide(season)),
       minimumRosterSize: season.minimumRosterSize,
       status: season.status,
     }));
@@ -137,7 +143,7 @@ export const listPublic = query({
         slug: season.slug,
         startDate: season.startDate,
         endDate: season.endDate,
-        formatName: formatName(league.sport, season.format),
+        formatName: formatLabel(seasonPlayersPerSide(season)),
       })),
       page,
       pageCount,
@@ -167,7 +173,7 @@ export const getPublicPage = query({
       slug: season.slug,
       startDate: season.startDate,
       endDate: season.endDate,
-      formatName: formatName(league.sport, season.format),
+      formatName: formatLabel(seasonPlayersPerSide(season)),
       minimumRosterSize: season.minimumRosterSize,
     };
   },

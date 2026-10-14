@@ -100,3 +100,13 @@ export function formatName(sport: Sport, format: Format): string {
   }
   return found.name;
 }
+
+export function playersPerSideOfFormat(format: Format): number {
+  return Number.parseInt(format, 10);
+}
+
+export function seasonPlayersPerSide(season: { playersPerSide?: number; format?: Format }): number {
+  if (season.playersPerSide !== undefined) return season.playersPerSide;
+  if (season.format !== undefined) return playersPerSideOfFormat(season.format);
+  throw new Error('The season has neither playersPerSide nor format');
+}
