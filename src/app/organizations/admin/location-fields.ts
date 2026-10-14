@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   input,
+  output,
   viewChildren,
   type Signal,
 } from '@angular/core';
@@ -57,6 +58,7 @@ const FIELD =
           data-slot="input"
           autocomplete="off"
           [formField]="fields()[field.key]"
+          (blur)="fieldLeft.emit(field.key)"
           [attr.aria-describedby]="describedBy(field.key)"
           [attr.aria-invalid]="errors()[field.key]() ? 'true' : null"
           [attr.data-invalid]="errors()[field.key]() ? 'true' : null"
@@ -94,6 +96,8 @@ export class LocationFields {
   readonly fields = input.required<FieldTree<LocationModel>>();
   readonly errors = input.required<Record<LocationField, Signal<string | null>>>();
   readonly descriptions = input.required<Record<LocationField, string>>();
+  /** Focus left a field's input, whatever its value (the form decides whether to check it). */
+  readonly fieldLeft = output<LocationField>();
 
   protected readonly list: readonly { key: LocationField; label: string }[] = [
     { key: 'name', label: 'Name' },

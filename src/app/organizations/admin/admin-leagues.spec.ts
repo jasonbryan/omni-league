@@ -416,6 +416,99 @@ describe('AdminLeagues', () => {
       expect(error('locations')).toBeNull();
     });
 
+    describe('checking a field when the user leaves it', () => {
+      async function leave(id: string) {
+        input(id).dispatchEvent(new Event('blur'));
+        await o.harness.fixture.whenStable();
+      }
+
+      /** Focus moving from a location checkbox to `to` (null: out of the page). */
+      async function leaveLocations(n: number, to: HTMLElement | null) {
+        location(n).dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
+        await o.harness.fixture.whenStable();
+      }
+
+      it('shows the error with aria-invalid and aria-describedby once a changed field is left', async () => {
+        await open([]);
+        await type('name', 'n'.repeat(101));
+        await leave('name');
+        expect(error('name')).toBe('Use 100 characters or fewer. This name has 101.');
+        expect(input('name').getAttribute('aria-invalid')).toBe('true');
+        expect(input('name').getAttribute('aria-describedby')).toContain('name-error');
+        await type('slug', 'Not-Valid');
+        await leave('slug');
+        expect(error('slug')).toBe(LEAGUE_MESSAGES.slugInvalid);
+        expect(input('slug').getAttribute('aria-invalid')).toBe('true');
+      });
+
+      it('shows nothing while the user types an invalid partial value', async () => {
+        await open([]);
+        await type('slug', 'Not-Valid');
+        expect(error('slug')).toBeNull();
+        expect(input('slug').hasAttribute('aria-invalid')).toBe(false);
+      });
+
+      it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+        await open([]);
+        await leave('name');
+        await leave('slug');
+        await leaveLocations(1, null);
+        expect(error('name')).toBeNull();
+        expect(error('slug')).toBeNull();
+        expect(error('locations')).toBeNull();
+        await submit();
+        expect(error('name')).toBe(LEAGUE_MESSAGES.nameEmpty);
+        expect(error('slug')).toBe(LEAGUE_MESSAGES.slugEmpty);
+        expect(error('locations')).toBe(LEAGUE_MESSAGES.locationsEmpty);
+      });
+
+      it('clears the error on the keystroke that makes the value valid', async () => {
+        await open([]);
+        await type('slug', 'Not-Valid');
+        await leave('slug');
+        await type('slug', 'valid-slug');
+        expect(error('slug')).toBeNull();
+        expect(input('slug').hasAttribute('aria-invalid')).toBe(false);
+      });
+
+      it('checks a slug that followed the name when Slug is left', async () => {
+        await open([]);
+        await type('name', 'ab');
+        await leave('slug');
+        expect(error('slug')).toBe(LEAGUE_MESSAGES.slugInvalid);
+      });
+
+      it('checks the locations when focus leaves the group after a change, not while it moves within', async () => {
+        await open([]);
+        await toggleLocation(1);
+        await toggleLocation(1);
+        await leaveLocations(1, location(2));
+        expect(error('locations')).toBeNull();
+        await leaveLocations(2, null);
+        expect(error('locations')).toBe(LEAGUE_MESSAGES.locationsEmpty);
+        expect(page.querySelector('fieldset#locations')?.getAttribute('aria-describedby')).toBe(
+          'locations-description locations-error',
+        );
+        await toggleLocation(3);
+        expect(error('locations')).toBeNull();
+      });
+
+      it('a form emptied after a create starts again: passing through its fields shows nothing', async () => {
+        await open([]);
+        await fill();
+        await submit();
+        o.convex.calls[0]?.resolve({ leagueId: 'league_new' });
+        await o.flush();
+        expect(input('name').value).toBe('');
+        await leave('name');
+        await leave('slug');
+        await leaveLocations(1, null);
+        expect(error('name')).toBeNull();
+        expect(error('slug')).toBeNull();
+        expect(error('locations')).toBeNull();
+      });
+    });
+
     it('sends the trimmed name, the slug, the sport, and the chosen location ids; while in flight the button says so (state 7)', async () => {
       await open([]);
       await type('name', '  Sunday Reverse Coed 4s ');

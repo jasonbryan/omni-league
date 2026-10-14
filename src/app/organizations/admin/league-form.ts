@@ -13,6 +13,7 @@ import {
 import { slugify } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 
 export type { LeagueField };
 /** The fields in the order focus and errors follow (design/mockups/66-69-organization-leagues.html). */
@@ -78,8 +79,9 @@ function inputErrorOf(failure: unknown): LeagueInputError | null {
 /**
  * The state of the create-league form (#66): the signal form for Name and Slug, the chosen sport
  * and locations, the messages each field shows, and the submit sequence. Like `LocationForm`,
- * errors show after a submit, under their field, and clear once the field is valid; a server
- * refusal about a field shows until that field changes. Typing a name fills Slug with
+ * errors show under their field when the user leaves a field they changed (`left`, `leftGroup`) and
+ * after a submit, and clear once the field is valid; a server refusal about a field shows until
+ * that field changes. Typing a name fills Slug with
  * `slugify(name)` until the user edits Slug (decision 3). Construct it in an injection context (a
  * component field initializer); `available` returns the ids of the organization's locations, in
  * the order the list shows them.
@@ -99,7 +101,9 @@ export class LeagueForm {
   readonly chosen: Signal<Id<'locations'>[]>;
 
   private readonly clientErrors: Record<LeagueField, Signal<string | null>>;
-  private readonly shown: Record<LeagueField, WritableSignal<boolean>>;
+  private readonly shown: Record<LeagueField, ShownUntilValid>;
+  /** True once the user has checked or unchecked a location. */
+  private readonly locationsChanged = changedSince(() => this.selected());
   private readonly serverErrors: Record<LeagueField, WritableSignal<ServerError | null>>;
 
   /** The error each field shows now, or `null`. */
@@ -131,12 +135,20 @@ export class LeagueForm {
       sport: computed(() => (this.sport() === null ? LEAGUE_MESSAGES.sportEmpty : null)),
       locations: computed(() => checkLeagueLocations(this.chosen().length)?.message ?? null),
     };
-    this.shown = {
-      name: this.shownUntilValid('name'),
-      slug: this.shownUntilValid('slug'),
-      sport: this.shownUntilValid('sport'),
-      locations: this.shownUntilValid('locations'),
+    // Slug counts as changed when the user typed in Name, which fills it. Sport is a radio group:
+    // once chosen it is valid, so leaving it never shows an error and only a submit does.
+    const changed: Record<LeagueField, () => boolean> = {
+      name: () => this.fields.name().dirty(),
+      slug: () => this.fields.slug().dirty() || this.fields.name().dirty(),
+      sport: () => false,
+      locations: () => this.locationsChanged(),
     };
+    this.shown = Object.fromEntries(
+      LEAGUE_FIELDS.map((field) => [
+        field,
+        new ShownUntilValid(() => this.clientErrors[field]() !== null, changed[field]),
+      ]),
+    ) as Record<LeagueField, ShownUntilValid>;
     this.serverErrors = {
       name: this.untilChanged(() => this.model().name),
       slug: this.untilChanged(() => this.model().slug),
@@ -150,7 +162,7 @@ export class LeagueForm {
       locations: this.shownError('locations'),
     };
     this.takenSlug = computed(() =>
-      this.shown.slug() ? null : (this.serverErrors.slug()?.taken ?? null),
+      this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
     );
     this.reservedParts = computed(() => {
       if (this.errors.slug() !== LEAGUE_MESSAGES.slugInvalid) return null;
@@ -182,6 +194,18 @@ export class LeagueForm {
     this.slugEdited.set(false);
     this.sport.set(null);
     this.selected.set(new Set());
+    this.fields().reset();
+    this.locationsChanged.set(false);
+  }
+
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  left(field: LeagueField): void {
+    this.shown[field].left();
+  }
+
+  /** A `focusout` in a group of checkboxes: checked once focus leaves the whole group. */
+  leftGroup(field: LeagueField, event: FocusEvent): void {
+    if (focusLeftGroup(event)) this.left(field);
   }
 
   /**
@@ -197,9 +221,8 @@ export class LeagueForm {
     this.alert.set(null);
     let firstInvalid: LeagueField | null = null;
     for (const field of LEAGUE_FIELDS) {
-      const invalid = this.clientErrors[field]() !== null;
-      this.shown[field].set(invalid);
-      if (invalid) firstInvalid ??= field;
+      this.shown[field].submitted();
+      if (this.clientErrors[field]() !== null) firstInvalid ??= field;
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
@@ -243,20 +266,15 @@ export class LeagueForm {
     return { sent: false, alert };
   }
 
-  private shownUntilValid(field: LeagueField): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors[field]() === null,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
-  }
-
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {
     return linkedSignal<unknown, ServerError | null>({ source: value, computation: () => null });
   }
 
   private shownError(field: LeagueField): Signal<string | null> {
     return computed(() =>
-      this.shown[field]() ? this.clientErrors[field]() : (this.serverErrors[field]()?.text ?? null),
+      this.shown[field].shown()
+        ? this.clientErrors[field]()
+        : (this.serverErrors[field]()?.text ?? null),
     );
   }
 }

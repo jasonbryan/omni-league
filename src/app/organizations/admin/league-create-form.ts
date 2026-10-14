@@ -108,6 +108,7 @@ export interface LeagueLocationChoice {
             data-slot="input"
             autocomplete="off"
             [formField]="form.fields.name"
+            (blur)="form.left('name')"
             (input)="nameTyped($event)"
             [attr.aria-describedby]="describedBy('name', 'name-description')"
             [attr.aria-invalid]="form.errors.name() ? 'true' : null"
@@ -147,6 +148,7 @@ export interface LeagueLocationChoice {
             spellcheck="false"
             autocapitalize="none"
             [formField]="form.fields.slug"
+            (blur)="form.left('slug')"
             (input)="form.slugEdited.set(true)"
             [attr.aria-describedby]="describedBy('slug', 'slug-description')"
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
@@ -253,6 +255,7 @@ export interface LeagueLocationChoice {
               : 'locations-description'
           "
           [attr.data-invalid]="form.errors.locations() ? 'true' : null"
+          (focusout)="form.leftGroup('locations', $event)"
           [class]="fieldSetClass"
         >
           <legend
