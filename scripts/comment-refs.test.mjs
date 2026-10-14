@@ -106,6 +106,16 @@ describe('the colour rule', () => {
     accepted('src/a.css', '/* box-shadow: 0 0 0 2px #000 */');
   });
 
+  it('accepts a gradient and a value with more than one colour', () => {
+    accepted('src/a.css', '/* background: linear-gradient(#000, #111) */');
+    accepted('src/a.css', '/* background: linear-gradient(to right, #000 0%, #111 100%) */');
+    accepted('src/a.css', '/* border-color: #000 #111 */');
+  });
+
+  it('flags an issue number after prose that follows a colour value', () => {
+    flagged('src/a.css', '/* background: #123 then issue fixed in #274 */');
+  });
+
   it('accepts an HTML entity', () => {
     accepted('src/a.ts', '// renders &#39; for the apostrophe');
   });

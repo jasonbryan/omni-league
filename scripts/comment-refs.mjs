@@ -1,5 +1,6 @@
 // Fails when a code comment, test title, skip reason, or ESLint rule message references this
-// repo's tracker (issues, PRs, ADRs, reviews, agent roles). Those belong in commits, PRs, and ADRs (AGENTS.md, Code comments).
+// repo's tracker (issues, PRs, ADRs, reviews, agent roles). Those belong in commits, PRs, and
+// ADRs (AGENTS.md, Code comments).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, join, relative } from 'node:path';
 import ts from 'typescript';
@@ -18,7 +19,7 @@ const ISSUE_NUMBER = /(?<!&)#\d+(?![\w])/g;
 const COLOUR_DECLARATION =
   /(?:^|[\s;{`'"(])(?:--[\w-]+|[\w-]*(?:color|background|border|outline|fill|stroke|shadow)[\w-]*)\s*:([^;{}]*)$/i;
 const CSS_VALUE_BEFORE_COLOUR =
-  /^\s*(?:(?:-?[\d.]+[a-z%]*|solid|dashed|dotted|double|inset|none|transparent|,)\s*)*$/i;
+  /^\s*(?:(?:-?[\d.]+[a-z%]*|#\w+|[a-z-]+\(|solid|dashed|dotted|double|inset|none|transparent|to|top|bottom|left|right|center|circle|ellipse|,)\s*)*$/i;
 
 const URL_BEFORE_HASH = /https?:\/\/\S*$/;
 const FILE_PATH_BEFORE_HASH = /[\w/-]\.[A-Za-z0-9]+$/;
