@@ -153,7 +153,8 @@ export class InviteForm {
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
-    if (!online) return this.showAlert('offline');
+    const pressedOffline = !online;
+    if (pressedOffline) return this.showAlert('offline');
 
     const checked = checkInviteEmail(this.model().email);
     if (!checked.ok) return { sent: false, focus: 'email' };

@@ -35,8 +35,9 @@ function localDateTime(time: number, timeZone: string | undefined): string {
   }).formatToParts(time);
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? '';
-  const offset = part('timeZoneName').replace(/^GMT/, '') || '+00:00';
-  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}${offset}`;
+  const longOffset = part('timeZoneName');
+  const utcOffset = longOffset.replace(/^GMT/, '') || '+00:00';
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}${utcOffset}`;
 }
 
 /** Absolute, in the device's locale and time zone, so it needs no timer and stays true. Saved copies are at most 14 days old, so the weekday and date are enough without a year. */

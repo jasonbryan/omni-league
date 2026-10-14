@@ -231,9 +231,10 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     3 to 60 lowercase letters and digits, with single hyphens between them. Your
                     public page will be at
                     <span class="block break-words text-foreground"
-                      >{{ host }}/<wbr />organizations/<wbr /><strong class="font-semibold">{{
-                        addressSlug()
-                      }}</strong></span
+                      >{{ publicAddressHost }}/<wbr />organizations/<wbr /><strong
+                        class="font-semibold"
+                        >{{ addressSlug() }}</strong
+                      ></span
                     >
                   </p>
                   @if (errors.slug(); as error) {
@@ -300,7 +301,7 @@ export class CreateOrganizationPage {
 
   protected readonly messages = MESSAGES;
   protected readonly online = injectOnline();
-  protected readonly host = inject(DOCUMENT).location.host;
+  protected readonly publicAddressHost = inject(DOCUMENT).location.host;
 
   private readonly model = signal<CreateModel>({ name: '', slug: '' });
   // `required` puts the attribute on both inputs; the messages are ours (checkOrganizationName and
@@ -392,7 +393,8 @@ export class CreateOrganizationPage {
       return;
     }
 
-    if (!this.online()) {
+    const pressedOffline = !this.online();
+    if (pressedOffline) {
       this.showAlert('offline');
       return;
     }

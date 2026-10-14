@@ -118,13 +118,13 @@ export class AdminSidebar {
   protected readonly sections = computed(() => {
     const { slug } = this.organization();
     const here = pathOf(this.url());
-    const mark = (path: string, below = false): 'page' | 'true' | null =>
-      here === path ? 'page' : below && here.startsWith(`${path}/`) ? 'true' : null;
+    const ariaCurrentFor = (path: string, includeChildren = false): 'page' | 'true' | null =>
+      here === path ? 'page' : includeChildren && here.startsWith(`${path}/`) ? 'true' : null;
     return [
       { label: 'Overview', icon: 'lucideLayoutDashboard', path: adminPath(slug) },
       { label: 'Locations', icon: 'lucideMapPin', path: adminPath(slug, 'locations') },
       { label: 'Leagues', icon: 'lucideTrophy', path: adminPath(slug, 'leagues') },
       { label: 'Staff', icon: 'lucideUsers', path: adminPath(slug, 'staff') },
-    ].map((link) => ({ ...link, current: mark(link.path, link.label === 'Leagues') }));
+    ].map((link) => ({ ...link, current: ariaCurrentFor(link.path, link.label === 'Leagues') }));
   });
 }

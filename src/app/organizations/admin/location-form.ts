@@ -107,7 +107,8 @@ export class LocationForm {
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
-    if (!online) return this.showAlert('offline');
+    const pressedOffline = !online;
+    if (pressedOffline) return this.showAlert('offline');
 
     const { name, address } = this.model();
     const values = { name: name.trim(), address: address.trim() };

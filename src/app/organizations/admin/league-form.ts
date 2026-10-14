@@ -106,10 +106,12 @@ export class LeagueForm {
       sport: computed(() => (this.sport() === null ? LEAGUE_MESSAGES.sportEmpty : null)),
       locations: computed(() => checkLeagueLocations(this.chosen().length)?.message ?? null),
     };
+    const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
+    const radioGroupNeverShownOnLeave = () => false;
     const changed: Record<LeagueField, () => boolean> = {
       name: () => this.fields.name().dirty(),
-      slug: () => this.fields.slug().dirty() || this.fields.name().dirty(),
-      sport: () => false,
+      slug: slugChanged,
+      sport: radioGroupNeverShownOnLeave,
       locations: () => this.locationsChanged(),
     };
     this.shown = Object.fromEntries(
@@ -185,7 +187,8 @@ export class LeagueForm {
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
-    if (!online) return this.showAlert('offline');
+    const pressedOffline = !online;
+    if (pressedOffline) return this.showAlert('offline');
 
     const { name, slug } = this.model();
     const values: LeagueValues = {

@@ -142,9 +142,14 @@ export class UpdatePrompt {
   }
 
   protected later(): void {
-    const hadFocus = this.card()?.nativeElement.contains(this.document.activeElement) ?? false;
+    const cardHadFocus = this.card()?.nativeElement.contains(this.document.activeElement) ?? false;
     this.updates.later();
-    if (hadFocus) this.document.getElementById('main')?.focus({ preventScroll: true });
+    if (cardHadFocus) this.focusMain();
+  }
+
+  /** Focus must not fall to `<body>`, so the next Tab starts in the page content. */
+  private focusMain(): void {
+    this.document.getElementById('main')?.focus({ preventScroll: true });
   }
 }
 

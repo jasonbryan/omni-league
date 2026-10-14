@@ -84,7 +84,8 @@ export class AuthService implements ConvexAuthSource {
     }
     void this.client.then((client) => {
       if (this.destroyRef.destroyed) return;
-      if (!client || !hasStoredSession(client)) {
+      const hasNoStoredSession = !client || !hasStoredSession(client);
+      if (hasNoStoredSession) {
         this.setSession('signed-out');
         return;
       }
@@ -96,7 +97,8 @@ export class AuthService implements ConvexAuthSource {
     if (this.watching || this.destroyRef.destroyed) return;
     this.watching = true;
     const unsubscribe = client.useSession.subscribe((state) => {
-      if (state.isPending) return;
+      const awaitingFirstAnswer = state.isPending;
+      if (awaitingFirstAnswer) return;
       this.setSession(state.data?.session ? 'signed-in' : 'signed-out');
     });
     this.destroyRef.onDestroy(unsubscribe);
