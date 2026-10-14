@@ -1,9 +1,3 @@
-// Accepting a staff invite (#70): `/invites/accept#<token>`, a Client route (approved design
-// design/mockups/70-accept-invite.html). The token is a bearer secret in the fragment: the tests
-// check that it reaches no request URL, `Referer`, address bar, or `returnTo`, that sign-up and
-// sign-in bring the visitor back to the page, and that the membership is created for the leagues
-// the invite named. Invites are seeded with a known token (`testing:addInvite`), so the tests need
-// the local Convex backend and are skipped with E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible } from './support/a11y';
@@ -58,14 +52,9 @@ async function seedInvite(
 }
 
 /**
- * Records every request URL, `Referer`, and address-bar URL the page produces, so a test can check
- * that none holds the token (the websocket carries the token as a Convex argument, which is not a
- * URL and is not recorded here).
- *
- * The link itself is `/invites/accept#<token>`: the first address-bar URL holds the fragment, as
- * the visitor opened it, and Playwright reports a request URL with its fragment, which no request
- * carries. So a request is judged without its fragment, a `Referer` and every later address-bar
- * URL in full.
+ * The websocket carries the token as a Convex argument, which is not a URL, so it is not recorded.
+ * Playwright reports a request URL with its fragment, which no request carries, so a request is
+ * judged without it; a `Referer` and every later address-bar URL in full.
  */
 function watchUrls(page: Page) {
   const requests: string[] = [];
@@ -88,7 +77,7 @@ function watchUrls(page: Page) {
     sent,
     expectNone(token: string) {
       expect(requests.filter((url) => url.includes(token))).toEqual([]);
-      // Skips the navigation to the link itself, which is the one that holds the fragment.
+      // Skips the navigation to the link itself, which holds the fragment.
       expect(navigations.slice(1).filter((url) => url.includes(token))).toEqual([]);
     },
   };
@@ -107,7 +96,6 @@ async function signInWith(page: Page, user: TestUser) {
 
 async function openLink(page: Page, token: string) {
   const response = await page.goto(`/invites/accept#${token}`);
-  // The fragment is gone from the router and the address bar before the page renders.
   await expect(page).toHaveURL(`${baseURL}/invites/accept`);
   return response;
 }
@@ -133,7 +121,6 @@ test.describe('Accept invite: a visitor with no account', () => {
     await screenshot(page, testInfo, '70-signed-out');
     await expectAccessible(page);
 
-    // The top bar's Sign in carries the page's own path, not the token.
     await expect(page.locator('header a[href^="/sign-in"]')).toHaveAttribute(
       'href',
       '/sign-in?returnTo=%2Finvites%2Faccept',
@@ -166,8 +153,6 @@ test.describe('Accept invite: a visitor with no account', () => {
     await screenshot(page, testInfo, '70-accepted');
     await expectAccessible(page);
 
-    // One league, so the button opens it (#212). The membership is for Coed 7v7 Rec only: the
-    // organization's admin area is not open to a league organizer, and Sand 2s is not theirs.
     const open = main(page).getByRole('link', { name: 'Open Coed 7v7 Rec' });
     await expect(open).toHaveAttribute(
       'href',
@@ -204,7 +189,6 @@ test.describe('Accept invite: a visitor with no account', () => {
     await expect(page).toHaveURL(`${baseURL}/invites/accept`);
     await main(page).getByRole('button', { name: 'Accept invite' }).click();
     await expect(main(page)).toContainText('You’re an org admin.');
-    // The button opens the organization (#212).
     const open = main(page).getByRole('link', { name: `Open ${tenant.name}` });
     await expect(open).toHaveAttribute('href', `/app/organizations/${tenant.slug}`);
     await open.click();
@@ -213,14 +197,14 @@ test.describe('Accept invite: a visitor with no account', () => {
   });
 });
 
-test.describe('Accept invite: while the invite is checked, issue 212', () => {
+test.describe('Accept invite: while the invite is checked', () => {
   test('shows a skeleton of the invite card with a "Checking your invite…" status and no spinner, then the invite', async ({
     page,
   }, testInfo) => {
     const tenant = await seedOrganization();
     const token = await seedInvite(tenant, { email: newUser('Checking').email });
-    // Holds the answer to getByToken, and every frame after it (Convex applies transitions in
-    // order), until released.
+    // Convex applies transitions in order, so holding the answer to getByToken holds every frame
+    // after it.
     interface Change {
       type: string;
       queryId: number;
@@ -282,8 +266,7 @@ test.describe('Accept invite: while the invite is checked, issue 212', () => {
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
     await expect(skeleton).toHaveCount(0);
 
-    // No layout shift as the invite arrives: the card keeps its left edge, width, and top, so only
-    // the height below the rows can change (the lead line may wrap, the sign-in prompt is longer).
+    // Only the height can change: the lead line may wrap and the sign-in prompt is longer.
     const card = main(page).locator('.ring-1').first();
     const after = await card.boundingBox();
     expect(before).not.toBeNull();
@@ -291,7 +274,6 @@ test.describe('Accept invite: while the invite is checked, issue 212', () => {
     expect(after?.x).toBeCloseTo(before?.x ?? -1, 0);
     expect(after?.y).toBeCloseTo(before?.y ?? -1, 0);
     expect(after?.width).toBeCloseTo(before?.width ?? -1, 0);
-    // The browser's own layout-shift score stays in "good" (below 0.1).
     const score = await page.evaluate(
       () => (window as unknown as { shifts: { score: number } }).shifts.score,
     );
@@ -328,7 +310,6 @@ test.describe('Accept invite: a different account', () => {
     await expect(alert).toBeFocused();
     await screenshot(page, testInfo, '70-different-email');
     await expectAccessible(page);
-    // Nothing was written.
     await page.goto('/app');
     await expect(main(page)).not.toContainText(tenant.name);
     await page.goBack();
@@ -340,7 +321,6 @@ test.describe('Accept invite: a different account', () => {
     await main(page).getByRole('button', { name: 'Sign in with a different account' }).click();
     await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Finvites%2Faccept`);
     expect(await storedToken(page)).toBe(token);
-    // The session is deleted.
     await expect.poll(async () => (await accountByEmail(wrong.email))?.sessions).toBe(0);
 
     await signInWith(page, invited);
@@ -377,7 +357,6 @@ test.describe('Accept invite: a different account', () => {
     ).toHaveAttribute('href', '/app');
     await screenshot(page, testInfo, '70-already-member');
     await expectAccessible(page);
-    // Still a league organizer: the invite did not change the role.
     await page.goto(`/app/organizations/${tenant.slug}`);
     await expect(main(page)).toContainText('You can’t manage this organization');
   });
@@ -424,23 +403,19 @@ test.describe('Accept invite: links that cannot be used', () => {
       const token = await seedInvite(tenant, { email: newUser('Again').email });
       const urls = watchUrls(page);
 
-      // The page is open with nothing stored: the invalid view.
       await page.goto('/invites/accept');
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
         'This invite link can’t be used',
       );
 
-      // The same tab opens the link: a navigation to the same path with a fragment only.
       await page.goto(`/invites/accept#${token}`);
       await expect(page).toHaveURL(`${baseURL}/invites/accept`);
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
       expect(await storedToken(page)).toBe(token);
       expect(page.url()).not.toContain(token);
       expect(page.url()).not.toContain('#');
-      // The navigation to the link held the fragment, as the visitor opened it; none after it may.
       const afterCapture = urls.navigations.length;
 
-      // Neither sign-in link carries it: the top bar's and the page's.
       const links = page.locator('a[href^="/sign-in"], a[href^="/sign-up"]');
       expect(await links.count()).toBeGreaterThan(0);
       for (const href of await links.evaluateAll((all) => all.map((a) => a.getAttribute('href')))) {
@@ -473,7 +448,6 @@ test.describe('Accept invite: links that cannot be used', () => {
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 
-/** The address bar and every sign-in or sign-up link on the page hold none of `tokens`. */
 async function expectNoTokenShown(page: Page, tokens: string[]) {
   for (const token of tokens) {
     expect(page.url()).not.toContain(token);
@@ -484,13 +458,14 @@ async function expectNoTokenShown(page: Page, tokens: string[]) {
     .evaluateAll((all) => all.map((a) => a.getAttribute('href') ?? ''));
   for (const href of hrefs) {
     for (const token of tokens) expect(href).not.toContain(token);
-    // The skip link is `#main`-like and short; a token-shaped fragment or an encoded one is a leak.
+    // The skip link's fragment is short and `#main`-like; a token-shaped or encoded fragment is a
+    // leak.
     expect(href).not.toMatch(/#[A-Za-z0-9_-]{20,}/);
     expect(href).not.toContain('%23');
   }
 }
 
-test.describe('Accept invite: a link opened on the page that is already open (round 2)', () => {
+test.describe('Accept invite: a link opened on the page that is already open', () => {
   test(
     'two links in sequence, then back and forward: the second replaces the first and neither token is ever in the address bar, a link, or a request',
     VIEWPORT_AGNOSTIC,
@@ -505,7 +480,6 @@ test.describe('Accept invite: a link opened on the page that is already open (ro
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${first.name}`);
       await expectNoTokenShown(page, [tokenA, tokenB]);
 
-      // A fragment-only navigation on the open page, twice in a row.
       await page.goto(`/invites/accept#${tokenB}`);
       await expect(page).toHaveURL(`${baseURL}/invites/accept`);
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${second.name}`);
@@ -520,7 +494,6 @@ test.describe('Accept invite: a link opened on the page that is already open (ro
       await expectNoTokenShown(page, [tokenA, tokenB]);
       const afterThird = urls.navigations.length;
 
-      // Back and forward never put a token back in the address bar or re-capture an older one.
       for (const move of ['back', 'forward', 'back', 'back', 'forward', 'forward'] as const) {
         if (move === 'back') await page.goBack();
         else await page.goForward();
@@ -562,7 +535,6 @@ test.describe('Accept invite: a link opened on the page that is already open (ro
       await expectNoTokenShown(page, [token]);
       expect(await storedToken(page)).toBe(token);
 
-      // A second assignment of the same token, and an empty one, leave no token behind.
       await page.evaluate((t) => {
         location.hash = t;
       }, token);
@@ -614,8 +586,6 @@ test.describe('Accept invite: a link opened on the page that is already open (ro
         );
         expect(await storedToken(page)).toBeNull();
 
-        // The same link opened again on the accepted page: no token in any URL; a reload then shows
-        // the invalid view and leaves nothing stored.
         await page.goto(`/invites/accept#${mine}`);
         await expect(page).toHaveURL(`${baseURL}/invites/accept`);
         await page.waitForTimeout(500);
@@ -655,14 +625,13 @@ test.describe('Accept invite: a link opened on the page that is already open (ro
   );
 });
 
-test.describe('Accept invite: the invite could not be loaded (round 2)', () => {
+test.describe('Accept invite: the invite could not be loaded', () => {
   test('shows the temporarily-unavailable view; the token stays stored and appears in no URL, link, or Try again; Try again then loads the invite', async ({
     page,
   }, testInfo) => {
     const tenant = await seedOrganization();
     const token = await seedInvite(tenant, { email: newUser('Down').email });
     const urls = watchUrls(page);
-    // The query is sent to a function that does not exist, so the server fails it.
     let failQuery = true;
     await page.routeWebSocket(CONVEX_SOCKET, (ws) => {
       const server = ws.connectToServer();
@@ -697,13 +666,12 @@ test.describe('Accept invite: the invite could not be loaded (round 2)', () => {
   });
 });
 
-test.describe('Accept invite: offline and a spent token (round 3)', () => {
+test.describe('Accept invite: offline and a spent token', () => {
   test('offline, Accept invite is aria-disabled at half opacity and still focusable; a press shows the offline alert and sends nothing; back online it accepts', async ({
     page,
     context,
   }, testInfo) => {
-    // As e2e/pwa.spec.ts: while offline the Convex socket is closed at once, so Chromium logs no
-    // connection error for it.
+    // While offline the Convex socket closes at once, so Chromium logs no connection error for it.
     let offline = false;
     await context.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
       if (offline) void ws.close();
@@ -725,7 +693,6 @@ test.describe('Accept invite: offline and a spent token (round 3)', () => {
     await context.setOffline(true);
     await expect(accept).toHaveAttribute('aria-disabled', 'true', { timeout: 2_000 });
     await expect(accept).toHaveCSS('opacity', '0.5');
-    // Still focusable: aria-disabled, not the disabled attribute.
     await expect(accept).not.toHaveAttribute('disabled', /.*/);
     await accept.focus();
     await expect(accept).toBeFocused();
@@ -739,8 +706,8 @@ test.describe('Accept invite: offline and a spent token (round 3)', () => {
     await expect(alert).toBeFocused();
     await screenshot(page, testInfo, '70-offline-alert');
     await expectAccessible(page);
-    // A second press (mouse) behaves the same and still sends nothing. `force`: Playwright treats
-    // aria-disabled as not actionable, and the page must answer the press regardless.
+    // `force`: Playwright treats aria-disabled as not actionable, and the page must answer the
+    // press regardless.
     await accept.click({ force: true });
     await expect(alert).toBeFocused();
     await page.waitForTimeout(500);
@@ -750,7 +717,6 @@ test.describe('Accept invite: offline and a spent token (round 3)', () => {
     expect(urls.requests.length).toBe(requestsBefore);
     expect(await storedToken(page)).toBe(token);
 
-    // Back online the same press sends the token.
     offline = false;
     await context.setOffline(false);
     await expect(accept).not.toHaveAttribute('aria-disabled', /.*/, { timeout: 20_000 });
@@ -804,7 +770,6 @@ test.describe('Accept invite: offline and a spent token (round 3)', () => {
         `You’re on the staff of ${tenant.name}`,
       );
       expect(await storedToken(page)).toBeNull();
-      // Reopened on a fresh load of the page: the invalid view, and nothing kept.
       await page.goto('/app');
       await openLink(page, token);
       await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(

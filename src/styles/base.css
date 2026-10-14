@@ -4,10 +4,11 @@
 
    Focus: a solid 2px --ring outline replaces helm's translucent halo (2.25:1, under the 3:1 of
    WCAG 1.4.11). A component must not remove it with `outline-none`.
-   Scroll offset: 4.5rem keeps anchor targets and focused elements below the sticky 56px top bar
-   (WCAG 2.4.11). While the offline note (#88, src/app/shell/offline-note.ts) shows below the top
-   bar, the offset grows by its measured height, --offline-note-h (36px, or more where it wraps), as
-   in design/mockups/88-offline-note.html; the shell's header cancels the same amount on itself. */
+   Scroll offset: 4.5rem keeps anchor targets and focused elements below the sticky top bar (56px
+   in the app shell, 65px in the public layout; WCAG 2.4.11). While the offline note
+   (src/app/shell/offline-note.ts) shows below the top bar, the offset grows by its measured
+   height, --offline-note-h (36px, or more where it wraps), as in
+   design/mockups/88-offline-note.html; the shell's header cancels the same amount on itself. */
 @layer base {
   * {
     @apply border-border;

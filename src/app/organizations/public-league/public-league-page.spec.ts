@@ -13,7 +13,6 @@ import { PublicLeaguePage } from './public-league-page';
 import {
   leagueQueryResults,
   NO_SEASONS,
-  ORGANIZATION,
   SEASONS,
   seasonsPage,
   SUNDAY_4S,
@@ -119,14 +118,14 @@ describe('PublicLeaguePage queries', () => {
     expect(subscription(SEASONS_QUERY).args).toMatchObject({ page });
   });
 
-  it('shows nothing but the shell until all three results have arrived', async () => {
+  it('shows nothing but the layout until all three results have arrived', async () => {
     const harness = await open();
     const results = leagueQueryResults();
     subscription(ORG).emit(results[ORG]);
     subscription(LEAGUE).emit(results[LEAGUE]);
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     subscription(SEASONS_QUERY).emit(results[SEASONS_QUERY]);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
@@ -226,47 +225,21 @@ describe('PublicLeaguePage populated', () => {
     expect(canonical()).toBe(`${window.location.origin}${PATH}`);
   });
 
-  it('marks the league’s sport as the current section of the sidebar, with the league counts', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav).not.toBeNull();
-    // Plain text until #114 adds the sport view: no link in the list.
-    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
-    expect(
-      sports.map((a) => [
-        text(a.querySelector('span.min-w-0')),
-        text(a.querySelector('span.ms-auto')),
-        a.getAttribute('aria-current'),
-      ]),
-    ).toEqual([
-      ['Beach volleyball', '2 leagues', 'true'],
-      ['Soccer', '2 leagues', null],
-      ['Softball', '1 league', null],
-    ]);
-    expect(sports[0].className).toContain('bg-sidebar-accent');
-    expect(sports[1].className).not.toContain('bg-sidebar-accent');
+  it('renders in the public layout: top bar and footer, no organization sidebar and no menu button', () => {
+    const root = host(harness);
+    expect(root.querySelector('app-public-layout')).not.toBeNull();
+    expect(root.querySelector('app-shell')).toBeNull();
+    expect(root.querySelectorAll('header')).toHaveLength(1);
+    expect(root.querySelectorAll('footer')).toHaveLength(1);
+    const names = [...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'));
+    expect(names).toContain('Footer');
+    expect(names).not.toContain('Gulf Coast Sport & Social');
+    expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
-  it('links the sidebar’s Overview to the organization page and its Locations to the locations list, with the total', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    const overview = [...(nav?.querySelectorAll('a') ?? [])].find((a) => text(a) === 'Overview');
-    expect(overview?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
-    expect(overview?.hasAttribute('aria-current')).toBe(false);
-    const locations = [...(nav?.querySelectorAll('a') ?? [])].find((a) =>
-      text(a).startsWith('Locations'),
-    );
-    expect(locations?.getAttribute('href')).toBe(
-      '/organizations/gulf-coast-sport-social#locations',
-    );
-    expect(text(locations?.querySelector('span.min-w-0'))).toBe('Locations');
-    expect(text(locations?.querySelector('span.ms-auto'))).toBe('3 locations');
-  });
-
-  it('does not mark any sport when the league’s sport has no entry in the organization’s sports', async () => {
+  it('names a sport the organization does not list in the breadcrumb, without a link', async () => {
     emit(leagueQueryResults({ league: { ...SUNDAY_4S, sportName: 'Curling' } }));
     await settle(harness);
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav?.querySelectorAll('[aria-current]')).toHaveLength(0);
     // The breadcrumb names the sport but cannot link it.
     const crumbs = host(harness).querySelector('nav[aria-label="Breadcrumb"]');
     expect(text(crumbs)).toContain('Curling');
@@ -329,12 +302,12 @@ describe('PublicLeaguePage page 2', () => {
 });
 
 describe('PublicLeaguePage not found and errors', () => {
-  it('shows the not-found view with no sidebar for a null league', async () => {
+  it('shows the not-found view in the public layout for a null league', async () => {
     const harness = await open();
     emit(leagueQueryResults({ league: null, seasons: NO_SEASONS }));
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     expect(TestBed.inject(Title).getTitle()).toBe('Page not found | Omni League');
     expect(canonical()).toBeNull();
     expect(metaContent('og:title')).toBeNull();
@@ -360,7 +333,7 @@ describe('PublicLeaguePage not found and errors', () => {
         'This page is temporarily unavailable',
       );
       expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=3`);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('main nav')).toBeNull();
       expect(host(harness).textContent).not.toContain('internal-db');
       expect(host(harness).textContent).not.toContain('SECRET');
     },
@@ -498,31 +471,5 @@ describe('PublicLeaguePage page changes', () => {
       'This page is temporarily unavailable',
     );
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=2`);
-  });
-});
-
-describe('PublicLeaguePage route changes', () => {
-  it('moves focus to main when the visitor arrives from another page, and not on the page load', async () => {
-    const harness = await open('/organizations/gulf-coast-sport-social');
-    await settle(harness);
-    await TestBed.inject(Router).navigateByUrl(PATH);
-    await settle(harness);
-    emit();
-    await settle(harness);
-    expect(text(host(harness).querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
-    expect(document.activeElement).toBe(host(harness).querySelector('main#main'));
-  });
-
-  it('leaves focus alone on the page load', async () => {
-    const harness = await open();
-    emit();
-    await settle(harness);
-    expect(document.activeElement).toBe(document.body);
-  });
-});
-
-describe('PublicLeaguePage sanity', () => {
-  it('uses the organization fixture for its sidebar', () => {
-    expect(ORGANIZATION.sports.map((sport) => sport.name)).toContain(SUNDAY_4S.sportName);
   });
 });

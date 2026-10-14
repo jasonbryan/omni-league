@@ -14,21 +14,23 @@ const LEAGUE_ADMIN = [
   'organization-leagues-publish-states',
 ];
 const LOCATION_ADMIN = ['organization-admin', 'sign-in-admin'];
-const STAFF = ['organization-staff', 'accept-invite'];
+const STAFF = ['organization-staff', 'organization-staff-undo', 'accept-invite'];
 const ADMIN = [
   ...new Set([
     'organization-admin',
     ...LEAGUE_ADMIN,
     'organization-staff',
+    'organization-staff-undo',
     'sign-in-admin',
     'accept-invite',
     'create-organization',
     'organization-leagues-mockup',
+    'shell-sheet',
+    'navigation-focus',
   ]),
 ];
 const PUBLIC_PAGE = [
   'organization-page',
-  'organization-page-links',
   'organization-admin',
   'organization-leagues-publish',
   'organization-leagues-publish-states',
@@ -38,6 +40,8 @@ const PUBLIC_PAGE = [
   'pwa',
   'top-bar',
   'auth-session',
+  'public-layout',
+  'navigation-focus',
 ];
 
 // cache-key samples the league page's `?page=N` parameter.
@@ -198,7 +202,7 @@ export const AREAS = [
   {
     name: 'create organization',
     test: named('src/app/organizations/', ['create-organization-page']),
-    specs: ['create-organization'],
+    specs: ['create-organization', 'navigation-focus'],
   },
   {
     name: 'public organization page',
@@ -206,11 +210,8 @@ export const AREAS = [
       'organization-page',
       'organization-overview',
       'organization-path',
-      'organization-sidebar',
+      'initials',
     ]),
-    // The admin area imports `initials` from organization-sidebar, and the league rows link to the
-    // public league page, which league-page.spec.ts reaches from here. The season page shows the same
-    // sidebar.
     specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE],
   },
   {
@@ -242,12 +243,6 @@ export const AREAS = [
     test: named('src/app/core/forms/', ['shown-errors']),
     specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT],
   },
-  {
-    // The focus move after a route change is also asserted on the season page.
-    name: 'focus helper',
-    test: named('src/app/core/', ['focus-main']),
-    specs: [...LEAGUE_PAGE, ...SEASON_PAGE],
-  },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
   { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: [SESSION] },
@@ -273,6 +268,24 @@ export const AREAS = [
       'league-page',
       'league-page-offline',
       'season-page',
+    ],
+  },
+  {
+    name: 'public layout',
+    test: inDir('src/app/public-layout/'),
+    specs: [
+      'public-layout',
+      ...PUBLIC_PAGE,
+      ...LEAGUE_PAGE,
+      ...SEASON_PAGE,
+      'accept-invite',
+      'install',
+      'not-found',
+      'offline-note-height',
+      'pwa',
+      'pwa-kill-switch',
+      'smoke',
+      SESSION,
     ],
   },
   {

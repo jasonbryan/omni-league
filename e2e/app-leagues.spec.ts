@@ -1,10 +1,3 @@
-// League organizers reach their assigned leagues from `/app` (#141): "Your organizations" lists,
-// under a league organizer's row, one link per assigned league to its management page (#125). The
-// visual tests compare the text of each state with the approved mockup
-// design/mockups/141-app-leagues.html at both widths, take screenshots, and run axe. Every test
-// signs up its own user through the real form, then gives it roles in seeded organizations
-// (`testing:addLeagueOrganizer`, `testing:addMembership`, `testing:assignForeignLeague`), so the
-// tests need the local Convex backend and are skipped with E2E_BASE_URL set.
 import type { Browser, Page } from '@playwright/test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -43,7 +36,6 @@ const GULF_COAST = 'Gulf Coast Sport & Social';
 const MUSTANG = 'Mustang Island Beach Volleyball';
 const RIVERBEND = 'Riverbend Softball Association';
 
-/** A seeded organization: the mockup's name, plus the league names (the first draft). */
 function organization(name: string, leagues: string[], draft?: string) {
   return seedTenant({
     name,
@@ -54,7 +46,6 @@ function organization(name: string, leagues: string[], draft?: string) {
   });
 }
 
-/** Makes `user` a league organizer of `tenant`, assigned the named leagues. */
 const assign = (user: TestUser, tenant: Tenant, assigned: string[]) =>
   convexRun('testing:addLeagueOrganizer', {
     organizationSlug: tenant.slug,
@@ -69,7 +60,6 @@ const makeAdmin = (user: TestUser, tenant: Tenant) =>
     role: 'orgAdmin',
   });
 
-/** Signs up a new user and opens `/app` after `seed` gives it roles. */
 async function signedUp(
   page: Page,
   seed: (user: TestUser) => Promise<unknown>,
@@ -110,7 +100,6 @@ test.describe('/app: a league organizer reaches their assigned leagues', () => {
         `/app/organizations/${tenant.slug}/leagues/${slugOf(SUNDAY)}`,
       );
       await expect(page.getByRole('link', { name: THURSDAY })).toHaveCount(0);
-      // A league organizer has no admin area: the row has Public page, and no Manage.
       await expect(rowOf(page, tenant).getByRole('link', { name: /^Manage/ })).toHaveCount(0);
       await expect(rowOf(page, tenant).getByRole('link', { name: /^Public page/ })).toHaveCount(1);
     },
@@ -201,7 +190,6 @@ test.describe('/app: a league organizer reaches their assigned leagues', () => {
   );
 });
 
-// The text of each mockup state, from "Your organizations" down, per width.
 const STATES = ['one', 'several', 'none', 'org-admin'] as const;
 type State = (typeof STATES)[number];
 
@@ -218,8 +206,8 @@ function mockupTextsAt(browser: Browser, width: number): Promise<Map<State, stri
 }
 
 async function readMockup(browser: Browser, width: number): Promise<Map<State, string>> {
-  // The overview page lists every state in iframes that each load the page again; the states are
-  // the page's <template>s, so the read uses a copy without the frames.
+  // The overview page loads every state in iframes that each load it again; the states are its
+  // <template>s, so the read uses a copy without the frames.
   const html = (await readFile(MOCKUP_FILE, 'utf8')).replace(/<iframe\b[\s\S]*?<\/iframe>/g, '');
   const directory = await mkdtemp(join(tmpdir(), 'mockup-141-'));
   const context = await browser.newContext({ viewport: { width, height: 900 } });
@@ -240,8 +228,7 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, s
 }
 
 /**
- * The lines of the page's text from "Your organizations" down (the account card above it names the
- * test's own user), with each seeded organization's unique name replaced by the mockup's.
+ * The lines from "Your organizations" down: the account card above it names the test's own user.
  */
 function organizationsText(text: string, tenants: { tenant: Tenant; mockupName: string }[]) {
   let result = text;
@@ -318,8 +305,6 @@ test.describe('/app: "Your organizations" against the mockup', () => {
         organization(GULF_COAST, [SUNDAY]),
         organization(RIVERBEND, ['Wednesday Coed Slow-Pitch']),
       ]);
-      // Every league assigned in Gulf Coast was dropped: the one left in it is another
-      // organization's.
       await assign(user, gulf, []);
       await convexRun('testing:assignForeignLeague', {
         organizationSlug: gulf.slug,

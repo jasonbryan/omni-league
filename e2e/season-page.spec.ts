@@ -1,7 +1,3 @@
-// Public season page (#128): `/organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug`,
-// rendered on the server from `seasons:getPublicPage` and the organization's header. Each test
-// seeds its own tenant (ADR 0005) and needs the local Convex backend, so the file is skipped with
-// E2E_BASE_URL set; the preview sample is in `cache-key.spec.ts`.
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -31,14 +27,12 @@ const NEW_YEAR: SeasonSeed = {
   startDate: '2027-01-01',
   endDate: '2027-03-01',
 };
-/** A season across two years: both dates carry their year. */
 const CROSS_YEAR: SeasonSeed = {
   name: 'Winter 2027-28',
   slug: 'winter-2027-28',
   startDate: '2027-12-01',
   endDate: '2028-02-20',
 };
-/** A season of one day: one date, no end. */
 const ONE_DAY: SeasonSeed = {
   name: 'One Day Cup',
   slug: 'one-day-cup',
@@ -55,15 +49,9 @@ const DRAFT_SEASON: SeasonSeed = {
 
 interface SeededSeason {
   tenant: Tenant;
-  /** `/organizations/<org>/leagues/sunday-reverse-coed-4s/seasons/summer-2027`. */
   path: string;
 }
 
-/**
- * An organization with a published beach volleyball league at two locations with the published
- * seasons "Summer 2027" and "New Year 2027" and one draft season, a draft league with a published
- * season `summer-2027`, and a second published league with the season `other-season`.
- */
 async function seed(): Promise<SeededSeason> {
   const tenant = await seedTenant({
     name: 'E2E Season Page',
@@ -108,7 +96,6 @@ function canonicalHrefs(html: string): string[] {
   );
 }
 
-/** Visible text of an HTML fragment: tags and comments removed, whitespace collapsed. */
 function textOf(fragment: string | undefined): string {
   return (fragment ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -119,7 +106,6 @@ function textOf(fragment: string | undefined): string {
     .trim();
 }
 
-/** The `<dd>` after the `<dt>` whose text is `term`. */
 function definition(html: string, term: string): string | undefined {
   const rows = [...html.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>\s*<dd\b[^>]*>([\s\S]*?)<\/dd>/g)];
   return rows.find(([, dt]) => textOf(dt) === term)?.[2];
@@ -160,27 +146,21 @@ test.describe('public season page: raw server HTML', () => {
           new RegExp(`<a\\b[^>]*aria-current="page"[^>]*>Summer 2027</a>`),
         );
 
-        // Both dates as stored, and the text the mockup shows.
         const dates = definition(html, 'Dates');
         expect(dates, query).toContain('datetime="2027-06-06"');
         expect(dates, query).toContain('datetime="2027-08-29"');
         expect(textOf(dates), query).toBe('Jun 6 – Aug 29, 2027');
         expect(textOf(definition(html, 'Format')), query).toBe('4 v 4');
         expect(textOf(definition(html, 'Team size')), query).toBe('Teams need at least 4 players');
-        // The league's locations, in its own order.
         expect(textOf(definition(html, 'Locations')), query).toBe('Beta Courts, Alpha Field');
 
-        // The sport is plain text in the sidebar until #114 adds the sport view.
         expect(html, query).not.toContain('/sports/');
-        expect(html, query).toMatch(
-          /<span\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/span>/,
-        );
+        expect(html, query).not.toContain('aria-label="Open navigation"');
+        expect(html, query).not.toContain(`aria-label="${tenant.name}"`);
 
-        // No price and no registration action (#129, #133, #143 add theirs).
         expect(html, query).not.toMatch(/Register|\$\d/);
         expect(html, query).not.toContain('registration-heading');
 
-        // Meta, from the query result: built from the slugs, with nothing of the query string.
         expect(html, query).toContain(`<title>Summer 2027 | ${LEAGUE} | Omni League</title>`);
         expect(canonicalHrefs(html), query).toHaveLength(1);
         expect(canonicalHrefs(html)[0].endsWith(path), query).toBe(true);
@@ -208,12 +188,10 @@ test.describe('public season page: raw server HTML', () => {
         `${league}/seasons/draft-season`,
         `${tenant.path}/leagues/draft-league/seasons/summer-2027`,
         `${league}/seasons/no-such-season`,
-        // A season slug of another league is unknown here.
         `${league}/seasons/other-season`,
         `${tenant.path}/leagues/other-league/seasons/summer-2027`,
         `${tenant.path}/leagues/no-such-league/seasons/summer-2027`,
         `/organizations/no-such-org-${tenant.slug}/leagues/${LEAGUE_SLUG}/seasons/summer-2027`,
-        // A league slug of another organization is unknown here.
         `${other.path}/leagues/${LEAGUE_SLUG}/seasons/summer-2027`,
       ]) {
         const { status, headers, html } = await fetchRawHtml(request, path);
@@ -221,7 +199,8 @@ test.describe('public season page: raw server HTML', () => {
         expect(noSpaces(headers['cache-control']), path).toBe(noSpaces(PUBLIC_PAGE_CACHE));
         expect(html, path).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1);
+        expect(html, path).toContain('<nav aria-label="Footer"');
         expect(html, path).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
         expect(html, path).not.toContain('Draft Season');
         expect(html, path).not.toContain('Other Season');
@@ -232,7 +211,7 @@ test.describe('public season page: raw server HTML', () => {
 
 test.describe('public season page: dates and locations in the raw server HTML', () => {
   test(
-    'a season across two years writes both years, a season of one day writes one date, and one location reads "Location" (tester probe)',
+    'a season across two years writes both years, a season of one day writes one date, and one location reads "Location"',
     RAW_HTTP,
     async ({ request }) => {
       const { tenant } = await seed();
@@ -258,7 +237,6 @@ test.describe('public season page: dates and locations in the raw server HTML', 
         'Sep 4, 2027. 4 v 4, teams need at least 4 players.',
       );
 
-      // A league with one location: the label is singular.
       const single = await fetchRawHtml(
         request,
         `${tenant.path}/leagues/other-league/seasons/other-season`,
@@ -301,7 +279,7 @@ test.describe('public season page in the browser', () => {
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
         await hydrated(consoleGuard);
-        await expect(page.getByRole('navigation')).toHaveCount(0);
+        await expect(page.getByRole('navigation')).toHaveCount(1);
       },
     );
   });
@@ -315,8 +293,8 @@ test.describe('public season page in the browser', () => {
       async ({ page, request, consoleGuard }) => {
         const { tenant } = await seed();
         const path = `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/new-year-2027`;
-        // The server writes the stored 2027-01-01, not the 31 December a UTC midnight reads as
-        // west of UTC.
+        // The server writes the stored 2027-01-01, not the 31 December a UTC midnight reads as west
+        // of UTC.
         const raw = await fetchRawHtml(request, path);
         expect(raw.status).toBe(200);
         expect(textOf(definition(raw.html, 'Dates'))).toBe('Jan 1 – Mar 1, 2027');
@@ -350,7 +328,6 @@ test.describe('public season page in the browser', () => {
     await expect(page).toHaveTitle(`Summer 2027 | ${LEAGUE} | Omni League`);
     await expect(page.locator('main dl')).toContainText('Jun 6 – Aug 29, 2027');
 
-    // The breadcrumb goes back to the league page.
     await page
       .getByRole('navigation', { name: 'Breadcrumb' })
       .getByRole('link', { name: LEAGUE })
@@ -360,9 +337,8 @@ test.describe('public season page in the browser', () => {
   });
 });
 
-// Offline (#82): chromium-mobile only (ADR 0013).
 test.describe('public season page offline', () => {
-  test('offline (tester probe): a viewed season opens offline from its saved copy with the note; a season never viewed shows the not-saved view', async ({
+  test('offline: a viewed season opens offline from its saved copy with the note; a season never viewed shows the not-saved view', async ({
     page,
     context,
     consoleGuard,
@@ -390,7 +366,6 @@ test.describe('public season page offline', () => {
     const dates = page.locator('main dl > div').filter({ hasText: 'Dates' }).locator('dd');
     const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
 
-    // Online: the league page, then one season through its row, then back through the breadcrumb.
     await page.goto(leaguePath);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
@@ -400,8 +375,6 @@ test.describe('public season page offline', () => {
     await crumbs.getByRole('link', { name: 'Offline League' }).click();
     await expect(h1).toHaveText('Offline League');
 
-    // Offline: the viewed season opens from its saved copies (the season and the organization
-    // header), with the saved-copy note under the h1.
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
@@ -411,8 +384,6 @@ test.describe('public season page offline', () => {
     await expect(note).toBeVisible();
     await expect(page.locator('app-not-saved-view')).toHaveCount(0);
 
-    // A season never viewed has no saved copy: the not-saved view, with "Try again" to the page
-    // asked for, and no season details.
     await crumbs.getByRole('link', { name: 'Offline League' }).click();
     await expect(h1).toHaveText('Offline League');
     await page.getByRole('main').getByRole('link', { name: 'Spring 2028', exact: true }).click();
@@ -421,7 +392,6 @@ test.describe('public season page offline', () => {
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
     await expect(page.locator('app-not-saved-view a')).toHaveAttribute('href', springPath);
 
-    // Back online: the live season replaces the not-saved view.
     await context.setOffline(false);
     await page.goto(winterPath);
     await expect(h1).toHaveText('Winter 2027-28');

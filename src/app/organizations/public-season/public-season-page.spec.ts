@@ -14,7 +14,6 @@ import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
 // The public season page (#128), drawn in design/mockups/127-128-public-seasons.html state 9.
 
-const ORG = 'organizations:getPublicPage';
 const SEASON = 'seasons:getPublicPage';
 const LEAGUE_PATH = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s';
 const PATH = `${LEAGUE_PATH}/seasons/summer-2027`;
@@ -87,14 +86,13 @@ afterEach(() => {
 });
 
 describe('PublicSeasonPage queries', () => {
-  it("asks for the organization and the season with the route's slugs only", async () => {
+  it("asks for the season with the route's slugs only", async () => {
     await open(`${PATH}?ott=SECRET&utm_source=x#details`);
     expect(
       client.activeSubscriptions
         .map(({ name, args }) => ({ name, args }))
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
-      { name: ORG, args: { slug: 'gulf-coast-sport-social' } },
       {
         name: SEASON,
         args: {
@@ -106,12 +104,11 @@ describe('PublicSeasonPage queries', () => {
     ]);
   });
 
-  it('shows nothing but the shell until both results have arrived', async () => {
+  it('shows nothing but the layout until the result has arrived', async () => {
     const harness = await open();
-    subscription(ORG).emit(seasonQueryResults()[ORG]);
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     subscription(SEASON).emit(SUMMER_2027);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Summer 2027');
@@ -199,18 +196,16 @@ describe('PublicSeasonPage populated', () => {
     expect(canonical()).toBe(`${window.location.origin}${PATH}`);
   });
 
-  it('marks the league’s sport as the current section of the sidebar, as plain text until the sport view exists', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav).not.toBeNull();
-    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
-    expect(
-      sports.map((el) => [text(el.querySelector('span.min-w-0')), el.getAttribute('aria-current')]),
-    ).toEqual([
-      ['Beach volleyball', 'true'],
-      ['Soccer', null],
-      ['Softball', null],
-    ]);
+  it('renders in the public layout: top bar and footer, no organization sidebar and no menu button', () => {
+    const root = host(harness);
+    expect(root.querySelector('app-public-layout')).not.toBeNull();
+    expect(root.querySelector('app-shell')).toBeNull();
+    expect(root.querySelectorAll('header')).toHaveLength(1);
+    expect(root.querySelectorAll('footer')).toHaveLength(1);
+    const names = [...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'));
+    expect(names).toContain('Footer');
+    expect(names).not.toContain('Gulf Coast Sport & Social');
+    expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
   it('writes several locations as "Locations", in the league’s order', async () => {
@@ -285,19 +280,18 @@ describe('PublicSeasonPage populated', () => {
 
 describe('PublicSeasonPage not found and failures', () => {
   it.each([
-    ['a null season (a draft or an unknown one)', { season: null }],
-    ['an unknown organization', { organization: null, season: null }],
-  ])('shows #23’s not-found view, with no sidebar, for %s', async (_label, options) => {
+    ['a null season (a draft, or an unknown organization, league, or season)', { season: null }],
+  ])('shows the not-found view in the public layout for %s', async (_label, options) => {
     const harness = await open();
     emit(seasonQueryResults(options));
     await settle(harness);
     expect(host(harness).querySelector('app-not-found-view')).not.toBeNull();
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     expect(head().querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
   });
 
-  it.each([ORG, SEASON])('shows the server-error view when %s fails', async (failing) => {
+  it.each([SEASON])('shows the server-error view when %s fails', async (failing) => {
     const harness = await open(`${PATH}?x=1`);
     for (const [name, value] of Object.entries(seasonQueryResults())) {
       if (name === failing) subscription(name).fail(new Error('connect ECONNREFUSED internal-db'));
@@ -307,6 +301,6 @@ describe('PublicSeasonPage not found and failures', () => {
     expect(host(harness).querySelector('app-server-error-view')).not.toBeNull();
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(PATH);
     expect(host(harness).textContent).not.toContain('internal-db');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
   });
 });

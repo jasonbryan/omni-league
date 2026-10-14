@@ -1,8 +1,3 @@
-// Self-tests of the shared console fixture (#13). Two layers:
-// - rule tests drive a ConsoleGuard on a page in a separate context (not watched by the auto
-//   fixture) and assert the exact problems it reports;
-// - wiring tests use the real fixture through `test.use`; the failing ones are marked `test.fail()`,
-//   so they pass only if the fixture fails the test.
 import type { Browser, ConsoleMessage, Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -13,8 +8,9 @@ import { baseURL, LOCAL_BUILD_ONLY, remoteBaseUrl } from '../support/env';
 import { expect, failedRequests, test } from '../support/fixtures';
 import { VIEWPORT_AGNOSTIC } from '../support/viewport-agnostic';
 
-// The expected-failure probes would otherwise write a failure screenshot into the report. Playwright
-// allows `screenshot` only at file level (a describe-level `use` would force a new worker).
+// The expected-failure probes would otherwise write a failure screenshot into the report.
+// Playwright allows `screenshot` only at file level (a describe-level `use` would force a new
+// worker).
 test.use({ screenshot: 'off' });
 
 async function guardedPage(
@@ -28,7 +24,6 @@ async function guardedPage(
   return { page, guard, close: () => context.close() };
 }
 
-/** Logs through `page.evaluate` and waits until the console event has arrived. */
 async function logInPage(
   page: Page,
   level: 'error' | 'warn' | 'log' | 'info',
@@ -62,7 +57,7 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
     await close();
   });
 
-  // Angular's hydration warnings come with a code (NG0505) and without one (#94).
+  // Angular's hydration warnings come with a code (NG0505) and without one.
   test('fails on every console.warn, with or without an NG05xx code', async ({ browser }) => {
     const { page, guard, close } = await guardedPage(browser);
     await logInPage(page, 'warn', 'plain warning');
@@ -238,7 +233,6 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
   test.describe('expectedFailedRequests: 409 on /probe-conflict', () => {
     const options = { expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }] };
 
-    /** Fetches `path`, answered with `status` by a route, and waits for the console error. */
     async function failRequest(page: Page, path: string, status: number): Promise<void> {
       await page.route(`**${path}`, (route) => route.fulfill({ status, body: '' }));
       await Promise.all([
@@ -339,8 +333,8 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
     });
   });
 
-  // #62 tester: `test.skip()` inside a test runs after `test.use()` set the allowances, so a
-  // skipped test never reaches the request it allowed.
+  // `test.skip()` inside a test runs after `test.use()` set the allowances, so a skipped test never
+  // reaches the request it allowed.
   test.describe('in a skipped test', () => {
     const options = {
       expectedConvexErrors: ['probe:add'],
@@ -433,8 +427,6 @@ test.describe('console fixture wiring (real fixture)', VIEWPORT_AGNOSTIC, () => 
     });
   });
 
-  // #62 tester: a test that skips itself after `test.use()` set allowances must end skipped, not
-  // failed at teardown. Before the fix this test failed with "entry … was not used".
   test.describe('with allowances, skipped inside the test', () => {
     test.use({
       expectedConvexErrors: ['probe:add'],
@@ -448,7 +440,6 @@ test.describe('console fixture wiring (real fixture)', VIEWPORT_AGNOSTIC, () => 
     });
   });
 
-  // #62 tester (round 2): an unused expectedFailedRequests entry still fails a test that runs.
   test.describe('with expectedFailedRequests', () => {
     test.use({ expectedFailedRequests: [{ status: 409, path: '/probe-conflict' }] });
 
@@ -458,8 +449,8 @@ test.describe('console fixture wiring (real fixture)', VIEWPORT_AGNOSTIC, () => 
     });
   });
 
-  // #63 tester: `failedRequests(...)` keeps every entry of a list of two or more. A plain array of
-  // two entries is read by Playwright as `[value, options]` and loses the second entry.
+  // A plain array of two entries is read by Playwright as `[value, options]` and loses the second
+  // entry.
   test.describe('with failedRequests(a, b)', () => {
     test.use({
       expectedFailedRequests: failedRequests(
@@ -497,9 +488,8 @@ test.describe('console fixture wiring (real fixture)', VIEWPORT_AGNOSTIC, () => 
     });
   });
 
-  // #62 tester (round 2): a test that skips itself still fails on a console or page error it hit
-  // before the skip. Its outcome is read from a child Playwright run (`probes/`), because a test
-  // cannot both skip itself and expect to fail.
+  // Its outcome is read from a child Playwright run (`probes/`), because a test cannot both skip
+  // itself and expect to fail.
   test('a test that skips itself still fails on an earlier console or page error', ({
     browserName,
   }, testInfo) => {

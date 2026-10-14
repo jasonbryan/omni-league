@@ -72,6 +72,15 @@ describe('SignInPage', () => {
     await harness.fixture.whenStable();
   }
 
+  it('renders in the public layout: top bar and footer, no sidebar', async () => {
+    await open();
+    expect(page.firstElementChild?.tagName).toBe('APP-PUBLIC-LAYOUT');
+    expect(page.querySelectorAll('header')).toHaveLength(1);
+    expect(page.querySelectorAll('footer')).toHaveLength(1);
+    expect(page.querySelector('main#main')).not.toBeNull();
+    expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+  });
+
   describe('fields (mockup "Sign-in field attributes")', () => {
     beforeEach(() => open());
 
@@ -279,6 +288,16 @@ describe('SignInPage', () => {
       await submit();
       expect(client.signIns).toEqual([{ email: EMAIL, password: PASSWORD }]);
       expect(url()).toBe('/app');
+    });
+
+    it('replaces /sign-in in the history, so Back skips the finished form', async () => {
+      await open('/sign-in?returnTo=%2Fleagues%2Fx%2Fregister');
+      await fill();
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      await submit();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/leagues/x/register', {
+        replaceUrl: true,
+      });
     });
 
     it.each([

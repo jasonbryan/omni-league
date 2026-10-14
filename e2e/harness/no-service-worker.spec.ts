@@ -1,6 +1,3 @@
-// Self-test of holdServiceWorkerRegistration (#62, PR #102 round 5). Locally the development build
-// registers no worker, so the first test calls `register` itself; on a remote run (a production
-// build that registers ngsw-worker.js) the second checks the app's own registration is held too.
 import { remoteBaseUrl } from '../support/env';
 import { expect, test } from '../support/fixtures';
 import { holdServiceWorkerRegistration } from '../support/no-service-worker';
@@ -28,7 +25,7 @@ test.describe('holdServiceWorkerRegistration', VIEWPORT_AGNOSTIC, () => {
     await holdServiceWorkerRegistration(context);
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
-    // The app registers as soon as it is stable (ADR 0013); allow it time to have done so.
+    // The app registers as soon as it is stable; allow it time to have done so.
     await page.waitForTimeout(3_000);
     expect(
       await page.evaluate(async () => ({

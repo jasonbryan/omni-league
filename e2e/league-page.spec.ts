@@ -1,8 +1,3 @@
-// Public league page (#127): `/organizations/:orgSlug/leagues/:leagueSlug`, rendered on the server
-// from `leagues:getPublicPage`, `seasons:listPublic`, and the organization's header, with the
-// numbered control under the seasons (`?page=N#seasons`). Each test seeds its own tenant (ADR 0005)
-// and needs the local Convex backend, so the file is skipped with E2E_BASE_URL set; the preview
-// samples are in `cache-key.spec.ts`.
 import { expectAccessible, tabKey } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -37,15 +32,9 @@ const DRAFT_SEASON: SeasonSeed = {
 
 interface SeededLeague {
   tenant: Tenant;
-  /** `/organizations/<org>/leagues/sunday-reverse-coed-4s`. */
   path: string;
 }
 
-/**
- * An organization with a published beach volleyball league at two locations with 7 published
- * seasons and 1 draft season, a published league with only a draft season, a published league
- * with no season, a draft league, and a published soccer league with 5 seasons and one with 6.
- */
 async function seed(): Promise<SeededLeague> {
   const tenant = await seedTenant({
     name: 'E2E League Page',
@@ -87,12 +76,10 @@ function canonicalHrefs(html: string): string[] {
   );
 }
 
-/** The text of each `<h3>` in the Seasons panel, in order (a season's name is a link inside it). */
 function seasonNames(html: string): string[] {
   return [...html.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) => name.trim());
 }
 
-/** The control's range text, for example `6–7 of 7`. */
 function rangeText(html: string): string | undefined {
   const nav = /<nav\b[^>]*aria-label="Seasons pages"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1];
   const text = /<p\b[^>]*>([\s\S]*?)<\/p>/.exec(nav ?? '')?.[1];
@@ -122,7 +109,6 @@ test.describe('public league page: raw server HTML', () => {
         expect(noSpaces(headers['cache-control']), query).toBe(noSpaces(PUBLIC_PAGE_CACHE));
         expect(headers['content-type'], query).toContain('text/html');
 
-        // Seasons 6 and 7 of the list, newest start date first, and no draft.
         expect(seasonNames(html), query).toEqual(['Season 02', 'Season 01']);
         expect(html, query).not.toContain('Draft Season');
         expect(rangeText(html), query).toBe('6–7 of 7 seasons');
@@ -134,22 +120,17 @@ test.describe('public league page: raw server HTML', () => {
         )?.[0];
         expect(breadcrumb, query).toBeDefined();
         expect(breadcrumb, query).toContain(`>${tenant.name}</a>`);
-        // The sport is plain text until #114 adds the sport view.
         expect(breadcrumb, query).toContain('>Beach volleyball</span>');
         expect(html, query).not.toContain('/sports/');
         expect(breadcrumb, query).toMatch(
           new RegExp(`<a\\b[^>]*aria-current="page"[^>]*>${LEAGUE}</a>`),
         );
-        // The sport badge and the locations, in the league's own order.
         expect(html, query).toMatch(/data-slot="badge"[^>]*>Beach volleyball<\/span>/);
         expect(html, query).toMatch(/Locations: <\/span>\s*Beta Courts, Alpha Field/);
 
-        // The sidebar marks the league's sport.
-        expect(html, query).toMatch(
-          /<span\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/span>/,
-        );
+        expect(html, query).not.toContain('aria-label="Open navigation"');
+        expect(html, query).not.toContain(`aria-label="${tenant.name}"`);
 
-        // Meta, from the query result: the canonical and og:url hold ?page=2, and nothing else.
         const canonical = `${path}?page=2`;
         expect(html, query).toContain(`<title>${LEAGUE} | ${tenant.name} | Omni League</title>`);
         expect(canonicalHrefs(html), query).toHaveLength(1);
@@ -178,9 +159,7 @@ test.describe('public league page: raw server HTML', () => {
       ]);
       expect(rangeText(html)).toBe('1–5 of 7 seasons');
       expect(html).not.toContain('Draft Season');
-      // Each season links to its season page (#128).
       expect(html).toContain(`href="${path}/seasons/season-07"`);
-      // Previous is not a link on the first page; Next and page 2 go to ?page=2#seasons.
       const nav = /<nav\b[^>]*aria-label="Seasons pages"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1];
       expect(nav).toContain('aria-disabled="true"');
       expect(nav).toContain(`href="${path}?page=2#seasons"`);
@@ -248,7 +227,7 @@ test.describe('public league page: raw server HTML', () => {
     },
   );
 
-  // The router cannot decode these query strings; the page renders as if there were none (#91).
+  // The router cannot decode these query strings; the page renders as if there were none.
   test(
     'a query string the router cannot decode renders page 1 with 200, the public Cache-Control, and no query string in the HTML',
     RAW_HTTP,
@@ -301,7 +280,6 @@ test.describe('public league page: raw server HTML', () => {
         `${tenant.path}/leagues/draft-league`,
         `${tenant.path}/leagues/no-such-league`,
         `/organizations/no-such-org-${tenant.slug}/leagues/${LEAGUE_SLUG}`,
-        // A league slug of another organization is unknown here.
         `${other.path}/leagues/${LEAGUE_SLUG}`,
       ]) {
         const { status, headers, html } = await fetchRawHtml(request, path);
@@ -309,7 +287,8 @@ test.describe('public league page: raw server HTML', () => {
         expect(noSpaces(headers['cache-control']), path).toBe(noSpaces(PUBLIC_PAGE_CACHE));
         expect(html, path).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1);
+        expect(html, path).toContain('<nav aria-label="Footer"');
         expect(html, path).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
         expect(html, path).not.toContain('Draft League');
       }
@@ -363,7 +342,7 @@ test.describe('public league page in the browser', () => {
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
         await hydrated(consoleGuard);
-        await expect(page.getByRole('navigation')).toHaveCount(0);
+        await expect(page.getByRole('navigation')).toHaveCount(1);
       },
     );
   });
@@ -385,7 +364,6 @@ test.describe('public league page in the browser', () => {
       await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
       expect(new URL(page.url()).pathname).toBe(path);
       await expect(page.locator('main#main')).toBeFocused();
-      // The same document: the router changed the page, not a full load.
       await expect(page).toHaveTitle(`${LEAGUE} | ${tenant.name} | Omni League`);
     });
 

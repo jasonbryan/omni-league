@@ -1,5 +1,3 @@
-// Self-tests of the axe helper's checks (#13): reflow (1.4.10) and the Tab walk (2.1.2, 2.4.3,
-// 2.4.7, 2.4.11), on fixture pages loaded with page.setContent.
 import { axeScan, checkReflow, expectAccessible, tabWalk } from '../support/a11y';
 import { expect, test } from '../support/fixtures';
 
@@ -34,7 +32,7 @@ test.describe('axe helper checks', () => {
   });
 
   // `checkReflow` waits for running animations to finish, so a control that is still transitioning
-  // two frames after the resize is measured settled (#63). The waiting must not hide an overflow.
+  // two frames after the resize is measured settled. The waiting must not hide an overflow.
   const slowShrink =
     '<style>.t{width:600px;height:10px;transition:width 600ms linear}' +
     '@media (max-width:400px){.t{width:100px}}</style>';
@@ -60,7 +58,7 @@ test.describe('axe helper checks', () => {
     expect(reflow.scrollWidth).toBeGreaterThanOrEqual(700);
   });
 
-  test('1.4.10: an infinite animation (animate-pulse, animate-spin) does not hang reflow or expectAccessible (#167)', async ({
+  test('1.4.10: an infinite animation (animate-pulse, animate-spin) does not hang reflow or expectAccessible', async ({
     page,
   }) => {
     test.setTimeout(15_000);
@@ -76,7 +74,7 @@ test.describe('axe helper checks', () => {
     await expectAccessible(page);
   });
 
-  test('1.4.10: a real overflow still fails while an infinite animation runs beside it (#167)', async ({
+  test('1.4.10: a real overflow still fails while an infinite animation runs beside it', async ({
     page,
   }) => {
     test.setTimeout(15_000);
@@ -131,7 +129,7 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
-  test('2.4.11: an inline link that wraps over lines is not obscured by the text around it (#126)', async ({
+  test('2.4.11: an inline link that wraps over lines is not obscured by the text around it', async ({
     page,
   }) => {
     // The link's bounding box is the union of its line boxes, so its centre can fall in the gap
@@ -155,8 +153,7 @@ test.describe('axe helper checks', () => {
   });
 
   // A wrapped link is partly obscured when a fixed banner covers one of its lines, which WCAG
-  // 2.4.11 (AA) allows; it fails only when no part of it is visible. The fixture puts a fixed
-  // banner over the top of a two-line link (lines at 0 to 24px and 24 to 48px).
+  // 2.4.11 (AA) allows; it fails only when no part of it is visible.
   const wrappedLink = (bannerHeight: number): string =>
     fixture(
       `<div style="position:fixed;top:0;left:0;right:0;height:${bannerHeight}px;background:#fff;z-index:1">Banner</div>` +
@@ -165,7 +162,7 @@ test.describe('axe helper checks', () => {
       '<style>body{margin:0}</style>',
     );
 
-  test('2.4.11: a wrapped link with one line under a banner and the other visible passes (#126)', async ({
+  test('2.4.11: a wrapped link with one line under a banner and the other visible passes', async ({
     page,
   }) => {
     await page.setContent(wrappedLink(30));
@@ -174,12 +171,11 @@ test.describe('axe helper checks', () => {
       const box = document.querySelector('a')!.getBoundingClientRect();
       return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.tagName;
     });
-    // The centre of the whole link is under the banner, and its second line is clear.
     expect(covered).toBe('DIV');
     expect((await tabWalk(page)).failures).toEqual([]);
   });
 
-  test('2.4.11: a wrapped link with every line under a banner fails (#126)', async ({ page }) => {
+  test('2.4.11: a wrapped link with every line under a banner fails', async ({ page }) => {
     await page.setContent(wrappedLink(60));
     expect(await page.evaluate(() => document.querySelector('a')!.getClientRects().length)).toBe(2);
     const walk = await tabWalk(page);
@@ -203,7 +199,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(/^2\.1\.2 No keyboard trap: /)]);
   });
 
-  test('2.1.2: a native date field takes one Tab press per segment and is not a trap (#125)', async ({
+  test('2.1.2: a native date field takes one Tab press per segment and is not a trap', async ({
     page,
   }) => {
     await page.setContent(
@@ -217,8 +213,8 @@ test.describe('axe helper checks', () => {
     expect(walk.order).toEqual(['input#d ""', 'button "After"']);
   });
 
-  // The date-field allowance (#125) must not hide a real trap: each fixture below traps focus,
-  // next to a date field or on it, and the walk must still report it.
+  // The date-field allowance must not hide a real trap: each fixture traps focus next to a date
+  // field or on it.
   const TRAP = /^2\.1\.2 No keyboard trap: /;
   const dateAndTrap = (trapScript: string, extra = ''): string =>
     fixture(
@@ -227,7 +223,7 @@ test.describe('axe helper checks', () => {
         `<script>${trapScript}</script>`,
     );
 
-  test('2.1.2: a button that keeps focus on Tab, right after a date field, is still a trap (#125)', async ({
+  test('2.1.2: a button that keeps focus on Tab, right after a date field, is still a trap', async ({
     page,
   }) => {
     await page.setContent(
@@ -239,7 +235,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: a date field that keeps focus on Tab is still a trap (#125)', async ({ page }) => {
+  test('2.1.2: a date field that keeps focus on Tab is still a trap', async ({ page }) => {
     await page.setContent(
       dateAndTrap(
         "document.getElementById('d').addEventListener('keydown', (e) => { if (e.key === 'Tab') e.preventDefault(); });",
@@ -249,9 +245,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: a date field that takes focus back on blur is still a trap (#125)', async ({
-    page,
-  }) => {
+  test('2.1.2: a date field that takes focus back on blur is still a trap', async ({ page }) => {
     await page.setContent(
       dateAndTrap(
         "const d = document.getElementById('d'); d.addEventListener('blur', () => setTimeout(() => d.focus(), 0));",
@@ -261,7 +255,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: two buttons that pass focus back and forth, on a page with a date field, are still a trap (#125)', async ({
+  test('2.1.2: two buttons that pass focus back and forth, on a page with a date field, are still a trap', async ({
     page,
   }) => {
     await page.setContent(
@@ -278,9 +272,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: a trap on a button before the date field is still a trap (#125)', async ({
-    page,
-  }) => {
+  test('2.1.2: a trap on a button before the date field is still a trap', async ({ page }) => {
     await page.setContent(
       fixture(
         '<h1>Trap first</h1><button type="button" id="t">Trap</button>' +
@@ -292,7 +284,7 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
   });
 
-  test('2.1.2: three date fields in a row, with no trap, still pass (#125)', async ({ page }) => {
+  test('2.1.2: three date fields in a row, with no trap, still pass', async ({ page }) => {
     await page.setContent(
       fixture(
         '<h1>Dates</h1><input id="a" type="date" aria-label="A"><input id="b" type="date" aria-label="B">' +
