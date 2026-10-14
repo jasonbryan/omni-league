@@ -36,7 +36,8 @@ test.describe('smoke: placeholder home', () => {
         />Sign in<\/a>/,
       );
       expect(html).not.toContain('aria-label="Open navigation"');
-      expect(html).not.toMatch(/<nav\b/);
+      expect(html.match(/<nav\b/g)).toHaveLength(1);
+      expect(html).toMatch(/<footer\b[\s\S]*<nav\b[^>]*aria-label="Footer"/);
     },
   );
 
@@ -88,13 +89,13 @@ test.describe('smoke: placeholder home', () => {
 
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
     expect(
       await page.locator('header').evaluate((el) => {
         const style = getComputedStyle(el);
         return { position: style.position, top: style.top, height: style.height };
       }),
-    ).toEqual({ position: 'sticky', top: '0px', height: '56px' });
+    ).toEqual({ position: 'sticky', top: '0px', height: '65px' });
 
     // The offset that keeps anchor targets and focused elements below the sticky top bar (4.5rem at
     // the 16px root font size, WCAG 2.4.11).
@@ -115,7 +116,15 @@ test.describe('smoke: placeholder home', () => {
     expect(thirdPartyRequests).toEqual([]);
 
     await expectAccessible(page, {
-      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]', 'header a[href^="/sign-in"]'],
+      expectedOrder: [
+        'a[href$="#main"]',
+        'header a[href="/"]',
+        'header a[href^="/sign-in"]',
+        'footer a[href="/"]',
+        'footer a[href="/app"]',
+        'footer a[href="/app/organizations/new"]',
+        'footer a[href^="/sign-in"]',
+      ],
     });
 
     // The sticky header cancels the html scroll-padding-top, which otherwise makes the browser

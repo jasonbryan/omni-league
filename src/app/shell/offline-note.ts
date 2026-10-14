@@ -37,7 +37,10 @@ export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
   imports: [NgIcon],
   providers: [provideIcons({ lucideWifiOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { role: 'status', class: 'sticky top-14 z-20 block bg-foreground text-background' },
+  host: {
+    role: 'status',
+    class: 'sticky top-[var(--top-bar-h,3.5rem)] z-20 block bg-foreground text-background',
+  },
   template: `
     @if (!online()) {
       <p data-offline-note class="flex items-start gap-2 px-3 py-2 text-sm md:px-4 lg:px-6">

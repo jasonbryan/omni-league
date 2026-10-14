@@ -19,7 +19,7 @@ import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
 import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
 import { ShownUntilValid } from '../core/forms/shown-errors';
-import { Shell } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 
 /**
  * An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses
@@ -76,11 +76,11 @@ interface FormAlert {
  */
 @Component({
   selector: 'app-sign-in-page',
-  imports: [FormField, NgIcon, RouterLink, Shell],
+  imports: [FormField, NgIcon, RouterLink, PublicLayout],
   providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16">
         <div
           class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
@@ -278,7 +278,7 @@ interface FormAlert {
           </p>
         </div>
       </div>
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class SignInPage {
