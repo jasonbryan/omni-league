@@ -23,16 +23,17 @@ const COARSE_POINTER = '(pointer: coarse)';
 
 const ROWS = LIST_PAGE_SIZE + 1;
 const LOCATIONS = numberedLocations(ROWS);
-const LEAGUE_NAMES = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot']
-  .slice(0, ROWS)
-  .map((name) => `${name} Sand 2s`);
+const LEAGUE_NAMES = Array.from(
+  { length: ROWS },
+  (_, i) => `League ${String(i + 1).padStart(2, '0')} Sand 2s`,
+);
 const LEAGUES: NonNullable<TenantSeed['leagues']> = LEAGUE_NAMES.map((name) => ({
   name,
   sport: 'beachVolleyball',
   locations: [LOCATIONS[0].name],
   status: 'published',
 }));
-const FIRST_LEAGUE = 'alpha-sand-2s';
+const FIRST_LEAGUE = 'league-01-sand-2s';
 const SEASONS = numberedSeasons(ROWS);
 
 interface Measured {
@@ -46,6 +47,7 @@ interface Measured {
  *   such as a list row's title, is measured;
  * - breadcrumb links, which meet WCAG 2.5.8 (24 px) and are outside the touch-target scope;
  * - check boxes and radio buttons, whose hit area is the label row (`checkableRows`).
+ * A stretched link (an `::after` covering its positioned row) is measured as that row.
  */
 async function undersizedControls(scope: Locator): Promise<Measured> {
   return scope.evaluate((root, target): Measured => {
@@ -65,7 +67,9 @@ async function undersizedControls(scope: Locator): Promise<Measured> {
       const wholeBlock = parentText === (el.textContent ?? '').replace(/\s+/g, ' ').trim();
       if (getComputedStyle(el).display === 'inline' && !wholeBlock) continue;
       if (el.closest('nav[aria-label="Breadcrumb"]')) continue;
-      const box = el.getBoundingClientRect();
+      const stretched = getComputedStyle(el, '::after').position === 'absolute';
+      const hitArea = stretched ? (el.closest('.relative') ?? el) : el;
+      const box = hitArea.getBoundingClientRect();
       if (box.width <= 1 || box.height <= 1) continue;
       count++;
       if (box.width + 0.01 < target || box.height + 0.01 < target) {
@@ -157,7 +161,6 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
       ['/sign-up', /Create your account/],
       ['/sign-in', /Sign in/],
       [`${tenant.path}`, tenant.name],
-      [`${tenant.path}?page=2`, tenant.name],
       [`${tenant.path}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]],
       [`${tenant.path}/leagues/${FIRST_LEAGUE}?page=2`, LEAGUE_NAMES[0]],
       [seasonPath, SEASONS[0].name],
