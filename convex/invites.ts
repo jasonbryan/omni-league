@@ -81,7 +81,7 @@ export const create = action({
 
 /**
  * What `create` and `restore` both require before an invite is pending for an address, so the two
- * cannot drift (#211): a well-formed email, the role's leagues (an org admin carries none; a
+ * cannot drift: a well-formed email, the role's leagues (an org admin carries none; a
  * league organizer needs at least one, each in the organization, else `invalidLeague` throws), no
  * current member of the organization at that address (`alreadyMember`), and no other pending
  * invite to it (`alreadyInvited`, an expired one included). Returns the normalised address and the
@@ -210,11 +210,10 @@ export const revoke = mutation({
 });
 
 /**
- * Undoes a revoke (#211): sets a revoked invite back to `pending` with the same token hash and
+ * Undoes a revoke: sets a revoked invite back to `pending` with the same token hash and
  * expiry, so the link the org admin already sent works again. Org admins of the invite's
  * organization only, the organization taken from the stored invite. It refuses, writing nothing:
- * an invite that is not `revoked` or has no `revokedAt` (rows revoked before #211 cannot be
- * restored), more than `INVITE_RESTORE_WINDOW_MS` after the revoke (`windowPassed`), an invite whose
+ * an invite that is not `revoked` or has no `revokedAt`, more than `INVITE_RESTORE_WINDOW_MS` after the revoke (`windowPassed`), an invite whose
  * `expiresAt` has passed (`expired`), and everything `create` would refuse for the same invite
  * (`checkInviteAllowed`: `alreadyMember`, `alreadyInvited`, and `leaguesGone` for a league that no
  * longer exists in the organization). Refusals with a code are a `ConvexError`; the window is

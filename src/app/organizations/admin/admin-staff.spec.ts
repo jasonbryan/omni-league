@@ -945,7 +945,7 @@ describe('AdminStaff', () => {
       expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
         'Invite to dana.whitlock@example.com revoked.',
       );
-      // The description is followed by Undo (#211).
+      // The description is followed by Undo.
       expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
         'Its link no longer works. You can invite this address again. Undo revoking the invite to dana.whitlock@example.com',
       );
@@ -1030,7 +1030,7 @@ describe('AdminStaff', () => {
     });
   });
 
-  describe('Undo a revoke (issue 211)', () => {
+  describe('Undo a revoke', () => {
     const DANA = 'dana.whitlock@example.com';
     const statusBox = () => pendingSection().querySelector<HTMLElement>('[data-slot="alert"]');
     const undoButton = () =>

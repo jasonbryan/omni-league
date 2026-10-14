@@ -86,9 +86,8 @@ export default defineSchema({
     expiresAt: v.number(),
     status: inviteStatusValidator,
     /**
-     * When an org admin revoked the invite (#211), which `invites.restore` measures its 10-minute
-     * window from. Set by `revoke` and cleared by `restore`; rows revoked before it existed have
-     * none and cannot be restored. No backfill.
+     * When an org admin revoked the invite; `invites.restore` measures its window from it. A
+     * revoked invite without it cannot be restored.
      */
     revokedAt: v.optional(v.number()),
   })

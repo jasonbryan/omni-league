@@ -536,7 +536,7 @@ describe('invites.restore', () => {
     expect((await allInvites(s))[0].status).toBe('accepted');
   });
 
-  test('refuses a revoked invite with no revokedAt, as old rows have', async () => {
+  test('refuses a revoked invite with no revokedAt', async () => {
     const s = await setup();
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     await s.t.run((ctx) => ctx.db.patch('invites', inviteId, { revokedAt: undefined }));
@@ -570,7 +570,7 @@ describe('invites.restore', () => {
   });
 });
 
-describe('invites.restore: tester probes (#211)', () => {
+describe('invites.restore: edge cases', () => {
   test('an expired pending invite to the address blocks both create and restore', async () => {
     const s = await setup();
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
@@ -636,7 +636,7 @@ describe('invites.restore: tester probes (#211)', () => {
     expect(before.find((row) => row._id === inviteId)?.revokedAt).toBe(NOW);
   });
 
-  test('the same error for an unknown invite and another organization’s invite (no existence oracle)', async () => {
+  test('the same error for an unknown invite and another organization’s invite (neither reveals which exists)', async () => {
     const s = await setup();
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     const gone = await revokedInvite(s, 'erin@example.com');

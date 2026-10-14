@@ -42,7 +42,7 @@ import { BADGE_SECONDARY } from './field-classes';
 import { formatDay } from './format-day';
 import { StaffInvitePanel } from './staff-invite-panel';
 
-/** Why `invites.restore` refused with a code (#211); the page has a message for each. */
+/** Why `invites.restore` refused with a code; the page has a message for each. */
 type RestoreRefusal =
   'windowPassed' | 'expired' | 'alreadyInvited' | 'alreadyMember' | 'leaguesGone';
 
@@ -91,10 +91,11 @@ const ROLE_LABEL: Record<Role, string> = {
  * and after them below. Below 1024px the header's "Invite staff" link jumps to the panel and puts
  * focus on its first control.
  *
- * Revoke acts at once, with no confirmation (decision 7): a status above the list says so and
- * takes focus, because the button that had it is gone, and carries Undo (#211), which
- * `invites.restore` allows for 10 minutes after the revoke (the server enforces it). The link the
- * org admin already sent works again, with no new invite.
+ * Revoke acts at once, with no confirmation: a status above the list says so and takes focus,
+ * because the button that had it is gone. The status carries Undo, which `invites.restore` allows
+ * for 10 minutes after the revoke (the server enforces it) and which makes the link already sent
+ * work again.
+ *
  * Every query here is org-admin only; the area's parent has already shown the no-access view to
  * anyone else, so none is asked for them (`AdminArea`).
  */
@@ -549,7 +550,7 @@ export class AdminStaff {
   }
 
   /**
-   * Undo a revoke (#211). Offline, nothing is sent and the offline alert shows, still with Undo; a
+   * Undo a revoke. Offline, nothing is sent and the offline alert shows, still with Undo; a
    * refusal from the server says why and ends the offer; any other failure shows the destructive
    * alert, with Undo to try again. The status takes focus either way, because Undo has gone or the
    * alert replaced it. On success the live list brings the row back.

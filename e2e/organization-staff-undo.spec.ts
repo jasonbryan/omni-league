@@ -1,9 +1,6 @@
-// Undoing a revoked invite on the Staff page (#211, design/mockups/67-organization-staff.html,
-// decision 7): the revoked status carries Undo, which `invites.restore` honours for 10 minutes
-// after the revoke (the server enforces the window; its edges are Convex tests). Every test signs
-// up its own org admin through the real form and seeds the invite with a known token
-// (`testing:addInvite`), so the tests need the local Convex backend and are skipped with
-// E2E_BASE_URL set.
+// Undo on the Staff page's revoked status. The window's edges are Convex tests. Each test signs up
+// its own org admin and seeds the invite with a known token (`testing:addInvite`), so the tests
+// need the local Convex backend and are skipped with E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible } from './support/a11y';
@@ -21,9 +18,8 @@ test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex bac
 
 const DAY = 24 * 60 * 60 * 1000;
 /**
- * Rounds per race. Each round makes several HTTP calls, and 12 per race ran past the 30 s timeout
- * on the 2-vCPU CI runner. The Convex tests (`convex/invites.test.ts`) cover the races in depth;
- * these rounds prove them once through the real backend.
+ * Rounds per race: each makes several HTTP calls, so many rounds pass the 30 s test timeout on a
+ * 2-vCPU runner. The Convex tests cover the races in depth; these prove them once end to end.
  */
 const RACE_ROUNDS = 2;
 const LOCATIONS = [
@@ -111,9 +107,7 @@ test.describe('Staff: undoing a revoke', () => {
     await after.tab.close();
   });
 
-  test('a keyboard alone revokes an invite and then activates Undo (WCAG 2.1.1)', async ({
-    page,
-  }) => {
+  test('a keyboard alone revokes an invite and then activates Undo', async ({ page }) => {
     const email = 'erin@example.com';
     const { tenant, token } = await openStaffWithInvite(page, email);
 
@@ -174,8 +168,8 @@ test.describe('Staff: undoing a revoke', () => {
   });
 });
 
-// Concurrency (tester, #211): the calls go straight to the backend's HTTP API with the signed-in
-// admin's token, all started together; only the invariant is asserted, not which call wins.
+// The calls go straight to the backend's HTTP API with the signed-in admin's token, all started
+// together; only the invariant is asserted, not which call wins.
 interface Outcome {
   status: string;
   errorData?: unknown;
