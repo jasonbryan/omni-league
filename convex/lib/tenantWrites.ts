@@ -728,9 +728,10 @@ type LeagueDivisionPatch = Partial<
  * readers do, so a season this pass has not reached yet still counts); its name
  * (`deriveDivisionFromName`); then Coed, the smallest players per side of its sport, Rec, and
  * Adult. Its `minimumRosterSize` is set only together with its `playersPerSide`: the demo table's,
- * else its newest season's when that is above the players per side. Reads at most
- * `BACKFILL_SCAN_LIMIT` rows per table. Returns the number of rows changed per table; a second run
- * changes none. Run by `seed:demo` under its deployment guard, before its inserts, after the
+ * else its newest season's when that is above the players per side. Selects only the rows that
+ * still lack a field and changes at most `BACKFILL_SCAN_LIMIT` per table, so repeated runs reach
+ * every row. Returns the number of rows changed per table; once every row is done a run changes
+ * none. Run by `seed:demo` under its deployment guard, before its inserts, after the
  * demo custom levels of existing organizations exist; it is removed once the fields are required.
  */
 export async function backfillDivisionFields(
@@ -738,8 +739,13 @@ export async function backfillDivisionFields(
   demoDivisions: readonly DemoDivision[],
 ): Promise<Infer<typeof divisionBackfilledValidator>> {
   const backfilled = { seasons: 0, leagueDivisions: 0 };
-  for (const season of await ctx.db.query('seasons').take(BACKFILL_SCAN_LIMIT)) {
-    if (season.playersPerSide !== undefined || season.format === undefined) continue;
+  const unmigratedSeasons = await ctx.db
+    .query('seasons')
+    // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers a missing field; a temporary pass over a small table
+    .filter((q) => q.eq(q.field('playersPerSide'), undefined))
+    .take(BACKFILL_SCAN_LIMIT);
+  for (const season of unmigratedSeasons) {
+    if (season.format === undefined) continue;
     await ctx.db.patch('seasons', season._id, {
       playersPerSide: seasonPlayersPerSide(season),
       format: undefined,
@@ -748,15 +754,19 @@ export async function backfillDivisionFields(
   }
 
   const organizationSlugs = new Map<Id<'organizations'>, string | undefined>();
-  for (const league of await ctx.db.query('leagues').take(BACKFILL_SCAN_LIMIT)) {
-    if (
-      league.playersPerSide !== undefined &&
-      league.gender !== undefined &&
-      league.level !== undefined &&
-      league.ageGroup !== undefined
-    ) {
-      continue;
-    }
+  const incompleteLeagues = await ctx.db
+    .query('leagues')
+    // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers a missing field; a temporary pass over a small table
+    .filter((q) =>
+      q.or(
+        q.eq(q.field('playersPerSide'), undefined),
+        q.eq(q.field('gender'), undefined),
+        q.eq(q.field('level'), undefined),
+        q.eq(q.field('ageGroup'), undefined),
+      ),
+    )
+    .take(BACKFILL_SCAN_LIMIT);
+  for (const league of incompleteLeagues) {
     if (!organizationSlugs.has(league.organizationId)) {
       const organization = await ctx.db.get('organizations', league.organizationId);
       organizationSlugs.set(league.organizationId, organization?.slug);

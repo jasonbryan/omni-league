@@ -70,7 +70,7 @@ function insertLegacyLeague(
 const leagueRow = (t: T, id: Id<'leagues'>) => t.run((ctx) => ctx.db.get('leagues', id));
 
 describe('division backfill probes', () => {
-  test('a league whose newest season is left unmigrated by the row cap still gets that season’s players per side and minimum', async () => {
+  test('seasons past the row cap are migrated by later runs, and a league whose newest season waits still gets its players per side and minimum', async () => {
     const t = setup();
     const organizationId = await insertOrganization(t, 'big-club');
     const filler = await insertLegacyLeague(t, organizationId, 'Filler', 'beachVolleyball');
@@ -82,7 +82,7 @@ describe('division backfill probes', () => {
           organizationId,
           leagueId: filler,
           slug: `filler-${index}`,
-          playersPerSide: 4,
+          format: '4v4',
         });
       }
     });
@@ -96,15 +96,28 @@ describe('division backfill probes', () => {
         minimumRosterSize: 8,
       }),
     );
+    const unmigrated = () =>
+      t.run(async (ctx) =>
+        (await ctx.db.query('seasons').collect()).filter((season) => season.format !== undefined),
+      );
 
-    const result = await t.run((ctx) => backfillDivisionFields(ctx, []));
-
-    expect(result.seasons).toBe(0);
-    expect(await t.run((ctx) => ctx.db.get('seasons', lateSeason))).toMatchObject({
-      format: '5v5',
-    });
+    const first = await t.run((ctx) => backfillDivisionFields(ctx, []));
+    expect(first.seasons).toBe(BACKFILL_SCAN_LIMIT);
+    expect((await unmigrated()).map((season) => season._id)).toEqual([lateSeason]);
     expect(await leagueRow(t, target)).toMatchObject({ playersPerSide: 5, minimumRosterSize: 8 });
-  });
+
+    const second = await t.run((ctx) => backfillDivisionFields(ctx, []));
+    expect(second).toEqual({ seasons: 1, leagueDivisions: 0 });
+    expect(await unmigrated()).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.get('seasons', lateSeason))).toMatchObject({
+      playersPerSide: 5,
+    });
+
+    expect(await t.run((ctx) => backfillDivisionFields(ctx, []))).toEqual({
+      seasons: 0,
+      leagueDivisions: 0,
+    });
+  }, 30_000);
 
   test('the newest season by start date decides, whatever its status', async () => {
     const t = setup();
