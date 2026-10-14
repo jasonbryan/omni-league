@@ -53,6 +53,7 @@ The orchestrator owns every transition. It updates the label and leaves a one- o
 - **Type:** `type:feature`, `type:bug`, `type:chore`, `type:decision` (ADR), `type:design` (mockup)
 - **Gate:** `gate:technology`, `gate:production`. Applied to the issue that needs the gate and to the gate PR itself.
 - **Area:** `area:frontend`, `area:backend`, `area:payments`, `area:infra`
+- **Merge:** `ready-to-merge`. The orchestrator adds it in [Phase 7](#7-merge) to start the one full `ci` run, e2e included, on the PR's head, and removes it when `ci` fails or `main` moves first. Removing it runs nothing.
 
 `scripts/setup-github.sh` creates them all.
 
@@ -107,11 +108,11 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
-- Run e2e with `npm run e2e:affected`, which runs only the specs the branch's changed files map to.
+- Run e2e with `npm run e2e:affected` before reporting, and put its output in the PR's Evidence block. It runs only the specs the branch's changed files map to.
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 - Stop local processes as in [Local processes](#local-processes).
 
-The PR stays draft through Phases 4 to 6. CI does not run on drafts ([ADR 0009](../decisions/0009-ci-pipeline.md)), so every agent runs the full check suite locally.
+The PR stays draft through Phases 4 to 6. CI does not run on drafts ([ADR 0009](../decisions/0009-ci-pipeline.md)), so the local checks plus the affected e2e specs are the per-push check, and every agent runs them locally. The one e2e run in CI happens at merge ([Phase 7](#7-merge)).
 
 **Done when:** all local checks are **green** (format, lint, typecheck, unit tests, serial unit tests, Convex tests, build), the draft PR is open, and no process the implementer started is still running.
 
@@ -122,7 +123,7 @@ The serial run (`npm run test:serial`) runs the Angular specs in one worker, as 
 The tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The checks run, including the serial unit tests and the affected e2e specs (`npm run e2e:affected`; the full e2e suite runs nightly on `main`, and the tester adds a named spec only when an acceptance criterion needs it); UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
+- The checks run, including the serial unit tests and the affected e2e specs (`npm run e2e:affected` before reporting, with its output in the Evidence block; the full e2e suite runs nightly on `main`, and the tester adds a named spec only when an acceptance criterion needs it); UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
 - The demo data shows the feature:
   - **Screens behind sign-in:** the proof is a screenshot as the matching demo account on the anonymous local backend with a local build ([hosting, Service worker, "With data"](hosting.md#service-worker)), using a throwaway `DEMO_ACCOUNT_PASSWORD` set only on that backend. `DEMO_ACCOUNT_PASSWORD` is owner-held and never given to an agent ([AGENTS.md, Secrets](../../AGENTS.md#secrets)), so no agent signs in on a preview.
@@ -147,11 +148,14 @@ On `CHANGES`, the implementer fixes it, then the tester re-runs, then the review
 
 A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commit, it has no `gate:*` label, it is outside the owner-merge scope ([Who merges](#who-merges)), and every gate on the linked issue is approved. The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
 
-1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS` and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
-2. **Mark ready.** `gh pr ready <n>` starts the `ci` run.
-3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then `gh pr checks <n> --watch` until `ci` passes. `skipping` is not a pass.
-4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
-5. **On failure.** If `ci` fails, `gh pr ready <n> --undo` and send the PR back to the implementer.
+1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. No CI runs on a draft, so this is free. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS` and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
+2. **Mark ready.** `gh pr ready <n>` runs nothing. The required check `ci` is now missing, so the ruleset blocks a merge.
+3. **Label.** `gh pr edit <n> --add-label ready-to-merge`. The label starts the one full `ci` run, e2e included, on the merge of the up-to-date head. Note the head SHA (`gh pr view <n> --json headRefOid`).
+4. **Wait for `ci`.** `gh pr checks <n> --watch` until `ci` from workflow `CI` passes. `skipping` is not a pass.
+5. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`.
+6. **On failure.** If `ci` fails, or GitHub refuses the merge because `main` moved, remove the label (`gh pr edit <n> --remove-label ready-to-merge`), run `gh pr ready <n> --undo`, and update (step 1) or send the PR back to the implementer. If `ci` was cancelled, or failed with `stale merge ref` (GitHub had not yet recomputed the merge ref after an update), remove the label and add it again; the PR does not go back.
+
+Dependabot PRs open ready, so they follow steps 1, 3, 4, and 5 and get the same label. Other labels (`type:`, `area:`) added at any time start nothing and change no check.
 
 The branch is deleted and the issue closes through `Closes #n`. Merging (or closing) the PR also deletes its Convex preview deployment `pr-<n>` automatically ([Phase 8](#8-deploy)); nobody deletes it by hand.
 

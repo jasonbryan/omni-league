@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, labeled]
     branches: [main, production]
   push:
     branches: [main]
@@ -19,8 +19,9 @@ on:
 permissions:
   contents: read
 
+# A label outside the trigger set gets its own group, so it never cancels a run in progress.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.event_name != 'pull_request' && format('ci-{0}', github.run_id) || (github.event.action == 'labeled' && github.event.label.name != 'ready-to-merge' && github.event.label.name != 'gate:technology' && github.event.label.name != 'gate:production') && format('run-{0}', github.run_id) || format('ci-{0}', github.event.pull_request.number) }}
   cancel-in-progress: true
 
 env:
@@ -28,7 +29,7 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
-  # Any failure to look the run up leaves `skip` empty, and `ci` runs the full suite.
+  # Any failure to look the run up leaves `skip` empty, and the full suite runs.
   nightly-gate:
     name: nightly-gate
     if: ${{ github.event_name == 'schedule' }}
@@ -37,39 +38,65 @@ jobs:
     permissions:
       actions: read
     outputs:
-      skip: ${{ steps.last-green.outputs.skip }}
+      skip: ${{ steps.last-tested.outputs.skip }}
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ github.sha }}
     steps:
-      - name: last green night
-        id: last-green
+      # A night counts as tested when its job `ci` concluded success or failure, or the gate skipped it.
+      # A startup failure, a cancelled run, or a run with no `ci` job tested nothing.
+      - name: last tested night
+        id: last-tested
         run: |
-          if last="$(gh run list --workflow ci.yml --event schedule --status success --branch main --limit 1 --json headSha --jq '.[0].headSha // empty')" && [ -n "$last" ] && [ "$last" = "$HEAD_SHA" ]; then
-            echo "::notice::main is still ${HEAD_SHA:0:7}, the commit the last successful nightly run tested; skipping tonight's run"
+          last=''
+          runs="$(gh run list --workflow ci.yml --event schedule --branch main --status completed --limit 10 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')" || runs=''
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            state="$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.name == "ci" or .name == "nightly-gate") | {key: .name, value: .conclusion}] | from_entries | if (.ci == "success" or .ci == "failure") or (.ci == "skipped" and .["nightly-gate"] == "success") then "tested" else "untested" end')" || break
+            if [ "$state" = tested ]; then
+              last="$sha"
+              break
+            fi
+          done <<< "$runs"
+          if [ -n "$last" ] && [ "$last" = "$HEAD_SHA" ]; then
+            echo "::notice::main is still ${HEAD_SHA:0:7}, the commit the last tested nightly run covered; skipping tonight's run"
             echo 'skip=true' >> "$GITHUB_OUTPUT"
           else
             echo 'skip=false' >> "$GITHUB_OUTPUT"
           fi
 
-  ci:
-    name: ci
+  # Named `ci` only on a path that runs the full suite, so a skipped job on a PR head is never `ci`
+  # (a skipped job counts as a pass for the required check). Every other path is named `checks`.
+  # FULL_RUN repeats the name condition because a job name cannot read `env`.
+  checks:
+    name: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production'))))) && 'ci' || 'checks' }}
     needs: nightly-gate
-    # Drafts and the cache-warming push get a skipped job: 0 billed minutes. !cancelled() lets `ci` run
-    # when nightly-gate was skipped (every event but a schedule) or failed (fail safe: run everything).
-    if: ${{ !cancelled() && github.event_name != 'push' && !github.event.pull_request.draft && needs.nightly-gate.outputs.skip != 'true' }}
+    if: ${{ !cancelled() && needs.nightly-gate.outputs.skip != 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production' || !github.event.pull_request.draft))))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
       e2e_failures: ${{ steps.failures.outputs.failures }}
     env:
       E2E_WEBKIT: ${{ (github.base_ref == 'production' || inputs.webkit == true) && '1' || '0' }}
+      FULL_RUN: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && ((github.event.action == 'labeled' && (github.event.label.name == 'ready-to-merge' || github.event.label.name == 'gate:technology' || github.event.label.name == 'gate:production')) || (github.event.action != 'labeled' && (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') || contains(github.event.pull_request.labels.*.name, 'gate:technology') || contains(github.event.pull_request.labels.*.name, 'gate:production') || github.base_ref == 'production'))))) && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 2
+      # GitHub recomputes refs/pull/<n>/merge after update-branch, so a run can check out the old merge
+      # of a head that has since moved.
+      - name: merge ref
+        id: merge-ref
+        if: ${{ github.event_name == 'pull_request' && env.FULL_RUN == '1' }}
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$(git rev-parse --verify --quiet 'HEAD^2' || true)" != "$PR_HEAD_SHA" ]; then
+            echo "::error::stale merge ref: the merge commit's second parent is not the PR head ${PR_HEAD_SHA:0:7}; remove ready-to-merge and add it again"
+            exit 1
+          fi
       # --no-renames lists both paths of a rename, so moving an app file into docs/ is an app change.
       # pipefail: a failed git diff fails the pipeline, so the warning branch runs.
       - name: scope
@@ -85,7 +112,7 @@ jobs:
           fi
       - name: e2e specs
         id: specs
-        if: ${{ steps.scope.outputs.app == 'true' }}
+        if: ${{ steps.scope.outputs.app == 'true' && env.FULL_RUN == '1' }}
         run: |
           set -o pipefail
           if outputs="$(git diff --no-renames --name-only HEAD^1 HEAD | node scripts/e2e-affected.mjs)" && [ -n "$outputs" ]; then
@@ -135,10 +162,10 @@ jobs:
             echo "Every npm cooldown window equals min-release-age=${age}."
           fi
           exit "$status"
-      # !cancelled() lets setup-node and install run after a release age failure.
+      # !cancelled() lets setup-node and install run after a release age failure, but not after a stale merge ref.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         id: setup-node
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.merge-ref.outcome != 'failure' }}
         with:
           node-version-file: package.json
       - name: install
@@ -178,7 +205,7 @@ jobs:
           ./actionlint -color
       # Headless shell only: the Playwright config sets no channel.
       - name: e2e browsers
-        if: ${{ success() && steps.scope.outputs.app == 'true' }}
+        if: ${{ success() && steps.scope.outputs.app == 'true' && env.FULL_RUN == '1' }}
         run: |
           npx playwright install --with-deps --only-shell chromium
           if [ "$E2E_WEBKIT" = "1" ]; then
@@ -208,7 +235,7 @@ jobs:
       # Runs after a drift failure too, so one run reports both.
       - name: e2e
         id: e2e
-        if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' && env.FULL_RUN == '1' }}
         env:
           E2E_SCOPE: ${{ steps.specs.outputs.e2e_scope }}
           E2E_SPECS: ${{ steps.specs.outputs.e2e_specs }}
@@ -238,8 +265,8 @@ jobs:
   # issues: write for this job only; no checkout, no other secret.
   nightly-issue:
     name: nightly-issue
-    needs: ci
-    if: ${{ !cancelled() && needs.ci.result == 'failure' && github.event_name == 'schedule' }}
+    needs: checks
+    if: ${{ !cancelled() && needs.checks.result == 'failure' && github.event_name == 'schedule' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -247,7 +274,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      FAILURES: ${{ needs.ci.outputs.e2e_failures }}
+      FAILURES: ${{ needs.checks.outputs.e2e_failures }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       COMMIT: ${{ github.sha }}
       ISSUE_TITLE: Nightly e2e failed on main

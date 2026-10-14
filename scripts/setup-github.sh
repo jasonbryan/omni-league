@@ -24,3 +24,5 @@ label "area:frontend" "0052cc" "Angular app"
 label "area:backend"  "006b75" "Convex"
 label "area:payments" "5319e7" "Stripe"
 label "area:infra"    "333333" "CI, hosting, tooling"
+
+label "ready-to-merge" "bfdadc" "Run the full CI, e2e included, on this PR's head before merge"
