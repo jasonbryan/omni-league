@@ -17,9 +17,6 @@ import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
 import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 
-// #128: saved copies on the public season page and the not-saved view
-// (design/mockups/82-offline-pages.html). "Offline" is the adapter's `online` signal (#88).
-
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
 const ORG_SLUG = 'gulf-coast-sport-social';
@@ -30,7 +27,6 @@ let client: FakeConvexClient;
 
 const SEASON = 'seasons:getPublicPage';
 
-/** The saved-copy allow-list entries' functions and the args the page asks them with. */
 const queries = [
   {
     fn: api.seasons.getPublicPage,
@@ -39,7 +35,6 @@ const queries = [
   },
 ];
 
-/** Saves the result the page's query returns. */
 function plant(results = seasonQueryResults(), savedAt = SAVED_AT): void {
   for (const { fn, name, args } of queries) plantSavedCopy(fn, args, results[name], savedAt);
 }
@@ -53,7 +48,6 @@ function stubOnLine(value: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
 }
 
-/** Opens `url` with a fake client; `socket: 'down'` models a client that has not connected yet. */
 async function open(
   url = PATH,
   options: { socket?: 'up' | 'down' } = {},
@@ -169,7 +163,6 @@ describe('PublicSeasonPage offline', () => {
 
   describe('no saved copy', () => {
     it('offline: shows the not-saved view at once, top bar only, with Try again to the season page asked for', async () => {
-      // Summer 2027 is saved; Fall 2026 is not.
       plant();
       stubOnLine(false);
       const other = `${PATH.replace('summer-2027', 'fall-2026')}`;

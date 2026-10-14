@@ -20,9 +20,8 @@ const FOOTER_LINK_CLASSES =
   'inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0';
 
 /**
- * Nothing here depends on the visitor: the server HTML is cached by the CDN, so "Sign in" and the
- * account link come from `TopBarAccount`, which shows the account link only in the browser, and
- * the query string stays out of the HTML (`skipLinkHref`).
+ * "Sign in" and the account link come from `TopBarAccount`, which shows the account link only in the browser: the server HTML is cached by the CDN,
+ * so nothing here depends on the visitor, and the query string stays out of the HTML (`skipLinkHref`).
  */
 @Component({
   selector: 'app-public-layout',
