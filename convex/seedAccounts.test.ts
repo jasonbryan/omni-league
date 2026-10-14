@@ -721,7 +721,7 @@ describe('seed:demo accounts: the password never leaks', () => {
   });
 });
 
-describe('seed:demo accounts: the seeded invite (tester probes)', () => {
+describe('seed:demo accounts: the seeded invite', () => {
   test(
     'cannot be accepted, even by the invited address, with the stored hash or a guessed token',
     async () => {
@@ -762,7 +762,7 @@ describe('seed:demo accounts: the seeded invite (tester probes)', () => {
   );
 });
 
-describe('seed:demo accounts: three runs at once (tester probes)', () => {
+describe('seed:demo accounts: three runs at once', () => {
   test(
     'none throws, and the rows end one per address, membership, and invite',
     async () => {
