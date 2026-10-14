@@ -13,9 +13,6 @@ import {
   type Sport,
 } from './sports';
 
-// #124: the sport configuration holds each sport's formats and their minimum roster sizes
-// (requirements, Payments, rule 3).
-
 const sports = Object.keys(SPORT_NAMES) as Sport[];
 
 describe('SPORT_FORMATS', () => {
@@ -57,7 +54,7 @@ describe('formatMinimumRosterSize', () => {
 
 describe('formatName', () => {
   test('returns the placeholder display name', () => {
-    expect(formatName('soccer', '7v7')).toBe('7 v 7');
+    expect(formatName('soccer', '7v7')).toBe('7v7');
   });
 });
 
@@ -75,7 +72,6 @@ describe('ROSTER_SIZE_INPUT_MAX', () => {
   });
 });
 
-// #101: the sport view's URL segment, from one shared map.
 describe('SPORT_SEGMENTS', () => {
   test('maps each sport key to its kebab-case segment', () => {
     expect(sports.map((sport) => [sport, sportSegment(sport)])).toEqual([

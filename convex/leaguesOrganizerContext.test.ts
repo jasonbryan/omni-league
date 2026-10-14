@@ -9,8 +9,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `leagues.getOrganizerContext` (#125): the league management page's first question.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -20,12 +18,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A with a published soccer league L (`coed-7v7`, at two locations, one of them of
- * organization B), a published league M (`sand-2s`), and a draft league D (`draft-softball`);
- * organization B. Users: `admin-a`, `organizer-l` (L), `organizer-d` (D), `organizer-m` (M),
- * `admin-b`, `stranger`, and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -56,7 +48,6 @@ async function setup() {
       await league('sand-2s'),
       await league('draft-softball'),
     ];
-    // League L also names a location of organization B, which the page must not show.
     const bField = (await ctx.db
       .query('locations')
       .withIndex('by_organizationId_and_name', (q) =>
@@ -107,7 +98,6 @@ async function forbidden(call: Promise<unknown>) {
   expect((error as ConvexError<{ code: string }>).data).toEqual({ code: FORBIDDEN_CODE });
 }
 
-/** Callers who are not staff of organization A: signed out, no row, another organization, none. */
 function outsiders(s: Setup) {
   return [
     ['unauthenticated', s.t],
@@ -176,7 +166,6 @@ describe('leagues.getOrganizerContext', () => {
   test('throws FORBIDDEN for a league organizer of another league of the same organization', async () => {
     const s = await setup();
     await forbidden(s.as('organizer-m').query(api.leagues.getOrganizerContext, L));
-    // D is a draft, but a league organizer of the organization is staff of it: not null.
     await forbidden(s.as('organizer-m').query(api.leagues.getOrganizerContext, D));
     await forbidden(s.as('organizer-l').query(api.leagues.getOrganizerContext, M));
   });

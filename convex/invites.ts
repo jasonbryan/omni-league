@@ -25,10 +25,6 @@ import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inv
 import { insertMembership } from './lib/memberships';
 import { roleValidator, type Role } from './lib/roles';
 
-/**
- * Pending invites `listPending` returns at most. The staff screen is one page with no paging
- * (#67), as for leagues (`ADMIN_LEAGUES_LIMIT`). Never taken from args.
- */
 export const PENDING_INVITES_LIMIT = 200;
 
 function refuse(error: InviteInputError): never {
@@ -36,20 +32,8 @@ function refuse(error: InviteInputError): never {
   throw new ConvexError({ ...error });
 }
 
-/**
- * Invites someone to the organization's staff by email (#67). Org admins of the organization only.
- * Returns the invite and its **token**, which the caller turns into the link
- * `<origin>/invites/accept#<token>` and shows once: only the token's SHA-256 hash is stored, so
- * nothing can show it again, and to resend an org admin revokes the invite and creates a new one.
- *
- * An action, because the token is made here with `crypto.getRandomValues` (256 bits): Convex seeds
- * the randomness of queries and mutations, which does not suit a bearer secret. The checks and the
- * insert run in `insertPending`, one transaction that authorizes the caller itself (the caller's
- * identity passes through `ctx.runMutation`). Refusals about a field are a `ConvexError` whose data
- * is the `InviteInputError`: an empty or malformed email, a league organizer with no league, an
- * address of a current member, or one with a pending invite. Nothing sends email: no sending
- * domain exists before production (ADR 0011).
- */
+// An action: Convex seeds the randomness of queries and mutations, which does not suit a bearer
+// secret.
 // eslint-disable-next-line @convex-dev/require-access-control -- an action has no database: it turns away a caller with no identity, then insertPending authorizes the caller as an org admin of the organization inside the transaction that writes the invite.
 export const create = action({
   args: {
@@ -79,15 +63,6 @@ export const create = action({
   },
 });
 
-/**
- * What `create` and `restore` both require before an invite is pending for an address, so the two
- * cannot drift: a well-formed email, the role's leagues (an org admin carries none; a
- * league organizer needs at least one, each in the organization, else `invalidLeague` throws), no
- * current member of the organization at that address (`alreadyMember`), and no other pending
- * invite to it (`alreadyInvited`, an expired one included). Returns the normalised address and the
- * de-duplicated leagues. A refusal about the address or the league count is a `ConvexError` whose
- * data is the `InviteInputError`.
- */
 async function checkInviteAllowed(
   ctx: Pick<MutationCtx, 'db' | 'runQuery'>,
   args: {
@@ -153,13 +128,6 @@ async function checkInviteAllowed(
   return { email, leagueIds };
 }
 
-/**
- * The transaction behind `create`: authorizes the caller (`requireOrgAdmin`), checks the email and
- * the role's leagues, refuses a current member and an address with a pending invite (an expired
- * one counts until it is revoked), and stores the invite as `pending` with the hash it was given,
- * expiring `INVITE_LIFETIME_MS` from now. A league of another organization is refused with
- * `Not allowed`, as the form never offers one.
- */
 export const insertPending = internalMutation({
   args: {
     organizationId: v.id('organizations'),
@@ -189,11 +157,6 @@ export const insertPending = internalMutation({
   },
 });
 
-/**
- * Revokes a pending invite (#67), so its link no longer works. The organization comes from the
- * stored invite, never from args: an org admin of that organization only. Only a pending invite
- * can be revoked, an expired one included; a revoked or accepted one is refused.
- */
 export const revoke = mutation({
   args: { inviteId: v.id('invites') },
   returns: v.null(),
@@ -209,16 +172,6 @@ export const revoke = mutation({
   },
 });
 
-/**
- * Undoes a revoke: sets a revoked invite back to `pending` with the same token hash and
- * expiry, so the link the org admin already sent works again. Org admins of the invite's
- * organization only, the organization taken from the stored invite. It refuses, writing nothing:
- * an invite that is not `revoked` or has no `revokedAt`, more than `INVITE_RESTORE_WINDOW_MS` after the revoke (`windowPassed`), an invite whose
- * `expiresAt` has passed (`expired`), and everything `create` would refuse for the same invite
- * (`checkInviteAllowed`: `alreadyMember`, `alreadyInvited`, and `leaguesGone` for a league that no
- * longer exists in the organization). Refusals with a code are a `ConvexError`; the window is
- * enforced here, never by the page.
- */
 export const restore = mutation({
   args: { inviteId: v.id('invites') },
   returns: v.null(),
@@ -254,13 +207,6 @@ export const restore = mutation({
   },
 });
 
-/**
- * The organization's pending invites for its staff screen (#67): `{ inviteId, email, role,
- * leagueNames, expiresAt }`, oldest first, at most `PENDING_INVITES_LIMIT`. An invite whose
- * `expiresAt` has passed is still listed, because it is still pending and blocks a new invite to
- * its address. No token and no hash. Org admins of the organization only, because the rows hold
- * email addresses.
- */
 export const listPending = query({
   args: { organizationId: v.id('organizations') },
   returns: v.array(
@@ -307,29 +253,20 @@ export const listPending = query({
   },
 });
 
-/** What a visitor may see of an invite: never the address, an id, or the hash. */
+// Never the address, an id, or the hash.
 const inviteSummaryFields = {
   organizationName: v.string(),
   role: roleValidator,
   leagueNames: v.array(v.string()),
 };
 
-/**
- * Why `accept` refused, as the `code` of its `ConvexError` data (#70): `invalid` for an unknown,
- * revoked, expired, or already accepted token (not told apart), `emailMismatch` when the caller's
- * account email is not the invited one, `alreadyMember` when the caller already has a membership
- * in the organization. Nothing is written for any of them.
- */
+// `invalid` does not tell an unknown, revoked, expired, or accepted token apart.
 export type AcceptRefusal = 'invalid' | 'emailMismatch' | 'alreadyMember';
 
 function refuseAccept(code: AcceptRefusal): never {
   throw new ConvexError({ code });
 }
 
-/**
- * The organization's name and slug and the invite's leagues that still exist in it (ids, and each
- * league's name and slug).
- */
 async function summarise(
   ctx: Pick<QueryCtx, 'db'>,
   invite: Doc<'invites'>,
@@ -361,14 +298,7 @@ async function summarise(
   };
 }
 
-/**
- * What the invite page shows for the token in the link (#70). Deliberately public: the token is
- * the bearer secret, and a visitor opens the link before they have an account. The token is hashed
- * here and looked up by `by_tokenHash`. A pending, unexpired invite answers `{ status: 'valid',
- * organizationName, role, leagueNames, expiresAt }`; an unknown, revoked, expired, or accepted one
- * answers exactly `{ status: 'invalid' }`, so the answer says nothing about which. No address, id,
- * or hash is returned.
- */
+// All unusable tokens answer alike, so the answer says nothing about which.
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (convex.md, Functions): the visitor has no account yet, the argument is a 256-bit bearer token that is hashed and looked up, and the answer holds no address, id, or hash.
 export const getByToken = query({
   args: { token: v.string() },
@@ -390,21 +320,6 @@ export const getByToken = query({
   },
 });
 
-/**
- * Accepts the invite for the signed-in caller (#70). The caller's account email (kept by Better
- * Auth, never an argument) must be the invited address, compared in constant time; the invite must
- * be pending and unexpired; and the caller must not already be a member of the organization (one
- * membership per user per organization, and changing a role is a later slice). It then creates the
- * membership (an org admin, or a league organizer with the invite's leagues that still exist) and
- * marks the invite accepted in the same transaction. A concurrent second accept sees the invite
- * accepted and is refused, so the membership is never created twice. It returns the organization's
- * name and slug, the role, and the leagues granted (`leagues`: name and slug, for the page's "Open"
- * link, #212); `leagueNames` stays for the previous frontend and may go in a release at least 14
- * days after #212 ships. Only the caller who just accepted receives the slugs; `getByToken` still
- * shows a visitor none. Refusals are a
- * `ConvexError` whose data is `{ code: AcceptRefusal }`; a caller who is not signed in gets
- * `Sign in required`.
- */
 export const accept = mutation({
   args: { token: v.string() },
   returns: v.object({

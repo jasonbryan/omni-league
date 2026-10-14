@@ -8,9 +8,6 @@ import { insertLocation, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `locations.listForAdmin`, `locations.create`, and `locations.update` (#65). Identities are faked
-// the way ADR 0008 "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -20,11 +17,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A (slug `org-a`) with two locations and a league at one of them, and organization B
- * with one location. Users: `admin-a`, `organizer-a` (a league organizer of A), `admin-b`,
- * `stranger` (no membership), and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -84,7 +76,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** Everything a location write may touch, so a refused call can be shown to change nothing. */
 const snapshot = (t: Setup['t']) =>
   t.run(async (ctx) => ({
     locations: await ctx.db.query('locations').collect(),
@@ -92,7 +83,6 @@ const snapshot = (t: Setup['t']) =>
     sportLocations: await ctx.db.query('sportLocations').collect(),
   }));
 
-/** The `ConvexError` data a refused call carries, or fails the test. */
 async function refusal(call: Promise<unknown>) {
   const error = await call.then(
     () => null,
@@ -102,7 +92,6 @@ async function refusal(call: Promise<unknown>) {
   return (error as ConvexError<{ field: string; code: string; message: string }>).data;
 }
 
-/** Every caller that must be refused for organization A: how to call, and the error text. */
 function refusedCallers(s: Setup) {
   return [
     ['unauthenticated', s.t, 'Sign in required'],
@@ -348,7 +337,6 @@ describe('locations.update', () => {
       address: '26 Zulu St',
       sortName: 'zulu beach',
     });
-    // Only that row changed: totals, sport counters, and sportLocations rows are as before.
     expect(after.organizations).toEqual(before.organizations);
     expect(after.sportLocations).toEqual(before.sportLocations);
     expect(after.locations.filter((l) => l._id !== s.bravo)).toEqual(
@@ -465,7 +453,7 @@ describe('locations.update', () => {
   });
 });
 
-describe('locations edge cases (#65 tester)', () => {
+describe('locations edge cases', () => {
   test('allows two locations with the same name in one organization, each its own row and count', async () => {
     const s = await setup();
     const input = { organizationId: s.organizationA, name: 'Twin Courts', address: '5 Twin St' };

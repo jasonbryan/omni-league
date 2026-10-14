@@ -23,12 +23,10 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-/** Inserts a tenant through the shared writers, so `sortName` and the counters are set. */
 function seed(t: T, tenant: Tenant): Promise<Id<'organizations'>> {
   return t.run((ctx) => insertTenant(ctx, tenant));
 }
 
-/** Organization A: two locations and three leagues of three sports, inserted out of name order. */
 function seedA(t: T): Promise<Id<'organizations'>> {
   return seed(t, {
     organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast' },
@@ -48,7 +46,6 @@ function seedA(t: T): Promise<Id<'organizations'>> {
   });
 }
 
-/** Organization B: one location and one league, which A's page must never show. */
 function seedB(t: T): Promise<Id<'organizations'>> {
   return seed(t, {
     organization: { name: 'Other Org', slug: 'other-org' },
@@ -57,11 +54,7 @@ function seedB(t: T): Promise<Id<'organizations'>> {
   });
 }
 
-/**
- * 13 names in shuffled insertion order. Sorted ignoring case: "adult league" comes before
- * "Zebra League" (the code-point order of the old `by_organizationId_and_name` index would put it
- * after).
- */
+// "adult league" sorts before "Zebra League" ignoring case; code-point order would put it after.
 const THIRTEEN = [
   'Zebra League',
   'adult league',
@@ -79,7 +72,6 @@ const THIRTEEN = [
 ];
 const SORTED = [...THIRTEEN].sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : 1));
 
-/** `count` names "Row 001", "Row 002", ... whose order is their number. */
 const numbered = (count: number) =>
   Array.from({ length: count }, (_, i) => `Row ${String(i + 1).padStart(3, '0')}`);
 
@@ -99,7 +91,6 @@ function seedLeagues(t: T, slug: string, names: string[]) {
   });
 }
 
-/** Both list queries, with the fixture that fills each and the row name in its result. */
 const LISTS = [
   {
     kind: 'locations',
@@ -541,12 +532,11 @@ describe('organizations module source', () => {
   });
 });
 
-describe('organizations: totals and page bounds against a recount (#100, tester)', () => {
+describe('organizations: totals and page bounds against a recount', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  /** The organization's rows recounted, keyed by slug: leagues, locations, and distinct sports. */
   async function recount(t: T) {
     return t.run(async (ctx) => {
       const organizations = await ctx.db.query('organizations').collect();
@@ -651,13 +641,6 @@ describe('organizations: totals and page bounds against a recount (#100, tester)
   });
 });
 
-// #101: per-sport league and location counts, and each sport's leagues by page.
-
-/**
- * 12 beach volleyball leagues at 3 locations (several share one, and one lists its location
- * twice), 3 soccer leagues at 1 location, and no softball league. A fourth location holds no
- * beach volleyball league.
- */
 function seedSports(t: T, slug: string) {
   const fields = ['Court A', 'Court B', 'Court C', 'Turf'];
   return seed(t, {
@@ -667,7 +650,6 @@ function seedSports(t: T, slug: string) {
       ...numbered(12).map((name, i) => ({
         name: `Sand ${name}`,
         sport: 'beachVolleyball' as const,
-        // Court A holds leagues 0, 3, 6, and 9; the first of them lists it twice.
         locations: i === 0 ? ['Court A', 'Court A'] : [fields[i % 3]],
       })),
       ...numbered(3).map((name) => ({
@@ -679,7 +661,7 @@ function seedSports(t: T, slug: string) {
   });
 }
 
-describe('organizations:getPublicPage sports (#101)', () => {
+describe('organizations:getPublicPage sports', () => {
   test('lists each sport with a league: key, segment, name, and league and location counts', async () => {
     const t = setup();
     await seedSports(t, 'sandy');
@@ -699,7 +681,6 @@ describe('organizations:getPublicPage sports (#101)', () => {
   test("excludes another organization's leagues and locations", async () => {
     const t = setup();
     await seedSports(t, 'sandy');
-    // The other organization has a location named like one of the first organization's.
     await seed(t, {
       organization: { name: 'Other', slug: 'other' },
       locations: [
@@ -842,14 +823,12 @@ describe('organizations:getPublicPage sports (#101)', () => {
   });
 });
 
-describe('organizations:listPublicLeagues with a sport (#101)', () => {
-  /** 12 soccer leagues in shuffled insertion order. */
+describe('organizations:listPublicLeagues with a sport', () => {
   const SOCCER_NAMES = THIRTEEN.slice(0, 12);
   const SOCCER_SORTED = [...SOCCER_NAMES].sort((a, b) =>
     a.toLowerCase() < b.toLowerCase() ? -1 : 1,
   );
 
-  /** The 12 soccer leagues among 3 beach volleyball leagues and 1 softball league. */
   function seedMixed(t: T, slug = 'mixed') {
     return seed(t, {
       organization: { name: `Org ${slug}`, slug },
@@ -992,7 +971,7 @@ describe('organizations:listPublicLeagues with a sport (#101)', () => {
   });
 });
 
-describe('organizations module source (#101)', () => {
+describe('organizations module source', () => {
   test('the sport list reads through the sport index with the same offset read', () => {
     expect(organizationsSource).toMatch(/by_organizationId_and_sport_and_status_and_sortName/);
     expect(organizationsSource.match(/\.take\(page \* PUBLIC_LIST_PAGE_SIZE\)/g)).toHaveLength(2);

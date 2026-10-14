@@ -9,10 +9,6 @@ import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// Tester probes (#127): `leagues.publishedSeasonCount` under concurrent writers, the recount
-// fallback next to seasons that were published before the counter existed, and that a draft never
-// reaches `leagues.getPublicPage` or `seasons.listPublic`, nor takes a place on a page.
-
 function setup() {
   const t = convexTest(schema, modules);
   betterAuthTest.register(t, 'betterAuth');
@@ -87,7 +83,6 @@ const counter = async (t: T, leagueId: Id<'leagues'>) =>
   (await t.run(async (ctx) => (await ctx.db.get('leagues', leagueId))?.publishedSeasonCount)) ??
   undefined;
 
-/** Removes the counter, as a league written before #127 has none. */
 async function dropCounter(t: T, row: Doc<'leagues'>): Promise<void> {
   await t.run(async (ctx) => {
     await ctx.db.replace('leagues', row._id, {
@@ -133,7 +128,6 @@ describe('publishedSeasonCount under concurrency', () => {
       return out;
     });
     const a = await admin(t, row.organizationId);
-    // Each draft is published twice, all at once.
     await Promise.all(
       [...ids, ...ids].map((seasonId) => a.mutation(api.seasons.publish, { seasonId })),
     );
@@ -194,7 +188,6 @@ describe('publishedSeasonCount under concurrency', () => {
   test('concurrent writers on a league without a counter recount, and count the earlier published seasons', async () => {
     const t = setup();
     const row = await league(t);
-    // Two published and one draft before the counter existed, then the counter is gone.
     const draftIds = await t.run(async (ctx) => {
       await insertSeason(ctx, row, season(1), 'published');
       await insertSeason(ctx, row, season(2), 'published');
@@ -207,7 +200,6 @@ describe('publishedSeasonCount under concurrency', () => {
       leagueSlug: 'coed-7v7',
       page: 1,
     });
-    // Reads as 0 until a writer runs.
     expect(before).toEqual({ rows: [], page: 1, pageCount: 0, total: 0 });
 
     const a = await admin(t, row.organizationId);
@@ -240,7 +232,6 @@ describe('drafts never reach the public queries', () => {
     const row = await league(t);
     await t.run(async (ctx) => {
       for (let n = 1; n <= 7; n++) await insertSeason(ctx, row, season(n), 'published');
-      // Newer than every published season, 6 of them: if drafts took places, page 1 would be all draft.
       for (let n = 1; n <= 6; n++) {
         await insertSeason(
           ctx,

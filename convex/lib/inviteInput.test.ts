@@ -8,7 +8,7 @@ import {
   normaliseInviteEmail,
 } from './inviteInput';
 
-describe('inviteInput (#67)', () => {
+describe('inviteInput', () => {
   test('an invite lasts 14 days', () => {
     expect(INVITE_LIFETIME_MS).toBe(14 * 24 * 60 * 60 * 1000);
   });

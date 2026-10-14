@@ -7,7 +7,7 @@ import {
   timingSafeEqual,
 } from './inviteToken';
 
-describe('inviteToken (#67)', () => {
+describe('inviteToken', () => {
   test('a token is 256 bits as 43 base64url characters', () => {
     expect(INVITE_TOKEN_BYTES * 8).toBe(256);
     const token = generateInviteToken();

@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// `invites.create`, `invites.revoke`, `invites.listPending`, and `memberships.listForOrganization`
-// (#67). Identities are faked the way ADR 0008 "Testing" shows; accounts exist in the Better Auth
-// component too, because a member's email lives there.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -34,12 +31,6 @@ const identity = (authUserId: string) => ({
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
-/**
- * Organization A (`org-a`) with leagues Coed 7v7 and Sand 2s, and organization B (`org-b`) with
- * the league Other Sand. People, each with a Better Auth account and a `users` row: `admin-a`
- * (org admin of A, email admin-a@example.test), `organizer-a` (league organizer of A for Coed
- * 7v7), `admin-b` (org admin of B), `stranger` (no membership).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   betterAuthTest.register(t, 'betterAuth');
@@ -152,7 +143,6 @@ const sha256Hex = async (text: string) =>
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
 
-/** The bytes a base64url string holds. */
 function base64urlBytes(text: string): Uint8Array {
   const padded = text.replaceAll('-', '+').replaceAll('_', '/');
   return Uint8Array.from(atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '=')), (c) =>
@@ -180,10 +170,8 @@ describe('invites.create', () => {
       status: 'pending',
       expiresAt: NOW + INVITE_LIFETIME_MS,
     });
-    // Only the SHA-256 hash is stored, never the token.
     expect(rows[0].tokenHash).toBe(await sha256Hex(result.token));
     expect(JSON.stringify(rows[0])).not.toContain(result.token);
-    // A pending invite grants nothing.
     const memberships = await s.t.run((ctx) => ctx.db.query('memberships').collect());
     expect(memberships).toHaveLength(3);
   });
@@ -319,7 +307,6 @@ describe('invites.create', () => {
   });
 
   test('the write is internal: no client can call it with a hash it chose', () => {
-    // `internal.invites.insertPending` is not on `api`.
     expect('insertPending' in api.invites).toBe(false);
   });
 });
@@ -383,7 +370,6 @@ describe('invites.revoke', () => {
   });
 });
 
-/** An invite created and revoked at `NOW`; the token is the link the org admin already sent. */
 async function revokedInvite(
   s: Setup,
   email: string,
@@ -690,7 +676,6 @@ describe('invites.listPending', () => {
     const second = await invite(s, 'boss@example.com', 'orgAdmin');
     const revoked = await invite(s, 'gone@example.com');
     await s.asAdminA.mutation(api.invites.revoke, { inviteId: revoked.inviteId });
-    // Another organization's invite never shows.
     await s.asAdminB.action(api.invites.create, {
       organizationId: s.organizationB,
       email: 'b-only@example.com',

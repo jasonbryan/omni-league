@@ -1,13 +1,7 @@
-// What an org admin may type when inviting staff (#67), checked in the browser and again by
-// `invites.create` with the same rules and messages (design/mockups/67-organization-staff.html,
-// "Staff messages"). Imports nothing, so the app can import it (convex.md, Functions).
-
-/** How long an invite works: 14 days from creation (#67). Expired invites stay `pending`. */
+// Imports nothing, so the app can import it.
 export const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
-/**
- * How long after a revoke an org admin can undo it. `invites.restore` enforces it, not the page.
- */
+// Enforced by `invites.restore`, not the page.
 export const INVITE_RESTORE_WINDOW_MINUTES = 10;
 export const INVITE_RESTORE_WINDOW_MS = INVITE_RESTORE_WINDOW_MINUTES * 60 * 1000;
 
@@ -19,23 +13,15 @@ export type InviteInputCode =
 
 export type InviteField = 'email' | 'leagues';
 
-/** A refusal about one field: the `data` of the `ConvexError` that `invites.create` throws. */
 export interface InviteInputError {
   field: InviteField;
   code: InviteInputCode;
   message: string;
 }
 
-/**
- * Why `invites.restore` refused, as the `code` of its `ConvexError` data: the two codes
- * `create` also uses (`alreadyMember`, `alreadyInvited`, with the same data), `windowPassed`,
- * `expired` (the invite's 14 days are over), and `leaguesGone` (a league of the invite no longer
- * exists in the organization).
- */
 export type InviteRestoreCode =
   'alreadyMember' | 'alreadyInvited' | 'windowPassed' | 'expired' | 'leaguesGone';
 
-/** A restore refusal that is not about a field: the `data` of the `ConvexError`. */
 export interface InviteRestoreError {
   code: 'windowPassed' | 'expired' | 'leaguesGone';
   message: string;
@@ -57,15 +43,13 @@ export const INVITE_MESSAGES = {
     'A league on this invite no longer exists. Invite this address again with the leagues you want.',
 } as const;
 
-/** The address as stored and compared: trimmed and lower case (Better Auth stores it that way). */
+// Better Auth stores addresses trimmed and in lower case.
 export function normaliseInviteEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** One `@`, text on both sides, and a dot in the domain, with no spaces. */
 const SHAPE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
-/** The address to store (normalised), or the refusal. */
 export function checkInviteEmail(
   email: string,
 ): { ok: true; email: string } | { ok: false; error: InviteInputError } {
@@ -85,7 +69,6 @@ export function checkInviteEmail(
   return { ok: true, email: normalised };
 }
 
-/** The refusal when a league organizer has no league chosen, or `null`. */
 export function checkInviteLeagues(leagueCount: number): InviteInputError | null {
   return leagueCount === 0
     ? { field: 'leagues', code: 'leaguesEmpty', message: INVITE_MESSAGES.leaguesEmpty }

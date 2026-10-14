@@ -6,9 +6,6 @@ import schema from './schema';
 import { modules } from './test.setup';
 import * as users from './users';
 
-// `users.me` (#62): the caller's own name for "Signed in as <name>", `null` with no identity, and
-// no argument that could name another user. Identities are faked the way ADR 0008 "Testing" shows.
-
 const asUser = (authUserId: string, name: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -55,7 +52,6 @@ describe('users.me', () => {
     const exported = users.me as unknown as { exportArgs(): string; isPublic?: boolean };
     expect(JSON.parse(exported.exportArgs())).toEqual({ type: 'object', value: {} });
     expect(exported.isPublic).toBe(true);
-    // An extra argument is refused by the validator, not ignored.
     const t = await seedUsers();
     await expect(
       t
