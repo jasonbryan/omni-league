@@ -215,8 +215,8 @@ export const AREAS = [
     specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE],
   },
   {
-    // The season page shows the league page's sidebar and builds its links from its paths, and the
-    // league page's rows link to it.
+    // The season page builds its links from the league page's paths, and the league page's rows link
+    // to it.
     name: 'public league page',
     test: inDir('src/app/organizations/public-league/'),
     specs: [...LEAGUE_PAGE, ...SEASON_PAGE],
@@ -297,7 +297,6 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    // The season page reads the organization's header for its sidebar.
     specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, SESSION],
   },
   {
