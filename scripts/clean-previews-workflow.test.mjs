@@ -277,10 +277,8 @@ describe('clean-previews workflow scripts, executed', () => {
     const subject = `feat: x ${numbers.map((n) => `(#${n})`).join(' ')}`;
     const kept = numbers.slice(-20);
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(subject)), pr(...kept));
-    // Across commits: the newest commit's numbers come last and win.
     const commits = numbers.map((n) => `fix: c${n} (#${n})`);
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(...commits)), pr(...kept));
-    // The PR number need not be the highest: the last match is kept, counted at its last place.
     const lowLast = `feat: y ${[...numbers, 5].map((n) => `(#${n})`).join(' ')}`;
     assert.equal(run({ GITHUB_EVENT_NAME: 'push' }, push(lowLast)), pr(5, ...numbers.slice(11)));
   });

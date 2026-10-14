@@ -45,7 +45,6 @@ function appCompilerOptions() {
   return ts.parseJsonConfigFileContent(config, ts.sys, ROOT).options;
 }
 
-// Packages (`node_modules`) are not followed. Spec files are not entries.
 function edgeGraph() {
   const options = appCompilerOptions();
   const entries = readdirSync(SRC)

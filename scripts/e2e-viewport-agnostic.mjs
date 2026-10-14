@@ -24,7 +24,6 @@ export const FORBIDDEN = {
   focus: ['toBeFocused', 'tabKey', 'activeElement', "'Tab'", "'Shift+Tab'"],
 };
 
-// Counted as the names `'Tab'` and `'Shift+Tab'`, quotes included.
 const TAB_KEYS = new Set(['Tab', 'Shift+Tab']);
 
 const TAG_TEXT = '@viewport-agnostic';
@@ -48,7 +47,6 @@ export function sourceFiles(dir) {
 const isFunctionLike = (node) =>
   ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node);
 
-// `import { expectAccessible as a11y }` counts as `expectAccessible`.
 function identifiersIn(node, aliases = new Map()) {
   const names = [];
   const visit = (child) => {
@@ -75,8 +73,6 @@ function importAliases(parsed) {
   return aliases;
 }
 
-// `const tag = VIEWPORT_AGNOSTIC` and `const tag = { ...VIEWPORT_AGNOSTIC }` carry the tag too,
-// matched by name across all files.
 function tagNames(parsed, aliases) {
   const tags = new Set([TAG_IDENTIFIER]);
   const declarations = [];
@@ -124,7 +120,6 @@ function namedFunctions(sourceFile, aliases) {
     ) {
       functions.set(node.name.text, identifiersIn(node.initializer, aliases));
     } else if (ts.isMethodDeclaration(node) && ts.isIdentifier(node.name) && node.body) {
-      // An object or class method: `const page = { async scan(p) { … } }`, called as `page.scan(p)`.
       functions.set(node.name.text, identifiersIn(node.body, aliases));
     } else if (
       ts.isPropertyAssignment(node) &&
@@ -180,8 +175,6 @@ function isHook(node) {
   return ts.isPropertyAccessExpression(callee) && HOOK_NAMES.has(callee.name.text);
 }
 
-// A tag nested inside another tagged scope is covered by the outer one. A scope's callbacks are its
-// own and those of the hooks that run around it.
 function taggedScopes(sourceFile, tags, aliases) {
   const hooks = [];
   const collect = (node) => {

@@ -40,9 +40,9 @@ export function seedDemoCalls(previewOriginPattern) {
   ];
 }
 
-// Node strips the types of that one constant file. The repo's package.json has no `type`, so Node
-// warns `MODULE_TYPELESS_PACKAGE_JSON` when it reparses the file as a module; only that warning is
-// held back, for this one import.
+// Node strips the types of convex/lib/previewOrigin.ts, a file of one constant. The repo's
+// package.json has no `type`, so Node warns `MODULE_TYPELESS_PACKAGE_JSON` when it reparses the file
+// as a module; only that warning is held back, for this one import.
 export async function previewOriginPattern() {
   const emitWarning = process.emitWarning;
   process.emitWarning = function (warning, ...rest) {

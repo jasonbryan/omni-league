@@ -265,7 +265,6 @@ export const AREAS = [
   {
     name: 'offline views',
     test: inDir('src/app/offline/'),
-    // The league page's and the season page's saved-copy note and not-saved view.
     specs: [
       'offline',
       'offline-note-height',
@@ -282,7 +281,6 @@ export const AREAS = [
     specs: ['install', 'pwa', 'pwa-kill-switch', SESSION],
   },
 
-  // Convex modules that e2e specs exercise through the app or through `convexRun`.
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
@@ -372,7 +370,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       sessionSpecs: () => deriveSessionSpecs(join(import.meta.dirname, '..')),
     });
   } catch (error) {
-    // Cannot tell what changed: the full suite runs.
     process.stderr.write(`e2e-affected: ${error instanceof Error ? error.message : error}\n`);
     selection = { scope: 'full' };
   }

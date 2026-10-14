@@ -125,8 +125,6 @@ function buildKit() {
   });
 }
 
-// The directories and the build step are parameters so a test can run this on a fixture with a fake
-// build.
 export async function main(
   argv,
   {

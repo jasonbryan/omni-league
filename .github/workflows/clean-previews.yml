@@ -65,7 +65,6 @@ jobs:
               # Only the first line of each commit message, and only digits from it, are used.
               nums="$(jq -r '(.commits // [])[].message | split("\n")[0]' "$GITHUB_EVENT_PATH" \
                 | grep -oE '\(#[1-9][0-9]*\)' | tr -d '(#)' || true)"
-              # A number of 10 or more digits is no PR number.
               for big in $(printf '%s\n' "$nums" | grep -E '^[0-9]{10,}$' || true); do
                 echo "::notice title=Skipped an oversized number::(#${big:0:12}...) in a commit subject is too long to be a PR number, so it was skipped."
               done

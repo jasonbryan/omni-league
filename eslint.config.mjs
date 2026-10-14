@@ -47,7 +47,6 @@ export default defineConfig([
     '.claude/worktrees/',
   ]),
 
-  // Root tooling files are typed by tsconfig.tooling.json.
   {
     files: ['**/*.{ts,mts,cts}'],
     extends: [

@@ -18,7 +18,6 @@ function fail(message) {
   process.exit(1);
 }
 
-// The environment wins over .env.local, which `npx convex dev` writes.
 let url = process.env.CONVEX_URL || null;
 let source = 'environment';
 const envFile = join(root, '.env.local');

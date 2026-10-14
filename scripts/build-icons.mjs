@@ -26,7 +26,6 @@ const MASTER_HEADINGS = {
   favicon: 'Favicon (16, 32, 48)',
 };
 
-// `rounded` art has transparent corners; the others fill the whole square.
 export const ICONS = [
   { path: 'public/icons/icon-192.png', source: 'any', size: 192, rounded: true, maskable: false },
   { path: 'public/icons/icon-512.png', source: 'any', size: 512, rounded: true, maskable: false },

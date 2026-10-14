@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Safe to re-run: `--force` updates an existing label in place.
 set -euo pipefail
 
 label() { gh label create "$1" --color "$2" --description "$3" --force; }

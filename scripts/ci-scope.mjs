@@ -142,7 +142,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     appScripts = deriveAppScripts(join(import.meta.dirname, '..'));
   } catch (error) {
-    // Cannot tell which scripts the build runs: every check runs.
     process.stderr.write(`ci-scope: ${error instanceof Error ? error.message : error}\n`);
   }
   const result = appScripts

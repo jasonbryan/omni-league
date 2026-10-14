@@ -101,7 +101,6 @@ async function filesUnder(dir, extensions) {
 }
 
 describe('focus treatment in the app shell and the vendored sheet', () => {
-  // A plain `rg -n` search, run on the raw source, comments included.
   const HALO = /outline-none|ring-ring\/50|focus-visible:ring-3/;
 
   it("finds only main's focus:outline-none in src/app/shell/ and src/app/ui/sheet/", async () => {
@@ -174,7 +173,6 @@ describe('colour literals in src/', () => {
     const sources = {};
     for (const file of files) sources[file] = await read(file);
     assert.deepEqual(findColourLiterals(sources), []);
-    // Each allowed line still exists exactly once, so the list cannot go stale.
     for (const { file, line } of ALLOWED) {
       const count = sources[file].split('\n').filter((l) => l.trim() === line).length;
       assert.equal(count, 1, `${file}: ${line}`);
@@ -190,12 +188,10 @@ describe('colour literals in src/', () => {
       [assets1.file]: `${assets1.line}\n${assets2.line}\n`,
     };
     assert.deepEqual(findColourLiterals(ok), []);
-    // A second theme-color meta, even identical, exceeds the max count of 1.
     assert.equal(
       findColourLiterals({ ...ok, [html.file]: `${html.line}\n${html.line}\n` }).length,
       1,
     );
-    // A different theme-color meta is not on the list.
     assert.equal(
       findColourLiterals({
         ...ok,
@@ -203,7 +199,6 @@ describe('colour literals in src/', () => {
       }).length,
       1,
     );
-    // An extra hex line in an allowed file, and the same line in another file.
     assert.equal(
       findColourLiterals({
         ...ok,

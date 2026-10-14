@@ -14,8 +14,6 @@ function command(context) {
   return /^\s*command\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/m.exec(body)?.[1];
 }
 
-// PR previews use `--preview-create` (a fresh backend per push); staging uses `--preview-name`, which
-// reuses the `main` deployment and its data.
 const PREVIEW = {
   'deploy-preview': { name: String.raw`\"pr-$REVIEW_ID\"`, flag: '--preview-create' },
   'branch-deploy': { name: String.raw`\"$HEAD\"`, flag: '--preview-name' },
@@ -87,8 +85,9 @@ describe('netlify.toml demo seed', () => {
   });
 });
 
-// Only content-hashed build outputs may be cached for a year; the manifest and the icons keep Netlify's default `max-age=0,
-// must-revalidate`, so a changed icon or name reaches users on the next load.
+// Only content-hashed build outputs may be cached for a year; the manifest and the icons keep
+// Netlify's default `max-age=0, must-revalidate`, so a changed icon or name reaches users on the next
+// load.
 
 function headerRules() {
   return [...toml.matchAll(/^\[\[headers\]\]\s*$([\s\S]*?)(?=^\[|(?![\s\S]))/gm)].map(

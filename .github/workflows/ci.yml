@@ -28,7 +28,6 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
-  # A scheduled run skips `ci` when main is the commit the last successful scheduled run tested.
   # Any failure to look the run up leaves `skip` empty, and `ci` runs the full suite.
   nightly-gate:
     name: nightly-gate
@@ -190,8 +189,6 @@ jobs:
       - name: test:scripts
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.checks == 'true' }}
         run: npm run test:scripts
-      # Anonymous local Convex backend, no secrets: `convex dev --once` downloads the pinned backend
-      # (e2e/support/convex-backend.json), pushes the functions, and runs codegen.
       - name: e2e backend
         id: e2e-backend
         if: ${{ success() && steps.scope.outputs.app == 'true' }}
@@ -222,7 +219,6 @@ jobs:
           fi
           echo "e2e: ${#specs[@]} spec filter(s); none means every spec"
           npm run e2e -- "${specs[@]}"
-      # The Playwright config writes the JSON report this step reads. Always exits 0.
       - name: e2e failures
         id: failures
         if: ${{ !cancelled() && github.event_name == 'schedule' && steps.e2e.outcome == 'failure' }}

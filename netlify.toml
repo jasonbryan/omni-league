@@ -1,5 +1,3 @@
-# SSR runs as the edge function the plugin generates from src/server.ts (netlifyAppEngineHandler).
-
 [build]
   publish = "dist/omni-league/browser"
 
@@ -16,15 +14,13 @@
 [context.branch-deploy]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-name \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\" && npx convex run seed:demo --preview-name \"$HEAD\""
 
-# Production runs no function and no seed, so it has no demo data.
 [context.production]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL"
 
 [[plugins]]
   package = "@netlify/angular-runtime"
 
-# Long-lived browser caching only for content-hashed build outputs. Nothing in public/ may use
-# these names. Every other file keeps Netlify's default `public, max-age=0, must-revalidate`.
+# Nothing in public/ may use these hashed-output names.
 #
 # The web app manifest is a plain file in public/, so a changed name or icon reaches users on the
 # next load. Only its content type is set, so every deploy answers with the manifest media type, not

@@ -385,7 +385,6 @@ describe('seedDemoCalls (seed-demo)', () => {
       ['env', 'set', 'PREVIEW_ORIGIN_PATTERN', pattern],
       ['run', 'seed:demo'],
     ]);
-    // Each call is one runConvex accepts (env set or run), so each goes through the target check.
     for (const args of calls) {
       assert.ok((args[0] === 'env' && args[1] === 'set') || args[0] === 'run', args.join(' '));
     }
@@ -579,7 +578,6 @@ describe('main setup (globalSetup)', () => {
     assert.match(output, /not accepting admin requests/);
     const attempts = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET');
     assert.ok(attempts.length > 2, 'it retried');
-    // The whole 60 s window is used, in waits of at most 5 s.
     assert.equal(
       clock.sleeps.reduce((sum, ms) => sum + ms, 0),
       60_000,

@@ -61,7 +61,6 @@ describe('committed icon files', () => {
 
       it('has the art in the right place', async () => {
         const image = decodePng(await read(icon.path));
-        // Trophy cup and base are white, the background around the top edge is indigo.
         assert.ok(isColor(pixelAt(image, 0.5, 0.39), WHITE), 'cup');
         assert.ok(isColor(pixelAt(image, 0.5, icon.maskable ? 0.676 : 0.713), WHITE), 'base');
         assert.ok(isColor(pixelAt(image, 0.5, 0.05), INDIGO), 'background');

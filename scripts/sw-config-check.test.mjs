@@ -27,7 +27,6 @@ function angularJson({ option = true, inConfiguration = false } = {}) {
   };
 }
 
-// The shape `@angular/build` writes for ngsw-config.json, hashes shortened.
 function ngswJson(overrides = {}) {
   return {
     configVersion: 1,
@@ -310,8 +309,6 @@ describe('serviceWorkerOptionSet', () => {
   });
 });
 
-// The kill switch is one setting: the `serviceWorker` option decides both whether
-// the build writes the worker and whether the app registers it.
 describe('serviceWorkerDefine', () => {
   it('turns registration on exactly when angular.json sets the serviceWorker option', () => {
     assert.equal(serviceWorkerDefine(angularJson()), '--define=__SERVICE_WORKER__=true');
@@ -386,7 +383,6 @@ describe('the repository configuration', () => {
 
   it('npm run build and npm start pass __SERVICE_WORKER__ from the serviceWorker option', async () => {
     const source = await readFile(join(ROOT, 'scripts', 'ng-convex.mjs'), 'utf8');
-    // At the top level, for both commands, from the repository's angular.json.
     assert.match(
       source,
       /^const swDefine = serviceWorkerDefine\(JSON\.parse\(readFileSync\(join\(root, 'angular\.json'\)/m,

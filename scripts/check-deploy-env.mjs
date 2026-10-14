@@ -121,7 +121,6 @@ function redactKey(text) {
   return key ? text.split(key).join('<redacted>') : text;
 }
 
-// Output is captured in memory, never inherited.
 function convexCli(args) {
   const cli = join(import.meta.dirname, '..', 'node_modules', 'convex', 'bin', 'main.js');
   const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
