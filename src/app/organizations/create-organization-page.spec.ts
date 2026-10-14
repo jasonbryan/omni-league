@@ -348,6 +348,17 @@ describe('CreateOrganizationPage', () => {
       expect(url()).toBe(`/app/organizations/${SLUG}`);
     });
 
+    it('replaces the create form in the history, so Back skips it', async () => {
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      await type('name', NAME);
+      await submit();
+      convex.calls[0]?.resolve({ slug: SLUG });
+      await flush();
+      expect(navigate).toHaveBeenCalledExactlyOnceWith(`/app/organizations/${SLUG}`, {
+        replaceUrl: true,
+      });
+    });
+
     it('sends a slug edited by hand, as typed', async () => {
       await type('name', NAME);
       await type('slug', 'abc');

@@ -1,7 +1,3 @@
-// Public league page, offline (#127, #82): tester probe in a real browser against the local
-// backend. A visitor who has viewed pages 1 and 2 goes offline, and the page control follows the
-// saved copies of those pages; a page never viewed has no saved copy, so the page must not claim to
-// show it. One test, chromium-mobile only (ADR 0013, CI minutes); needs the local Convex backend.
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
@@ -49,7 +45,6 @@ test.describe('public league page offline', () => {
         contentType: 'application/json',
       });
 
-    // Online: page 1, then page 2 (each is its own saved copy), then page 1 again.
     await page.goto(path);
     await expect(rows).toHaveText([
       'Season 12',
@@ -69,10 +64,8 @@ test.describe('public league page offline', () => {
     ]);
     await expect(note).toHaveCount(0);
 
-    // Offline: page 1 and page 2 are saved copies.
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
-    // Page 2 is still the live result on screen: no saved-copy note until a saved copy is shown.
     await expect(rows).toHaveText([
       'Season 07',
       'Season 06',
@@ -92,13 +85,11 @@ test.describe('public league page offline', () => {
     await expect(page.getByText('Draft Season')).toHaveCount(0);
     await dump('offline-page-1');
 
-    // A page never viewed has no saved copy: as on a fresh load offline, and as design/mockups/
-    // 82-offline-pages.html says ("a link to a page with its own saved copy opens it; anything else
-    // shows state 2"), the not-saved view shows, not the previous page's rows under `?page=3`.
+    // A page never viewed has no saved copy: as on a fresh load offline, the not-saved view shows,
+    // not the previous page's rows under `?page=3`.
     await pages.getByRole('link', { name: 'Page 3' }).click();
     await expect(page.locator('app-not-saved-view')).toBeVisible({ timeout: 3_000 });
     await expect(rows).toHaveCount(0);
-    // Nothing stays busy, no page control is left to mislead, and "Try again" goes to the page asked for.
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
     await expect(pages).toHaveCount(0);
     await expect(page.locator('app-not-saved-view a')).toHaveAttribute('href', `${path}?page=3`);
