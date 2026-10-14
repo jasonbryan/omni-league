@@ -604,7 +604,7 @@ export async function backfillDivisionFields(
   const backfilled = { seasons: 0, leagueDivisions: 0 };
   const unmigratedSeasons = await ctx.db
     .query('seasons')
-    // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers a missing field; a temporary pass over a small table
+    // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers `format`; a temporary pass over a small table
     .filter((q) => q.neq(q.field('format'), undefined))
     .take(BACKFILL_SCAN_LIMIT);
   for (const season of unmigratedSeasons) {
