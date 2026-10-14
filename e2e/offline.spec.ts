@@ -82,7 +82,7 @@ test.describe('offline note', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await expect.poll(async () => (await note.boundingBox())?.height).toBe(56);
     const noteBox = await status.boundingBox();
-    expect(noteBox).toMatchObject({ y: 56, height: 56 });
+    expect(noteBox).toMatchObject({ y: 65, height: 56 });
     await expect.poll(() => scrollPaddingTop(page)).toBe('128px');
     // The header cancels the same amount on itself (shell.ts).
     expect(

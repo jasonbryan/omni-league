@@ -128,9 +128,8 @@ test.describe('public league page: raw server HTML', () => {
         expect(html, query).toMatch(/data-slot="badge"[^>]*>Beach volleyball<\/span>/);
         expect(html, query).toMatch(/Locations: <\/span>\s*Beta Courts, Alpha Field/);
 
-        expect(html, query).toMatch(
-          /<span\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/span>/,
-        );
+        expect(html, query).not.toContain('aria-label="Open navigation"');
+        expect(html, query).not.toContain(`aria-label="${tenant.name}"`);
 
         const canonical = `${path}?page=2`;
         expect(html, query).toContain(`<title>${LEAGUE} | ${tenant.name} | Omni League</title>`);
@@ -288,7 +287,8 @@ test.describe('public league page: raw server HTML', () => {
         expect(noSpaces(headers['cache-control']), path).toBe(noSpaces(PUBLIC_PAGE_CACHE));
         expect(html, path).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1);
+        expect(html, path).toContain('<nav aria-label="Footer"');
         expect(html, path).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
         expect(html, path).not.toContain('Draft League');
       }
@@ -342,7 +342,7 @@ test.describe('public league page in the browser', () => {
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
         await hydrated(consoleGuard);
-        await expect(page.getByRole('navigation')).toHaveCount(0);
+        await expect(page.getByRole('navigation')).toHaveCount(1);
       },
     );
   });

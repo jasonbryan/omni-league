@@ -88,6 +88,16 @@ async function open(options: { token?: string | null; signedIn?: boolean } = {})
 }
 
 describe('AcceptInvitePage', () => {
+  it('renders in the public layout: top bar and footer, no sidebar', async () => {
+    const { page, flush } = await open();
+    await flush();
+    expect(page.firstElementChild?.tagName).toBe('APP-PUBLIC-LAYOUT');
+    expect(page.querySelectorAll('header')).toHaveLength(1);
+    expect(page.querySelectorAll('footer')).toHaveLength(1);
+    expect(page.querySelector('main#main')).not.toBeNull();
+    expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+  });
+
   describe('no token', () => {
     it('shows the invalid view and never asks getByToken (a bookmarked /invites/accept)', async () => {
       const { page, flush, convex } = await open({ token: null });

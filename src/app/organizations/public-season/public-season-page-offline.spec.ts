@@ -28,12 +28,10 @@ const PATH = `/organizations/${ORG_SLUG}/leagues/${LEAGUE_SLUG}/seasons/summer-2
 
 let client: FakeConvexClient;
 
-const ORG = 'organizations:getPublicPage';
 const SEASON = 'seasons:getPublicPage';
 
 /** The saved-copy allow-list entries' functions and the args the page asks them with. */
 const queries = [
-  { fn: api.organizations.getPublicPage, name: ORG, args: { slug: ORG_SLUG } },
   {
     fn: api.seasons.getPublicPage,
     name: SEASON,
@@ -41,7 +39,7 @@ const queries = [
   },
 ];
 
-/** Saves the two results the page's queries return. */
+/** Saves the result the page's query returns. */
 function plant(results = seasonQueryResults(), savedAt = SAVED_AT): void {
   for (const { fn, name, args } of queries) plantSavedCopy(fn, args, results[name], savedAt);
 }
@@ -111,7 +109,7 @@ describe('PublicSeasonPage offline', () => {
     localStorage.clear();
   });
 
-  it('lists the page’s own query beside the organization header, each with its own returns validator', () => {
+  it('lists the page’s own query with its returns validator', () => {
     const listed = new Set(OFFLINE_SAVED_QUERIES.map((entry) => getFunctionName(entry.query)));
     for (const { name } of queries) expect(listed.has(name), name).toBe(true);
   });
@@ -124,13 +122,10 @@ describe('PublicSeasonPage offline', () => {
       harness = await open(PATH, { socket: 'down' });
     });
 
-    it('shows the season, its details, and the sidebar from the saved copies', () => {
+    it('shows the season, its details, from the saved copies', () => {
       const main = host(harness).querySelector('main');
       expect(text(main?.querySelector('h1'))).toBe('Summer 2027');
       expect(text(main?.querySelector('dl'))).toContain('Jun 6 – Aug 29, 2027');
-      expect(
-        host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]'),
-      ).not.toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
       );
@@ -164,20 +159,6 @@ describe('PublicSeasonPage offline', () => {
     });
   });
 
-  it('dates the note by the older saved copy on screen', async () => {
-    const older = SAVED_AT - 3 * 60 * 60 * 1000;
-    plant();
-    plantSavedCopy(
-      api.organizations.getPublicPage,
-      { slug: ORG_SLUG },
-      seasonQueryResults()[ORG],
-      older,
-    );
-    stubOnLine(false);
-    const harness = await open(PATH, { socket: 'down' });
-    expect(text(note(harness))).toContain(formatSavedTime(older, NOW).text);
-  });
-
   it('online before the first live result: shows the saved copy with no note', async () => {
     plant();
     stubOnLine(true);
@@ -199,16 +180,13 @@ describe('PublicSeasonPage offline', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe(other);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('main nav')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
     });
 
-    it.each([
-      ['the organization', ORG],
-      ['the season', SEASON],
-    ])('offline with %s not saved: shows the not-saved view', async (_, missing) => {
+    it('offline with the season not saved: shows the not-saved view', async () => {
       plant();
-      const query = queries.find((q) => q.name === missing)!;
+      const query = queries.find((q) => q.name === SEASON)!;
       localStorage.removeItem(savedCopyKey(query.fn, query.args));
       stubOnLine(false);
       const harness = await open(PATH, { socket: 'down' });

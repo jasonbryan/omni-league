@@ -32,7 +32,7 @@ import {
   injectQuery,
   skipToken,
 } from '../../core/data/convex';
-import { initials } from '../organization-sidebar';
+import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from './admin-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';

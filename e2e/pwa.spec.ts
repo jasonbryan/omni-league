@@ -484,7 +484,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       'href',
       path,
     );
-    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
     await expectLinksEnabled(page);
     await screenshotsAndAxe(page, testInfo, 'not-saved-offline');
 

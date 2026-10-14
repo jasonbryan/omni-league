@@ -38,7 +38,7 @@ import {
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { ServerErrorView } from '../server-error/server-error-view';
-import { Shell } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 import { ACCEPT_INVITE_PATH } from './capture-invite-token';
 import { InviteAlert } from './invite-alert';
 import { InviteTokenStore } from './invite-token-store';
@@ -93,22 +93,13 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
 }
 
 /**
- * `/invites/accept` (#70), a `RenderMode.Client` route with `Referrer-Policy: no-referrer`,
- * approved in PR #108 (design/mockups/70-accept-invite.html): the app shell with the top bar only.
- * The link is `/invites/accept#<token>`; `captureInviteToken` has already moved the token into
- * `sessionStorage` and taken it out of the URL, so it is in no `returnTo`, address bar, or request
- * URL. The page sends it only as the argument of `invites.getByToken` (live) and `invites.accept`.
- *
- * A signed-out visitor sees the organization and role with sign-up and sign-in links that carry
- * `returnTo=/invites/accept` alone. A signed-in one sees Accept invite; `invites.accept` checks
- * the account email, so a refusal shows the different-email, already-a-member, or error alert,
- * which takes focus. "Sign in with a different account" signs out and opens sign-in with the
- * token still stored. The token is deleted once the invite is accepted, turns out to be unusable, or
- * is refused because the visitor is already a member.
+ * `captureInviteToken` has already moved the token from the link's fragment into `sessionStorage`,
+ * so it is in no `returnTo`, address bar, or request URL; the page sends it only as the argument
+ * of `invites.getByToken` and `invites.accept`.
  */
 @Component({
   selector: 'app-accept-invite-page',
-  imports: [InviteAlert, NgIcon, RouterLink, ServerErrorView, Shell],
+  imports: [InviteAlert, NgIcon, RouterLink, ServerErrorView, PublicLayout],
   providers: [
     provideIcons({
       lucideCheck,
@@ -122,7 +113,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (view() === 'loadFailed') {
         <app-server-error-view [retryHref]="path" />
       } @else {
@@ -368,7 +359,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
           }
         </div>
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class AcceptInvitePage {

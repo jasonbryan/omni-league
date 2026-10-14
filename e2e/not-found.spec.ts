@@ -34,7 +34,8 @@ test.describe('not-found page', () => {
         expect(html, path).toMatch(HOME_LINK);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
         expect(html, path).not.toContain('aria-label="Open navigation"');
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1);
+        expect(html, path).toMatch(/<footer\b[\s\S]*<nav\b[^>]*aria-label="Footer"/);
         expect(html.slice(html.indexOf('<header'), html.indexOf('</header>')), path).toMatch(
           />Sign in<\/a>/,
         );
@@ -359,7 +360,7 @@ test.describe('not-found page', () => {
 
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
     await expect(page.getByRole('button')).toHaveCount(0);
 
     await expectAccessible(page, {
@@ -368,6 +369,10 @@ test.describe('not-found page', () => {
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
         'main a[href="/"]',
+        'footer a[href="/"]',
+        'footer a[href="/app"]',
+        'footer a[href="/app/organizations/new"]',
+        'footer a[href^="/sign-in"]',
       ],
     });
 
