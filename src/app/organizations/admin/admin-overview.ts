@@ -131,7 +131,7 @@ import { OUTLINE_BUTTON } from './button-classes';
                   </p>
                   <a
                     [routerLink]="locationsPath()"
-                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4"
+                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
                     >Add a location<ng-icon
                       name="lucideArrowRight"
                       class="text-base"
@@ -152,7 +152,7 @@ import { OUTLINE_BUTTON } from './button-classes';
                   </p>
                   <a
                     [routerLink]="leaguesPath()"
-                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4"
+                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
                     >Create a league<ng-icon
                       name="lucideArrowRight"
                       class="text-base"
@@ -186,7 +186,7 @@ import { OUTLINE_BUTTON } from './button-classes';
                   </p>
                   <a
                     [routerLink]="staffPath()"
-                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4"
+                    class="mt-2 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
                     >Invite staff<ng-icon
                       name="lucideArrowRight"
                       class="text-base"

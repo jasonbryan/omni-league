@@ -24,6 +24,7 @@ Every screen designs, builds, and tests each of these states that applies: **emp
 
 - Mobile first: build at 360px, then widen. No horizontal scroll at 320px (the axe helper's reflow check, `e2e/support/a11y.ts`).
 - Touch targets are at least 44 by 44 CSS px on touch screens (buttons, inputs, list links, pagination).
+  - `src/styles/base.css` enlarges `data-slot="button"`, `data-slot="input"`, and the rows of check boxes and radio buttons on `pointer: coarse`. Any other link people tap (a sidebar or list link, the title link of a list row) carries `pointer-coarse:min-h-11`; a link inside running text is exempt.
 - On phones, a form taller than the screen keeps its primary action visible (sticky to the bottom of the form).
 - Spacing, radius, and colour come from tokens and the existing Tailwind scale; no one-off values.
 
