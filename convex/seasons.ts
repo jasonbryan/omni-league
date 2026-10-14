@@ -1,7 +1,12 @@
-import { v } from 'convex/values';
+import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireLeagueOrganizer, requireUser } from './lib/access';
-import { checkSeasonFields, firstSeasonError, SEASON_MESSAGES } from './lib/seasonInput';
+import {
+  checkSeasonFields,
+  firstSeasonError,
+  SEASON_MESSAGES,
+  type SeasonInputError,
+} from './lib/seasonInput';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { leagueLocationNames } from './lib/publicLeague';
 import { getSeasonPublicPageReturns, publicSeasonsValidator } from './lib/publicPage';
@@ -9,9 +14,13 @@ import { findLeagueBySlugs, findSeasonBySlugs, seasonSlugsValidator } from './li
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatName, formatValidator, sportName } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
-import { refuse } from './lib/refuse';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
+
+function refuse(error: SeasonInputError): never {
+  // Spread: `ConvexError` data must be a plain object value, which an interface is not.
+  throw new ConvexError({ ...error });
+}
 
 export const create = mutation({
   args: {
