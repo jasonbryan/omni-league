@@ -136,6 +136,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             data-slot="input"
             autocomplete="off"
             [formField]="form.fields.name"
+            (blur)="form.left('name')"
             (input)="nameTyped($event)"
             [attr.aria-describedby]="describedBy('name', 'name-description')"
             [attr.aria-invalid]="form.errors.name() ? 'true' : null"
@@ -174,6 +175,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             spellcheck="false"
             autocapitalize="none"
             [formField]="form.fields.slug"
+            (blur)="form.left('slug')"
             (input)="form.slugEdited.set(true)"
             [attr.aria-describedby]="describedBy('slug', 'slug-description')"
             [attr.aria-invalid]="form.errors.slug() ? 'true' : null"
@@ -226,6 +228,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               data-slot="input"
               autocomplete="off"
               [formField]="form.fields[date.field]"
+              (blur)="form.left(date.field)"
               [attr.aria-describedby]="
                 describedBy(date.field, date.description ? date.id + '-description' : null, date.id)
               "
@@ -348,6 +351,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             data-slot="input"
             autocomplete="off"
             [formField]="form.fields.minimumRosterSize"
+            (blur)="form.left('minimumRosterSize')"
             [attr.aria-describedby]="
               describedBy(
                 'minimumRosterSize',

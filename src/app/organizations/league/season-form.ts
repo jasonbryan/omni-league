@@ -11,6 +11,7 @@ import {
 import { slugify } from '../../../../convex/lib/slugs';
 import { SPORT_FORMATS, type Format, type Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { ShownUntilValid } from '../../core/forms/shown-errors';
 
 export { SEASON_FIELDS };
 export type { SeasonField };
@@ -92,8 +93,8 @@ const EMPTY: SeasonTextModel = {
 /**
  * The state of the create-season form (#125): the signal form for the text fields, the chosen
  * format, the messages each field shows, and the submit sequence. Like `LeagueForm`, errors show
- * after a submit, under their field, and clear once the field is valid; a server refusal about a
- * field shows until that field changes. Typing a name fills Slug with `slugify(name)` until the
+ * under their field when the user leaves a field they changed (`left`) and after a submit, and
+ * clear once the field is valid; a server refusal about a field shows until that field changes. Typing a name fills Slug with `slugify(name)` until the
  * user edits Slug, and choosing a format sets Minimum roster size to the format's minimum, which
  * the organizer may raise. The rules and messages are `convex/lib/seasonInput.ts`, which
  * `seasons.create` applies again. Construct it in an injection context (a component field
@@ -109,7 +110,7 @@ export class SeasonForm {
   readonly alert = signal<SeasonFormAlertKind | null>(null);
 
   private readonly clientErrors: Signal<Partial<Record<SeasonField, SeasonInputError>>>;
-  private readonly shown: Record<SeasonField, WritableSignal<boolean>>;
+  private readonly shown: Record<SeasonField, ShownUntilValid>;
   private readonly serverErrors: Record<SeasonField, WritableSignal<ServerError | null>>;
 
   /** The error each field shows now, or `null`. */
@@ -173,9 +174,24 @@ export class SeasonForm {
       format: () => this.format(),
       minimumRosterSize: () => [this.model().minimumRosterSize, this.format()],
     };
+    // The text fields count as changed when the user typed in them; Slug also when the user typed
+    // in Name, which fills it. Format is a radio group: once chosen it is valid, so leaving it
+    // never shows an error and only a submit does.
+    const changed: Record<SeasonField, () => boolean> = {
+      name: () => this.fields.name().dirty(),
+      slug: () => this.fields.slug().dirty() || this.fields.name().dirty(),
+      startDate: () => this.fields.startDate().dirty(),
+      endDate: () => this.fields.endDate().dirty(),
+      registrationDeadline: () => this.fields.registrationDeadline().dirty(),
+      format: () => false,
+      minimumRosterSize: () => this.fields.minimumRosterSize().dirty(),
+    };
     this.shown = Object.fromEntries(
-      SEASON_FIELDS.map((field) => [field, this.shownUntilValid(field)]),
-    ) as Record<SeasonField, WritableSignal<boolean>>;
+      SEASON_FIELDS.map((field) => [
+        field,
+        new ShownUntilValid(() => this.clientErrors()[field] !== undefined, changed[field]),
+      ]),
+    ) as Record<SeasonField, ShownUntilValid>;
     this.serverErrors = Object.fromEntries(
       SEASON_FIELDS.map((field) => [field, this.untilChanged(sources[field])]),
     ) as Record<SeasonField, WritableSignal<ServerError | null>>;
@@ -183,7 +199,7 @@ export class SeasonForm {
       SEASON_FIELDS.map((field) => [field, this.shownError(field)]),
     ) as Record<SeasonField, Signal<string | null>>;
     this.takenSlug = computed(() =>
-      this.shown.slug() ? null : (this.serverErrors.slug()?.taken ?? null),
+      this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
     );
     this.reservedParts = computed(() => {
       const message = this.errors.slug();
@@ -226,6 +242,12 @@ export class SeasonForm {
     this.slugEdited.set(false);
     this.format.set(null);
     this.chooseOnlyFormat();
+    this.fields().reset();
+  }
+
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  left(field: SeasonField): void {
+    this.shown[field].left();
   }
 
   /**
@@ -242,9 +264,8 @@ export class SeasonForm {
     let firstInvalid: SeasonField | null = null;
     const errors = this.clientErrors();
     for (const field of SEASON_FIELDS) {
-      const invalid = errors[field] !== undefined;
-      this.shown[field].set(invalid);
-      if (invalid) firstInvalid ??= field;
+      this.shown[field].submitted();
+      if (errors[field] !== undefined) firstInvalid ??= field;
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
@@ -291,20 +312,13 @@ export class SeasonForm {
     return { sent: false, alert };
   }
 
-  private shownUntilValid(field: SeasonField): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors()[field] === undefined,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
-  }
-
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {
     return linkedSignal<unknown, ServerError | null>({ source: value, computation: () => null });
   }
 
   private shownError(field: SeasonField): Signal<string | null> {
     return computed(() =>
-      this.shown[field]()
+      this.shown[field].shown()
         ? (this.clientErrors()[field]?.message ?? null)
         : (this.serverErrors[field]()?.text ?? null),
     );

@@ -265,6 +265,79 @@ describe('CreateOrganizationPage', () => {
     });
   });
 
+  describe('checking a field when the user leaves it', () => {
+    beforeEach(() => open());
+
+    async function leave(id: string) {
+      input(id).dispatchEvent(new Event('blur'));
+      await harness.fixture.whenStable();
+    }
+
+    it('shows the error with aria-invalid and aria-describedby once a changed field is left', async () => {
+      await type('slug', 'Coastal-Bend');
+      await leave('slug');
+      expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugInvalid);
+      expect(input('slug').getAttribute('aria-invalid')).toBe('true');
+      expect(input('slug').getAttribute('aria-describedby')).toBe('slug-description slug-error');
+
+      await type('name', 'n'.repeat(108));
+      await leave('name');
+      expect(error('name')).toBe('Use 100 characters or fewer. This name has 108.');
+      expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
+    });
+
+    it('shows nothing while the user types an invalid partial value', async () => {
+      await type('slug', 'Coastal-Bend');
+      expect(error('slug')).toBeNull();
+      expect(input('slug').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+      await leave('name');
+      await leave('slug');
+      expect(error('name')).toBeNull();
+      expect(error('slug')).toBeNull();
+      await submit();
+      expect(error('name')).toBe(ORGANIZATION_MESSAGES.nameEmpty);
+      expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugEmpty);
+    });
+
+    it('clears the error on the keystroke that makes the value valid, with the typed text kept', async () => {
+      await type('slug', 'Coastal-Bend');
+      await leave('slug');
+      await type('slug', SLUG);
+      expect(error('slug')).toBeNull();
+      expect(input('slug').hasAttribute('aria-invalid')).toBe(false);
+      expect(input('slug').value).toBe(SLUG);
+    });
+
+    it('checks a slug that followed the name when Slug is left', async () => {
+      await type('name', 'ab');
+      expect(input('slug').value).toBe('ab');
+      expect(error('slug')).toBeNull();
+      await leave('slug');
+      expect(error('slug')).toBe(ORGANIZATION_MESSAGES.slugInvalid);
+    });
+
+    it('a server refusal about a field shows under it until the field changes', async () => {
+      await type('name', NAME);
+      await submit();
+      convex.calls[0]?.reject(
+        new ConvexError({
+          field: 'slug',
+          code: 'slugTaken',
+          message: ORGANIZATION_MESSAGES.slugTaken(SLUG),
+        }),
+      );
+      await flush();
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another slug.`);
+      await leave('slug');
+      expect(error('slug')).toBe(`${SLUG} is already taken. Choose another slug.`);
+      await type('slug', 'another-slug');
+      expect(error('slug')).toBeNull();
+    });
+  });
+
   describe('submitting (mockup state 11)', () => {
     beforeEach(() => open());
 

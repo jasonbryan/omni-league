@@ -264,6 +264,104 @@ describe('SignUpPage', () => {
     });
   });
 
+  describe('checking a field when the user leaves it', () => {
+    beforeEach(() => open());
+
+    async function leave(id: string) {
+      // A browser fires both; Password and its Show button are checked on `focusout`.
+      input(id).dispatchEvent(new Event('blur'));
+      input(id).dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      await harness.fixture.whenStable();
+    }
+
+    it('shows the error with aria-invalid and aria-describedby once a changed field is left', async () => {
+      await type('email', 'maya.okafor.example.com');
+      await leave('email');
+      expect(error('email')).toBe(MESSAGES.emailMalformed);
+      expect(input('email').getAttribute('aria-invalid')).toBe('true');
+      expect(input('email').getAttribute('aria-describedby')).toBe('email-error');
+    });
+
+    it('shows nothing while the user types an invalid partial value', async () => {
+      await type('email', 'maya');
+      expect(error('email')).toBeNull();
+      expect(input('email').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+      await leave('name');
+      await leave('email');
+      expect(error('name')).toBeNull();
+      expect(error('email')).toBeNull();
+      await submit();
+      expect(error('name')).toBe(MESSAGES.nameEmpty);
+      expect(error('email')).toBe(MESSAGES.emailEmpty);
+    });
+
+    it('clears the error on the keystroke that makes the value valid', async () => {
+      await type('email', 'maya');
+      await leave('email');
+      expect(error('email')).toBe(MESSAGES.emailMalformed);
+      await type('email', EMAIL);
+      expect(error('email')).toBeNull();
+      expect(input('email').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('checks the name, the password, and the 18+ confirmation the same way', async () => {
+      await type('name', 'Maya');
+      await type('name', '  ');
+      await leave('name');
+      expect(error('name')).toBe(MESSAGES.nameEmpty);
+
+      await type('password', 'tenletters');
+      await leave('password');
+      expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
+
+      checkbox().click();
+      checkbox().click();
+      checkbox().dispatchEvent(new Event('blur'));
+      await harness.fixture.whenStable();
+      expect(error('adult')).toBe(MESSAGES.adult);
+      expect(checkbox().getAttribute('aria-invalid')).toBe('true');
+      expect(checkbox().getAttribute('aria-describedby')).toBe('adult-description adult-error');
+    });
+
+    it('does not check the password while focus moves to Show password, and does once it leaves Show', async () => {
+      await type('password', 'tenletters');
+      input('password').dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: showButton() }),
+      );
+      await harness.fixture.whenStable();
+      expect(error('password')).toBeNull();
+      // Tabbing past Show to the 18+ checkbox leaves the Password field and its Show button.
+      showButton().dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: checkbox() }),
+      );
+      await harness.fixture.whenStable();
+      expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
+    });
+
+    it('checks the password when focus moves from it to another field', async () => {
+      await type('password', 'tenletters');
+      input('password').dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: checkbox() }),
+      );
+      await harness.fixture.whenStable();
+      expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
+    });
+
+    it('a server refusal about a field shows under it until the field changes', async () => {
+      await fill();
+      client.nextSignUpError = { status: 422, code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' };
+      await submit();
+      expect(error('email')).toContain('already exists');
+      await leave('email');
+      expect(error('email')).toContain('already exists');
+      await type('email', 'maya.other@example.com');
+      expect(error('email')).toBeNull();
+    });
+  });
+
   describe('submitting', () => {
     it('sends the trimmed values with the 18+ confirmation and goes to /app', async () => {
       await open();

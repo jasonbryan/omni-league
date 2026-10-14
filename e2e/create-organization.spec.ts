@@ -150,6 +150,37 @@ test.describe('create an organization', () => {
     await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
   });
 
+  test('a slug is checked when the user leaves it, and the error clears as they fix it', async ({
+    page,
+  }) => {
+    await signUp(page, newUser('Leave'));
+    await openForm(page);
+
+    // Tabbing through Name without changing it shows nothing; typing a bad slug shows nothing yet.
+    await field(page, 'name').focus();
+    await page.keyboard.press('Tab');
+    await expect(field(page, 'slug')).toBeFocused();
+    await expect(fieldError(page, 'name')).toHaveCount(0);
+    await page.keyboard.type('Bad-Slug');
+    await expect(fieldError(page, 'slug')).toHaveCount(0);
+
+    // Leaving Slug shows the error, linked to the field, and the page passes axe with it shown.
+    await page.keyboard.press('Tab');
+    await expect(fieldError(page, 'slug')).toHaveText(FORMAT_MESSAGE);
+    await expect(field(page, 'slug')).toHaveAttribute('aria-invalid', 'true');
+    await expect(field(page, 'slug')).toHaveAttribute(
+      'aria-describedby',
+      'slug-description slug-error',
+    );
+    await expectAccessible(page, { expectedOrder: FORM_ORDER });
+
+    // Fixing it clears the error on the keystroke that makes the slug valid.
+    await field(page, 'slug').fill('fixed-slug');
+    await expect(fieldError(page, 'slug')).toHaveCount(0);
+    await expect(field(page, 'slug')).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
+  });
+
   test('a whitespace-only and a 101-character name are refused with the field error', async ({
     page,
   }, testInfo) => {

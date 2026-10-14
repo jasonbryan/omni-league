@@ -1,8 +1,3 @@
-// Navigation (#207, ux.md Navigation): after a client-side route change focus moves to
-// `<main id="main">`, and Back skips a form that has been finished (sign-in, sign-up, create an
-// organization), because the app replaces its history entry. Every test signs up or seeds its own
-// user and tenant, so the file needs the local Convex backend and is skipped with E2E_BASE_URL set.
-// The focus tests check focus, so they run at both widths; the Back tests check history only.
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, checkReflow, describeViolations, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -21,6 +16,12 @@ const LEAGUE_SLUG = 'sunday-reverse-coed-4s';
 const mainElement = (page: Page) => page.locator('main#main');
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
+async function expectInViewport(page: Page, locator: Locator) {
+  const top = await locator.evaluate((el) => el.getBoundingClientRect().top);
+  expect(top).toBeGreaterThanOrEqual(-1);
+  expect(top).toBeLessThan(page.viewportSize()!.height);
+}
+
 async function seed() {
   const tenant = await seedTenant({
     name: 'E2E Navigation',
@@ -30,7 +31,6 @@ async function seed() {
   return { tenant, leaguePath: `${tenant.path}/leagues/${LEAGUE_SLUG}` };
 }
 
-/** The admin navigation: the sidebar column at 1280px, the open menu sheet at 360px. */
 async function adminNav(page: Page, organizationName: string): Promise<Locator> {
   if (isDesktop(page)) return page.getByRole('navigation', { name: `${organizationName} admin` });
   await page.getByRole('button', { name: 'Open navigation' }).click();
@@ -39,8 +39,7 @@ async function adminNav(page: Page, organizationName: string): Promise<Locator> 
   return dialog.getByRole('navigation', { name: `${organizationName} admin` });
 }
 
-/** Signs up a user who administers a new seeded organization, and waits on `/app`. */
-async function adminOfNewOrganization(page: Page) {
+async function signUpAsAdminOfNewOrganization(page: Page) {
   const user = newUser('Nav');
   await signUp(page, user);
   const { tenant } = await seed();
@@ -64,7 +63,7 @@ test.describe('focus moves to the page after navigation', () => {
   });
 
   test('from the admin Overview to Locations', async ({ page }) => {
-    const { tenant, base } = await adminOfNewOrganization(page);
+    const { tenant, base } = await signUpAsAdminOfNewOrganization(page);
     await page.goto(base);
     await expect(
       page.getByRole('main').getByRole('heading', { level: 1, name: 'Overview' }),
@@ -79,7 +78,7 @@ test.describe('focus moves to the page after navigation', () => {
   });
 
   test('from Your organizations to the admin Overview', async ({ page }) => {
-    const { tenant, base } = await adminOfNewOrganization(page);
+    const { tenant, base } = await signUpAsAdminOfNewOrganization(page);
     await page
       .getByRole('region', { name: 'Your organizations' })
       .getByRole('link', { name: `Manage ${tenant.name}` })
@@ -110,7 +109,7 @@ test.describe('Back skips a finished form', () => {
       const user = await seedUser();
       const { tenant, leaguePath } = await seed();
       await page.goto(tenant.path);
-      // A public league page is a Server route (ADR 0008): the hand-off after sign-in goes to one.
+      // The sign-in hand-off goes to a Server route, such as a public league page.
       await page.goto(`/sign-in?returnTo=${encodeURIComponent(leaguePath)}`);
       await page.locator('#email').fill(user.email);
       await page.locator('#password').fill(user.password);
@@ -161,7 +160,6 @@ test.describe('Back skips a finished form', () => {
   );
 });
 
-// Where focus must not move on a route change, and the route changes that must move it.
 test.describe('focus on page loads, redirects, and other route changes', () => {
   const activeTag = (page: Page) => page.evaluate(() => document.activeElement?.tagName);
 
@@ -189,11 +187,8 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
     await page.evaluate(() => {
       (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
     });
-    // The top bar's sign-in link is a client-side navigation to another route.
-    await page
-      .getByRole('link', { name: /^Sign in/ })
-      .first()
-      .click();
+    const topBarSignInLink = page.getByRole('link', { name: /^Sign in/ }).first();
+    await topBarSignInLink.click();
     await expect(page).toHaveURL(/\/sign-in/);
     await expect(page.locator('main#main')).toBeFocused();
     expect(
@@ -246,11 +241,7 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
     await expect(page).toHaveURL(`${baseURL}${tenant.path}#locations`);
     await expect(page.getByRole('heading', { level: 2, name: 'Locations' })).toBeVisible();
     await expect(page.locator('main#main')).toBeFocused();
-    const top = await page.locator('#locations').evaluate((el) => el.getBoundingClientRect().top);
-    const height = page.viewportSize()!.height;
-    // The section the fragment names is in view, not scrolled off by the focus move.
-    expect(top).toBeGreaterThanOrEqual(-1);
-    expect(top).toBeLessThan(height);
+    await expectInViewport(page, page.locator('#locations'));
   });
 
   test('main is a landmark with no stray name, and pages reached by navigation pass axe and reflow', async ({
@@ -265,6 +256,7 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
     await expect(page.locator('main#main')).toBeFocused();
     const landmark = page.getByRole('main');
     await expect(landmark).toHaveCount(1);
+    await expect(landmark).toHaveAccessibleName('');
     const results = await axeScan(page);
     expect(describeViolations(results.violations)).toEqual([]);
     expect((await checkReflow(page)).passed).toBe(true);

@@ -20,7 +20,6 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    // After a client-side route change, focus moves to <main> (ux.md, Navigation; #207).
     provideFocusMainAfterNavigation(),
     // A query string the router cannot decode (`?ref=%`) is dropped, as the server handler drops
     // it, so the page stays after hydration instead of the router navigating to `/` (#91).

@@ -32,6 +32,7 @@ import {
 } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../core/data/convex';
+import { ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 import { adminPath } from './admin/admin-path';
 
@@ -85,8 +86,8 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
  * `/app/organizations/new` (#64), a `RenderMode.Client` route behind `requireSignedIn`, approved in
  * design/mockups/64-create-organization.html: Name and Slug. Typing a name fills Slug with
  * `slugify(name)` until the user edits Slug; the public address under Slug follows it. Errors show
- * after a submit, under their field, and clear once the field is valid; focus goes to the first
- * invalid field, or to the form alert for a failure that is not about one field. The first form
+ * under their field when the user leaves a field they changed and after a submit, and clear once
+ * the field is valid; focus goes to the first invalid field, or to the form alert for a failure that is not about one field. The first form
  * that calls a Convex mutation, so it carries the offline refusal of design/mockups/88-offline-note.html
  * (angular.md, State and data). After success the browser lands on the new organization's admin Overview, with its "Get set up" list
  * (#65, decision 5), not on the public page.
@@ -180,6 +181,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     data-slot="input"
                     autocomplete="organization"
                     [formField]="fields.name"
+                    (blur)="left('name')"
                     (input)="nameTyped($event)"
                     [attr.aria-describedby]="describedBy('name', 'name-description')"
                     [attr.aria-invalid]="errors.name() ? 'true' : null"
@@ -233,6 +235,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     spellcheck="false"
                     autocapitalize="none"
                     [formField]="fields.slug"
+                    (blur)="left('slug')"
                     (input)="slugEdited.set(true)"
                     [attr.aria-describedby]="describedBy('slug', 'slug-description')"
                     [attr.aria-invalid]="errors.slug() ? 'true' : null"
@@ -345,10 +348,20 @@ export class CreateOrganizationPage {
     slug: computed(() => checkOrganizationSlug(this.model().slug)?.message ?? null),
   };
 
-  /** Set on a submit for each invalid field; cleared once the field is valid (mockup state 7). */
-  private readonly shown: Record<FieldName, WritableSignal<boolean>> = {
-    name: this.shownUntilValid('name'),
-    slug: this.shownUntilValid('slug'),
+  /**
+   * Whether each field's client error shows: after a submit, or when the user leaves the field
+   * after changing it; cleared once the field is valid (mockup state 7, #205). Slug counts as
+   * changed when the user typed in Name, which fills it.
+   */
+  private readonly shown: Record<FieldName, ShownUntilValid> = {
+    name: new ShownUntilValid(
+      () => this.clientErrors.name() !== null,
+      () => this.fields.name().dirty(),
+    ),
+    slug: new ShownUntilValid(
+      () => this.clientErrors.slug() !== null,
+      () => this.fields.slug().dirty() || this.fields.name().dirty(),
+    ),
   };
 
   /** A server answer about one field, until that field's value changes. */
@@ -365,7 +378,7 @@ export class CreateOrganizationPage {
 
   /** The slug named by the "taken" message while that message is the one Slug shows. */
   protected readonly takenSlug = computed(() =>
-    this.shown.slug() ? null : (this.serverErrors.slug()?.taken ?? null),
+    this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
   );
 
   /**
@@ -389,6 +402,11 @@ export class CreateOrganizationPage {
     return this.errors[field]() ? `${description} ${field}-error` : description;
   }
 
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  protected left(field: FieldName): void {
+    this.shown[field].left();
+  }
+
   /** The user typed in Name: while Slug is untouched it follows (empty name, empty slug). */
   protected nameTyped(event: Event): void {
     if (this.slugEdited()) return;
@@ -405,7 +423,7 @@ export class CreateOrganizationPage {
     let firstInvalid: FieldName | null = null;
     for (const field of FIELDS) {
       const invalid = this.clientErrors[field]() !== null;
-      this.shown[field].set(invalid);
+      this.shown[field].submitted();
       if (invalid) firstInvalid ??= field;
     }
     if (firstInvalid) {
@@ -429,7 +447,6 @@ export class CreateOrganizationPage {
       this.showFailure(failure, slug);
       return;
     }
-    // replaceUrl: Back from the new organization skips the create form (#207).
     await this.router.navigateByUrl(adminPath(slug), { replaceUrl: true });
     this.submitting.set(false);
   }
@@ -461,20 +478,15 @@ export class CreateOrganizationPage {
     afterNextRender(() => inputs[field]().nativeElement.focus(), { injector: this.injector });
   }
 
-  private shownUntilValid(field: FieldName): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors[field]() === null,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
-  }
-
   private untilChanged(value: () => unknown): WritableSignal<ServerError | null> {
     return linkedSignal<unknown, ServerError | null>({ source: value, computation: () => null });
   }
 
   private shownError(field: FieldName): Signal<string | null> {
     return computed(() =>
-      this.shown[field]() ? this.clientErrors[field]() : (this.serverErrors[field]()?.text ?? null),
+      this.shown[field].shown()
+        ? this.clientErrors[field]()
+        : (this.serverErrors[field]()?.text ?? null),
     );
   }
 }

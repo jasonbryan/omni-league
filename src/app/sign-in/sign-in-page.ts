@@ -10,7 +10,6 @@ import {
   signal,
   viewChild,
   type Signal,
-  type WritableSignal,
 } from '@angular/core';
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -19,6 +18,7 @@ import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
 import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
+import { ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 
 /**
@@ -67,9 +67,9 @@ interface FormAlert {
 
 /**
  * `/sign-in` (#63), a `RenderMode.Client` route, approved in #96 (design/mockups/63-sign-in.html):
- * email and password with a Show control beside the password. Errors show after a submit, under
- * their field (`aria-invalid`, `aria-describedby`), and each clears once its field is valid; focus
- * goes to the first invalid field, or to the form alert for an answer from the server. A wrong
+ * email and password with a Show control beside the password. Errors show under their field
+ * (`aria-invalid`, `aria-describedby`) when the user leaves a field they changed, and after a
+ * submit for every invalid field; each clears once its field is valid; focus goes to the first invalid field, or to the form alert for an answer from the server. A wrong
  * password and an address with no account get the same alert, with neither field marked invalid,
  * so the page reveals nothing about which addresses exist; the entered values stay. After sign-in
  * the browser goes to the validated `returnTo`, else `/app`.
@@ -149,6 +149,7 @@ interface FormAlert {
                   spellcheck="false"
                   autocapitalize="none"
                   [formField]="fields.email"
+                  (blur)="left('email')"
                   [attr.aria-describedby]="describedBy('email')"
                   [attr.aria-invalid]="errors.email() ? 'true' : null"
                   [attr.data-invalid]="errors.email() ? 'true' : null"
@@ -196,6 +197,7 @@ interface FormAlert {
                     autocapitalize="none"
                     [type]="showPassword() ? 'text' : 'password'"
                     [formField]="fields.password"
+                    (blur)="left('password')"
                     [attr.aria-describedby]="describedBy('password')"
                     [attr.aria-invalid]="errors.password() ? 'true' : null"
                     [attr.data-invalid]="errors.password() ? 'true' : null"
@@ -310,8 +312,11 @@ export class SignInPage {
     password: computed(() => this.fields.password().errors()[0]?.message ?? null),
   };
 
-  /** Set on a submit for each invalid field; cleared once the field is valid (mockup state 3). */
-  private readonly shown: Record<FieldName, WritableSignal<boolean>> = {
+  /**
+   * Whether each field's client error shows: after a submit, or when the user leaves the field
+   * after changing it; cleared once the field is valid (mockup state 3, #205).
+   */
+  private readonly shown: Record<FieldName, ShownUntilValid> = {
     email: this.shownUntilValid('email'),
     password: this.shownUntilValid('password'),
   };
@@ -325,9 +330,9 @@ export class SignInPage {
   /** The error each field shows now, or `null`. */
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
     email: computed(() =>
-      this.shown.email() ? this.clientErrors.email() : this.serverEmailError(),
+      this.shown.email.shown() ? this.clientErrors.email() : this.serverEmailError(),
     ),
-    password: computed(() => (this.shown.password() ? this.clientErrors.password() : null)),
+    password: computed(() => (this.shown.password.shown() ? this.clientErrors.password() : null)),
   };
 
   private readonly emailInput = viewChild.required<ElementRef<HTMLInputElement>>('email');
@@ -339,6 +344,11 @@ export class SignInPage {
     return this.errors[field]() ? `${field}-error` : null;
   }
 
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  protected left(field: FieldName): void {
+    this.shown[field].left();
+  }
+
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
     if (this.submitting()) return;
@@ -347,9 +357,8 @@ export class SignInPage {
 
     let firstInvalid: FieldName | null = null;
     for (const field of FIELDS) {
-      const invalid = this.clientErrors[field]() !== null;
-      this.shown[field].set(invalid);
-      if (invalid) firstInvalid ??= field;
+      this.shown[field].submitted();
+      if (this.clientErrors[field]() !== null) firstInvalid ??= field;
     }
     if (firstInvalid) {
       this.focusAfterRender(firstInvalid);
@@ -361,7 +370,6 @@ export class SignInPage {
     const result = await this.auth.signIn({ email: email.trim(), password });
     this.submitting.set(false);
     if (result.ok) {
-      // replaceUrl: the finished form leaves no history entry, so Back skips it (#207).
       await this.router.navigateByUrl(afterAuthUrl(this.returnTo), { replaceUrl: true });
       return;
     }
@@ -413,10 +421,10 @@ export class SignInPage {
     );
   }
 
-  private shownUntilValid(field: FieldName): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors[field]() === null,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
+  private shownUntilValid(field: FieldName): ShownUntilValid {
+    return new ShownUntilValid(
+      () => this.clientErrors[field]() !== null,
+      () => this.fields[field]().dirty(),
+    );
   }
 }
