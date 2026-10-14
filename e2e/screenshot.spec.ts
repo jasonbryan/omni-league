@@ -10,7 +10,6 @@ const routes = (process.env['E2E_SCREENSHOT_ROUTES'] ?? '/')
   .map((route) => route.trim())
   .filter(Boolean);
 
-/** `/` -> `home`; `/leagues/abc?x=1` -> `leagues-abc-x-1`. */
 function routeSlug(route: string): string {
   const slug = route
     .replace(/^\/+|\/+$/g, '')

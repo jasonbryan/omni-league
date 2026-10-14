@@ -33,21 +33,9 @@ function withoutFragment(url: string): string {
 }
 
 /**
- * A test fails on any uncaught page error (`pageerror`), any `console` message of type `error`
- * (NG0500 to NG0504 included), and any of type `warning`. Angular's development warnings come with
- * a code (`NG0505`) and without one (`Unexpected state: no hydration info available …`), so no text
- * rule tells them apart from other warnings, and every warning counts. `log` and `info` are ignored
- * (they are kept only for the hydration assertion).
- *
- * Three opt-in, per-test allowances (see the fixture options in `fixtures.ts`):
- * - `expectedDocumentStatus: 404` ignores exactly the main document's own 404 resource message;
- * - `expectedConvexErrors` ignores `[CONVEX M(<name>)] ` / `[CONVEX A(<name>)] ` for listed names,
- *   and fails the test if a listed name never produced such a message;
- * - `expectedFailedRequests` ignores the resource message of a request with a listed status and URL
- *   path, and fails the test if a listed request never produced one;
- * - `expectedConsoleWarnings` ignores a warning that starts with a listed string or matches a
- *   listed RegExp, and fails the test if an entry matched no warning. Each entry needs a one-line
- *   why at the call site.
+ * Angular's development warnings come with a code (`NG0505`) and without one (`Unexpected state: no
+ * hydration info available …`), so no text rule tells them apart from other warnings, and every
+ * warning counts. `log` and `info` are ignored (they are kept only for the hydration assertion).
  *
  * A test that skips itself after `test.use()` (for example a local-only test on a remote run) is
  * not failed for unused allowances of any kind.

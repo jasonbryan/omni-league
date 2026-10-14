@@ -9,7 +9,6 @@ export const LOCAL_PORT = 4000;
 export const LOCAL_BASE_URL = `http://localhost:${LOCAL_PORT}`;
 /** The anonymous local Convex backend; version and ports live in `convex-backend.json`. */
 export const LOCAL_CONVEX_URL = `http://127.0.0.1:${convexBackend.cloudPort}`;
-/** Its HTTP-action URL, which the Better Auth client calls. */
 export const LOCAL_CONVEX_SITE_URL = `http://127.0.0.1:${convexBackend.sitePort}`;
 
 const rawBaseUrl = process.env['E2E_BASE_URL'];

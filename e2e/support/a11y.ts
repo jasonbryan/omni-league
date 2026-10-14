@@ -294,12 +294,9 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
   const maxSteps = options.maxSteps ?? domOrder.length * 2 + 5 + multiPartFields * 10;
   const same = (a: StepInfo | undefined, b: StepInfo): boolean =>
     !!a && a.where === 'element' && a.index === b.index && a.description === b.description;
-  // Phase "before": from the start marker until focus first leaves the page. A fresh Tab sequence
-  // starts there, so positive tabindex values are seen in the order the browser really uses.
-  // Phase "cycle": one full round, recorded, until focus leaves the page again.
-  // Phase "return": the next Tab must land on the first element of the round.
-  // A browser that wraps from the last element to the first without leaving the page completes
-  // its round in phase "before" instead.
+  // A fresh Tab sequence starts once focus first leaves the page, so positive tabindex values are
+  // seen in the order the browser really uses. A browser that wraps from the last element to the
+  // first without leaving the page completes its round in phase "before".
   let phase: 'before' | 'cycle' | 'return' = 'before';
   const before: StepInfo[] = [];
   let cycle: StepInfo[] = [];
