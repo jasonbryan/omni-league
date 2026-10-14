@@ -157,7 +157,6 @@ describe('PublicSeasonPage server render', () => {
 
     // One fetch per query, with the route's slugs only.
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
-      { name: 'organizations:getPublicPage', args: { slug: 'gulf-coast-sport-social' } },
       { name: 'seasons:getPublicPage', args: slugs },
     ]);
     expect(responseInit.status).toBeUndefined(); // 200
@@ -214,8 +213,7 @@ describe('PublicSeasonPage server render', () => {
   });
 
   it.each([
-    ['a null season (a draft, or an unknown one)', { season: null }],
-    ['an unknown organization', { organization: null, season: null }],
+    ['a null season (a draft, or an unknown organization, league, or season)', { season: null }],
   ])(
     'renders the not-found view in the public layout with status 404 and the public Cache-Control for %s',
     async (_label, options) => {
@@ -258,7 +256,7 @@ describe('PublicSeasonPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
   });
 
-  for (const failing of ['seasons:getPublicPage', 'organizations:getPublicPage']) {
+  for (const failing of ['seasons:getPublicPage']) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
       const { html, body, head, responseInit } = await render(
         `${SEASON_PATH}?ott=SECRET`,

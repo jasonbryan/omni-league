@@ -21,7 +21,6 @@ async function openAdminOverview(page: Page): Promise<void> {
   });
   await page.goto(`/app/organizations/${tenant.slug}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
-  // The admin area is a Client route: the browser renders it, so there is no hydration log to wait for.
   await expect(menuButton(page)).toBeVisible();
 }
 
@@ -46,9 +45,6 @@ const menuButton = (page: Page) => page.getByRole('button', { name: 'Open naviga
 test.describe('the phone sheet on the admin area', () => {
   test.skip(({ isMobile }) => !isMobile, 'the phone sheet runs at phone widths only');
 
-  // The first press creates the sheet on the loaded page. In a development build that
-  // creation logged "no hydration info available for a given TNode" while the shell's template
-  // held a view container; the console fixture fails the test on any warning.
   test('320: the first press on the loaded page opens it with no console warning', async ({
     page,
   }) => {
@@ -60,9 +56,6 @@ test.describe('the phone sheet on the admin area', () => {
     expect(await page.locator('app-shell-sheet').count()).toBe(0);
   });
 
-  // The sheet is created outside the shell's template. A navigation that replaces the page
-  // while the sheet is open leaves no dialog, scrim, or scroll block on the next page. That the
-  // shell destroys the sheet's ComponentRef is asserted in shell.spec.ts.
   test('a navigation away while it is open leaves no overlay or scroll block', async ({ page }) => {
     await openAdminOverview(page);
     await makeTall(page);
@@ -90,11 +83,6 @@ test.describe('the phone sheet on the admin area', () => {
     expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
   });
 
-  // The sheet opens and closes while the offline note shows. The sheet's chunk is
-  // loaded by a first press while online, because `setOffline` blocks every request, the chunk's
-  // included. The sheet is created outside the shell's template, so the note above it (a sibling
-  // of the top bar) must stay where it is, and the sheet must still open at 288px with focus on
-  // Close, close on Escape, and return focus to the menu button.
   test('opens and closes while the offline note shows, with no console warning', async ({
     page,
     context,
@@ -103,6 +91,7 @@ test.describe('the phone sheet on the admin area', () => {
     const sheet = dialogOf(page).locator('[data-slot="sheet-content"]');
     const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
 
+    // The first press loads the sheet's chunk while online: setOffline blocks that request too.
     await activate(page, menuButton(page));
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
@@ -122,7 +111,6 @@ test.describe('the phone sheet on the admin area', () => {
     await expect(note).toBeVisible();
     expect(await note.boundingBox()).toEqual(noteBefore);
     expect(await page.locator('app-shell-sheet').count()).toBe(0);
-    // The tab walk of expectAccessible does not apply to an open modal: axe only.
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
 
     await page.keyboard.press('Escape');
@@ -140,5 +128,40 @@ test.describe('the phone sheet on the admin area', () => {
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialogOf(page)).toHaveCount(0);
+  });
+
+  test('keeps Tab inside the open sheet, and closing it leaves the page scrolled where it was', async ({
+    page,
+  }) => {
+    await openAdminOverview(page);
+    await makeTall(page);
+    await page.evaluate(() => window.scrollTo(0, 300));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(300);
+    const close = dialogOf(page).getByRole('button', { name: 'Close navigation' });
+    const closers: [string, () => Promise<void>][] = [
+      ['Escape', () => page.keyboard.press('Escape')],
+      ['Close', () => activate(page, close)],
+      ['the scrim', () => page.touchscreen.tap(340, 400)],
+    ];
+    for (const [how, closeSheet] of closers) {
+      await activate(page, menuButton(page));
+      await expect(close).toBeFocused();
+      await closeSheet();
+      await expect(dialogOf(page), how).toHaveCount(0);
+      await expect(menuButton(page), how).toBeFocused();
+      expect(await page.evaluate(() => window.scrollY), how).toBe(300);
+    }
+
+    await activate(page, menuButton(page));
+    await expect(close).toBeFocused();
+    const insideDialog = () =>
+      page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+    const stops = (await dialogOf(page).locator('a[href], button').count()) + 2;
+    for (const key of ['Tab', 'Shift+Tab']) {
+      for (let i = 0; i < stops; i++) {
+        await page.keyboard.press(key);
+        expect(await insideDialog(), `${key} #${i + 1}`).toBe(true);
+      }
+    }
   });
 });

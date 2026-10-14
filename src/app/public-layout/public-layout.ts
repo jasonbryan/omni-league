@@ -23,9 +23,6 @@ const FOOTER_LINK_CLASSES =
  * Nothing here depends on the visitor: the server HTML is cached by the CDN, so "Sign in" and the
  * account link come from `TopBarAccount`, which shows the account link only in the browser, and
  * the query string stays out of the HTML (`skipLinkHref`).
- *
- * `--top-bar-h` is the top bar's 64px plus its 1px border; the offline note sticks below it.
- * `[&_a]:min-h-11` raises `TopBarAccount`'s links to 44px on a phone without changing that component.
  */
 @Component({
   selector: 'app-public-layout',
@@ -40,10 +37,7 @@ const FOOTER_LINK_CLASSES =
       >Skip to main content</a
     >
     <div class="flex min-h-dvh flex-col bg-card [--top-bar-h:calc(4rem+1px)]">
-      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css, which adds the
-           offline note's height, --offline-note-h) on the header and everything in it, as in the
-           app shell: the header is always in view, so focusing one of its controls must not
-           scroll the page. -->
+      <!-- The header is always in view, so focusing one of its controls must not scroll the page. -->
       <header
         class="sticky top-0 z-30 border-b border-border bg-card [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
       >

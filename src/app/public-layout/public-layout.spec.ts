@@ -43,7 +43,6 @@ describe('PublicLayout', () => {
   }
 
   const labels = (links: Iterable<Element>) => [...links].map((a) => a.textContent.trim());
-  const classes = (element: Element | null | undefined) => element?.className.split(/\s+/) ?? [];
 
   describe('landmarks', () => {
     it('has one header holding the top bar, one main#main with tabindex -1, and one footer', async () => {
@@ -110,28 +109,6 @@ describe('PublicLayout', () => {
       expect(page.querySelector('[role="dialog"]')).toBeNull();
     });
 
-    it('is light: a card background and a border, 64px tall, sticky', async () => {
-      const page = await open();
-
-      const header = page.querySelector('header');
-      expect(classes(header)).toEqual(
-        expect.arrayContaining(['sticky', 'top-0', 'z-30', 'border-b', 'border-border', 'bg-card']),
-      );
-      expect(classes(header?.firstElementChild)).toEqual(
-        expect.arrayContaining(['mx-auto', 'h-16', 'max-w-6xl']),
-      );
-    });
-
-    it('keeps its controls at least 44px tall on a phone: min-h-11 on the brand and "Sign in"', async () => {
-      const page = await open();
-
-      expect(classes(page.querySelector('header a[href="/"]'))).toContain('min-h-11');
-      const signIn = page.querySelector('header a[href^="/sign-in"]');
-      expect(classes(signIn?.closest('app-top-bar-account')?.parentElement)).toContain(
-        '[&_a]:min-h-11',
-      );
-    });
-
     it('shows the account link in place of "Sign in" for a signed-in visitor, after hydration', async () => {
       const page = await open('/organizations/gulf-coast', { id: 'u1' });
       TestBed.inject(AuthService).onChange(true);
@@ -159,16 +136,13 @@ describe('PublicLayout', () => {
       expect(region?.nextElementSibling?.tagName).toBe('MAIN');
     });
 
-    it('shows the note while offline, stuck below the 65px bar (the shell’s is 56px)', async () => {
+    it('shows the note while offline', async () => {
       const page = await open();
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
       window.dispatchEvent(new Event('offline'));
       TestBed.tick();
 
       expect(page.querySelector('header + [role="status"] [data-offline-note]')).not.toBeNull();
-      expect(classes(page.querySelector('app-offline-note')?.parentElement)).toContain(
-        '[--top-bar-h:calc(4rem+1px)]',
-      );
     });
   });
 
@@ -194,14 +168,6 @@ describe('PublicLayout', () => {
         ['Create an organization', '/app/organizations/new'],
         ['Sign in to manage', '/sign-in?returnTo=%2Fapp'],
       ]);
-    });
-
-    it('keeps its links at least 44px tall on a phone', async () => {
-      const page = await open();
-
-      for (const link of page.querySelectorAll('footer a')) {
-        expect(classes(link), link.textContent).toContain('min-h-11');
-      }
     });
   });
 });

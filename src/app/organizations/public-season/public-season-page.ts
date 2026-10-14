@@ -52,9 +52,6 @@ export class PublicSeasonPage {
     { requireSync: true },
   );
 
-  private readonly organization = injectQuery(api.organizations.getPublicPage, () => ({
-    slug: this.orgSlug(),
-  }));
   private readonly season = injectQuery(api.seasons.getPublicPage, () => ({
     orgSlug: this.orgSlug(),
     leagueSlug: this.leagueSlug(),
@@ -67,32 +64,21 @@ export class PublicSeasonPage {
     publicSeasonPath(this.orgSlug(), this.leagueSlug(), this.seasonSlug()),
   );
 
-  /** Either failed, including a missing Convex URL; never its message (adapter README). */
-  private readonly failed = computed(
-    () => this.organization.error() !== undefined || this.season.error() !== undefined,
-  );
+  /** Failed, including a missing Convex URL; never its message (adapter README). */
+  private readonly failed = computed(() => this.season.error() !== undefined);
 
-  /** The organization and the season, once found and both arrived. */
   protected readonly view = computed((): PublicSeasonView | undefined => {
     if (this.failed()) return undefined;
-    const organization = this.organization.value();
     const season = this.season.value();
-    if (!organization || !season) return undefined;
-    return { organization, season };
+    return season ? { season } : undefined;
   });
 
-  /** When the older saved copy on screen was saved, only while offline (the note is hidden online). */
-  protected readonly savedAt = computed(() => {
-    if (this.online()) return undefined;
-    const times = [this.organization.savedAt(), this.season.savedAt()].filter(
-      (time) => time !== undefined,
-    );
-    return times.length > 0 ? Math.min(...times) : undefined;
-  });
+  /** When the saved copy on screen was saved, only while offline (the note is hidden online). */
+  protected readonly savedAt = computed(() => (this.online() ? undefined : this.season.savedAt()));
 
   protected readonly state = computed(() => {
     if (this.view()) return 'page';
-    if (this.season.value() === null || this.organization.value() === null) return 'not-found';
+    if (this.season.value() === null) return 'not-found';
     if (this.failed()) return 'error';
     // Offline with nothing to show (never on the server, where `online` is always true).
     if (!this.online()) return 'not-saved';

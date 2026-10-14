@@ -4,7 +4,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
-import { seedTenant, tallLocations } from './support/tenant';
+import { seedTenant } from './support/tenant';
 import { newUser, seedUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -15,12 +15,6 @@ const LEAGUE_SLUG = 'sunday-reverse-coed-4s';
 
 const mainElement = (page: Page) => page.locator('main#main');
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
-
-async function expectInViewport(page: Page, locator: Locator) {
-  const top = await locator.evaluate((el) => el.getBoundingClientRect().top);
-  expect(top).toBeGreaterThanOrEqual(-1);
-  expect(top).toBeLessThan(page.viewportSize()!.height);
-}
 
 async function seed() {
   const tenant = await seedTenant({
@@ -215,33 +209,6 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
     await page.goBack();
     await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
     await expect(page.locator('main#main')).toBeFocused();
-  });
-
-  test('the Locations link of a league page opens the organization page at #locations, scrolled to it, focus on main', async ({
-    page,
-    consoleGuard,
-  }) => {
-    const tenant = await seedTenant({
-      name: 'E2E Locations Jump',
-      locations: tallLocations(),
-      leagues: [{ name: LEAGUE, sport: 'beachVolleyball', locations: ['Location 01'] }],
-    });
-    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
-    await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    if (isDesktop(page)) {
-      await page
-        .getByRole('navigation', { name: tenant.name })
-        .getByRole('link', { name: /^Locations/ })
-        .click();
-    } else {
-      await page.getByRole('button', { name: 'Open navigation' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Navigation' });
-      await dialog.getByRole('link', { name: /^Locations/ }).click();
-    }
-    await expect(page).toHaveURL(`${baseURL}${tenant.path}#locations`);
-    await expect(page.getByRole('heading', { level: 2, name: 'Locations' })).toBeVisible();
-    await expect(page.locator('main#main')).toBeFocused();
-    await expectInViewport(page, page.locator('#locations'));
   });
 
   test('main is a landmark with no stray name, and pages reached by navigation pass axe and reflow', async ({

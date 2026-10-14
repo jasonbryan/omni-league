@@ -189,8 +189,6 @@ async function expectInPublicLayout(page: Page): Promise<void> {
   await expect(page.locator('aside')).toHaveCount(0);
 }
 
-/**
- */
 async function expectTouchTargets(page: Page, touch: boolean): Promise<void> {
   if (!touch) return;
   expect(await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)).toBe(true);
