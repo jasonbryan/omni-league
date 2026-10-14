@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// `invites.getByToken` and `invites.accept` (#70). Identities are faked the way ADR 0008
-// "Testing" shows; accounts exist in the Better Auth component too, because the invited address is
-// matched against the account's email.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
@@ -35,11 +32,6 @@ const identity = (authUserId: string) => ({
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
-/**
- * Organization A (`org-a`, leagues Coed 7v7 and Sand 2s) and organization B (`org-b`, league
- * Other Sand). `admin-a` is an org admin of A and sends the invites. `dana`, `eli`, and `fran` have
- * accounts and no membership; `dana@example.test` is the address most tests invite.
- */
 async function setup() {
   const t = convexTest(schema, modules);
   betterAuthTest.register(t, 'betterAuth');
@@ -121,7 +113,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** Invites `email` to organization A as an admin of A, and returns the invite id and token. */
 const invite = (
   s: Setup,
   email: string,
@@ -146,7 +137,6 @@ const membershipsOf = (s: Setup, userId: Id<'users'>) =>
 const inviteRow = (s: Setup, inviteId: Id<'invites'>) =>
   s.t.run((ctx) => ctx.db.get('invites', inviteId));
 
-/** The code of the `ConvexError` a promise rejects with. */
 async function refusalCode(promise: Promise<unknown>): Promise<unknown> {
   try {
     await promise;
@@ -262,7 +252,6 @@ describe('invites.accept', () => {
     });
     expect((await inviteRow(s, inviteId))?.status).toBe('accepted');
 
-    // requireLeagueOrganizer passes for the assigned league and fails for another.
     await s.asDana.run(async (ctx) => {
       await expect(requireLeagueOrganizer(ctx, s.coed)).resolves.toBeDefined();
       await expect(requireLeagueOrganizer(ctx, s.sand)).rejects.toThrow('Not allowed');
@@ -271,7 +260,7 @@ describe('invites.accept', () => {
     });
   });
 
-  test('it returns the organization slug and each league name and slug, keeping leagueNames (#212)', async () => {
+  test('it returns the organization slug and each league name and slug, keeping leagueNames', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed, s.sand]);
     const result = await s.asDana.mutation(api.invites.accept, { token });
@@ -283,7 +272,7 @@ describe('invites.accept', () => {
     ]);
   });
 
-  test('an org admin accept returns the organization slug and no leagues (#212)', async () => {
+  test('an org admin accept returns the organization slug and no leagues', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test');
     expect(await s.asDana.mutation(api.invites.accept, { token })).toEqual({
@@ -295,7 +284,7 @@ describe('invites.accept', () => {
     });
   });
 
-  test('the slugs are not in what getByToken shows a visitor (#212)', async () => {
+  test('the slugs are not in what getByToken shows a visitor', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed]);
     const text = JSON.stringify(await s.t.query(api.invites.getByToken, { token }));
@@ -330,7 +319,6 @@ describe('invites.accept', () => {
     );
     expect(await membershipsOf(s, s.eli.userId)).toHaveLength(0);
     expect((await inviteRow(s, inviteId))?.status).toBe('pending');
-    // The invited person can still accept it.
     await s.asDana.mutation(api.invites.accept, { token });
     expect(await membershipsOf(s, s.dana.userId)).toHaveLength(1);
   });
@@ -380,8 +368,8 @@ describe('invites.accept', () => {
 
   test('a caller who is already a member is refused, keeps one membership, and the invite stays pending', async () => {
     const s = await setup();
-    // fran already organizes in A; an admin invite for fran's address cannot be created, so the
-    // invite is written first and fran joins afterwards.
+    // Fran already organizes in A, so an admin invite for her address cannot be created: the invite
+    // is written first and she joins afterwards.
     const { token, inviteId } = await invite(s, 'newcomer@example.test');
     await s.t.run((ctx) => ctx.db.patch('invites', inviteId, { email: 'fran@example.test' }));
     expect(await refusalCode(s.asFran.mutation(api.invites.accept, { token }))).toBe(
@@ -435,8 +423,7 @@ describe('invites.accept', () => {
   });
 });
 
-describe('invites.accept: probes added by the tester (#70)', () => {
-  /** The `ConvexError` data (or message) a refused promise carries, for comparing refusals. */
+describe('invites.accept: edge cases', () => {
   async function refusal(promise: Promise<unknown>): Promise<unknown> {
     try {
       await promise;
@@ -455,7 +442,6 @@ describe('invites.accept: probes added by the tester (#70)', () => {
     await s.t.run((ctx) => ctx.db.patch('invites', accepted.inviteId, { status: 'accepted' }));
     vi.setSystemTime(NOW + INVITE_LIFETIME_MS + 1);
 
-    // Dana is the invited address of the revoked invite; she gets no hint that it is revoked.
     const refusals = [
       await refusal(s.asDana.mutation(api.invites.accept, { token: 'unknown-token' })),
       await refusal(s.asDana.mutation(api.invites.accept, { token: revoked.token })),

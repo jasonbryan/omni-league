@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// `testing:addInvite` (#67 e2e): a pending invite written straight to the table, so a test can have
-// one whose expiry has passed without waiting 14 days. Like every test-only function it refuses
-// unless IS_TEST is exactly `true`.
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
@@ -61,7 +58,7 @@ describe('testing:addInvite', () => {
     expect(rows[0].tokenHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  test('with a token, its hash is stored, so the token opens the invite (#70 e2e)', async () => {
+  test('with a token, its hash is stored, so the token opens the invite', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = await setup();
     const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

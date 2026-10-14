@@ -7,10 +7,6 @@ import { insertLeague, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `organizations.listMine` and its `leagues` field (#141): a league organizer's assigned leagues in
-// each organization, from the caller's own membership. Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -20,12 +16,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A (`org-a`) with the leagues "Coed Soccer", "beach 2s", "L Draft" (a draft), and
- * "M Other", and organization B (`org-b`) with the league "Sand 2s". Users: `organizer` (a league
- * organizer of A assigned "Coed Soccer", "beach 2s", and "L Draft", but not "M Other"), `admin` (an
- * org admin of A), `outsider` (an org admin of B), and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const seeded = await t.run(async (ctx) => {
@@ -92,7 +82,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** Replaces the league ids of the first membership with this role in this organization. */
 async function assign(
   t: Setup['t'],
   organizationId: Id<'organizations'>,
@@ -107,7 +96,7 @@ async function assign(
   });
 }
 
-describe('organizations.listMine: leagues (#141)', () => {
+describe('organizations.listMine: leagues', () => {
   test("a league organizer's row lists their assigned leagues, drafts included, and not an unassigned one", async () => {
     const { as } = await setup();
     const rows = await as('organizer').query(api.organizations.listMine, {});
@@ -266,7 +255,6 @@ describe('organizations.listMine: leagues (#141)', () => {
     );
   });
 
-  /** Creates `count` leagues of `organizationId` named `<prefix> 000`, `<prefix> 001`, and so on. */
   async function leaguesOf(
     t: Setup['t'],
     organizationId: Id<'organizations'>,
@@ -288,7 +276,6 @@ describe('organizations.listMine: leagues (#141)', () => {
     });
   }
 
-  /** Gives the `organizer` user a membership. */
   async function addMembership(
     t: Setup['t'],
     organizationId: Id<'organizations'>,
@@ -308,9 +295,10 @@ describe('organizations.listMine: leagues (#141)', () => {
     });
   }
 
-  test('one LIST_MINE_LEAGUES_LIMIT budget covers all memberships, spent in organization-name order (#196)', async () => {
+  const FOREIGN_LEAGUE_COUNT = LIST_MINE_LEAGUES_LIMIT - 1;
+
+  test('one LIST_MINE_LEAGUES_LIMIT budget covers all memberships, spent in organization-name order', async () => {
     const { t, as } = await setup();
-    // "Org 0" sorts before "Org A", but its membership is the later one.
     const zero = await t.run((ctx) =>
       insertTenant(ctx, {
         organization: { name: 'Org 0', slug: 'org-0' },
@@ -327,7 +315,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     ]);
   });
 
-  test('the budget one organization leaves goes to the next, and the total never exceeds the limit (#196)', async () => {
+  test('the budget one organization leaves goes to the next, and the total never exceeds the limit', async () => {
     const { t, as, organizationA, organizationB } = await setup();
     const aLeagues = await leaguesOf(t, organizationA, 'Alpha Field', 'A extra', 59);
     await assign(t, organizationA, 'leagueOrganizer', aLeagues);
@@ -340,10 +328,8 @@ describe('organizations.listMine: leagues (#141)', () => {
     ]);
   });
 
-  test('an org admin membership spends none of the budget (#196)', async () => {
+  test('an org admin membership spends none of the budget, even when it sorts first and holds a full budget of ids', async () => {
     const { t, as } = await setup();
-    // "Org 0" sorts before "Org A" and holds LIST_MINE_LEAGUES_LIMIT ids for an org admin, so the
-    // budget would be gone before Org A if an org admin spent it.
     const zero = await t.run((ctx) =>
       insertTenant(ctx, {
         organization: { name: 'Org 0', slug: 'org-0' },
@@ -360,18 +346,9 @@ describe('organizations.listMine: leagues (#141)', () => {
     ]);
   });
 
-  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once (#196)", async () => {
+  test("assigned ids of another organization's leagues spend the budget but list nothing, and a repeated id is read once, leaving one read for the next organization", async () => {
     const { t, as, organizationA, organizationB } = await setup();
-    // Org A (first by name) names LIST_MINE_LEAGUES_LIMIT - 1 foreign leagues (all of organization
-    // B's) plus a repeat of one. Every distinct id is read and none is listed. The repeat is not
-    // read again, so exactly one read is left for Org B, which lists one league.
-    const foreign = await leaguesOf(
-      t,
-      organizationB,
-      'B Field',
-      'Foreign',
-      LIST_MINE_LEAGUES_LIMIT - 1,
-    );
+    const foreign = await leaguesOf(t, organizationB, 'B Field', 'Foreign', FOREIGN_LEAGUE_COUNT);
     await assign(t, organizationA, 'leagueOrganizer', [...foreign, foreign[0]]);
     const bOwn = await leaguesOf(t, organizationB, 'B Field', 'Own', 3);
     await addMembership(t, organizationB, 'leagueOrganizer', bOwn);
@@ -383,7 +360,7 @@ describe('organizations.listMine: leagues (#141)', () => {
     expect(JSON.stringify(rows)).not.toContain('Foreign');
   });
 
-  test("another user's assignments never spend the caller's budget or appear in their rows (#196)", async () => {
+  test("another user's assignments never spend the caller's budget or appear in their rows", async () => {
     const { t, as, organizationA } = await setup();
     const many = await leaguesOf(t, organizationA, 'Alpha Field', 'Many', LIST_MINE_LEAGUES_LIMIT);
     await t.run(async (ctx) => {

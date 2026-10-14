@@ -1,9 +1,6 @@
 /// <reference types="vite/client" />
-// Tester probe (#63, ADR 0008 "Unknown addresses get exactly the same responses"): a wrong
-// password for a known address and for an unknown one must not differ in status, body, header
-// names, or in how long the answer takes. Timing is measured with `performance.now()` (the clock is
-// not faked here), on medians of interleaved samples, so a missing dummy hash (about 0.4 s of scrypt
-// per password check) shows as a large ratio while scheduler noise does not.
+// Timing is measured with the real clock, on medians of interleaved samples, so a missing dummy hash
+// (about 0.4 s of scrypt per password check) shows as a large ratio while scheduler noise does not.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -33,7 +30,6 @@ async function post(t: T, path: string, body: unknown) {
   return { response, status: response.status, text };
 }
 
-/** One timed wrong-password sign-in. */
 async function timed(t: T, email: string) {
   const start = performance.now();
   const answer = await post(t, 'sign-in/email', { email, password: WRONG });

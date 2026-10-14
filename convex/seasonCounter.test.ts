@@ -9,10 +9,6 @@ import { insertSeason, insertTenant, publishSeason, type NewSeason } from './lib
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `leagues.publishedSeasonCount` (#127): the number of a league's published seasons, kept by
-// `insertSeason` and `publishSeason` in the same mutation as the season row, and set from a recount
-// by the `seed:demo` backfill. Every case compares the counter with a recount of the seasons.
-
 function setup() {
   const t = convexTest(schema, modules);
   betterAuthTest.register(t, 'betterAuth');
@@ -31,7 +27,6 @@ const season = (n: number): NewSeason => ({
   minimumRosterSize: 7,
 });
 
-/** Each league's stored counter next to a recount of its published seasons, by organization/league. */
 async function counters(
   t: T,
 ): Promise<Record<string, { stored: number | undefined; recount: number }>> {
@@ -54,7 +49,6 @@ async function counters(
   });
 }
 
-/** Asserts that every league's counter is set and equals a recount. */
 async function expectCountersMatch(t: T): Promise<void> {
   const all = await counters(t);
   expect(Object.keys(all).length).toBeGreaterThan(0);
@@ -83,7 +77,7 @@ async function tenant(t: T): Promise<Doc<'leagues'>> {
   });
 }
 
-/** The league's counter; `undefined` for none (`t.run` returns a missing value as `null`). */
+// `t.run` returns a missing value as `null`.
 const stored = async (t: T, id: Id<'leagues'>): Promise<number | undefined> =>
   (await t.run(async (ctx) => (await ctx.db.get('leagues', id))?.publishedSeasonCount)) ??
   undefined;
@@ -132,7 +126,7 @@ describe('leagues.publishedSeasonCount: the writers', () => {
     await expectCountersMatch(t);
   });
 
-  test('a league without a counter reads as 0, and the writers start it from 0 (a league #66 creates after the seed)', async () => {
+  test('a league without a counter reads as 0, and the writers start it from 0', async () => {
     const t = setup();
     const league = await tenant(t);
     await t.run(async (ctx) => {
@@ -173,7 +167,6 @@ describe('leagues.publishedSeasonCount: seasons.publish', () => {
     const league = await tenant(t);
     const seasonId = await t.run((ctx) => insertSeason(ctx, league, season(1)));
     await t.run(async (ctx) => {
-      // An org admin of the league's organization, as in convex/seasonsPublish.test.ts.
       const userId = await ctx.db.insert('users', {
         authUserId: 'admin-a',
         name: 'admin-a',
@@ -240,7 +233,6 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
     await t.mutation(internal.seed.demo, {});
     await expectCountersMatch(t);
     const all = await counters(t);
-    // The two published demo seasons (#126) are counted, in their leagues only.
     expect(all['gulf-coast-sport-social/sunday-reverse-coed-4s']).toEqual({
       stored: 1,
       recount: 1,
@@ -263,7 +255,6 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       await insertSeason(ctx, league, season(1), 'published');
       await insertSeason(ctx, league, season(2), 'published');
       await insertSeason(ctx, league, season(3));
-      // Rows from before this change: no counter, whatever the seasons hold.
       await ctx.db.replace('leagues', league._id, {
         organizationId: league.organizationId,
         name: league.name,
@@ -291,7 +282,6 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
     const league = await tenant(t);
     await t.run(async (ctx) => {
       await insertSeason(ctx, league, season(1), 'published');
-      // A counter that disagrees with the seasons is not the backfill's to fix.
       await ctx.db.patch('leagues', league._id, { publishedSeasonCount: 5 });
     });
     await t.mutation(internal.seed.demo, {});

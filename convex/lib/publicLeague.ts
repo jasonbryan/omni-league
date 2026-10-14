@@ -1,13 +1,7 @@
-// The league fields a public page shows, read the same way by every public query that shows them
-// (`leagues.getPublicPage`, #127; `seasons.getPublicPage`, #128).
 import type { Doc } from '../_generated/dataModel';
 import type { QueryCtx } from '../_generated/server';
 
-/**
- * The names of the league's locations, in the league's own order. An id that is missing, or that
- * names a location of another organization, is left out, so a stray id never shows another
- * organization's location.
- */
+// Leaves out a location of another organization, so a stray id never shows it.
 export async function leagueLocationNames(
   ctx: Pick<QueryCtx, 'db'>,
   organization: Doc<'organizations'>,

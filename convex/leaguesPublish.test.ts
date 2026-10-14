@@ -7,9 +7,6 @@ import { insertDraftLeague, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `leagues.publish` and `leagues.publishedCount` (#69). Identities are faked the way ADR 0008
-// "Testing" shows.
-
 const identity = (authUserId: string) => ({
   subject: authUserId,
   issuer: 'http://127.0.0.1:3211',
@@ -19,13 +16,6 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
-/**
- * Organization A with locations X (Alpha Field) and Y (Bravo Beach), a published soccer league at
- * X, a draft soccer league `Draft Soccer` at X and Y, a draft softball league `Draft Softball` at
- * Y, and a draft beach volleyball league `Other Draft` at X. Organization B has one location and a
- * draft league. Users: `admin-a`, `organizer-a` (assigned to `Draft Soccer` only), `admin-b`,
- * `stranger` (no membership), and `ghost` (an identity with no `users` row).
- */
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -100,7 +90,6 @@ async function setup() {
 
 type Setup = Awaited<ReturnType<typeof setup>>;
 
-/** Everything a publish may touch, so a refused or repeated call can be shown to change nothing. */
 const snapshot = (t: Setup['t']) =>
   t.run(async (ctx) => ({
     leagues: await ctx.db.query('leagues').collect(),
@@ -159,7 +148,6 @@ describe('leagues.publish', () => {
     await expect(s.adminA.mutation(api.leagues.publish, { leagueId: s.draftSoccer })).resolves.toBe(
       null,
     );
-    // The seed's league was published from the start, so it is a repeat too.
     const live = (await s.t.run((ctx) => ctx.db.query('leagues').first()))!;
     expect(live.status).toBe('published');
     await expect(s.adminA.mutation(api.leagues.publish, { leagueId: live._id })).resolves.toBe(
@@ -212,7 +200,6 @@ describe('leagues.publish', () => {
       'Draft Softball',
     ]);
     expect((await page())?.sports.map((sport) => sport.key)).toEqual(['soccer', 'softball']);
-    // The drafts still unpublished stay off every list.
     expect(after.rows.map((row) => row.name)).not.toContain('Draft Soccer');
   });
 
