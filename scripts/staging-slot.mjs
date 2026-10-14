@@ -1,6 +1,5 @@
-// Prints the Convex deployment the next staging build creates: the slot that the published staging
-// site is not using. The slot goes to stdout alone, so `STAGING_SLOT="$(node scripts/staging-slot.mjs)"`
-// captures only it; every reason goes to stderr. It always exits 0 and reads no secret.
+// The slot goes to stdout alone so `STAGING_SLOT="$(node scripts/staging-slot.mjs)"` captures only
+// it; every reason goes to stderr.
 import { STAGING_SLOT_FILE, STAGING_SLOTS } from './staging-slot-file.mjs';
 
 const FETCH_TIMEOUT_MS = 10_000;
@@ -24,7 +23,7 @@ export async function chooseStagingSlot({
     return fallback('DEPLOY_PRIME_URL is not a valid URL');
   }
 
-  // A timer and an AbortController, not AbortSignal.timeout, so the limit also covers reading the body.
+  // Not AbortSignal.timeout: fake timers cannot fake it, and the 10 s tests need them.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let body;
