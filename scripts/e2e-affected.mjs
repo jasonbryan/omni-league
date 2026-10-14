@@ -209,7 +209,10 @@ export const AREAS = [
     test: named('src/app/organizations/', [
       'organization-page',
       'organization-overview',
+      'organization-mark',
+      'organization-skeleton',
       'organization-path',
+      'sport-list',
       'initials',
     ]),
     specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE],

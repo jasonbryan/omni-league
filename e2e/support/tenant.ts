@@ -9,10 +9,25 @@ export const SPORT_NAMES: Record<Sport, string> = {
   softball: 'Softball',
 };
 
+export interface DivisionSeed {
+  gender: 'coed' | 'mens' | 'womens';
+  playersPerSide: number;
+  level: 'rec' | 'b' | 'bb' | 'a' | 'aa' | 'open' | 'intermediate' | 'competitive';
+  ageGroup: 'adult' | 'over30' | 'over35' | 'over40' | 'over50' | 'over55' | 'over60';
+}
+
+export interface LeagueSeed {
+  name: string;
+  sport: Sport;
+  locations: string[];
+  status?: 'draft' | 'published';
+  division?: DivisionSeed;
+}
+
 export interface TenantSeed {
   name?: string;
   locations?: { name: string; address: string }[];
-  leagues?: { name: string; sport: Sport; locations: string[]; status?: 'draft' | 'published' }[];
+  leagues?: LeagueSeed[];
 }
 
 export interface Tenant {
@@ -20,7 +35,7 @@ export interface Tenant {
   slug: string;
   path: string;
   locations: { name: string; address: string }[];
-  leagues: { name: string; sport: Sport; locations: string[]; status?: 'draft' | 'published' }[];
+  leagues: LeagueSeed[];
 }
 
 const byName = <T extends { name: string }>(items: T[]): T[] =>

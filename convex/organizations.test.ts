@@ -3,7 +3,13 @@ import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { insertLeague, insertLocation, insertTenant, type Tenant } from './lib/tenantWrites';
+import {
+  insertCustomLevel,
+  insertLeague,
+  insertLocation,
+  insertTenant,
+  type Tenant,
+} from './lib/tenantWrites';
 import { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './organizations';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -383,23 +389,82 @@ describe.each(LISTS)('organizations:listPublic $kind', ({ kind, seedNames, list 
 });
 
 describe('organizations:listPublicLocations rows', () => {
-  test('each row holds the name and address only', async () => {
+  test('each row holds the name, the address, and the sports played there', async () => {
     const t = setup();
     await seedA(t);
     expect(
       await t.query(api.organizations.listPublicLocations, { slug: 'gulf-coast', page: 1 }),
     ).toEqual({
       rows: [
-        { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
+        {
+          name: 'Bayside Athletic Complex',
+          address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+          sportNames: ['Soccer', 'Softball'],
+        },
         {
           name: 'North Beach Sand Courts',
           address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+          sportNames: ['Softball'],
         },
       ],
       page: 1,
       pageCount: 1,
       total: 2,
     });
+  });
+
+  test('lists the sports in sport order whatever order the leagues were added in', async () => {
+    const t = setup();
+    await seed(t, {
+      organization: { name: 'Order Club', slug: 'order-club' },
+      locations: [{ name: 'Shared Field', address: '1 Shared Road' }],
+      leagues: [
+        { name: 'Softball One', sport: 'softball', locations: ['Shared Field'] },
+        { name: 'Soccer One', sport: 'soccer', locations: ['Shared Field'] },
+        { name: 'Beach One', sport: 'beachVolleyball', locations: ['Shared Field'] },
+        { name: 'Soccer Two', sport: 'soccer', locations: ['Shared Field'] },
+      ],
+    });
+    const locations = await t.query(api.organizations.listPublicLocations, {
+      slug: 'order-club',
+      page: 1,
+    });
+    expect(locations.rows[0]?.sportNames).toEqual(['Beach volleyball', 'Soccer', 'Softball']);
+  });
+
+  test('a location with no league has no sports, and a draft league adds none', async () => {
+    const t = setup();
+    await seed(t, {
+      organization: { name: 'Quiet Club', slug: 'quiet-club' },
+      locations: [
+        { name: 'Empty Field', address: '1 Empty Road' },
+        { name: 'Draft Field', address: '2 Draft Road' },
+      ],
+      leagues: [
+        { name: 'Draft League', sport: 'soccer', locations: ['Draft Field'], status: 'draft' },
+      ],
+    });
+    const locations = await t.query(api.organizations.listPublicLocations, {
+      slug: 'quiet-club',
+      page: 1,
+    });
+    expect(locations.rows.map((row) => [row.name, row.sportNames])).toEqual([
+      ['Draft Field', []],
+      ['Empty Field', []],
+    ]);
+  });
+
+  test("never names another organization's sports", async () => {
+    const t = setup();
+    await seedA(t);
+    await seedB(t);
+    const locations = await t.query(api.organizations.listPublicLocations, {
+      slug: 'other-org',
+      page: 1,
+    });
+    expect(locations.rows).toEqual([
+      { name: 'B Field', address: '1 B Street', sportNames: ['Soccer'] },
+    ]);
   });
 });
 
@@ -434,6 +499,119 @@ describe('organizations:listPublicLeagues rows', () => {
       pageCount: 1,
       total: 3,
     });
+  });
+
+  test('a league with a division carries its label, and one without carries no label', async () => {
+    const t = setup();
+    await seed(t, {
+      organization: { name: 'Divided Club', slug: 'divided-club' },
+      locations: [{ name: 'Home Field', address: '1 Home Road' }],
+      leagues: [
+        {
+          name: "Men's Over-30 11v11",
+          sport: 'soccer',
+          locations: ['Home Field'],
+          division: {
+            gender: 'mens',
+            playersPerSide: 11,
+            level: 'rec',
+            ageGroup: 'over30',
+          },
+        },
+        {
+          name: 'Coed 4s',
+          sport: 'beachVolleyball',
+          locations: ['Home Field'],
+          division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+        },
+        { name: 'Undivided', sport: 'softball', locations: ['Home Field'] },
+      ],
+    });
+    const leagues = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'divided-club',
+      page: 1,
+    });
+    expect(leagues.rows.map((row) => [row.name, row.divisionLabel])).toEqual([
+      ['Coed 4s', 'Coed · 4v4 · BB'],
+      ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+"],
+      ['Undivided', undefined],
+    ]);
+    expect(Object.keys(leagues.rows[2] ?? {})).not.toContain('divisionLabel');
+  });
+
+  test("a league with a custom level shows the organization's name for it beside the standard level", async () => {
+    const t = setup();
+    const organizationId = await seed(t, {
+      organization: { name: 'Custom Club', slug: 'custom-club' },
+      locations: [{ name: 'Home Field', address: '1 Home Road' }],
+      leagues: [],
+    });
+    await t.run(async (ctx) => {
+      await insertCustomLevel(ctx, organizationId, {
+        sport: 'softball',
+        name: 'D',
+        standardLevel: 'rec',
+      });
+      await insertLeague(ctx, organizationId, {
+        name: "Men's D Slow-Pitch",
+        sport: 'softball',
+        locations: ['Home Field'],
+        division: {
+          gender: 'mens',
+          playersPerSide: 10,
+          level: 'rec',
+          customLevel: 'D',
+          ageGroup: 'adult',
+        },
+      });
+    });
+    const leagues = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'custom-club',
+      page: 1,
+    });
+    expect(leagues.rows[0]?.divisionLabel).toBe("Men's · 10v10 · D (Rec)");
+  });
+
+  test('a league whose custom level belongs to another organization or sport shows the standard level and the page still loads', async () => {
+    const t = setup();
+    const organizationId = await seed(t, {
+      organization: { name: 'Bad Data Club', slug: 'bad-data-club' },
+      locations: [{ name: 'Home Field', address: '1 Home Road' }],
+      leagues: [],
+    });
+    const otherId = await seedB(t);
+    await t.run(async (ctx) => {
+      const otherLevel = await insertCustomLevel(ctx, otherId, {
+        sport: 'soccer',
+        name: 'Z',
+        standardLevel: 'rec',
+      });
+      const beachLevel = await insertCustomLevel(ctx, organizationId, {
+        sport: 'beachVolleyball',
+        name: 'Y',
+        standardLevel: 'bb',
+      });
+      for (const [name, customLevelId] of [
+        ['Other Org Level', otherLevel],
+        ['Other Sport Level', beachLevel],
+      ] as const) {
+        const { leagueId } = await insertLeague(ctx, organizationId, {
+          name,
+          sport: 'soccer',
+          locations: ['Home Field'],
+          division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+        });
+        await ctx.db.patch('leagues', leagueId, { customLevelId });
+      }
+    });
+    const leagues = await t.query(api.organizations.listPublicLeagues, {
+      slug: 'bad-data-club',
+      page: 1,
+    });
+    expect(leagues.rows.map((row) => [row.name, row.divisionLabel])).toEqual([
+      ['Other Org Level', 'Coed · 7v7 · Rec'],
+      ['Other Sport Level', 'Coed · 7v7 · Rec'],
+    ]);
   });
 
   test('a league at a location outside the first 5 locations still shows its name', async () => {
@@ -506,8 +684,9 @@ describe('organizations:listPublicLeagues rows', () => {
     for (const league of leagues.rows) {
       expect(Object.keys(league).sort()).toEqual(['locationNames', 'name', 'slug', 'sportName']);
     }
+    expect(JSON.stringify(leagues)).not.toMatch(/customLevelId|standardLevel/);
     for (const location of locations.rows) {
-      expect(Object.keys(location).sort()).toEqual(['address', 'name']);
+      expect(Object.keys(location).sort()).toEqual(['address', 'name', 'sportNames']);
     }
     expect(JSON.stringify([leagues, locations])).not.toMatch(
       /_id|_creationTime|organizationId|locationIds|sortName|publishedSeasonCount/,

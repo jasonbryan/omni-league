@@ -18,38 +18,55 @@ export const GULF_COAST: PublicOrganizationPage = {
     { key: 'softball', segment: 'softball', name: 'Softball', leagueCount: 1, locationCount: 2 },
   ],
   locations: [
-    { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
-    { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
-    { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+    {
+      name: 'Bayside Athletic Complex',
+      address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+      sportNames: ['Soccer', 'Softball'],
+    },
+    {
+      name: 'Flour Bluff Softball Park',
+      address: '2001 Waldron Rd, Corpus Christi, TX 78418',
+      sportNames: ['Softball'],
+    },
+    {
+      name: 'North Beach Sand Courts',
+      address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+      sportNames: ['Beach volleyball'],
+    },
   ],
   leagues: [
     {
       name: 'Coed 7v7 Rec',
       slug: 'coed-7v7-rec',
+      divisionLabel: 'Coed · 7v7 · Rec',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
     },
     {
       name: "Men's Over-30 11v11",
       slug: 'mens-over-30-11v11',
+      divisionLabel: "Men's · 11v11 · Rec · 30+",
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
     },
     {
       name: 'Sunday Reverse Coed 4s',
       slug: 'sunday-reverse-coed-4s',
+      divisionLabel: 'Coed · 4v4 · BB',
       sportName: 'Beach volleyball',
       locationNames: ['North Beach Sand Courts'],
     },
     {
       name: 'Thursday Night Coed 2s',
       slug: 'thursday-night-coed-2s',
+      divisionLabel: 'Coed · 2v2 · B',
       sportName: 'Beach volleyball',
       locationNames: ['North Beach Sand Courts'],
     },
     {
       name: 'Wednesday Coed Slow-Pitch',
       slug: 'wednesday-coed-slow-pitch',
+      divisionLabel: 'Coed · 10v10 · Rec',
       sportName: 'Softball',
       locationNames: ['Flour Bluff Softball Park', 'Bayside Athletic Complex'],
     },

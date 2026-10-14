@@ -392,7 +392,11 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     await expect(offlineNote).toBeVisible();
     await expect(savedNote).toBeVisible();
     expect(
-      await page.evaluate(() => document.querySelector('main h1')?.nextElementSibling?.tagName),
+      await page.evaluate(
+        () =>
+          document.querySelector('main h1')?.parentElement?.nextElementSibling?.nextElementSibling
+            ?.tagName,
+      ),
     ).toBe('APP-SAVED-COPY-NOTE');
     const expectedTime = await page.evaluate(
       (savedAt) => new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(savedAt),
