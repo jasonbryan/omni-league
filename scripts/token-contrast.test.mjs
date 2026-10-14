@@ -74,7 +74,7 @@ describe('parseRootTokens', () => {
 });
 
 describe('PAIRS', () => {
-  it('lists the pairs from the issue with their WCAG thresholds', () => {
+  it('lists the required token pairs with their WCAG thresholds', () => {
     const names = PAIRS.map(({ fg, bg, min }) => `${fg} on ${bg} ${min}`);
     assert.deepEqual(names, [
       '--foreground on --background 4.5',
