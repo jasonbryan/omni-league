@@ -152,7 +152,8 @@ async function membershipsOf(t: T, email: string) {
 }
 
 const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
-const DATA = { organizations: 5, locations: 10, leagues: 15, seasons: 4 };
+const DATA = { organizations: 5, locations: 10, customLevels: 1, leagues: 16, seasons: 4 };
+const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 
 describe('seed:demo accounts: a new deployment', () => {
   test(
@@ -162,7 +163,7 @@ describe('seed:demo accounts: a new deployment', () => {
       const result = await run(t);
       expect(result).toEqual({
         ...DATA,
-        backfilled: { organizations: 0, locations: 0, leagues: 0 },
+        backfilled: NO_BACKFILL,
         memberships: 4,
         invites: 1,
         accounts: ALL('created'),
@@ -332,9 +333,10 @@ describe('seed:demo accounts: a second run', () => {
       expect(second).toEqual({
         organizations: 0,
         locations: 0,
+        customLevels: 0,
         leagues: 0,
         seasons: 0,
-        backfilled: { organizations: 0, locations: 0, leagues: 0 },
+        backfilled: NO_BACKFILL,
         memberships: 0,
         invites: 0,
         accounts: ALL('exists'),
@@ -452,7 +454,7 @@ describe('seed:demo accounts: the password', () => {
       const result = await run(t);
       expect(result).toEqual({
         ...DATA,
-        backfilled: { organizations: 0, locations: 0, leagues: 0 },
+        backfilled: NO_BACKFILL,
         memberships: 0,
         invites: 1,
         accounts: ALL('skipped:unset'),

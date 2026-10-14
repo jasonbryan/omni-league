@@ -381,7 +381,9 @@ describe('seed:demo divisions on an empty deployment', () => {
       }));
     const before = await snapshot();
 
-    await expect(t.mutation(internal.seed.insertDemoData, {})).rejects.toThrow(/PREVIEW_ORIGIN_PATTERN/);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).rejects.toThrow(
+      /PREVIEW_ORIGIN_PATTERN/,
+    );
 
     expect(await snapshot()).toEqual(before);
   });
