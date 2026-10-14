@@ -59,7 +59,7 @@ describe('contrastRatio', () => {
     assert.ok(Math.abs(contrastRatio(white, white) - 1) < 0.001);
   });
 
-  it('matches the WCAG value for #767676 on white (4.54:1)', () => {
+  it('matches the WCAG value for the grey 767676 on white (4.54:1)', () => {
     const ratio = contrastRatio(parseColor('#767676'), parseColor('#ffffff'));
     assert.ok(Math.abs(ratio - 4.54) < 0.01, String(ratio));
   });

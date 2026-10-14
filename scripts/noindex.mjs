@@ -10,7 +10,7 @@ export function noindexForContext(context) {
 }
 
 export const NOINDEX_HEADERS_FILE =
-  '# Written by scripts/ng-convex.mjs for non-production Netlify builds only (#15).\n' +
+  '# Written by scripts/ng-convex.mjs for non-production Netlify builds only.\n' +
   '/*\n' +
   '  X-Robots-Tag: noindex\n';
 
