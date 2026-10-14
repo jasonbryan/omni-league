@@ -165,8 +165,6 @@ describe('OrganizationPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
     expect([...body.querySelectorAll('main dl dd')].map(text)).toEqual(['5', '3', '3']);
 
-    // The public layout: the skip link, the top bar with "Sign in", and the footer are in
-    // the raw HTML, and the organization's sidebar is gone.
     expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     expect(body.querySelector('a')?.getAttribute('href')).toBe(
       '/organizations/gulf-coast-sport-social#main',

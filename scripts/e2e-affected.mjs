@@ -264,8 +264,6 @@ export const AREAS = [
       'organization-path',
       'initials',
     ]),
-    // The admin and league sidebars import `initials`, and the league rows link to the public
-    // league page, which league-page.spec.ts reaches from here.
     specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE],
   },
   {
@@ -337,9 +335,6 @@ export const AREAS = [
     ],
   },
   {
-    // The layout every page outside /app/** renders in: the organization, league, and
-    // season pages, sign-in, sign-up, accept-invite, the home page, and the not-found page, so the
-    // specs that open them and every session spec (the signed-in account link).
     name: 'public layout',
     test: inDir('src/app/public-layout/'),
     specs: [

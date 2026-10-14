@@ -144,7 +144,6 @@ test.describe('public league page: raw server HTML', () => {
         expect(html, query).toMatch(/data-slot="badge"[^>]*>Beach volleyball<\/span>/);
         expect(html, query).toMatch(/Locations: <\/span>\s*Beta Courts, Alpha Field/);
 
-        // The public layout has no sidebar: no menu button and no organization navigation.
         expect(html, query).not.toContain('aria-label="Open navigation"');
         expect(html, query).not.toContain(`aria-label="${tenant.name}"`);
 

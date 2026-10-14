@@ -45,7 +45,6 @@ describe('App routing', () => {
     });
   }
 
-  // /app/** keeps the app shell: an unknown signed-in path has no footer.
   it('renders the not-found page in the app shell for an unknown /app path', async () => {
     const page = routed(await renderAt('/app/x'));
     expect(page?.tagName.toLowerCase()).toBe('app-app-not-found-page');

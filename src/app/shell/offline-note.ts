@@ -27,8 +27,6 @@ export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
  * true, so the server HTML holds an empty region.
  *
  * The host is the region itself, so `sticky` works against the shell's column rather than a wrapper.
- * It sticks below the top bar: 3.5rem (the shell's), or the `--top-bar-h` a parent sets (the public
- * layout's 4rem).
  *
  * In the browser it keeps `--offline-note-h` on `<html>` equal to its measured height (unset while
  * empty). html's `scroll-padding-top`, the header's negative scroll margin, and the sidebar's

@@ -193,8 +193,6 @@ describe('PublicSeasonPage server render', () => {
     expect(
       [...body.querySelectorAll('main dl time')].map((time) => time.getAttribute('datetime')),
     ).toEqual(['2027-06-06', '2027-08-29']);
-    // The public layout: the skip link, the top bar with "Sign in", and the footer are in
-    // the raw HTML. The organization's sidebar and the menu button are gone.
     const frame = publicFrame(body);
     expect({ ...frame, navs: [] }).toEqual({ ...PUBLIC_FRAME, navs: [] });
     expect(frame.navs.at(-1)).toBe('Footer');

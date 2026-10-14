@@ -197,7 +197,6 @@ describe('OrganizationPage', () => {
       expect(root.querySelector('app-shell')).toBeNull();
       expect(root.querySelectorAll('header')).toHaveLength(1);
       expect(root.querySelectorAll('footer')).toHaveLength(1);
-      // The only navigation landmark is the footer's: the organization's sidebar is gone.
       expect([...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'))).toEqual([
         'Footer',
       ]);

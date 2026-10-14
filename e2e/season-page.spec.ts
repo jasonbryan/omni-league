@@ -170,8 +170,6 @@ test.describe('public season page: raw server HTML', () => {
         // The league's locations, in its own order.
         expect(textOf(definition(html, 'Locations')), query).toBe('Beta Courts, Alpha Field');
 
-        // The sport is plain text (no sport view yet), and the public layout has
-        // no sidebar.
         expect(html, query).not.toContain('/sports/');
         expect(html, query).not.toContain('aria-label="Open navigation"');
         expect(html, query).not.toContain(`aria-label="${tenant.name}"`);

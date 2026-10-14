@@ -7,9 +7,6 @@ import { App } from '../app';
 import { provideSpartanHlm } from '../ui/utils';
 import { PublicLayout } from './public-layout';
 
-// The public layout's server render: the skip link, top bar, and footer are in the raw
-// HTML, the same for every visitor, with no query string.
-
 @Component({
   selector: 'app-public-layout-server-test-page',
   imports: [PublicLayout],
@@ -58,7 +55,6 @@ describe('PublicLayout server render', () => {
     const html = await render();
     const body = new DOMParser().parseFromString(html, 'text/html').body;
 
-    // The skip link is the first link, and the server's href has no query string.
     expect(body.querySelector('a')?.textContent.trim()).toBe('Skip to main content');
     expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test#main');
     expect([...body.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
@@ -77,7 +73,6 @@ describe('PublicLayout server render', () => {
 
     expect(html).not.toContain('Open navigation');
     expect(body.querySelector('aside, button, [role="dialog"]')).toBeNull();
-    // Anonymous and the same for everyone: no account link, no query string.
     expect(body.querySelector('header a[routerlink="/app"]')).toBeNull();
     expect(html).not.toContain('Account:');
     expect(html).not.toContain('SECRET');

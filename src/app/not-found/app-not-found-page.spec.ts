@@ -12,7 +12,6 @@ describe('AppNotFoundPage', () => {
     expect(host.children).toHaveLength(1);
     expect(host.children[0].tagName).toBe('APP-SHELL');
     expect(host.querySelectorAll('header')).toHaveLength(1);
-    // No sidebar: no menu button and no navigation landmark, and no footer.
     expect(host.querySelector('button')).toBeNull();
     expect(host.querySelector('nav')).toBeNull();
     expect(host.querySelector('footer')).toBeNull();
@@ -20,7 +19,6 @@ describe('AppNotFoundPage', () => {
     expect(main?.children).toHaveLength(1);
     expect(main?.children[0].tagName).toBe('APP-NOT-FOUND-VIEW');
     expect(host.querySelectorAll('h1')).toHaveLength(1);
-    // The top bar's own links only: the brand and "Sign in".
     expect([...host.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
       'Omni League',
       'Sign in',

@@ -37,8 +37,6 @@ test.describe('not-found page', () => {
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(HOME_LINK);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
-        // The public layout: no menu button and no sidebar, the footer's navigation only,
-        // and the top bar's "Sign in", which every public page carries.
         expect(html, path).not.toContain('aria-label="Open navigation"');
         expect(html.match(/<nav\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(/<footer\b[\s\S]*<nav\b[^>]*aria-label="Footer"/);
@@ -366,14 +364,11 @@ test.describe('not-found page', () => {
       )
       .toEqual({ style: 'solid', width: '2px' });
 
-    // One banner and one main landmark, the footer's navigation only, and no menu button.
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('navigation')).toHaveCount(1);
     await expect(page.getByRole('button')).toHaveCount(0);
 
-    // Tab order: skip link, "Omni League", the top bar's "Sign in", "Go to the home page",
-    // then the footer's links.
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',

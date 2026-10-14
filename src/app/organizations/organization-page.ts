@@ -13,31 +13,9 @@ import { OrganizationOverview } from './organization-overview';
 import { organizationPath, type PublicOrganizationPage } from './organization-path';
 
 /**
- * The public organization page, `/organizations/:orgSlug` (#60), approved in #73
- * (design/mockups/60-organization-page.html). A Server route: the render reads three queries
- * anonymously, `organizations:getPublicPage` (the header and totals) and page 1 of
- * `organizations:listPublicLeagues` and `organizations:listPublicLocations` (#100), and after
- * hydration the live subscriptions keep the page current.
- *
- * - Found: the overview in the public layout (a light top bar and a footer, no sidebar), and
- *   the title, Open Graph tags, and canonical from the query results, once all three have
- *   arrived.
- * - Header `null`: the not-found view with status 404, in the public layout.
- * - Any of the three failed or timed out: the server-error view with status 503 and `no-store`,
- *   in the public layout, so an error never enters the CDN cache. The live subscriptions replace it once
- *   every result has arrived.
- *
- * Offline (#82, design/mockups/82-offline-pages.html): all three queries are on the adapter's
- * `OFFLINE_SAVED_QUERIES`, so the browser keeps each live result as a saved copy and shows it when
- * there is no transferred value and no live result yet. While the app is offline (`injectOnline()`
- * false) the overview shows the saved-copy note under the `h1`, dated by the oldest saved copy on
- * screen; online, a saved copy shows with no note until the live result replaces it. Offline with
- * any of the three missing, the page shows the not-saved view. A live `null` header removes its
- * saved copy (the adapter) and shows the not-found view.
- *
- * The queries' only arguments are the route's slug and page 1, so the server and the browser use
- * the same `TransferState` keys and the server HTML holds no query string. Page numbers in the URL
- * are #103.
+ * The queries take only the route's slug and page 1, so the server and the browser use the same
+ * `TransferState` keys and the server HTML holds no query string. A failed or timed-out query
+ * renders the server-error view (503, `no-store`) so the CDN never stores it.
  */
 @Component({
   selector: 'app-organization-page',

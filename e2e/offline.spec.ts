@@ -85,8 +85,7 @@ test.describe('offline note', () => {
       await testInfo.attach(`offline-note-${width}.png`, { path, contentType: 'image/png' });
     }
     // At 320px the note wraps to two lines (56px). The scroll offset follows its measured height,
-    // so a focused or anchored element above the viewport lands below the note, not under it. The
-    // note starts under the public layout's top bar: 64px and its 1px border.
+    // so a focused or anchored element above the viewport lands below the note, not under it.
     await page.setViewportSize({ width: 320, height: 800 });
     await expect.poll(async () => (await note.boundingBox())?.height).toBe(56);
     const noteBox = await status.boundingBox();

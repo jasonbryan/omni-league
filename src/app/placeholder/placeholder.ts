@@ -1,10 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { PublicLayout } from '../public-layout/public-layout';
 
-/**
- * Home placeholder: the `home-shell` state of design/mockups/61-token-sheet.html. It renders in the public layout: the top bar
- * and footer, no sidebar.
- */
 @Component({
   selector: 'app-placeholder',
   imports: [PublicLayout],

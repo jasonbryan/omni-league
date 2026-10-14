@@ -5,10 +5,6 @@ import type { PublicOrganizationHeader } from '../organization-path';
 /** A found season's page data, as `seasons:getPublicPage` returns it. */
 export type PublicSeasonData = NonNullable<FunctionReturnType<typeof api.seasons.getPublicPage>>;
 
-/**
- * What the public season page shows: the organization's header (its name for the
- * breadcrumb) and the season with its league.
- */
 export interface PublicSeasonView {
   organization: PublicOrganizationHeader;
   season: PublicSeasonData;

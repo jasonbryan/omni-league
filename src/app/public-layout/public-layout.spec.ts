@@ -8,9 +8,6 @@ import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { PublicLayout } from './public-layout';
 
-// The public layout (design/mockups/300-public-site-navigation.html and the frame of
-// 300-public-site-organization.html): a light top bar, no sidebar, and a footer.
-
 @Component({
   selector: 'app-public-layout-test-page',
   imports: [PublicLayout],
@@ -28,7 +25,6 @@ describe('PublicLayout', () => {
   let convex: FakeConvexClient;
   let harness: RouterTestingHarness;
 
-  /** Opens `url` in the layout; `session` null is signed out. */
   async function open(url = '/organizations/gulf-coast', session: { id: string } | null = null) {
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
@@ -59,7 +55,6 @@ describe('PublicLayout', () => {
       expect(mains).toHaveLength(1);
       expect(mains[0].id).toBe('main');
       expect(mains[0].getAttribute('tabindex')).toBe('-1');
-      // The top bar is the header's content; the footer and main are outside it.
       expect(page.querySelector('header')?.contains(page.querySelector('a[href="/"]'))).toBe(true);
       expect(page.querySelector('header')?.contains(mains[0])).toBe(false);
       expect(page.querySelector('footer')?.contains(mains[0])).toBe(false);
@@ -97,8 +92,6 @@ describe('PublicLayout', () => {
 
       const links = [...page.querySelectorAll('a')];
       expect(links[0].textContent.trim()).toBe('Skip to main content');
-      // The router's current URL with the fragment set; as in the app shell, a server render
-      // leaves the query string out (public-layout.server.spec.ts).
       expect(links[0].getAttribute('href')).toBe('/organizations/gulf-coast?ott=SECRET#main');
       const header = page.querySelector('header')!;
       expect(labels(header.querySelectorAll('a'))).toEqual(['Omni League', 'Sign in']);

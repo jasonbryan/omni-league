@@ -1,9 +1,5 @@
-// Public organization page (#60): `/organizations/:orgSlug`, rendered on the server from
-// `organizations:getPublicPage` and page 1 of the league and location lists, in the public
-// layout (top bar and footer, no sidebar) with live subscriptions after hydration. Each test
-// that seeds its own tenant needs the local Convex backend and is skipped with
-// E2E_BASE_URL set; the unknown-slug tests also run against a preview. The layout's own checks
-// are in e2e/public-layout.spec.ts.
+// Tests that seed their own tenant need the local Convex backend and are skipped with
+// E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { expectAccessible } from './support/a11y';
@@ -119,7 +115,6 @@ test.describe('organization page: raw server HTML', () => {
         expect(metaContent(html, 'og:url'), path).toBe(canonical);
         expect(canonicalHrefs(html), path).toEqual([canonical]);
 
-        // No sidebar; the rows keep their ids.
         expect(html, path).not.toContain(`aria-label="${tenant.name}"`);
         for (const id of ['league-1', 'league-2', 'location-1', 'location-2']) {
           expect(html, `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
@@ -218,11 +213,8 @@ test.describe('organization page in the browser', () => {
     await hydrated(consoleGuard);
     await expect(page).toHaveTitle(`${tenant.name} | Omni League`);
 
-    // The public layout: no menu button, and the only navigation is the footer's.
     await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
     await expect(page.getByRole('navigation')).toHaveCount(1);
-    // The Tab order follows the DOM: skip link, top bar, each league's name, then the
-    // footer's links.
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
@@ -390,7 +382,6 @@ test.describe('organization page: unknown slug', () => {
       );
       expect(html).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
       expect(html.match(/<h1\b/g)).toHaveLength(1);
-      // The public layout: the footer's navigation only, no sidebar and no menu button.
       expect(html.match(/<nav\b[^>]*>/g)).toHaveLength(1);
       expect(html).toContain('aria-label="Footer"');
       expect(html).not.toContain('aria-label="Open navigation"');

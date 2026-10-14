@@ -1,8 +1,5 @@
-// The offline note's measured height (#88, review round 2): `--offline-note-h` on <html> follows the
-// note, and html's scroll padding and the header's scroll margin add it, and the note itself sticks
-// below the public layout's top bar (the app shell's sidebar offset is checked in
-// src/app/shell/shell-offline.spec.ts). One browser project only. The note is driven by `setOffline`
-// (navigator.onLine false), which needs no socket route and no fake clock.
+// One browser project only. The note is driven by `setOffline` (navigator.onLine false), which
+// needs no socket route and no fake clock.
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
@@ -63,7 +60,6 @@ test.describe('offline note height', () => {
         document.documentElement.style.fontSize = `${percent}%`;
       }, textPercent);
       const rem = (16 * textPercent) / 100;
-      // The public layout's top bar: 4rem and its 1px border.
       const barHeight = 4 * rem + 1;
 
       // The variable equals the note's rendered height once the observer has run.
@@ -120,7 +116,6 @@ test.describe('offline note height', () => {
         window.scrollTo(0, 0);
       });
 
-      // The note sticks directly below the top bar when the page is scrolled.
       await page.evaluate(() => window.scrollTo(0, 400));
       expect((await status.boundingBox())!.y, `note stuck below the bar at ${label}`).toBeCloseTo(
         barHeight,

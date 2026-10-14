@@ -35,8 +35,6 @@ test.describe('smoke: placeholder home', () => {
       expect(main).toBeGreaterThan(home);
       expect(heading).toBeGreaterThan(main);
       expect(html.indexOf('</main>')).toBeGreaterThan(heading);
-      // The top bar's "Sign in" (#63) is in the server HTML, and there is no sidebar on the home page
-      // (the public layout has a footer navigation only).
       expect(html.slice(html.indexOf('<header'), html.indexOf('</header>'))).toMatch(
         />Sign in<\/a>/,
       );
@@ -94,8 +92,6 @@ test.describe('smoke: placeholder home', () => {
     await expect(page.locator('main#main')).toBeFocused();
     expect(new URL(page.url()).pathname).toBe('/');
 
-    // One banner and one main landmark, the footer's navigation only, and a sticky top bar: the
-    // 64px of the public layout plus its 1px border.
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('navigation')).toHaveCount(1);

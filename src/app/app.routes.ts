@@ -115,7 +115,6 @@ export const routes: Routes = [
         ],
       },
       {
-        // Unknown /app paths keep the app shell; every other unknown path gets the public layout.
         path: '**',
         loadComponent: () =>
           import('./not-found/app-not-found-page').then((m) => m.AppNotFoundPage),

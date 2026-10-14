@@ -238,7 +238,6 @@ describe('Route tables', () => {
     expect(await account?.loadComponent?.()).toBe(AccountPage);
     expect(notFound?.path).toBe('**');
     expect(notFound?.canActivate).toBeUndefined();
-    // The app shell's not-found page; the root `**` route renders the public layout's.
     expect(await notFound?.loadComponent?.()).toBe(AppNotFoundPage);
   });
 });

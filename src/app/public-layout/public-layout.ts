@@ -16,27 +16,16 @@ import { OfflineNote } from '../shell/offline-note';
 import { skipLinkHref } from '../shell/shell';
 import { TopBarAccount } from '../shell/top-bar-account';
 
-/** The link classes of the footer's groups: 44px tall on a phone, as drawn in the mockup. */
-const FOOTER_LINK =
+const FOOTER_LINK_CLASSES =
   'inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0';
 
 /**
- * The public layout (design/mockups/300-public-site-navigation.html and the frame of
- * design/mockups/300-public-site-organization.html, style A): every page outside
- * `/app/**` wraps its content in it. A skip link, a light top bar ("Omni League", then "Sign in"
- * or the account link), the offline note directly below the bar, `<main id="main">`, and a
- * footer. There is no menu button and no sidebar. The app shell (`src/app/shell/`) is for
- * `/app/**` only.
+ * Nothing here depends on the visitor: the server HTML is cached by the CDN, so "Sign in" and the
+ * account link come from `TopBarAccount`, which shows the account link only in the browser, and
+ * the query string stays out of the HTML (`skipLinkHref`).
  *
- * It holds no per-user value: "Sign in" and the account link are `TopBarAccount`, which shows the
- * account link only in the browser, once the session store answers. The server's HTML (cached by
- * the CDN for Server routes) is therefore the same for every visitor, and the query string stays
- * out of it, as in the shell (`skipLinkHref`). The new-version prompt is an overlay
- * the app provides once (`provideUpdatePrompt`), so it appears here without markup.
- *
- * The top bar is 64px tall plus its 1px border, so the offline note sticks below it with
- * `--top-bar-h`. "Sign in" and the account link reuse the shell's `TopBarAccount`; the layout only
- * raises their height to 44px on a phone with a descendant selector, as the mockup draws it.
+ * `--top-bar-h` is the top bar's 64px plus its 1px border; the offline note sticks below it.
+ * `[&_a]:min-h-11` raises `TopBarAccount`'s links to 44px on a phone without changing that component.
  */
 @Component({
   selector: 'app-public-layout',
@@ -82,7 +71,7 @@ const FOOTER_LINK =
             <div class="max-w-xs">
               <a
                 routerLink="/"
-                class="flex min-h-11 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
+                class="flex min-h-11 md:min-h-0 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
               >
                 <ng-container [ngTemplateOutlet]="brand" />
               </a>
@@ -139,12 +128,11 @@ const FOOTER_LINK =
 export class PublicLayout {
   private readonly router = inject(Router);
   private readonly url = injectCurrentUrl();
-  // The server leaves the query string out of the HTML (see skipLinkHref); the browser puts it
-  // back on hydration. Before hydration the link reloads the page without the query string.
+  // The server renders the link without the query string (CDN-cached HTML); the browser adds it on hydration.
   private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
 
-  protected readonly footerLink = FOOTER_LINK;
+  protected readonly footerLink = FOOTER_LINK_CLASSES;
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),
   );

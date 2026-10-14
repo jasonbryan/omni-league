@@ -93,18 +93,9 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
 }
 
 /**
- * `/invites/accept` (#70), a `RenderMode.Client` route with `Referrer-Policy: no-referrer`,
- * (design/mockups/70-accept-invite.html): the page in the public layout.
- * The link is `/invites/accept#<token>`; `captureInviteToken` has already moved the token into
- * `sessionStorage` and taken it out of the URL, so it is in no `returnTo`, address bar, or request
- * URL. The page sends it only as the argument of `invites.getByToken` (live) and `invites.accept`.
- *
- * A signed-out visitor sees the organization and role with sign-up and sign-in links that carry
- * `returnTo=/invites/accept` alone. A signed-in one sees Accept invite; `invites.accept` checks
- * the account email, so a refusal shows the different-email, already-a-member, or error alert,
- * which takes focus. "Sign in with a different account" signs out and opens sign-in with the
- * token still stored. The token is deleted once the invite is accepted, turns out to be unusable, or
- * is refused because the visitor is already a member.
+ * `captureInviteToken` has already moved the token from the link's fragment into `sessionStorage`,
+ * so it is in no `returnTo`, address bar, or request URL; the page sends it only as the argument
+ * of `invites.getByToken` and `invites.accept`.
  */
 @Component({
   selector: 'app-accept-invite-page',

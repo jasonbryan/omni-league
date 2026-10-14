@@ -13,7 +13,6 @@ describe('NotFoundPage', () => {
     expect(host.children[0].tagName).toBe('APP-PUBLIC-LAYOUT');
     expect(host.querySelectorAll('header')).toHaveLength(1);
     expect(host.querySelectorAll('footer')).toHaveLength(1);
-    // No sidebar: no menu button, and the only navigation landmark is the footer's.
     expect(host.querySelector('button')).toBeNull();
     expect([...host.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'))).toEqual([
       'Footer',

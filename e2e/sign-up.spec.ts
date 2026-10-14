@@ -18,10 +18,7 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
 
-/**
- * Sign-up form order (mockup 62 "Focus order"): the top bar's Sign in, then the panel footer's,
- * then the public layout's footer links.
- */
+/** Sign-up form order (mockup 62 "Focus order"): the top bar's Sign in, then the panel footer's. */
 const SIGN_UP_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',

@@ -1,9 +1,5 @@
-// The public layout: every page outside `/app/**` has a light top bar and a footer and no
-// sidebar (design/mockups/300-public-site-navigation.html and 300-public-site-organization.html,
-// style A). Raw HTML, landmarks, the account link, the other public routes, the accessibility and
-// reflow checks at 360px and 1280px, and 44px targets on a touch screen. The pages' own content
-// is checked in their specs. Tests that seed a tenant or a user need the local Convex backend and
-// are skipped with E2E_BASE_URL set.
+// Tests that seed a tenant or a user need the local Convex backend and are skipped with
+// E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
@@ -24,7 +20,6 @@ const noSpaces = (value: string | undefined) => value?.replace(/\s+/g, '');
 const LEAGUE = 'Sunday Reverse Coed 4s';
 const LEAGUE_SLUG = 'sunday-reverse-coed-4s';
 
-/** An organization with a published league and a published season "Summer 2027". */
 async function seed(): Promise<{ tenant: Tenant; paths: string[] }> {
   const tenant = await seedTenant({
     name: 'E2E Public Layout',
@@ -38,7 +33,6 @@ async function seed(): Promise<{ tenant: Tenant; paths: string[] }> {
   return { tenant, paths: [tenant.path, league, `${league}/seasons/summer-2027`] };
 }
 
-/** Waits for the dev-mode hydration log, so the page is interactive. */
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
   await expect
     .poll(() => consoleGuard.hydrated, {
@@ -66,7 +60,6 @@ test.describe('public layout: raw server HTML', () => {
         expect(status, path).toBe(200);
         expect(noSpaces(headers['cache-control']), path).toBe(noSpaces(PUBLIC_PAGE_CACHE));
 
-        // The skip link comes first, then the top bar with the brand and "Sign in".
         const skip = html.search(/<a\b[^>]*href="[^"]*#main"[^>]*>\s*Skip to main content\s*<\/a>/);
         const header = html.indexOf('<header');
         const main = html.search(/<main\b[^>]*\bid="main"[^>]*\btabindex="-1"/);
@@ -78,10 +71,8 @@ test.describe('public layout: raw server HTML', () => {
         const bar = html.slice(header, html.indexOf('</header>'));
         expect(bar, path).toMatch(/>\s*Omni League\s*(?:<!--[^>]*-->\s*)*<\/a>/);
         expect(bar, path).toMatch(/>Sign in<\/a>/);
-        // Anonymous: the account link exists only in the browser.
         expect(bar, path).not.toContain('Account:');
 
-        // One header, one main, one footer, and the footer's links in a navigation named Footer.
         expect(html.match(/<header\b/g), path).toHaveLength(1);
         expect(html.match(/<main\b/g), path).toHaveLength(1);
         expect(html.match(/<footer\b/g), path).toHaveLength(1);
@@ -98,7 +89,6 @@ test.describe('public layout: raw server HTML', () => {
         );
         expect(html.slice(footer), path).toContain('2026 Omni League');
 
-        // No sidebar and no menu button; the page's content is in <main>.
         expect(html, path).not.toContain('aria-label="Open navigation"');
         expect(html, path).not.toMatch(/<aside\b/);
         expect(html, path).not.toContain(`<nav aria-label="${tenant.name}"`);
@@ -128,7 +118,6 @@ test.describe('public layout: signed in', () => {
       await hydrated(consoleGuard);
       await expect(page.locator('header a[href="/app"]')).toContainText(user.name);
       await expect(page.locator('header a[href^="/sign-in"]')).toHaveCount(0);
-      // The footer is the same for everyone.
       await expect(page.locator('footer')).toHaveCount(1);
     },
   );
@@ -142,7 +131,6 @@ test.describe('public layout: signed in', () => {
   });
 });
 
-/** The other public routes; an unknown path answers 404 in the same layout. */
 const ROUTES = ['/', '/sign-in', '/sign-up', '/invites/accept'];
 
 test.describe('public layout: other routes', () => {
@@ -192,7 +180,6 @@ test.describe('public layout: other routes', () => {
   });
 });
 
-/** One top bar, one main, one footer holding the "Footer" navigation, and no menu button. */
 async function expectInPublicLayout(page: Page): Promise<void> {
   await expect(page.getByRole('banner')).toHaveCount(1);
   await expect(page.locator('main#main[tabindex="-1"]')).toHaveCount(1);
@@ -203,8 +190,6 @@ async function expectInPublicLayout(page: Page): Promise<void> {
 }
 
 /**
- * On a touch screen (the phone project) every link of the top bar and the footer is at least 44px
- * tall; on a desktop it is only measured to exist, because their desktop sizes follow the mockup.
  */
 async function expectTouchTargets(page: Page, touch: boolean): Promise<void> {
   if (!touch) return;

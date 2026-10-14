@@ -19,29 +19,10 @@ import {
 } from './public-league-path';
 
 /**
- * The public league page, `/organizations/:orgSlug/leagues/:leagueSlug` (#127), drawn in
- * design/mockups/127-128-public-seasons.html. A Server route: the render reads three queries
- * anonymously, `organizations:getPublicPage` (the organization's name for the breadcrumb),
- * `leagues:getPublicPage` (the league's header), and `seasons:listPublic` (the page of published
- * seasons asked for), and after hydration the live subscriptions keep the page current.
- *
- * - Found: the content in the public layout (a light top bar and a footer, no sidebar), and
- *   the title, Open Graph tags, and canonical from the query results, once all three have
- *   arrived.
- * - Header `null` (an unknown organization or league, or a draft league): #23's not-found view with
- *   status 404, in the public layout.
- * - Any of the three failed or timed out: the server-error view with status 503 and `no-store`, in
- *   the public layout, so an error never enters the CDN cache.
- *
- * The page asked for is `?page=N`, read with `parseListPage` from every value of the parameter, so
- * the server and the browser ask for the same page and the server HTML holds only the page number
- * the query result gives (Angular conventions, "Query strings and the CDN"). A page link changes
- * only the seasons query; while it loads the page keeps the previous rows with `aria-busy`.
- *
- * Offline (#82, design/mockups/82-offline-pages.html): all three queries are on the adapter's
- * `OFFLINE_SAVED_QUERIES`. While the app is offline (`injectOnline()` false) the content shows the
- * saved-copy note under the `h1`, dated by the oldest saved copy on screen; offline with any of
- * the three missing, the page shows the not-saved view.
+ * `?page=N` is read with `parseListPage` from every value of the parameter, so the server and the
+ * browser ask for the same page and the server HTML holds only the page number the query returns.
+ * A failed or timed-out query renders the server-error view (503, `no-store`) so the CDN never
+ * stores it.
  */
 @Component({
   selector: 'app-public-league-page',

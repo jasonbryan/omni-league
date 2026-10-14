@@ -178,8 +178,6 @@ describe('selectSpecs: mapped areas', () => {
   });
 
   it('maps the public league page and its paths to the league page, season page, and cache-key specs', () => {
-    // The season page builds its links from the league page's paths, and is reached from the
-    // league page's rows.
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',

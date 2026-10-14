@@ -228,7 +228,6 @@ describe('OrganizationPage offline (#82)', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe(PATH);
-      // In the public layout: the footer's navigation, no sidebar, no menu button.
       expect(host(harness).querySelector('app-public-layout')).not.toBeNull();
       expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
       expect(host(harness).querySelector('button')).toBeNull();

@@ -181,8 +181,6 @@ describe('PublicLeaguePage server render', () => {
       'Spring 2026',
     ]);
     expect(text(body.querySelector('nav[aria-label="Seasons pages"] p'))).toBe('1–5 of 7 seasons');
-    // The public layout: the skip link, the top bar with "Sign in", and the footer are in
-    // the raw HTML. The organization's sidebar and the menu button are gone.
     const frame = publicFrame(body);
     expect({ ...frame, navs: [] }).toEqual({ ...PUBLIC_FRAME, navs: [] });
     expect(frame.navs.at(-1)).toBe('Footer');

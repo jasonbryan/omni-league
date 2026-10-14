@@ -1,18 +1,9 @@
-/**
- * Test helper for the public layout: the landmarks and chrome of a rendered page, to compare
- * with `PUBLIC_FRAME`. A page in the public layout has one top bar (`header`), one `<main
- * id="main">`, one footer whose links are in the only navigation landmark (named "Footer"), and no
- * sidebar and no menu button.
- */
 export interface PublicFrame {
   headers: number;
   mains: number;
   footers: number;
-  /** The accessible names of every `nav`, in document order. */
   navs: (string | null)[];
-  /** "Open navigation" buttons: the app shell's menu button, absent from the public layout. */
   menuButtons: number;
-  /** Complementary landmarks: the sidebar's column. */
   asides: number;
 }
 

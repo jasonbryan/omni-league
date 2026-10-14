@@ -1,6 +1,3 @@
-// The app shell's phone sheet on the organization admin area, a page with a sidebar. The sheet's chunk
-// loads on the first press and its host stays out of the document; a navigation away while it is
-// open leaves no overlay or scroll block; and it opens and closes while the offline note shows.
 // Tests sign a user up and seed an organization, so they need the local Convex backend.
 import type { Locator, Page } from '@playwright/test';
 import { describeViolations, axeScan } from './support/a11y';
@@ -13,7 +10,6 @@ import { newUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
-/** Signs a user up as an org admin of a new organization and opens its admin Overview. */
 async function openAdminOverview(page: Page): Promise<void> {
   const user = newUser('Sheet');
   await signUp(page, user);
@@ -29,7 +25,6 @@ async function openAdminOverview(page: Page): Promise<void> {
   await expect(menuButton(page)).toBeVisible();
 }
 
-/** Makes the page scroll, so an open sheet blocks scrolling. */
 async function makeTall(page: Page): Promise<void> {
   await page.locator('main').evaluate((main) => {
     const spacer = document.createElement('div');
@@ -38,7 +33,6 @@ async function makeTall(page: Page): Promise<void> {
   });
 }
 
-/** A tap at the control's coordinates (the phone user's press). */
 async function activate(page: Page, control: Locator): Promise<void> {
   await control.scrollIntoViewIfNeeded();
   const box = await control.boundingBox();
@@ -61,10 +55,8 @@ test.describe('the phone sheet on the admin area', () => {
     await page.setViewportSize({ width: 320, height: 800 });
     await openAdminOverview(page);
     await activate(page, menuButton(page));
-    // The dialog container has no box of its own: the helm sheet content inside is fixed.
     await expect(dialogOf(page).locator('[data-slot="sheet-content"]')).toBeVisible();
     await expect(dialogOf(page).getByRole('button', { name: 'Close navigation' })).toBeFocused();
-    // The sheet's host element is not in the document: only the overlay holds its content.
     expect(await page.locator('app-shell-sheet').count()).toBe(0);
   });
 
@@ -82,8 +74,6 @@ test.describe('the phone sheet on the admin area', () => {
       )
       .toBe(true);
 
-    // The header's home link is under the scrim; a script click starts the client navigation to
-    // the public layout, which has no menu button.
     await page.evaluate(() => {
       document.querySelector<HTMLAnchorElement>('header a[href="/"]')?.click();
     });
@@ -113,7 +103,6 @@ test.describe('the phone sheet on the admin area', () => {
     const sheet = dialogOf(page).locator('[data-slot="sheet-content"]');
     const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
 
-    // Online: the first press loads the chunk and creates the sheet; close it again.
     await activate(page, menuButton(page));
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
@@ -130,7 +119,6 @@ test.describe('the phone sheet on the admin area', () => {
       Promise.all(element.getAnimations().map((animation) => animation.finished)),
     );
     expect((await sheet.boundingBox())?.width).toBe(288);
-    // The note is still shown, unmoved, under the scrim.
     await expect(note).toBeVisible();
     expect(await note.boundingBox()).toEqual(noteBefore);
     expect(await page.locator('app-shell-sheet').count()).toBe(0);
@@ -148,7 +136,6 @@ test.describe('the phone sheet on the admin area', () => {
       ),
     ).toBe(false);
 
-    // And once more: the second open after the note appeared works as the first one did.
     await activate(page, menuButton(page));
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
