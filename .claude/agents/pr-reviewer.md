@@ -14,6 +14,7 @@ Check every changed file for:
 - **Authorization:** every public Convex function validates `args`, authenticates the caller, and confirms access to the specific league, team, or record.
 - **Payments:** amounts set server-side, webhook signature verified, handlers idempotent, idempotency keys on Stripe calls, no live keys.
 - **Conventions:** the matching `docs/conventions/` rules.
+- **Code comments:** any added or changed comment that breaks `AGENTS.md`, Code comments, is a blocking finding: a what-comment where a clearer name, extracted function, or named constant would do; history or a reference to an issue, PR, ADR, review, or agent role; a TODO or other pointer to future work with no open issue naming the code; an issue number in a test title.
 - **Tests:** tests assert behaviour, not implementation details, and would fail if the feature broke.
 - **Scope:** changes beyond the issue, and any new package or service without an Accepted ADR (a missed `gate:technology`).
 - **Migration:** a PR that changes `convex/schema.ts`, or code that rewrites stored data, with a missing or `none` Migration section is a blocking finding.

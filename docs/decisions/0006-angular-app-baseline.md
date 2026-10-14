@@ -5,6 +5,7 @@
 - **Issue:** #5
 - **Date:** 2026-10-07 (revised 2026-10-07 after the owner's answer on public pages; revised again for dev-only hydration checks, the `@types/node` pin, and the indexing assumption; revised a third time to record the owner's indexing answer and the #11 / #24 adapter split)
 - **Amended:** 2026-10-08, wording only: hydration seed timing (first read of the args, not creation). See "Amendment: seed timing (2026-10-08)" at the end.
+- **Amended:** 2026-10-13, by #269: `ngSkipHydration` takes a one-line why comment, with no issue link. See "Amendment: code comments (#269)" at the end. Where the sections above say the comment links an issue, the amendment applies.
 - **Amended:** 2026-10-09, `provideConvexAuth` also accepts an injectable class (#62, PR #102). See "Amendment: injectable auth source (2026-10-09)" at the end.
 
 ## Context
@@ -528,3 +529,13 @@ A wording clarification that matches the shipped adapter (#24, PR #38). The deci
 ## Amendment: injectable auth source (2026-10-09)
 
 `provideConvexAuth` accepts an injectable class as well as an instance. The signature in "Adapter specification" declares an instance only (`source: ConvexAuthSource`). The signature is now `source: ConvexAuthSource | Type<ConvexAuthSource>`: a class is registered with `useExisting`, so its root instance is the source. #62 (PR #102) calls `provideConvexAuth(AuthService)`. Behaviour, `setAuth`, and `clearAuth` timing are unchanged.
+
+## Amendment: code comments (#269, 2026-10-13)
+
+The owner set one rule for code comments in `AGENTS.md`, Code comments: a comment gives only a why the code cannot express, and references to this repo's issues and PRs live in commits and PRs, not code.
+
+| Rule in this ADR                                                          | Was                                          | Now                                                                                                                              |
+| ------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Browser-only widgets and `ngSkipHydration` (SSR-safe code rule, line 208) | "only with a code comment and an issue link" | Only with a one-line code comment giving the why. The tracking issue stays open, and the PR that adds `ngSkipHydration` links it |
+
+**Why.** The comment says why the widget cannot hydrate, which the code cannot express. The issue link is history, and the PR carries it.
