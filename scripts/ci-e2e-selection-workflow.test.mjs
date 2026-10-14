@@ -1,7 +1,3 @@
-// Checks of the `ci` workflow's e2e spec selection and nightly run (#186): the shape of the
-// schedule trigger and the `nightly-issue` job, and the shell of the `e2e specs`, `e2e`, and issue
-// steps, run as GitHub runs them. Run with `npm run test:scripts` (node:test). Node built-ins only:
-// the workflow is read with regular expressions, not a YAML parser, as in ci-workflow.test.mjs.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,7 +10,6 @@ const workflow = readFileSync(
   'utf8',
 );
 
-/** The text of one top-level job. */
 function job(name) {
   const block = new RegExp(`^ {2}${name}:\\n([\\s\\S]*?)(?=^ {2}\\S|(?![\\s\\S]))`, 'm').exec(
     workflow,
@@ -23,7 +18,6 @@ function job(name) {
   return block[1];
 }
 
-/** The `ci` job's steps in file order: the name and the `if:` condition of each. */
 function ciSteps() {
   const steps = [];
   for (const [, block] of job('ci').matchAll(/^ {6}- ([\s\S]*?)(?=^ {6}- |(?![\s\S]))/gm)) {
@@ -34,7 +28,6 @@ function ciSteps() {
   return steps;
 }
 
-/** The `run` script of the step named `name`, as GitHub runs it. */
 function stepScript(name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const block = new RegExp(
@@ -141,8 +134,7 @@ describe('the e2e specs step', () => {
   };
 
   /**
-   * Runs the e2e specs step in a scratch git repository with `bash -e`, GitHub's default shell.
-   * @param {(repo: string, git: (...args: string[]) => void) => void} prepare Builds the history.
+   * @param {(repo: string, git: (...args: string[]) => void) => void} prepare
    * @param {string} event
    */
   function runSpecsStep(prepare, event = 'pull_request') {
@@ -184,7 +176,6 @@ describe('the e2e specs step', () => {
     }
   }
 
-  /** Two commits that change `path`: the base, then the change. */
   const changeFile = (path) => (repo, git) => {
     write(repo, path, 'one\n');
     git('add', '.');
@@ -249,9 +240,8 @@ describe('the e2e specs step', () => {
 
 describe('the e2e step', () => {
   /**
-   * Runs the e2e step's script with a fake `npm` on PATH that records its arguments.
-   * @param {Record<string, string>} env E2E_SCOPE and E2E_SPECS.
-   * @returns {string[]} The arguments `npm` received.
+   * @param {Record<string, string>} env
+   * @returns {string[]}
    */
   function npmArguments(env) {
     const dir = mkdtempSync(join(tmpdir(), 'e2e-step-'));
@@ -316,10 +306,9 @@ describe('the nightly issue step', () => {
   const skip = hasJq ? false : 'jq is not installed';
 
   /**
-   * Runs the step's script with a fake `gh` and the real `jq`.
-   * @param {Record<string, string>} env The step's environment.
-   * @param {string} existing JSON that `gh issue list` prints.
-   * @returns {string} One line per `gh` call other than the list.
+   * @param {Record<string, string>} env
+   * @param {string} existing
+   * @returns {string}
    */
   function runIssueStep(env, existing = '[]') {
     const dir = mkdtempSync(join(tmpdir(), 'nightly-issue-'));
@@ -429,9 +418,8 @@ describe('skipping a quiet night', () => {
   });
 
   /**
-   * Runs the gate step's script with a fake `gh`.
-   * @param {{ output?: string, exit?: number }} lookup What `gh run list` prints and its exit code.
-   * @param {string} head The commit the scheduled run is for.
+   * @param {{ output?: string, exit?: number }} lookup
+   * @param {string} head
    */
   function runGate({ output = '', exit = 0 }, head = 'abcdef0123456789') {
     const dir = mkdtempSync(join(tmpdir(), 'nightly-gate-'));

@@ -1,6 +1,3 @@
-// Local SSR runner (ADR 0010 item 2): serves the production build the way Netlify does, with Node
-// built-ins only. Static files come from dist/omni-league/browser/ with ADR 0010 item 3's cache
-// headers; every other request goes to the same `netlifyAppEngineHandler` the edge function runs.
 // It must not import the Node adapter of `@angular/ssr` (its `/node` entry point): that loads a
 // second, unlinked copy of Angular.
 import { open, realpath, stat } from 'node:fs/promises';
@@ -19,7 +16,7 @@ const { netlifyAppEngineHandler } = await import(
   pathToFileURL(join(distDir, 'server', 'server.mjs')).href
 );
 
-// Mirrors the [[headers]] paths in netlify.toml: only content-hashed build outputs are immutable.
+// Mirrors the [[headers]] paths in netlify.toml.
 const HASHED = /^\/(?:media\/.+|(?:main|chunk|polyfills)-[^/]+\.js|styles-[^/]+\.css)$/;
 const MIME = {
   '.css': 'text/css; charset=utf-8',
@@ -34,18 +31,13 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
-/** The real path of `path` if it exists and resolves (through `..` or a symlink) inside browser/. */
 async function realPathInside(path) {
   const real = await realpath(path).catch(() => undefined);
   return real === browserRoot || real?.startsWith(browserRoot + sep) ? real : undefined;
 }
 
-/**
- * The open file under browser/ for this path, or undefined when the path is missing, resolves
- * outside browser/, or is a directory without an index.html. A directory is answered with its
- * index.html (a prerendered route, as Netlify serves it), never a listing. A file that exists but
- * cannot be opened throws, so the caller answers 500.
- */
+// A directory is answered with its index.html (a prerendered route, as Netlify serves it), never a
+// listing.
 async function staticFile(pathname) {
   let decoded;
   try {
@@ -69,7 +61,6 @@ async function staticFile(pathname) {
 const UNPRINTABLE = '<unprintable thrown value>';
 const MAX_CAUSES = 5;
 
-/** Text of one thrown value, always a string. */
 function describeOrFallback(value) {
   try {
     if (value instanceof Error) {
@@ -86,10 +77,7 @@ function describeOrFallback(value) {
   }
 }
 
-/**
- * Error text for the log, with its `cause` chain (bounded), and every query string removed: it
- * can carry a one-time token (ADR 0008). Never throws, whatever was thrown.
- */
+// Every query string is removed from the log: it can carry a one-time token.
 function redactQuery(error) {
   let text = describeOrFallback(error);
   try {
@@ -237,10 +225,8 @@ function listen(server, port, host) {
   });
 }
 
-/**
- * Listens on 127.0.0.1 and then ::1 on the same port. With PORT=0 the port comes from 127.0.0.1,
- * and it can already be taken on ::1; then both are retried on a new port, a few times.
- */
+// With PORT=0 the port comes from 127.0.0.1, and it can already be taken on ::1; then both are
+// retried on a new port, a few times.
 async function listenOnLoopback(requested) {
   for (let attempt = 1; ; attempt++) {
     const ipv4 = createServer(handle);

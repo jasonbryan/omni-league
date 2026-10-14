@@ -1,4 +1,3 @@
-# Generated, build, and test output (ADR 0002)
 **/convex/_generated/
 dist/
 .angular/
@@ -9,22 +8,18 @@ test-results/
 blob-report/
 e2e/screenshots/
 
-# Lockfiles
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
 bun.lock
 bun.lockb
 
-# Package-manager stores
 node_modules/
 .yarn/
 .pnpm-store/
 
-# Environment files and local Convex backend state
 .env*
 .convex/
 .convex-e2e/
 
-# Agent worktrees created inside the checkout (dev cycle)
 .claude/worktrees/
