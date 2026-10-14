@@ -1,7 +1,7 @@
-// Checks of the edge-runtime block of eslint.config.mjs (#116). Run with `npm run test:scripts`
-// (node:test). The Netlify edge function bundles `src/server*.ts` and every `src/` file they import
-// (ADR 0010), so each of those files must get the server-entry restrictions: no environment reads,
-// no Node built-ins, and the `convex/browser` ban that applies to all of `src/`.
+// The Netlify edge function bundles `src/server*.ts` and every `src/` file they import, so each of
+// those files must get the server-entry restrictions: no environment reads, no Node built-ins, and
+// the `convex/browser` ban that applies to all of `src/`.
+
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -16,7 +16,6 @@ const eslint = new ESLint({ cwd: ROOT });
 const ENV_READ = "export const x = process.env['X'];\n";
 const CONVEX_BROWSER = "import { ConvexClient } from 'convex/browser';\nexport { ConvexClient };\n";
 
-/** The rule ids ESLint reports for `text` linted as the repository file `file`. */
 async function ruleIds(file, text) {
   const [result] = await eslint.lintText(text, { filePath: join(ROOT, file) });
   return result.messages.map((message) => message.ruleId);
@@ -40,17 +39,13 @@ describe('edge-runtime lint block', () => {
   });
 });
 
-/** Compiler options of the app build: path aliases and module resolution as the bundler reads them. */
 function appCompilerOptions() {
   const path = join(ROOT, 'tsconfig.app.json');
   const { config } = ts.readConfigFile(path, ts.sys.readFile);
   return ts.parseJsonConfigFileContent(config, ts.sys, ROOT).options;
 }
 
-/**
- * Every `src/` file the server entries import, directly or through other files: relative paths and
- * `tsconfig` path aliases. Packages (`node_modules`) are not followed. Spec files are not entries.
- */
+// Packages (`node_modules`) are not followed. Spec files are not entries.
 function edgeGraph() {
   const options = appCompilerOptions();
   const entries = readdirSync(SRC)

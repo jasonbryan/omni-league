@@ -1,4 +1,4 @@
-/* Deliberately failing token set for scripts/token-contrast.test.mjs (#58).
+/* Deliberately failing token set for scripts/token-contrast.test.mjs.
    Three pairs fall short; every other required pair passes:
    - --muted-foreground on --background (text, needs 4.5:1)
    - --muted-foreground on --muted (text, needs 4.5:1)

@@ -1,5 +1,3 @@
-// Unit tests for scripts/sw-config-check.mjs (#81, ADR 0013 section 1). Run with
-// `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,7 +12,6 @@ import {
 
 const ROOT = join(import.meta.dirname, '..');
 
-/** An angular.json with or without the `serviceWorker` build option. */
 function angularJson({ option = true, inConfiguration = false } = {}) {
   const options = { browser: 'src/main.ts', outputMode: 'server' };
   const production = { outputHashing: 'all' };
@@ -30,7 +27,7 @@ function angularJson({ option = true, inConfiguration = false } = {}) {
   };
 }
 
-/** The shape `@angular/build` writes for ngsw-config.json (ADR 0013 section 1), hashes shortened. */
+// The shape `@angular/build` writes for ngsw-config.json, hashes shortened.
 function ngswJson(overrides = {}) {
   return {
     configVersion: 1,
@@ -69,7 +66,6 @@ function ngswJson(overrides = {}) {
   };
 }
 
-/** A data group as `@angular/build` writes it. */
 const DATA_GROUP = {
   name: 'pages',
   patterns: ['^\\/organizations\\/.*$'],
@@ -81,14 +77,12 @@ const DATA_GROUP = {
   version: 1,
 };
 
-/** ngsw.json with `url` added to the shell group's URLs. */
 function withShellUrl(url) {
   const manifest = ngswJson();
   manifest.assetGroups[0].urls.push(url);
   return manifest;
 }
 
-/** Writes angular.json and (unless `ngsw` is undefined) browser/ngsw.json into a temporary root. */
 async function withBuild({ angular, ngsw, files = [] }, run) {
   const dir = await mkdtemp(join(tmpdir(), 'sw-config-check-'));
   try {
@@ -233,8 +227,8 @@ describe('swConfigCheck', () => {
     for (const line of lines) assert.match(line, /^sw-config-check: FAIL /);
   });
 
-  // A lazily loaded chunk (the phone sheet, PR #107 testing) must be prefetched, or the feature
-  // that imports it fails offline until it has been used online once.
+  // A lazily loaded chunk must be prefetched, or the feature that imports it fails offline until it
+  // has been used online once.
   describe('content-hashed build files in browser/', () => {
     const BUILT = [
       'chunk-ABCDEF12.js',
@@ -316,7 +310,7 @@ describe('serviceWorkerOptionSet', () => {
   });
 });
 
-// The kill switch is one setting (PR #119 review): the `serviceWorker` option decides both whether
+// The kill switch is one setting: the `serviceWorker` option decides both whether
 // the build writes the worker and whether the app registers it.
 describe('serviceWorkerDefine', () => {
   it('turns registration on exactly when angular.json sets the serviceWorker option', () => {

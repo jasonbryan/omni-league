@@ -1,5 +1,3 @@
-// Unit tests for scripts/e2e-convex.mjs and scripts/e2e.mjs (#59). Run with `npm run test:scripts`.
-// No Convex CLI or backend runs: each case uses a temporary project directory and stubs.
 import assert from 'node:assert/strict';
 import {
   existsSync,
@@ -49,7 +47,6 @@ after(() => {
   for (const dir of temps) rmSync(dir, { recursive: true, force: true });
 });
 
-/** A temporary e2e project dir; `config` is written as the CLI's local deployment config. */
 function projectDir({ config, envLocal } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'e2e-convex-test-'));
   temps.push(dir);
@@ -189,7 +186,6 @@ describe('resolveTarget', () => {
 });
 
 describe('runConvex', () => {
-  /** A spawn stub that records calls and exits 0 with `stdout`. */
   function stubSpawn(stdout = '"ok"\n') {
     const calls = [];
     const spawnCli = async (args, options) => {
@@ -318,7 +314,6 @@ describe('runConvex', () => {
 });
 
 describe('assertNoSharedState (the CLI would select the shared anonymous-agent state)', () => {
-  /** A temporary home with (or without) the shared state directory the CLI may select. */
   function home({ shared }) {
     const dir = mkdtempSync(join(tmpdir(), 'e2e-convex-home-'));
     temps.push(dir);
@@ -358,7 +353,6 @@ describe('assertNoSharedState (the CLI would select the shared anonymous-agent s
 });
 
 describe('ports', () => {
-  /** Listens on 127.0.0.1 on a free port; returns the port and a close function. */
   async function listener() {
     const server = createServer();
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -446,7 +440,6 @@ describe('main', () => {
 });
 
 describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
-  /** A fake clock: `sleep` advances `now`, so a retry loop runs instantly and deterministically. */
   function fakeClock() {
     let time = 0;
     const sleeps = [];
@@ -460,11 +453,6 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     };
   }
 
-  /**
-   * Runs `setup` against a stub CLI; returns the CLI calls and everything printed. `failures`
-   * maps an `env set` name to how many of its first attempts fail; `fail` is shorthand for
-   * `{ [fail]: Infinity }`.
-   */
   async function setup({ fail, failures = {}, stderr, clock = fakeClock(), randomBytes } = {}) {
     const dir = projectDir({ config: LOCAL_CONFIG });
     const calls = [];
@@ -477,7 +465,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
       ...(randomBytes && { randomBytes }),
       spawnCli: async (args) => {
         calls.push(args.slice(0, -2)); // without `--env-file <target>`
-        // Like the real CLI (#191): a value that starts with `-` is parsed as an option.
+        // Like the real CLI: a value that starts with `-` is parsed as an option.
         if (args[0] === 'env' && args[3]?.startsWith('-')) {
           return { code: 1, stdout: '', stderr: "error: unknown option '<redacted>'" };
         }
@@ -519,7 +507,6 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.deepEqual(first.calls[1], ['env', 'set', 'SITE_URL', E2E_SITE_URL]);
     assert.equal(E2E_SITE_URL, 'http://localhost:4000');
 
-    // Random per run, at least 256 bits, and never printed.
     const secret = first.calls[2][3];
     assert.match(secret, /^[0-9a-f]{64}$/);
     assert.ok(!first.output.includes(secret), 'the secret is printed');
@@ -575,11 +562,9 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
         'run testing:reset',
       ],
     );
-    // One value for every attempt of a call: the secret is generated once, never printed.
     const secrets = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET').map((args) => args[3]);
     assert.equal(new Set(secrets).size, 1);
     assert.ok(!output.includes(secrets[0]), 'the secret is printed');
-    // Backoff: each wait is longer than the last, and none is zero.
     assert.equal(clock.sleeps.length, 4);
     assert.ok(clock.sleeps.every((ms) => ms > 0));
     assert.ok(clock.sleeps[1] > clock.sleeps[0]);
@@ -594,7 +579,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
     assert.match(output, /not accepting admin requests/);
     const attempts = calls.filter((args) => args[2] === 'BETTER_AUTH_SECRET');
     assert.ok(attempts.length > 2, 'it retried');
-    // The whole 60 s window is used (a shorter deadline would bring #156 back), in waits of at most 5 s.
+    // The whole 60 s window is used, in waits of at most 5 s.
     assert.equal(
       clock.sleeps.reduce((sum, ms) => sum + ms, 0),
       60_000,
@@ -698,7 +683,6 @@ describe('main seed-demo (#82)', () => {
         ['run', 'seed:demo'],
       ],
     );
-    // Both calls run from the e2e project dir given to main, after the target check.
     assert.deepEqual(
       calls.map(({ cwd }) => cwd),
       [dir, dir],
@@ -728,7 +712,6 @@ describe('main seed-demo (#82)', () => {
 });
 
 describe('main with the backend port held by another process', () => {
-  /** Holds 127.0.0.1:`port`; if something already holds it, the port is busy either way. */
   async function hold(port) {
     const server = createServer();
     const held = await new Promise((resolve, reject) => {

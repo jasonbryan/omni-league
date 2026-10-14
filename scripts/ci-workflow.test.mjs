@@ -1,6 +1,3 @@
-// Checks of the step order and conditions in the `ci` workflow file (#116). Run with
-// `npm run test:scripts` (node:test). Node built-ins only: the step names and `if:` lines are read
-// with regular expressions, not a YAML parser.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,7 +10,6 @@ const workflow = readFileSync(
   'utf8',
 );
 
-/** The `ci` job's steps in file order: the `- name:` and the `if:` condition of each. */
 function ciSteps() {
   const job = /^ {2}ci:\n([\s\S]*?)(?=^ {2}\S)/m.exec(workflow)?.[1] ?? '';
   const steps = [];
@@ -93,7 +89,6 @@ describe('ci workflow step order', () => {
   });
 });
 
-/** The `run` script of the `scope` step, as GitHub runs it. */
 function scopeScript() {
   const block = /^ {6}- name: scope\n(?: {8}.*\n)*? {8}run: \|\n((?: {10}.*\n|\n)+)/m.exec(
     workflow,
@@ -102,13 +97,9 @@ function scopeScript() {
   return block[1].replace(/^ {10}/gm, '');
 }
 
-/**
- * Runs the scope step in a scratch git repository with `bash -e`, GitHub's default shell for a
- * step without `shell:`. The repository holds a copy of the classifier and the reference files it
- * reads, with one script named, so the classifier can derive a script list. (A symlink to
- * `scripts/` would not do: the classifier runs only when its path is its real path.)
- * @param {(repo: string) => void} prepare Builds the scratch repository's history.
- */
+// A symlink to `scripts/` would not do for the classifier copy: it runs only when its path is its
+// real path.
+/** @param {(repo: string) => void} prepare */
 function runScopeStep(prepare) {
   const repo = mkdtempSync(join(tmpdir(), 'ci-scope-step-'));
   try {

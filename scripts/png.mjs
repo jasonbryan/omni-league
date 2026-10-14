@@ -1,16 +1,13 @@
-// PNG and ICO helpers for scripts/build-icons.mjs and its test (#80). Node built-ins only.
-// Reads 8-bit, non-interlaced RGB and RGBA PNGs, which is what Chromium's screenshots are.
+// Reads only 8-bit, non-interlaced RGB and RGBA PNGs: what Chromium's screenshots are.
 import { createHash } from 'node:crypto';
 import { crc32, inflateSync } from 'node:zlib';
 
 const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-/** SHA-256 of `data` as lower-case hex. */
 export function sha256(data) {
   return createHash('sha256').update(data).digest('hex');
 }
 
-/** The chunks of a PNG, in order: `{ type, data }`. Throws when the signature or a CRC is wrong. */
 export function pngChunks(png) {
   if (!png.subarray(0, 8).equals(SIGNATURE)) throw new Error('not a PNG: bad signature');
   const chunks = [];
@@ -29,7 +26,6 @@ export function pngChunks(png) {
   return chunks;
 }
 
-/** `{ width, height, bitDepth, colorType, interlace }` from the IHDR chunk. */
 export function pngHeader(png) {
   const first = pngChunks(png)[0];
   if (first?.type !== 'IHDR') throw new Error('PNG does not start with IHDR');
@@ -52,7 +48,6 @@ function chunk(type, data) {
   return Buffer.concat([head, body, tail]);
 }
 
-/** The PNG with a `tEXt` chunk (Latin-1 keyword and text) placed before its first IDAT. */
 export function addTextChunk(png, keyword, text) {
   const text_ = chunk('tEXt', Buffer.from(`${keyword}\0${text}`, 'latin1'));
   const at = pngChunks(png).findIndex(({ type }) => type === 'IDAT');
@@ -61,7 +56,6 @@ export function addTextChunk(png, keyword, text) {
   return Buffer.concat([png.subarray(0, offset), text_, png.subarray(offset)]);
 }
 
-/** The `tEXt` chunks of a PNG as `{ keyword: text }`. */
 export function textChunks(png) {
   const out = {};
   for (const { type, data } of pngChunks(png)) {
@@ -72,7 +66,6 @@ export function textChunks(png) {
   return out;
 }
 
-/** Decodes a PNG to `{ width, height, rgba }` (rgba is a Buffer of width * height * 4 bytes). */
 export function decodePng(png) {
   const { width, height, bitDepth, colorType, interlace } = pngHeader(png);
   if (bitDepth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6)) {
@@ -129,7 +122,7 @@ export function decodePng(png) {
   return { width, height, rgba };
 }
 
-/** An ICO file holding these PNGs (Vista and later PNG entries), smallest first as given. */
+// PNG entries in an ICO need Vista or later.
 export function buildIco(pngs) {
   const head = Buffer.alloc(6);
   head.writeUInt16LE(1, 2); // type: icon
@@ -151,7 +144,6 @@ export function buildIco(pngs) {
   return Buffer.concat([head, ...entries, ...pngs]);
 }
 
-/** The PNG entries of an ICO file as `{ width, height, png }`. Throws on a non-PNG entry. */
 export function readIco(ico) {
   if (ico.readUInt16LE(0) !== 0 || ico.readUInt16LE(2) !== 1) throw new Error('not an ICO');
   const images = [];

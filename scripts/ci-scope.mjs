@@ -1,71 +1,28 @@
-// Scope of a `ci` run from the files a PR changes (#165, docs/process/ci.md). Node built-ins only:
-// the `scope` step runs before setup-node, on the Node the runner image ships.
-//
-// - `docs`: only docs/, design/, .claude/ and root *.md files, and no .js/.ts-family file. Runs
-//   `release age`, install, and format:check.
-// - `tooling`: only the non-app paths (docs/, design/, .claude/, .github/, scripts/, root *.md),
-//   and no script the build, e2e, or deploy runs (see below). Adds lint, test:scripts, actionlint,
-//   and typecheck when a TypeScript file changed. Skips the build-dependent steps: audit
-//   signatures, test, test:convex, build, e2e.
-// - `app`: anything else, an empty list, a path that is not plainly relative, a script the build,
-//   e2e, or deploy runs, the CI files themselves (see CI_FILES), a docs file a Convex or Vitest
-//   test reads, a non-PR event, or a release PR into production. Runs every step.
-//   Detection that fails, including failing to derive the script list, is `app`.
-//
-// Files under docs/ and design/ that a test reads are not docs: a change to one must run the test
-// that reads it. See APP_TEST_INPUTS and TOOLING_TEST_INPUTS.
-//
-// The scripts that count as app are derived, not listed: every `scripts/<file>` that package.json,
-// netlify.toml, angular.json, playwright.config.ts, or a file under e2e/ names, plus every file those
-// scripts import (relative imports, transitively). Test files (`*.test.mjs`) are tooling.
-//
-// Usage: `git diff --no-renames --name-only HEAD^1 HEAD | node scripts/ci-scope.mjs`, with
-// GITHUB_EVENT_NAME and GITHUB_BASE_REF in the environment. It prints `key=value` lines for
-// $GITHUB_OUTPUT.
+// Node built-ins only: the `scope` step runs before setup-node, on the Node the runner image ships.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-/** Directories whose contents never affect the app build. */
 const DOC_DIRS = ['docs/', 'design/', '.claude/'];
 const TOOLING_DIRS = ['.github/', 'scripts/'];
-/** Files ESLint lints (the .js and .ts families), wherever they live. */
 const CODE_FILE = /\.[cm]?[jt]s$/;
 const TYPESCRIPT_FILE = /\.[cm]?ts$/;
 const ROOT_MARKDOWN = /^[^/]+\.md$/;
 
-/**
- * The files that define this classifier and the job. A change to one is `app`, so the full suite
- * runs: the PR's own copy of the classifier decides its scope, and an edit to a build or e2e step
- * must not merge without those steps running. This narrows #165's `.github/**` rule, for safety.
- * The imports of the scripts listed here are followed by deriveAppScripts.
- */
-const CI_FILES = [
-  '.github/workflows/ci.yml',
-  'scripts/ci-scope.mjs',
-  // Picks the e2e specs of a PR (#186): an edit to its mapping must run the suite it selects from.
-  'scripts/e2e-affected.mjs',
-];
+// A PR's own copy of the classifier decides its scope, so a change to one of these runs every check.
+const CI_FILES = ['.github/workflows/ci.yml', 'scripts/ci-scope.mjs', 'scripts/e2e-affected.mjs'];
 
-/**
- * Files under docs/ that `test:convex` or `test` reads (convex/lib/slugs.test.ts reads the
- * glossary, convex/lib/previewOrigin.test.ts reads hosting.md). A change to one is `app`.
- */
+// Docs that Convex and Angular tests read: a change to one must run those tests.
 export const APP_TEST_INPUTS = ['docs/glossary.md', 'docs/process/hosting.md'];
 
-/**
- * Files under design/ that `test:scripts` reads (scripts/build-icons.test.mjs reads the icon
- * mockup and design/icons/, scripts/global-styles.test.mjs and scripts/inline-mockup-kit.test.mjs
- * read design/mockup-kit/mockup-kit.css). A change to one is `tooling`, so `test:scripts` runs.
- * An entry ending in `/` is a directory.
- */
+// Design files that script tests read: a change to one must run `test:scripts`.
 export const TOOLING_TEST_INPUTS = [
   'design/icons/',
   'design/mockup-kit/',
   'design/mockups/80-app-icon.html',
 ];
 
-/** A plain repo-relative path: no quotes (git quotes non-ASCII names), backslashes, or dot segments. */
+// git quotes non-ASCII names, so a quoted path is not plain.
 function isPlainPath(path) {
   return (
     path !== '' &&
@@ -75,24 +32,20 @@ function isPlainPath(path) {
   );
 }
 
-/** Files whose text names the scripts the build, e2e, or deploy run. */
 const REFERENCE_FILES = ['package.json', 'netlify.toml', 'angular.json', 'playwright.config.ts'];
 const REFERENCE_DIRS = ['e2e'];
 const SCRIPT_EXTENSIONS = 'mjs|cjs|js|mts|cts|ts|sh';
-/** A scripts/<name> path in a command line or a path string, with or without a `./` or `../` prefix. */
 const SCRIPT_PATH = new RegExp(
   `(?<![\\w/-])(?:\\.{1,2}/)*scripts/([\\w.-]+\\.(?:${SCRIPT_EXTENSIONS}))`,
   'g',
 );
-/** The directory and file name as two string arguments, the form path.join takes. */
 const SCRIPT_JOIN = new RegExp(
   `['"]scripts['"],\\s*['"]([\\w.-]+\\.(?:${SCRIPT_EXTENSIONS}))['"]`,
   'g',
 );
-/** A relative import: a from clause, a dynamic import call, or a require call. */
 const RELATIVE_IMPORT = /(?:from\s*|import\s*\(\s*|require\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g;
 
-/** @param {string} dir @returns {string[]} Every file below dir, as paths relative to dir's parent. */
+/** @param {string} dir @returns {string[]} */
 function filesBelow(dir, prefix = dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()
@@ -102,9 +55,7 @@ function filesBelow(dir, prefix = dir) {
 }
 
 /**
- * The scripts the build, e2e, or deploy run, as repo-relative paths (`scripts/ng-convex.mjs`).
- * Throws when a reference file cannot be read, so the caller falls back to `app`.
- * @param {string} root Repository root.
+ * @param {string} root
  * @returns {Set<string>}
  */
 export function deriveAppScripts(root) {
@@ -115,8 +66,7 @@ export function deriveAppScripts(root) {
   ];
   const found = new Set();
   const queue = [];
-  // A referenced path counts whether or not it exists: deleting or renaming a script that the
-  // build still names is an app change. Only the files that exist are read.
+  // A referenced path counts even when missing: deleting a script the build still names is an app change.
   const add = (path) => {
     if (found.has(path) || /\.test\.[cm]?[jt]s$/.test(path)) return;
     found.add(path);
@@ -129,9 +79,7 @@ export function deriveAppScripts(root) {
   }
   if (found.size === 0)
     throw new Error('no script is referenced; the reference files are unreadable');
-  // The classifier itself, so what it imports counts as app too.
   for (const file of CI_FILES) if (file.startsWith('scripts/')) add(file);
-  // The scripts those scripts run or import, transitively.
   while (queue.length > 0) {
     const path = /** @type {string} */ (queue.pop());
     const text = read(path);
@@ -148,7 +96,7 @@ export function deriveAppScripts(root) {
 }
 
 /**
- * @param {string[] | undefined} files Changed paths, one entry per path.
+ * @param {string[] | undefined} files
  * @param {{ event?: string, base?: string, appScripts?: Iterable<string> }} [context]
  * @returns {{ scope: 'docs' | 'tooling' | 'app', typecheck: boolean }}
  */
@@ -177,7 +125,6 @@ export function classify(files, { event, base, appScripts = [] } = {}) {
   return { scope: docsOnly ? 'docs' : 'tooling', typecheck };
 }
 
-/** The lines the `scope` step appends to $GITHUB_OUTPUT. */
 export function formatOutputs({ scope, typecheck }) {
   return (
     `scope=${scope}\n` +

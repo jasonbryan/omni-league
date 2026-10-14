@@ -1,5 +1,3 @@
-// Unit tests for scripts/inline-mockup-kit.mjs (#58). Run with `npm run test:scripts` (node:test).
-// They use the committed fixture in scripts/fixtures/mockup-kit/ and need no Angular build.
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -144,8 +142,7 @@ describe('stripKitFromHtml', () => {
 });
 
 // The build itself is `ng build`; here the same Tailwind engine (@tailwindcss/postcss, as in the
-// Angular build) runs on a stand-in entry, which is fast enough for `ci`. The full two-run proof with
-// the real build is recorded in the PR evidence for #58.
+// Angular build) runs on a stand-in entry, which is fast enough for `ci`.
 describe('the kit build reads mockups without their own earlier kit block', () => {
   const entryFile = join(dirname(fileURLToPath(import.meta.url)), '..', 'design', 'kit-test.css');
 
@@ -155,7 +152,6 @@ describe('the kit build reads mockups without their own earlier kit block', () =
     return result.css;
   }
 
-  /** One `npm run design:css` pass, with Tailwind standing in for `ng build`. */
   async function designCss(mockupsDir, sourcesDir, pages) {
     await prepareKitSources(mockupsDir, sourcesDir);
     const css = await buildKitCss(sourcesDir);
@@ -259,7 +255,6 @@ describe('the real kit entry and the real orchestration', () => {
       await mkdir(output, { recursive: true });
       await cp(join(fixtures, 'page.html'), join(mockups, 'page.html'));
       await writeFile(join(output, 'mockup-kit.css'), '.kit-built{color:red}');
-      // Put an earlier kit block in the mockup, as a second run would find it.
       await main(['--skip-build'], {
         mockupsDir: mockups,
         kitOutput: output,

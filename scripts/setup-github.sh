@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Creates the dev-cycle labels (docs/process/dev-cycle.md) on the current repo's GitHub remote.
-# Safe to re-run: existing labels are updated in place.
+# Safe to re-run: `--force` updates an existing label in place.
 set -euo pipefail
 
 label() { gh label create "$1" --color "$2" --description "$3" --force; }

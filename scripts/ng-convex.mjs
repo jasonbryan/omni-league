@@ -1,5 +1,3 @@
-// Runs `ng <build|serve> [extra ng args]` with the Convex URL compiled in (ADR 0006 "URL configuration
-// specification"). Node built-ins only. Usage: node scripts/ng-convex.mjs <build|serve> [args...]
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { constants } from 'node:os';
@@ -20,7 +18,7 @@ function fail(message) {
   process.exit(1);
 }
 
-// 1. Resolve: environment first, then .env.local (written by `npx convex dev`).
+// The environment wins over .env.local, which `npx convex dev` writes.
 let url = process.env.CONVEX_URL || null;
 let source = 'environment';
 const envFile = join(root, '.env.local');
@@ -31,8 +29,8 @@ if (!url && existsSync(envFile)) {
 
 const defines = [];
 if (url) {
-  // 2. Validate. The value is compiled in as a JS string literal, so quotes, backslashes, and
-  //    whitespace are rejected outright (code-injection guard).
+  // The value is compiled in as a JS string literal, so quotes, backslashes, and whitespace are
+  // rejected outright (code-injection guard).
   if (/['"`\\\s]/.test(url)) fail('CONVEX_URL must not contain quotes, backslashes, or whitespace');
   let parsed;
   try {
@@ -58,7 +56,6 @@ if (url) {
     fail(`CONVEX_URL must use https:, or http: on localhost/127.0.0.1; got ${parsed.protocol}`);
   }
 
-  // 4. Derive the HTTP-action (site) URL (ADR 0008).
   let siteUrl;
   if (parsed.protocol === 'https:' && parsed.hostname.endsWith('.convex.cloud') && !parsed.port) {
     siteUrl = `https://${parsed.hostname.replace(/\.convex\.cloud$/, '.convex.site')}`;
@@ -71,7 +68,7 @@ if (url) {
     );
   }
 
-  // 3. Log (the deployment URL is public: it ships to every browser).
+  // The deployment URL is public: it ships to every browser.
   const origin = parsed.origin;
   console.log(`Convex URL: ${origin} (from ${source}), site: ${siteUrl}`);
   defines.push(`--define=__CONVEX_URL__='${origin}'`, `--define=__CONVEX_SITE_URL__='${siteUrl}'`);
@@ -79,8 +76,8 @@ if (url) {
   console.log('Convex URL: none');
 }
 
-// `noindex` on non-production Netlify builds (#15): the server define here, and `_headers` for
-// static files once the build succeeds (scripts/noindex.mjs). CONTEXT is public build metadata.
+// The server define here, and `_headers` for static files once the build succeeds. CONTEXT is public
+// build metadata.
 const noindex = command === 'build' && noindexForContext(process.env.CONTEXT);
 if (command === 'build') {
   console.log(
@@ -89,16 +86,16 @@ if (command === 'build') {
   defines.push(`--define=__NOINDEX__=${noindex}`);
 }
 
-// The service worker (#81, ADR 0013 section 4): the app registers it exactly when angular.json sets
-// the `serviceWorker` build option, so removing that option (the kill switch) turns off both the
-// worker build and its registration. Production builds only: development builds never register.
+// The app registers the service worker exactly when angular.json sets the `serviceWorker` build
+// option, so removing that option (the kill switch) turns off both the worker build and its
+// registration. Production builds only: development builds never register.
 const swDefine = serviceWorkerDefine(JSON.parse(readFileSync(join(root, 'angular.json'), 'utf8')));
 console.log(
   `service worker: ${swDefine.endsWith('=true') ? 'on' : 'off'} (angular.json serviceWorker option)`,
 );
 defines.push(swDefine);
 
-// 5. Spawn the CLI through Node with an argv array: no shell, same quoting on every OS.
+// Through Node with an argv array: no shell, same quoting on every OS.
 const ngArgs = [command, ...defines, ...extraArgs];
 console.log(`Running: ng ${ngArgs.join(' ')}`);
 const ng = join(root, 'node_modules', '@angular', 'cli', 'bin', 'ng.js');
@@ -125,11 +122,6 @@ child.on('exit', (code, signal) => {
   );
 });
 
-/**
- * After a successful build: the edge-safety check of the server bundle (scripts/edge-bundle.mjs),
- * the service worker config check (scripts/sw-config-check.mjs), then the noindex `_headers` file.
- * A failed check fails the build, so Netlify publishes nothing.
- */
 async function afterBuild() {
   const serverDir = join(root, 'dist', 'omni-league', 'server');
   const problems = await checkServerBundle(serverDir);
@@ -143,7 +135,6 @@ async function afterBuild() {
     );
   }
   console.log('edge-bundle: PASS (no filesystem access in dist/omni-league/server)');
-  // The service worker caches only same-origin build files (ADR 0013 section 1, #81).
   const sw = await swConfigCheck({
     angularJsonPath: join(root, 'angular.json'),
     browserDir: join(root, 'dist', 'omni-league', 'browser'),

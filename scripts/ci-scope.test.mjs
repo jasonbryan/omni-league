@@ -1,4 +1,3 @@
-// Unit tests for scripts/ci-scope.mjs (#165). Run with `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
@@ -28,10 +27,7 @@ const repoRoot = join(import.meta.dirname, '..');
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'ci-scope-')));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-/**
- * A throwaway repository root holding the given files.
- * @param {Record<string, string>} files
- */
+/** @param {Record<string, string>} files */
 function fakeRepo(files) {
   const root = mkdtempSync(join(scratch, 'repo-'));
   for (const [path, content] of Object.entries(files)) {
@@ -41,10 +37,7 @@ function fakeRepo(files) {
   return root;
 }
 
-/**
- * deriveAppScripts without the CI scripts, which it always adds (CI_FILES).
- * @param {string} root
- */
+/** @param {string} root */
 function deriveWithoutClassifier(root) {
   const derived = deriveAppScripts(root);
   derived.delete('scripts/ci-scope.mjs');
@@ -115,7 +108,6 @@ describe('classify: PR into main', () => {
     ['scripts/e2e-affected.mjs'],
     ['scripts/ci-scope.mjs', 'scripts/ci-scope.test.mjs'],
     ['docs/a.md', '.github/workflows/ci.yml'],
-    // Docs that a Convex or Vitest test reads.
     ['docs/glossary.md'],
     ['docs/process/hosting.md'],
   ];

@@ -1,4 +1,3 @@
-// Unit tests for scripts/e2e-affected.mjs (#186). Run with `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,7 +18,6 @@ const repoRoot = join(import.meta.dirname, '..');
 const sessionSpecs = deriveSessionSpecs(repoRoot);
 const pr = { event: 'pull_request', base: 'main' };
 
-/** Every e2e spec file on disk, repo-relative (`e2e/smoke.spec.ts`, `e2e/harness/a11y-helper.spec.ts`). */
 function specFilesOnDisk() {
   const found = [];
   const walk = (dir) => {
@@ -33,13 +31,12 @@ function specFilesOnDisk() {
   return found.sort();
 }
 
-/** The spec files a Playwright filter selects: it is a case-insensitive regex on the file path. */
 function filesSelectedBy(filter, files) {
   const pattern = new RegExp(filter, 'i');
   return files.filter((file) => pattern.test(file));
 }
 
-/** @param {string[]} files @returns {string[]} The filters selected, or ['FULL']. */
+/** @param {string[]} files @returns {string[]} */
 function specsFor(files, context = pr) {
   const selection = selectSpecs(files, { sessionSpecs, ...context });
   return selection.scope === 'full' ? ['FULL'] : selection.specs;
@@ -47,7 +44,6 @@ function specsFor(files, context = pr) {
 
 const smokeAndHarness = ['e2e/harness/', 'e2e/smoke.spec.ts'];
 
-/** The expected selection: the given filters and the always-on ones, sorted, as the script prints. */
 const want = (...filters) => [...new Set([...filters, ...smokeAndHarness])].sort();
 
 describe('selectSpecs: mapped areas', () => {
@@ -594,8 +590,8 @@ describe('the mapping', () => {
 
   // These specs run in no source-area rule. They run when changed, in the nightly full run, and
   // whenever a shared file changes. A new spec fails here until it is mapped or added on purpose.
-  // cache-key.spec.ts is mapped to the public league page (#127) and the season page (#128), which
-  // have their own samples in it.
+  // cache-key.spec.ts is mapped to the public league page and the season page, which have their own
+  // samples in it.
   const FULL_SUITE_ONLY = ['e2e/convex-backend.spec.ts', 'e2e/screenshot.spec.ts'];
 
   it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
@@ -677,10 +673,10 @@ describe('the specs that sign a user up or in', () => {
   const onDisk = specFilesOnDisk();
   const read = (file) => readFileSync(join(repoRoot, file), 'utf8');
 
-  // Written separately from deriveSessionSpecs, from the review that found the gap (#188): a spec
-  // that drives the sign-up form through a support helper. A support file is a helper when its
-  // source uses `signUp`, `otherUser`, `newUser`, or `seedUser`, or imports a helper, directly or
-  // through other support files; a spec is a user of it when it imports it by path.
+  // Written separately from deriveSessionSpecs: a spec that drives the sign-up form through a support
+  // helper. A support file is a helper when its source uses `signUp`, `otherUser`, `newUser`, or
+  // `seedUser`, or imports a helper, directly or through other support files; a spec is a user of it
+  // when it imports it by path.
   const supportDir = join(repoRoot, 'e2e', 'support');
   const supportSources = new Map(
     readdirSync(supportDir)

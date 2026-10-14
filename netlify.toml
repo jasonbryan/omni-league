@@ -1,30 +1,22 @@
-# Netlify build and deploy settings (ADR 0010 items 3 and 6; setup and checks in
-# docs/process/hosting.md). SSR runs as the edge function the plugin generates from src/server.ts
-# (netlifyAppEngineHandler). Non-production builds are `noindex` (scripts/noindex.mjs, #15).
+# SSR runs as the edge function the plugin generates from src/server.ts (netlifyAppEngineHandler).
 
 [build]
   publish = "dist/omni-league/browser"
 
-# Deploy previews: one Convex preview deployment per PR, named pr-<number>. The deploy environment
-# check runs after `npx convex deploy`, because pr-<number> does not exist before it. Then
-# `npx convex run seed:demo` inserts any missing demo data on every build (convex/seed.ts, #97),
-# never on a deployment that failed the check. Not `--preview-run`: it runs only when the deploy
-# creates a new deployment, and staging had no demo data after the #93 merge (#97).
+# The deploy environment check runs after `npx convex deploy`, because pr-<number> does not exist
+# before it. `seed:demo` inserts any missing demo data on every build, never on a deployment that
+# failed the check. Not `--preview-run`: it runs only when the deploy creates a new deployment.
 [context.deploy-preview]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\" && node scripts/check-deploy-env.mjs preview --preview-name \"pr-$REVIEW_ID\" && npx convex run seed:demo --preview-name \"pr-$REVIEW_ID\""
 
-# Branch deploys: main only, the staging deploy, with the Convex preview deployment named main.
 # `--preview-name`, not `--preview-create`: it reuses the deployment named main (and creates it when
 # none exists), so staging keeps its data between deploys. `--preview-create` deletes and recreates
-# the deployment on every deploy, which wiped staging's accounts on each merge (#222, ADR 0010
-# amendment). PR previews keep `--preview-create`: a fresh backend per push is wanted there.
+# the deployment on every deploy. PR previews keep `--preview-create`: a fresh backend per push is
+# wanted there.
 [context.branch-deploy]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-name \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\" && npx convex run seed:demo --preview-name \"$HEAD\""
 
-# Production is not enabled until the production deploy issue adds the check BEFORE the deploy:
-# `npm ci && node scripts/check-deploy-env.mjs production && npx convex deploy ...` (#15, ADR 0010).
-# After the deploy would be too late: the functions would already be on the production backend.
-# Production never runs a function or the seed (scripts/netlify-toml.test.mjs): no demo data there.
+# Production runs no function and no seed, so it has no demo data.
 [context.production]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL"
 
@@ -32,13 +24,11 @@
   package = "@netlify/angular-runtime"
 
 # Long-lived browser caching only for content-hashed build outputs. Nothing in public/ may use
-# these names (src/public-assets.spec.ts). Every other file keeps Netlify's default
-# `public, max-age=0, must-revalidate`.
+# these names. Every other file keeps Netlify's default `public, max-age=0, must-revalidate`.
 #
-# The web app manifest (#80) is a plain file in public/, so it keeps that default and is never
-# cached immutably: a changed name or icon reaches users on the next load. Only its content type
-# is set, so every deploy answers with the manifest media type, not a guessed one. The icons in
-# public/icons/ and favicon.ico also keep the default (scripts/netlify-toml.test.mjs).
+# The web app manifest is a plain file in public/, so a changed name or icon reaches users on the
+# next load. Only its content type is set, so every deploy answers with the manifest media type, not
+# a guessed one.
 [[headers]]
   for = "/manifest.webmanifest"
   [headers.values]

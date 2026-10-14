@@ -1,27 +1,13 @@
-// Service worker config check (#81, ADR 0013 section 1). Node built-ins only.
-// The enforced form of "the worker never caches Convex, auth, or signed-in data": the built
-// `ngsw.json` may hold only same-origin build files, no data groups, the client shell as its index,
-// and the `performance` navigation strategy. Every content-hashed chunk, lazy ones too, must be in
-// a prefetch group, so lazily loaded features work offline. `scripts/ng-convex.mjs build` runs it after the
-// edge-safety check, so a failing build is never published. Run alone with
-// `node scripts/sw-config-check.mjs` after a build.
-//
-// With no `serviceWorker` option in angular.json and no ngsw.json (the kill switch, ADR 0013
-// section 4), it prints `sw-config-check: SKIP` and passes. The same option decides whether the app
-// registers the worker (`serviceWorkerDefine`).
+// Enforces that the service worker never caches Convex, auth, or signed-in data.
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const PREFIX = 'sw-config-check:';
 const INDEX = '/index.csr.html';
 const STRATEGY = 'performance';
-/** Substrings no cached URL may contain (compared in lower case). */
 const FORBIDDEN = ['/api/', 'convex.cloud', 'convex.site'];
 
 /**
- * True when angular.json sets the `serviceWorker` build option, in the build options or in any
- * build configuration, for any project.
- *
  * @param {any} angularJson
  * @returns {boolean}
  */
@@ -34,12 +20,8 @@ export function serviceWorkerOptionSet(angularJson) {
 }
 
 /**
- * The `--define` that tells the app whether to register the worker: `true` exactly when angular.json
- * sets the `serviceWorker` option. The option is the kill switch's single setting (ADR 0013
- * section 4, PR #119 review): without it the build writes no worker and the app registers none, so
- * no client requests the missing `ngsw-worker.js`. `scripts/ng-convex.mjs` passes it to every
- * `ng build` and `ng serve`; angular.json's default (`false`) covers a plain `ng build`.
- *
+ * The option is the kill switch's single setting: without it the build writes no worker and the app
+ * registers none, so no client requests the missing `ngsw-worker.js`.
  * @param {any} angularJson
  * @returns {string}
  */
@@ -47,17 +29,10 @@ export function serviceWorkerDefine(angularJson) {
   return `--define=__SERVICE_WORKER__=${String(serviceWorkerOptionSet(angularJson))}`;
 }
 
-/**
- * Content-hashed build files at the root of browser/ that the worker must prefetch: lazily loaded
- * chunks too, so a feature that imports one (the phone sheet) works offline before its first use
- * online (PR #107 testing). A development build's unhashed `main.js` does not match.
- */
+// Lazily loaded chunks too, so a feature that imports one works offline before its first use online.
 const PREFETCHED_BUILD_FILE = /^(?:(?:main|chunk|polyfills)-[^/]+\.js|styles-[^/]+\.css)$/;
 
 /**
- * The problems for content-hashed build files in `browserFiles` (names at the root of browser/)
- * that no `prefetch` asset group of `manifest` lists, one string per file.
- *
  * @param {any} manifest
  * @param {string[]} browserFiles
  * @returns {string[]}
@@ -78,7 +53,6 @@ export function unprefetchedBuildFiles(manifest, browserFiles) {
     );
 }
 
-/** The reasons a cached URL is not allowed; empty when it is a same-origin path to a build file. */
 function urlProblems(url) {
   const problems = [];
   // One leading slash and then no slash or backslash: `//host` and `/\host` name another host.
@@ -90,8 +64,6 @@ function urlProblems(url) {
 }
 
 /**
- * The problems in a parsed ngsw.json, one string per problem; empty when it passes.
- *
  * @param {any} manifest
  * @returns {string[]}
  */
@@ -133,9 +105,6 @@ export function checkNgswManifest(manifest) {
 }
 
 /**
- * Checks one build. Returns the status and the lines to print: one PASS or SKIP line, or one
- * FAIL line per problem.
- *
  * @param {{ angularJsonPath: string, browserDir: string }} paths
  * @returns {Promise<{ status: 'PASS' | 'SKIP' | 'FAIL', lines: string[] }>}
  */
