@@ -44,7 +44,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ github.sha }}
     steps:
-      # A startup failure, a cancelled run (even one whose jobs read as a gate skip), or a run with no `ci` job tested nothing.
+      # A startup failure, a cancelled run (even one whose jobs read as a gate skip), or a run with no `ci` or `checks` job tested nothing.
       - name: last tested night
         id: last-tested
         run: |

@@ -431,9 +431,9 @@ describe('skipping a night that is already tested', () => {
   const MAIN = 'abcdef0123456789';
   const OLDER = '1111111222222233333';
 
-  const scheduledRunJobs = (ci, name = 'ci') => [
+  const scheduledRunJobs = (conclusion, name = 'ci') => [
     { name: 'nightly-gate', conclusion: 'success' },
-    { name, conclusion: ci },
+    { name, conclusion },
   ];
 
   // The fake gh applies the workflow's own --jq filters with the real jq.
