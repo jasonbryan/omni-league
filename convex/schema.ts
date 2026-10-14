@@ -85,6 +85,11 @@ export default defineSchema({
     tokenHash: v.string(),
     expiresAt: v.number(),
     status: inviteStatusValidator,
+    /**
+     * When an org admin revoked the invite; `invites.restore` measures its window from it. A
+     * revoked invite without it cannot be restored.
+     */
+    revokedAt: v.optional(v.number()),
   })
     .index('by_organizationId_and_status', ['organizationId', 'status'])
     .index('by_organizationId_and_email_and_status', ['organizationId', 'email', 'status'])

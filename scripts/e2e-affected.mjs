@@ -43,13 +43,14 @@ const LEAGUE_ADMIN = [
   'organization-leagues-publish-states',
 ];
 const LOCATION_ADMIN = ['organization-admin', 'sign-in-admin'];
-const STAFF = ['organization-staff', 'accept-invite'];
+const STAFF = ['organization-staff', 'organization-staff-undo', 'accept-invite'];
 /** Every spec that opens the admin area. */
 const ADMIN = [
   ...new Set([
     'organization-admin',
     ...LEAGUE_ADMIN,
     'organization-staff',
+    'organization-staff-undo',
     'sign-in-admin',
     'accept-invite',
     'create-organization',

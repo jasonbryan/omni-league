@@ -1,6 +1,5 @@
-// Self-test of the Netlify Drawer stub (#15). It runs in a separate browser context, not watched by
-// the console fixture, because the unstubbed request is a 404 locally. The fixture's remote-only
-// wiring is checked by the last test, which runs only with E2E_BASE_URL (docs/process/hosting.md).
+// Runs in a separate browser context, not watched by the console fixture, because the unstubbed
+// request is a 404 locally.
 import type { Browser, ConsoleMessage, Page } from '@playwright/test';
 import { ConsoleGuard } from '../support/console-guard';
 import { baseURL, remoteBaseUrl } from '../support/env';
@@ -84,7 +83,6 @@ test.describe('Netlify Drawer stub', VIEWPORT_AGNOSTIC, () => {
     await context.close();
   });
 
-  // Wiring: the real auto fixtures (the stub included on remote runs) still fail this test.
   test('the shared fixtures still fail a test that logs console.error', async ({ page }) => {
     test.fail();
     await page.goto('/');

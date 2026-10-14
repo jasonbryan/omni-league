@@ -95,6 +95,7 @@ describe('selectSpecs: mapped areas', () => {
       specsFor(['src/app/organizations/admin/invite-form.ts']),
       want(
         'e2e/accept-invite.spec.ts',
+        'e2e/organization-staff-undo.spec.ts',
         'e2e/organization-staff.spec.ts',
         'e2e/validate-on-blur.spec.ts',
       ),
@@ -109,6 +110,7 @@ describe('selectSpecs: mapped areas', () => {
       'organization-leagues-publish',
       'organization-leagues-publish-states',
       'organization-staff',
+      'organization-staff-undo',
       'sign-in-admin',
       'accept-invite',
       'create-organization',
@@ -355,6 +357,7 @@ describe('selectSpecs: mapped areas', () => {
       'organization-leagues-publish',
       'organization-leagues-publish-states',
       'organization-staff',
+      'organization-staff-undo',
       'sign-in-admin',
       'accept-invite',
       'create-organization',
@@ -400,7 +403,12 @@ describe('selectSpecs: mapped areas', () => {
     assert.equal(new Set(specs).size, specs.length);
     assert.deepEqual(
       specs,
-      want('e2e/accept-invite.spec.ts', 'e2e/organization-staff.spec.ts', ...sessionSpecs),
+      want(
+        'e2e/accept-invite.spec.ts',
+        'e2e/organization-staff-undo.spec.ts',
+        'e2e/organization-staff.spec.ts',
+        ...sessionSpecs,
+      ),
     );
   });
 
