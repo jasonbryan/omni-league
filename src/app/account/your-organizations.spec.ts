@@ -194,7 +194,7 @@ describe('YourOrganizations', () => {
     ]);
   });
 
-  describe('assigned leagues (design/mockups/141-app-leagues.html)', () => {
+  describe('assigned leagues', () => {
     const leagueLinks = (row: Element) => [...row.querySelectorAll('ul ul a, li ul a')];
 
     it('one league (state 1): "Your leagues" and a link to the league management page, no Manage', async () => {

@@ -175,7 +175,7 @@ describe('AdminLeagues', () => {
       expect(items().map((li) => li.querySelector('button') !== null)).toEqual([false, true, true]);
     });
 
-    it('links each league’s name to its management page (design/mockups/125-126-seasons.html state 16)', async () => {
+    it('links each league’s name to its management page', async () => {
       await open(LEAGUES);
       const links = items().map((li) => li.querySelector<HTMLAnchorElement>('h3 a')!);
       expect(links.map((a) => [text(a), a.getAttribute('href')])).toEqual(
@@ -593,7 +593,7 @@ describe('AdminLeagues', () => {
       expect(text(submitButton())).toBe('Create draft league');
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+    describe('offline', () => {
       afterEach(() => vi.restoreAllMocks());
 
       async function goOffline() {

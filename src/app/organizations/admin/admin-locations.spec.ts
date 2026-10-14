@@ -429,7 +429,7 @@ describe('AdminLocations', () => {
       expect(text(addSubmit())).toBe('Add location');
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+    describe('offline', () => {
       afterEach(() => vi.restoreAllMocks());
 
       async function goOffline() {

@@ -470,7 +470,7 @@ describe('CreateOrganizationPage', () => {
     });
   });
 
-  describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+  describe('offline', () => {
     beforeEach(() => open());
     afterEach(() => vi.restoreAllMocks());
 

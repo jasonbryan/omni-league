@@ -522,7 +522,7 @@ describe('AcceptInvitePage', () => {
       expect(accept()).toBeDefined();
     });
 
-    describe('offline before the press (design/mockups/88-offline-note.html states 2 and 3)', () => {
+    describe('offline before the press', () => {
       async function goOffline(flush: () => Promise<void>) {
         vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
         window.dispatchEvent(new Event('offline'));

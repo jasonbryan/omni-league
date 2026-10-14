@@ -938,7 +938,7 @@ describe('AdminStaff', () => {
       expect(text(submitButton())).toBe('Create invite link');
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+    describe('offline', () => {
       async function goOffline() {
         vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
         window.dispatchEvent(new Event('offline'));

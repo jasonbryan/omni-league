@@ -304,7 +304,7 @@ describe('LeagueManagement: publishing a season', () => {
     });
   });
 
-  describe('offline (design/mockups/88-offline-note.html states 2 and 3)', () => {
+  describe('offline', () => {
     afterEach(() => vi.restoreAllMocks());
 
     it('the button looks disabled but stays focusable; a press shows the offline alert and sends nothing', async () => {

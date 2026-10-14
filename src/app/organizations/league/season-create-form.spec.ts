@@ -586,7 +586,7 @@ describe('SeasonCreateForm', () => {
       );
     });
 
-    describe('offline (design/mockups/88-offline-note.html states 2 and 3, state 11)', () => {
+    describe('offline', () => {
       afterEach(() => vi.restoreAllMocks());
 
       async function goOffline() {
