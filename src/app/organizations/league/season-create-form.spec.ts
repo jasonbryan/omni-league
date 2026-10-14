@@ -151,7 +151,7 @@ describe('SeasonCreateForm', () => {
       // After a format is chosen, the description names the minimum it sets.
       await chooseFormat('11v11');
       expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-        'At least 11 for 11 v 11. Raise it if teams need more players.',
+        'At least 11 for 11v11. Raise it if teams need more players.',
       );
       expect(input('end-date').getAttribute('aria-describedby')).toBe('end-date-description');
     });
@@ -173,9 +173,9 @@ describe('SeasonCreateForm', () => {
           r.getAttribute('aria-describedby'),
         ]),
       ).toEqual([
-        ['5 v 5', 'At least 5 players', 'format-5v5-description'],
-        ['7 v 7', 'At least 7 players', 'format-7v7-description'],
-        ['11 v 11', 'At least 11 players', 'format-11v11-description'],
+        ['5v5', 'At least 5 players', 'format-5v5-description'],
+        ['7v7', 'At least 7 players', 'format-7v7-description'],
+        ['11v11', 'At least 11 players', 'format-11v11-description'],
       ]);
     });
 
@@ -195,7 +195,7 @@ describe('SeasonCreateForm', () => {
         expect(radios.map((r) => [r.value, r.checked])).toEqual([['10v10', true]]);
         expect(input('minimum-roster-size').value).toBe('10');
         expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-          'At least 10 for 10 v 10. Raise it if teams need more players.',
+          'At least 10 for 10v10. Raise it if teams need more players.',
         );
       });
 
@@ -336,7 +336,7 @@ describe('SeasonCreateForm', () => {
       expect(error('registration-deadline')).toBe(
         'The registration deadline must be before the start date, Mar 1, 2028.',
       );
-      expect(error('minimum-roster-size')).toBe('7 v 7 needs at least 7 players. Enter 7 or more.');
+      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
       expect(error('start-date')).toBeNull();
       expect(document.activeElement).toBe(input('end-date'));
       expect(calls()).toEqual([]);
@@ -426,7 +426,7 @@ describe('SeasonCreateForm', () => {
       await chooseFormat('7v7');
       await type('minimum-roster-size', '6');
       await leave('minimum-roster-size');
-      expect(error('minimum-roster-size')).toBe('7 v 7 needs at least 7 players. Enter 7 or more.');
+      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
     });
 
     it('shows nothing while the user types an invalid partial value', async () => {

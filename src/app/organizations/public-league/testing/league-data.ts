@@ -42,7 +42,7 @@ export const SEASONS = [
   slug,
   startDate,
   endDate,
-  formatName: '4 v 4',
+  formatName: '4v4',
 }));
 
 /** Page `page` of `total` seasons as `seasons:listPublic` returns it (5 per page, 40 pages at most). */

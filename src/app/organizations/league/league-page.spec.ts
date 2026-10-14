@@ -195,12 +195,12 @@ describe('LeaguePage', () => {
       expect([...rows()[0].querySelectorAll('p')].map((p) => text(p))).toEqual([
         'Dates: Sep 8 – Nov 10, 2027',
         'Registration deadline Aug 25, 2027',
-        '7 v 7 · at least 9 players',
+        '7v7 · at least 9 players',
       ]);
       expect([...rows()[1].querySelectorAll('p')].map((p) => text(p))).toEqual([
         'Dates: Jun 2 – Aug 25, 2027',
         'Registration deadline May 19, 2027',
-        '7 v 7 · at least 7 players',
+        '7v7 · at least 7 players',
       ]);
       expect(rows()[0].querySelector('.sr-only')?.textContent).toBe('Dates: ');
     });

@@ -163,7 +163,7 @@ describe('seasons.create refuses input a form never sends', () => {
     Number.NEGATIVE_INFINITY,
     Number.MAX_SAFE_INTEGER,
     1e21,
-  ])('the minimum roster size %s for 7 v 7', async (minimumRosterSize) => {
+  ])('the minimum roster size %s for 7v7', async (minimumRosterSize) => {
     const s = await setup();
     expect(
       await fieldOf(
