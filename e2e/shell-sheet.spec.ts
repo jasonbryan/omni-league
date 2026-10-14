@@ -134,15 +134,8 @@ test.describe('the phone sheet on the admin area', () => {
     page,
   }) => {
     await openAdminOverview(page);
-    // The overview's tiles arrive from separate queries and shift the layout until they are in.
-    const pageHeight = () => page.evaluate(() => document.documentElement.scrollHeight);
-    await expect
-      .poll(async () => {
-        const before = await pageHeight();
-        await page.waitForTimeout(500);
-        return before === (await pageHeight());
-      })
-      .toBe(true);
+    // The tiles arrive from separate queries and shift the layout until all three show a count.
+    await expect(page.locator('main dd.tabular-nums')).toHaveCount(3);
     await makeTall(page);
     await expect
       .poll(async () => {
