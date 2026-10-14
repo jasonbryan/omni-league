@@ -20,6 +20,12 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const DAY = 24 * 60 * 60 * 1000;
+/**
+ * Rounds per race. Each round makes several HTTP calls, and 12 per race ran past the 30 s timeout
+ * on the 2-vCPU CI runner. The Convex tests (`convex/invites.test.ts`) cover the races in depth;
+ * these rounds prove them once through the real backend.
+ */
+const RACE_ROUNDS = 2;
 const LOCATIONS = [
   { name: 'Redfish Flats Fields', address: '880 Redfish Flats Ln, Rockport, TX 78382' },
 ];
@@ -245,7 +251,7 @@ test.describe('Staff: Undo racing another write on the real backend', () => {
         return (list.value as { email: string }[]).filter((row) => row.email === email).length;
       };
 
-      for (let round = 0; round < 12; round++) {
+      for (let round = 0; round < RACE_ROUNDS; round++) {
         const email = `race-create-${round}@example.com`;
         const inviteId = await seedRevoked(email);
         const [restored, created] = await Promise.all([
@@ -261,7 +267,7 @@ test.describe('Staff: Undo racing another write on the real backend', () => {
         expect(await pendingFor(email)).toBe(1);
       }
 
-      for (let round = 0; round < 12; round++) {
+      for (let round = 0; round < RACE_ROUNDS; round++) {
         const email = `race-restore-${round}@example.com`;
         const first = await seedRevoked(email);
         const second = await seedRevoked(email);
