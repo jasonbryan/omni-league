@@ -79,7 +79,6 @@ export type Format = Infer<typeof formatValidator>;
 /** One way a sport is played: the players on the field set the minimum roster size. */
 export interface SportFormat {
   readonly key: Format;
-  /** Display name: players per side written "4v4" (#232; `formatLabel` in `./divisions`). */
   readonly name: string;
   /** The fewest roster entries a team needs. An organization may raise it, never lower it. */
   readonly minimumRosterSize: number;

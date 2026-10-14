@@ -22,12 +22,9 @@ import {
 } from './divisions';
 import { SPORT_FORMATS, SPORT_NAMES, formatName, type Sport } from './sports';
 
-// #232: the standard division values, their labels, and the fill-from-name rules (owner decisions
-// 14 to 18, 23, and 24 on PR #224). Nothing is stored yet; #233 adds the fields.
-
 const sports = Object.keys(SPORT_NAMES) as Sport[];
 
-describe('gender (decision 15)', () => {
+describe('gender', () => {
   test('lists Coed, Men’s, and Women’s, with no Open gender', () => {
     expect([...GENDERS]).toEqual(['coed', 'mens', 'womens']);
     expect(GENDERS.map((gender) => genderLabel(gender))).toEqual(['Coed', "Men's", "Women's"]);
@@ -48,7 +45,7 @@ describe('gender (decision 15)', () => {
   });
 });
 
-describe('standard levels (decision 16)', () => {
+describe('standard levels', () => {
   test('are the ladder of each sport, in order', () => {
     expect(levelsOfSport('beachVolleyball')).toEqual(['rec', 'b', 'bb', 'a', 'aa', 'open']);
     expect(levelsOfSport('soccer')).toEqual(['rec', 'intermediate', 'competitive']);
@@ -88,7 +85,7 @@ describe('standard levels (decision 16)', () => {
   });
 });
 
-describe('age groups (decision 17)', () => {
+describe('age groups', () => {
   test('are Adult, 30+ to 60+, then U6 to U19, in order', () => {
     expect(AGE_GROUPS.map((group) => group.key)).toEqual([
       'adult',
@@ -133,7 +130,7 @@ describe('age groups (decision 17)', () => {
   });
 });
 
-describe('players per side (decision 18)', () => {
+describe('players per side', () => {
   test('is a range per sport', () => {
     expect(playersPerSideOfSport('beachVolleyball')).toEqual([2, 3, 4, 5, 6]);
     expect(playersPerSideOfSport('soccer')).toEqual([4, 5, 6, 7, 8, 9, 10, 11]);
@@ -164,13 +161,13 @@ describe('players per side (decision 18)', () => {
   });
 });
 
-describe('format display (decision 24)', () => {
+describe('format display', () => {
   test('formatLabel writes players per side as 4v4', () => {
     expect(formatLabel(4)).toBe('4v4');
     expect(formatLabel(11)).toBe('11v11');
   });
 
-  test('the season format names read 4v4, not 4v4', () => {
+  test('each season format name is its key, written as players per side', () => {
     expect(formatName('beachVolleyball', '4v4')).toBe('4v4');
     for (const sport of sports) {
       for (const format of SPORT_FORMATS[sport]) {
@@ -181,7 +178,7 @@ describe('format display (decision 24)', () => {
   });
 });
 
-describe('divisionLabel (decision 14)', () => {
+describe('divisionLabel', () => {
   test('joins gender, format, and level with a middle dot', () => {
     expect(
       divisionLabel({ gender: 'coed', playersPerSide: 4, levelLabel: 'BB', ageGroup: 'adult' }),
@@ -225,7 +222,7 @@ describe('divisionLabel (decision 14)', () => {
   });
 });
 
-describe('customLevelLabel (decision 21)', () => {
+describe('customLevelLabel', () => {
   test('shows an organization’s level with the standard level it maps to', () => {
     expect(customLevelLabel('Gold', 'a', 'beachVolleyball')).toBe('Gold (A)');
     expect(customLevelLabel('Div 1', 'competitive', 'soccer')).toBe('Div 1 (Competitive)');
@@ -236,7 +233,7 @@ describe('customLevelLabel (decision 21)', () => {
   });
 });
 
-describe('deriveDivisionFromName (decision 23)', () => {
+describe('deriveDivisionFromName', () => {
   type Derived = ReturnType<typeof deriveDivisionFromName>;
   const rows: [string, Sport, Derived][] = [
     [
@@ -246,22 +243,16 @@ describe('deriveDivisionFromName (decision 23)', () => {
     ],
     ['Sunday Reverse Coed 4s', 'beachVolleyball', { gender: 'coed', playersPerSide: 4 }],
     ["Men's Over-30 11v11", 'soccer', { gender: 'mens', playersPerSide: 11 }],
-    // "Competitive" is not a beach volleyball level.
     ["Competitive Men's 4s", 'beachVolleyball', { gender: 'mens', playersPerSide: 4 }],
     ['Coed 7v7 Rec', 'soccer', { gender: 'coed', playersPerSide: 7, level: 'rec' }],
-    // 12 is outside 4 to 11.
     ['Coed 12v12', 'soccer', { gender: 'coed' }],
     ['Play a game', 'beachVolleyball', {}],
     ["Women's A League", 'beachVolleyball', { gender: 'womens', level: 'a' }],
-    // "Open" is a beach volleyball level only.
     ['Open Doubles', 'soccer', {}],
-    // U+2019, the apostrophe iOS types by default.
     ['Women’s 2s', 'beachVolleyball', { gender: 'womens', playersPerSide: 2 }],
     ['CO-ED 4s', 'beachVolleyball', { gender: 'coed', playersPerSide: 4 }],
     ['Men’s 4’s rec', 'beachVolleyball', { gender: 'mens', playersPerSide: 4, level: 'rec' }],
-    // Two formats give the first.
     ['Coed 4s and 6s', 'beachVolleyball', { gender: 'coed', playersPerSide: 4 }],
-    // A lone first-word "A" is the article, not level A.
     ['A Coed League', 'beachVolleyball', { gender: 'coed' }],
   ];
 
@@ -307,7 +298,6 @@ describe('deriveDivisionFromName (decision 23)', () => {
     expect(deriveDivisionFromName('Gladiators 4s', 'beachVolleyball')).toStrictEqual({
       playersPerSide: 4,
     });
-    // "men's" inside "women's" is not Men's.
     expect(deriveDivisionFromName("Women's", 'soccer')).toStrictEqual({ gender: 'womens' });
   });
 

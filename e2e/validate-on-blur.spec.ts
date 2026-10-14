@@ -188,12 +188,12 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expect(field(page, 'end-date')).toHaveAttribute('aria-invalid', 'true');
 
-    await page.getByRole('radio', { name: '7 v 7' }).check();
+    await page.getByRole('radio', { name: '7v7' }).check();
     await expect(fieldError(page, 'format')).toHaveCount(0);
     await field(page, 'minimum-roster-size').fill('2');
     await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);
     await field(page, 'name').focus();
-    await expect(fieldError(page, 'minimum-roster-size')).toContainText('7 v 7 needs at least 7');
+    await expect(fieldError(page, 'minimum-roster-size')).toContainText('7v7 needs at least 7');
     await expect(field(page, 'minimum-roster-size')).toHaveAttribute('aria-invalid', 'true');
     await expectAccessible(page);
 

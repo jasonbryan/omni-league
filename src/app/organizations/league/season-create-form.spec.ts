@@ -426,7 +426,7 @@ describe('SeasonCreateForm', () => {
       await chooseFormat('7v7');
       await type('minimum-roster-size', '6');
       await leave('minimum-roster-size');
-      expect(error('minimum-roster-size')).toBe('7 v 7 needs at least 7 players. Enter 7 or more.');
+      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
     });
 
     it('shows nothing while the user types an invalid partial value', async () => {
