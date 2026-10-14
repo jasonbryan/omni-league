@@ -33,6 +33,7 @@ import {
   deriveDivisionFromName,
   genderValidator,
   isLevelOfSport,
+  isPlayersPerSideOfSport,
   playersPerSideOfSport,
   standardLevelValidator,
   type AgeGroup,
@@ -42,12 +43,14 @@ import {
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
-import { seasonPlayersPerSide, sportValidator, type Sport, type SportCounts } from './sports';
+import {
+  ROSTER_SIZE_INPUT_MAX,
+  seasonPlayersPerSide,
+  sportValidator,
+  type Sport,
+  type SportCounts,
+} from './sports';
 
-/**
- * A league's division as a seed writes it. `customLevel` names a custom level of the league's
- * organization and sport, which must exist and map to `level`.
- */
 export const divisionSeedValidator = v.object({
   gender: genderValidator,
   playersPerSide: v.number(),
@@ -62,7 +65,6 @@ export type DivisionSeed = Infer<typeof divisionSeedValidator>;
 /**
  * A league to create; `locations` names locations of the same organization. `status` is
  * `published` when left out, so a seed's pages are public; only the e2e seeds ask for a `draft`.
- * A league without a `division` is written without one.
  */
 export const leagueSeedValidator = v.object({
   name: v.string(),
@@ -268,10 +270,6 @@ export async function insertLeague(
   return { leagueId, slug };
 }
 
-/**
- * A league's division as stored: `customLevelId` is the label shown in place of `level`, and
- * `minimumRosterSize` is set only when the organization raised it above the players per side.
- */
 export interface LeagueDivision {
   gender: Gender;
   playersPerSide: number;
@@ -309,14 +307,12 @@ async function resolveDivision(
   return { ...division, customLevelId: found._id };
 }
 
-/** A custom level to insert; `name` is trimmed and its inner whitespace collapsed by the caller. */
 export interface NewCustomLevel {
   sport: Sport;
   name: string;
   standardLevel: StandardLevel;
 }
 
-/** The custom level of the organization and sport with this name, ignoring case and spacing. */
 export async function findCustomLevel(
   ctx: Pick<MutationCtx, 'db'>,
   organizationId: Id<'organizations'>,
@@ -334,11 +330,7 @@ export async function findCustomLevel(
     .unique();
 }
 
-/**
- * Inserts a custom level of `organizationId` with its `nameKey` and creation time: the one writer
- * of the `customLevels` table. Throws when the standard level is not a level of the sport. The
- * caller has checked access, the name, and that the name is not already used.
- */
+// The caller has checked access and that the name is free.
 export async function insertCustomLevel(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
@@ -483,6 +475,7 @@ async function insertLeagueRow(
   league: NewLeague,
   status: LeagueStatus,
 ): Promise<Id<'leagues'>> {
+  if (league.division) assertDivision(league.sport, league.division);
   const leagueId = await ctx.db.insert('leagues', {
     organizationId,
     name: league.name,
@@ -501,7 +494,28 @@ async function insertLeagueRow(
   return leagueId;
 }
 
-/** The stored fields of a division, leaving out the optional ones it does not set. */
+function assertDivision(sport: Sport, division: LeagueDivision): void {
+  const { playersPerSide, level, minimumRosterSize } = division;
+  if (!isPlayersPerSideOfSport(sport, playersPerSide)) {
+    throw new Error(`${playersPerSide} players per side is not a format of ${sport}`);
+  }
+  if (!isLevelOfSport(sport, level)) {
+    throw new Error(`Level ${level} is not a level of ${sport}`);
+  }
+  if (
+    minimumRosterSize !== undefined &&
+    !(
+      Number.isInteger(minimumRosterSize) &&
+      minimumRosterSize >= playersPerSide &&
+      minimumRosterSize <= ROSTER_SIZE_INPUT_MAX
+    )
+  ) {
+    throw new Error(
+      `Minimum roster size ${minimumRosterSize} must be a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}`,
+    );
+  }
+}
+
 function divisionFields(division: LeagueDivision | undefined) {
   if (!division) return {};
   const { customLevelId, minimumRosterSize, ...required } = division;
@@ -701,13 +715,11 @@ export async function backfillTenantFields(
   return backfilled;
 }
 
-/** Rows the division backfill changed, per table. */
 export const divisionBackfilledValidator = v.object({
   seasons: v.number(),
   leagueDivisions: v.number(),
 });
 
-/** A demo league's division, found by its organization's slug and its name. */
 export interface DemoDivision {
   organizationSlug: string;
   leagueName: string;
@@ -721,19 +733,6 @@ type LeagueDivisionPatch = Partial<
   >
 >;
 
-/**
- * Gives a season written with a `format` its `playersPerSide` and drops the `format`, and gives a
- * league missing part of its division the rest of it. A league's values come from, in order: the
- * demo table when it is a demo league; its newest season by start date, any status (read as the
- * readers do, so a season this pass has not reached yet still counts); its name
- * (`deriveDivisionFromName`); then Coed, the smallest players per side of its sport, Rec, and
- * Adult. Its `minimumRosterSize` is set only together with its `playersPerSide`: the demo table's,
- * else its newest season's when that is above the players per side. Selects only the rows that
- * still lack a field and changes at most `BACKFILL_SCAN_LIMIT` per table, so repeated runs reach
- * every row. Returns the number of rows changed per table; once every row is done a run changes
- * none. Run by `seed:demo` under its deployment guard, before its inserts, after the
- * demo custom levels of existing organizations exist; it is removed once the fields are required.
- */
 export async function backfillDivisionFields(
   ctx: MutationCtx,
   demoDivisions: readonly DemoDivision[],
@@ -742,10 +741,9 @@ export async function backfillDivisionFields(
   const unmigratedSeasons = await ctx.db
     .query('seasons')
     // eslint-disable-next-line @convex-dev/no-filter-in-query -- no index covers a missing field; a temporary pass over a small table
-    .filter((q) => q.eq(q.field('playersPerSide'), undefined))
+    .filter((q) => q.neq(q.field('format'), undefined))
     .take(BACKFILL_SCAN_LIMIT);
   for (const season of unmigratedSeasons) {
-    if (season.format === undefined) continue;
     await ctx.db.patch('seasons', season._id, {
       playersPerSide: seasonPlayersPerSide(season),
       format: undefined,
@@ -785,6 +783,7 @@ export async function backfillDivisionFields(
     const playersPerSide =
       league.playersPerSide ??
       demo?.playersPerSide ??
+      // The season pass may not have reached this season yet.
       (newest ? seasonPlayersPerSide(newest) : undefined) ??
       derived.playersPerSide ??
       playersPerSideOfSport(league.sport)[0];

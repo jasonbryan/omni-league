@@ -33,8 +33,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The fields of a season written before the division fields; the caller adds the players per side or the format. */
-const season = (
+const legacySeasonFields = (
   overrides: { format?: '4v4' | '7v7'; playersPerSide?: number } & Record<string, unknown>,
 ) => ({
   name: 'Season',
@@ -47,7 +46,6 @@ const season = (
   ...overrides,
 });
 
-/** An organization with leagues written before the division fields existed. */
 async function insertLegacy(t: T, slug: string, leagues: [string, Sport][]) {
   return t.run(async (ctx) => {
     const organizationId = await ctx.db.insert('organizations', {
@@ -81,10 +79,10 @@ function addSeason(
   t: T,
   organizationId: Id<'organizations'>,
   leagueId: Id<'leagues'>,
-  overrides: Parameters<typeof season>[0],
+  overrides: Parameters<typeof legacySeasonFields>[0],
 ) {
   return t.run((ctx) =>
-    ctx.db.insert('seasons', { ...season(overrides), organizationId, leagueId }),
+    ctx.db.insert('seasons', { ...legacySeasonFields(overrides), organizationId, leagueId }),
   );
 }
 

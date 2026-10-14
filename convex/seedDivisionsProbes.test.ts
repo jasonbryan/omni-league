@@ -223,7 +223,7 @@ describe('division backfill probes', () => {
     expect(await leagueRow(t, leagueId)).toMatchObject({ playersPerSide: 11 });
   });
 
-  test('a season that holds both fields keeps its players per side and is not counted', async () => {
+  test('a season that holds both fields keeps its players per side, loses its format, and is counted', async () => {
     const t = setup();
     const organizationId = await insertOrganization(t, 'other-club');
     const leagueId = await insertLegacyLeague(t, organizationId, 'Plain', 'soccer');
@@ -239,10 +239,10 @@ describe('division backfill probes', () => {
 
     const result = await t.mutation(internal.seed.demo, {});
 
-    expect(result.backfilled.seasons).toBe(0);
-    expect(await t.run((ctx) => ctx.db.get('seasons', seasonId))).toMatchObject({
-      playersPerSide: 7,
-    });
+    expect(result.backfilled.seasons).toBe(1);
+    const row = await t.run((ctx) => ctx.db.get('seasons', seasonId));
+    expect(row).toMatchObject({ playersPerSide: 7 });
+    expect(row).not.toHaveProperty('format');
     expect(await leagueRow(t, leagueId)).toMatchObject({ playersPerSide: 7 });
   });
 });

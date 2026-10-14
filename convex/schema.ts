@@ -131,7 +131,6 @@ export default defineSchema({
      */
     publishedSeasonCount: v.optional(v.number()),
     gender: v.optional(genderValidator),
-    /** The players on the field for each side; every season of the league uses it. */
     playersPerSide: v.optional(v.number()),
     /** Always a standard level, the value filters use; `customLevelId` is the label shown instead. */
     level: v.optional(standardLevelValidator),
@@ -195,7 +194,6 @@ export default defineSchema({
     registrationDeadline: v.string(),
     /** The league's players per side when the season was created. */
     playersPerSide: v.optional(v.number()),
-    /** The key a season was created with, such as `4v4`; superseded by `playersPerSide`. */
     format: v.optional(formatValidator),
     minimumRosterSize: v.number(),
     status: seasonStatusValidator,

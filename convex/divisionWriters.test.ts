@@ -206,3 +206,69 @@ describe('insertDraftLeague', () => {
     });
   });
 });
+
+describe('the division a league is inserted with', () => {
+  const valid = {
+    gender: 'coed' as const,
+    playersPerSide: 7,
+    level: 'rec' as const,
+    ageGroup: 'adult' as const,
+  };
+
+  test.each([
+    ['players per side outside the sport’s range', { playersPerSide: 12 }, /players per side/],
+    ['a level that is not a level of the sport', { level: 'aa' as const }, /not a level of soccer/],
+    ['a minimum below the players per side', { minimumRosterSize: 6 }, /Minimum roster size 6/],
+    ['a minimum above the input maximum', { minimumRosterSize: 100 }, /Minimum roster size 100/],
+    ['a minimum that is not a whole number', { minimumRosterSize: 7.5 }, /Minimum roster size/],
+  ])('refuses %s, in both writers, writing no league', async (_, change, message) => {
+    const t = setup();
+    const division = { ...valid, ...change };
+    await expect(
+      t.run(async (ctx) => {
+        const organizationId = await insertTenant(ctx, TENANT);
+        await insertLeague(ctx, organizationId, {
+          name: 'Bad',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division,
+        });
+      }),
+    ).rejects.toThrow(message);
+    await expect(
+      t.run(async (ctx) => {
+        const organizationId = await insertTenant(ctx, TENANT);
+        await insertDraftLeague(ctx, organizationId, {
+          name: 'Bad',
+          slug: 'bad',
+          sport: 'soccer',
+          locationIds: [],
+          division,
+        });
+      }),
+    ).rejects.toThrow(message);
+    expect(await t.run((ctx) => ctx.db.query('leagues').collect())).toEqual([]);
+  });
+
+  test('accepts the smallest and largest players per side and a minimum from the players per side to the input maximum', async () => {
+    const t = setup();
+    const names = await t.run(async (ctx) => {
+      const organizationId = await insertTenant(ctx, TENANT);
+      for (const [name, change] of [
+        ['Smallest', { playersPerSide: 4 }],
+        ['Largest', { playersPerSide: 11 }],
+        ['Equal minimum', { minimumRosterSize: 7 }],
+        ['Largest minimum', { minimumRosterSize: 99 }],
+      ] as const) {
+        await insertLeague(ctx, organizationId, {
+          name,
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: { ...valid, ...change },
+        });
+      }
+      return (await ctx.db.query('leagues').collect()).map((league) => league.name);
+    });
+    expect(names).toEqual(['Smallest', 'Largest', 'Equal minimum', 'Largest minimum']);
+  });
+});

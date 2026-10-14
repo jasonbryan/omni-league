@@ -547,8 +547,6 @@ describe('seed:demo', () => {
     const after = await snapshot(t);
     // Every earlier location and league is unchanged; the organization gained one of each.
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
-    // A league the demo gave a published season (#126) gained its publishedSeasonCount (#127), and
-    // every earlier league its division.
     const DIVISION = ['gender', 'playersPerSide', 'level', 'ageGroup'] as const;
     const withoutBackfill = (league: Doc<'leagues'>) => ({
       ...league,

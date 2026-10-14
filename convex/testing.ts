@@ -100,10 +100,6 @@ export const reset = internalMutation({
   },
 });
 
-/**
- * The league with the division Coed, the smallest players per side of its sport, Rec, and Adult
- * when the test gives none.
- */
 function withDivision(league: LeagueSeed): LeagueSeed {
   return {
     ...league,
@@ -378,7 +374,6 @@ export const seedSeasons = internalMutation({
   },
 });
 
-/** The season with its players per side, defaulting to the league's, else its sport's smallest. */
 function withPlayersPerSide<S extends { playersPerSide?: number | undefined }>(
   league: Doc<'leagues'>,
   season: S,

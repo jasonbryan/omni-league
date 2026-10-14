@@ -6,9 +6,6 @@ import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// A season written before `playersPerSide` holds only `format`; the readers show the same text and
-// minimum for it as for a season that holds only `playersPerSide`.
-
 const identity = {
   subject: 'admin',
   issuer: 'http://127.0.0.1:3211',

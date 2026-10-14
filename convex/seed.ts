@@ -190,10 +190,7 @@ export const DEMO: readonly Tenant[] = [
   },
 ];
 
-/**
- * The demo custom levels, by the organization's slug, inserted before the leagues that use them.
- * Insert-only by name, like every demo entry: never rename or remove one.
- */
+// Never rename or remove an entry: a renamed one is inserted again next to the old.
 const DEMO_CUSTOM_LEVELS: readonly {
   organizationSlug: string;
   sport: Sport;
@@ -294,7 +291,6 @@ export const DEMO_SEASONS: readonly {
   },
 ];
 
-/** Rows inserted by one run, per table, and the rows its backfills changed. */
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
@@ -339,10 +335,6 @@ async function ensureOrganization(
   return { id, inserted: true };
 }
 
-/**
- * Inserts the demo custom levels of the organization with this slug that are missing, by name
- * within the organization and sport, and returns how many it inserted.
- */
 async function ensureCustomLevels(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
@@ -375,16 +367,11 @@ async function ensureCustomLevels(
  * `insertSeason`. A season is inserted only when its league has none under the slug, so a season
  * that exists is never updated, whatever its status.
  *
- * Each demo league is inserted with its division, and the demo custom levels (`DEMO_CUSTOM_LEVELS`)
- * before the leagues that use them, by name within the organization and sport.
- *
- * Before inserting, it backfills the fields added after a row was written (`backfillTenantFields`
- * and `backfillDivisionFields`, the only updates it makes, on demo and other rows alike):
- * `sortName`, the counters, and `status` `published` on a league without one, before the recount
- * that counts only published leagues; then a season's `playersPerSide` in place of its `format`,
- * and a league's division. The demo custom levels of organizations that already exist are inserted
- * between the two, so a demo league's division can name its custom level. It reports the changed
- * rows as `backfilled`. Every demo league is inserted `published`.
+ * Before inserting, it backfills the fields #100, #101, and #66 added on any row written before
+ * them (`backfillTenantFields`, the only update it makes, on demo and other rows alike): `sortName`,
+ * the counters, and `status` `published` on a league without one, before the recount that counts
+ * only published leagues. It reports the changed rows as `backfilled`. Every demo league is inserted
+ * `published`. #104 removes the backfill.
  */
 export const demo = internalMutation({
   args: {},
@@ -393,6 +380,7 @@ export const demo = internalMutation({
     assertPreviewDeployment();
     const tenantBackfilled = await backfillTenantFields(ctx);
     const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
+    // Existing organizations get their custom levels first, so a demo league can name its level.
     for (const tenant of DEMO) {
       const slug = tenant.organization.slug;
       const existing = await ctx.db

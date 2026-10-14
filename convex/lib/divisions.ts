@@ -224,7 +224,6 @@ export function deriveDivisionFromName(name: string, sport: Sport): DerivedDivis
   return derived;
 }
 
-/** The key a custom level is unique by: trimmed, inner whitespace collapsed, lower case. */
 export function customLevelNameKey(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
