@@ -382,8 +382,8 @@ export async function main(
         // A new secret every run, so none is stored anywhere. It is never printed: on failure only
         // its name is. It is hex (256 bits), never base64url: a base64url value starts with `-` in 1
         // run of 64, and `convex env set` reads that as an option.
-        // `testing:reset` then clears the component's `jwks`, whose signing key the previous run's
-        // secret encrypted.
+        // One `testing:reset` call clears everything, in batches of its own. It also clears the
+        // component's `jwks`, whose signing key the previous run's secret encrypted.
         const secret = random(32).toString('hex');
         await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
         const reset = await runConvex(['run', 'testing:reset'], target);

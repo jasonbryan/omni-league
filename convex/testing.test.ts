@@ -83,7 +83,7 @@ describe('IS_TEST guard', () => {
       vi.stubEnv('IS_TEST', value);
       const t = setup();
       await seed(t);
-      await expect(t.mutation(internal.testing.reset, {})).rejects.toThrow(/IS_TEST/);
+      await expect(t.action(internal.testing.reset, {})).rejects.toThrow(/IS_TEST/);
       expect(await remaining(t)).toEqual(ALL_SEEDED);
     },
   );
@@ -107,7 +107,7 @@ describe('testing:reset', () => {
     await seed(t);
     expect(await remaining(t)).toEqual(ALL_SEEDED);
 
-    await expect(t.mutation(internal.testing.reset, {})).resolves.toEqual({
+    await expect(t.action(internal.testing.reset, {})).resolves.toEqual({
       documents: 4,
       authDocuments: 0,
       scheduledFunctions: 1,
@@ -119,7 +119,7 @@ describe('testing:reset', () => {
   test('on an empty deployment deletes nothing', async () => {
     vi.stubEnv('IS_TEST', 'true');
     const t = setup();
-    await expect(t.mutation(internal.testing.reset, {})).resolves.toEqual({
+    await expect(t.action(internal.testing.reset, {})).resolves.toEqual({
       documents: 0,
       authDocuments: 0,
       scheduledFunctions: 0,
@@ -140,6 +140,10 @@ describe('convex/testing.ts exports', () => {
       'assignForeignLeague',
       'ping',
       'reset',
+      'resetAuthBatch',
+      'resetFilesBatch',
+      'resetScheduledBatch',
+      'resetSchemaBatch',
       'seedLeague',
       'seedSeason',
       'seedSeasons',

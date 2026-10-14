@@ -25,7 +25,7 @@ import {
   type LeagueSeed,
 } from './lib/tenantWrites';
 import { throttleKey } from './lib/signInThrottle';
-import { assertTestDeployment, AUTH_COMPONENT_TABLES } from './lib/testOnly';
+import { assertTestDeployment, AUTH_COMPONENT_TABLES, authModelValidator } from './lib/testOnly';
 import schema from './schema';
 
 export const ping = internalQuery({
@@ -37,9 +37,21 @@ export const ping = internalQuery({
   },
 });
 
-const AUTH_DELETE_BATCH = 500;
+// Convex stops a transaction at 4,096 reads and counts each delete as a read, so a batch of 500
+// deletes (about 1,000 reads) leaves room even for the component's `deleteMany`, which runs inside
+// the calling transaction.
+const RESET_BATCH = 500;
 
-export const reset = internalMutation({
+interface ResetCounts {
+  documents: number;
+  authDocuments: number;
+  scheduledFunctions: number;
+  files: number;
+}
+
+// An action that clears the deployment one batch per transaction, so any amount of leftovers resets
+// without one transaction reading them all.
+export const reset = internalAction({
   args: {},
   returns: v.object({
     documents: v.number(),
@@ -47,45 +59,107 @@ export const reset = internalMutation({
     scheduledFunctions: v.number(),
     files: v.number(),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<ResetCounts> => {
     assertTestDeployment();
-    // Table names come from the schema at run time, so the writer is typed by name only.
-    const db: GenericDatabaseWriter<GenericDataModel> = ctx.db;
     let documents = 0;
     for (const table of Object.keys(schema.tables)) {
-      for await (const doc of db.query(table)) {
-        await db.delete(table, doc['_id'] as GenericId<string>);
-        documents++;
+      for (;;) {
+        const count: number = await ctx.runMutation(internal.testing.resetSchemaBatch, { table });
+        documents += count;
+        if (count < RESET_BATCH) break;
       }
     }
     // The component's `jwks` key is encrypted with the run's `BETTER_AUTH_SECRET`; a key left from an
     // earlier run fails every token request with HTTP 500.
     let authDocuments = 0;
     for (const model of AUTH_COMPONENT_TABLES) {
-      // Deleted documents leave the index, so each call starts from the beginning again.
       for (;;) {
-        // The component's generated return type is `any`.
-        const { count, isDone } = (await ctx.runMutation(components.betterAuth.adapter.deleteMany, {
-          input: { model },
-          paginationOpts: { numItems: AUTH_DELETE_BATCH, cursor: null },
-        })) as { count: number; isDone: boolean };
+        const count: number = await ctx.runMutation(internal.testing.resetAuthBatch, { model });
         authDocuments += count;
-        if (isDone || count === 0) break;
+        if (count < RESET_BATCH) break;
       }
     }
+    // Cancelling keeps the row, so each batch starts after the last row the previous one saw.
     let scheduledFunctions = 0;
-    for await (const job of ctx.db.system.query('_scheduled_functions')) {
-      if (job.state.kind === 'pending' || job.state.kind === 'inProgress') {
-        await ctx.scheduler.cancel(job._id);
-        scheduledFunctions++;
-      }
+    let after: number | null = null;
+    for (;;) {
+      const batch: { cancelled: number; last: number | null } = await ctx.runMutation(
+        internal.testing.resetScheduledBatch,
+        { after },
+      );
+      scheduledFunctions += batch.cancelled;
+      if (batch.last === null) break;
+      after = batch.last;
     }
     let files = 0;
-    for await (const file of ctx.db.system.query('_storage')) {
-      await ctx.storage.delete(file._id);
-      files++;
+    for (;;) {
+      const count: number = await ctx.runMutation(internal.testing.resetFilesBatch, {});
+      files += count;
+      if (count < RESET_BATCH) break;
     }
     return { documents, authDocuments, scheduledFunctions, files };
+  },
+});
+
+export const resetSchemaBatch = internalMutation({
+  args: { table: v.string() },
+  returns: v.number(),
+  handler: async (ctx, { table }) => {
+    assertTestDeployment();
+    if (!Object.hasOwn(schema.tables, table)) {
+      throw new Error(`No table named ${JSON.stringify(table)} in the schema`);
+    }
+    // Table names come from the schema at run time, so the writer is typed by name only.
+    const db: GenericDatabaseWriter<GenericDataModel> = ctx.db;
+    const docs = await db.query(table).take(RESET_BATCH);
+    for (const doc of docs) await db.delete(table, doc['_id'] as GenericId<string>);
+    return docs.length;
+  },
+});
+
+export const resetAuthBatch = internalMutation({
+  args: { model: authModelValidator },
+  returns: v.number(),
+  handler: async (ctx, { model }) => {
+    assertTestDeployment();
+    // The component's generated return type is `any`. Deleted documents leave the index, so every
+    // call starts from the beginning.
+    const { count } = (await ctx.runMutation(components.betterAuth.adapter.deleteMany, {
+      input: { model },
+      paginationOpts: { numItems: RESET_BATCH, cursor: null },
+    })) as { count: number };
+    return count;
+  },
+});
+
+export const resetScheduledBatch = internalMutation({
+  args: { after: v.union(v.null(), v.number()) },
+  returns: v.object({ cancelled: v.number(), last: v.union(v.null(), v.number()) }),
+  handler: async (ctx, { after }) => {
+    assertTestDeployment();
+    const jobs = await ctx.db.system
+      .query('_scheduled_functions')
+      .withIndex('by_creation_time', (q) => (after === null ? q : q.gt('_creationTime', after)))
+      .take(RESET_BATCH);
+    let cancelled = 0;
+    for (const job of jobs) {
+      if (job.state.kind === 'pending' || job.state.kind === 'inProgress') {
+        await ctx.scheduler.cancel(job._id);
+        cancelled++;
+      }
+    }
+    return { cancelled, last: jobs.at(-1)?._creationTime ?? null };
+  },
+});
+
+export const resetFilesBatch = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    assertTestDeployment();
+    const files = await ctx.db.system.query('_storage').take(RESET_BATCH);
+    for (const file of files) await ctx.storage.delete(file._id);
+    return files.length;
   },
 });
 
