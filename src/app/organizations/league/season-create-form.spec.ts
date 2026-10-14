@@ -403,6 +403,83 @@ describe('SeasonCreateForm', () => {
     });
   });
 
+  describe('checking a field when the user leaves it', () => {
+    async function leave(id: string) {
+      input(id).dispatchEvent(new Event('blur'));
+      await o.harness.fixture.whenStable();
+    }
+
+    it('shows the error with aria-invalid and aria-describedby once a changed field is left', async () => {
+      await open();
+      await type('start-date', '2028-03-01');
+      await type('end-date', '2028-02-23');
+      await leave('end-date');
+      expect(error('end-date')).toBe(SEASON_MESSAGES.endBeforeStart);
+      expect(input('end-date').getAttribute('aria-invalid')).toBe('true');
+      expect(input('end-date').getAttribute('aria-describedby')).toContain('end-date-error');
+
+      await type('name', 'n'.repeat(101));
+      await leave('name');
+      expect(error('name')).toBe('Use 100 characters or fewer. This name has 101.');
+      expect(input('name').getAttribute('aria-invalid')).toBe('true');
+
+      await chooseFormat('7v7');
+      await type('minimum-roster-size', '6');
+      await leave('minimum-roster-size');
+      expect(error('minimum-roster-size')).toBe('7 v 7 needs at least 7 players. Enter 7 or more.');
+    });
+
+    it('shows nothing while the user types an invalid partial value', async () => {
+      await open();
+      await type('slug', 'Not-Valid');
+      expect(error('slug')).toBeNull();
+      expect(input('slug').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+      await open();
+      for (const id of ['name', 'slug', 'start-date', 'end-date', 'registration-deadline']) {
+        await leave(id);
+        expect(error(id), id).toBeNull();
+      }
+      await leave('minimum-roster-size');
+      expect(error('minimum-roster-size')).toBeNull();
+      await submit();
+      expect(error('name')).toBe(SEASON_MESSAGES.nameEmpty);
+      expect(error('start-date')).toBe(SEASON_MESSAGES.dateEmpty('startDate'));
+    });
+
+    it('clears the error on the keystroke that makes the value valid', async () => {
+      await open();
+      await type('slug', 'Not-Valid');
+      await leave('slug');
+      expect(error('slug')).toBe(SEASON_MESSAGES.slugInvalid);
+      await type('slug', 'fall-2026');
+      expect(error('slug')).toBeNull();
+      expect(input('slug').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('checks a slug that followed the name when Slug is left', async () => {
+      await open();
+      await type('name', 'ab');
+      await leave('slug');
+      expect(error('slug')).toBe(SEASON_MESSAGES.slugInvalid);
+    });
+
+    it('a form emptied after a create starts again: passing through its fields shows nothing', async () => {
+      await open();
+      await fill();
+      await submit();
+      o.convex.calls[0].resolve({ seasonId: 'se_new' });
+      await o.flush();
+      expect(input('name').value).toBe('');
+      for (const id of ['name', 'slug', 'start-date', 'end-date', 'registration-deadline']) {
+        await leave(id);
+        expect(error(id), id).toBeNull();
+      }
+    });
+  });
+
   describe('sending', () => {
     it('sends the trimmed name and the values; while in flight the button says so (state 8)', async () => {
       await open();

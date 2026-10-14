@@ -626,6 +626,81 @@ describe('AdminStaff', () => {
     });
   });
 
+  describe('checking a field when the user leaves it', () => {
+    async function leave(id: string) {
+      input(id).dispatchEvent(new Event('blur'));
+      await o.harness.fixture.whenStable();
+    }
+
+    /** Focus moving from a league checkbox to `to` (null: out of the page). */
+    async function leaveLeagues(n: number, to: HTMLElement | null) {
+      league(n).dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
+      await o.harness.fixture.whenStable();
+    }
+
+    it('shows the error with aria-invalid and aria-describedby once a changed Email is left', async () => {
+      await openFull();
+      await type('email', 'dana');
+      await leave('email');
+      expect(error('email')).toBe('Enter an email address like name@example.com.');
+      expect(input('email').getAttribute('aria-invalid')).toBe('true');
+      expect(input('email').getAttribute('aria-describedby')).toBe('email-description email-error');
+    });
+
+    it('shows nothing while the user types an invalid partial value', async () => {
+      await openFull();
+      await type('email', 'dana');
+      expect(error('email')).toBeNull();
+      expect(input('email').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('shows nothing when focus passes through a field that was never changed; a submit still shows it', async () => {
+      await openFull();
+      await leave('email');
+      await leaveLeagues(1, null);
+      expect(error('email')).toBeNull();
+      expect(error('leagues')).toBeNull();
+      await submit();
+      expect(error('email')).toBe('Enter their email address.');
+      expect(error('leagues')).toBe('Choose at least one league.');
+    });
+
+    it('clears the error on the keystroke that makes the value valid', async () => {
+      await openFull();
+      await type('email', 'dana');
+      await leave('email');
+      await type('email', 'dana@example.com');
+      expect(error('email')).toBeNull();
+      expect(input('email').hasAttribute('aria-invalid')).toBe(false);
+    });
+
+    it('checks the leagues when focus leaves the group after a change, not while it moves within', async () => {
+      await openFull();
+      await toggleLeague(1);
+      await toggleLeague(1);
+      await leaveLeagues(1, league(2));
+      expect(error('leagues')).toBeNull();
+      await leaveLeagues(2, null);
+      expect(error('leagues')).toBe('Choose at least one league.');
+      await toggleLeague(3);
+      expect(error('leagues')).toBeNull();
+    });
+
+    it('"Invite someone else" returns a form that shows nothing as focus passes through', async () => {
+      await openFull();
+      await createInvite();
+      const another = [...page.querySelectorAll<HTMLButtonElement>('#invite button')].find((b) =>
+        b.textContent?.includes('Invite someone else'),
+      );
+      another!.click();
+      await o.flush();
+      await leave('email');
+      await leaveLeagues(1, null);
+      expect(error('email')).toBeNull();
+      expect(error('leagues')).toBeNull();
+    });
+  });
+
   describe('creating the invite (states 7 and 8)', () => {
     it('sends the organization id, the normalised email, the role, and the chosen league ids in list order; while in flight the button says so', async () => {
       await openFull();

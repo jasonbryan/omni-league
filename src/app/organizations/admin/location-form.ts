@@ -7,6 +7,7 @@ import {
   type LocationInputError,
 } from '../../../../convex/lib/locationInput';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { ShownUntilValid } from '../../core/forms/shown-errors';
 
 export type LocationField = 'name' | 'address';
 const FIELDS: readonly LocationField[] = ['name', 'address'];
@@ -51,9 +52,9 @@ export type SubmitOutcome =
 
 /**
  * The state of one location form, the add form and a row's edit form alike (#65): the signal form,
- * the messages each field shows, and the submit sequence. Errors show after a submit, under their
- * field, and clear once the field is valid; a server refusal about a field shows until that field
- * changes. Construct it in an injection context (a component field initializer).
+ * the messages each field shows, and the submit sequence. Errors show under their field when the
+ * user leaves a field they changed (`left`) and after a submit, and clear once the field is valid;
+ * a server refusal about a field shows until that field changes. Construct it in an injection context (a component field initializer).
  */
 export class LocationForm {
   readonly model: WritableSignal<LocationModel>;
@@ -63,8 +64,8 @@ export class LocationForm {
 
   /** The first client-side error of each field, whether or not it is shown. */
   private readonly clientErrors: Record<LocationField, Signal<string | null>>;
-  /** Set on a submit for each invalid field; cleared once the field is valid. */
-  private readonly shown: Record<LocationField, WritableSignal<boolean>>;
+  /** Whether each field's client error shows; cleared once the field is valid. */
+  private readonly shown: Record<LocationField, ShownUntilValid>;
   /** A server answer about one field, until that field's value changes. */
   private readonly serverErrors: Record<LocationField, WritableSignal<string | null>>;
 
@@ -100,9 +101,15 @@ export class LocationForm {
     this.errors = { name: this.shownError('name'), address: this.shownError('address') };
   }
 
-  /** Empties both fields (after an add succeeded). */
+  /** Empties both fields (after an add succeeded); the next pass through them shows nothing. */
   clear(): void {
     this.model.set({ name: '', address: '' });
+    this.fields().reset();
+  }
+
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  left(field: LocationField): void {
+    this.shown[field].left();
   }
 
   /**
@@ -118,9 +125,8 @@ export class LocationForm {
     this.alert.set(null);
     let firstInvalid: LocationField | null = null;
     for (const field of FIELDS) {
-      const invalid = this.clientErrors[field]() !== null;
-      this.shown[field].set(invalid);
-      if (invalid) firstInvalid ??= field;
+      this.shown[field].submitted();
+      if (this.clientErrors[field]() !== null) firstInvalid ??= field;
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
@@ -156,11 +162,11 @@ export class LocationForm {
     return { sent: false, alert };
   }
 
-  private shownUntilValid(field: LocationField): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors[field]() === null,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
+  private shownUntilValid(field: LocationField): ShownUntilValid {
+    return new ShownUntilValid(
+      () => this.clientErrors[field]() !== null,
+      () => this.fields[field]().dirty(),
+    );
   }
 
   private untilChanged(value: () => unknown): WritableSignal<string | null> {
@@ -169,7 +175,7 @@ export class LocationForm {
 
   private shownError(field: LocationField): Signal<string | null> {
     return computed(() =>
-      this.shown[field]() ? this.clientErrors[field]() : this.serverErrors[field](),
+      this.shown[field].shown() ? this.clientErrors[field]() : this.serverErrors[field](),
     );
   }
 }
