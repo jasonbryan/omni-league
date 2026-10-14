@@ -37,14 +37,11 @@ __screenshots__/
 /blob-report/
 /e2e/screenshots/
 
-# Environment files and Convex deployment settings (never committed)
 .env
 .env.*
 .env*.local
 !.env.example
-# Anonymous local Convex backend state (database, admin key)
 /.convex/
-# The e2e backend's own Convex CLI project: its .env.local, state, and admin key
 /.convex-e2e/
 
 /.claude/worktrees/

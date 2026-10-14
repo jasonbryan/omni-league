@@ -76,8 +76,7 @@ if (url) {
   console.log('Convex URL: none');
 }
 
-// The server define here, and `_headers` for static files once the build succeeds. CONTEXT is public
-// build metadata.
+// CONTEXT is public build metadata, so it is safe to log.
 const noindex = command === 'build' && noindexForContext(process.env.CONTEXT);
 if (command === 'build') {
   console.log(
@@ -86,9 +85,8 @@ if (command === 'build') {
   defines.push(`--define=__NOINDEX__=${noindex}`);
 }
 
-// The app registers the service worker exactly when angular.json sets the `serviceWorker` build
-// option, so removing that option (the kill switch) turns off both the worker build and its
-// registration. Production builds only: development builds never register.
+// Removing the `serviceWorker` option (the kill switch) turns off both the worker build and its
+// registration.
 const swDefine = serviceWorkerDefine(JSON.parse(readFileSync(join(root, 'angular.json'), 'utf8')));
 console.log(
   `service worker: ${swDefine.endsWith('=true') ? 'on' : 'off'} (angular.json serviceWorker option)`,
