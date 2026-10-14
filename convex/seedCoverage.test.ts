@@ -38,7 +38,7 @@ const TABLES = Object.keys(schema.tables);
 
 function setup() {
   const t = convexTest(schema, modules);
-  // The demo accounts (#98) are made through Better Auth's sign-up, so the component is registered.
+  // The demo accounts are made through Better Auth's sign-up, so the component is registered.
   betterAuthTest.register(t, 'betterAuth');
   return t;
 }
@@ -64,7 +64,7 @@ function rowCounts(tableIds: Record<string, string[]>): Record<string, number> {
 beforeEach(() => {
   // Every preview and staging deployment has this Convex default preview variable (hosting.md).
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
-  // What the demo accounts need (#98): a throwaway password, the auth variables, and the breached
+  // What the demo accounts need: a throwaway password, the auth variables, and the breached
   // password check on (IS_TEST unset) against a mocked Pwned Passwords range response.
   vi.stubEnv('DEMO_ACCOUNT_PASSWORD', 'throwaway coverage passphrase 2026');
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');

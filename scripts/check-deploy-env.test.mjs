@@ -131,7 +131,7 @@ describe('checkDeployEnv, preview mode', () => {
   });
 });
 
-describe('checkDeployEnv, DEMO_ACCOUNT_PASSWORD in preview mode (#98)', () => {
+describe('checkDeployEnv, DEMO_ACCOUNT_PASSWORD in preview mode', () => {
   it('is not required: a preview without it passes, and with it passes', async () => {
     assert.deepEqual(await checkDeployEnv('preview', stubReader(ALLOWED_PREVIEW)), []);
     const reader = stubReader({
@@ -170,7 +170,7 @@ describe('checkDeployEnv, production mode', () => {
     assert.deepEqual(reader.reads, []);
   });
 
-  it('fails when DEMO_ACCOUNT_PASSWORD is set, without reading its value (#98)', async () => {
+  it('fails when DEMO_ACCOUNT_PASSWORD is set, without reading its value', async () => {
     const reader = stubReader({
       ...ALLOWED_PRODUCTION,
       DEMO_ACCOUNT_PASSWORD: SECRET.DEMO_ACCOUNT_PASSWORD,

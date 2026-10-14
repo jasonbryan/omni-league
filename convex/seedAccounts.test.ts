@@ -1,9 +1,4 @@
 /// <reference types="vite/client" />
-// The demo login accounts of `seed:demo` (#98): one account per role, with the memberships and the
-// pending invite that give each role something to see. The Better Auth component is registered in
-// `convex-test` (`@convex-dev/better-auth/test`, as `convex/signIn.test.ts` does), the breached
-// password check runs against a mocked `fetch` (IS_TEST unset, as on previews), and every value
-// the tests use as the password is a throwaway made up here.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -45,8 +40,7 @@ async function sha1Hex(text: string): Promise<string> {
     .toUpperCase();
 }
 
-/** A Pwned Passwords range response: padding lines, plus `suffix` when it is breached. */
-function rangeResponse(breachedSuffix?: string): Response {
+function pwnedRangeResponse(breachedSuffix?: string): Response {
   const lines = ['0018A45C4D1DEF81644B54AB7F969B88D65:0', '00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2'];
   if (breachedSuffix) lines.push(`${breachedSuffix}:3730471`);
   return new Response(lines.join('\r\n'), { status: 200 });
@@ -61,8 +55,7 @@ beforeEach(() => {
   vi.stubEnv('IS_TEST', undefined);
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
   vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
-  // By default no password is breached.
-  pwned = vi.fn(() => Promise.resolve(rangeResponse()));
+  pwned = vi.fn(() => Promise.resolve(pwnedRangeResponse()));
   vi.stubGlobal('fetch', pwned);
 });
 
@@ -114,7 +107,6 @@ async function signUp(t: T, email: string, password: string) {
 
 type AuthModel = 'user' | 'account' | 'session';
 
-/** Every row of one Better Auth component table. */
 async function authRows(t: T, model: AuthModel): Promise<Record<string, unknown>[]> {
   return t.run(async (ctx) => {
     const { page } = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
@@ -135,7 +127,6 @@ async function appRows(t: T) {
   }));
 }
 
-/** The memberships of the account with this email, with the organization slug and league slugs. */
 async function membershipsOf(t: T, email: string) {
   return t.run(async (ctx) => {
     const authUserId = await authUserIdByEmail(ctx, email);
@@ -182,7 +173,6 @@ describe('seed:demo accounts: a new deployment', () => {
         expect(answer.json).toHaveProperty('token');
       }
       expect((await signIn(t, EMAILS.admin, OTHER_PASSWORD)).status).toBe(401);
-      // The 18+ confirmation was given by the sign-up the seed made.
       const { users } = await appRows(t);
       expect(users).toHaveLength(3);
       for (const user of users) expect(user.adultConfirmedAt).toBeGreaterThan(0);
@@ -216,7 +206,6 @@ describe('seed:demo accounts: a new deployment', () => {
         leagueIds: [league?._id],
         status: 'pending',
       });
-      // Only a hash is stored, and no sign-in or sign-up token leaves the seed.
       expect(invites[0]?.tokenHash).toMatch(/^[0-9a-f]{64}$/);
       expect(invites[0]?.expiresAt).toBeGreaterThan(Date.now());
     },
@@ -279,7 +268,7 @@ describe('seed:demo accounts: a new deployment', () => {
         try {
           await fn();
         } catch (failure) {
-          return isForbidden(failure) || /Not allowed|Forbidden|access/i.test(String(failure));
+          return isForbidden(failure) || String(failure).includes('Not allowed');
         }
         return false;
       };
@@ -356,7 +345,6 @@ describe('seed:demo accounts: a second run', () => {
         accounts: await authRows(t, 'account'),
         sessions: await authRows(t, 'session'),
       }).toEqual(before);
-      // Existing accounts are verified against the stored hash, not by a sign-in or a sign-up.
       expect(pwned.mock.calls.length).toBe(calls);
       expect(await t.run((ctx) => ctx.db.query('signInFailures').collect())).toEqual([]);
     },
@@ -408,7 +396,6 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(3);
       expect(await hashes()).toEqual(expect.arrayContaining(hashBefore));
       expect(await authRows(t, 'session')).toEqual(expect.arrayContaining(sessionsBefore));
-      // The squatter keeps their own password and gets no role.
       expect((await signIn(t, EMAILS.organizer, OTHER_PASSWORD)).status).toBe(200);
       expect((await signIn(t, EMAILS.organizer, PASSWORD)).status).toBe(401);
       expect(result.memberships).toBe(3);
@@ -503,7 +490,7 @@ describe('seed:demo accounts: the password', () => {
 
   const breached = async () => {
     const hash = await sha1Hex(PASSWORD);
-    pwned.mockImplementation(() => Promise.resolve(rangeResponse(hash.slice(5))));
+    pwned.mockImplementation(() => Promise.resolve(pwnedRangeResponse(hash.slice(5))));
   };
 
   test.each([
@@ -571,10 +558,7 @@ describe('seed:demo accounts: the production guard', () => {
       (t) =>
         t.mutation(internal.seed.grantDemoMemberships, { authUserId: 'someone', account: 'admin' }),
     ],
-    [
-      'findDemoCredential',
-      (t) => t.query(internal.seed.findDemoCredential, { email: EMAILS.admin }),
-    ],
+    ['findDemoCredential', (t) => t.query(internal.seed.findDemoCredential, { account: 'admin' })],
   ];
 
   test.each(calls)(
@@ -627,7 +611,6 @@ describe('seed:demo accounts: two runs at once', () => {
 describe('seed:demo accounts: the password never leaks', () => {
   const SENTINEL = 'sentinel-passphrase-7Q9x-do-not-log';
 
-  /** Withholds the sentinel from every place a run can put it, over several cases. */
   test(
     'no return value, thrown error, console output, or credential query result holds it',
     async () => {
@@ -655,33 +638,52 @@ describe('seed:demo accounts: the password never leaks', () => {
         }
       };
 
-      // created, then exists
-      const t = setup();
-      await attempt(t);
-      await attempt(t);
-      // the stored hash read for `verify`
-      outputs.push(
-        JSON.stringify(await t.query(internal.seed.findDemoCredential, { email: EMAILS.admin })),
-      );
-      // conflict: another password already holds the address
-      const squatted = setup();
-      await signUp(squatted, EMAILS.player, OTHER_PASSWORD);
-      await attempt(squatted);
-      // breached, unreachable (with the sentinel in the fetch failure), and too short
-      const hash = await sha1Hex(SENTINEL);
-      pwned.mockImplementation(() => Promise.resolve(rangeResponse(hash.slice(5))));
-      await attempt(setup());
-      pwned.mockImplementation(() => Promise.reject(new Error(`failed for ${SENTINEL}`)));
-      await attempt(setup());
-      vi.stubEnv('DEMO_ACCOUNT_PASSWORD', SENTINEL.slice(0, 10));
-      await attempt(setup());
-      vi.stubEnv('DEMO_ACCOUNT_PASSWORD', SENTINEL);
-      // unset, and a forced unexpected error
-      vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
-      await attempt(setup());
-      vi.stubEnv('DEMO_ACCOUNT_PASSWORD', SENTINEL);
-      vi.stubEnv('BETTER_AUTH_SECRET', '');
-      await attempt(setup());
+      const seedTwice = async () => {
+        const t = setup();
+        await attempt(t);
+        await attempt(t);
+        return t;
+      };
+      const readStoredHash = async (t: T) =>
+        outputs.push(
+          JSON.stringify(await t.query(internal.seed.findDemoCredential, { account: 'admin' })),
+        );
+      const seedOverTakenAddress = async () => {
+        const t = setup();
+        await signUp(t, EMAILS.player, OTHER_PASSWORD);
+        await attempt(t);
+      };
+      const seedWithBreachedPassword = async () => {
+        const hash = await sha1Hex(SENTINEL);
+        pwned.mockImplementation(() => Promise.resolve(pwnedRangeResponse(hash.slice(5))));
+        await attempt(setup());
+      };
+      const seedWithUnreachableBreachCheck = async () => {
+        pwned.mockImplementation(() => Promise.reject(new Error(`failed for ${SENTINEL}`)));
+        await attempt(setup());
+      };
+      const seedWithShortPassword = async () => {
+        vi.stubEnv('DEMO_ACCOUNT_PASSWORD', SENTINEL.slice(0, 10));
+        await attempt(setup());
+        vi.stubEnv('DEMO_ACCOUNT_PASSWORD', SENTINEL);
+      };
+      const seedWithoutPassword = async () => {
+        vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
+        await attempt(setup());
+        vi.stubEnv('DEMO_ACCOUNT_PASSWORD', SENTINEL);
+      };
+      const seedWithoutAuthSecret = async () => {
+        vi.stubEnv('BETTER_AUTH_SECRET', '');
+        await attempt(setup());
+      };
+
+      await readStoredHash(await seedTwice());
+      await seedOverTakenAddress();
+      await seedWithBreachedPassword();
+      await seedWithUnreachableBreachCheck();
+      await seedWithShortPassword();
+      await seedWithoutPassword();
+      await seedWithoutAuthSecret();
 
       expect(outputs.length).toBeGreaterThan(8);
       for (const text of [...outputs, ...logged]) {
@@ -702,7 +704,6 @@ describe('seed:demo accounts: the password never leaks', () => {
     expect(code).toContain('env.DEMO_ACCOUNT_PASSWORD');
     expect(code).not.toContain('process.env');
 
-    // Every ctx.run* call, up to its closing parenthesis, names no password.
     const starts = [...code.matchAll(/ctx\.run(?:Mutation|Query|Action)\(/g)];
     expect(starts.length).toBeGreaterThan(3);
     for (const start of starts) {
@@ -729,7 +730,6 @@ describe('seed:demo accounts: the seeded invite', () => {
       await run(t);
       const stored = (await appRows(t)).invites[0];
       if (!stored) throw new Error('no seeded invite');
-      // Someone signs up the invited address (nothing stops them) and signs in.
       await signUp(t, INVITED, OTHER_PASSWORD);
       const invited = await as(t, INVITED);
       const memberships = (await appRows(t)).memberships.length;
@@ -752,7 +752,6 @@ describe('seed:demo accounts: the seeded invite', () => {
         );
         expect(failure, `token ${token.slice(0, 12)}`).not.toBeNull();
       }
-      // Still pending, still unaccepted, and no role was handed out.
       const after = await appRows(t);
       expect(after.invites).toEqual([stored]);
       expect(after.memberships).toHaveLength(memberships);

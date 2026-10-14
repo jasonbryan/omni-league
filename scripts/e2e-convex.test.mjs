@@ -670,7 +670,7 @@ describe('main setup (globalSetup, ADR 0005 "#7 (auth)", #62)', () => {
   });
 });
 
-describe('seed-demo with a demo account password (#98)', () => {
+describe('seed-demo with a demo account password', () => {
   const THROWAWAY = 'throwaway local passphrase 2026';
 
   it('seedDemoCalls sets DEMO_ACCOUNT_PASSWORD between the pattern and the seed, only when given', () => {

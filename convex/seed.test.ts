@@ -840,9 +840,6 @@ describe('seed:demo', () => {
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    // `DEMO` is the plain data array e2e/pwa.spec.ts reads (#82), `DEMO_SEASONS` the seasons
-    // (#125), and `DEMO_ACCOUNTS` and `DEMO_ACCOUNT_DOMAIN` the demo accounts (#98): no function,
-    // nothing to call.
     const { DEMO, DEMO_SEASONS, DEMO_ACCOUNTS, DEMO_ACCOUNT_DOMAIN, ...functions } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);

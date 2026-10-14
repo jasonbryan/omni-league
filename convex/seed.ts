@@ -349,7 +349,6 @@ const accountKeyValidator = v.union(
 
 type AccountKey = Infer<typeof accountKeyValidator>;
 
-/** One membership of a demo account: the organization and the leagues assigned, by slug. */
 interface DemoMembership {
   organizationSlug: string;
   role: Role;
@@ -357,17 +356,13 @@ interface DemoMembership {
 }
 
 /**
- * The demo accounts (#98), one per role, all with the password in `DEMO_ACCOUNT_PASSWORD`. Never
- * rename or remove an entry: an address is the account's identity. Later features add their own
- * rows to the accounts they show on (`captain@`, `guardian@`, and so on), under #230.
- *
- * A plain value, not a Convex function, so it adds nothing to the API.
+ * One per role, all with the password in `DEMO_ACCOUNT_PASSWORD`. An address is the account's
+ * identity, so an entry is never renamed or removed. A plain value, not a Convex function, so it
+ * adds nothing to the API.
  */
 export const DEMO_ACCOUNTS: Readonly<
   Record<AccountKey, { email: string; name: string; memberships: readonly DemoMembership[] }>
 > = {
-  // Org admin of the organization with data, of the empty one, and of the softball one, so it sees
-  // three organizations.
   admin: {
     email: `admin@${DEMO_ACCOUNT_DOMAIN}`,
     name: 'Demo Admin',
@@ -378,11 +373,10 @@ export const DEMO_ACCOUNTS: Readonly<
         role: 'orgAdmin',
         leagueSlugs: [],
       },
-      // Where #233's custom level "D" (Rec) shows (#236).
+      // The organization where the custom division level "D" (Rec) shows.
       { organizationSlug: 'saguaro-valley-softball', role: 'orgAdmin', leagueSlugs: [] },
     ],
   },
-  // League organizer of one league only.
   organizer: {
     email: `organizer@${DEMO_ACCOUNT_DOMAIN}`,
     name: 'Demo Organizer',
@@ -394,7 +388,6 @@ export const DEMO_ACCOUNTS: Readonly<
       },
     ],
   },
-  // No membership: sees the public pages and `/app` as a player.
   player: { email: `player@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Player', memberships: [] },
 };
 
@@ -436,7 +429,6 @@ const demoResultValidator = v.object({
 
 type DemoResult = Infer<typeof demoResultValidator>;
 
-/** The organization with this slug, or `null`. */
 async function organizationBySlug(ctx: Pick<MutationCtx, 'db'>, slug: string) {
   return ctx.db
     .query('organizations')
@@ -465,10 +457,9 @@ async function leagueIdsBySlugs(
 }
 
 /**
- * Adds the pending staff invite to the staff list of the demo organization (#98), unless the
- * address already has a pending invite there (an expired one counts, as in `invites.insertPending`).
- * It takes the hash of a token the action made and discarded: a mutation's randomness is seeded, so
- * the token is made in the action, and nothing can accept the invite. Returns the rows inserted.
+ * Skips the insert when the address already has a pending invite (an expired one counts, as in
+ * `invites.insertPending`). The token is made in the action and discarded, because a mutation's
+ * randomness is seeded; only its hash arrives here, so nothing can accept the invite.
  */
 export const insertDemoInvite = internalMutation({
   args: { tokenHash: v.string() },
@@ -539,37 +530,34 @@ export const grantDemoMemberships = internalMutation({
 });
 
 /**
- * What the action needs to know about the account with this address: no such user, a user with no
- * `credential` account (another run is mid sign-up, or one failed half way), or the auth user id
- * and the stored password hash for `verifyPassword`. Reads only; takes no password, and its result
- * goes to `verifyPassword` and nowhere else.
+ * Takes a demo account key, not an address, so it can read only the demo accounts' hashes. Its
+ * result goes to `verifyPassword` and nowhere else.
  */
 export const findDemoCredential = internalQuery({
-  args: { email: v.string() },
+  args: { account: accountKeyValidator },
   returns: v.union(
     v.object({ status: v.literal('absent') }),
     v.object({ status: v.literal('noCredential') }),
     v.object({ status: v.literal('found'), authUserId: v.string(), hash: v.string() }),
   ),
-  handler: async (ctx, { email }) => {
+  handler: async (ctx, { account }) => {
     assertPreviewDeployment();
-    const authUserId = await authUserIdByEmail(ctx, email);
+    const authUserId = await authUserIdByEmail(ctx, DEMO_ACCOUNTS[account].email);
     if (!authUserId) return { status: 'absent' as const };
     // The component's generated return types are `any`.
-    const account = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    const credential = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: 'account',
       where: [
         { field: 'userId', value: authUserId },
         { field: 'providerId', value: 'credential' },
       ],
     })) as { password?: string | null } | null;
-    if (!account?.password) return { status: 'noCredential' as const };
-    return { status: 'found' as const, authUserId, hash: account.password };
+    if (!credential?.password) return { status: 'noCredential' as const };
+    return { status: 'found' as const, authUserId, hash: credential.password };
   },
 });
 
-/** An account's code, plus the auth user id when the account may be given its memberships. */
-interface Outcome {
+interface AccountOutcome {
   code: AccountCode;
   authUserId?: string;
 }
@@ -579,7 +567,6 @@ type SignUpOutcome =
   | { kind: 'rejected'; code: AccountCode }
   | { kind: 'present' };
 
-/** The Better Auth error code and status of `error`, or `null` when it is not a Better Auth error. */
 function authErrorOf(error: unknown): { code?: string; status?: unknown } | null {
   if (typeof error !== 'object' || error === null) return null;
   if ((error as { name?: unknown }).name !== 'APIError') return null;
@@ -631,62 +618,46 @@ async function signUp(
   }
 }
 
-/** The outcome for an address that exists: `exists` when its stored hash verifies, else `conflict`. */
-async function checkExisting(
+async function verifyExistingAccount(
   found: { status: 'noCredential' } | { status: 'found'; authUserId: string; hash: string },
   password: string,
-): Promise<Outcome> {
+): Promise<AccountOutcome> {
   if (found.status === 'noCredential') return { code: 'conflict' };
   const verified = await verifyPassword({ hash: found.hash, password });
   return verified ? { code: 'exists', authUserId: found.authUserId } : { code: 'conflict' };
 }
 
 /**
- * Makes sure one demo account exists with this password. An existing account is verified against
- * its stored hash (never by a sign-in, which counts toward the per-address throttle, #63), and is
- * never rewritten: a mismatch is `conflict` and gets no role.
+ * An existing account is verified against its stored hash, never by a sign-in, because a failed
+ * sign-in counts toward the per-address throttle. It is never rewritten: a mismatch is `conflict`
+ * and gets no role.
  */
 async function ensureAccount(
   ctx: ActionCtx,
   auth: ReturnType<typeof createAuth>,
   key: AccountKey,
   password: string,
-): Promise<Outcome> {
-  const { email } = DEMO_ACCOUNTS[key];
-  const found = await ctx.runQuery(internal.seed.findDemoCredential, { email });
-  if (found.status !== 'absent') return checkExisting(found, password);
+): Promise<AccountOutcome> {
+  const found = await ctx.runQuery(internal.seed.findDemoCredential, { account: key });
+  if (found.status !== 'absent') return verifyExistingAccount(found, password);
 
   const signedUp = await signUp(auth, key, password);
   if (signedUp.kind === 'created') return { code: 'created', authUserId: signedUp.authUserId };
   if (signedUp.kind === 'rejected') return { code: signedUp.code };
 
   // Another run took the address between the lookup and the create.
-  const again = await ctx.runQuery(internal.seed.findDemoCredential, { email });
+  const again = await ctx.runQuery(internal.seed.findDemoCredential, { account: key });
   if (again.status === 'absent') {
     throw new Error(`seed:demo could not create the ${key} demo account and found none`);
   }
-  return checkExisting(again, password);
+  return verifyExistingAccount(again, password);
 }
 
 /**
- * Demo data and demo login accounts for deploy previews and staging (#97, #98), run by `npx convex
- * run seed:demo --preview-name <name>` on every build of netlify.toml's `deploy-preview` and
- * `branch-deploy` contexts, after the deploy environment check. The production context never runs it.
- *
- * An action, because Better Auth's sign-up (`auth.api.signUpEmail`, as `testing:seedLeague` does)
- * needs one. In order, each step an internal function that checks the deployment itself
- * (`assertPreviewDeployment`):
- * 1. `insertDemoData`: the organizations, locations, leagues, and seasons, insert-only.
- * 2. `insertDemoInvite`: the pending staff invite, with the hash of a token made and discarded here.
- * 3. For each of `DEMO_ACCOUNTS`, the account: created through the sign-up, or found and verified,
- *    then given its memberships (`grantDemoMemberships`) unless it is a `conflict`.
- *
- * Returns the rows inserted per table, plus `accounts`, one code per account (`created`, `exists`,
- * `conflict`, `skipped:unset`, or `rejected:<reason>`), which the build log shows. A missing, too
- * short, too long, or breached password, or an unreachable breach check, creates no account and
- * does not fail the build; the data is still seeded. The password is read once, here, through the
- * typed `env`, and goes only to Better Auth and `verifyPassword`: never to another Convex function,
- * a result, an error, or a log.
+ * An action because Better Auth's sign-up needs one. A missing, too short, too long, or breached
+ * password, or an unreachable breach check, creates no account and does not fail the build; the
+ * data is still seeded. The password is read once, here, and goes only to Better Auth and
+ * `verifyPassword`: never to another Convex function, a result, an error, or a log.
  */
 export const demo = internalAction({
   args: {},

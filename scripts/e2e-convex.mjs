@@ -12,7 +12,7 @@
 //                                                the demo data of a production-build PWA run (#82).
 //                                                With DEMO_ACCOUNT_PASSWORD set in the shell (a
 //                                                throwaway, never the owner's), it is set on the local
-//                                                backend first, so the demo accounts exist (#98)
+//                                                backend first, so the demo accounts exist
 //
 // TARGETING (security). The CLI follows `.env.local`, which may name a contributor's cloud dev
 // deployment, and `convex dev` rewrites `.env.local`. So the CLI never runs from the repository
