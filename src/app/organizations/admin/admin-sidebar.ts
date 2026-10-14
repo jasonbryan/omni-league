@@ -118,7 +118,6 @@ export class AdminSidebar {
   protected readonly sections = computed(() => {
     const { slug } = this.organization();
     const here = pathOf(this.url());
-    // `page` on the section's own path; `true` below it (a league management page is a page of the Leagues section, not the section's page).
     const mark = (path: string, below = false): 'page' | 'true' | null =>
       here === path ? 'page' : below && here.startsWith(`${path}/`) ? 'true' : null;
     return [

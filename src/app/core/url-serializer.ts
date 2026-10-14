@@ -8,10 +8,8 @@ import { DefaultUrlSerializer, type UrlTree } from '@angular/router';
 const serializer = new DefaultUrlSerializer();
 
 /**
- * True when the router cannot percent-decode the query string `search` (`?q=%`, `?%`). Checked on
- * its own, after the path `/`: the router stops parsing a path at `//` and never reads the query
- * string after it, so `/x//?q=%` parses, while the router in the browser reads it as `/x/?q=%`
- * (Angular's `Location` drops one trailing slash) and cannot decode it.
+ * Checked on its own, after the path `/`: the router stops parsing a path at `//` and never reads the query string after it, so `/x//?q=%` parses,
+ * while the router in the browser reads it as `/x/?q=%` (`Location` drops one trailing slash) and cannot decode it.
  */
 export function hasUndecodableQuery(search: string): boolean {
   if (search === '' || search === '?') return false;
@@ -24,9 +22,8 @@ export function hasUndecodableQuery(search: string): boolean {
 }
 
 /**
- * The default serializer throws `URIError` for a query string or fragment the router cannot decode, and the router then warns NG04018 and navigates to `/`,
- * so a visitor who follows a truncated link would land on the home page after hydration. This one reads such a URL without them
- * (`/organizations/acme?ref=%` as `/organizations/acme`, `/x#%` as `/x`). A path the router cannot read (`/%`, `/a(b`) still throws.
+ * The default serializer throws `URIError` for a query string or fragment the router cannot decode, and the router then navigates to `/`.
+ * This one reads such a URL without them (`/organizations/acme?ref=%` as `/organizations/acme`). A path the router cannot read (`/%`, `/a(b`) still throws.
  */
 export class QueryTolerantUrlSerializer extends DefaultUrlSerializer {
   override parse(url: string): UrlTree {

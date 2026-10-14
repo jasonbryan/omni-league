@@ -106,8 +106,6 @@ export class LeagueForm {
       sport: computed(() => (this.sport() === null ? LEAGUE_MESSAGES.sportEmpty : null)),
       locations: computed(() => checkLeagueLocations(this.chosen().length)?.message ?? null),
     };
-    // Slug counts as changed when the user typed in Name, which fills it. Sport is a radio group:
-    // once chosen it is valid, so leaving it never shows an error and only a submit does.
     const changed: Record<LeagueField, () => boolean> = {
       name: () => this.fields.name().dirty(),
       slug: () => this.fields.slug().dirty() || this.fields.name().dirty(),
@@ -187,8 +185,6 @@ export class LeagueForm {
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
-    // A press while offline is refused here; one the adapter refuses at call time (the 3-second
-    // check, before the note has appeared) takes the same path below.
     if (!online) return this.showAlert('offline');
 
     const { name, slug } = this.model();

@@ -34,12 +34,9 @@ function savedQuery<Q extends FunctionReference<'query'>>(
  */
 export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.organizations.getPublicPage, getPublicPageReturns, 1),
-  // Each (slug, page) is its own saved copy, so the page opens offline with page 1 of each list; another page opens offline once it has been viewed.
   savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
   savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
-  // The page also keeps `organizations.getPublicPage` for its sidebar, so it opens offline once all three have been viewed together.
   savedQuery(api.leagues.getPublicPage, getLeaguePublicPageReturns, 1),
   savedQuery(api.seasons.listPublic, publicSeasonsValidator, 1),
-  // The page also keeps `organizations.getPublicPage` for its sidebar, so it opens offline once both have been viewed together.
   savedQuery(api.seasons.getPublicPage, getSeasonPublicPageReturns, 1),
 ];

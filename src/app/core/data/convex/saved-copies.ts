@@ -149,7 +149,6 @@ export class ConvexSavedCopies {
       }
       const previous = storage.getItem(key);
       if (!this.trySet(storage, key, raw)) return;
-      // Only a new entry or a larger one can take the copies past a limit.
       if (previous === null || raw.length > previous.length) this.prune(storage, key);
     } catch {
       // A storage error leaves the page as if nothing were saved.

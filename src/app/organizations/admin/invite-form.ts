@@ -153,8 +153,6 @@ export class InviteForm {
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
-    // A press while offline is refused here; one the adapter refuses at call time (the 3-second
-    // check, before the note has appeared) takes the same path below.
     if (!online) return this.showAlert('offline');
 
     const checked = checkInviteEmail(this.model().email);

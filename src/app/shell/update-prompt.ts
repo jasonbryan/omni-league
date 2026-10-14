@@ -141,7 +141,6 @@ export class UpdatePrompt {
     });
   }
 
-  /** When focus was in the card, focus moves to the main region (the skip link's target, `tabindex="-1"`) without scrolling, so it does not fall to `<body>` and the next Tab starts in the page content. */
   protected later(): void {
     const hadFocus = this.card()?.nativeElement.contains(this.document.activeElement) ?? false;
     this.updates.later();

@@ -84,7 +84,6 @@ export class AuthService implements ConvexAuthSource {
     }
     void this.client.then((client) => {
       if (this.destroyRef.destroyed) return;
-      // No stored session token (never signed in, or signed out): signed out with no get-session request, so an anonymous page view makes none.
       if (!client || !hasStoredSession(client)) {
         this.setSession('signed-out');
         return;
@@ -97,7 +96,6 @@ export class AuthService implements ConvexAuthSource {
     if (this.watching || this.destroyRef.destroyed) return;
     this.watching = true;
     const unsubscribe = client.useSession.subscribe((state) => {
-      // Pending: the first fetch, or a refetch with no data yet. Keep the last answer.
       if (state.isPending) return;
       this.setSession(state.data?.session ? 'signed-in' : 'signed-out');
     });

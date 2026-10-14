@@ -35,7 +35,6 @@ function localDateTime(time: number, timeZone: string | undefined): string {
   }).formatToParts(time);
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? '';
-  // "GMT-05:00", or "GMT" for a zero offset.
   const offset = part('timeZoneName').replace(/^GMT/, '') || '+00:00';
   return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}${offset}`;
 }

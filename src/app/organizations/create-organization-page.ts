@@ -300,7 +300,6 @@ export class CreateOrganizationPage {
 
   protected readonly messages = MESSAGES;
   protected readonly online = injectOnline();
-  /** The host of the public address under Slug: this page is a client route, so it is known. */
   protected readonly host = inject(DOCUMENT).location.host;
 
   private readonly model = signal<CreateModel>({ name: '', slug: '' });
@@ -393,8 +392,6 @@ export class CreateOrganizationPage {
       return;
     }
 
-    // A press while offline is refused here; one the adapter refuses at call time (the 3-second
-    // check, before the note has appeared) takes the same path below.
     if (!this.online()) {
       this.showAlert('offline');
       return;

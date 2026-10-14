@@ -2,7 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { Injectable, InjectionToken, inject } from '@angular/core';
 import { Router, UrlTree } from '@angular/router';
 
-/** Loads a URL as a full page load (`location.assign`); a token so unit tests can observe it. */
+/** A token so unit tests can observe it. */
 export const LOAD_PAGE = new InjectionToken<(url: string) => void>('LOAD_PAGE', {
   factory: () => {
     const document = inject(DOCUMENT);

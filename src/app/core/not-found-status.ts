@@ -3,10 +3,8 @@ import { REQUEST, RESPONSE_INIT, inject } from '@angular/core';
 import { UrlSerializer } from '@angular/router';
 
 /**
- * It keeps the status unset when `@angular/ssr` will answer the request with a redirect: the router normalizes some URLs (`/x//` to `/x/`, `/x/(y)` to `/x`),
- * and the engine then sends a redirect with this status. A 404 there gives a 404 with a `Location` and an empty body in a production build,
- * and `Invalid redirect status code: 404` (a 500) in a development build. With the status unset the engine sends a 302, and the target URL renders the not-found page itself.
- * `src/server.ts` makes every redirect `no-store`, and turns any response that still has a `Location` and a non-3xx status into a 302.
+ * The status stays unset when `@angular/ssr` will answer with a redirect (the router normalizes some URLs, `/x//` to `/x/` and `/x/(y)` to `/x`): the engine then sends a 302 and the target URL renders the not-found page itself.
+ * A 404 there would reach the browser with a `Location` and an empty body, or throw `Invalid redirect status code: 404` in a development build. `src/server.ts` makes every redirect `no-store` and turns a response with a `Location` and a non-3xx status into a 302.
  */
 export function setNotFoundStatus(): void {
   const responseInit = inject(RESPONSE_INIT, { optional: true });

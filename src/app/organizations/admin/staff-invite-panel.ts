@@ -477,7 +477,6 @@ export class StaffInvitePanel {
   protected readonly created = signal<CreatedInvite | null>(null);
   protected readonly copied = signal<CopyOutcome>(null);
 
-  /** Holds the element that had focus at the press; if focus has moved since, the request is dropped. */
   private readonly focusPending = signal<{ readonly from: Element | null } | null>(null);
 
   private readonly section = viewChild<ElementRef<HTMLElement>>('section');

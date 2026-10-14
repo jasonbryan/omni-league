@@ -143,9 +143,6 @@ export class SeasonForm {
       format: () => this.format(),
       minimumRosterSize: () => [this.model().minimumRosterSize, this.format()],
     };
-    // The text fields count as changed when the user typed in them; Slug also when the user typed
-    // in Name, which fills it. Format is a radio group: once chosen it is valid, so leaving it
-    // never shows an error and only a submit does.
     const changed: Record<SeasonField, () => boolean> = {
       name: () => this.fields.name().dirty(),
       slug: () => this.fields.slug().dirty() || this.fields.name().dirty(),
@@ -223,8 +220,6 @@ export class SeasonForm {
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
-    // A press while offline is refused here; one the adapter refuses at call time (the 3-second
-    // check, before the note has appeared) takes the same path below.
     if (!online) return this.showAlert('offline');
 
     const m = this.model();

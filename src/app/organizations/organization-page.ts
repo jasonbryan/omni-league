@@ -88,7 +88,6 @@ export class OrganizationPage {
     // Any error of any of the three, including a missing Convex URL; never its message (adapter
     // README).
     if (this.header.error() || this.leagues.error() || this.locations.error()) return 'error';
-    // Offline with nothing to show (never on the server, where `online` is always true).
     if (!this.online()) return 'not-saved';
     return 'loading';
   });

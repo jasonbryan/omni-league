@@ -142,7 +142,6 @@ export class PublicLeaguePage {
     if (this.view()) return 'page';
     if (this.league.value() === null || this.organization.value() === null) return 'not-found';
     if (this.failed()) return 'error';
-    // Offline with nothing to show (never on the server, where `online` is always true).
     if (!this.online()) return 'not-saved';
     return 'loading';
   });

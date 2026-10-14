@@ -398,9 +398,8 @@ describe('netlifyAppEngineHandler X-Robots-Tag', () => {
   });
 });
 
-// Netlify's CDN stores an edge-function response whose Cache-Control allows it and keyed it by path alone: `/x?token=B` got the HTML rendered for `/x?token=A`,
-// and `//x` got a 301 whose Location held another visitor's query string. Every response from the handler therefore varies the cache key by the whole query string,
-// and the redirect, whose Location copies the query string, is never stored.
+// Every response from the handler varies the cache key by the whole query string, and the redirect, whose Location copies the query string, is never stored:
+// keyed by path alone, Netlify's CDN would serve one visitor's HTML or Location to another.
 describe('netlifyAppEngineHandler cache key', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -480,8 +479,7 @@ describe('netlifyAppEngineHandler cache key', () => {
 });
 
 // The router normalizes some URLs (`/x//` to `/x/`, `/x/(y)` to `/x`), and the engine then answers with a redirect that takes the status the route set.
-// With the not-found view's 404 a production build sent 404 with a Location, an empty body, and the route's public Cache-Control, which the CDN stored;
-// a development build threw "Invalid redirect status code: 404". A redirect's Location can carry the request's query string, so no shared cache may store one.
+// A 404 there would carry the route's public Cache-Control, which the CDN stores. A redirect's Location can carry the request's query string, so no shared cache may store one.
 describe('netlifyAppEngineHandler, an engine response with a Location', () => {
   afterEach(() => {
     setAppEngineForTesting(undefined);

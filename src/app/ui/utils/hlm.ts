@@ -128,11 +128,7 @@ export function classes(computed: () => ClassValue[] | string, options: ClassesO
       }
     });
 
-    /**
-     * We need this effect to track changes to the computed classes. Ideally, we would use
-     * afterRenderEffect here, but that doesn't run in SSR contexts, so we use a standard
-     * effect which works in both browser and SSR.
-     */
+    /** This effect tracks changes to the computed classes. `afterRenderEffect` would be ideal, but it doesn't run in SSR contexts, so a standard effect is used, which works in both browser and SSR. */
     effect(updateClasses);
   });
 }

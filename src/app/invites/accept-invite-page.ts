@@ -541,7 +541,7 @@ export class AcceptInvitePage {
     }
   }
 
-  /** Signs out, then opens sign-in; the token stays in `sessionStorage`, out of `returnTo`. */
+  /** The token stays in `sessionStorage`, out of `returnTo`. */
   protected async switchAccount(): Promise<void> {
     if (this.switching()) return;
     this.switching.set(true);

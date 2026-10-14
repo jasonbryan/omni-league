@@ -30,10 +30,9 @@ import { ShellSidebar } from './shell-sidebar';
 import { TopBarAccount } from './top-bar-account';
 
 /**
- * A bare `#main` would resolve to `/#main` (the home page) because of `<base href="/">`. The router's URL is the source, not `location` or the request URL, which keep a doubled leading slash.
- * The serializer collapses `//evil.com/x` to `/evil.com/x`, but an empty primary segment beside an auxiliary route still serializes with a leading `//`
- * (`/(//evil.com)` gives `//evil.com`, which is also `router.url` for that request). So leading slashes and backslashes, which a browser reads as the start of another host, collapse to one slash.
- * With `withQuery` false the query string is dropped. The server render does that: Netlify's CDN may store the HTML of a public page, and a query string can carry a one-time token, so server HTML never holds it.
+ * A bare `#main` would resolve to `/#main` because of `<base href="/">`. The router's URL is the source, not `location`, and leading slashes and backslashes collapse to one,
+ * since a browser reads them as the start of another host (`/(//evil.com)` serializes to `//evil.com`). With `withQuery` false the query string is dropped:
+ * Netlify's CDN may store the HTML of a public page, and a query string can carry a one-time token.
  */
 export function skipLinkHref(router: Router, url: string, withQuery = true): string {
   const tree = router.parseUrl(url);
@@ -49,12 +48,9 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
 );
 
 /**
- * The breakpoint switch is CSS only, so the server and the browser render the same DOM.
- * The sheet (`ShellSheet`: the helm sheet, the CDK dialog, and the helm class merging) is imported on the menu button's first press, so a page downloads none of that code until a visitor opens the sheet.
- * A press waiting on that import is dropped by Escape, by the start of a navigation, or by the shell's destruction, so the sheet never opens over the next page.
- * The sheet has no anchor in this template: a view container here would be server-rendered, and creating the sheet in it on the first press made hydration log "no hydration info available for a given TNode" in development builds.
- * The sheet is created with `createComponent` and its host view attached to `ApplicationRef` for change detection. Its host element stays out of the document:
- * the helm sheet renders its content through the CDK overlay, which needs no host in the page.
+ * The sheet is imported on the menu button's first press, so a page downloads none of its code until a visitor opens it. A press waiting on that import is dropped by Escape,
+ * a navigation, or the shell's destruction, so the sheet never opens over the next page. The sheet has no anchor in this template: a view container here would be server-rendered
+ * and break hydration. It is created with `createComponent` and its host view attached to `ApplicationRef`; the helm sheet renders through the CDK overlay, so its host element stays out of the document.
  */
 @Component({
   selector: 'app-shell',
