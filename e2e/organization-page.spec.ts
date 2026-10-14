@@ -1,7 +1,3 @@
-// Public organization page (#60): `/organizations/:orgSlug`, rendered on the server from
-// `organizations:getPublicPage` and page 1 of the league and location lists (#100), with its sidebar
-// in the app shell (#75) and live subscriptions after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
-// and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
@@ -28,7 +24,6 @@ const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 const isWebKit = (page: Page) => page.context().browser()?.browserType().name() === 'webkit';
 
-/** The two-location, two-league tenant of the raw-HTML criteria, with two different sports. */
 function smallTenant(): Promise<Tenant> {
   return seedTenant({
     locations: [
@@ -42,10 +37,6 @@ function smallTenant(): Promise<Tenant> {
   });
 }
 
-/**
- * Two leagues and five locations, the most a list shows (#100): the last location's row starts
- * below the fold at 1280x720 and at 360x800 (asserted by the tests that use it).
- */
 function tallTenant(): Promise<Tenant> {
   return seedTenant({
     locations: tallLocations(),
@@ -67,7 +58,6 @@ function canonicalHrefs(html: string): string[] {
   );
 }
 
-/** The sidebar `<nav>` element's HTML, from its start tag to its end tag. */
 function sidebarHtml(html: string, name: string): string {
   const start = new RegExp(`<nav\\b[^>]*\\baria-label="${name}"[^>]*>`).exec(html);
   expect(start, `<nav aria-label="${name}">`).not.toBeNull();
@@ -77,7 +67,6 @@ function sidebarHtml(html: string, name: string): string {
 
 const hrefs = (html: string) => [...html.matchAll(/\bhref="([^"]*)"/g)].map(([, href]) => href);
 
-/** Waits for the dev-mode hydration log, so the live subscription is open. */
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
   await expect
     .poll(() => consoleGuard.hydrated, {
@@ -86,7 +75,6 @@ async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
     .toBe(true);
 }
 
-/** Top of `row` relative to the viewport, the header's bottom edge, and the viewport height. */
 function rowPosition(row: Locator) {
   return row.evaluate((el) => ({
     top: el.getBoundingClientRect().top,
@@ -99,7 +87,7 @@ const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
 
 /**
  * Activates a control the way a phone user does: a tap at its coordinates in Chromium, and the
- * keyboard in WebKit, where a tap does not focus a button (#78's tester note).
+ * keyboard in WebKit, where a tap does not focus a button.
  */
 async function activate(page: Page, control: Locator): Promise<void> {
   if (isWebKit(page)) {
@@ -113,11 +101,6 @@ async function activate(page: Page, control: Locator): Promise<void> {
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-/**
- * The same-path jump of #95. The page is loaded as `<path>?utm_source=x`; for each row `jump`
- * follows its sidebar link. The query string stays, the fragment is set, the page does not reload,
- * the row is in view, history grows by one entry, and Back returns to the URL before the click.
- */
 async function expectQueryKeepingJumps(
   page: Page,
   consoleGuard: { hydrated: boolean },
@@ -127,8 +110,8 @@ async function expectQueryKeepingJumps(
   const search = '?utm_source=x';
   const before = `${ORIGIN}${tenant.path}${search}`;
   for (const id of ['league-2', 'location-3']) {
-    // A goto to the URL the page is on replaces its entry, which would keep the forward entry
-    // that Back left and make the count below grow by zero. A blank page first makes a new entry.
+    // A goto to the URL the page is on replaces its entry, which would keep the forward entry that
+    // Back left and make the count below grow by zero. A blank page first makes a new entry.
     await page.goto('about:blank');
     await page.goto(`${tenant.path}${search}`);
     await hydrated(consoleGuard);
@@ -189,7 +172,6 @@ test.describe('organization page: raw server HTML', () => {
         );
         expect(headers['content-type'], path).toContain('text/html');
 
-        // Content: the h1, both locations with addresses, both leagues with sport display names.
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(new RegExp(`<h1\\b[^>]*>\\s*${tenant.name}\\s*</h1>`));
         for (const location of tenant.locations) {
@@ -201,7 +183,6 @@ test.describe('organization page: raw server HTML', () => {
           expect(html, path).toMatch(new RegExp(`>\\s*${SPORT_NAMES[league.sport]}\\s*</span>`));
         }
 
-        // Meta, from the query result; og:url and the canonical carry no query string.
         expect(html, path).toContain(`<title>${tenant.name} | Omni League</title>`);
         expect(metaContent(html, 'og:title'), path).toBe(tenant.name);
         expect(metaContent(html, 'og:description'), path).toBe(
@@ -211,7 +192,6 @@ test.describe('organization page: raw server HTML', () => {
         expect(metaContent(html, 'og:url'), path).toBe(canonical);
         expect(canonicalHrefs(html), path).toEqual([canonical]);
 
-        // Sidebar: one link per league and location, built from the slug, and no id inside.
         const nav = sidebarHtml(html, tenant.name);
         expect(nav, path).not.toMatch(/\sid="/);
         expect(nav, path).not.toContain('aria-labelledby');
@@ -226,20 +206,17 @@ test.describe('organization page: raw server HTML', () => {
           expect(html.split(nav).join(''), `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
         }
 
-        // Tiles: 2 leagues, 2 locations, 2 distinct sports.
         expect(
           [...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n),
           path,
         ).toEqual(['2', '2', '2']);
 
-        // The query string never reaches the cacheable HTML (PR #90).
         if (query) expect(html, path).not.toContain(query.slice(1));
       }
     },
   );
 });
 
-// #100: each list shows its first 5 rows by name, and the tiles show the totals.
 test.describe('organization page: more than 5 rows per list', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
@@ -247,8 +224,6 @@ test.describe('organization page: more than 5 rows per list', () => {
     'raw: 5 league rows, 5 location rows, totals in the tiles, a sidebar link per row shown',
     RAW_HTTP,
     async ({ request }) => {
-      // 13 of each, in one call, with leagues of two sports. "League 01" to "League 05", the
-      // leagues shown, are at "Location 13" to "Location 09", none of the locations shown.
       const locations = numberedLocations(13);
       const tenant = await seedTenant({
         locations,
@@ -269,7 +244,6 @@ test.describe('organization page: more than 5 rows per list', () => {
       const content = html.split(nav).join('');
       const shownLeagues = tenant.leagues.slice(0, 5);
       const shownLocations = tenant.locations.slice(0, 5);
-      // Exactly the first 5 of each list, in name order.
       expect(
         [...content.matchAll(/\sid="(league|location)-(\d+)"/g)].map(
           ([, kind, n]) => `${kind}-${n}`,
@@ -279,7 +253,6 @@ test.describe('organization page: more than 5 rows per list', () => {
         ...[1, 2, 3, 4, 5].map((n) => `location-${n}`),
       ]);
       expect(
-        // A league's name is a link (#127); a location's is plain text.
         [...content.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
           name.trim(),
         ),
@@ -291,17 +264,14 @@ test.describe('organization page: more than 5 rows per list', () => {
         expect(content).not.toContain(`>${hidden.name}</h3>`);
         expect(content).not.toContain(`>${hidden.name}</a>`);
       }
-      // A league shows its location's name though that location is not among the 5 shown.
       expect(content).toContain(`${tenant.leagues[0].locations[0]}<`);
 
-      // Tiles: the totals, not the rows shown.
       expect([...html.matchAll(/<dd\b[^>]*>\s*(\d+)\s*<\/dd>/g)].map(([, n]) => n)).toEqual([
         '13',
         '13',
         '2',
       ]);
 
-      // Sidebar: one link per row shown, each resolving to a row in the content.
       const rowLinks = hrefs(nav).slice(1);
       expect(rowLinks).toEqual([
         ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#league-${n}`),
@@ -311,7 +281,6 @@ test.describe('organization page: more than 5 rows per list', () => {
         expect(content, href).toMatch(new RegExp(`\\sid="${href.split('#')[1]}"`));
       }
 
-      // The query string never reaches the cacheable HTML (PR #90).
       expect(html).not.toContain('utm_source');
     },
   );
@@ -330,7 +299,6 @@ test.describe('organization page in the browser', () => {
     await hydrated(consoleGuard);
     await expect(page).toHaveTitle(`${tenant.name} | Omni League`);
 
-    // The league names in the content link to their public pages (#127), after the sidebar's links.
     const leagueLinks = tenant.leagues.map(
       (league) =>
         `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
@@ -340,7 +308,6 @@ test.describe('organization page in the browser', () => {
     const nav = page.getByRole('navigation', { name: tenant.name });
 
     if (!isDesktop(testInfo)) {
-      // 360: the column is hidden, the menu button shows, and the Tab order follows the DOM.
       await expect(sidebarColumn).toBeHidden();
       await expect(menuButton).toBeVisible();
       await expectAccessible(page, {
@@ -349,19 +316,16 @@ test.describe('organization page in the browser', () => {
           'header button[aria-label="Open navigation"]',
           'header a[href="/"]',
           'header a[href^="/sign-in"]',
-          // Each league's name links to its page (#127): the first focusable controls of the content.
           ...leagueLinks,
         ],
       });
       return;
     }
 
-    // 1280: the sidebar column shows, 256px wide, with no menu button.
     await expect(nav).toBeVisible();
     await expect(menuButton).toBeHidden();
     expect((await sidebarColumn.boundingBox())?.width).toBe(256);
-    // The league and location icons are muted, as in the mockup: the colour utility on <ng-icon>
-    // wins over ng-icon's own layer (src/styles.css). The eyebrow above the h1 is muted too.
+    // The colour utility on <ng-icon> wins over ng-icon's own layer (src/styles.css).
     const muted = await page
       .getByRole('main')
       .getByText('Organization', { exact: true })
@@ -383,7 +347,6 @@ test.describe('organization page in the browser', () => {
       ],
     });
 
-    // The last location's row starts below the fold; its sidebar link jumps to it on this page.
     const last = tenant.locations.length;
     const row = page.locator(`main #location-${last}`);
     await expect(row.locator('h3')).toHaveText(tenant.locations[last - 1].name);
@@ -409,9 +372,6 @@ test.describe('organization page in the browser', () => {
     ).toBe(true);
   });
 
-  // #95: the sidebar links keep the visitor's query string. A plain click goes through the router
-  // to the current path, the current search, and the link's hash, so there is no reload, history
-  // grows by one entry, and Back returns to the URL before the click.
   test('1280: a sidebar link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
     page,
     consoleGuard,
@@ -424,7 +384,6 @@ test.describe('organization page in the browser', () => {
     });
   });
 
-  // #95: the same for the phone sheet, which closes before the link is followed (#75).
   test('phone sheet (360): its link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
     page,
     consoleGuard,
@@ -469,8 +428,6 @@ test.describe('organization page in the browser', () => {
       );
     }
 
-    // Closing by Escape, Close, or the scrim leaves the scrolled page where it was, with focus
-    // back on the menu button (#78's top bar scroll margin).
     await page.evaluate(() => {
       window.scrollTo(0, 300);
     });
@@ -489,7 +446,6 @@ test.describe('organization page in the browser', () => {
       expect(await scrollY(page), how).toBe(300);
     }
 
-    // Tab and Shift+Tab stay inside the open sheet.
     await openSheet();
     const insideDialog = () =>
       page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
@@ -503,8 +459,7 @@ test.describe('organization page in the browser', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
 
-    // The sheet's link to the last location: the sheet closes, focus returns to the menu button,
-    // and the page jumps to the row, which the block scroll strategy must not undo (#75).
+    // The block scroll strategy must not undo the jump to the row after the sheet closes.
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
@@ -525,7 +480,6 @@ test.describe('organization page in the browser', () => {
     expect(after.top).toBeLessThan(after.viewport);
     expect(new URL(page.url()).pathname).toBe(tenant.path);
 
-    // At 320px the sheet is capped at the viewport minus 48px (#75).
     await page.setViewportSize({ width: 320, height: 800 });
     await openSheet();
     expect((await sheet.boundingBox())?.width).toBe(272);
@@ -533,10 +487,6 @@ test.describe('organization page in the browser', () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  // #94: the first press creates the sheet on the hydrated page. In a development build that
-  // creation logged "no hydration info available for a given TNode" while the shell's template
-  // held a view container; the console fixture fails the test on any warning. The phone-sheet
-  // test above makes its first press at 360, so only 320 is added here.
   for (const width of [320]) {
     test(`phone sheet (${width}): the first press on the hydrated page opens it with no console warning`, async ({
       page,
@@ -557,15 +507,11 @@ test.describe('organization page in the browser', () => {
     });
   }
 
-  // #94: the sheet is created outside the shell's template. A navigation that replaces the page
-  // while the sheet is open leaves no dialog, scrim, or scroll block on the next page. That the
-  // shell destroys the sheet's ComponentRef is asserted in shell.spec.ts.
   test('phone sheet (360): a navigation away while it is open leaves no overlay or scroll block', async ({
     page,
     consoleGuard,
   }, testInfo) => {
     test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
-    // The tall tenant's page scrolls, so the open sheet blocks scrolling.
     const tenant = await tallTenant();
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
@@ -595,11 +541,8 @@ test.describe('organization page in the browser', () => {
     expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
   });
 
-  // #94 with #88: the sheet opens and closes while the offline note shows. The sheet's chunk is
-  // loaded by a first press while online, because `setOffline` blocks every request, the chunk's
-  // included. The sheet is created outside the shell's template, so the note above it (a sibling
-  // of the top bar) must stay where it is, and the sheet must still open at 288px with focus on
-  // Close, close on Escape, and return focus to the menu button.
+  // The sheet's chunk is loaded by a first press while online, because `setOffline` blocks every
+  // request, the chunk's included.
   test('phone sheet (360): opens and closes while the offline note shows, with no console warning', async ({
     page,
     context,
@@ -614,7 +557,6 @@ test.describe('organization page in the browser', () => {
     const sheet = dialog.locator('[data-slot="sheet-content"]');
     const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
 
-    // Online: the first press loads the chunk and creates the sheet; close it again.
     await activate(page, menuButton);
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
@@ -631,7 +573,6 @@ test.describe('organization page in the browser', () => {
       Promise.all(element.getAnimations().map((animation) => animation.finished)),
     );
     expect((await sheet.boundingBox())?.width).toBe(288);
-    // The note is still shown, unmoved, under the scrim.
     await expect(note).toBeVisible();
     expect(await note.boundingBox()).toEqual(noteBefore);
     expect(await page.locator('app-shell-sheet').count()).toBe(0);
@@ -649,7 +590,6 @@ test.describe('organization page in the browser', () => {
       ),
     ).toBe(false);
 
-    // And once more: the second open after the note appeared works as the first one did.
     await activate(page, menuButton);
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
@@ -711,9 +651,9 @@ test.describe('organization page in the browser', () => {
     },
   );
 
-  // #82: a saved copy never takes part in hydration. The server-rendered first load carries a
-  // TransferState entry, which wins over the saved copy (ADR 0013 section 3), so the page hydrates
-  // the server HTML unchanged, and the live result then replaces the saved copy in storage.
+  // A saved copy never takes part in hydration. The server-rendered first load carries a
+  // TransferState entry, which wins over the saved copy, so the page hydrates the server HTML
+  // unchanged, and the live result then replaces the saved copy in storage.
   test(
     'hydrates the transferred value over a saved copy with no console error, then saves the live result',
     VIEWPORT_AGNOSTIC,
@@ -791,7 +731,7 @@ test.describe('organization page in the browser', () => {
     ).toBeVisible();
     const nav = page.locator(`nav[aria-label="${tenant.name}"]`);
     await expect(nav.getByText('None yet', { exact: true })).toHaveCount(2);
-    await expect(nav.locator('a')).toHaveCount(1); // Overview only
+    await expect(nav.locator('a')).toHaveCount(1);
     await expectAccessible(page);
   });
 });
@@ -834,9 +774,9 @@ test.describe('organization page: unknown slug', () => {
   );
 });
 
-// A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page
-// as if there were none (#91). Not a redirect: Netlify copies the query string into a Location
-// without one, so it would loop (PR #105). Against a preview it uses the demo organization.
+// A query string the router cannot decode (`?ref=%`, a truncated tracking link) renders the page as
+// if there were none. Not a redirect: Netlify copies the query string into a Location without one,
+// so it would loop. Against a preview it uses the demo organization.
 test.describe('organization page: undecodable query string', () => {
   test('raw: the same page, cacheable, with no query string in the HTML', RAW_HTTP, async () => {
     const path = remoteBaseUrl
@@ -864,7 +804,7 @@ test.describe('organization page: undecodable query string', () => {
   });
 
   // The browser's router parses the same URL after hydration. If it cannot decode the query string
-  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page (PR #105, tester).
+  // it warns NG04018 and navigates to `/`, so the visitor ends on the home page.
   test(
     'browser: the organization page stays after hydration, at the same path',
     VIEWPORT_AGNOSTIC,
@@ -885,8 +825,8 @@ test.describe('organization page: undecodable query string', () => {
 });
 
 // A fragment the router cannot decode (`#%`) is read as no fragment, as an undecodable query string
-// is (#116). The server never sees a fragment, so only the browser's router can send the visitor
-// to `/` (NG04018). The test collects the console messages itself: the console fixture fails only on
+// is. The server never sees a fragment, so only the browser's router can send the visitor to `/`
+// (NG04018). The test collects the console messages itself: the console fixture fails only on
 // NG05xx warnings. Against a preview it uses the demo organization.
 test.describe('organization page: undecodable fragment', () => {
   test(
@@ -913,8 +853,6 @@ test.describe('organization page: undecodable fragment', () => {
   );
 });
 
-// ADR 0005: each test seeds its own tenant and sees only its own data, whatever else the shared
-// backend holds (other tests' tenants run in parallel).
 test.describe('tenant isolation', VIEWPORT_AGNOSTIC, () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 

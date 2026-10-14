@@ -1,11 +1,10 @@
 import type { ConsoleMessage, Page } from '@playwright/test';
 
-/** Document status a test may expect; only 404 is supported (#23). */
 export type ExpectedDocumentStatus = 404;
 
 /**
- * A request a test expects to fail with this HTTP status, by URL path on any origin (#62): for
- * example a 422 from `/api/auth/sign-up/email` when the email already has an account.
+ * By URL path on any origin: for example a 422 from `/api/auth/sign-up/email` when the email
+ * already has an account.
  */
 export interface ExpectedFailedRequest {
   status: number;
@@ -13,18 +12,14 @@ export interface ExpectedFailedRequest {
 }
 
 export interface ConsoleGuardOptions {
-  /** Ignore the page's own "Failed to load resource … 404" message (and nothing else). */
   expectedDocumentStatus?: ExpectedDocumentStatus;
-  /** Convex function names (`module:function`) whose rejected mutation or action may log. */
   expectedConvexErrors?: readonly string[];
-  /** Requests whose own "Failed to load resource" message may log (each must happen). */
   expectedFailedRequests?: readonly ExpectedFailedRequest[];
   /** `console.warn` messages the test expects: a string matches the start, a RegExp anywhere. */
   expectedConsoleWarnings?: readonly (string | RegExp)[];
 }
 
 export interface VerifyOptions {
-  /** The test skipped itself (`test.skip()` in its body): unused allowances are not problems. */
   skipped?: boolean;
 }
 
@@ -38,25 +33,24 @@ function withoutFragment(url: string): string {
 }
 
 /**
- * Console rules of ADR 0005 for one test. A test fails on:
- * - any uncaught page error (`pageerror`);
- * - any `console` message of type `error` (NG0500 to NG0504 included);
- * - any `console` message of type `warning`. Angular's development warnings come with a code
- *   (`NG0505`) and without one (`Unexpected state: no hydration info available …`, #94), so no
- *   text rule tells them apart from other warnings, and every warning counts.
- * `log` and `info` are ignored (they are kept only for the hydration assertion).
+ * A test fails on any uncaught page error (`pageerror`), any `console` message of type `error`
+ * (NG0500 to NG0504 included), and any of type `warning`. Angular's development warnings come with
+ * a code (`NG0505`) and without one (`Unexpected state: no hydration info available …`), so no text
+ * rule tells them apart from other warnings, and every warning counts. `log` and `info` are ignored
+ * (they are kept only for the hydration assertion).
  *
  * Three opt-in, per-test allowances (see the fixture options in `fixtures.ts`):
  * - `expectedDocumentStatus: 404` ignores exactly the main document's own 404 resource message;
  * - `expectedConvexErrors` ignores `[CONVEX M(<name>)] ` / `[CONVEX A(<name>)] ` for listed names,
  *   and fails the test if a listed name never produced such a message;
- * - `expectedFailedRequests` ignores the resource message of a request with a listed status and
- *   URL path, and fails the test if a listed request never produced one;
+ * - `expectedFailedRequests` ignores the resource message of a request with a listed status and URL
+ *   path, and fails the test if a listed request never produced one;
  * - `expectedConsoleWarnings` ignores a warning that starts with a listed string or matches a
- *   listed RegExp, and fails the test if an entry matched no warning. Each entry needs a comment
- *   linking the issue that removes the warning.
- * A test that skips itself after `test.use()` (for example a local-only test on a remote run) is not
- * failed for unused allowances of any kind.
+ *   listed RegExp, and fails the test if an entry matched no warning. Each entry needs a one-line
+ *   why at the call site.
+ *
+ * A test that skips itself after `test.use()` (for example a local-only test on a remote run) is
+ * not failed for unused allowances of any kind.
  */
 export class ConsoleGuard {
   private readonly failures: string[] = [];
@@ -68,7 +62,6 @@ export class ConsoleGuard {
   private readonly usedWarningAllowances = new Set<string | RegExp>();
   private readonly expectedConsoleWarnings: readonly (string | RegExp)[];
   private readonly expectedDocumentStatus: ExpectedDocumentStatus | undefined;
-  /** Latest main-frame document response per page (URL without fragment, status). */
   private readonly documents = new WeakMap<Page, { url: string; status: number }>();
 
   constructor(options: ConsoleGuardOptions = {}) {
@@ -82,7 +75,6 @@ export class ConsoleGuard {
     this.expectedConsoleWarnings = options.expectedConsoleWarnings ?? [];
   }
 
-  /** Starts listening on a page. Call before the page navigates. */
   attach(page: Page): void {
     page.on('pageerror', (error) => {
       this.failures.push(`pageerror: ${error.stack ?? error.message}`);
@@ -99,20 +91,18 @@ export class ConsoleGuard {
     });
   }
 
-  /** `log`/`info` texts seen so far, in order (for the hydration assertion). */
   get logMessages(): readonly string[] {
     return this.logs;
   }
 
-  /** True once the dev-mode `Angular hydrated <n> component(s)` log has appeared. */
   get hydrated(): boolean {
     return this.logs.some((text) => HYDRATED_LOG.test(text));
   }
 
   /**
-   * Everything that fails the test: console failures, then unused allowances. With `skipped` (the
-   * test skipped itself, so it may never reach what it allowed) unused allowances of every kind
-   * (Convex errors, failed requests, console warnings) are not reported; console failures still are.
+   * With `skipped` (the test skipped itself, so it may never reach what it allowed) unused
+   * allowances of every kind (Convex errors, failed requests, console warnings) are not reported;
+   * console failures still are.
    */
   problems({ skipped = false }: VerifyOptions = {}): string[] {
     if (skipped) return [...this.failures];
@@ -142,7 +132,6 @@ export class ConsoleGuard {
     return [...this.failures, ...unusedConvex, ...unusedRequests, ...unusedWarnings];
   }
 
-  /** Throws one error listing every problem; called by the fixture at teardown. */
   verify(options: VerifyOptions = {}): void {
     const problems = this.problems(options);
     if (problems.length > 0) {

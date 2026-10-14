@@ -1,9 +1,3 @@
-// The Staff page of the admin area and the Overview's Staff tile (#67):
-// `/app/organizations/:slug/staff`, a Client route behind sign-in (approved design
-// design/mockups/67-organization-staff.html). Every test signs up its own user through the real
-// form, then gives it a role in a seeded organization (`testing:addMembership`), so the tests need
-// the local Convex backend and are skipped with E2E_BASE_URL set. Nothing is emailed: the invite
-// link is shown once and copied by the org admin.
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible } from './support/a11y';
@@ -34,7 +28,6 @@ const DAY = 24 * 60 * 60 * 1000;
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
-/** Signs up a user and gives it `role` in a new seeded organization built from `seed`. */
 async function memberOf(page: Page, role: Role | null, seed: TenantSeed = {}) {
   const user = newUser('Admin');
   await signUp(page, user);
@@ -49,7 +42,6 @@ async function memberOf(page: Page, role: Role | null, seed: TenantSeed = {}) {
   return { user, tenant, base: `/app/organizations/${tenant.slug}` };
 }
 
-/** An organization with locations and leagues, and an org admin signed in on `/staff`. */
 async function openStaff(
   page: Page,
   seed: TenantSeed = { locations: LOCATIONS, leagues: LEAGUES },
@@ -115,7 +107,6 @@ test.describe('Staff: inviting', () => {
       'League organizer for Wednesday Coed Slow-Pitch',
     );
     await expect(pendingRows(page).first()).toContainText('Expires ');
-    // No membership yet, and the list holds no link.
     await expect(memberRows(page)).toHaveCount(1);
     await expect(pendingRows(page).first().locator('textarea, a')).toHaveCount(0);
     const token = link.split('#')[1];
@@ -197,7 +188,6 @@ test.describe('Staff: inviting', () => {
   });
 
   test.describe('refusals from the server', () => {
-    // The rejected action logs one console error each, as for a taken slug (#64, #66).
     test.use({ expectedConvexErrors: ['invites:create'] });
 
     test('an address that is already a member, and one that is already invited, is refused with the approved message', async ({
@@ -476,8 +466,8 @@ test.describe('Staff: members and the Overview tile', () => {
   }) => {
     test.skip(isDesktop(page), 'the link is hidden from 1024px');
     const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
-    // Holds the answer to the leagues query, and every frame after it (Convex applies
-    // transitions in order), until released: the form is not rendered while the leagues load.
+    // Convex applies transitions in order, so holding the answer to the leagues query holds every
+    // frame after it; the form is not rendered while the leagues load.
     let leaguesQuery: number | undefined;
     let holding = false;
     const held: string[] = [];
@@ -526,7 +516,6 @@ test.describe('Staff: members and the Overview tile', () => {
 });
 
 test.describe('Staff: who may open it', () => {
-  /** The WebSocket frames the page sends, to prove which queries it asked. */
   function sentFrames(page: Page): string[] {
     const frames: string[] = [];
     page.on('websocket', (socket) => {
@@ -579,7 +568,6 @@ test.describe('Staff: who may open it', () => {
     );
   }
 
-  // The view is the same for every role, so one run of it is saved as a screenshot and scanned.
   test('the no-access view is saved as a screenshot and passes the axe helper', async ({
     page,
   }, testInfo) => {

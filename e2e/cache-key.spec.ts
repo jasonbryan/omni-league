@@ -1,11 +1,3 @@
-// No visitor gets another visitor's query string from a shared cache (PR #90). Netlify's CDN may
-// store a server response whose Cache-Control allows it, and on PR #90's preview it keyed stored
-// edge-function responses by the path alone. A query string can carry a one-time token (ADR 0008),
-// so (Angular conventions, Rendering, "Query strings and the CDN"):
-// - server HTML never contains the request's query string;
-// - every edge-function response sends `Netlify-Vary: query` (src/server-cache.ts);
-// - every response with a Location is `no-store` (it can copy the query string).
-// Add a sample path here for every new server route, with a sample value for each parameter.
 import { randomUUID } from 'node:crypto';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -13,25 +5,22 @@ import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
 
-/** Paths the edge function answers (server and client routes), one per route kind. */
+/**
+ * Paths the edge function answers (server and client routes), one per route kind. Add one for every
+ * new server route, with a sample value for each parameter.
+ */
 const EDGE_PATHS = [
   '/this-page-does-not-exist',
   '/app/x',
   '/app',
   '/organizations/cache-key-sample',
-  // #127: the public league page, here an unknown league (404); the known one is tested below.
   '/organizations/cache-key-sample/leagues/cache-key-sample',
-  // #128: the public season page, here an unknown season (404); the known one is tested below.
   '/organizations/cache-key-sample/leagues/cache-key-sample/seasons/cache-key-sample',
-  // #62: a Client route whose query string carries `returnTo`; the shell holds none of it.
   '/sign-up',
-  // #63: the same for sign-in.
   '/sign-in',
 ];
-/** Prerendered pages: static files, the same bytes for every request. */
 const STATIC_PATHS = ['/'];
 
-/** True when a shared cache may store a response with this Cache-Control. */
 function sharedCacheable(cacheControl: string | undefined): boolean {
   return !!cacheControl && !/\b(?:no-store|private)\b/i.test(cacheControl);
 }
@@ -49,7 +38,7 @@ test.describe('query strings and the CDN', () => {
         expect(response.status, path).toBeLessThan(500);
         expect(response.body, path).not.toContain(token);
         expect(response.headers.location ?? '', path).not.toContain(token);
-        // Netlify passes `Netlify-Vary` on to the client (seen on PR #90's preview).
+        // Netlify passes `Netlify-Vary` on to the client.
         if (EDGE_PATHS.includes(path)) {
           expect(response.headers['netlify-vary'], path).toBe('query');
         }
@@ -57,8 +46,8 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
-  // On a preview this is the PR #90 reproduction: the first request stores the page, and the
-  // next ones with another query string, or none, must not get the first one's value.
+  // On a preview, the first request stores the page, and the next ones with another query string,
+  // or none, must not get the first one's value.
   test(
     'a request never gets the body or Location of a request with another query string',
     RAW_HTTP,
@@ -95,7 +84,7 @@ test.describe('query strings and the CDN', () => {
         expect(later.location, query).toBe(`${unique}/x${query}`);
       }
 
-      // The router normalizes `/x//` to `/x/`, and the engine redirects there (PR #90, round 2).
+      // The router normalizes `/x//` to `/x/`, and the engine redirects there.
       const normalized = `${unique}//`;
       for (const query of [`?token=${a}`, `?token=${a}`, `?token=${b}`, '']) {
         const response = await rawGet(`${normalized}${query}`);
@@ -106,15 +95,15 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
-  // #127: the public league page reads `?page=N`, the one query parameter whose value the HTML may
-  // hold (as an integer from the query result). Nothing else of the query string may: not the
-  // canary in `?page=<canary>` (which reads as page 1), nor one beside a valid `page`.
+  // The public league page reads `?page=N`, the one query parameter whose value the HTML may hold
+  // (as an integer from the query result). Nothing else of the query string may: not the canary in
+  // `?page=<canary>` (which reads as page 1), nor one beside a valid `page`.
   test(
     'the league page: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
     RAW_HTTP,
     async () => {
-      // On a preview the demo league has the published seasons `seed:demo` gives it (#126); locally
-      // the test seeds a league with 7.
+      // On a preview the demo league has the published seasons `seed:demo` gives it; locally the
+      // test seeds a league with 7.
       let path = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s';
       if (remoteBaseUrl === undefined) {
         const tenant = await seedTenant({
@@ -140,7 +129,6 @@ test.describe('query strings and the CDN', () => {
         expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
         expect(response.headers.location, sample(token)).toBeUndefined();
         expect(response.headers['netlify-vary'], sample(token)).toBe('query');
-        // Page 1: the same seasons as the bare path.
         const names = (body: string) =>
           [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
             name.trim(),
@@ -183,14 +171,12 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
-  // #128: the public season page reads no query parameter, so nothing of the query string may
-  // reach the response, and every query string gets the same page.
   test(
     'the season page: no query string value reaches the response, and every query string gets the same page',
     RAW_HTTP,
     async () => {
-      // On a preview the demo league has the published season `summer-2027` (#126); locally the
-      // test seeds one.
+      // On a preview the demo league has the published season `summer-2027`; locally the test seeds
+      // one.
       let path =
         '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s/seasons/summer-2027';
       if (remoteBaseUrl === undefined) {

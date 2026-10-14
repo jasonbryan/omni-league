@@ -6,9 +6,8 @@ import { promisify } from 'node:util';
 export const E2E_CONVEX_SCRIPT = join(process.cwd(), 'scripts', 'e2e-convex.mjs');
 
 /**
- * Runs one `convex/testing.ts` function on the local e2e backend and returns its JSON result.
  * The call goes through `scripts/e2e-convex.mjs run`, which refuses any target other than the
- * anonymous local backend (#59). Local runs only: it refuses when E2E_BASE_URL is set.
+ * anonymous local backend. Local runs only: it refuses when E2E_BASE_URL is set.
  */
 export async function convexRun(
   name: string,

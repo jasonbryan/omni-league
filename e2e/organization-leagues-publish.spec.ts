@@ -1,9 +1,3 @@
-// Publishing a draft league from the Leagues page (#69): the Publish button, its confirmation
-// dialog, the result, and the league on the public page (approved design
-// design/mockups/66-69-organization-leagues.html, states 9 to 12). Every test signs up its own
-// user through the real form, then gives it a role in a seeded organization
-// (`testing:addMembership`), so the tests need the local Convex backend and are skipped with
-// E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -41,7 +35,6 @@ const LEAGUES: NonNullable<TenantSeed['leagues']> = [
   },
 ];
 
-/** Signs up an org admin of a new seeded organization with the mockup's leagues. */
 async function orgAdmin(page: Page, seed: TenantSeed = { locations: LOCATIONS, leagues: LEAGUES }) {
   const user = newUser('Admin');
   await signUp(page, user);
@@ -73,7 +66,6 @@ test.describe('Leagues: publishing a draft (#69)', () => {
     browser,
   }, testInfo) => {
     const { tenant, base } = await orgAdmin(page);
-    // A visitor already has the public page open, to see the league arrive.
     const visitor = await browser.newPage({ baseURL });
     try {
       await visitor.goto(tenant.path);
@@ -89,7 +81,6 @@ test.describe('Leagues: publishing a draft (#69)', () => {
       await expectAccessible(page);
       await publishButton(page, 'Sunday Reverse Coed 4s').click();
 
-      // The confirmation: copy, focus on Cancel, the sheet's scrim, and the page behind inert.
       await expect(dialog(page)).toBeVisible();
       await expect(dialog(page).getByRole('heading')).toHaveText('Publish Sunday Reverse Coed 4s?');
       await expect(dialog(page)).toContainText(
@@ -113,8 +104,8 @@ test.describe('Leagues: publishing a draft (#69)', () => {
       expect(scrim.background).toBe(sheetScrim);
       expect(['none', '']).toContain(scrim.filter);
       await screenshot(page, testInfo, '69-publish-confirm');
-      // The modal holds focus, so the page-wide Tab walk (which expects to leave the page) does
-      // not apply: axe, and a Tab that cycles inside the dialog.
+      // The modal holds focus, so the page-wide Tab walk (which expects to leave the page) does not
+      // apply: axe, and a Tab that cycles inside the dialog.
       expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
       await page.keyboard.press('Tab');
       await expect(dialog(page).getByRole('button', { name: 'Publish league' })).toBeFocused();
@@ -141,10 +132,8 @@ test.describe('Leagues: publishing a draft (#69)', () => {
       await screenshot(page, testInfo, '69-publish-done');
       await expectAccessible(page);
 
-      // The other draft keeps its button.
       await expect(publishButton(page, 'Wednesday Coed Slow-Pitch')).toBeVisible();
 
-      // The visitor's open page gained the league live; the next render has it in the raw HTML.
       await expect(visitor.locator('body')).toContainText('Sunday Reverse Coed 4s');
       await expect(visitor.locator('body')).not.toContainText('Wednesday Coed Slow-Pitch');
       const raw = await fetchRawHtml(request, tenant.path);

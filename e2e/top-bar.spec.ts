@@ -1,6 +1,3 @@
-// The top bar's "Sign in" link and its signed-in account link (#63; PR #96 decisions 1 and 2;
-// design/mockups/63-sign-in.html states 10 to 12). Public pages are rendered on the server for
-// everyone, so they carry "Sign in"; the browser swaps it for the account link after hydration.
 import type { Page } from '@playwright/test';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -18,7 +15,6 @@ const LOCAL_ONLY = 'seeds a tenant or a user on the local Convex backend';
 const signInLink = (page: Page) => page.locator('header a[href^="/sign-in"]');
 const accountLink = (page: Page) => page.locator('header a[href="/app"]');
 
-/** Waits for the dev-mode hydration log, so the page is interactive. */
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
   await expect
     .poll(() => consoleGuard.hydrated, {
@@ -57,7 +53,7 @@ test.describe('top bar', () => {
         const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
         expect(header).toMatch(/>Sign in<\/a>/);
         expect(header).toContain(`/sign-in?returnTo=${encodeURIComponent(tenant.path)}"`);
-        // The CDN may store this HTML, and a query string can carry a one-time token (PR #90).
+        // The CDN may store this HTML, and a query string can carry a one-time token.
         expect(html).not.toContain('SECRET-TOKEN');
         expect(header).not.toContain('Account:');
       },
@@ -83,7 +79,6 @@ test.describe('top bar', () => {
       await page.goto(`${tenant.path}?tab=leagues`);
       await hydrated(consoleGuard);
       await expect(signInLink(page)).toHaveText('Sign in');
-      // After hydration the link has the whole current URL, as the skip link does.
       await expect(signInLink(page)).toHaveAttribute(
         'href',
         `/sign-in?returnTo=${encodeURIComponent(`${tenant.path}?tab=leagues`)}`,
@@ -137,7 +132,6 @@ test.describe('top bar', () => {
       const tenant = await seedTenant();
       await signInAs(page, user);
 
-      // The server HTML is the same for everyone, signed in or not.
       const raw = await page.request.get(tenant.path);
       expect(await raw.text()).toMatch(/>Sign in<\/a>/);
 
@@ -150,7 +144,6 @@ test.describe('top bar', () => {
       await expect(link.locator('.truncate')).toHaveText(user.name);
       await expect(signInLink(page)).toHaveCount(0);
       await screenshot(page, testInfo, '63-top-bar-signed-in');
-      // The console guard fails this test on a hydration mismatch (NG0500 to NG0504) or any error.
 
       await link.click();
       await expect(page).toHaveURL(`${baseURL}/app`);
@@ -183,10 +176,8 @@ test.describe('top bar', () => {
         expect(truncated).toBe(true);
         await expect(name).toHaveCSS('text-overflow', 'ellipsis');
       } else {
-        // From 768px the link may be 256px wide (md:max-w-64).
         expect(linkBox?.width).toBeLessThanOrEqual(256);
       }
-      // No horizontal scrolling at this width.
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         page.viewportSize()?.width ?? 0,
       );

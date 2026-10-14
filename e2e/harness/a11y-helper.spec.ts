@@ -1,5 +1,3 @@
-// Self-tests of the axe helper's checks (#13): reflow (1.4.10) and the Tab walk (2.1.2, 2.4.3,
-// 2.4.7, 2.4.11), on fixture pages loaded with page.setContent.
 import { axeScan, checkReflow, expectAccessible, tabWalk } from '../support/a11y';
 import { expect, test } from '../support/fixtures';
 
@@ -34,7 +32,7 @@ test.describe('axe helper checks', () => {
   });
 
   // `checkReflow` waits for running animations to finish, so a control that is still transitioning
-  // two frames after the resize is measured settled (#63). The waiting must not hide an overflow.
+  // two frames after the resize is measured settled. The waiting must not hide an overflow.
   const slowShrink =
     '<style>.t{width:600px;height:10px;transition:width 600ms linear}' +
     '@media (max-width:400px){.t{width:100px}}</style>';
@@ -155,8 +153,7 @@ test.describe('axe helper checks', () => {
   });
 
   // A wrapped link is partly obscured when a fixed banner covers one of its lines, which WCAG
-  // 2.4.11 (AA) allows; it fails only when no part of it is visible. The fixture puts a fixed
-  // banner over the top of a two-line link (lines at 0 to 24px and 24 to 48px).
+  // 2.4.11 (AA) allows; it fails only when no part of it is visible.
   const wrappedLink = (bannerHeight: number): string =>
     fixture(
       `<div style="position:fixed;top:0;left:0;right:0;height:${bannerHeight}px;background:#fff;z-index:1">Banner</div>` +
@@ -174,7 +171,6 @@ test.describe('axe helper checks', () => {
       const box = document.querySelector('a')!.getBoundingClientRect();
       return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.tagName;
     });
-    // The centre of the whole link is under the banner, and its second line is clear.
     expect(covered).toBe('DIV');
     expect((await tabWalk(page)).failures).toEqual([]);
   });
@@ -217,8 +213,8 @@ test.describe('axe helper checks', () => {
     expect(walk.order).toEqual(['input#d ""', 'button "After"']);
   });
 
-  // The date-field allowance (#125) must not hide a real trap: each fixture below traps focus,
-  // next to a date field or on it, and the walk must still report it.
+  // The date-field allowance must not hide a real trap: each fixture traps focus next to a date
+  // field or on it.
   const TRAP = /^2\.1\.2 No keyboard trap: /;
   const dateAndTrap = (trapScript: string, extra = ''): string =>
     fixture(

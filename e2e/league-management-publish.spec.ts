@@ -1,11 +1,3 @@
-// Publishing a draft season from the league management page (#126): the Publish button, its
-// confirmation dialog, the result, and the message of a draft league for each role (approved design
-// design/mockups/125-126-seasons.html, states 16 to 23; the text of each state is compared with the
-// mockup in league-management-mockup.spec.ts). Every test signs up its own user through the real
-// form, then gives it a role in a seeded organization (`testing:addMembership`,
-// `testing:addLeagueOrganizer`), so the tests need the local Convex backend and are skipped with
-// E2E_BASE_URL set. The tests that check focus, layout, or accessibility run at both widths; the
-// others do not depend on the viewport and are tagged VIEWPORT_AGNOSTIC (#181).
 import type { Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -49,11 +41,6 @@ const SEASONS = [
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
-/**
- * Signs up a user with `role` in a new seeded organization with the leagues above. The Coed league
- * has the three seasons above (two drafts, one published), and the draft league has Spring 2027 as
- * a draft. A league organizer is assigned the leagues in `assigned`.
- */
 async function memberOf(page: Page, role: Role, assigned: string[] = [COED]) {
   const user = newUser(role === 'orgAdmin' ? 'Admin' : 'Organizer');
   await signUp(page, user);
@@ -122,7 +109,6 @@ test.describe('League management: publishing a season (#126)', () => {
     await expectAccessible(page);
     await publishButton(page, 'Fall 2027').click();
 
-    // The confirmation: copy, focus on Cancel, the sheet's scrim, and the page behind inert.
     await expect(dialog(page)).toBeVisible();
     await expect(dialog(page).getByRole('heading')).toHaveText('Publish Fall 2027?');
     await expect(dialog(page)).toContainText(
@@ -150,7 +136,6 @@ test.describe('League management: publishing a season (#126)', () => {
     await expect(result(page)).toContainText('It’s on the league’s public page now.');
     await expect(result(page)).toBeFocused();
     await expect(page.locator('app-league-management')).not.toHaveAttribute('inert', '');
-    // The link to the league's public page (#127).
     await expect(result(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
       'href',
       `/organizations/${tenant.slug}/leagues/${COED}`,
@@ -163,8 +148,6 @@ test.describe('League management: publishing a season (#126)', () => {
     await screenshot(page, testInfo, '126-publish-done');
     await expectAccessible(page);
 
-    // The other draft keeps its button; nothing about a season is on the organization's public
-    // page (the league and season pages come with #127 and #128).
     await expect(publishButton(page, 'Spring 2027')).toBeVisible();
     const raw = await fetchRawHtml(request, tenant.path);
     expect(raw.html).not.toContain('Fall 2027');
@@ -191,7 +174,6 @@ test.describe('League management: publishing a season (#126)', () => {
 
     await expect(status(page, 'Spring 2027')).toHaveText('Draft');
     await expect(result(page)).toHaveCount(0);
-    // Still a draft after a reload: nothing was written.
     await page.reload();
     await expect(status(page, 'Spring 2027')).toHaveText('Draft');
     await expect(status(page, 'Fall 2027')).toHaveText('Draft');
@@ -236,7 +218,6 @@ test.describe('League management: publishing a season (#126)', () => {
       await expect(dialog(page)).toHaveCount(0);
       await expect(status(page, 'Fall 2027')).toHaveText('Published');
       await expect(result(page)).toContainText('Fall 2027 is published.');
-      // Another draft season is still a draft.
       await expect(status(page, 'Spring 2027')).toHaveText('Draft');
     },
   );
@@ -259,7 +240,6 @@ test.describe('League management: a draft league (#126)', () => {
       await expect(page.getByRole('button', { name: /^Publish Spring 2027/ })).toHaveCount(0);
       await expect(row(page, 'Spring 2027').getByRole('button')).toHaveCount(0);
 
-      // The link leads to #69's Publish for this league.
       await link.click();
       await expect(page).toHaveURL(new RegExp(`${base}/leagues$`));
       await expect(
@@ -325,7 +305,6 @@ test.describe('League management: concurrent publishes (#126, tester)', () => {
           await expect(result(each)).toContainText('Fall 2027 is published.');
           await expect(status(each, 'Spring 2027')).toHaveText('Draft');
         }
-        // A third press after both finished (the second context's page is stale) changes nothing.
         await page.reload();
         await expect(status(page, 'Fall 2027')).toHaveText('Published');
         await expect(rows(page)).toHaveCount(3);
