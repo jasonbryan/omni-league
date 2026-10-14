@@ -1,4 +1,3 @@
-/* Root tooling files (vitest.config.mts, later playwright.config.ts and e2e/) for typecheck and typed linting (ADR 0002). */
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {

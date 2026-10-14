@@ -1,4 +1,3 @@
-// Unit tests for scripts/noindex.mjs (#15). Run with `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

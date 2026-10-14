@@ -1,6 +1,5 @@
 // @ts-check
-// Lint configuration per ADR 0002. Must stay ESM: @convex-dev/eslint-plugin
-// returns an eslintrc-shaped config under CommonJS.
+// Must stay ESM: @convex-dev/eslint-plugin returns an eslintrc-shaped config under CommonJS.
 import convexPlugin from '@convex-dev/eslint-plugin';
 import eslint from '@eslint/js';
 import angular from 'angular-eslint';
@@ -9,14 +8,12 @@ import globals from 'globals';
 import { builtinModules } from 'node:module';
 import tseslint from 'typescript-eslint';
 
-// A selector regex matching a Node built-in module name: `node:` anything, or an exact un-prefixed
-// built-in. Selector regexes cannot contain `/`, so the `/` in names like `fs/promises` is `.`.
+// Selector regexes cannot contain `/`, so the `/` in names like `fs/promises` is `.`.
 const BUILTIN_SOURCE = `/^(?:node:.*|${builtinModules.map((name) => name.replaceAll('/', '.')).join('|')})$/`;
 
-// ADR 0008: `@convex-dev/better-auth` makes npm install React as a required peer. React is not an
-// approved framework here, so no file may import it, or the component's React entry. Every
-// `no-restricted-imports` block below repeats these, because a later block's options replace an
-// earlier one's for the files they share.
+// `@convex-dev/better-auth` makes npm install React as a required peer. React is not an approved
+// framework here, so no file may import it. Every `no-restricted-imports` block below repeats
+// these, because a later block's options replace an earlier one's for the files they share.
 const REACT_MESSAGE =
   'React is installed only as a peer of @convex-dev/better-auth and is not an approved framework (ADR 0008).';
 const REACT_PATHS = ['react', 'react-dom', '@convex-dev/better-auth/react'].map((name) => ({
@@ -50,7 +47,6 @@ export default defineConfig([
     '.claude/worktrees/',
   ]),
 
-  // Rule set 1: all TypeScript, type-aware. Root tooling files are typed by tsconfig.tooling.json.
   {
     files: ['**/*.{ts,mts,cts}'],
     extends: [
@@ -66,7 +62,6 @@ export default defineConfig([
     },
   },
 
-  // Rule set 2: Angular TypeScript, including the SSR files.
   {
     files: ['src/**/*.ts'],
     extends: [angular.configs.tsRecommended],
@@ -87,7 +82,7 @@ export default defineConfig([
     },
   },
 
-  // Vendored spartan helm code (ADR 0007), copied from upstream and formatted by Prettier only.
+  // Vendored spartan helm code, copied from upstream and formatted by Prettier only.
   // Upstream uses `hlm*` selectors, untyped `inject(ElementRef)`, `input(…, { alias: 'class' })`,
   // and `state ?? signal('closed')` fallbacks on an optional signal; these rules are off here so a
   // re-copy from upstream stays a plain diff. Every other rule still applies.
@@ -106,7 +101,6 @@ export default defineConfig([
     },
   },
 
-  // Restricted imports everywhere: no React (ADR 0008).
   {
     files: ['**/*.{ts,mts,cts,js,mjs,cjs}'],
     rules: {
@@ -114,7 +108,6 @@ export default defineConfig([
     },
   },
 
-  // Restricted imports: only the Convex adapter folder may import convex/browser (#11).
   {
     files: ['src/**/*.ts'],
     ignores: ['src/app/core/data/convex/**'],
@@ -139,7 +132,7 @@ export default defineConfig([
   // Server-entry files (src/server*.ts) and the app file they import
   // (src/app/core/url-serializer.ts) are bundled into the Netlify edge function: Web APIs only,
   // and no environment reads, because the production edge function can read the production deploy
-  // key (ADR 0010, #37). A file added to that import graph needs a `files` entry here:
+  // key. A file added to that import graph needs a `files` entry here:
   // scripts/eslint-edge-runtime.test.mjs walks the imports and fails when one is missing.
   // This block replaces the options of the no-restricted-imports block above for these files, so
   // it repeats convex/browser.
@@ -242,7 +235,6 @@ export default defineConfig([
     },
   },
 
-  // Rule set 3: Angular templates (external and inline), with accessibility rules.
   {
     files: ['src/**/*.html'],
     extends: [angular.configs.templateRecommended, angular.configs.templateAccessibility],
@@ -255,7 +247,6 @@ export default defineConfig([
     },
   },
 
-  // Rule set 4: Convex functions.
   {
     files: ['convex/**/*.ts'],
     extends: [convexPlugin.configs.recommended],
@@ -264,7 +255,6 @@ export default defineConfig([
     },
   },
 
-  // Rule set 5: all JavaScript (config files, Node scripts), no type information.
   {
     files: ['**/*.{js,mjs,cjs}'],
     extends: [eslint.configs.recommended],

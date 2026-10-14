@@ -1,11 +1,7 @@
-// Exports the app icons from their SVG sources (#80). Run with `npm run icons` after editing a
-// source in design/icons/, then commit the changed PNGs and favicon.ico.
-//
-// The sources are the SVG masters of the approved mockup (design/mockups/80-app-icon.html). The
-// export uses the Chromium that Playwright already installs for the e2e tests, so it adds no
+// The export uses the Chromium that Playwright already installs for the e2e tests, so it adds no
 // package. Each PNG carries a `tEXt` chunk with the SHA-256 of the SVG it came from, which
-// scripts/build-icons.test.mjs compares with the committed SVG: an edited source without a re-run
-// fails `npm run test:scripts` on any machine, with no browser.
+// build-icons.test.mjs compares with the committed SVG: an edited source without a re-run fails
+// `npm run test:scripts` on any machine, with no browser.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { chromium } from '@playwright/test';
@@ -16,7 +12,6 @@ const ROOT = join(import.meta.dirname, '..');
 export const MOCKUP = 'design/mockups/80-app-icon.html';
 export const SOURCE_HASH_KEYWORD = 'Source-SHA256';
 
-/** Source SVG per art variant. */
 export const SOURCES = {
   any: 'design/icons/any.svg',
   maskable: 'design/icons/maskable.svg',
@@ -24,7 +19,6 @@ export const SOURCES = {
   favicon: 'design/icons/favicon.svg',
 };
 
-/** The mockup's heading for each variant in its "SVG masters" section. */
 const MASTER_HEADINGS = {
   any: 'Any (192, 512)',
   maskable: 'Maskable (512)',
@@ -32,7 +26,6 @@ const MASTER_HEADINGS = {
   favicon: 'Favicon (16, 32, 48)',
 };
 
-/** PNG files: `rounded` art has transparent corners; the others fill the whole square. */
 export const ICONS = [
   { path: 'public/icons/icon-192.png', source: 'any', size: 192, rounded: true, maskable: false },
   { path: 'public/icons/icon-512.png', source: 'any', size: 512, rounded: true, maskable: false },
@@ -52,7 +45,6 @@ export const ICONS = [
   },
 ];
 
-/** The favicon: one ICO holding PNG entries of the favicon art. */
 export const FAVICON = { path: 'public/favicon.ico', source: 'favicon', sizes: [16, 32, 48] };
 
 const unescapeHtml = (text) =>
@@ -62,7 +54,6 @@ const unescapeHtml = (text) =>
     .replaceAll('&quot;', '"')
     .replaceAll('&amp;', '&');
 
-/** The SVG masters from the mockup's HTML: `{ any, maskable, 'apple-touch', favicon }`. */
 export function mockupMasters(html) {
   const start = html.indexOf('id="masters"');
   if (start < 0) throw new Error('the mockup has no "SVG masters" section');
@@ -77,7 +68,6 @@ export function mockupMasters(html) {
   return out;
 }
 
-/** Screenshots `svg` at `size` x `size` pixels with a transparent page background. */
 async function rasterize(browser, svg, size) {
   const page = await browser.newPage({ viewport: { width: size, height: size } });
   try {
@@ -93,10 +83,6 @@ async function rasterize(browser, svg, size) {
   }
 }
 
-/**
- * Renders every icon file from the committed SVG sources. Resolves to
- * `[{ path, file, images }]`: the file's bytes and the PNG(s) inside it (several for the ICO).
- */
 export async function renderIcons() {
   const svgs = {};
   for (const [name, path] of Object.entries(SOURCES)) svgs[name] = await readFile(join(ROOT, path));
@@ -124,7 +110,6 @@ export async function renderIcons() {
   }
 }
 
-/** Writes the SVG sources from the mockup, then every icon file. */
 export async function buildIcons() {
   const masters = mockupMasters(await readFile(join(ROOT, MOCKUP), 'utf8'));
   for (const [name, path] of Object.entries(SOURCES)) {

@@ -1,4 +1,3 @@
-// Unit tests for scripts/e2e-failures.mjs (#186). Run with `npm run test:scripts` (node:test).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,11 +10,9 @@ const script = join(import.meta.dirname, 'e2e-failures.mjs');
 const scratch = mkdtempSync(join(tmpdir(), 'e2e-failures-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-/** A Playwright JSON-report test entry with the final status of one project's run. */
 const test = (projectName, status) => ({ projectName, status, results: [] });
 const found = (file, line, title, ...tests) => ({ file, line, title, ok: false, tests });
 
-/** A report shaped like Playwright's: a file suite holding a describe suite and a top-level spec. */
 const report = {
   suites: [
     {
