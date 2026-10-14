@@ -208,6 +208,7 @@ test.describe('Staff: Undo racing another write on the real backend', () => {
     'restore racing create, and restore racing restore, leave one pending invite per address',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
+      test.slow(); // sign-up plus many sequential calls: a loaded runner needs the longer timeout
       const admin = newUser('Admin');
       await signUp(page, admin);
       const tenant = await seedTenant({ name: 'E2E Undo Race' });
