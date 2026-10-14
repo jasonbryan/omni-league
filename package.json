@@ -11,6 +11,7 @@
     "test:convex": "vitest run --config vitest.config.mts",
     "test:scripts": "node --test --test-timeout=60000 \"scripts/**/*.test.mjs\"",
     "e2e": "node scripts/e2e.mjs",
+    "e2e:affected": "node scripts/e2e-affected-local.mjs",
     "e2e:screenshots": "npm run e2e -- e2e/screenshot.spec.ts",
     "serve:ssr": "node scripts/serve-ssr.mjs",
     "design:css": "node scripts/inline-mockup-kit.mjs",
