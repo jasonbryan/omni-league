@@ -124,8 +124,11 @@ export function decodePng(png) {
 
 // PNG entries in an ICO need Vista or later.
 export function buildIco(pngs) {
+  const ICO_TYPE_ICON = 1;
+  const COLOUR_PLANES = 1;
+  const BITS_PER_PIXEL = 32;
   const head = Buffer.alloc(6);
-  head.writeUInt16LE(1, 2); // type: icon
+  head.writeUInt16LE(ICO_TYPE_ICON, 2);
   head.writeUInt16LE(pngs.length, 4);
   const entries = [];
   let offset = 6 + 16 * pngs.length;
@@ -134,8 +137,8 @@ export function buildIco(pngs) {
     const entry = Buffer.alloc(16);
     entry[0] = width >= 256 ? 0 : width;
     entry[1] = height >= 256 ? 0 : height;
-    entry.writeUInt16LE(1, 4); // colour planes
-    entry.writeUInt16LE(32, 6); // bits per pixel
+    entry.writeUInt16LE(COLOUR_PLANES, 4);
+    entry.writeUInt16LE(BITS_PER_PIXEL, 6);
     entry.writeUInt32LE(png.length, 8);
     entry.writeUInt32LE(offset, 12);
     entries.push(entry);

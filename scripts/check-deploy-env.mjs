@@ -121,7 +121,7 @@ function redactKey(text) {
   return key ? text.split(key).join('<redacted>') : text;
 }
 
-function convexCli(args) {
+function captureConvexCli(args) {
   const cli = join(import.meta.dirname, '..', 'node_modules', 'convex', 'bin', 'main.js');
   const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
   delete env['CONVEX_VERBOSE'];
@@ -143,7 +143,7 @@ function convexReader(previewName) {
   const target = previewName === undefined ? [] : ['--preview-name', previewName];
   return {
     async names() {
-      const result = await convexCli(['env', 'list', '--names-only', ...target]);
+      const result = await captureConvexCli(['env', 'list', '--names-only', ...target]);
       if (result.code !== 0) {
         // `--names-only` writes no value anywhere, so its error text is safe to show.
         console.error(redactKey(result.stderr.trim()));
@@ -157,7 +157,7 @@ function convexReader(previewName) {
       );
     },
     async value(name) {
-      const result = await convexCli(['env', 'get', name, ...target]);
+      const result = await captureConvexCli(['env', 'get', name, ...target]);
       // Not printed on failure: this command's output is a value.
       if (result.code !== 0) throw new Error('convex env get failed');
       return result.stdout.endsWith('\n') ? result.stdout.slice(0, -1) : result.stdout;

@@ -452,6 +452,7 @@ describe('main setup (globalSetup)', () => {
     };
   }
 
+  const withoutTargetFile = (args) => args.slice(0, -2);
   async function setup({ fail, failures = {}, stderr, clock = fakeClock(), randomBytes } = {}) {
     const dir = projectDir({ config: LOCAL_CONFIG });
     const calls = [];
@@ -463,7 +464,7 @@ describe('main setup (globalSetup)', () => {
       instanceName: async () => 'anonymous-agent',
       ...(randomBytes && { randomBytes }),
       spawnCli: async (args) => {
-        calls.push(args.slice(0, -2)); // without `--env-file <target>`
+        calls.push(withoutTargetFile(args));
         // Like the real CLI: a value that starts with `-` is parsed as an option.
         if (args[0] === 'env' && args[3]?.startsWith('-')) {
           return { code: 1, stdout: '', stderr: "error: unknown option '<redacted>'" };
