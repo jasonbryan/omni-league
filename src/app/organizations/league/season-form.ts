@@ -144,14 +144,14 @@ export class SeasonForm {
       minimumRosterSize: () => [this.model().minimumRosterSize, this.format()],
     };
     const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
-    const radioGroupNeverShownOnLeave = () => false;
     const changed: Record<SeasonField, () => boolean> = {
       name: () => this.fields.name().dirty(),
       slug: slugChanged,
       startDate: () => this.fields.startDate().dirty(),
       endDate: () => this.fields.endDate().dirty(),
       registrationDeadline: () => this.fields.registrationDeadline().dirty(),
-      format: radioGroupNeverShownOnLeave,
+      // A chosen radio is always valid, so leaving it cannot show an error.
+      format: () => false,
       minimumRosterSize: () => this.fields.minimumRosterSize().dirty(),
     };
     this.shown = Object.fromEntries(

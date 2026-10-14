@@ -97,8 +97,8 @@ export class AuthService implements ConvexAuthSource {
     if (this.watching || this.destroyRef.destroyed) return;
     this.watching = true;
     const unsubscribe = client.useSession.subscribe((state) => {
-      const awaitingFirstAnswer = state.isPending;
-      if (awaitingFirstAnswer) return;
+      // A fetch with no data is pending: keep the last answer.
+      if (state.isPending) return;
       this.setSession(state.data?.session ? 'signed-in' : 'signed-out');
     });
     this.destroyRef.onDestroy(unsubscribe);

@@ -477,7 +477,7 @@ export class StaffInvitePanel {
   protected readonly created = signal<CreatedInvite | null>(null);
   protected readonly copied = signal<CopyOutcome>(null);
 
-  private readonly focusRequestFrom = signal<{ readonly from: Element | null } | null>(null);
+  private readonly pendingFocusRequest = signal<{ readonly from: Element | null } | null>(null);
 
   private readonly section = viewChild<ElementRef<HTMLElement>>('section');
   private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('email');
@@ -487,18 +487,18 @@ export class StaffInvitePanel {
 
   constructor() {
     effect(() => {
-      const pending = this.focusRequestFrom();
-      if (!pending) return;
+      const request = this.pendingFocusRequest();
+      if (!request) return;
       const email = this.emailInput();
       if (email) {
-        this.focusRequestFrom.set(null);
+        this.pendingFocusRequest.set(null);
         // Focus moved since the press (Revoke, the menu sheet): leave it there.
-        if (this.document.activeElement !== pending.from) return;
+        if (this.document.activeElement !== request.from) return;
         // Not `preventScroll`: the form grew the section after the jump, so Email may be below it.
         email.nativeElement.focus();
       } else if (this.leaguesFailed()) {
         // The leagues did not load, so there is no form to focus; do not steal focus later.
-        this.focusRequestFrom.set(null);
+        this.pendingFocusRequest.set(null);
       }
     });
   }
@@ -507,7 +507,7 @@ export class StaffInvitePanel {
   focusFirst(): void {
     const target = this.emailInput() ?? this.linkHeading();
     if (target) target.nativeElement.focus({ preventScroll: true });
-    else this.focusRequestFrom.set({ from: this.document.activeElement });
+    else this.pendingFocusRequest.set({ from: this.document.activeElement });
   }
 
   scrollTarget(): HTMLElement | undefined {

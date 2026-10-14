@@ -107,11 +107,11 @@ export class LeagueForm {
       locations: computed(() => checkLeagueLocations(this.chosen().length)?.message ?? null),
     };
     const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
-    const radioGroupNeverShownOnLeave = () => false;
     const changed: Record<LeagueField, () => boolean> = {
       name: () => this.fields.name().dirty(),
       slug: slugChanged,
-      sport: radioGroupNeverShownOnLeave,
+      // A chosen radio is always valid, so leaving it cannot show an error.
+      sport: () => false,
       locations: () => this.locationsChanged(),
     };
     this.shown = Object.fromEntries(
