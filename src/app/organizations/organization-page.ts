@@ -71,7 +71,8 @@ export class OrganizationPage {
     if (this.page()) return 'page';
     if (this.header.value() === null) return 'not-found';
     if (this.header.error() || this.leagues.error() || this.locations.error()) return 'error';
-    if (!this.online()) return 'not-saved';
+    const offlineWithoutSavedCopy = !this.online();
+    if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
 

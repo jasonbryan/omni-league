@@ -73,7 +73,8 @@ export class PublicSeasonPage {
     if (this.view()) return 'page';
     if (this.season.value() === null) return 'not-found';
     if (this.failed()) return 'error';
-    if (!this.online()) return 'not-saved';
+    const offlineWithoutSavedCopy = !this.online();
+    if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
 

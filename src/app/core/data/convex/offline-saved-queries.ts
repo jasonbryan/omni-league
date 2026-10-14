@@ -28,15 +28,27 @@ function savedQuery<Q extends FunctionReference<'query'>>(
   return { query, returns, version };
 }
 
+const ORGANIZATION_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
+  savedQuery(api.organizations.getPublicPage, getPublicPageReturns, 1),
+  savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
+  savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
+];
+
+const LEAGUE_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
+  savedQuery(api.leagues.getPublicPage, getLeaguePublicPageReturns, 1),
+  savedQuery(api.seasons.listPublic, publicSeasonsValidator, 1),
+];
+
+const SEASON_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
+  savedQuery(api.seasons.getPublicPage, getSeasonPublicPageReturns, 1),
+];
+
 /**
  * A query is listed only if it is deliberately public (no `ctx.auth` check) and its result does not depend on the caller, so a saved
  * copy never holds signed-in or per-user data. A query that reads the caller's identity, or ever may, is never listed.
  */
 export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
-  savedQuery(api.organizations.getPublicPage, getPublicPageReturns, 1),
-  savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
-  savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
-  savedQuery(api.leagues.getPublicPage, getLeaguePublicPageReturns, 1),
-  savedQuery(api.seasons.listPublic, publicSeasonsValidator, 1),
-  savedQuery(api.seasons.getPublicPage, getSeasonPublicPageReturns, 1),
+  ...ORGANIZATION_PAGE_QUERIES,
+  ...LEAGUE_PAGE_QUERIES,
+  ...SEASON_PAGE_QUERIES,
 ];
