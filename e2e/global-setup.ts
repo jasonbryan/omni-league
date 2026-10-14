@@ -4,9 +4,8 @@ import { E2E_CONVEX_SCRIPT } from './support/convex';
 import { baseURL, LOCAL_CONVEX_URL, LOCAL_PORT, remoteBaseUrl } from './support/env';
 
 /**
- * Prints the run's target, so the job log and pasted local output show what was tested. Locally,
- * it then sets IS_TEST=true on the local Convex backend and runs `testing:reset` once (ADR 0005,
- * #59); tests are isolated by their own data, not by further resets.
+ * Locally, sets IS_TEST=true on the local Convex backend and resets it once; tests are isolated by
+ * their own data, not by further resets.
  */
 export default function globalSetup(config: FullConfig): void {
   const projects = config.projects.map((p) => p.name).join(', ');

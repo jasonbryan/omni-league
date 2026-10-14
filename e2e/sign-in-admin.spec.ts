@@ -1,7 +1,3 @@
-// Sign-in (#63) together with the organization admin area (#65): the top bar's account link on the
-// admin pages, and sign-out from the account page followed by a deep link into the admin area,
-// which goes to /sign-in?returnTo=<admin path> and back after sign-in. Both features merged
-// separately; this file checks they work together. Needs the local Convex backend.
 import { convexRun } from './support/convex';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -32,7 +28,6 @@ test.describe('sign-in and the admin area together', VIEWPORT_AGNOSTIC, () => {
     });
     const base = `/app/organizations/${tenant.slug}`;
 
-    // The top bar shows the account link, not "Sign in", on both admin pages.
     for (const [path, heading] of [
       [base, 'Overview'],
       [`${base}/locations`, 'Locations'],
@@ -45,20 +40,17 @@ test.describe('sign-in and the admin area together', VIEWPORT_AGNOSTIC, () => {
       await expect(signInLink(page)).toHaveCount(0);
     }
 
-    // The account link leads to /app, and Sign out there ends the session.
     await accountLink(page).click();
     await expect(page).toHaveURL(`${baseURL}/app`);
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);
     await expect(signInLink(page)).toBeVisible();
 
-    // A deep link into the admin area is sent to sign-in with the path as returnTo.
     await page.goto(`${base}/locations`);
     await expect(page).toHaveURL(
       `${baseURL}/sign-in?returnTo=${encodeURIComponent(`${base}/locations`)}`,
     );
 
-    // Signing in returns to that admin page, as an org admin, with the account link.
     const tokens = tokensSettled(page);
     await page.locator('#email').fill(user.email);
     await page.locator('#password').fill(user.password);

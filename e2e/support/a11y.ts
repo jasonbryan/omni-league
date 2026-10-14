@@ -5,19 +5,17 @@ import { expect, test, type Page } from '@playwright/test';
 type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>;
 type Result = AxeResults['violations'][number];
 
-/** axe rule tags enforced by ADR 0005; a scan passes only with zero violations. */
 export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
-/** 1.4.10 Reflow: the width at which no horizontal scrolling is allowed. */
 export const REFLOW_WIDTH = 320;
 
 export interface AxeScanOptions {
   /**
-   * Rules to disable. Only per rule, with a code comment linking an issue at the call site
-   * (ADR 0005). Prefer `exclude` for a single known element.
+   * Rules to disable. Only per rule, each with a one-line why at the call site. Prefer `exclude`
+   * for a single known element.
    */
   disableRules?: string[];
-  /** CSS selectors excluded from the scan (same comment-and-issue rule). */
+  /** CSS selectors excluded from the scan (same rule: a one-line why at the call site). */
   exclude?: string[];
 }
 
@@ -27,14 +25,11 @@ export interface TabWalkOptions {
    * follow the DOM order of the sequentially focusable elements.
    */
   expectedOrder?: string[];
-  /** Upper bound on Tab presses; default twice the focusable count plus 5. */
   maxSteps?: number;
 }
 
 export interface TabWalkResult {
-  /** Focused elements in Tab order, described as `tag#id "name"`. */
   order: string[];
-  /** One line per failed check, each starting with its WCAG success criterion. */
   failures: string[];
 }
 
@@ -47,7 +42,6 @@ export interface ReflowResult {
 
 export type AccessibilityOptions = AxeScanOptions & TabWalkOptions;
 
-/** Runs axe with the ADR 0005 tags. */
 export async function axeScan(page: Page, options: AxeScanOptions = {}): Promise<AxeResults> {
   let builder = new AxeBuilder({ page }).withTags(AXE_TAGS);
   if (options.disableRules?.length) builder = builder.disableRules(options.disableRules);
@@ -55,7 +49,6 @@ export async function axeScan(page: Page, options: AxeScanOptions = {}): Promise
   return builder.analyze();
 }
 
-/** One line per violation, naming the rule, its impact, and the failing nodes. */
 export function describeViolations(violations: Result[]): string[] {
   return violations.map(
     (v) =>
@@ -65,10 +58,6 @@ export function describeViolations(violations: Result[]): string[] {
   );
 }
 
-/**
- * 1.4.10 Reflow: at 320 CSS px wide, the page must not scroll horizontally
- * (`scrollWidth <= clientWidth`). The viewport is restored afterwards.
- */
 export async function checkReflow(page: Page): Promise<ReflowResult> {
   const original = page.viewportSize();
   await page.setViewportSize({ width: REFLOW_WIDTH, height: original?.height ?? 800 });
@@ -78,7 +67,7 @@ export async function checkReflow(page: Page): Promise<ReflowResult> {
       // Measure the settled layout: a `transition-all` control (the top bar's account link, whose
       // max-width drops at the md breakpoint) is still mid-transition two frames after the resize.
       // Only finite animations are awaited: an infinite one (`animate-pulse`, `animate-spin`) never
-      // finishes, so waiting for it would hang until the test timeout (#167).
+      // finishes, so waiting for it would hang until the test timeout.
       const finite = document
         .getAnimations()
         .filter((a) => a.effect !== null && a.effect.getComputedTiming().endTime !== Infinity);
@@ -91,10 +80,6 @@ export async function checkReflow(page: Page): Promise<ReflowResult> {
     if (original) await page.setViewportSize(original);
   }
 }
-
-// ---------------------------------------------------------------------------------------------
-// Tab walk (2.1.2, 2.4.3, 2.4.7, 2.4.11)
-// ---------------------------------------------------------------------------------------------
 
 const WALK_KEY = '__e2eTabWalk';
 
@@ -112,13 +97,12 @@ interface StepInfo {
    * the document (focus left the page); `element`: on an element of the page.
    */
   where: 'start' | 'outside' | 'element';
-  /** Index in the DOM-order focusable list, or -1 for an element outside it. */
   index: number;
   description: string;
   /**
-   * How many Tab presses in a row one element takes before focus moves on: 1 for an ordinary
-   * element, more for a native date or time field, whose segments (and picker button) each take a
-   * Tab press inside the one element (#125).
+   * How many Tab presses in a row one element takes before focus moves on: more than 1 for a native
+   * date or time field, whose segments (and picker button) each take a Tab press inside the one
+   * element.
    */
   parts: number;
   focusVisible: boolean | null;
@@ -127,11 +111,6 @@ interface StepInfo {
   coveredBy: string;
 }
 
-/**
- * Prepares the page: lists the sequentially focusable elements in DOM order (rendered, not
- * disabled, not inert, `tabIndex >= 0`; one radio per group), records their unfocused outline and
- * box-shadow, and focuses an invisible start marker at the top of the body.
- */
 function setUpWalk(key: string): string[] {
   const describe = (el: Element): string => {
     const name = (el.getAttribute('aria-label') ?? el.textContent ?? '')
@@ -193,7 +172,6 @@ function setUpWalk(key: string): string[] {
   return elements.map(describe);
 }
 
-/** Reads the focused element after one Tab press and runs the per-step checks. */
 async function readStep(key: string): Promise<StepInfo> {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const state = (window as WalkWindow)[key as typeof WALK_KEY];
@@ -204,8 +182,8 @@ async function readStep(key: string): Promise<StepInfo> {
       .replace(/\s+/g, ' ');
     return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} "${name.slice(0, 40)}"`;
   };
-  // Tab stops inside one native date or time input: its segments, then its picker button. This
-  // runs in the page, so the table is local.
+  // Tab stops inside one native date or time input: its segments, then its picker button. This runs
+  // in the page, so the table is local.
   const inputParts: Record<string, number> = {
     date: 4,
     month: 3,
@@ -243,8 +221,8 @@ async function readStep(key: string): Promise<StepInfo> {
   let unobscured = !!hit && (hit === active || active.contains(hit));
   if (inViewport && !unobscured) {
     // An inline element that wraps (a link in a sentence) has one box per line, and the centre of
-    // their union can fall beside the shorter line, on the text around it. The element is
-    // obscured only when the centre of none of its line boxes is on it (#126).
+    // their union can fall beside the shorter line, on the text around it. The element is obscured
+    // only when the centre of none of its line boxes is on it.
     for (const box of active.getClientRects()) {
       const bx = box.left + box.width / 2;
       const by = box.top + box.height / 2;
@@ -295,46 +273,43 @@ export function tabKey(page: Page): 'Tab' | 'Alt+Tab' {
   return browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab';
 }
 
+const TAB_ROUNDS = 2;
+const STEP_MARGIN = 5;
+const EXTRA_PRESSES_PER_DATE_FIELD = 5;
+
+function defaultMaxSteps(focusableCount: number, dateFieldCount: number): number {
+  return (
+    focusableCount * TAB_ROUNDS +
+    STEP_MARGIN +
+    dateFieldCount * EXTRA_PRESSES_PER_DATE_FIELD * TAB_ROUNDS
+  );
+}
+
 /**
- * Presses Tab from the top of the page through one full round of the page's Tab sequence (from
- * focus leaving the page to leaving it again) and on until focus returns to the first element of
- * that round, or the step limit is hit. Checks, per ADR 0005:
- * - 2.1.2 No keyboard trap: Tab moves focus, focus leaves the page and returns to the start within
- *   the limit, never stays on one element, and never cycles back to an element other than the start;
- * - 2.4.3 Focus order: the order equals `expectedOrder`, or else the DOM order of the
- *   sequentially focusable elements (CSS visual reordering is not detected; manual check);
- * - 2.4.7 Focus visible: each focused element's computed outline or box-shadow differs from its
- *   unfocused state;
- * - 2.4.11 Focus not obscured (minimum): the focused element's centre is in the viewport and
- *   `elementFromPoint` there is the element or a descendant.
- * A page with no focusable elements passes. Shadow roots and iframe contents are not walked.
+ * CSS visual reordering is not detected (manual check). A page with no focusable elements passes.
+ * Shadow roots and iframe contents are not walked.
  */
 export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise<TabWalkResult> {
   const domOrder = await page.evaluate(setUpWalk, WALK_KEY);
   const failures: string[] = [];
   const tab = tabKey(page);
-  // A native date or time field takes up to 5 more Tab presses per round than another element.
-  const multiPartFields = await page.evaluate(
+  const dateFieldCount = await page.evaluate(
     () =>
       document.querySelectorAll(
         'input[type="date"], input[type="month"], input[type="week"], input[type="time"], ' +
           'input[type="datetime-local"]',
       ).length,
   );
-  const maxSteps = options.maxSteps ?? domOrder.length * 2 + 5 + multiPartFields * 10;
+  const maxSteps = options.maxSteps ?? defaultMaxSteps(domOrder.length, dateFieldCount);
   const same = (a: StepInfo | undefined, b: StepInfo): boolean =>
     !!a && a.where === 'element' && a.index === b.index && a.description === b.description;
-  // Phase "before": from the start marker until focus first leaves the page. A fresh Tab sequence
-  // starts there, so positive tabindex values are seen in the order the browser really uses.
-  // Phase "cycle": one full round, recorded, until focus leaves the page again.
-  // Phase "return": the next Tab must land on the first element of the round.
-  // A browser that wraps from the last element to the first without leaving the page completes
-  // its round in phase "before" instead.
+  // A fresh Tab sequence starts once focus first leaves the page, so positive tabindex values are
+  // seen in the order the browser really uses. A browser that wraps from the last element to the
+  // first without leaving the page completes its round in phase "before".
   let phase: 'before' | 'cycle' | 'return' = 'before';
   const before: StepInfo[] = [];
   let cycle: StepInfo[] = [];
   let previous: StepInfo | undefined;
-  // Consecutive Tab presses that landed on `previous`.
   let stays = 0;
   let done = false;
   const trap = (message: string): void => {
@@ -350,7 +325,6 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
         break;
       }
       if (info.where === 'element' && same(previous, info)) {
-        // A date field takes one Tab press per segment (#125); any other element, one.
         stays++;
         if (stays > info.parts) {
           trap(`focus stayed on ${info.description} after Tab`);
@@ -364,7 +338,7 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
         if (info.where === 'outside') {
           phase = 'cycle';
         } else if (same(before[0], info)) {
-          cycle = before; // wrapped inside the page: the round is complete
+          cycle = before;
           done = true;
         } else if (before.some((b) => same(b, info))) {
           trap(
@@ -377,8 +351,8 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
       }
       if (phase === 'cycle') {
         if (info.where === 'outside') {
-          // An empty round (two exits in a row) means nothing on the page takes focus.
-          if (cycle.length === 0) done = true;
+          const nothingTakesFocus = cycle.length === 0;
+          if (nothingTakesFocus) done = true;
           else phase = 'return';
         } else if (cycle.some((c) => same(c, info))) {
           trap(
@@ -389,7 +363,6 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
         }
         continue;
       }
-      // phase === 'return'
       if (!same(cycle[0], info)) {
         trap(
           `after leaving the page, Tab focused ${info.description || 'nothing'} instead of the start ${cycle[0]?.description}`,
@@ -404,8 +377,6 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
       );
     }
 
-    // Per-element checks, once per element of the recorded round (or of everything visited when
-    // the walk was trapped).
     for (const info of cycle.length > 0 ? cycle : before) {
       if (info.focusVisible === false) {
         failures.push(
@@ -451,10 +422,8 @@ export async function tabWalk(page: Page, options: TabWalkOptions = {}): Promise
 }
 
 /**
- * The axe helper (ADR 0005): axe with the ADR tags (zero violations), the Tab walk, and the 320px
- * reflow check. All three are soft assertions, so one run reports every failure. The full axe
- * results, including `incomplete` ("needs review") items for the manual checklist, are attached to
- * the test report.
+ * All three are soft assertions, so one run reports every failure. The full axe results, including
+ * `incomplete` ("needs review") items for the manual checklist, are attached to the test report.
  */
 export async function expectAccessible(
   page: Page,
