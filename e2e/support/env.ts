@@ -7,7 +7,6 @@ import convexBackend from './convex-backend.json';
  */
 export const LOCAL_PORT = 4000;
 export const LOCAL_BASE_URL = `http://localhost:${LOCAL_PORT}`;
-/** The anonymous local Convex backend; version and ports live in `convex-backend.json`. */
 export const LOCAL_CONVEX_URL = `http://127.0.0.1:${convexBackend.cloudPort}`;
 export const LOCAL_CONVEX_SITE_URL = `http://127.0.0.1:${convexBackend.sitePort}`;
 

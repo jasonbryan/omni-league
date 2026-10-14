@@ -59,7 +59,6 @@ export function describeViolations(violations: Result[]): string[] {
   );
 }
 
-/** Restores the viewport afterwards. */
 export async function checkReflow(page: Page): Promise<ReflowResult> {
   const original = page.viewportSize();
   await page.setViewportSize({ width: REFLOW_WIDTH, height: original?.height ?? 800 });
