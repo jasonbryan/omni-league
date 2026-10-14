@@ -10,6 +10,7 @@ import {
 } from '../../../../convex/lib/inviteInput';
 import type { Role } from '../../../../convex/lib/roles';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 
 export type { InviteField };
 /** The fields in the order focus and errors follow (design/mockups/67-organization-staff.html). */
@@ -62,9 +63,9 @@ function inputErrorOf(failure: unknown): InviteInputError | null {
 
 /**
  * The state of the invite form (#67): the signal form for Email, the chosen role and leagues, the
- * messages each field shows, and the submit sequence. Like `LeagueForm`, errors show after a
- * submit, under their field, and clear once the field is valid; a server refusal about a field
- * shows until that field changes. Role defaults to League organizer, the least access (decision
+ * messages each field shows, and the submit sequence. Like `LeagueForm`, errors show under their
+ * field when the user leaves a field they changed (`left`, `leftGroup`) and after a submit, and
+ * clear once the field is valid; a server refusal about a field shows until that field changes. Role defaults to League organizer, the least access (decision
  * 9); with no league in the organization it is Org admin and League organizer is unavailable. The
  * leagues chosen are kept while Org admin is chosen and come back with League organizer. Construct
  * it in an injection context (a component field initializer); `available` returns the ids of the
@@ -88,7 +89,9 @@ export class InviteForm {
   readonly chosen: Signal<Id<'leagues'>[]>;
 
   private readonly clientErrors: Record<InviteField, Signal<string | null>>;
-  private readonly shown: Record<InviteField, WritableSignal<boolean>>;
+  private readonly shown: Record<InviteField, ShownUntilValid>;
+  /** True once the user has checked or unchecked a league. */
+  private readonly leaguesChanged = changedSince(() => this.selected());
   private readonly serverErrors: Record<InviteField, WritableSignal<string | null>>;
 
   /** The error each field shows now, or `null`. */
@@ -115,8 +118,14 @@ export class InviteForm {
       ),
     };
     this.shown = {
-      email: this.shownUntilValid('email'),
-      leagues: this.shownUntilValid('leagues'),
+      email: new ShownUntilValid(
+        () => this.clientErrors.email() !== null,
+        () => this.fields.email().dirty(),
+      ),
+      leagues: new ShownUntilValid(
+        () => this.clientErrors.leagues() !== null,
+        () => this.leaguesChanged(),
+      ),
     };
     this.serverErrors = {
       email: this.untilChanged(() => this.model().email),
@@ -142,7 +151,19 @@ export class InviteForm {
     this.model.set({ email: '' });
     this.chosenRole.set('leagueOrganizer');
     this.selected.set(new Set());
+    this.fields().reset();
+    this.leaguesChanged.set(false);
     this.alert.set(null);
+  }
+
+  /** Focus left a field: its error shows if the user changed it and it is invalid (#205). */
+  left(field: InviteField): void {
+    this.shown[field].left();
+  }
+
+  /** A `focusout` in a group of checkboxes: checked once focus leaves the whole group. */
+  leftGroup(field: InviteField, event: FocusEvent): void {
+    if (focusLeftGroup(event)) this.left(field);
   }
 
   /**
@@ -158,9 +179,8 @@ export class InviteForm {
     this.alert.set(null);
     let firstInvalid: InviteField | null = null;
     for (const field of INVITE_FIELDS) {
-      const invalid = this.clientErrors[field]() !== null;
-      this.shown[field].set(invalid);
-      if (invalid) firstInvalid ??= field;
+      this.shown[field].submitted();
+      if (this.clientErrors[field]() !== null) firstInvalid ??= field;
     }
     if (firstInvalid) return { sent: false, focus: firstInvalid };
 
@@ -202,20 +222,13 @@ export class InviteForm {
     return { sent: false, alert };
   }
 
-  private shownUntilValid(field: InviteField): WritableSignal<boolean> {
-    return linkedSignal<boolean, boolean>({
-      source: () => this.clientErrors[field]() === null,
-      computation: (valid, previous) => !valid && (previous?.value ?? false),
-    });
-  }
-
   private untilChanged(value: () => unknown): WritableSignal<string | null> {
     return linkedSignal<unknown, string | null>({ source: value, computation: () => null });
   }
 
   private shownError(field: InviteField): Signal<string | null> {
     return computed(() =>
-      this.shown[field]() ? this.clientErrors[field]() : this.serverErrors[field](),
+      this.shown[field].shown() ? this.clientErrors[field]() : this.serverErrors[field](),
     );
   }
 }
