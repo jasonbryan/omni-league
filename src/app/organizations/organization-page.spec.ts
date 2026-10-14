@@ -92,14 +92,14 @@ describe('OrganizationPage', () => {
     ]);
   });
 
-  it('shows nothing but the shell until all three results have arrived', async () => {
+  it('shows nothing but the layout until all three results have arrived', async () => {
     const harness = await open();
     const results = queryResults(GULF_COAST);
     subscription().emit(results[HEADER]);
     subscription(LEAGUES).emit(results[LEAGUES]);
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     subscription(LOCATIONS).emit(results[LOCATIONS]);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
@@ -191,47 +191,28 @@ describe('OrganizationPage', () => {
       ).toEqual(GULF_COAST.locations.map((location) => [location.name, location.address]));
     });
 
-    it('supplies the sidebar: a nav named after the organization, with no id inside', () => {
-      const navs = host(harness).querySelectorAll('nav');
-      expect(navs).toHaveLength(1);
-      const nav = navs[0];
-      expect(nav.getAttribute('aria-label')).toBe('Gulf Coast Sport & Social');
-      expect(nav.querySelectorAll('[id]')).toHaveLength(0);
-      expect(nav.querySelectorAll('[aria-labelledby]')).toHaveLength(0);
-      // The initials tile and the name.
-      expect(text(nav.querySelector('[aria-hidden="true"].size-10'))).toBe('GC');
-      expect(nav.textContent).toContain('Gulf Coast Sport & Social');
-      // The menu button exists because the page supplies a sidebar.
-      expect(host(harness).querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
+    it('renders in the public layout: top bar and footer, no sidebar and no menu button', () => {
+      const root = host(harness);
+      expect(root.querySelector('app-public-layout')).not.toBeNull();
+      expect(root.querySelector('app-shell')).toBeNull();
+      expect(root.querySelectorAll('header')).toHaveLength(1);
+      expect(root.querySelectorAll('footer')).toHaveLength(1);
+      expect([...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'))).toEqual([
+        'Footer',
+      ]);
+      expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+      expect(root.querySelector('button')).toBeNull();
     });
 
-    it('links Overview (current page) and every league and location row, hrefs built from the slug', () => {
-      const nav = host(harness).querySelector('nav');
-      const overview = nav?.querySelector('a[aria-current="page"]');
-      expect(text(overview)).toBe('Overview');
-      expect(overview?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
-
-      const leagues = nav?.querySelector('ul[aria-label="Leagues"]');
-      const locations = nav?.querySelector('ul[aria-label="Locations"]');
-      const links = (list: Element | null | undefined) =>
-        [...(list?.querySelectorAll('a') ?? [])].map((a) => [text(a), a.getAttribute('href')]);
-      expect(links(leagues)).toEqual(
-        GULF_COAST.leagues.map((league, i) => [
-          league.name,
-          `/organizations/gulf-coast-sport-social#league-${i + 1}`,
-        ]),
+    it('keeps the #league-<n> and #location-<n> ids on the rows of its panels', () => {
+      const ids = (heading: string) =>
+        [...host(harness).querySelectorAll(`section[aria-labelledby="${heading}"] li`)].map(
+          (li) => li.id,
+        );
+      expect(ids('leagues-heading')).toEqual(GULF_COAST.leagues.map((_, i) => `league-${i + 1}`));
+      expect(ids('locations-heading')).toEqual(
+        GULF_COAST.locations.map((_, i) => `location-${i + 1}`),
       );
-      expect(links(locations)).toEqual(
-        GULF_COAST.locations.map((location, i) => [
-          location.name,
-          `/organizations/gulf-coast-sport-social#location-${i + 1}`,
-        ]),
-      );
-      // Every fragment names a row in the page content.
-      for (const a of nav?.querySelectorAll('a[href*="#"]') ?? []) {
-        const id = (a.getAttribute('href') ?? '').split('#')[1];
-        expect(host(harness).querySelector(`main [id="${id}"]`), id).not.toBeNull();
-      }
     });
 
     it('sets the title, og tags, and canonical from the result, with the path built from the slug', () => {
@@ -247,7 +228,7 @@ describe('OrganizationPage', () => {
       expect(head().querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     });
 
-    it('updates the rows, sidebar, and tiles in place when page 1 or the totals change', async () => {
+    it('updates the rows and tiles in place when page 1 or the totals change', async () => {
       // A league that sorts first joins: page 1 gains it and drops its last row, and the totals
       // grow. The same subscriptions deliver it.
       const before = client.subscriptions.length;
@@ -270,12 +251,10 @@ describe('OrganizationPage', () => {
         ...GULF_COAST.leagues.slice(0, 4).map((league) => league.name),
       ]);
       expect(host(harness).querySelector('#league-1 p')).toBeNull(); // no locations: no line
-      const sidebarLinks = host(harness).querySelectorAll('nav ul[aria-label="Leagues"] a');
-      expect([...sidebarLinks].map(text)).toEqual(names);
       expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual(['6', '4', '3']);
     });
 
-    it('tiles show the totals, not the rows shown; the sidebar lists the rows shown', async () => {
+    it('tiles show the totals, not the rows shown', async () => {
       emit({ ...GULF_COAST, leagueCount: 13, locationCount: 236, sportCount: 2 });
       await settle(harness);
       expect([...host(harness).querySelectorAll('main dl dd')].map(text)).toEqual([
@@ -284,8 +263,6 @@ describe('OrganizationPage', () => {
         '2',
       ]);
       expect(host(harness).querySelectorAll('main li')).toHaveLength(8);
-      expect(host(harness).querySelectorAll('nav ul[aria-label="Leagues"] a')).toHaveLength(5);
-      expect(host(harness).querySelectorAll('nav ul[aria-label="Locations"] a')).toHaveLength(3);
     });
 
     it('removes its og tags and canonical when the visitor leaves the page', async () => {
@@ -296,29 +273,8 @@ describe('OrganizationPage', () => {
     });
   });
 
-  it('renders the sidebar a second time in the phone sheet without duplicating any id', async () => {
-    const harness = await open();
-    emit(GULF_COAST);
-    await settle(harness);
-    host(harness).querySelector<HTMLButtonElement>('button[aria-label="Open navigation"]')?.click();
-    // The sheet's chunk loads on the first press.
-    await vi.waitFor(() => {
-      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    });
-    await settle(harness);
-    const navs = document.querySelectorAll('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(navs).toHaveLength(2);
-    expect(document.querySelector('[role="dialog"] nav')).toBe(navs[1]);
-    const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);
-    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
-    // Close the sheet so its overlay does not leak into later specs.
-    document.querySelector<HTMLButtonElement>('button[aria-label="Close navigation"]')?.click();
-    await settle(harness);
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-  });
-
   describe('empty organization', () => {
-    it('shows each panel empty state, "None yet" in both sidebar groups, and tiles 0, 0, 0', async () => {
+    it('shows each panel empty state and tiles 0, 0, 0', async () => {
       const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
       emit(PORT_ARANSAS);
       await settle(harness);
@@ -339,18 +295,11 @@ describe('OrganizationPage', () => {
         'No locations yet',
         'Places where this organization plays will be listed here.',
       ]);
-      const nav = host(harness).querySelector('nav');
-      expect(nav?.getAttribute('aria-label')).toBe('Port Aransas Beach Volleyball Club');
-      expect(text(nav?.querySelector('.size-10'))).toBe('PA');
-      expect(
-        [...(nav?.querySelectorAll('p') ?? [])].map(text).filter((t) => t === 'None yet'),
-      ).toHaveLength(2);
-      expect(nav?.querySelectorAll('ul')).toHaveLength(1); // only the Overview list
     });
   });
 
   describe('unknown slug', () => {
-    it("renders #23's not-found view in the shell with the top bar only", async () => {
+    it('renders the not-found view in the public layout', async () => {
       const harness = await open('/organizations/does-not-exist');
       subscription().emit(null);
       subscription(LEAGUES).emit({ rows: [], page: 1, pageCount: 0, total: 0 });
@@ -358,7 +307,8 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
       expect(host(harness).querySelector('app-not-found-view')).not.toBeNull();
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('app-public-layout')).not.toBeNull();
+      expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
       expect(host(harness).querySelector('button')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Page not found | Omni League');
       expect(metaContent('og:title')).toBeNull();
@@ -367,7 +317,7 @@ describe('OrganizationPage', () => {
   });
 
   describe('failed query', () => {
-    it('renders the server-error view with no sidebar, and a Try again link to the same path', async () => {
+    it('renders the server-error view in the public layout, and a Try again link to the same path', async () => {
       const harness = await open('/organizations/gulf-coast-sport-social?ott=SECRET');
       subscription().fail(new Error('connect ECONNREFUSED internal-db.corp.example:443'));
       await settle(harness);
@@ -377,7 +327,8 @@ describe('OrganizationPage', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
-      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(host(harness).querySelector('app-public-layout')).not.toBeNull();
+      expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
       expect(host(harness).querySelector('button')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Temporarily unavailable | Omni League');
       expect(canonical()).toBeNull();
@@ -394,7 +345,7 @@ describe('OrganizationPage', () => {
         await settle(harness);
         expect(host(harness).querySelector('app-server-error-view')).not.toBeNull();
         expect(host(harness).querySelector('main')?.textContent).not.toContain('internal-db');
-        expect(host(harness).querySelector('nav')).toBeNull();
+        expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
         subscription(name).emit(results[name]);
         await settle(harness);
         expect(host(harness).querySelector('app-server-error-view')).toBeNull();
@@ -411,7 +362,7 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(host(harness).querySelector('app-server-error-view')).toBeNull();
       expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
-      expect(host(harness).querySelector('nav')).not.toBeNull();
+      expect(host(harness).querySelector('main h1')).not.toBeNull();
     });
   });
 });

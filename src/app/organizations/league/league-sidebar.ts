@@ -5,7 +5,7 @@ import { lucideArrowLeft, lucideGlobe, lucideTrophy } from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
 import { AuthService } from '../../core/auth/auth.service';
 import { injectQuery, skipToken } from '../../core/data/convex';
-import { initials } from '../organization-sidebar';
+import { initials } from '../initials';
 import type { OrganizerLeague } from './league-context';
 import { leaguePath } from './league-path';
 

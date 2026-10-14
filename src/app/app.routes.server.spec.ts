@@ -5,6 +5,7 @@ import { captureInviteToken } from './invites/capture-invite-token';
 import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
+import { AppNotFoundPage } from './not-found/app-not-found-page';
 import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
@@ -237,6 +238,6 @@ describe('Route tables', () => {
     expect(await account?.loadComponent?.()).toBe(AccountPage);
     expect(notFound?.path).toBe('**');
     expect(notFound?.canActivate).toBeUndefined();
-    expect(await notFound?.loadComponent?.()).toBe(NotFoundPage);
+    expect(await notFound?.loadComponent?.()).toBe(AppNotFoundPage);
   });
 });

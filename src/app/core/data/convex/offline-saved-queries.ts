@@ -55,12 +55,9 @@ export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
   savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
   // The public league page (#127): the league's header and each page of its published seasons,
-  // each (slugs, page) its own saved copy. The page also keeps `organizations.getPublicPage`
-  // (above) for its sidebar, so it opens offline once all three have been viewed together.
+  // each (slugs, page) its own saved copy. The page also waits on `organizations.getPublicPage`
+  // (above), so it opens offline once all three have been viewed together.
   savedQuery(api.leagues.getPublicPage, getLeaguePublicPageReturns, 1),
   savedQuery(api.seasons.listPublic, publicSeasonsValidator, 1),
-  // The public season page (#128): the season with its league. The page also keeps
-  // `organizations.getPublicPage` (above) for its sidebar, so it opens offline once both have
-  // been viewed together.
   savedQuery(api.seasons.getPublicPage, getSeasonPublicPageReturns, 1),
 ];
