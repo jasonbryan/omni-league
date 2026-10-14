@@ -34,7 +34,7 @@ test.describe('offline note height', () => {
   }, testInfo) => {
     test.skip(
       testInfo.project.name !== 'chromium-mobile',
-      'one browser project only (ADR 0013, CI minutes)',
+      'one browser project only, to save CI minutes',
     );
     const tenant = await seedTenant({
       locations: numberedLocations(10),

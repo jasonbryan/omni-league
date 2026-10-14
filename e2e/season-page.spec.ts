@@ -344,7 +344,7 @@ test.describe('public season page offline', () => {
     context,
     consoleGuard,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only (ADR 0013)');
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
     const tenant = await seedTenant({
       name: 'E2E Season Offline',
       locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],

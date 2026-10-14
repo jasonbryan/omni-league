@@ -15,7 +15,7 @@ const BUILTIN_SOURCE = `/^(?:node:.*|${builtinModules.map((name) => name.replace
 // framework here, so no file may import it. Every `no-restricted-imports` block below repeats
 // these, because a later block's options replace an earlier one's for the files they share.
 const REACT_MESSAGE =
-  'React is installed only as a peer of @convex-dev/better-auth and is not an approved framework (ADR 0008).';
+  'React is installed only as a peer of @convex-dev/better-auth and is not an approved framework.';
 const REACT_PATHS = ['react', 'react-dom', '@convex-dev/better-auth/react'].map((name) => ({
   name,
   message: REACT_MESSAGE,
@@ -144,22 +144,21 @@ export default defineConfig([
         'error',
         {
           name: 'process',
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         },
         {
           name: 'Netlify',
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         },
         {
           name: 'Deno',
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         },
         // The global object reaches the environment through casts and aliases
         // (`(globalThis as T).process`) that no-restricted-properties cannot see.
         ...['globalThis', 'self', 'window', 'global'].map((name) => ({
           name,
-          message:
-            'Server-entry files must not use the global object: it reaches the environment (ADR 0010).',
+          message: 'Server-entry files must not use the global object: it reaches the environment.',
         })),
       ],
       'no-restricted-properties': [
@@ -167,23 +166,23 @@ export default defineConfig([
         {
           object: 'process',
           property: 'env',
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         },
         {
           object: 'Netlify',
           property: 'env',
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         },
         {
           object: 'Deno',
           property: 'env',
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         },
         // The edge function runs on Deno, where the plugin's polyfill assigns globalThis.process.
         ...['process', 'Netlify', 'Deno'].map((property) => ({
           object: 'globalThis',
           property,
-          message: 'Server-entry files must not read the environment (ADR 0010).',
+          message: 'Server-entry files must not read the environment.',
         })),
       ],
       'no-restricted-imports': [
@@ -199,14 +198,14 @@ export default defineConfig([
             // `path` would also match a relative `./path` module.
             ...builtinModules.map((name) => ({
               name,
-              message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+              message: 'Server-entry files are Web-API-only: no Node built-in imports.',
             })),
             ...REACT_PATHS,
           ],
           patterns: [
             {
               group: ['node:*'],
-              message: 'Server-entry files are Web-API-only: no node: imports (ADR 0010).',
+              message: 'Server-entry files are Web-API-only: no node: imports.',
             },
             ...REACT_PATTERNS,
           ],
@@ -219,17 +218,17 @@ export default defineConfig([
         'error',
         {
           selector: `ImportExpression[source.type='Literal'][source.value=${BUILTIN_SOURCE}]`,
-          message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+          message: 'Server-entry files are Web-API-only: no Node built-in imports.',
         },
         {
           selector: `ImportExpression > TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=${BUILTIN_SOURCE}]`,
-          message: 'Server-entry files are Web-API-only: no Node built-in imports (ADR 0010).',
+          message: 'Server-entry files are Web-API-only: no Node built-in imports.',
         },
         {
           selector:
             "ImportExpression:not([source.type='Literal']):not(:has(> TemplateLiteral[expressions.length=0]))",
           message:
-            'Server-entry files must import from a fixed module name, so the module can be checked (ADR 0010).',
+            'Server-entry files must import from a fixed module name, so the module can be checked.',
         },
       ],
     },
