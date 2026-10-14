@@ -172,16 +172,6 @@ export const revoke = mutation({
   },
 });
 
-/**
- * Undoes a revoke: sets a revoked invite back to `pending` with the same token hash and
- * expiry, so the link the org admin already sent works again. Org admins of the invite's
- * organization only, the organization taken from the stored invite. It refuses, writing nothing:
- * an invite that is not `revoked` or has no `revokedAt`, more than `INVITE_RESTORE_WINDOW_MS` after the revoke (`windowPassed`), an invite whose
- * `expiresAt` has passed (`expired`), and everything `create` would refuse for the same invite
- * (`checkInviteAllowed`: `alreadyMember`, `alreadyInvited`, and `leaguesGone` for a league that no
- * longer exists in the organization). Refusals with a code are a `ConvexError`; the window is
- * enforced here, never by the page.
- */
 export const restore = mutation({
   args: { inviteId: v.id('invites') },
   returns: v.null(),

@@ -650,7 +650,6 @@ function seedSports(t: T, slug: string) {
       ...numbered(12).map((name, i) => ({
         name: `Sand ${name}`,
         sport: 'beachVolleyball' as const,
-        // Court A holds leagues 0, 3, 6, and 9; the first of them lists it twice.
         locations: i === 0 ? ['Court A', 'Court A'] : [fields[i % 3]],
       })),
       ...numbered(3).map((name) => ({
@@ -682,7 +681,6 @@ describe('organizations:getPublicPage sports', () => {
   test("excludes another organization's leagues and locations", async () => {
     const t = setup();
     await seedSports(t, 'sandy');
-    // The other organization has a location named like one of the first organization's.
     await seed(t, {
       organization: { name: 'Other', slug: 'other' },
       locations: [

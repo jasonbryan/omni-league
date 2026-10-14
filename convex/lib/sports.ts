@@ -75,7 +75,6 @@ export const SPORT_FORMATS: Readonly<Record<Sport, readonly SportFormat[]>> = {
   softball: [{ key: '10v10', name: '10 v 10', minimumRosterSize: 10 }],
 };
 
-// An input bound, not a product limit.
 export const ROSTER_SIZE_INPUT_MAX = 99;
 
 function findFormat(sport: Sport, format: Format): SportFormat | undefined {

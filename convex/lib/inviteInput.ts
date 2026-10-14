@@ -1,9 +1,7 @@
 // Imports nothing, so the app can import it.
 export const INVITE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
-/**
- * How long after a revoke an org admin can undo it. `invites.restore` enforces it, not the page.
- */
+// Enforced by `invites.restore`, not the page.
 export const INVITE_RESTORE_WINDOW_MINUTES = 10;
 export const INVITE_RESTORE_WINDOW_MS = INVITE_RESTORE_WINDOW_MINUTES * 60 * 1000;
 
@@ -21,16 +19,9 @@ export interface InviteInputError {
   message: string;
 }
 
-/**
- * Why `invites.restore` refused, as the `code` of its `ConvexError` data: the two codes
- * `create` also uses (`alreadyMember`, `alreadyInvited`, with the same data), `windowPassed`,
- * `expired` (the invite's 14 days are over), and `leaguesGone` (a league of the invite no longer
- * exists in the organization).
- */
 export type InviteRestoreCode =
   'alreadyMember' | 'alreadyInvited' | 'windowPassed' | 'expired' | 'leaguesGone';
 
-/** A restore refusal that is not about a field: the `data` of the `ConvexError`. */
 export interface InviteRestoreError {
   code: 'windowPassed' | 'expired' | 'leaguesGone';
   message: string;

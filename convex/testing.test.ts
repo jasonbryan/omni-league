@@ -25,7 +25,6 @@ const HOUR = 60 * 60 * 1000;
 
 function setup() {
   const t = convexTest(schema, modules);
-  // `reset` also clears the Better Auth component's tables.
   betterAuthTest.register(t, 'betterAuth');
   return t;
 }

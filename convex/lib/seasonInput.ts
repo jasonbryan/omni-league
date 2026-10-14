@@ -60,7 +60,6 @@ export const SEASON_MESSAGES = {
   nameTooLong: (length: number) =>
     `Use ${MAX_SEASON_NAME_LENGTH} characters or fewer. This name has ${length}.`,
   slugEmpty: 'Enter a slug for the season.',
-  // The organization and league forms' message, word for word.
   slugInvalid: LEAGUE_MESSAGES.slugInvalid,
   slugTaken: (slug: string, leagueName: string) =>
     `${slug} is already used by another season of ${leagueName}. Choose another slug.`,

@@ -370,7 +370,6 @@ describe('invites.revoke', () => {
   });
 });
 
-/** An invite created and revoked at `NOW`; the token is the link the org admin already sent. */
 async function revokedInvite(
   s: Setup,
   email: string,

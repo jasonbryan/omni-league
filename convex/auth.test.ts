@@ -109,7 +109,6 @@ beforeEach(() => {
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-only-secret-0123456789abcdef0123456789');
   vi.stubEnv('IS_TEST', undefined);
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', undefined);
-  // The breached-password check is on because IS_TEST is unset.
   pwned = vi.fn(() => Promise.resolve(rangeResponse()));
   vi.stubGlobal('fetch', pwned);
   failures.userRecord = false;
@@ -378,8 +377,6 @@ describe('the password is never echoed or logged', () => {
   }, 60_000);
 });
 
-// Pins the message format that the client's `VALIDATION_ERROR` mapping reads
-// (src/app/core/auth/auth.service.ts), and that the refused value is never echoed.
 describe('body validation messages the client maps', () => {
   test.each([
     ['a malformed email', { email: 'not-an-email' }, '[body.email] Invalid email address'],
