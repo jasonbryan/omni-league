@@ -182,8 +182,6 @@ describe('testing:reset under the read limit', () => {
     expect(await fileCount(t)).toBe(0);
   }, 120_000);
 
-  // convex-test gives every row a distinct `_creationTime`, so this cannot force the equal timestamps
-  // that would break a `_creationTime` bound; the pagination cursor does not depend on them.
   test('finishes when old canceled and completed jobs outnumber a batch, and cancels the pending ones among them', async () => {
     const t = setup();
     const done = 600;
