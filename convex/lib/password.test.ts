@@ -64,6 +64,17 @@ describe('verifyPassword', () => {
     );
   });
 
+  test('verifies a hash produced by the earlier implementation and rejects another password', async () => {
+    const stored =
+      'scrypt$15$8$3$c2ccf4d1d71aeb5e707f9d1c18294d93$441420db3ea0557060175a21e921a8973b292a294cbe28adc7b6512e8bdce78a';
+    await expect(
+      verifyPassword({ hash: stored, password: 'correct horse battery staple' }),
+    ).resolves.toBe(true);
+    await expect(verifyPassword({ hash: stored, password: 'another password!!' })).resolves.toBe(
+      false,
+    );
+  });
+
   test.each([
     ['empty', ''],
     ['Better Auth default format', `${'a'.repeat(32)}:${'b'.repeat(128)}`],
