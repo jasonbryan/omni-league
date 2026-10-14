@@ -1,26 +1,15 @@
-// The per-address sign-in throttle (#63, ADR 0008 "Rate limits and lockout"). Only these internal
-// functions read or write `signInFailures`, and only the `/sign-in/email` hooks in convex/auth.ts
-// call them, so no client can reach the table.
 import { v } from 'convex/values';
 import { internalMutation } from './_generated/server';
 import { HARD_LIMIT, waitAfterFailures } from './lib/signInThrottle';
 
-/** The answer to `begin`: the attempt may go on, or why it is refused. */
 const beginResult = v.union(
   v.object({ status: v.literal('allowed') }),
   v.object({ status: v.literal('throttled'), retryAfterSeconds: v.number() }),
   v.object({ status: v.literal('locked') }),
 );
 
-/**
- * Starts a sign-in attempt for `key` (`throttleKey` of the email). Refused while the address is
- * locked (HARD_LIMIT consecutive failures) or inside its wait; a refused attempt changes nothing,
- * so asking again cannot extend the wait. Otherwise the attempt is counted as a failure at once and
- * the wait that follows it is set. Counting before the password is checked, not after, means
- * parallel guesses cannot all pass a check made before any of them is recorded: Convex runs the
- * mutations one after another, so only the first few reach the password. A success then deletes the
- * row (`clear`), which makes the count the number of consecutive failures.
- */
+// Counted as a failure before the password is checked, so parallel guesses cannot all pass a check
+// made before any is recorded: Convex runs the mutations one after another.
 export const begin = internalMutation({
   args: { key: v.string() },
   returns: beginResult,
@@ -45,7 +34,6 @@ export const begin = internalMutation({
   },
 });
 
-/** A successful sign-in: forgets the address's failures. */
 export const clear = internalMutation({
   args: { key: v.string() },
   returns: v.null(),

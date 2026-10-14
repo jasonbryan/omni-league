@@ -7,9 +7,6 @@ import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
-// `seasons.getPublicPage` (#128): the public season page's data, for a published season of a
-// published league only.
-
 const seasonsSource = readFileSync(new URL('./seasons.ts', import.meta.url), 'utf8');
 
 const SUMMER: NewSeason = {
@@ -22,14 +19,6 @@ const SUMMER: NewSeason = {
   minimumRosterSize: 5,
 };
 
-/**
- * Organization A (`org-a`) with locations "Alpha Field" and "Beta Courts", a published beach
- * volleyball league `sand-4s` at both with a published season `summer-2027` and a draft season
- * `draft-season`, a draft league `draft-league` with a published season `summer-2027` (written
- * directly: the season publisher refuses it), and a published league `coed-7v7` with a season
- * `summer-2027` of its own. Organization B (`org-b`) has a published league `sand-4s` with a
- * published season `b-season`.
- */
 async function setup() {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
@@ -159,7 +148,6 @@ describe('seasons.getPublicPage', () => {
 
   test('is null for a season slug of another league, and for a league slug of another organization', async () => {
     const t = await setup();
-    // `coed-summer` belongs to `coed-7v7`, `b-season` to organization B's `sand-4s`.
     expect(await get(t, 'org-a', 'sand-4s', 'coed-summer')).toBeNull();
     expect(await get(t, 'org-a', 'sand-4s', 'b-season')).toBeNull();
     expect(await get(t, 'org-b', 'sand-4s', 'summer-2027')).toBeNull();
@@ -170,7 +158,6 @@ describe('seasons.getPublicPage', () => {
     const t = await setup();
     const sand = await get(t, 'org-a', 'sand-4s', 'summer-2027');
     expect(sand?.formatName).toBe('4v4');
-    // Another league's slug, `coed-7v7`, has only `coed-summer`: no `summer-2027`.
     expect(await get(t, 'org-a', 'coed-7v7', 'summer-2027')).toBeNull();
     const coed = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
     expect(coed).toMatchObject({
@@ -199,7 +186,6 @@ describe('seasons.getPublicPage', () => {
 
   test('is public: an anonymous caller reads it, and no argument names an id', async () => {
     const t = await setup();
-    // No identity is set on `t`.
     expect(await get(t, 'org-a', 'sand-4s', 'summer-2027')).not.toBeNull();
   });
 

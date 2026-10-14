@@ -7,9 +7,7 @@ import { internal } from './_generated/api';
 import * as testing from './testing';
 import { modules } from './test.setup';
 
-// `testing:reset` derives its tables from `convex/schema.ts`, so a fixture schema replaces it
-// here: two tables, neither of which `testing.ts` names (#59). The getter defers the read until
-// `reset` runs, after the assignment below.
+// The getter defers the read until `reset` runs, after the assignment below.
 const fixture = vi.hoisted((): { schema: unknown } => ({ schema: undefined }));
 vi.mock('./schema', () => ({
   get default() {
@@ -23,16 +21,18 @@ const schema = defineSchema({
 });
 fixture.schema = schema;
 
+type FunctionRegistrationMarkers = Partial<
+  Record<'isQuery' | 'isMutation' | 'isAction' | 'isInternal' | 'isPublic', boolean>
+>;
+
 const HOUR = 60 * 60 * 1000;
 
 function setup() {
   const t = convexTest(schema, modules);
-  // `reset` also clears the Better Auth component's tables (#62; testingAuth.test.ts).
   betterAuthTest.register(t, 'betterAuth');
   return t;
 }
 
-/** Two documents per fixture table, one pending scheduled function, and one stored file. */
 async function seed(t: ReturnType<typeof setup>) {
   await t.run(async (ctx) => {
     await ctx.db.insert('alpha', { name: 'a1' });
@@ -68,7 +68,6 @@ afterEach(() => {
 });
 
 describe('IS_TEST guard', () => {
-  // Unset, then values that are not exactly "true".
   const refused: [string, string | undefined][] = [
     ['unset', undefined],
     ['"false"', 'false'],
@@ -148,10 +147,7 @@ describe('convex/testing.ts exports', () => {
       'seedTenant',
     ]);
     for (const [name, fn] of exports) {
-      // The markers `internalQuery`/`internalMutation`/`internalAction` set (convex/server).
-      const markers = fn as Partial<
-        Record<'isQuery' | 'isMutation' | 'isAction' | 'isInternal' | 'isPublic', boolean>
-      >;
+      const markers = fn as FunctionRegistrationMarkers;
       const kinds = [markers.isQuery, markers.isMutation, markers.isAction].filter(Boolean);
       expect({ name, kinds: kinds.length }).toEqual({ name, kinds: 1 });
       expect({ name, isInternal: markers.isInternal }).toEqual({ name, isInternal: true });

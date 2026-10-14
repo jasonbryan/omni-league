@@ -1,7 +1,4 @@
 /// <reference types="vite/client" />
-// The auth parts of `convex/testing.ts` (#62; ADR 0005 "#7 (auth)", ADR 0008 "Testing"): password
-// users seeded through Better Auth's own sign-up, and `testing:reset` clearing the component's
-// tables, including `jwks`. Each throws without IS_TEST before touching data.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -48,7 +45,6 @@ async function appCounts(t: T) {
   }));
 }
 
-/** A failure row of the per-address sign-in throttle (#63), which `reset` clears too. */
 const seedSignInFailure = (t: T) =>
   t.run((ctx) =>
     ctx.db.insert('signInFailures', {
@@ -60,7 +56,6 @@ const seedSignInFailure = (t: T) =>
 const signInFailureCount = (t: T) =>
   t.run(async (ctx) => (await ctx.db.query('signInFailures').collect()).length);
 
-/** One document in each of the auth tables a run leaves behind, `jwks` among them. */
 async function seedAuthDocs(t: T) {
   await t.run(async (ctx) => {
     const now = Date.now();
@@ -136,7 +131,6 @@ describe('IS_TEST guard on the auth additions', () => {
       await expect(t.mutation(internal.testing.reset, {})).rejects.toThrow(/IS_TEST/);
       expect(await authDocs(t, 'jwks')).toHaveLength(1);
       expect(await authDocs(t, 'user')).toHaveLength(1);
-      // The signInFailures step throws before touching data too (#63).
       expect(await signInFailureCount(t)).toBe(1);
     },
   );
@@ -183,23 +177,20 @@ describe('testing:reset and the auth component', () => {
     expect((await authDocs(t, 'jwks')).length).toBeGreaterThanOrEqual(2);
     let before = 0;
     for (const model of AUTH_COMPONENT_TABLES) before += (await authDocs(t, model)).length;
-    // At least: 2 users, 1 account, 1 session, 2 jwks, 1 verification, 1 rateLimit.
     expect(before).toBeGreaterThanOrEqual(8);
 
     const result = await t.mutation(internal.testing.reset, {});
-    // The app documents are the users row, the organization, and the sign-in failure row (#63).
     expect(result).toMatchObject({ documents: 3, authDocuments: before });
     expect(await signInFailureCount(t)).toBe(0);
     for (const model of AUTH_COMPONENT_TABLES) expect(await authDocs(t, model), model).toEqual([]);
     expect(await appCounts(t)).toEqual({ users: 0, organizations: 0 });
 
-    // The same address can be seeded again afterwards.
     await t.action(internal.testing.seedLeague, { ...TENANT, users: [USER] });
     expect(await authDocs(t, 'user')).toHaveLength(1);
   }, 30_000);
 });
 
-describe('testing:seedSignInFailures (#63 e2e: reach the hard limit without 100 attempts)', () => {
+describe('testing:seedSignInFailures reaches the hard limit without 100 attempts', () => {
   const failureRows = (t: T) => t.run((ctx) => ctx.db.query('signInFailures').collect());
 
   test.each([
@@ -264,7 +255,7 @@ describe('testing:accountByEmail', () => {
   }, 30_000);
 });
 
-describe('testing:addMembership (#65)', () => {
+describe('testing:addMembership', () => {
   const MEMBER = { organizationSlug: TENANT.organization.slug, email: USER.email };
 
   test('throws without IS_TEST', async () => {
@@ -306,7 +297,6 @@ describe('testing:addMembership (#65)', () => {
     const memberships = await t.run((ctx) => ctx.db.query('memberships').collect());
     expect(memberships).toHaveLength(1);
     expect(memberships[0]).toMatchObject({ role: 'leagueOrganizer', leagueIds: [] });
-    // A second membership for the same user and organization is refused: at most one exists.
     await expect(
       t.mutation(internal.testing.addMembership, { ...MEMBER, role: 'orgAdmin' }),
     ).rejects.toThrow(/already/);

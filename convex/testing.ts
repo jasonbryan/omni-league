@@ -1,6 +1,3 @@
-// Test-only functions for the local e2e backend (ADR 0005, #59). Every function is internal, so no
-// client can call it, and starts with the IS_TEST guard. Playwright calls them through
-// `node scripts/e2e-convex.mjs run <name>`, which targets only the local backend.
 import type { GenericDatabaseWriter, GenericDataModel } from 'convex/server';
 import { type GenericId, v } from 'convex/values';
 import { components, internal } from './_generated/api';
@@ -29,7 +26,6 @@ import { throttleKey } from './lib/signInThrottle';
 import { assertTestDeployment, AUTH_COMPONENT_TABLES } from './lib/testOnly';
 import schema from './schema';
 
-/** Self-test probe: proves the e2e run reaches the local backend with `IS_TEST` set. */
 export const ping = internalQuery({
   args: {},
   returns: v.literal('ok'),
@@ -39,17 +35,8 @@ export const ping = internalQuery({
   },
 });
 
-/** Documents the component's `deleteMany` removes per call. */
 const AUTH_DELETE_BATCH = 500;
 
-/**
- * Empties the deployment, once per run in Playwright `globalSetup`: deletes the documents of every
- * table in `convex/schema.ts` (read from the schema, so a new table needs no edit here) and of every
- * Better Auth component table, cancels pending and running scheduled functions, and deletes stored
- * files. The component's `jwks` holds the JWT signing key encrypted with `BETTER_AUTH_SECRET`; each
- * run sets a new secret, so a key left from an earlier run would fail every token request with
- * HTTP 500 (ADR 0005, ADR 0008). The next token request creates a new key.
- */
 export const reset = internalMutation({
   args: {},
   returns: v.object({
@@ -69,6 +56,8 @@ export const reset = internalMutation({
         documents++;
       }
     }
+    // The component's `jwks` key is encrypted with the run's `BETTER_AUTH_SECRET`; a key left from an
+    // earlier run fails every token request with HTTP 500.
     let authDocuments = 0;
     for (const model of AUTH_COMPONENT_TABLES) {
       // Deleted documents leave the index, so each call starts from the beginning again.
@@ -98,19 +87,9 @@ export const reset = internalMutation({
   },
 });
 
-/** A password user for `seedLeague`: the test generates the password per run, never stored. */
 const seedUserValidator = v.object({ name: v.string(), email: v.string(), password: v.string() });
 
-/**
- * Creates the calling test's own tenant (ADR 0005, per-test tenant fixture): an organization with
- * the unique name and slug the test chose, its locations, and its leagues, then each of `users`
- * through Better Auth's own sign-up (`auth.api.signUpEmail`, ADR 0008 "Testing"), with the 18+
- * confirmation. That gives each user a real password hash, a `credential` account, and (through
- * the `user.onCreate` trigger) a `users` row, so the test signs in through the real UI.
- * An action, because the sign-up runs through the component's adapter. Throws, writing nothing,
- * when the slug is malformed or taken or a league names a location the tenant does not have.
- * Tests assert only on their own tenant's data, so no reset runs between tests.
- */
+// An action: sign-up runs through the Better Auth component's adapter.
 export const seedLeague = internalAction({
   args: { ...tenantValidator.fields, users: v.optional(v.array(seedUserValidator)) },
   returns: v.object({ slug: v.string() }),
@@ -127,7 +106,6 @@ export const seedLeague = internalAction({
   },
 });
 
-/** The tenant part of `seedLeague`, in one transaction. */
 export const seedTenant = internalMutation({
   args: tenantValidator,
   returns: v.object({ slug: v.string() }),
@@ -138,10 +116,6 @@ export const seedTenant = internalMutation({
   },
 });
 
-/**
- * Adds a league to the organization with `organizationSlug`, at its named locations (#60), and
- * returns the league's slug.
- */
 export const addLeague = internalMutation({
   args: { organizationSlug: v.string(), ...leagueSeedValidator.fields },
   returns: v.object({ slug: v.string() }),
@@ -159,11 +133,6 @@ export const addLeague = internalMutation({
   },
 });
 
-/**
- * Sets the per-address sign-in throttle's row for `email` to `failures` consecutive failures with
- * no wait left (#63 e2e), so a test reaches the 100-failure hard limit without making 100 attempts
- * and the waits between them. Replaces the address's row, if there is one. `reset` clears it.
- */
 export const seedSignInFailures = internalMutation({
   args: { email: v.string(), failures: v.number() },
   returns: v.null(),
@@ -180,11 +149,6 @@ export const seedSignInFailures = internalMutation({
   },
 });
 
-/**
- * Gives the seeded user with this email a role in the organization with this slug (#65 e2e): an org
- * admin, or a league organizer with no league assigned. Throws, writing nothing, for an unknown
- * organization or account, or when the user already has a membership there.
- */
 export const addMembership = internalMutation({
   args: { organizationSlug: v.string(), email: v.string(), role: roleValidator },
   returns: v.null(),
@@ -198,13 +162,6 @@ export const addMembership = internalMutation({
   },
 });
 
-/**
- * Makes the seeded user with this email a league organizer of the leagues with these slugs in the
- * organization with this slug (#125 e2e), so a test has an assigned league organizer without the
- * invite flow. Like `addMembership`, which gives none. Throws, writing nothing, for an unknown
- * organization, account, or league (a league of another organization is unknown), or when the user
- * already has a membership there.
- */
 export const addLeagueOrganizer = internalMutation({
   args: {
     organizationSlug: v.string(),
@@ -233,14 +190,6 @@ export const addLeagueOrganizer = internalMutation({
   },
 });
 
-/**
- * Adds a league of another organization to the league organizer's assigned leagues (#141 e2e): the
- * seeded user with this email must already be a league organizer of `organizationSlug`, and the
- * league is `leagueSlug` of `leagueOrganizationSlug`. The result is a membership holding a league
- * id of another organization, which nothing in the app writes and `organizations.listMine` must
- * drop. Throws, writing nothing, for an unknown organization, account, or league, no membership,
- * or a league of the membership's own organization.
- */
 export const assignForeignLeague = internalMutation({
   args: {
     organizationSlug: v.string(),
@@ -278,12 +227,7 @@ export const assignForeignLeague = internalMutation({
   },
 });
 
-/**
- * Adds a season to the league with `leagueSlug` of the organization with `organizationSlug` (#125
- * e2e), through `insertSeason`. A `draft` unless `status` says `published`. None of
- * `seasons.create`'s rules apply, so a test can seed a registration deadline on or after the start
- * date (#129). Throws, writing nothing, for an unknown organization or league.
- */
+// Skips `seasons.create`'s rules, so a test can seed a deadline on or after the start date.
 export const seedSeason = internalMutation({
   args: {
     organizationSlug: v.string(),
@@ -313,7 +257,6 @@ export const seedSeason = internalMutation({
   },
 });
 
-/** One season of `seedSeasons`: the fields of `seedSeason` after the league. */
 const seasonSeedValidator = v.object({
   name: v.string(),
   slug: v.string(),
@@ -325,13 +268,8 @@ const seasonSeedValidator = v.object({
   status: v.optional(seasonStatusValidator),
 });
 
-/**
- * Adds several seasons to one league in one transaction (#127 e2e), each through `insertSeason`
- * like `seedSeason`. Many `seedSeason` calls at once for one league all write that league's
- * `publishedSeasonCount`, so on a slow runner they conflict (`OptimisticConcurrencyControlFailure`);
- * one mutation writes the counter once per season in a single transaction, and needs one process.
- * Throws, writing nothing, for an unknown organization or league.
- */
+// One mutation writes the league's `publishedSeasonCount` once per season. Many `seedSeason` calls at
+// once for one league conflict (`OptimisticConcurrencyControlFailure`) on a slow runner.
 export const seedSeasons = internalMutation({
   args: {
     organizationSlug: v.string(),
@@ -368,7 +306,6 @@ async function organizationBySlug(
   return organization;
 }
 
-/** The `users` row of the seeded account with this email. */
 async function userByEmail(ctx: MutationCtx, email: string): Promise<Doc<'users'>> {
   // Better Auth stores emails in lower case. The component's generated return types are `any`.
   const authUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
@@ -385,7 +322,6 @@ async function userByEmail(ctx: MutationCtx, email: string): Promise<Doc<'users'
   return user;
 }
 
-/** Throws when the user already has a membership in the organization: at most one exists. */
 async function assertNoMembership(
   ctx: Pick<MutationCtx, 'db'>,
   user: Doc<'users'>,
@@ -400,14 +336,6 @@ async function assertNoMembership(
   if (existing) throw new Error('This user already has a membership in the organization');
 }
 
-/**
- * Adds a pending staff invite to the organization with this slug (#67 e2e), written straight to
- * the table so a test can have one whose `expiresAt` has passed, or two pending ones at once,
- * without waiting 14 days or going through the form. A `leagueOrganizer` invite names its leagues
- * of that organization. With `token`, its hash is stored, so a test (#70) can open the invite by
- * the link `/invites/accept#<token>`; without one the hash is random and no token opens it. Throws,
- * writing nothing, for an unknown organization or league.
- */
 export const addInvite = internalMutation({
   args: {
     organizationSlug: v.string(),
@@ -451,11 +379,6 @@ export const addInvite = internalMutation({
   },
 });
 
-/**
- * The account of the auth user with this email (#62 e2e): its `users` row's name and
- * `adultConfirmedAt`, and how many sessions it has, or `null` when there is no such user. Lets an
- * e2e test check what sign-up wrote and that sign-out deleted the session.
- */
 export const accountByEmail = internalQuery({
   args: { email: v.string() },
   returns: v.union(

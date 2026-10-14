@@ -1,13 +1,6 @@
-// Password hashing for Better Auth's `emailAndPassword.password` (ADR 0008 "Passwords").
-//
-// scrypt with N=2^15, r=8, p=3 (32 MiB), one of OWASP's Password Storage Cheat Sheet settings, and
-// the strongest that fits the Convex runtime's 64 MB memory limit. Better Auth's default
-// (N=2^14, r=16, p=1) does about a quarter of the work. `@noble/hashes` is pure JavaScript, so it
-// runs in the Convex V8 runtime that HTTP actions use.
-//
-// Stored format: `scrypt$<log2 N>$<r>$<p>$<salt hex>$<key hex>`, with a 16-byte random salt and a
-// 32-byte key. Verification reads the parameters from the stored hash, so they can be raised later
-// without breaking stored hashes. Input is NFKC-normalised, and keys are compared in constant time.
+// scrypt N=2^15, r=8, p=3 (32 MiB): an OWASP Password Storage Cheat Sheet setting, and the strongest
+// that fits the Convex runtime's 64 MB memory limit. `@noble/hashes` is pure JavaScript, so it runs
+// in the Convex V8 runtime. Each hash stores its parameters, so they can be raised later.
 import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
@@ -17,10 +10,15 @@ export const SCRYPT_P = 3;
 export const SCRYPT_SALT_BYTES = 16;
 export const SCRYPT_KEY_BYTES = 32;
 
-/** Bounds on parameters read back from a stored hash; anything outside them is malformed. */
 const MAX_LOG_N = 20;
 const MAX_R = 32;
 const MAX_P = 16;
+
+const SCRYPT_MAXMEM_HEADROOM_BYTES = 1024 * 1024;
+
+function scryptWorkingMemoryBytes(r: number, logN: number): number {
+  return 128 * r * 2 ** logN;
+}
 
 const HEX = /^(?:[0-9a-f]{2})+$/;
 const INTEGER = /^[1-9][0-9]{0,2}$/;
@@ -42,12 +40,11 @@ async function derive(
     r,
     p,
     dkLen,
-    // 128 * r * N bytes of working memory, plus headroom; the default cap is 1 GiB.
-    maxmem: 128 * r * 2 ** logN + 1024 * 1024,
+    // Without this, the library's 1 GiB default cap would reject the larger parameters `parse` accepts.
+    maxmem: scryptWorkingMemoryBytes(r, logN) + SCRYPT_MAXMEM_HEADROOM_BYTES,
   });
 }
 
-/** Hashes a new password in the stored format above. */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(SCRYPT_SALT_BYTES);
   const key = await derive(password, {
@@ -60,7 +57,6 @@ export async function hashPassword(password: string): Promise<string> {
   return ['scrypt', SCRYPT_LOG_N, SCRYPT_R, SCRYPT_P, bytesToHex(salt), bytesToHex(key)].join('$');
 }
 
-/** The parts of a stored hash, or `null` when it is not in the stored format. */
 function parse(stored: string): Params | null {
   const parts = stored.split('$');
   if (parts.length !== 6) return null;
@@ -80,10 +76,8 @@ function parse(stored: string): Params | null {
   return { ...params, salt: hexToBytes(salt), key: hexToBytes(key) };
 }
 
-/**
- * True when `password` matches the stored `hash`. A malformed hash never matches and never throws,
- * so a bad row cannot turn a sign-in into a server error.
- */
+// A malformed hash never matches and never throws, so a bad row cannot turn a sign-in into a server
+// error.
 export async function verifyPassword({
   hash,
   password,
@@ -97,10 +91,7 @@ export async function verifyPassword({
   return constantTimeEqual(key, params.key);
 }
 
-/**
- * Compares two byte arrays in time that depends only on their length: every byte is read, whatever
- * the first difference. Lengths are not secret here (the stored key length is fixed).
- */
+// Lengths are not secret here: the stored key length is fixed.
 export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let difference = 0;
