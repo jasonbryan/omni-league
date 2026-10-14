@@ -1,18 +1,19 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { Shell } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 import { NotFoundView } from './not-found-view';
 
 /**
- * The router `**` route (#23): the not-found view in the app shell, top bar only (no sidebar
- * template, #73 decision 2). The view sets the 404 status and the title.
+ * The router `**` route: the not-found view in the public layout, for every unknown
+ * path outside `/app` (`AppNotFoundPage` serves `/app/**`). The view sets the 404 status and the
+ * title.
  */
 @Component({
   selector: 'app-not-found-page',
-  imports: [NotFoundView, Shell],
+  imports: [NotFoundView, PublicLayout],
   template: `
-    <app-shell>
+    <app-public-layout>
       <app-not-found-view />
-    </app-shell>
+    </app-public-layout>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

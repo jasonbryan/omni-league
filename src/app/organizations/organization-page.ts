@@ -8,10 +8,9 @@ import { bindPageMeta } from '../core/page-meta';
 import { NotFoundView } from '../not-found/not-found-view';
 import { NotSavedView } from '../offline/not-saved-view';
 import { ServerErrorView } from '../server-error/server-error-view';
-import { Shell, ShellSidebar } from '../shell';
+import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview } from './organization-overview';
 import { organizationPath, type PublicOrganizationPage } from './organization-path';
-import { OrganizationSidebar } from './organization-sidebar';
 
 /**
  * The public organization page, `/organizations/:orgSlug` (#60), approved in #73
@@ -20,11 +19,12 @@ import { OrganizationSidebar } from './organization-sidebar';
  * `organizations:listPublicLeagues` and `organizations:listPublicLocations` (#100), and after
  * hydration the live subscriptions keep the page current.
  *
- * - Found: the overview in the app shell, with the organization's sidebar, and the title, Open
- *   Graph tags, and canonical from the query results, once all three have arrived.
- * - Header `null`: #23's not-found view with status 404, top bar only (#73 decision 2).
+ * - Found: the overview in the public layout (a light top bar and a footer, no sidebar), and
+ *   the title, Open Graph tags, and canonical from the query results, once all three have
+ *   arrived.
+ * - Header `null`: the not-found view with status 404, in the public layout.
  * - Any of the three failed or timed out: the server-error view with status 503 and `no-store`,
- *   top bar only, so an error never enters the CDN cache. The live subscriptions replace it once
+ *   in the public layout, so an error never enters the CDN cache. The live subscriptions replace it once
  *   every result has arrived.
  *
  * Offline (#82, design/mockups/82-offline-pages.html): all three queries are on the adapter's
@@ -41,22 +41,11 @@ import { OrganizationSidebar } from './organization-sidebar';
  */
 @Component({
   selector: 'app-organization-page',
-  imports: [
-    NotFoundView,
-    NotSavedView,
-    OrganizationOverview,
-    OrganizationSidebar,
-    ServerErrorView,
-    Shell,
-    ShellSidebar,
-  ],
+  imports: [NotFoundView, NotSavedView, OrganizationOverview, PublicLayout, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (page(); as page) {
-        <ng-template appShellSidebar>
-          <app-organization-sidebar [page]="page" />
-        </ng-template>
         <app-organization-overview [page]="page" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -65,7 +54,7 @@ import { OrganizationSidebar } from './organization-sidebar';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="path()" />
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class OrganizationPage {

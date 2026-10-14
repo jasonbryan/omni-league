@@ -126,14 +126,13 @@ describe('OrganizationPage offline (#82)', () => {
       harness = await open(PATH, { socket: 'down' });
     });
 
-    it('shows the name, leagues, locations, and sidebar from the saved copy', () => {
+    it('shows the name, leagues, and locations from the saved copy', () => {
       const main = host(harness).querySelector('main');
       expect(text(main?.querySelector('h1'))).toBe(GULF_COAST.name);
       expect([...(main?.querySelectorAll('section h3') ?? [])].map(text)).toEqual([
         ...GULF_COAST.leagues.map((league) => league.name),
         ...GULF_COAST.locations.map((location) => location.name),
       ]);
-      expect(host(harness).querySelector(`nav[aria-label="${GULF_COAST.name}"]`)).not.toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe(`${GULF_COAST.name} | Omni League`);
     });
 
@@ -229,7 +228,9 @@ describe('OrganizationPage offline (#82)', () => {
       const retry = main?.querySelector('a');
       expect(text(retry)).toBe('Try again');
       expect(retry?.getAttribute('href')).toBe(PATH);
-      expect(host(harness).querySelector('nav')).toBeNull();
+      // In the public layout: the footer's navigation, no sidebar, no menu button.
+      expect(host(harness).querySelector('app-public-layout')).not.toBeNull();
+      expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
       expect(host(harness).querySelector('button')).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
       for (const link of host(harness).querySelectorAll('a')) {
@@ -344,7 +345,7 @@ describe('OrganizationPage offline (#82)', () => {
     expect(host(harness).querySelector('app-not-found-view')).not.toBeNull();
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
     expect(note(harness)).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('nav:not([aria-label="Footer"])')).toBeNull();
   });
 
   it('renders live data with no error when localStorage throws on read and on write', async () => {

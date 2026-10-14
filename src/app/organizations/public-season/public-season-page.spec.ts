@@ -111,7 +111,7 @@ describe('PublicSeasonPage queries', () => {
     subscription(ORG).emit(seasonQueryResults()[ORG]);
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     subscription(SEASON).emit(SUMMER_2027);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Summer 2027');
@@ -199,18 +199,16 @@ describe('PublicSeasonPage populated', () => {
     expect(canonical()).toBe(`${window.location.origin}${PATH}`);
   });
 
-  it('marks the league’s sport as the current section of the sidebar, as plain text until the sport view exists', () => {
-    const nav = host(harness).querySelector('nav[aria-label="Gulf Coast Sport & Social"]');
-    expect(nav).not.toBeNull();
-    expect(nav?.querySelectorAll('ul[aria-label="Sports"] a')).toHaveLength(0);
-    const sports = [...(nav?.querySelectorAll('ul[aria-label="Sports"] li > *') ?? [])];
-    expect(
-      sports.map((el) => [text(el.querySelector('span.min-w-0')), el.getAttribute('aria-current')]),
-    ).toEqual([
-      ['Beach volleyball', 'true'],
-      ['Soccer', null],
-      ['Softball', null],
-    ]);
+  it('renders in the public layout: top bar and footer, no organization sidebar and no menu button', () => {
+    const root = host(harness);
+    expect(root.querySelector('app-public-layout')).not.toBeNull();
+    expect(root.querySelector('app-shell')).toBeNull();
+    expect(root.querySelectorAll('header')).toHaveLength(1);
+    expect(root.querySelectorAll('footer')).toHaveLength(1);
+    const names = [...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'));
+    expect(names).toContain('Footer');
+    expect(names).not.toContain('Gulf Coast Sport & Social');
+    expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
   it('writes several locations as "Locations", in the league’s order', async () => {
@@ -287,13 +285,13 @@ describe('PublicSeasonPage not found and failures', () => {
   it.each([
     ['a null season (a draft or an unknown one)', { season: null }],
     ['an unknown organization', { organization: null, season: null }],
-  ])('shows #23’s not-found view, with no sidebar, for %s', async (_label, options) => {
+  ])('shows the not-found view in the public layout for %s', async (_label, options) => {
     const harness = await open();
     emit(seasonQueryResults(options));
     await settle(harness);
     expect(host(harness).querySelector('app-not-found-view')).not.toBeNull();
     expect(text(host(harness).querySelector('main h1'))).toBe('Page not found');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
     expect(head().querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
   });
 
@@ -307,6 +305,6 @@ describe('PublicSeasonPage not found and failures', () => {
     expect(host(harness).querySelector('app-server-error-view')).not.toBeNull();
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(PATH);
     expect(host(harness).textContent).not.toContain('internal-db');
-    expect(host(harness).querySelector('nav')).toBeNull();
+    expect(host(harness).querySelector('main nav')).toBeNull();
   });
 });

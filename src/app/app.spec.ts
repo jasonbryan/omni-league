@@ -28,14 +28,32 @@ describe('App routing', () => {
     expect(page?.querySelector('h1')?.textContent).toBe('Omni League');
   });
 
-  for (const url of ['/this-page-does-not-exist', '/app/x', '/a/b/c?q=1#x']) {
-    it(`renders the not-found page for ${url}`, async () => {
+  it('renders the placeholder in the public layout, with no sidebar', async () => {
+    const page = routed(await renderAt('/'));
+    expect(page?.firstElementChild?.tagName.toLowerCase()).toBe('app-public-layout');
+    expect(page?.querySelector('footer')).not.toBeNull();
+    expect(page?.querySelector('button')).toBeNull();
+  });
+
+  for (const url of ['/this-page-does-not-exist', '/a/b/c?q=1#x']) {
+    it(`renders the not-found page in the public layout for ${url}`, async () => {
       const page = routed(await renderAt(url));
       expect(page?.tagName.toLowerCase()).toBe('app-not-found-page');
+      expect(page?.firstElementChild?.tagName.toLowerCase()).toBe('app-public-layout');
       expect(page?.querySelector('h1')?.textContent.trim()).toBe('Page not found');
       expect(TestBed.inject(Title).getTitle()).toBe('Page not found | Omni League');
     });
   }
+
+  // /app/** keeps the app shell: an unknown signed-in path has no footer.
+  it('renders the not-found page in the app shell for an unknown /app path', async () => {
+    const page = routed(await renderAt('/app/x'));
+    expect(page?.tagName.toLowerCase()).toBe('app-app-not-found-page');
+    expect(page?.firstElementChild?.tagName.toLowerCase()).toBe('app-shell');
+    expect(page?.querySelector('footer')).toBeNull();
+    expect(page?.querySelector('h1')?.textContent.trim()).toBe('Page not found');
+    expect(TestBed.inject(Title).getTitle()).toBe('Page not found | Omni League');
+  });
 
   it('sets the title back to "Omni League" on the way home from the not-found page', async () => {
     const fixture = await renderAt('/this-page-does-not-exist');

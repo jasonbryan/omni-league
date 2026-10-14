@@ -9,8 +9,8 @@ import { publicLeaguePath } from './public-league/public-league-path';
 /**
  * The organization page's content column (#60): the name as the page's `<h1>`, the three summary
  * tiles (#73 decision 4), and the Leagues and Locations panels with their empty states, as in
- * design/mockups/60-organization-page.html. Each row carries the `id` the sidebar links to
- * (`league-<n>`, `location-<n>`, numbered in the order the query sorts them). The panels show the
+ * design/mockups/60-organization-page.html. Each row carries an `id` (`league-<n>`,
+ * `location-<n>`, numbered in the order the query sorts them). The panels show the
  * rows of page 1 of each list, at most 5 (#100); the tiles show the totals. Each league's name is a
  * link to its public page (#127). With `savedAt` set
  * (a saved copy shown offline, #82), the saved-copy note sits right under the `h1`.

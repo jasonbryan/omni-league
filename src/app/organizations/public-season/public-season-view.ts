@@ -6,8 +6,8 @@ import type { PublicOrganizationHeader } from '../organization-path';
 export type PublicSeasonData = NonNullable<FunctionReturnType<typeof api.seasons.getPublicPage>>;
 
 /**
- * What the public season page shows (#128): the organization's header (for the sidebar's sports
- * and totals) and the season with its league.
+ * What the public season page shows: the organization's header (its name for the
+ * breadcrumb) and the season with its league.
  */
 export interface PublicSeasonView {
   organization: PublicOrganizationHeader;

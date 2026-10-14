@@ -10,29 +10,28 @@ import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
-import { Shell, ShellSidebar } from '../../shell';
+import { PublicLayout } from '../../public-layout/public-layout';
 import { PublicLeagueContent } from './public-league-content';
 import {
   publicLeagueCanonicalPath,
   type PublicLeagueSeasons,
   type PublicLeagueView,
 } from './public-league-path';
-import { PublicLeagueSidebar } from './public-league-sidebar';
 
 /**
  * The public league page, `/organizations/:orgSlug/leagues/:leagueSlug` (#127), drawn in
  * design/mockups/127-128-public-seasons.html. A Server route: the render reads three queries
- * anonymously, `organizations:getPublicPage` (the sidebar's sports and totals),
+ * anonymously, `organizations:getPublicPage` (the organization's name for the breadcrumb),
  * `leagues:getPublicPage` (the league's header), and `seasons:listPublic` (the page of published
  * seasons asked for), and after hydration the live subscriptions keep the page current.
  *
- * - Found: the content in the app shell, with the organization's sidebar marking the league's sport,
- *   and the title, Open Graph tags, and canonical from the query results, once all three have
+ * - Found: the content in the public layout (a light top bar and a footer, no sidebar), and
+ *   the title, Open Graph tags, and canonical from the query results, once all three have
  *   arrived.
  * - Header `null` (an unknown organization or league, or a draft league): #23's not-found view with
- *   status 404, top bar only.
- * - Any of the three failed or timed out: the server-error view with status 503 and `no-store`, top
- *   bar only, so an error never enters the CDN cache.
+ *   status 404, in the public layout.
+ * - Any of the three failed or timed out: the server-error view with status 503 and `no-store`, in
+ *   the public layout, so an error never enters the CDN cache.
  *
  * The page asked for is `?page=N`, read with `parseListPage` from every value of the parameter, so
  * the server and the browser ask for the same page and the server HTML holds only the page number
@@ -46,25 +45,11 @@ import { PublicLeagueSidebar } from './public-league-sidebar';
  */
 @Component({
   selector: 'app-public-league-page',
-  imports: [
-    NotFoundView,
-    NotSavedView,
-    PublicLeagueContent,
-    PublicLeagueSidebar,
-    ServerErrorView,
-    Shell,
-    ShellSidebar,
-  ],
+  imports: [NotFoundView, NotSavedView, PublicLayout, PublicLeagueContent, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (view(); as view) {
-        <ng-template appShellSidebar>
-          <app-public-league-sidebar
-            [organization]="view.organization"
-            [sportName]="view.league.sportName"
-          />
-        </ng-template>
         <app-public-league-content [view]="view" [busy]="busy()" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -73,7 +58,7 @@ import { PublicLeagueSidebar } from './public-league-sidebar';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="retryHref()" />
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class PublicLeaguePage {

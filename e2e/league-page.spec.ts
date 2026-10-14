@@ -144,10 +144,9 @@ test.describe('public league page: raw server HTML', () => {
         expect(html, query).toMatch(/data-slot="badge"[^>]*>Beach volleyball<\/span>/);
         expect(html, query).toMatch(/Locations: <\/span>\s*Beta Courts, Alpha Field/);
 
-        // The sidebar marks the league's sport.
-        expect(html, query).toMatch(
-          /<span\b[^>]*aria-current="true"[^>]*>[\s\S]*?Beach volleyball[\s\S]*?<\/span>/,
-        );
+        // The public layout has no sidebar: no menu button and no organization navigation.
+        expect(html, query).not.toContain('aria-label="Open navigation"');
+        expect(html, query).not.toContain(`aria-label="${tenant.name}"`);
 
         // Meta, from the query result: the canonical and og:url hold ?page=2, and nothing else.
         const canonical = `${path}?page=2`;
@@ -309,7 +308,8 @@ test.describe('public league page: raw server HTML', () => {
         expect(noSpaces(headers['cache-control']), path).toBe(noSpaces(PUBLIC_PAGE_CACHE));
         expect(html, path).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1); // the footer's
+        expect(html, path).toContain('<nav aria-label="Footer"');
         expect(html, path).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
         expect(html, path).not.toContain('Draft League');
       }
@@ -363,7 +363,7 @@ test.describe('public league page in the browser', () => {
         expect(response?.status()).toBe(404);
         await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
         await hydrated(consoleGuard);
-        await expect(page.getByRole('navigation')).toHaveCount(0);
+        await expect(page.getByRole('navigation')).toHaveCount(1); // the footer's
       },
     );
   });

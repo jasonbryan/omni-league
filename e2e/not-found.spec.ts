@@ -37,10 +37,11 @@ test.describe('not-found page', () => {
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(HOME_LINK);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
-        // Top bar only (#73 decisions 2 and 5): no menu button and no sidebar, and the top bar's
-        // "Sign in" (#63), which every public page carries.
+        // The public layout: no menu button and no sidebar, the footer's navigation only,
+        // and the top bar's "Sign in", which every public page carries.
         expect(html, path).not.toContain('aria-label="Open navigation"');
-        expect(html, path).not.toMatch(/<nav\b/);
+        expect(html.match(/<nav\b/g), path).toHaveLength(1);
+        expect(html, path).toMatch(/<footer\b[\s\S]*<nav\b[^>]*aria-label="Footer"/);
         expect(html.slice(html.indexOf('<header'), html.indexOf('</header>')), path).toMatch(
           />Sign in<\/a>/,
         );
@@ -365,19 +366,24 @@ test.describe('not-found page', () => {
       )
       .toEqual({ style: 'solid', width: '2px' });
 
-    // One banner and one main landmark, no navigation landmark, and no menu button.
+    // One banner and one main landmark, the footer's navigation only, and no menu button.
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
     await expect(page.getByRole('button')).toHaveCount(0);
 
-    // Tab order: skip link, "Omni League", the top bar's "Sign in" (#63), "Go to the home page".
+    // Tab order: skip link, "Omni League", the top bar's "Sign in", "Go to the home page",
+    // then the footer's links.
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
         'main a[href="/"]',
+        'footer a[href="/"]',
+        'footer a[href="/app"]',
+        'footer a[href="/app/organizations/new"]',
+        'footer a[href^="/sign-in"]',
       ],
     });
 

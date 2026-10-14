@@ -54,7 +54,8 @@ describe('OfflineNote', () => {
   it('is an empty, sticky status region below the top bar while online', () => {
     expect(region.getAttribute('role')).toBe('status');
     expect(region.classList).toContain('sticky');
-    expect(region.classList).toContain('top-14');
+    // 3.5rem under the shell's top bar; the public layout's 4rem bar sets --top-bar-h.
+    expect(region.classList).toContain('top-[var(--top-bar-h,3.5rem)]');
     expect(region.textContent.trim()).toBe('');
     expect(region.querySelector('a, button, input, [tabindex]')).toBeNull();
   });

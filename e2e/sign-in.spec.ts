@@ -19,7 +19,10 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 const LOCAL_ONLY = 'seeds a user or the throttle on the local Convex backend';
 const SIGN_IN_PATH = '/api/auth/sign-in/email';
 
-/** Sign-in form order (mockup 63 "Focus order"): no top bar Sign in on this page (decision 2). */
+/**
+ * Sign-in form order (mockup 63 "Focus order"): no top bar Sign in on this page (decision 2), and
+ * the public layout's footer links last.
+ */
 const SIGN_IN_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
@@ -28,6 +31,10 @@ const SIGN_IN_ORDER = [
   'button[aria-controls="password"]',
   'button[type="submit"]',
   'main p a[href^="/sign-up"]',
+  'footer a[href="/"]',
+  'footer a[href="/app"]',
+  'footer a[href="/app/organizations/new"]',
+  'footer a[href^="/sign-in"]',
 ];
 
 const field = (page: Page, id: string) => page.locator(`#${id}`);

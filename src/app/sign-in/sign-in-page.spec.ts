@@ -72,6 +72,15 @@ describe('SignInPage', () => {
     await harness.fixture.whenStable();
   }
 
+  it('renders in the public layout: top bar and footer, no sidebar', async () => {
+    await open();
+    expect(page.firstElementChild?.tagName).toBe('APP-PUBLIC-LAYOUT');
+    expect(page.querySelectorAll('header')).toHaveLength(1);
+    expect(page.querySelectorAll('footer')).toHaveLength(1);
+    expect(page.querySelector('main#main')).not.toBeNull();
+    expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+  });
+
   describe('fields (mockup "Sign-in field attributes")', () => {
     beforeEach(() => open());
 

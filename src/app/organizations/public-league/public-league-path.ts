@@ -10,8 +10,8 @@ export type PublicLeagueHeader = NonNullable<FunctionReturnType<typeof api.leagu
 export type PublicLeagueSeasons = FunctionReturnType<typeof api.seasons.listPublic>;
 
 /**
- * What the public league page shows (#127): the organization's header (for the sidebar's sports
- * and totals), the league's header, and the page of seasons shown.
+ * What the public league page shows: the organization's header (its name for the
+ * breadcrumb), the league's header, and the page of seasons shown.
  */
 export interface PublicLeagueView {
   organization: PublicOrganizationHeader;

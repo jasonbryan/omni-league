@@ -18,7 +18,10 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
 
-/** Sign-up form order (mockup 62 "Focus order"): the top bar's Sign in, then the panel footer's. */
+/**
+ * Sign-up form order (mockup 62 "Focus order"): the top bar's Sign in, then the panel footer's,
+ * then the public layout's footer links.
+ */
 const SIGN_UP_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
@@ -30,6 +33,10 @@ const SIGN_UP_ORDER = [
   '#adult',
   'button[type="submit"]',
   'main p a[href^="/sign-in"]',
+  'footer a[href="/"]',
+  'footer a[href="/app"]',
+  'footer a[href="/app/organizations/new"]',
+  'footer a[href^="/sign-in"]',
 ];
 
 const password = (page: Page) => page.locator('#password');

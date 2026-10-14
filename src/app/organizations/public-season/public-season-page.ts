@@ -9,27 +9,25 @@ import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
-import { Shell, ShellSidebar } from '../../shell';
+import { PublicLayout } from '../../public-layout/public-layout';
 import { seasonDates } from '../league/season-dates';
 import { publicSeasonPath } from '../public-league/public-league-path';
-import { PublicLeagueSidebar } from '../public-league/public-league-sidebar';
 import { PublicSeasonContent } from './public-season-content';
 import type { PublicSeasonView } from './public-season-view';
 
 /**
  * The public season page, `/organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug`
  * (#128), drawn in design/mockups/127-128-public-seasons.html state 9. A Server route: the render
- * reads two queries anonymously, `organizations:getPublicPage` (the sidebar's sports and totals)
+ * reads two queries anonymously, `organizations:getPublicPage` (the organization's name for the breadcrumb)
  * and `seasons:getPublicPage` (the season with its league), and after hydration the live
  * subscriptions keep the page current.
  *
- * - Found: the content in the app shell, with the organization's sidebar marking the league's
- *   sport (the league page's sidebar), and the title, Open Graph tags, and canonical from the
- *   query results, once both have arrived.
+ * - Found: the content in the public layout (a light top bar and a footer, no sidebar), and
+ *   the title, Open Graph tags, and canonical from the query results, once both have arrived.
  * - Season `null` (a draft season, a season of a draft league, or an unknown organization, league,
- *   or season): #23's not-found view with status 404, top bar only.
- * - Either query failed or timed out: the server-error view with status 503 and `no-store`, top
- *   bar only, so an error never enters the CDN cache.
+ *   or season): the not-found view with status 404, in the public layout.
+ * - Either query failed or timed out: the server-error view with status 503 and `no-store`, in the
+ *   public layout, so an error never enters the CDN cache.
  *
  * The query arguments are the route's slugs only; the query string is never read, so the server
  * HTML holds none of it (Angular conventions, "Query strings and the CDN").
@@ -41,25 +39,11 @@ import type { PublicSeasonView } from './public-season-view';
  */
 @Component({
   selector: 'app-public-season-page',
-  imports: [
-    NotFoundView,
-    NotSavedView,
-    PublicLeagueSidebar,
-    PublicSeasonContent,
-    ServerErrorView,
-    Shell,
-    ShellSidebar,
-  ],
+  imports: [NotFoundView, NotSavedView, PublicLayout, PublicSeasonContent, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-public-layout>
       @if (view(); as view) {
-        <ng-template appShellSidebar>
-          <app-public-league-sidebar
-            [organization]="view.organization"
-            [sportName]="view.season.league.sportName"
-          />
-        </ng-template>
         <app-public-season-content [view]="view" [savedAt]="savedAt()" />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -68,7 +52,7 @@ import type { PublicSeasonView } from './public-season-view';
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="path()" />
       }
-    </app-shell>
+    </app-public-layout>
   `,
 })
 export class PublicSeasonPage {

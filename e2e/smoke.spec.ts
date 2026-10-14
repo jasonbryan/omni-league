@@ -36,12 +36,13 @@ test.describe('smoke: placeholder home', () => {
       expect(heading).toBeGreaterThan(main);
       expect(html.indexOf('</main>')).toBeGreaterThan(heading);
       // The top bar's "Sign in" (#63) is in the server HTML, and there is no sidebar on the home page
-      // (#73 decisions).
+      // (the public layout has a footer navigation only).
       expect(html.slice(html.indexOf('<header'), html.indexOf('</header>'))).toMatch(
         />Sign in<\/a>/,
       );
       expect(html).not.toContain('aria-label="Open navigation"');
-      expect(html).not.toMatch(/<nav\b/);
+      expect(html.match(/<nav\b/g)).toHaveLength(1);
+      expect(html).toMatch(/<footer\b[\s\S]*<nav\b[^>]*aria-label="Footer"/);
     },
   );
 
@@ -93,16 +94,17 @@ test.describe('smoke: placeholder home', () => {
     await expect(page.locator('main#main')).toBeFocused();
     expect(new URL(page.url()).pathname).toBe('/');
 
-    // One banner and one main landmark, no navigation landmark, and a 56px sticky top bar.
+    // One banner and one main landmark, the footer's navigation only, and a sticky top bar: the
+    // 64px of the public layout plus its 1px border.
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
     expect(
       await page.locator('header').evaluate((el) => {
         const style = getComputedStyle(el);
         return { position: style.position, top: style.top, height: style.height };
       }),
-    ).toEqual({ position: 'sticky', top: '0px', height: '56px' });
+    ).toEqual({ position: 'sticky', top: '0px', height: '65px' });
 
     // base.css (#61): the offset that keeps anchor targets and focused elements below the sticky
     // top bar (4.5rem at the 16px root font size, WCAG 2.4.11).
@@ -124,7 +126,15 @@ test.describe('smoke: placeholder home', () => {
     expect(thirdPartyRequests).toEqual([]);
 
     await expectAccessible(page, {
-      expectedOrder: ['a[href$="#main"]', 'header a[href="/"]', 'header a[href^="/sign-in"]'],
+      expectedOrder: [
+        'a[href$="#main"]',
+        'header a[href="/"]',
+        'header a[href^="/sign-in"]',
+        'footer a[href="/"]',
+        'footer a[href="/app"]',
+        'footer a[href="/app/organizations/new"]',
+        'footer a[href^="/sign-in"]',
+      ],
     });
 
     // Focusing a top bar control on a scrolled page leaves the page where it is (#75): the sticky

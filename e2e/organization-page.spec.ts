@@ -1,10 +1,12 @@
 // Public organization page (#60): `/organizations/:orgSlug`, rendered on the server from
-// `organizations:getPublicPage` and page 1 of the league and location lists (#100), with its sidebar
-// in the app shell (#75) and live subscriptions after hydration. Each test that seeds its own tenant (ADR 0005) needs the local Convex backend
-// and is skipped with E2E_BASE_URL set; the unknown-slug tests also run against a preview.
-import type { Locator, Page, TestInfo } from '@playwright/test';
+// `organizations:getPublicPage` and page 1 of the league and location lists, in the public
+// layout (top bar and footer, no sidebar) with live subscriptions after hydration. Each test
+// that seeds its own tenant needs the local Convex backend and is skipped with
+// E2E_BASE_URL set; the unknown-slug tests also run against a preview. The layout's own checks
+// are in e2e/public-layout.spec.ts.
+import type { TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
-import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
+import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -26,7 +28,6 @@ const ORIGIN = new URL(baseURL).origin;
 const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
-const isWebKit = (page: Page) => page.context().browser()?.browserType().name() === 'webkit';
 
 /** The two-location, two-league tenant of the raw-HTML criteria, with two different sports. */
 function smallTenant(): Promise<Tenant> {
@@ -67,16 +68,6 @@ function canonicalHrefs(html: string): string[] {
   );
 }
 
-/** The sidebar `<nav>` element's HTML, from its start tag to its end tag. */
-function sidebarHtml(html: string, name: string): string {
-  const start = new RegExp(`<nav\\b[^>]*\\baria-label="${name}"[^>]*>`).exec(html);
-  expect(start, `<nav aria-label="${name}">`).not.toBeNull();
-  const from = start?.index ?? 0;
-  return html.slice(from, html.indexOf('</nav>', from) + '</nav>'.length);
-}
-
-const hrefs = (html: string) => [...html.matchAll(/\bhref="([^"]*)"/g)].map(([, href]) => href);
-
 /** Waits for the dev-mode hydration log, so the live subscription is open. */
 async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
   await expect
@@ -86,94 +77,11 @@ async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
     .toBe(true);
 }
 
-/** Top of `row` relative to the viewport, the header's bottom edge, and the viewport height. */
-function rowPosition(row: Locator) {
-  return row.evaluate((el) => ({
-    top: el.getBoundingClientRect().top,
-    headerBottom: document.querySelector('header')?.getBoundingClientRect().bottom ?? 0,
-    viewport: window.innerHeight,
-  }));
-}
-
-const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
-
-/**
- * Activates a control the way a phone user does: a tap at its coordinates in Chromium, and the
- * keyboard in WebKit, where a tap does not focus a button (#78's tester note).
- */
-async function activate(page: Page, control: Locator): Promise<void> {
-  if (isWebKit(page)) {
-    await control.focus();
-    await page.keyboard.press('Enter');
-    return;
-  }
-  await control.scrollIntoViewIfNeeded();
-  const box = await control.boundingBox();
-  if (!box) throw new Error('control has no box');
-  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
-}
-
-/**
- * The same-path jump of #95. The page is loaded as `<path>?utm_source=x`; for each row `jump`
- * follows its sidebar link. The query string stays, the fragment is set, the page does not reload,
- * the row is in view, history grows by one entry, and Back returns to the URL before the click.
- */
-async function expectQueryKeepingJumps(
-  page: Page,
-  consoleGuard: { hydrated: boolean },
-  tenant: Tenant,
-  jump: (id: string) => Promise<void>,
-): Promise<void> {
-  const search = '?utm_source=x';
-  const before = `${ORIGIN}${tenant.path}${search}`;
-  for (const id of ['league-2', 'location-3']) {
-    // A goto to the URL the page is on replaces its entry, which would keep the forward entry
-    // that Back left and make the count below grow by zero. A blank page first makes a new entry.
-    await page.goto('about:blank');
-    await page.goto(`${tenant.path}${search}`);
-    await hydrated(consoleGuard);
-    await page.evaluate(() => {
-      window.scrollTo(0, 0);
-      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
-    });
-    await expect.poll(() => scrollY(page)).toBe(0);
-    const lengthBefore = await page.evaluate(() => history.length);
-
-    await jump(id);
-
-    await expect(page, id).toHaveURL(`${before}#${id}`);
-    expect(await page.evaluate(() => history.length), `${id} history.length`).toBe(
-      lengthBefore + 1,
-    );
-    const row = page.locator(`main #${id}`);
-    await expect
-      .poll(
-        async () => {
-          const position = await rowPosition(row);
-          return position.top >= position.headerBottom && position.top < position.viewport;
-        },
-        { message: `${id} is scrolled into view` },
-      )
-      .toBe(true);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-      `${id} no reload`,
-    ).toBe(true);
-
-    await page.goBack();
-    await expect(page, `${id} Back`).toHaveURL(before);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-      `${id} no reload after Back`,
-    ).toBe(true);
-  }
-}
-
 test.describe('organization page: raw server HTML', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
   test(
-    '200 with the public Cache-Control, content, meta, sidebar links, row ids, and tiles; a query string changes nothing',
+    '200 with the public Cache-Control, content, meta, row ids, and tiles; a query string changes nothing',
     RAW_HTTP,
     async ({ request }) => {
       const tenant = await smallTenant();
@@ -211,19 +119,10 @@ test.describe('organization page: raw server HTML', () => {
         expect(metaContent(html, 'og:url'), path).toBe(canonical);
         expect(canonicalHrefs(html), path).toEqual([canonical]);
 
-        // Sidebar: one link per league and location, built from the slug, and no id inside.
-        const nav = sidebarHtml(html, tenant.name);
-        expect(nav, path).not.toMatch(/\sid="/);
-        expect(nav, path).not.toContain('aria-labelledby');
-        expect(hrefs(nav), path).toEqual([
-          tenant.path,
-          `${tenant.path}#league-1`,
-          `${tenant.path}#league-2`,
-          `${tenant.path}#location-1`,
-          `${tenant.path}#location-2`,
-        ]);
+        // No sidebar; the rows keep their ids.
+        expect(html, path).not.toContain(`aria-label="${tenant.name}"`);
         for (const id of ['league-1', 'league-2', 'location-1', 'location-2']) {
-          expect(html.split(nav).join(''), `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
+          expect(html, `${path} #${id}`).toMatch(new RegExp(`\\sid="${id}"`));
         }
 
         // Tiles: 2 leagues, 2 locations, 2 distinct sports.
@@ -244,7 +143,7 @@ test.describe('organization page: more than 5 rows per list', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
   test(
-    'raw: 5 league rows, 5 location rows, totals in the tiles, a sidebar link per row shown',
+    'raw: 5 league rows, 5 location rows, and totals in the tiles',
     RAW_HTTP,
     async ({ request }) => {
       // 13 of each, in one call, with leagues of two sports. "League 01" to "League 05", the
@@ -265,8 +164,7 @@ test.describe('organization page: more than 5 rows per list', () => {
         PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
       );
 
-      const nav = sidebarHtml(html, tenant.name);
-      const content = html.split(nav).join('');
+      const content = html;
       const shownLeagues = tenant.leagues.slice(0, 5);
       const shownLocations = tenant.locations.slice(0, 5);
       // Exactly the first 5 of each list, in name order.
@@ -301,16 +199,6 @@ test.describe('organization page: more than 5 rows per list', () => {
         '2',
       ]);
 
-      // Sidebar: one link per row shown, each resolving to a row in the content.
-      const rowLinks = hrefs(nav).slice(1);
-      expect(rowLinks).toEqual([
-        ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#league-${n}`),
-        ...[1, 2, 3, 4, 5].map((n) => `${tenant.path}#location-${n}`),
-      ]);
-      for (const href of rowLinks) {
-        expect(content, href).toMatch(new RegExp(`\\sid="${href.split('#')[1]}"`));
-      }
-
       // The query string never reaches the cacheable HTML (PR #90).
       expect(html).not.toContain('utm_source');
     },
@@ -320,352 +208,48 @@ test.describe('organization page: more than 5 rows per list', () => {
 test.describe('organization page in the browser', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
-  test('hydrates with no console error and passes the axe helper; the sidebar link jumps to its row (1280) or the menu button shows (360)', async ({
+  test('hydrates with no console error and passes the axe helper; no sidebar and no menu button', async ({
     page,
     consoleGuard,
-  }, testInfo) => {
+  }) => {
     const tenant = await tallTenant();
     await page.goto(tenant.path);
     await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
     await hydrated(consoleGuard);
     await expect(page).toHaveTitle(`${tenant.name} | Omni League`);
 
-    // The league names in the content link to their public pages (#127), after the sidebar's links.
-    const leagueLinks = tenant.leagues.map(
-      (league) =>
-        `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
-    );
-    const sidebarColumn = page.locator('main').locator('xpath=preceding-sibling::div[1]');
-    const menuButton = page.getByRole('button', { name: 'Open navigation' });
-    const nav = page.getByRole('navigation', { name: tenant.name });
-
-    if (!isDesktop(testInfo)) {
-      // 360: the column is hidden, the menu button shows, and the Tab order follows the DOM.
-      await expect(sidebarColumn).toBeHidden();
-      await expect(menuButton).toBeVisible();
-      await expectAccessible(page, {
-        expectedOrder: [
-          'a[href$="#main"]',
-          'header button[aria-label="Open navigation"]',
-          'header a[href="/"]',
-          'header a[href^="/sign-in"]',
-          // Each league's name links to its page (#127): the first focusable controls of the content.
-          ...leagueLinks,
-        ],
-      });
-      return;
-    }
-
-    // 1280: the sidebar column shows, 256px wide, with no menu button.
-    await expect(nav).toBeVisible();
-    await expect(menuButton).toBeHidden();
-    expect((await sidebarColumn.boundingBox())?.width).toBe(256);
-    // The league and location icons are muted, as in the mockup: the colour utility on <ng-icon>
-    // wins over ng-icon's own layer (src/styles.css). The eyebrow above the h1 is muted too.
-    const muted = await page
-      .getByRole('main')
-      .getByText('Organization', { exact: true })
-      .evaluate((el) => getComputedStyle(el).color);
-    for (const group of ['Leagues', 'Locations']) {
-      const icon = nav.locator(`ul[aria-label="${group}"] ng-icon`).first();
-      expect(await icon.evaluate((el) => getComputedStyle(el).color), group).toBe(muted);
-    }
-
+    // The public layout: no menu button, and the only navigation is the footer's.
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
+    await expect(page.getByRole('navigation')).toHaveCount(1);
+    // The Tab order follows the DOM: skip link, top bar, each league's name, then the
+    // footer's links.
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
-        'nav a[aria-current="page"]',
-        ...tenant.leagues.map((_, i) => `nav a[href="${tenant.path}#league-${i + 1}"]`),
-        ...tenant.locations.map((_, i) => `nav a[href="${tenant.path}#location-${i + 1}"]`),
-        ...leagueLinks,
+        ...tenant.leagues.map(
+          (league) =>
+            `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
+        ),
+        'footer a[href="/"]',
+        'footer a[href="/app"]',
+        'footer a[href="/app/organizations/new"]',
+        'footer a[href^="/sign-in"]',
       ],
     });
-
-    // The last location's row starts below the fold; its sidebar link jumps to it on this page.
-    const last = tenant.locations.length;
-    const row = page.locator(`main #location-${last}`);
-    await expect(row.locator('h3')).toHaveText(tenant.locations[last - 1].name);
-    await page.evaluate(() => {
-      window.scrollTo(0, 0);
-      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
-    });
-    await expect.poll(() => scrollY(page)).toBe(0);
-    const before = await rowPosition(row);
-    expect(before.top).toBeGreaterThanOrEqual(before.viewport);
-    const scrollBefore = await scrollY(page);
-
-    await nav.locator(`a[href="${tenant.path}#location-${last}"]`).click();
-
-    await expect.poll(() => scrollY(page)).toBeGreaterThan(scrollBefore);
-    const after = await rowPosition(row);
-    expect(after.top).toBeGreaterThanOrEqual(after.headerBottom);
-    expect(after.top).toBeLessThan(after.viewport);
-    expect(new URL(page.url()).pathname).toBe(tenant.path);
-    expect(new URL(page.url()).hash).toBe(`#location-${last}`);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-    ).toBe(true);
-  });
-
-  // #95: the sidebar links keep the visitor's query string. A plain click goes through the router
-  // to the current path, the current search, and the link's hash, so there is no reload, history
-  // grows by one entry, and Back returns to the URL before the click.
-  test('1280: a sidebar link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
-    page,
-    consoleGuard,
-  }, testInfo) => {
-    test.skip(!isDesktop(testInfo), 'the sidebar column shows at 1280px only');
-    const tenant = await tallTenant();
-    const nav = page.getByRole('navigation', { name: tenant.name });
-    await expectQueryKeepingJumps(page, consoleGuard, tenant, async (id) => {
-      await nav.locator(`a[href="${tenant.path}#${id}"]`).click();
-    });
-  });
-
-  // #95: the same for the phone sheet, which closes before the link is followed (#75).
-  test('phone sheet (360): its link on a page loaded with a query string keeps it, adds one history entry, and Back returns', async ({
-    page,
-    consoleGuard,
-  }, testInfo) => {
-    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
-    const tenant = await tallTenant();
-    const menuButton = page.getByRole('button', { name: 'Open navigation' });
-    const dialog = page.getByRole('dialog', { name: 'Navigation' });
-    await expectQueryKeepingJumps(page, consoleGuard, tenant, async (id) => {
-      await activate(page, menuButton);
-      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
-      await activate(page, dialog.locator(`a[href="${tenant.path}#${id}"]`));
-      await expect(dialog).toHaveCount(0);
-      await expect(menuButton).toBeFocused();
-    });
-  });
-
-  test('phone sheet (360): 288px, focus on Close, Tab trapped, closes without moving the page, and its link jumps to the row', async ({
-    page,
-    consoleGuard,
-  }, testInfo) => {
-    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
-    const tenant = await tallTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
-
-    const menuButton = page.getByRole('button', { name: 'Open navigation' });
-    const dialog = page.getByRole('dialog', { name: 'Navigation' });
-    // The dialog container has no box of its own: the helm sheet content inside is fixed.
-    const sheet = dialog.locator('[data-slot="sheet-content"]');
-    const close = dialog.getByRole('button', { name: 'Close navigation' });
-    const tab = tabKey(page);
-
-    async function openSheet(): Promise<void> {
-      await activate(page, menuButton);
-      await expect(sheet).toBeVisible();
-      await expect(close).toBeFocused();
-      // The width is read once the slide-in has finished: mid-animation, WebKit reports a
-      // fractional width (288.0000076) for the translated content.
-      await sheet.evaluate((element) =>
-        Promise.all(element.getAnimations().map((animation) => animation.finished)),
-      );
-    }
-
-    // Closing by Escape, Close, or the scrim leaves the scrolled page where it was, with focus
-    // back on the menu button (#78's top bar scroll margin).
-    await page.evaluate(() => {
-      window.scrollTo(0, 300);
-    });
-    await expect.poll(() => scrollY(page)).toBe(300);
-    const closers: [string, () => Promise<void>][] = [
-      ['Escape', () => page.keyboard.press('Escape')],
-      ['Close', () => activate(page, close)],
-      ['the scrim', () => page.touchscreen.tap(340, 400)],
-    ];
-    for (const [how, closeSheet] of closers) {
-      await openSheet();
-      expect((await sheet.boundingBox())?.width, how).toBe(288);
-      await closeSheet();
-      await expect(dialog, how).toHaveCount(0);
-      await expect(menuButton, how).toBeFocused();
-      expect(await scrollY(page), how).toBe(300);
-    }
-
-    // Tab and Shift+Tab stay inside the open sheet.
-    await openSheet();
-    const insideDialog = () =>
-      page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
-    const stops = (await dialog.locator('a[href], button').count()) + 2;
-    for (const key of [tab, `Shift+${tab}`]) {
-      for (let i = 0; i < stops; i++) {
-        await page.keyboard.press(key);
-        expect(await insideDialog(), `${key} #${i + 1}`).toBe(true);
-      }
-    }
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-
-    // The sheet's link to the last location: the sheet closes, focus returns to the menu button,
-    // and the page jumps to the row, which the block scroll strategy must not undo (#75).
-    await page.evaluate(() => {
-      window.scrollTo(0, 0);
-    });
-    await expect.poll(() => scrollY(page)).toBe(0);
-    const last = tenant.locations.length;
-    const row = page.locator(`main #location-${last}`);
-    const before = await rowPosition(row);
-    expect(before.top).toBeGreaterThanOrEqual(before.viewport);
-    const scrollBefore = await scrollY(page);
-
-    await openSheet();
-    await activate(page, dialog.locator(`a[href="${tenant.path}#location-${last}"]`));
-    await expect(dialog).toHaveCount(0);
-    await expect(menuButton).toBeFocused();
-    await expect.poll(() => scrollY(page)).toBeGreaterThan(scrollBefore);
-    const after = await rowPosition(row);
-    expect(after.top).toBeGreaterThanOrEqual(after.headerBottom);
-    expect(after.top).toBeLessThan(after.viewport);
-    expect(new URL(page.url()).pathname).toBe(tenant.path);
-
-    // At 320px the sheet is capped at the viewport minus 48px (#75).
-    await page.setViewportSize({ width: 320, height: 800 });
-    await openSheet();
-    expect((await sheet.boundingBox())?.width).toBe(272);
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-  });
-
-  // #94: the first press creates the sheet on the hydrated page. In a development build that
-  // creation logged "no hydration info available for a given TNode" while the shell's template
-  // held a view container; the console fixture fails the test on any warning. The phone-sheet
-  // test above makes its first press at 360, so only 320 is added here.
-  for (const width of [320]) {
-    test(`phone sheet (${width}): the first press on the hydrated page opens it with no console warning`, async ({
-      page,
-      consoleGuard,
-    }, testInfo) => {
-      test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
-      await page.setViewportSize({ width, height: 800 });
-      const tenant = await smallTenant();
-      await page.goto(tenant.path);
-      await hydrated(consoleGuard);
-      const dialog = page.getByRole('dialog', { name: 'Navigation' });
-      await activate(page, page.getByRole('button', { name: 'Open navigation' }));
-      // The dialog container has no box of its own: the helm sheet content inside is fixed.
-      await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
-      await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
-      // The sheet's host element is not in the document: only the overlay holds its content.
-      expect(await page.locator('app-shell-sheet').count()).toBe(0);
-    });
-  }
-
-  // #94: the sheet is created outside the shell's template. A navigation that replaces the page
-  // while the sheet is open leaves no dialog, scrim, or scroll block on the next page. That the
-  // shell destroys the sheet's ComponentRef is asserted in shell.spec.ts.
-  test('phone sheet (360): a navigation away while it is open leaves no overlay or scroll block', async ({
-    page,
-    consoleGuard,
-  }, testInfo) => {
-    test.skip(isDesktop(testInfo), 'the phone sheet runs at 360px only');
-    // The tall tenant's page scrolls, so the open sheet blocks scrolling.
-    const tenant = await tallTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
-    const dialog = page.getByRole('dialog', { name: 'Navigation' });
-    await activate(page, page.getByRole('button', { name: 'Open navigation' }));
-    await expect(dialog.locator('[data-slot="sheet-content"]')).toBeVisible();
-    await expect
-      .poll(() =>
-        page.evaluate(() => document.documentElement.classList.contains('cdk-global-scrollblock')),
-      )
-      .toBe(true);
-
-    // The header's home link is under the scrim; a script click starts the client navigation.
-    await page.evaluate(() => {
-      document.querySelector<HTMLAnchorElement>('header a[href="/"]')?.click();
-    });
-    await expect(page).toHaveURL(`${ORIGIN}/`);
-    await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
-    await expect(dialog).toHaveCount(0);
-    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
-    await expect(page.locator('.cdk-overlay-pane')).toHaveCount(0);
-    expect(
-      await page.evaluate(() =>
-        document.documentElement.classList.contains('cdk-global-scrollblock'),
-      ),
-    ).toBe(false);
-    expect(await page.locator('app-shell-sheet, hlm-sheet').count()).toBe(0);
-  });
-
-  // #94 with #88: the sheet opens and closes while the offline note shows. The sheet's chunk is
-  // loaded by a first press while online, because `setOffline` blocks every request, the chunk's
-  // included. The sheet is created outside the shell's template, so the note above it (a sibling
-  // of the top bar) must stay where it is, and the sheet must still open at 288px with focus on
-  // Close, close on Escape, and return focus to the menu button.
-  test('phone sheet (360): opens and closes while the offline note shows, with no console warning', async ({
-    page,
-    context,
-    consoleGuard,
-  }, testInfo) => {
-    test.skip(isDesktop(testInfo), 'the phone sheet runs at phone widths only');
-    const tenant = await smallTenant();
-    await page.goto(tenant.path);
-    await hydrated(consoleGuard);
-    const menuButton = page.getByRole('button', { name: 'Open navigation' });
-    const dialog = page.getByRole('dialog', { name: 'Navigation' });
-    const sheet = dialog.locator('[data-slot="sheet-content"]');
-    const note = page.locator('header + [role="status"]').locator('[data-offline-note]');
-
-    // Online: the first press loads the chunk and creates the sheet; close it again.
-    await activate(page, menuButton);
-    await expect(sheet).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-
-    await context.setOffline(true);
-    await expect(note).toBeVisible({ timeout: 2_000 });
-    const noteBefore = await note.boundingBox();
-
-    await activate(page, menuButton);
-    await expect(sheet).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
-    await sheet.evaluate((element) =>
-      Promise.all(element.getAnimations().map((animation) => animation.finished)),
-    );
-    expect((await sheet.boundingBox())?.width).toBe(288);
-    // The note is still shown, unmoved, under the scrim.
-    await expect(note).toBeVisible();
-    expect(await note.boundingBox()).toEqual(noteBefore);
-    expect(await page.locator('app-shell-sheet').count()).toBe(0);
-    // The tab walk of expectAccessible does not apply to an open modal: axe only.
-    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
-
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    await expect(menuButton).toBeFocused();
-    await expect(note).toBeVisible();
-    await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
-    expect(
-      await page.evaluate(() =>
-        document.documentElement.classList.contains('cdk-global-scrollblock'),
-      ),
-    ).toBe(false);
-
-    // And once more: the second open after the note appeared works as the first one did.
-    await activate(page, menuButton);
-    await expect(sheet).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
   });
 
   test.describe('with JavaScript disabled', () => {
     test.use({ javaScriptEnabled: false });
 
-    test('360: the menu button is present and every league and location is in the page content', async ({
+    test('360: every league and location is in the page content, with no menu button', async ({
       page,
     }, testInfo) => {
       test.skip(isDesktop(testInfo), 'the phone layout runs at 360px only');
       const tenant = await smallTenant();
       await page.goto(tenant.path);
-      await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
       const main = page.getByRole('main');
       await expect(main.getByRole('heading', { level: 3 })).toHaveText([
         ...tenant.leagues.map((league) => league.name),
@@ -678,7 +262,7 @@ test.describe('organization page in the browser', () => {
   });
 
   test(
-    'a league added after load appears without a reload in its panel, sidebar group, and tile',
+    'a league added after load appears without a reload in its panel and tile',
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const tenant = await smallTenant();
@@ -700,10 +284,6 @@ test.describe('organization page in the browser', () => {
       await expect(main.locator('#league-3 h3')).toHaveText('Zulu League');
       await expect(main.locator('#league-3')).toContainText('Softball');
       await expect(main.locator('#league-3')).toContainText('Beta Courts');
-      // The sidebar column is hidden at 360px, so not by role.
-      await expect(
-        page.locator(`nav[aria-label="${tenant.name}"] a[href="${tenant.path}#league-3"]`),
-      ).toHaveText('Zulu League');
       await expect(main.locator('dl dd')).toHaveText(['3', '2', '3']);
       expect(
         await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
@@ -770,7 +350,7 @@ test.describe('organization page in the browser', () => {
     },
   );
 
-  test('an organization with no leagues and no locations shows the empty states, "None yet", and 0, 0, 0', async ({
+  test('an organization with no leagues and no locations shows the empty states and 0, 0, 0', async ({
     page,
     consoleGuard,
   }) => {
@@ -789,9 +369,6 @@ test.describe('organization page in the browser', () => {
     await expect(
       main.getByText('Places where this organization plays will be listed here.'),
     ).toBeVisible();
-    const nav = page.locator(`nav[aria-label="${tenant.name}"]`);
-    await expect(nav.getByText('None yet', { exact: true })).toHaveCount(2);
-    await expect(nav.locator('a')).toHaveCount(1); // Overview only
     await expectAccessible(page);
   });
 });
@@ -800,7 +377,7 @@ test.describe('organization page: unknown slug', () => {
   test.use({ expectedDocumentStatus: 404 });
 
   test(
-    'raw: 404 with the public Cache-Control and the not-found view, top bar only',
+    'raw: 404 with the public Cache-Control and the not-found view in the public layout',
     RAW_HTTP,
     async ({ request }) => {
       const { status, headers, html } = await fetchRawHtml(
@@ -813,7 +390,9 @@ test.describe('organization page: unknown slug', () => {
       );
       expect(html).toMatch(/<h1\b[^>]*>\s*Page not found\s*<\/h1>/);
       expect(html.match(/<h1\b/g)).toHaveLength(1);
-      expect(html).not.toMatch(/<nav\b/);
+      // The public layout: the footer's navigation only, no sidebar and no menu button.
+      expect(html.match(/<nav\b[^>]*>/g)).toHaveLength(1);
+      expect(html).toContain('aria-label="Footer"');
       expect(html).not.toContain('aria-label="Open navigation"');
       expect(html).not.toMatch(/<link\b[^>]*rel="canonical"|property="og:/);
     },
@@ -827,7 +406,7 @@ test.describe('organization page: unknown slug', () => {
       expect(response?.status()).toBe(404);
       await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
       if (!remoteBaseUrl) await hydrated(consoleGuard);
-      await expect(page.getByRole('navigation')).toHaveCount(0);
+      await expect(page.getByRole('navigation')).toHaveCount(1); // the footer's
       await expect(page.getByRole('button')).toHaveCount(0);
       await expect(page).toHaveTitle('Page not found | Omni League');
     },
@@ -931,12 +510,6 @@ test.describe('tenant isolation', VIEWPORT_AGNOSTIC, () => {
       const main = page.getByRole('main');
       await expect(main.getByRole('heading', { level: 1 })).toHaveText(tenant.name);
       await expect(main.getByRole('heading', { level: 3 })).toHaveText([
-        `League ${label}`,
-        `Field ${label}`,
-      ]);
-      // The sidebar column is hidden at 360px, so not by role.
-      await expect(page.locator(`nav[aria-label="${tenant.name}"] a`)).toHaveText([
-        'Overview',
         `League ${label}`,
         `Field ${label}`,
       ]);

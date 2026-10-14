@@ -118,7 +118,7 @@ test.describe('top bar', () => {
             page.getByRole('heading', { level: 1, name: 'Create your account' }),
           ).toBeVisible();
           const hrefs = await page
-            .locator('a[href^="/sign-in"]')
+            .locator('main a[href^="/sign-in"], header a[href^="/sign-in"]')
             .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
           expect(hrefs, raw).toEqual(['/sign-in?returnTo=%2Fapp', '/sign-in?returnTo=%2Fapp']);
         }
