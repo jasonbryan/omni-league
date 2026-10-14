@@ -1,8 +1,8 @@
 import { v, type Infer, type Validator } from 'convex/values';
 import { sportValidator } from './sports';
 
-// These live apart from the function modules and import only `convex/values`, so the Angular app
-// can import the same validators to check saved copies without bundling the server functions.
+// These live apart from the function modules and import no function code, so the Angular app can
+// import the same validators to check saved copies without bundling the server functions.
 // Changing one changes what the app accepts as a saved copy.
 
 export const publicSportValidator = v.object({

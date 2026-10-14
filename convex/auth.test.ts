@@ -134,7 +134,6 @@ describe('sign-up', () => {
     expect(authUser).toMatchObject({ email: 'maya.okafor@example.com', name: 'Maya Okafor' });
     expect(accounts).toHaveLength(1);
     expect(accounts[0]).toMatchObject({ providerId: 'credential', userId: authUser?.['_id'] });
-    // The stored hash is in convex/lib/password.ts's format, never the default one.
     expect(accounts[0]?.['password']).toMatch(/^scrypt\$15\$8\$3\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
 
     expect(users).toHaveLength(1);

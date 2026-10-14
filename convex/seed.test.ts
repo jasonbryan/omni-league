@@ -807,7 +807,6 @@ describe('seed:demo', () => {
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    // `DEMO` and `DEMO_SEASONS` are plain data, not functions.
     const { DEMO, DEMO_SEASONS, ...functions } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
