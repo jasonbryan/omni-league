@@ -380,6 +380,62 @@ test.describe('Leagues: the create form on a phone (#209)', () => {
     expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
   });
 
+  test('Shift+Tab from the Create button back through the fields never leaves one under it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(6) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await submit(page).focus();
+    const back = `Shift+${tabKey(page)}`;
+
+    for (let step = 0; step < 9; step++) {
+      await page.keyboard.press(back);
+      const clear = await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement;
+        const rect = active.getBoundingClientRect();
+        const footer = document.querySelector('[data-slot="form-footer"]')!.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return {
+          control: active.id || active.tagName,
+          visible: rect.top >= 0,
+          above: rect.bottom <= footer.top,
+          hit: !!hit && (hit === active || active.contains(hit)),
+        };
+      });
+      expect(clear, `step ${step + 1}`).toMatchObject({ visible: true, above: true, hit: true });
+    }
+  });
+
+  test('every location, however far down, can be clicked once the page is scrolled to it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(8) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').focus();
+    await expect(submit(page)).toBeInViewport({ ratio: 1 });
+
+    for (let n = 1; n <= 8; n++) {
+      const location = page.getByRole('checkbox', { name: `Location 0${n}` });
+      // Scrolling by hand, as a thumb does, until the checkbox is clear of the sticky button.
+      let box = (await location.boundingBox())!;
+      const footerTop = (await form(page).locator('[data-slot="form-footer"]').boundingBox())!.y;
+      for (let swipe = 0; swipe < 40 && !(box.y >= 0 && box.y + box.height <= footerTop); swipe++) {
+        await page.mouse.wheel(0, box.y < 0 ? -80 : 80);
+        await page.waitForTimeout(30);
+        box = (await location.boundingBox())!;
+      }
+      expect(box.y, `Location 0${n} scrolled into view`).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, `Location 0${n} above the button`).toBeLessThanOrEqual(footerTop);
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(location).toBeChecked();
+    }
+  });
+
   test('at 1280px the button is in the flow, as before', async ({ page }, testInfo) => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.setViewportSize({ width: 1280, height: 720 });
