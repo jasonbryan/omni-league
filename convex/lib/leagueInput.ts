@@ -1,5 +1,6 @@
-// Imports only `./slugs`, so the app can import it.
-import { isChoosableSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH } from './slugs';
+// Imports only other `convex/lib` input files, so the app can import it.
+import { ORGANIZATION_MESSAGES } from './organizationInput';
+import { isChoosableSlug } from './slugs';
 
 export const MAX_LEAGUE_NAME_LENGTH = 100;
 
@@ -25,8 +26,7 @@ export const LEAGUE_MESSAGES = {
   nameTooLong: (length: number) =>
     `Use ${MAX_LEAGUE_NAME_LENGTH} characters or fewer. This name has ${length}.`,
   slugEmpty: 'Enter a slug for the league.',
-  // The organization form's message, word for word.
-  slugInvalid: `Use ${MIN_SLUG_LENGTH} to ${MAX_SLUG_LENGTH} lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.`,
+  slugInvalid: ORGANIZATION_MESSAGES.slugInvalid,
   slugTaken: (slug: string) =>
     `${slug} is already used by another league here. Choose another slug.`,
   sportEmpty: 'Choose a sport.',
