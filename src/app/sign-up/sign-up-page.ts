@@ -539,7 +539,7 @@ export class SignUpPage {
     const result = await this.auth.signUp({ name: name.trim(), email: email.trim(), password });
     this.submitting.set(false);
     if (result.ok) {
-      await this.router.navigateByUrl(afterAuthUrl(this.returnTo));
+      await this.router.navigateByUrl(afterAuthUrl(this.returnTo), { replaceUrl: true });
       return;
     }
     this.showFailure(result.error, password.length);
