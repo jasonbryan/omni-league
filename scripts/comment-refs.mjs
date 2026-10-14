@@ -1,5 +1,5 @@
-// Fails when a code comment or test title references this repo's tracker (issues, PRs, ADRs,
-// reviews, agent roles). Those belong in commits, PRs, and ADRs (AGENTS.md, Code comments).
+// Fails when a code comment, test title, skip reason, or ESLint rule message references this
+// repo's tracker (issues, PRs, ADRs, reviews, agent roles). Those belong in commits, PRs, and ADRs (AGENTS.md, Code comments).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname, join, relative } from 'node:path';
 import ts from 'typescript';
@@ -12,14 +12,15 @@ const REFERENCE_PATTERNS = [
   /github\.com\/jasonbryan\/omni-league\/(?:issues|pull)\//,
 ];
 
-// A trailing letter or dash-word keeps hex colours (`#1a2b3c`) and anchors out of the match.
+// A trailing letter keeps hex colours (`#1a2b3c`) out of the match.
 const ISSUE_NUMBER = /(?<!&)#\d+(?![\w])/g;
 
-// `color: #000`, `border: 1px solid #111`, `--surface: #222`.
 const COLOUR_DECLARATION =
-  /(?:^|[\s;{`'"(])(?:--[\w-]+|[\w-]*(?:color|background|border|outline|fill|stroke|shadow)[\w-]*)\s*:[^;{}]*$/i;
+  /(?:^|[\s;{`'"(])(?:--[\w-]+|[\w-]*(?:color|background|border|outline|fill|stroke|shadow)[\w-]*)\s*:([^;{}]*)$/i;
+const CSS_VALUE_BEFORE_COLOUR =
+  /^\s*(?:(?:-?[\d.]+[a-z%]*|solid|dashed|dotted|double|inset|none|transparent|,)\s*)*$/i;
 
-const URL_BEFORE_HASH = /^https?:\/\//;
+const URL_BEFORE_HASH = /https?:\/\/\S*$/;
 const FILE_PATH_BEFORE_HASH = /[\w/-]\.[A-Za-z0-9]+$/;
 
 const SCRIPT_EXTENSIONS = new Set(['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']);
@@ -62,15 +63,19 @@ const SCAN_ROOT_FILES = [
 const SCAN_ROOT_PATTERNS = [/^vitest.*\.mts$/, /^tsconfig.*\.json$/];
 const SKIPPED_DIRECTORIES = new Set(['node_modules', '_generated']);
 
-// `path` is relative to the repo root with `/` separators.
-function inScope(path) {
-  const parts = path.split('/');
+function inScope(repoPath) {
+  const parts = repoPath.split('/');
   if (parts.some((part) => SKIPPED_DIRECTORIES.has(part))) return false;
   return (
-    SCAN_DIRECTORIES.some((directory) => path.startsWith(`${directory}/`)) ||
-    SCAN_ROOT_FILES.includes(path) ||
-    (parts.length === 1 && SCAN_ROOT_PATTERNS.some((pattern) => pattern.test(path)))
+    SCAN_DIRECTORIES.some((directory) => repoPath.startsWith(`${directory}/`)) ||
+    SCAN_ROOT_FILES.includes(repoPath) ||
+    (parts.length === 1 && SCAN_ROOT_PATTERNS.some((pattern) => pattern.test(repoPath)))
   );
+}
+
+function isColourValue(before) {
+  const value = COLOUR_DECLARATION.exec(before)?.[1];
+  return value !== undefined && CSS_VALUE_BEFORE_COLOUR.test(value);
 }
 
 function referencesIn(line) {
@@ -79,24 +84,38 @@ function referencesIn(line) {
     const before = line.slice(0, index);
     const token = /\S*$/.exec(before)[0];
     if (URL_BEFORE_HASH.test(token) || FILE_PATH_BEFORE_HASH.test(token)) return false;
-    return !COLOUR_DECLARATION.test(before);
+    return !isColourValue(before);
   });
   return hits.length > 0 || issueNumber;
 }
 
-const lineOf = (text, position) => {
-  let line = 1;
-  for (let index = 0; index < position; index++) if (text.charCodeAt(index) === 10) line++;
-  return line;
-};
-
-function checkText(path, source, text, start, findings) {
-  const firstLine = lineOf(source, start);
-  text.split('\n').forEach((line, offset) => {
-    if (referencesIn(line)) {
-      findings.push({ path, line: firstLine + offset, text: line.trim() });
+function lineFinder(source) {
+  const lineStarts = [0];
+  for (let index = 0; index < source.length; index++) {
+    if (source.charCodeAt(index) === 10) lineStarts.push(index + 1);
+  }
+  return (position) => {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (lineStarts[middle] <= position) low = middle;
+      else high = middle - 1;
     }
-  });
+    return low + 1;
+  };
+}
+
+function reporter(path, source, findings) {
+  const lineAt = lineFinder(source);
+  return (text, start) => {
+    const firstLine = lineAt(start);
+    text.split('\n').forEach((line, offset) => {
+      if (referencesIn(line)) {
+        findings.push({ path, line: firstLine + offset, text: line.trim() });
+      }
+    });
+  };
 }
 
 function htmlComments(text) {
@@ -106,7 +125,7 @@ function htmlComments(text) {
   }));
 }
 
-// Inline CSS in a component's `styles`, and the CSS files. `//` starts a comment only in SCSS.
+// `//` starts a comment only in SCSS.
 function cssComments(text, { lineComments = false } = {}) {
   const comments = [];
   let index = 0;
@@ -136,8 +155,9 @@ function cssComments(text, { lineComments = false } = {}) {
   return comments;
 }
 
-// `#` starts a comment at the line start or after whitespace, outside quotes. A quote does not
-// carry over a line break, because YAML prose and shell comments hold stray apostrophes.
+// `#` starts a comment at the line start or after whitespace, outside quotes. A quote opens only
+// where no word character precedes it and does not carry over a line break, because YAML prose
+// and shell comments hold stray apostrophes.
 function hashComments(text) {
   const comments = [];
   let lineStart = 0;
@@ -150,7 +170,7 @@ function hashComments(text) {
         else if (char === quote) quote = null;
       } else if (char === '\\') {
         index++;
-      } else if (char === '"' || char === "'") {
+      } else if ((char === '"' || char === "'") && !/\w/.test(line[index - 1] ?? '')) {
         quote = char;
       } else if (char === '#' && (index === 0 || /\s/.test(line[index - 1]))) {
         comments.push({ text: line.slice(index), start: lineStart + index });
@@ -186,22 +206,34 @@ const stringLike = (node) =>
   ts.isNoSubstitutionTemplateLiteral(node) ||
   ts.isTemplateExpression(node);
 
-function titleText(node) {
-  if (ts.isTemplateExpression(node)) {
-    return node.head.text + node.templateSpans.map((span) => span.literal.text).join('');
-  }
-  return node.text;
+// The raw source of each literal piece, so a line number counts the file's lines and not the
+// line breaks an escape such as `\n` spells.
+function literalPieces(node, sourceFile) {
+  const pieces = ts.isTemplateExpression(node)
+    ? [node.head, ...node.templateSpans.map((span) => span.literal)]
+    : [node];
+  return pieces.map((piece) => ({
+    text: piece
+      .getText(sourceFile)
+      .slice(1, ts.isTemplateHead(piece) || ts.isTemplateMiddle(piece) ? -2 : -1),
+    start: piece.getStart(sourceFile) + 1,
+  }));
 }
 
-// `it`, `test`, `describe`, and their member forms: `test.describe.only`, `it.skip`, `test.step`,
-// and the curried `describe.each(table)('title', fn)`.
-function titleCallee(expression) {
+function isTestCallee(expression) {
   const names = [];
   let current = expression;
   while (!ts.isIdentifier(current)) {
-    if (ts.isPropertyAccessExpression(current)) names.unshift(current.name.text);
-    else if (!ts.isCallExpression(current)) return false;
-    current = current.expression;
+    if (ts.isPropertyAccessExpression(current)) {
+      names.unshift(current.name.text);
+      current = current.expression;
+    } else if (ts.isTaggedTemplateExpression(current)) {
+      current = current.tag;
+    } else if (ts.isCallExpression(current)) {
+      current = current.expression;
+    } else {
+      return false;
+    }
   }
   return TITLE_ROOTS.has(current.text) && names.every((member) => TITLE_MEMBERS.has(member));
 }
@@ -211,7 +243,7 @@ function isReasonCall(node) {
   return (
     ts.isPropertyAccessExpression(callee) &&
     REASON_MEMBERS.has(callee.name.text) &&
-    titleCallee(callee)
+    isTestCallee(callee)
   );
 }
 
@@ -252,38 +284,30 @@ function inlineKind(node) {
 function scanScript(path, text, findings) {
   const kind = extname(path) === '.json' ? ts.ScriptKind.JSON : ts.ScriptKind.TS;
   const sourceFile = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
-  for (const comment of commentRanges(sourceFile)) {
-    checkText(path, text, comment.text, comment.start, findings);
-  }
+  const report = reporter(path, text, findings);
+  const checkLiteral = (node) => {
+    for (const piece of literalPieces(node, sourceFile)) report(piece.text, piece.start);
+  };
+  for (const comment of commentRanges(sourceFile)) report(comment.text, comment.start);
   const visit = (node) => {
-    if (ts.isCallExpression(node) && titleCallee(node.expression) && node.arguments[0]) {
+    if (ts.isCallExpression(node) && isTestCallee(node.expression)) {
       const [title] = node.arguments;
-      if (stringLike(title)) {
-        checkText(path, text, titleText(title), title.getStart(sourceFile), findings);
-      }
+      if (title && stringLike(title)) checkLiteral(title);
     }
-    if (ts.isCallExpression(node) && isReasonCall(node) && node.arguments[1]) {
+    if (ts.isCallExpression(node) && isReasonCall(node)) {
       const [, reason] = node.arguments;
-      if (stringLike(reason)) {
-        checkText(path, text, titleText(reason), reason.getStart(sourceFile), findings);
-      }
+      if (reason && stringLike(reason)) checkLiteral(reason);
     }
     if (basename(path) === RULE_MESSAGE_FILE && stringLike(node) && isRuleMessage(node)) {
-      checkText(path, text, titleText(node), node.getStart(sourceFile), findings);
+      checkLiteral(node);
     }
     if (stringLike(node)) {
       const inline = inlineKind(node);
       const start = node.getStart(sourceFile) + 1;
       const raw = node.getText(sourceFile).slice(1, -1);
-      if (inline === 'template') {
-        for (const comment of htmlComments(raw)) {
-          checkText(path, text, comment.text, start + comment.start, findings);
-        }
-      } else if (inline === 'styles') {
-        for (const comment of cssComments(raw)) {
-          checkText(path, text, comment.text, start + comment.start, findings);
-        }
-      }
+      const comments =
+        inline === 'template' ? htmlComments(raw) : inline === 'styles' ? cssComments(raw) : [];
+      for (const comment of comments) report(comment.text, start + comment.start);
     }
     ts.forEachChild(node, visit);
   };
@@ -313,9 +337,8 @@ export function findReferences(files) {
       scanScript(path, text, findings);
       continue;
     }
-    for (const comment of commentsOf(path, text)) {
-      checkText(path, text, comment.text, comment.start, findings);
-    }
+    const report = reporter(path, text, findings);
+    for (const comment of commentsOf(path, text)) report(comment.text, comment.start);
   }
   return findings.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
 }
@@ -360,7 +383,7 @@ if (import.meta.main) {
   if (findings.length > 0) {
     for (const finding of findings) console.error(describeFinding(finding));
     console.error(
-      `${findings.length} tracker reference(s) in comments or test titles. Move them to the commit, PR, or ADR (AGENTS.md, Code comments).`,
+      `${findings.length} tracker reference(s) in comments, test titles, skip reasons, or ESLint rule messages. Move them to the commit, PR, or ADR (AGENTS.md, Code comments).`,
     );
     process.exitCode = 1;
   }

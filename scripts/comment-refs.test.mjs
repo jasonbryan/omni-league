@@ -96,6 +96,16 @@ describe('the colour rule', () => {
     flagged('src/a.ts', '// closes: #12');
   });
 
+  it('flags an issue number after prose that follows a colour-like label', () => {
+    flagged('src/a.ts', '// Background: the fix in #274 moved this');
+    flagged('src/a.ts', '// Border: see #12');
+    flagged('src/a.css', 'a {\n  /* color: issue fixed in #274 */\n}');
+  });
+
+  it('accepts a colour after a multi-part CSS value', () => {
+    accepted('src/a.css', '/* box-shadow: 0 0 0 2px #000 */');
+  });
+
   it('accepts an HTML entity', () => {
     accepted('src/a.ts', '// renders &#39; for the apostrophe');
   });
@@ -122,6 +132,21 @@ describe('the anchor rule', () => {
     flagged('convex/a.test.ts', '// seeds #100/#101 apart');
     // The first number is a path anchor, so only the second can be what flags this line.
     flagged('convex/a.test.ts', '// docs/a.md#100/#101');
+  });
+
+  it('accepts a fragment after a URL in parentheses, angle brackets, or quotes', () => {
+    accepted('src/a.ts', '// see (https://example.com/page#123)');
+    accepted('src/a.ts', '// see <https://example.com/page#123>');
+    accepted('src/a.ts', '// see "https://example.com/page#123"');
+    accepted('.github/workflows/a.yml', '# see (https://example.com/page#123)');
+  });
+
+  it('flags a URL that ends before a number', () => {
+    flagged('src/a.ts', '// see (https://example.com/page) #123');
+  });
+
+  it('flags a number followed by a dashed word', () => {
+    flagged('src/a.ts', '// see #3-gates');
   });
 
   it('flags a number after a path with a space before the hash', () => {
@@ -208,6 +233,11 @@ describe('the hash-comment files', () => {
     accepted(yml, 'run: echo ${#specs[@]} $#');
   });
 
+  it('reads a comment after an apostrophe inside a plain value', () => {
+    flagged(yml, "key: it's fine # see #12");
+    accepted(yml, "key: it's fine # a why");
+  });
+
   it('does not read a hash that follows a word character', () => {
     accepted(yml, 'run: echo a#12');
   });
@@ -268,6 +298,25 @@ describe('the test titles', () => {
     });
   }
 
+  it('flags a tagged-template table of it.each, test.each, and describe.each', () => {
+    flagged('e2e/a.spec.ts', "it.each`\n a | b\n ${1} | ${2}\n`('x issue 12', () => {});");
+    flagged('e2e/a.spec.ts', "test.each`\n a\n ${1}\n`('x issue 12', () => {});");
+    flagged('e2e/a.spec.ts', "describe.each`\n a\n ${1}\n`('x issue 12', () => {});");
+    accepted('e2e/a.spec.ts', "it.each`\n a\n ${1}\n`('shows the roster', () => {});");
+  });
+
+  it('counts file lines, not the line breaks an escape spells', () => {
+    assert.deepEqual(lines('e2e/a.spec.ts', "test('a\\nb #12', () => {});"), [1]);
+    assert.deepEqual(
+      lines('e2e/a.spec.ts', "test('a\\nb', () => {});\ntest('c #12', () => {});"),
+      [2],
+    );
+  });
+
+  it('counts file lines across a multi-line substitution', () => {
+    assert.deepEqual(lines('e2e/a.spec.ts', 'test(`a ${\n  name\n} issue 12`, () => {});'), [3]);
+  });
+
   it('reports the line of the title', () => {
     assert.deepEqual(
       lines(
@@ -294,6 +343,15 @@ describe('the test titles', () => {
     accepted('e2e/a.spec.ts', "test('shows it', async () => { await page.goto('/issue 12'); });");
     accepted('e2e/a.spec.ts', "someOther('issue 12', () => {});");
     accepted('e2e/a.spec.ts', "test.use({ name: 'issue 12' });");
+  });
+});
+
+describe('the scan cost', () => {
+  it('stays linear in the number of comments in a file', () => {
+    const text = `${'// a why\n'.repeat(100_000)}// see #12\n`;
+    const started = performance.now();
+    assert.deepEqual(lines('src/a.ts', text), [100_001]);
+    assert.ok(performance.now() - started < 10_000);
   });
 });
 
