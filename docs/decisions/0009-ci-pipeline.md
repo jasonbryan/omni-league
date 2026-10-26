@@ -8,6 +8,7 @@
 - **Amended:** 2026-10-08, wording only: the `scope` step's rename handling and code-extension rule, as shipped in #12 (PR #39). See "Amendment: scope step (2026-10-08)" at the end.
 - **Amended:** 2026-10-08 (#47): every npm cooldown window (default, patch, minor, major) equals ADR 0003's `min-release-age` of 3 days, TypeScript majors are ignored, and two statements about security updates are corrected. See "Amendment: release age and Dependabot cooldown (2026-10-08)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-12 (#178): Playwright `workers: 2` in CI and `timeout-minutes: 45` on `ci`, because the suite outgrew one worker and 25 minutes. See "Amendment: e2e workers and job timeout (2026-10-12)" at the end. Where the sections above say `workers: 1` or `timeout-minutes: 25`, the amendment applies.
+- **Amended:** 2026-10-26: `ci` runs no e2e tests; the full e2e suite, the Convex backend push, and the codegen drift check run once a day on `main` in a second workflow, `e2e.yml`. See "Amendment: e2e only nightly, in its own workflow (2026-10-26)" at the end. Where the sections above or the #186 amendment put e2e steps in `ci`, this amendment applies.
 
 ## Context
 
@@ -802,3 +803,29 @@ Issue #186. After #178 and #181, an app PR's `ci` takes about 21 to 25 minutes (
 **Minutes.** A mapped PR is estimated at about 13 minutes on average (the 4.8 minutes outside the `e2e` step, the step's build and push, and 1 to 10 minutes of specs: a change in one area runs a few specs, a sign-in, sign-up, account, `users`, or home-page change, or a `leagues`, `locations`, or `invites` Convex change, runs ten or more) and a full run is 19 to 25 (measured twice on #186's own tree, 471 listed tests; 25 is used below). A nightly run costs about 25 and happens only on a night with a new commit on `main`, about 20 of 30 at ADR 0009's volume (500 minutes a month) and about 28 at the 10 to 12 Oct pace (700). At ADR 0009's volume (50 app PRs and 5 Dependabot runs a month, 70% of PRs mapped) the total is about 1,700 minutes, just over the 1,500-minute budget rule and about 100 minutes above the same counts without #186 at the same run length, because the nightly runs cost more than affected specs save at that volume (without the quiet-night skip, about 1,950). At the 10 to 12 Oct pace (about 200 app runs a month) it is about 4,200 against about 5,200. The saving grows with PR volume; the nightly cost is capped at one full run per night with a merge. The figures and their sources are in the "Minutes" table of [`docs/process/ci.md`](../process/ci.md#minutes), and the first measured affected-spec and nightly runs replace the estimates there.
 
 **Security.** The workflow's top-level permissions stay `contents: read`; `nightly-issue` has `issues: write` and `nightly-gate` has `actions: read`, each on its own job. It runs no checkout and no action, and takes the failing test names from a job output that reaches the shell through `env:` only. No secret is added, no action is added, and every action stays pinned to a full SHA.
+
+## Amendment: e2e only nightly, in its own workflow (2026-10-26)
+
+The account's Actions minutes ran out, and every run from 2026-10-15 on failed before starting. The owner's direction, in chat on 2026-10-26:
+
+> "remove the e2e tests as part of the ci deployment. have that on the side which runs daily"
+
+The owner also made the repository public the same day, so Actions minutes for it are no longer billed.
+
+| Item                         | Before (#186)                                                                      | After                                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| e2e on a PR's `ci`           | affected specs, or the full suite                                                  | none                                                                                                           |
+| Backend push and drift check | in `ci`, every `app` run                                                           | in `e2e.yml` only                                                                                              |
+| Nightly run                  | `schedule` on `ci.yml`, job `ci`                                                   | `schedule` (`17 3 * * *`) on `e2e.yml`, job `e2e`: install, browsers, backend, drift check, full suite, report |
+| Quiet nights and the issue   | `nightly-gate`, `nightly-issue` in `ci.yml`                                        | the same jobs, moved unchanged to `e2e.yml`; the gate looks up the last green scheduled `e2e.yml` run          |
+| WebKit                       | release PRs into `production`, and `workflow_dispatch` on `CI` with `webkit: true` | `workflow_dispatch` on `E2E` with `webkit: true` only; the deployer dispatches it on the release branch        |
+| Required check               | `ci`                                                                               | `ci` (unchanged); `E2E` has no PR trigger and is not required                                                  |
+| `ci` timeout                 | 45 minutes                                                                         | 20 minutes                                                                                                     |
+
+**Why a second workflow now.** The #186 amendment kept the nightly run in `ci.yml` to avoid copying about a dozen steps. With no e2e left in `ci`, the nightly job shares only checkout, setup-node, and install with it, so a separate file copies three steps and keeps each workflow's conditions simple. The required check name stays `ci`.
+
+**What a PR loses.** An e2e regression or a `convex/_generated` drift is no longer caught before merge; the next nightly run catches it and opens the `Nightly e2e failed on main` issue. The tester still runs `npm run e2e:affected` locally before `PASS` ([dev cycle, Test](../process/dev-cycle.md#5-test)), so the PR-level net is the local run.
+
+**Minutes.** An app PR's `ci` drops from about 13 to 25 minutes to about 5 to 6 (the measured 4.8 minutes outside e2e in #186's run, plus about 0.5 for the Chromium install that `test:scripts` uses). The nightly run is unchanged at about 20 to 25 minutes on a night with new commits.
+
+**Security.** Unchanged: top-level `contents: read` in both workflows, `actions: read` on `nightly-gate` and `issues: write` on `nightly-issue` only, no secret, every action pinned to a full SHA. `scripts/ci-workflow.test.mjs` checks that `ci` has no e2e step and no schedule; `scripts/e2e-workflow.test.mjs` checks `e2e.yml`.

@@ -26,16 +26,20 @@ describe('ci workflow step order', () => {
 
   it('reads the steps of the ci job', () => {
     assert.ok(names.includes('format:check'), names.join(', '));
-    assert.ok(names.includes('e2e backend'), names.join(', '));
+    assert.ok(names.includes('test:scripts'), names.join(', '));
   });
 
-  it('runs test:scripts after e2e browsers and before e2e backend', () => {
-    const browsers = names.indexOf('e2e browsers');
+  it('runs no e2e step and has no schedule: the e2e suite runs in e2e.yml', () => {
+    for (const name of names) assert.doesNotMatch(name, /e2e/, name);
+    assert.doesNotMatch(workflow, /npm run e2e|e2e-convex|schedule:/);
+  });
+
+  it('runs test:scripts right after the chromium install, as the last step', () => {
+    const chromium = names.indexOf('chromium');
     const scripts = names.indexOf('test:scripts');
-    const backend = names.indexOf('e2e backend');
-    assert.ok(browsers !== -1 && scripts !== -1 && backend !== -1, names.join(', '));
-    assert.equal(scripts, browsers + 1, 'test:scripts directly follows e2e browsers');
-    assert.equal(backend, scripts + 1, 'e2e backend directly follows test:scripts');
+    assert.ok(chromium !== -1 && scripts !== -1, names.join(', '));
+    assert.equal(scripts, chromium + 1, 'test:scripts directly follows chromium');
+    assert.equal(scripts, names.length - 1, 'test:scripts is the last step');
   });
 
   it('gives test:scripts the checks condition, not success()', () => {
@@ -47,14 +51,7 @@ describe('ci workflow step order', () => {
   });
 
   it('runs the build-dependent steps only for app scope', () => {
-    const appOnly = [
-      'audit signatures',
-      'test',
-      'test:convex',
-      'build',
-      'e2e browsers',
-      'e2e backend',
-    ];
+    const appOnly = ['audit signatures', 'test', 'test:convex', 'build', 'chromium'];
     for (const name of appOnly) {
       const step = ciSteps().find((candidate) => candidate.name === name);
       assert.match(step?.condition ?? '', /steps\.scope\.outputs\.app == 'true'/, name);
@@ -81,11 +78,21 @@ describe('ci workflow step order', () => {
     assert.match(workflow, /scope=app\\napp=true\\nchecks=true\\ntypecheck=true\\n/);
   });
 
-  it('keeps success() on e2e browsers and e2e backend', () => {
-    for (const name of ['e2e browsers', 'e2e backend']) {
-      const step = ciSteps().find((candidate) => candidate.name === name);
-      assert.equal(step?.condition, "${{ success() && steps.scope.outputs.app == 'true' }}", name);
-    }
+  it('keeps success() on the chromium install', () => {
+    const step = ciSteps().find((candidate) => candidate.name === 'chromium');
+    assert.equal(step?.condition, "${{ success() && steps.scope.outputs.app == 'true' }}");
+  });
+
+  it('skips the ci job for a push and a draft PR only', () => {
+    assert.match(
+      workflow,
+      /^ {4}if: \$\{\{ github\.event_name != 'push' && !github\.event\.pull_request\.draft \}\}$/m,
+    );
+  });
+
+  it('keeps warm-cache to pushes to main', () => {
+    const job = /^ {2}warm-cache:\n([\s\S]*)/m.exec(workflow)?.[1] ?? '';
+    assert.match(job, /^ {4}if: \$\{\{ github\.event_name == 'push' \}\}$/m);
   });
 });
 
