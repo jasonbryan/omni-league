@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 const workflow = readFileSync(
-  join(import.meta.dirname, '..', '.github', 'workflows', 'ci.yml'),
+  join(import.meta.dirname, '..', '.github', 'workflows', 'e2e.yml'),
   'utf8',
 );
 
@@ -18,9 +18,9 @@ function job(name) {
   return block[1];
 }
 
-function ciSteps() {
+function e2eSteps() {
   const steps = [];
-  for (const [, block] of job('ci').matchAll(/^ {6}- ([\s\S]*?)(?=^ {6}- |(?![\s\S]))/gm)) {
+  for (const [, block] of job('e2e').matchAll(/^ {6}- ([\s\S]*?)(?=^ {6}- |(?![\s\S]))/gm)) {
     const name = /^name: (.+)$/m.exec(block)?.[1];
     const condition = /^ {8}if: (.+)$/m.exec(block)?.[1];
     if (name) steps.push({ name, condition });
@@ -39,7 +39,7 @@ function stepScript(name) {
 }
 
 describe('the nightly full run', () => {
-  const names = ciSteps().map((step) => step.name);
+  const names = e2eSteps().map((step) => step.name);
 
   it('is one schedule trigger, once a day', () => {
     const on = /^on:\n([\s\S]*?)(?=^\S)/m.exec(workflow)?.[1] ?? '';
@@ -52,23 +52,18 @@ describe('the nightly full run', () => {
     assert.doesNotMatch(workflow, /pull_request_target/);
   });
 
-  it('runs the ci job for a schedule: only a push and a draft PR are skipped', () => {
-    assert.match(
-      job('ci'),
-      /^ {4}if: \$\{\{ !cancelled\(\) && github\.event_name != 'push' && !github\.event\.pull_request\.draft && needs\.nightly-gate\.outputs\.skip != 'true' \}\}$/m,
-    );
+  it('runs only on the schedule and on dispatch: no PR or push trigger', () => {
+    const on = /^on:\n([\s\S]*?)(?=^\S)/m.exec(workflow)?.[1] ?? '';
+    const triggers = [...on.matchAll(/^ {2}(\w+):/gm)].map((match) => match[1]);
+    assert.deepEqual(triggers, ['schedule', 'workflow_dispatch']);
   });
 
-  it('keeps warm-cache to pushes to main', () => {
-    assert.match(job('warm-cache'), /^ {4}if: \$\{\{ github\.event_name == 'push' \}\}$/m);
-  });
-
-  it('opens the issue in a job after ci, only for a failed scheduled run', () => {
+  it('opens the issue in a job after e2e, only for a failed scheduled run', () => {
     const issue = job('nightly-issue');
-    assert.match(issue, /^ {4}needs: ci$/m);
+    assert.match(issue, /^ {4}needs: e2e$/m);
     assert.match(
       issue,
-      /^ {4}if: \$\{\{ !cancelled\(\) && needs\.ci\.result == 'failure' && github\.event_name == 'schedule' \}\}$/m,
+      /^ {4}if: \$\{\{ !cancelled\(\) && needs\.e2e\.result == 'failure' && github\.event_name == 'schedule' \}\}$/m,
     );
   });
 
@@ -86,14 +81,14 @@ describe('the nightly full run', () => {
 
   it('pins every action to a full commit SHA', () => {
     const uses = [...workflow.matchAll(/^\s*(?:- )?uses: (\S+)/gm)].map((match) => match[1]);
-    assert.ok(uses.length >= 4, uses.join(', '));
+    assert.ok(uses.length >= 3, uses.join(', '));
     for (const reference of uses) {
       assert.match(reference, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/, reference);
     }
   });
 
   it('puts a timeout on every job', () => {
-    for (const name of ['ci', 'nightly-gate', 'nightly-issue', 'warm-cache']) {
+    for (const name of ['e2e', 'nightly-gate', 'nightly-issue']) {
       assert.match(job(name), /^ {4}timeout-minutes: \d+$/m, name);
     }
   });
@@ -101,203 +96,32 @@ describe('the nightly full run', () => {
   it('lists the failing tests after e2e and before the report upload, for a scheduled failure', () => {
     assert.equal(names.indexOf('e2e failures'), names.indexOf('e2e') + 1, names.join(', '));
     assert.equal(names.indexOf('e2e report'), names.indexOf('e2e failures') + 1, names.join(', '));
-    const step = ciSteps().find((candidate) => candidate.name === 'e2e failures');
+    const step = e2eSteps().find((candidate) => candidate.name === 'e2e failures');
     assert.equal(
       step?.condition,
       "${{ !cancelled() && github.event_name == 'schedule' && steps.e2e.outcome == 'failure' }}",
     );
-    assert.match(job('ci'), /e2e_failures: \$\{\{ steps\.failures\.outputs\.failures \}\}/);
-    assert.match(job('nightly-issue'), /FAILURES: \$\{\{ needs\.ci\.outputs\.e2e_failures \}\}/);
+    assert.match(job('e2e'), /e2e_failures: \$\{\{ steps\.failures\.outputs\.failures \}\}/);
+    assert.match(job('nightly-issue'), /FAILURES: \$\{\{ needs\.e2e\.outputs\.e2e_failures \}\}/);
   });
 });
 
-describe('the e2e specs step', () => {
-  const names = ciSteps().map((step) => step.name);
+describe('the e2e job', () => {
+  const names = e2eSteps().map((step) => step.name);
 
-  it('runs right after scope, for app scope only', () => {
-    assert.equal(names[0], 'scope');
-    assert.equal(names[1], 'e2e specs');
-    const step = ciSteps().find((candidate) => candidate.name === 'e2e specs');
-    assert.equal(step?.condition, "${{ steps.scope.outputs.app == 'true' }}");
-  });
-
-  it('feeds the e2e step, which still runs after a drift failure', () => {
+  it('runs every spec, with no selection', () => {
+    assert.ok(!names.includes('e2e specs'), names.join(', '));
     const e2e = /^ {6}- name: e2e\n([\s\S]*?)(?=^ {6}- name:)/m.exec(workflow)?.[1] ?? '';
-    assert.match(e2e, /E2E_SCOPE: \$\{\{ steps\.specs\.outputs\.e2e_scope \}\}/);
-    assert.match(e2e, /E2E_SPECS: \$\{\{ steps\.specs\.outputs\.e2e_specs \}\}/);
-    assert.match(e2e, /if: \$\{\{ !cancelled\(\) && steps\.e2e-backend\.outcome == 'success' \}\}/);
+    assert.match(e2e, /^ {8}run: npm run e2e$/m);
   });
 
-  const write = (repo, path, text) => {
-    mkdirSync(dirname(join(repo, path)), { recursive: true });
-    writeFileSync(join(repo, path), text);
-  };
-
-  /**
-   * @param {(repo: string, git: (...args: string[]) => void) => void} prepare
-   * @param {string} event
-   */
-  function runSpecsStep(prepare, event = 'pull_request') {
-    const repo = mkdtempSync(join(tmpdir(), 'e2e-specs-step-'));
-    try {
-      const git = (...args) => {
-        const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
-        assert.equal(result.status, 0, result.stderr);
-      };
-      git('init', '-q');
-      git('config', 'user.email', 'test@example.com');
-      git('config', 'user.name', 'test');
-      git('config', 'commit.gpgsign', 'false');
-      mkdirSync(join(repo, 'scripts'));
-      copyFileSync(
-        join(import.meta.dirname, 'e2e-affected.mjs'),
-        join(repo, 'scripts', 'e2e-affected.mjs'),
-      );
-      prepare(repo, git);
-      const output = join(repo, 'github-output');
-      writeFileSync(output, '');
-      const result = spawnSync('bash', ['-e', '-c', stepScript('e2e specs')], {
-        cwd: repo,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          GITHUB_OUTPUT: output,
-          GITHUB_EVENT_NAME: event,
-          GITHUB_BASE_REF: 'main',
-        },
-      });
-      return {
-        status: result.status,
-        stdout: result.stdout,
-        outputs: readFileSync(output, 'utf8'),
-      };
-    } finally {
-      rmSync(repo, { recursive: true, force: true });
-    }
-  }
-
-  const changeFile = (path) => (repo, git) => {
-    write(repo, path, 'one\n');
-    git('add', '.');
-    git('commit', '-q', '-m', 'base');
-    write(repo, path, 'two\n');
-    git('add', '.');
-    git('commit', '-q', '-m', 'change');
-  };
-
-  it('writes the affected specs for the files the last commit changed', () => {
-    const run = runSpecsStep(changeFile('src/app/invites/accept-invite-page.ts'));
-    assert.equal(run.status, 0);
-    assert.equal(
-      run.outputs,
-      'e2e_scope=affected\ne2e_specs=e2e/accept-invite.spec.ts e2e/harness/ e2e/smoke.spec.ts\n',
-    );
-    assert.doesNotMatch(run.stdout, /::warning::/);
+  it('runs e2e after a drift failure, but only once the backend is up', () => {
+    const step = e2eSteps().find((candidate) => candidate.name === 'e2e');
+    assert.equal(step?.condition, "${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}");
   });
 
-  it('writes the full scope for a shared file', () => {
-    const run = runSpecsStep(changeFile('src/app/shell/shell.ts'));
-    assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
-  });
-
-  it('writes the full scope for a sign-up change when the e2e specs cannot be read', () => {
-    // The scratch repository has no e2e/ directory, so the session specs cannot be derived.
-    const run = runSpecsStep(changeFile('src/app/sign-up/sign-up-page.ts'));
-    assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
-  });
-
-  it('writes the full scope for a scheduled run, whatever changed', () => {
-    const run = runSpecsStep(changeFile('src/app/invites/accept-invite-page.ts'), 'schedule');
-    assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
-  });
-
-  it('warns and writes the full scope when git diff fails (no parent commit)', () => {
-    const run = runSpecsStep((repo, git) => {
-      write(repo, 'src/app/invites/accept-invite-page.ts', 'one\n');
-      git('add', '.');
-      git('commit', '-q', '-m', 'only');
-    });
-    assert.equal(run.status, 0);
-    assert.match(run.stdout, /::warning::e2e spec selection failed; running the full suite/);
-    assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
-  });
-
-  it('warns and writes the full scope when the selection script is broken', () => {
-    const run = runSpecsStep((repo, git) => {
-      write(repo, 'src/app/invites/accept-invite-page.ts', 'one\n');
-      git('add', '.');
-      git('commit', '-q', '-m', 'base');
-      write(repo, 'src/app/invites/accept-invite-page.ts', 'two\n');
-      write(repo, 'scripts/e2e-affected.mjs', 'throw new Error("broken");\n');
-      git('add', '.');
-      git('commit', '-q', '-m', 'change');
-    });
-    assert.equal(run.status, 0);
-    assert.match(run.stdout, /::warning::e2e spec selection failed/);
-    assert.equal(run.outputs, 'e2e_scope=full\ne2e_specs=\n');
-  });
-});
-
-describe('the e2e step', () => {
-  /**
-   * @param {Record<string, string>} env
-   * @returns {string[]}
-   */
-  function npmArguments(env) {
-    const dir = mkdtempSync(join(tmpdir(), 'e2e-step-'));
-    try {
-      const log = join(dir, 'args');
-      writeFileSync(
-        join(dir, 'npm'),
-        '#!/bin/sh\nfor a in "$@"; do echo "$a"; done > "$NPM_LOG"\n',
-        { mode: 0o755 },
-      );
-      const result = spawnSync('bash', ['-e', '-c', stepScript('e2e')], {
-        cwd: dir,
-        encoding: 'utf8',
-        env: { PATH: `${dir}:${process.env.PATH}`, NPM_LOG: log, ...env },
-      });
-      assert.equal(result.status, 0, result.stderr);
-      return readFileSync(log, 'utf8').split('\n').filter(Boolean);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }
-
-  it('passes an affected selection to Playwright after --', () => {
-    assert.deepEqual(
-      npmArguments({
-        E2E_SCOPE: 'affected',
-        E2E_SPECS: 'e2e/accept-invite.spec.ts e2e/harness/ e2e/smoke.spec.ts',
-      }),
-      ['run', 'e2e', '--', 'e2e/accept-invite.spec.ts', 'e2e/harness/', 'e2e/smoke.spec.ts'],
-    );
-  });
-
-  it('runs every spec for the full scope, even when specs are listed', () => {
-    assert.deepEqual(npmArguments({ E2E_SCOPE: 'full', E2E_SPECS: 'e2e/smoke.spec.ts' }), [
-      'run',
-      'e2e',
-      '--',
-    ]);
-  });
-
-  it('runs every spec when the specs step did not run or printed nothing', () => {
-    assert.deepEqual(npmArguments({ E2E_SCOPE: '', E2E_SPECS: '' }), ['run', 'e2e', '--']);
-    assert.deepEqual(npmArguments({}), ['run', 'e2e', '--']);
-  });
-
-  it('runs every spec for an affected selection with no specs', () => {
-    assert.deepEqual(npmArguments({ E2E_SCOPE: 'affected', E2E_SPECS: '' }), ['run', 'e2e', '--']);
-  });
-
-  it('passes a glob character through unexpanded', () => {
-    assert.deepEqual(npmArguments({ E2E_SCOPE: 'affected', E2E_SPECS: '*.spec.ts' }), [
-      'run',
-      'e2e',
-      '--',
-      '*.spec.ts',
-    ]);
+  it('adds WebKit only on a dispatch that asks for it', () => {
+    assert.match(job('e2e'), /E2E_WEBKIT: \$\{\{ inputs\.webkit == true && '1' \|\| '0' \}\}/);
   });
 });
 
@@ -390,22 +214,21 @@ describe('the nightly issue step', () => {
 });
 
 describe('skipping a quiet night', () => {
-  it('gates ci behind a job that runs for a schedule only', () => {
+  it('gates e2e behind a job that runs for a schedule only', () => {
     const gate = job('nightly-gate');
     assert.match(gate, /^ {4}if: \$\{\{ github\.event_name == 'schedule' \}\}$/m);
-    assert.match(job('ci'), /^ {4}needs: nightly-gate$/m);
+    assert.match(job('e2e'), /^ {4}needs: nightly-gate$/m);
   });
 
-  it('lets ci run when the gate was skipped or failed, and skips it only on skip=true', () => {
-    const condition = /^ {4}if: (.+)$/m.exec(job('ci'))?.[1] ?? '';
-    assert.match(condition, /^\$\{\{ !cancelled\(\) && /, 'a skipped gate does not skip ci');
+  it('lets e2e run when the gate was skipped or failed, and skips it only on skip=true', () => {
+    const condition = /^ {4}if: (.+)$/m.exec(job('e2e'))?.[1] ?? '';
+    assert.match(condition, /^\$\{\{ !cancelled\(\) && /, 'a skipped gate does not skip e2e');
     assert.match(condition, /needs\.nightly-gate\.outputs\.skip != 'true'/);
     assert.doesNotMatch(condition, /needs\.nightly-gate\.result/, 'a failed gate runs the suite');
-    assert.match(condition, /github\.event_name != 'push' && !github\.event\.pull_request\.draft/);
   });
 
-  it('opens no nightly issue because the gate failed or ci was skipped', () => {
-    assert.match(job('nightly-issue'), /needs\.ci\.result == 'failure'/);
+  it('opens no nightly issue because the gate failed or e2e was skipped', () => {
+    assert.match(job('nightly-issue'), /needs\.e2e\.result == 'failure'/);
   });
 
   it('gives the gate actions: read and nothing else, with the workflow token only', () => {
@@ -467,11 +290,11 @@ describe('skipping a quiet night', () => {
     assert.match(run.stdout, /^::notice::main is still abcdef0, the commit the last successful/m);
   });
 
-  it('asks for the last successful scheduled run of ci.yml on main', () => {
+  it('asks for the last successful scheduled run of e2e.yml on main', () => {
     const { args } = runGate({ output: 'abcdef0123456789' });
     assert.deepEqual(args.slice(0, 2), ['run', 'list']);
     for (const [flag, value] of [
-      ['--workflow', 'ci.yml'],
+      ['--workflow', 'e2e.yml'],
       ['--event', 'schedule'],
       ['--status', 'success'],
       ['--branch', 'main'],

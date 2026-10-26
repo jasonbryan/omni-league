@@ -7,14 +7,7 @@ on:
   push:
     branches: [main]
     paths: [package-lock.json, .github/workflows/ci.yml]
-  schedule:
-    - cron: '17 3 * * *'
   workflow_dispatch:
-    inputs:
-      webkit:
-        description: Also run the webkit-mobile e2e project
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -28,43 +21,12 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
 jobs:
-  # Any failure to look the run up leaves `skip` empty, and `ci` runs the full suite.
-  nightly-gate:
-    name: nightly-gate
-    if: ${{ github.event_name == 'schedule' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      actions: read
-    outputs:
-      skip: ${{ steps.last-green.outputs.skip }}
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      HEAD_SHA: ${{ github.sha }}
-    steps:
-      - name: last green night
-        id: last-green
-        run: |
-          if last="$(gh run list --workflow ci.yml --event schedule --status success --branch main --limit 1 --json headSha --jq '.[0].headSha // empty')" && [ -n "$last" ] && [ "$last" = "$HEAD_SHA" ]; then
-            echo "::notice::main is still ${HEAD_SHA:0:7}, the commit the last successful nightly run tested; skipping tonight's run"
-            echo 'skip=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'skip=false' >> "$GITHUB_OUTPUT"
-          fi
-
   ci:
     name: ci
-    needs: nightly-gate
-    # Drafts and the cache-warming push get a skipped job: 0 billed minutes. !cancelled() lets `ci` run
-    # when nightly-gate was skipped (every event but a schedule) or failed (fail safe: run everything).
-    if: ${{ !cancelled() && github.event_name != 'push' && !github.event.pull_request.draft && needs.nightly-gate.outputs.skip != 'true' }}
+    # Drafts and the cache-warming push get a skipped job: 0 billed minutes.
+    if: ${{ github.event_name != 'push' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    outputs:
-      e2e_failures: ${{ steps.failures.outputs.failures }}
-    env:
-      E2E_WEBKIT: ${{ (github.base_ref == 'production' || inputs.webkit == true) && '1' || '0' }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,18 +44,6 @@ jobs:
           else
             echo "::warning::scope detection failed; running every check"
             printf 'scope=app\napp=true\nchecks=true\ntypecheck=true\n' >> "$GITHUB_OUTPUT"
-          fi
-      - name: e2e specs
-        id: specs
-        if: ${{ steps.scope.outputs.app == 'true' }}
-        run: |
-          set -o pipefail
-          if outputs="$(git diff --no-renames --name-only HEAD^1 HEAD | node scripts/e2e-affected.mjs)" && [ -n "$outputs" ]; then
-            printf '%s\n' "$outputs" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "$outputs"
-          else
-            echo "::warning::e2e spec selection failed; running the full suite"
-            printf 'e2e_scope=full\ne2e_specs=\n' >> "$GITHUB_OUTPUT"
           fi
       # Every npm Dependabot cooldown window must equal .npmrc min-release-age.
       - name: release age
@@ -176,98 +126,14 @@ jobs:
           echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check --strict
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint -color
-      # Headless shell only: the Playwright config sets no channel.
-      - name: e2e browsers
+      # build-icons.test.mjs re-renders the icons in Chromium, and skips that check without it.
+      - name: chromium
         if: ${{ success() && steps.scope.outputs.app == 'true' }}
-        run: |
-          npx playwright install --with-deps --only-shell chromium
-          if [ "$E2E_WEBKIT" = "1" ]; then
-            npx playwright install --with-deps webkit
-          fi
-      # After e2e browsers so build-icons.test.mjs re-renders the icons in Chromium instead of skipping.
+        run: npx playwright install --with-deps --only-shell chromium
       # !cancelled(), not success(): it still reports its own failures when an earlier check failed.
       - name: test:scripts
         if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.scope.outputs.checks == 'true' }}
         run: npm run test:scripts
-      - name: e2e backend
-        id: e2e-backend
-        if: ${{ success() && steps.scope.outputs.app == 'true' }}
-        run: node scripts/e2e-convex.mjs push
-      - name: convex codegen drift
-        if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
-        run: |
-          drift=0
-          git diff --exit-code convex/_generated || drift=1
-          untracked="$(git status --porcelain --untracked-files=all -- convex/_generated)"
-          if [ -n "$untracked" ]; then
-            echo "$untracked"
-            echo "::error::codegen wrote files that are not committed under convex/_generated"
-            drift=1
-          fi
-          exit "$drift"
-      # Runs after a drift failure too, so one run reports both.
-      - name: e2e
-        id: e2e
-        if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
-        env:
-          E2E_SCOPE: ${{ steps.specs.outputs.e2e_scope }}
-          E2E_SPECS: ${{ steps.specs.outputs.e2e_specs }}
-        run: |
-          specs=()
-          if [ "$E2E_SCOPE" = "affected" ]; then
-            read -r -a specs <<< "$E2E_SPECS"
-          fi
-          echo "e2e: ${#specs[@]} spec filter(s); none means every spec"
-          npm run e2e -- "${specs[@]}"
-      - name: e2e failures
-        id: failures
-        if: ${{ !cancelled() && github.event_name == 'schedule' && steps.e2e.outcome == 'failure' }}
-        run: node scripts/e2e-failures.mjs >> "$GITHUB_OUTPUT"
-      - name: e2e report
-        if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: e2e-report
-          path: |
-            playwright-report/
-            test-results/
-            e2e/screenshots/
-          retention-days: 7
-          if-no-files-found: ignore
-
-  # issues: write for this job only; no checkout, no other secret.
-  nightly-issue:
-    name: nightly-issue
-    needs: ci
-    if: ${{ !cancelled() && needs.ci.result == 'failure' && github.event_name == 'schedule' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      issues: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      FAILURES: ${{ needs.ci.outputs.e2e_failures }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      COMMIT: ${{ github.sha }}
-      ISSUE_TITLE: Nightly e2e failed on main
-    steps:
-      - name: open or update the issue
-        run: |
-          failures="$(printf '%s' "${FAILURES:-[]}" | jq -c 'if type == "array" then . else [] end' 2>/dev/null)" || failures='[]'
-          [ -n "$failures" ] || failures='[]'
-          body="$(jq -rn --arg run "$RUN_URL" --arg commit "${COMMIT:0:7}" --argjson failures "$failures" '
-            "Nightly e2e: FAIL (main \($commit))\n\nRun: \($run)\n\n"
-            + (if ($failures | length) > 0
-               then "Failing tests:\n" + ($failures | map("- `" + gsub("`"; "\u0027") + "`") | join("\n"))
-               else "No failing test was recorded: a step before or after the e2e step failed. See the run." end)')"
-          number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
-            | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --body "$body"
-          else
-            gh issue create --title "$ISSUE_TITLE" --label type:bug --label status:ready --body "$body"
-          fi
 
   warm-cache:
     name: warm-cache
