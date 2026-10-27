@@ -617,3 +617,36 @@ describe('PublicLeaguePage page changes', () => {
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=2`);
   });
 });
+
+describe('PublicLeaguePage open season first and the seasons intro', () => {
+  const INTRO =
+    'Each season is one run of Sunday Reverse Coed 4s, with its own dates, registration, teams, and schedule.';
+
+  it('starts the open season card with "Registration open" and puts it before the Seasons heading', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const card = host(harness).querySelector('section#registration-open');
+    const seasons = host(harness).querySelector('section#seasons');
+    expect(text(card)).toMatch(/^Registration open /);
+    expect(card!.compareDocumentPosition(seasons!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('names the league in a line under the Seasons heading', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const panel = host(harness).querySelector('section#seasons');
+    const heading = panel?.querySelector('h2');
+    expect(text(heading?.parentElement?.nextElementSibling)).toBe(INTRO);
+  });
+
+  it('shows the same line above "No seasons yet" when the league has no season', async () => {
+    const harness = await open();
+    emit(leagueQueryResults({ league: { ...SUNDAY_4S, seasons: [] }, seasons: NO_SEASONS }));
+    await settle(harness);
+    const panelText = text(host(harness).querySelector('section#seasons'));
+    expect(panelText).toContain(INTRO);
+    expect(panelText.indexOf(INTRO)).toBeLessThan(panelText.indexOf('No seasons yet'));
+  });
+});

@@ -322,10 +322,19 @@ test.describe('public league page: raw server HTML', () => {
     RAW_HTTP,
     async ({ request }) => {
       const { tenant } = await seed();
-      for (const slug of ['only-drafts', 'quiet-league']) {
+      for (const [slug, leagueName] of [
+        ['only-drafts', 'Only Drafts'],
+        ['quiet-league', 'Quiet League'],
+      ]) {
         const { status, html } = await fetchRawHtml(request, `${tenant.path}/leagues/${slug}`);
         expect(status, slug).toBe(200);
         expect(html, slug).toContain('No seasons yet');
+        const seasonsText = plainText(sectionById(html, 'seasons'));
+        const intro = `Each season is one run of ${leagueName}, with its own dates, registration, teams, and schedule.`;
+        expect(seasonsText, slug).toContain(intro);
+        expect(seasonsText.indexOf(intro), slug).toBeLessThan(
+          seasonsText.indexOf('No seasons yet'),
+        );
         expect(plainText(html), slug).toContain(
           `When ${tenant.name} publishes a season, its dates and registration appear here.`,
         );
@@ -379,6 +388,10 @@ test.describe('public league page: raw server HTML', () => {
       expect(rows[1]).toContain('In progress');
       expect(rows[2]).toContain('Ended');
       expect(plainText(sectionById(html, 'seasons'))).toContain('3 seasons');
+      expect(plainText(sectionById(html, 'seasons'))).toContain(
+        'Each season is one run of Zeta Open, with its own dates, registration, teams, and schedule.',
+      );
+      expect(plainText(card)).toMatch(/^Registration open /);
 
       const where = plainText(sectionById(html, 'where'));
       expect(where).toContain(
