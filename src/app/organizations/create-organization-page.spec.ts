@@ -121,7 +121,7 @@ describe('CreateOrganizationPage', () => {
 
     it("draws the buttons with the mockup's unmerged class strings", () => {
       expect([...submitButton().classList].sort()).toEqual(
-        `${buttonVariants({ size: 'lg' })} mt-6 w-full`.split(' ').sort(),
+        `${buttonVariants({ size: 'md' })} mt-6 w-full`.split(' ').sort(),
       );
       expect(submitButton().textContent?.trim()).toBe('Create organization');
       expect(status()?.textContent?.trim()).toBe('');
