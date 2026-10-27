@@ -374,7 +374,9 @@ describe('AdminLeagues', () => {
         ]);
         expect(field.getAttribute('aria-describedby')).toBe(`${id}-description`);
       }
-      expect(text(page.querySelector('#name-description'))).toBe('Up to 100 characters.');
+      expect(text(page.querySelector('#name-description'))).toBe(
+        'The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.',
+      );
       expect(text(page.querySelector('#slug-description'))).toBe(
         '3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coastal Bend Rec Club.',
       );
@@ -648,7 +650,7 @@ describe('AdminLeagues', () => {
         'Sunday Reverse Coed 4s created as a draft.',
       );
       expect(text(status.querySelector('[data-slot="alert-description"]'))).toBe(
-        'Publish it when it’s ready for players to see. Add seasons to Sunday Reverse Coed 4s',
+        'Publish it when it’s ready for players to see. Add the first season to Sunday Reverse Coed 4s',
       );
       expect(
         status.compareDocumentPosition(input('name')) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -666,14 +668,14 @@ describe('AdminLeagues', () => {
       expect(form().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
     });
 
-    it('the success status links "Add seasons to <league>" to the league’s management page', async () => {
+    it('the success status links "Add the first season to <league>" to the league’s management page', async () => {
       await open([]);
       await fill();
       await submit();
       o.convex.calls[0].resolve({ leagueId: 'lg_new' });
       await o.flush();
       const link = form().querySelector<HTMLAnchorElement>('[data-slot="alert"] a')!;
-      expect(text(link)).toBe('Add seasons to Sunday Reverse Coed 4s');
+      expect(text(link)).toBe('Add the first season to Sunday Reverse Coed 4s');
       expect(link.getAttribute('href')).toBe(
         `/app/organizations/${COASTAL.slug}/leagues/sunday-reverse-coed-4s`,
       );

@@ -146,7 +146,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
             [class]="inputClass"
           />
           <p data-slot="field-description" id="league-name-description" [class]="descriptionClass">
-            Up to 100 characters.
+            The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.
           </p>
           @if (details.errors.name(); as error) {
             <div role="alert" data-slot="field-error" id="league-name-error" [class]="errorClass">

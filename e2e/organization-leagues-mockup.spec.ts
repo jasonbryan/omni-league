@@ -66,7 +66,7 @@ async function mockupText(page: Page, state: string, width: number): Promise<str
 }
 
 function normalize(text: string, organizations: string[]): string {
-  let result = text.replace(/ Add seasons to [^\n]*/g, '');
+  let result = text.replace(/ Add the first season to [^\n]*/g, '');
   for (const name of organizations) result = result.replaceAll(name, 'ORG');
   const lines = result
     .split('\n')

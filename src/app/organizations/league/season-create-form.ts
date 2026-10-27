@@ -90,7 +90,8 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         />
       }
       <p id="create-season-note" class="mb-5 text-sm text-muted-foreground">
-        New seasons start as drafts, which only your staff see.
+        A season is one run of {{ leagueName() }}, with its own dates, registration, teams, and
+        schedule. It starts as a draft, which only your staff see.
       </p>
       <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
         <div
@@ -117,7 +118,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             [class]="inputClass"
           />
           <p data-slot="field-description" id="name-description" [class]="descriptionClass">
-            Up to 100 characters, for example Spring 2028.
+            Up to 100 characters, for example Fall 2027. Players see it with the league’s name.
           </p>
           @if (form.errors.name(); as error) {
             <div role="alert" data-slot="field-error" id="name-error" [class]="errorClass">
