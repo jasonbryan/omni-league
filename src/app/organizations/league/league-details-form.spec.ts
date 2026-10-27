@@ -64,6 +64,7 @@ const SAVED_DIVISION = {
 const EARLIER = {
   league: { name: 'Sunday Reverse Coed 4s', ...SAVED_DIVISION },
   draftSeasons: [{ seasonId: 'se_fall27', playersPerSide: 4, minimumRosterSize: 4 }],
+  written: { name: 'Sunday Sand', ...SAVED_DIVISION, playersPerSide: 6 },
 };
 
 describe('LeagueDetailsForm', () => {
@@ -390,11 +391,80 @@ describe('LeagueDetailsForm', () => {
       );
     });
 
+    it('shows the server’s reason when the league changed since the save', async () => {
+      await saved();
+      undoButton()!.click();
+      await o.flush();
+      o.convex.calls[1].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'changedSince',
+          message: LEAGUE_MESSAGES.changedSince,
+        }),
+      );
+      await o.flush();
+      expect(text(status())).toContain(LEAGUE_MESSAGES.changedSince);
+    });
+
+    it('stays while the league shows what the save wrote', async () => {
+      await saved();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit({
+        ...SUNDAY,
+        name: 'Sunday Sand',
+        division: { ...SUNDAY.division, playersPerSide: 6 },
+      });
+      await o.flush();
+      expect(undoButton()).toBeDefined();
+    });
+
+    it('is gone once the league shows neither the saved values nor the earlier ones', async () => {
+      await saved();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit({ ...SUNDAY, name: 'Renamed by someone else' });
+      await o.flush();
+      expect(text(status())).toContain('League details saved.');
+      expect(undoButton()).toBeUndefined();
+    });
+
+    it('is not offered for a league that had no division before the save', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].resolve({ ...EARLIER, league: { name: 'Sunday Reverse Coed 4s' } });
+      await o.flush();
+      expect(text(status())).toContain('League details saved.');
+      expect(undoButton()).toBeUndefined();
+    });
+
+    it('goes away when the user edits the form again', async () => {
+      await saved();
+      await typeName('Sunday Sand again');
+      expect(status()!.textContent.trim()).toBe('');
+      expect(undoButton()).toBeUndefined();
+    });
+
+    it('does not start a save while the Undo is pending', async () => {
+      await saved();
+      undoButton()!.click();
+      await o.flush();
+      await submit();
+      expect(o.convex.calls).toHaveLength(2);
+    });
+
     it('is gone once the next save starts', async () => {
       await saved();
       await typeName('Sunday Sand 2');
       await submit();
       expect(undoButton()).toBeUndefined();
+    });
+  });
+
+  describe('a save and an Undo', () => {
+    it('do not start an Undo while the save is pending', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      expect(undoButton()).toBeUndefined();
+      expect(o.convex.calls).toHaveLength(1);
     });
   });
 

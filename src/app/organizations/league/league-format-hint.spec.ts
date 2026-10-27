@@ -1,4 +1,4 @@
-import { formatHint, publishedSeasons } from './league-format-hint';
+import { formatHint, publishedSeasonsEarliestFirst } from './league-format-hint';
 
 const LEAD = 'Players on each side, and so the minimum roster size.';
 
@@ -44,7 +44,7 @@ describe('formatHint', () => {
   });
 });
 
-describe('publishedSeasons', () => {
+describe('publishedSeasonsEarliestFirst', () => {
   const season = (name: string, startDate: string, status: 'draft' | 'published') => ({
     name,
     startDate,
@@ -54,7 +54,7 @@ describe('publishedSeasons', () => {
 
   it('lists published seasons only, earliest first', () => {
     expect(
-      publishedSeasons([
+      publishedSeasonsEarliestFirst([
         season('Fall 2027', '2027-09-12', 'published'),
         season('Winter 2027', '2027-12-12', 'draft'),
         season('Summer 2027', '2027-06-06', 'published'),

@@ -36,8 +36,10 @@ import {
   draftSeasonEarlierValidator,
   insertDraftLeague,
   leagueEarlierValidator,
+  leagueHolds,
   leagueSlugTaken,
   leagueUpdateEarlierValidator,
+  leagueWrittenValidator,
   MAX_DRAFT_SEASONS_UPDATED,
   publishLeague,
   restoreLeague,
@@ -227,28 +229,31 @@ export const undoUpdate = mutation({
     leagueId: v.id('leagues'),
     league: leagueEarlierValidator,
     draftSeasons: v.array(draftSeasonEarlierValidator),
+    written: leagueWrittenValidator,
   },
   returns: v.null(),
-  handler: async (ctx, { leagueId, league: values, draftSeasons }) => {
+  handler: async (ctx, { leagueId, league: values, draftSeasons, written }) => {
     const { league } = await requireLeagueOrganizer(ctx, leagueId);
+    if (!leagueHolds(league, written)) {
+      refuse({ field: 'name', code: 'changedSince', message: LEAGUE_MESSAGES.changedSince });
+    }
     // What `update` returned always passes these checks, so a failure is a caller sending its own values.
     const name = checkLeagueName(values.name);
     if (!name.ok || draftSeasons.length > MAX_DRAFT_SEASONS_UPDATED) throw new Error('Not allowed');
     const { gender, playersPerSide, level, ageGroup, customLevelId, minimumRosterSize } = values;
+    // A league without a division cannot be put back to one, so no screen lets a save strip it.
     if (gender === undefined || playersPerSide === undefined || level === undefined) {
-      const rest = [ageGroup, customLevelId, minimumRosterSize, gender, playersPerSide, level];
-      if (rest.some((value) => value !== undefined)) throw new Error('Not allowed');
-    } else {
-      if (ageGroup === undefined) throw new Error('Not allowed');
-      await checkedDivision(ctx, league.organizationId, league.sport, {
-        gender,
-        playersPerSide,
-        level,
-        ageGroup,
-        customLevelId,
-        minimumRosterSize,
-      });
+      throw new Error('Not allowed');
     }
+    if (ageGroup === undefined) throw new Error('Not allowed');
+    await checkedDivision(ctx, league.organizationId, league.sport, {
+      gender,
+      playersPerSide,
+      level,
+      ageGroup,
+      customLevelId,
+      minimumRosterSize,
+    });
     for (const season of draftSeasons) {
       if (
         !isPlayersPerSideOfSport(league.sport, season.playersPerSide) ||
@@ -259,7 +264,11 @@ export const undoUpdate = mutation({
         throw new Error('Not allowed');
       }
     }
-    await restoreLeague(ctx, league, { league: { ...values, name: name.name }, draftSeasons });
+    await restoreLeague(ctx, league, {
+      league: { ...values, name: name.name },
+      draftSeasons,
+      written,
+    });
     return null;
   },
 });

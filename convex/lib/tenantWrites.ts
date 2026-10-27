@@ -325,14 +325,38 @@ export const draftSeasonEarlierValidator = v.object({
   minimumRosterSize: v.number(),
 });
 
+export const leagueWrittenValidator = v.object({
+  name: v.string(),
+  gender: genderValidator,
+  playersPerSide: v.number(),
+  level: standardLevelValidator,
+  customLevelId: v.optional(v.id('customLevels')),
+  ageGroup: ageGroupValidator,
+  minimumRosterSize: v.optional(v.number()),
+});
+
 export const leagueUpdateEarlierValidator = v.object({
   league: leagueEarlierValidator,
   draftSeasons: v.array(draftSeasonEarlierValidator),
+  written: leagueWrittenValidator,
 });
 
 export type LeagueEarlier = Infer<typeof leagueEarlierValidator>;
 export type DraftSeasonEarlier = Infer<typeof draftSeasonEarlierValidator>;
+export type LeagueWritten = Infer<typeof leagueWrittenValidator>;
 export type LeagueUpdateEarlier = Infer<typeof leagueUpdateEarlierValidator>;
+
+export function leagueHolds(league: Doc<'leagues'>, written: LeagueWritten): boolean {
+  return (
+    league.name === written.name &&
+    league.gender === written.gender &&
+    league.playersPerSide === written.playersPerSide &&
+    league.level === written.level &&
+    league.customLevelId === written.customLevelId &&
+    league.ageGroup === written.ageGroup &&
+    league.minimumRosterSize === written.minimumRosterSize
+  );
+}
 
 function effectiveMinimum(division: {
   playersPerSide?: number | undefined;
@@ -394,10 +418,23 @@ export async function updateLeague(
     sortName: sortName(change.name),
     ...leagueDivisionPatch(change.division),
   });
-  return { league: earlier, draftSeasons };
+  const { customLevelId, minimumRosterSize } = change.division;
+  const written: LeagueWritten = {
+    name: change.name,
+    gender: change.division.gender,
+    playersPerSide: change.division.playersPerSide,
+    level: change.division.level,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ageGroup: change.division.ageGroup,
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
+  return { league: earlier, draftSeasons, written };
 }
 
-// A season that is no longer a draft of this league keeps its values.
+function isDraftOf(season: Doc<'seasons'> | null, league: Doc<'leagues'>): boolean {
+  return season?.leagueId === league._id && season.status === 'draft';
+}
+
 export async function restoreLeague(
   ctx: MutationCtx,
   league: Doc<'leagues'>,
@@ -416,7 +453,7 @@ export async function restoreLeague(
   });
   for (const { seasonId, playersPerSide, minimumRosterSize } of earlier.draftSeasons) {
     const season = await ctx.db.get('seasons', seasonId);
-    if (season?.leagueId !== league._id || season.status !== 'draft') continue;
+    if (!isDraftOf(season, league)) continue;
     await ctx.db.patch('seasons', seasonId, { playersPerSide, minimumRosterSize });
   }
 }

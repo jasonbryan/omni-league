@@ -8,8 +8,7 @@ interface SeasonFormat {
   status: string;
 }
 
-/** Earliest first. */
-export function publishedSeasons(seasons: readonly SeasonFormat[]): SeasonFormat[] {
+export function publishedSeasonsEarliestFirst(seasons: readonly SeasonFormat[]): SeasonFormat[] {
   return seasons
     .filter((season) => season.status === 'published')
     .sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0));

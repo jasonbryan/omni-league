@@ -72,6 +72,20 @@ export class LeagueDetails {
   readonly errors: Record<DetailsField, Signal<string | null>>;
 
   private savedName = '';
+  private readonly loadedKey = signal('');
+  private readonly currentKey = computed(() =>
+    [
+      this.model().name,
+      this.division.gender(),
+      this.division.playersPerSide(),
+      this.division.level(),
+      this.division.customLevelId(),
+      this.division.ageGroup(),
+      this.division.minimumText(),
+    ].join('|'),
+  );
+  /** True once the user edits what was loaded, saved, or restored. */
+  readonly edited = computed(() => this.currentKey() !== this.loadedKey());
   private readonly clientErrors: Record<DetailsField, Signal<string | null>>;
   private readonly shown: Record<DetailsField, ShownUntilValid>;
   private readonly serverErrors: Record<DetailsField, WritableSignal<string | null>>;
@@ -139,6 +153,7 @@ export class LeagueDetails {
     if (saved.division) this.division.load(saved.division);
     else this.division.clear();
     this.fields().reset();
+    this.loadedKey.set(this.currentKey());
     this.alert.set(null);
     for (const field of DETAILS_FIELDS) this.shown[field].hide();
   }

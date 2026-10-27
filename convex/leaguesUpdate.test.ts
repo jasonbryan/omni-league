@@ -523,7 +523,7 @@ describe('leagues.update edge cases', () => {
     expect(await stored(s)).toEqual(before);
   });
 
-  test('a league created without a division takes one on update, and Undo takes it away again', async () => {
+  test('a league created without a division takes one on update, and Undo cannot take it away again', async () => {
     const s = await setup();
     const legacyId = await s.t.run(async (ctx) => {
       await insertTenant(ctx, {
@@ -560,16 +560,13 @@ describe('leagues.update edge cases', () => {
     expect(earlier.league).toEqual({ name: 'Legacy' });
     expect(await read()).toMatchObject({ name: 'Legacy Sand', playersPerSide: 2, level: 'b' });
 
-    await adminC.mutation(api.leagues.undoUpdate, { leagueId: legacyId, ...earlier });
-    const restored = (await read())!;
-    expect(restored).toMatchObject({ name: 'Legacy', sortName: 'legacy' });
-    expect(restored.gender).toBeUndefined();
-    expect(restored.playersPerSide).toBeUndefined();
-    expect(restored.level).toBeUndefined();
-    expect(restored.ageGroup).toBeUndefined();
+    await expect(
+      adminC.mutation(api.leagues.undoUpdate, { leagueId: legacyId, ...earlier }),
+    ).rejects.toThrow('Not allowed');
+    expect(await read()).toMatchObject({ name: 'Legacy Sand', playersPerSide: 2, level: 'b' });
   });
 
-  test('an Undo from an earlier save restores the values before that save, even after a later save', async () => {
+  test('an Undo is refused once another save changed the league, and changes nothing', async () => {
     const s = await setup();
     const first = await s.admin.mutation(api.leagues.update, {
       ...sundayArgs(s),
@@ -581,9 +578,38 @@ describe('leagues.update edge cases', () => {
       name: 'Second',
       playersPerSide: 6,
     });
-    await s.admin.mutation(api.leagues.undoUpdate, { leagueId: s.sundayId, ...first });
-    const after = await stored(s);
-    expect(after.league).toMatchObject({ name: 'Sunday Reverse Coed 4s', playersPerSide: 4 });
-    expect(after.seasons[1]).toMatchObject({ playersPerSide: 4, minimumRosterSize: 4 });
+    const before = await stored(s);
+    const data = await refusal(
+      s.admin.mutation(api.leagues.undoUpdate, { leagueId: s.sundayId, ...first }),
+    );
+    expect(data).toEqual({
+      field: 'name',
+      code: 'changedSince',
+      message: 'The league details changed since this save, so it cannot be undone.',
+    });
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('an Undo is refused when a field other than the name changed since the save', async () => {
+    const s = await setup();
+    const earlier = await s.admin.mutation(api.leagues.update, { ...sundayArgs(s), name: 'First' });
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { minimumRosterSize: 9 }));
+    const data = await refusal(
+      s.admin.mutation(api.leagues.undoUpdate, { leagueId: s.sundayId, ...earlier }),
+    );
+    expect(data).toMatchObject({ code: 'changedSince' });
+  });
+
+  test('an Undo cannot strip the division from a league that has one', async () => {
+    const s = await setup();
+    const earlier = await s.admin.mutation(api.leagues.update, { ...sundayArgs(s), name: 'First' });
+    await expect(
+      s.admin.mutation(api.leagues.undoUpdate, {
+        leagueId: s.sundayId,
+        ...earlier,
+        league: { name: 'Sunday Reverse Coed 4s' },
+      }),
+    ).rejects.toThrow('Not allowed');
+    expect((await stored(s)).league).toMatchObject({ name: 'First', playersPerSide: 4 });
   });
 });

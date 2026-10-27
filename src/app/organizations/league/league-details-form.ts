@@ -24,6 +24,7 @@ import {
 import type { FunctionReturnType } from 'convex/server';
 import { api } from '../../../../convex/_generated/api';
 import { filledFromNameMessage } from '../admin/league-division';
+import { inputErrorOf } from '../admin/league-form';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
@@ -41,7 +42,7 @@ import {
   type DetailsField,
   type SavedDetails,
 } from './league-details-state';
-import { formatHint, publishedSeasons } from './league-format-hint';
+import { formatHint, publishedSeasonsEarliestFirst } from './league-format-hint';
 
 type Earlier = FunctionReturnType<typeof api.leagues.update>;
 
@@ -192,7 +193,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
         </fieldset>
       </div>
       <div role="status" data-slot="save-status">
-        @if (status(); as status) {
+        @if (shownStatus(); as status) {
           <div
             #statusBox
             tabindex="-1"
@@ -201,17 +202,19 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
             <ng-icon name="lucideCheck" class="shrink-0 text-base" aria-hidden="true" />
             @if (status.kind === 'saved') {
               <span class="font-medium">League details saved.</span>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
-                [class.opacity-50]="!online() && !undoing()"
-                [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
-                (click)="undo(status.earlier)"
-              >
-                <ng-icon name="lucideUndo2" class="text-base" aria-hidden="true" />{{
-                  undoing() ? 'Undoing…' : 'Undo'
-                }}
-              </button>
+              @if (undoOffered()) {
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                  [class.opacity-50]="!online() && !undoing()"
+                  [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
+                  (click)="undo(status.earlier)"
+                >
+                  <ng-icon name="lucideUndo2" class="text-base" aria-hidden="true" />{{
+                    undoing() ? 'Undoing…' : 'Undo'
+                  }}
+                </button>
+              }
               @if (undoNote(); as note) {
                 <span class="basis-full">{{ note }}</span>
               }
@@ -287,8 +290,18 @@ export class LeagueDetailsForm implements OnInit {
         : (previous?.value ?? null),
   });
 
+  // A later edit by the user or by someone else leaves nothing for Undo to put back.
+  protected readonly shownStatus = computed(() => (this.details.edited() ? null : this.status()));
+  protected readonly undoOffered = computed(() => {
+    const status = this.status();
+    if (status?.kind !== 'saved') return false;
+    const { league, written } = status.earlier;
+    const hasDivision = league.gender !== undefined;
+    return hasDivision && (this.leagueHolds(written) || this.leagueHolds(league));
+  });
+
   protected readonly formatDescription = computed(() =>
-    formatHint(publishedSeasons(this.seasons())),
+    formatHint(publishedSeasonsEarliestFirst(this.seasons())),
   );
   protected readonly filledMessage = computed(() =>
     filledFromNameMessage(this.details.division.filledFromName()),
@@ -299,6 +312,27 @@ export class LeagueDetailsForm implements OnInit {
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
 
+  private leagueHolds(values: {
+    name: string;
+    gender?: string | undefined;
+    playersPerSide?: number | undefined;
+    level?: string | undefined;
+    customLevelId?: string | undefined;
+    ageGroup?: string | undefined;
+    minimumRosterSize?: number | undefined;
+  }): boolean {
+    const { name, division } = this.league();
+    return (
+      values.name === name &&
+      values.gender === division?.gender &&
+      values.playersPerSide === division?.playersPerSide &&
+      values.level === division?.level &&
+      values.customLevelId === division?.customLevel?.customLevelId &&
+      values.ageGroup === division?.ageGroup &&
+      values.minimumRosterSize === division?.minimumRosterSize
+    );
+  }
+
   ngOnInit(): void {
     const { name, division } = this.league();
     this.details.load(savedDetails(name, division));
@@ -306,7 +340,7 @@ export class LeagueDetailsForm implements OnInit {
 
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
-    if (this.details.submitting()) return;
+    if (this.details.submitting() || this.undoing()) return;
     this.status.set(null);
     this.undoNote.set(null);
     const leagueId = this.league().leagueId;
@@ -324,7 +358,7 @@ export class LeagueDetailsForm implements OnInit {
   }
 
   protected async undo(earlier: Earlier): Promise<void> {
-    if (this.undoing()) return;
+    if (this.undoing() || this.details.submitting()) return;
     this.undoNote.set(null);
     if (!this.online()) {
       this.undoNote.set(UNDO_OFFLINE);
@@ -339,7 +373,11 @@ export class LeagueDetailsForm implements OnInit {
       // The Undo button that had focus is gone.
       this.focusAfterRender(() => this.statusBox()?.nativeElement.focus());
     } catch (failure) {
-      this.undoNote.set(failure instanceof ConvexOfflineError ? UNDO_OFFLINE : UNDO_FAILED);
+      this.undoNote.set(
+        failure instanceof ConvexOfflineError
+          ? UNDO_OFFLINE
+          : (inputErrorOf(failure)?.message ?? UNDO_FAILED),
+      );
     } finally {
       this.undoing.set(false);
     }
