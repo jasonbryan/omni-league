@@ -54,35 +54,34 @@ test.describe('after sign-in', () => {
       });
     }
 
-    test('the top bar Sign in link returns to the sport view, league, and season pages, query and hash included', async ({
-      page,
-    }) => {
-      const tenant = await organization();
-      await seedSeasons(tenant, 'sunday-reverse-coed-4s', [
-        {
-          name: 'Summer 2027',
-          slug: 'summer-2027',
-          startDate: '2027-06-06',
-          endDate: '2027-08-29',
-        },
-      ]);
-      const user = await seedUser(newUser('Pages'));
-      const leaguePath = `${tenant.path}/leagues/sunday-reverse-coed-4s`;
-      const pages = [
-        `${tenant.path}/sports/soccer?utm=a#top`,
-        `${leaguePath}?utm=a&b=c#seasons`,
-        `${leaguePath}/seasons/summer-2027?utm=a#teams`,
-      ];
+    for (const [name, relative] of [
+      ['sport view', '/sports/soccer?utm=a#top'],
+      ['league', '/leagues/sunday-reverse-coed-4s?utm=a&b=c#seasons'],
+      ['season', '/leagues/sunday-reverse-coed-4s/seasons/summer-2027?utm=a#teams'],
+    ] as const) {
+      test(`the top bar Sign in link returns to the ${name} page, query and hash included`, async ({
+        page,
+      }) => {
+        const tenant = await organization();
+        await seedSeasons(tenant, 'sunday-reverse-coed-4s', [
+          {
+            name: 'Summer 2027',
+            slug: 'summer-2027',
+            startDate: '2027-06-06',
+            endDate: '2027-08-29',
+          },
+        ]);
+        const user = await seedUser(newUser('Pages'));
+        const from = `${tenant.path}${relative}`;
 
-      for (const from of pages) {
         await signInFrom(page, user, from, 'top-bar');
+
         await expect(page).toHaveURL(`${baseURL}${from}`);
         await expect(page.locator('header a[href="/app"]')).toHaveAccessibleName(
           `Account: ${user.name}`,
         );
-        await page.context().clearCookies();
-      }
-    });
+      });
+    }
 
     test('opening a signed-in-only URL while signed out and then signing in returns to it, query and hash included', async ({
       page,
