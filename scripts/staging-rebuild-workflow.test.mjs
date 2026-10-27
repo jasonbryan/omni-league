@@ -195,14 +195,14 @@ function runStep(jobName, name, { env = {}, stubs = () => {}, prelude = '' } = {
   }
 }
 
-// A stand-in for the `sleep` command that moves bash's SECONDS forward one second per call, so a poll
-// loop reaches its limit after a fixed number of polls however slow the machine is.
-const VIRTUAL_CLOCK = 'SECONDS=0\nsleep() { SECONDS=$((SECONDS + 1)); }\n';
+// Unset, SECONDS stops tracking wall time, so the poll limit counts sleeps.
+const VIRTUAL_CLOCK = 'unset SECONDS; SECONDS=0\nsleep() { SECONDS=$((SECONDS + $1)); }\n';
 
 /** @param {string} dir */
 function curlStub(dir) {
   writeStub(dir, 'curl', [
     'echo "$*" >> "$STUB_DIR/calls"',
+    '[ -z "$STUB_DELAY" ] || sleep "$STUB_DELAY"',
     'for url; do :; done',
     'case "$url" in',
     '  */staging-slot.txt)',
@@ -324,13 +324,12 @@ describe('the trigger step with the real curl', () => {
 
 describe('the verify step', () => {
   const page = 'Gulf Coast Sport &amp; Social';
-  // Each poll advances the virtual clock one second, so the limit is a count of polls.
-  const polls = { POLL_SECONDS: '1', POLL_LIMIT_SECONDS: '10' };
+  const tenPolls = { POLL_SECONDS: '1', POLL_LIMIT_SECONDS: '10' };
 
   /** @param {Record<string, string>} env */
   function verify(env) {
     return runStep('rebuild', 'verify', {
-      env: { PAGE_STATUS: '200', PAGE_BODY: page, ...polls, ...env },
+      env: { PAGE_STATUS: '200', PAGE_BODY: page, ...tenPolls, ...env },
       stubs: curlStub,
       prelude: VIRTUAL_CLOCK,
     });
@@ -353,6 +352,16 @@ describe('the verify step', () => {
 
   it('ignores an unreadable body while waiting', () => {
     const run = verify({ SLOT_BEFORE: 'staging-b', SLOT_READS: `${EMPTY_BODY} garbage staging-a` });
+    assert.equal(run.status, 0, run.output);
+  });
+
+  it('counts polls, not wall time, when every read is slow', () => {
+    const run = verify({
+      SLOT_BEFORE: 'staging-a',
+      SLOT_READS: `${EMPTY_BODY} garbage staging-b`,
+      POLL_LIMIT_SECONDS: '2',
+      STUB_DELAY: '1.1',
+    });
     assert.equal(run.status, 0, run.output);
   });
 
