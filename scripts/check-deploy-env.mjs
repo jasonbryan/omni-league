@@ -1,10 +1,6 @@
-// Preview mode runs AFTER `npx convex deploy`, because the `pr-<n>` deployment does not exist before
+// Preview mode runs AFTER `npx convex deploy`, because a preview deployment does not exist before
 // it. Production mode runs BEFORE it: a failure after the deploy would leave the new functions
 // already pushed to the production backend.
-//
-// Convex applies its default preview variables only when it creates a deployment and does not sync
-// later changes, so a default added or changed after staging was created must be set on `main` by
-// hand.
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 
