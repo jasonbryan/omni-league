@@ -118,8 +118,8 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
           /></span>
           <p class="mt-4 font-medium">No organizations yet</p>
           <p class="mt-1 max-w-xs text-sm text-balance text-muted-foreground">
-            Create one to run your leagues on Omni League, or ask an org admin to invite you to
-            theirs.
+            Ask your league organizer for an invite or registration link to join a league, or create
+            an organization to run your own.
           </p>
           <div class="mt-5">
             <a

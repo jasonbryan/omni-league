@@ -14,6 +14,7 @@ import { lucideTrophy } from '@ng-icons/lucide';
 import { injectCurrentUrl } from '../shell/current-url';
 import { OfflineNote } from '../shell/offline-note';
 import { skipLinkHref } from '../shell/shell';
+import { injectSignInReturnTo } from '../shell/sign-in-return-to';
 import { TopBarAccount } from '../shell/top-bar-account';
 
 const FOOTER_LINK_CLASSES =
@@ -92,7 +93,7 @@ const FOOTER_LINK_CLASSES =
                   <li>
                     <a
                       routerLink="/sign-in"
-                      [queryParams]="{ returnTo: '/app' }"
+                      [queryParams]="{ returnTo: signIn().returnTo }"
                       [class]="footerLink"
                       >Sign in to manage</a
                     >
@@ -125,6 +126,7 @@ export class PublicLayout {
   private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
 
+  protected readonly signIn = injectSignInReturnTo();
   protected readonly footerLink = FOOTER_LINK_CLASSES;
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),

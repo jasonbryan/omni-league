@@ -17,7 +17,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
-import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
+import { returnToOrApp } from '../core/auth/return-to';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
@@ -506,7 +506,7 @@ export class SignUpPage {
     const result = await this.auth.signUp({ name: name.trim(), email: email.trim(), password });
     this.submitting.set(false);
     if (result.ok) {
-      await this.router.navigateByUrl(afterAuthUrl(this.returnTo), { replaceUrl: true });
+      await this.router.navigateByUrl(returnToOrApp(this.returnTo), { replaceUrl: true });
       return;
     }
     this.showFailure(result.error, password.length);

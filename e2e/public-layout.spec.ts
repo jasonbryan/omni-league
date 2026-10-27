@@ -41,11 +41,12 @@ async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
     .toBe(true);
 }
 
-const FOOTER_LINKS = [
-  ['Your account', '/app'],
-  ['Create an organization', '/app/organizations/new'],
-  ['Sign in to manage', '/sign-in?returnTo=%2Fapp'],
-] as const;
+const footerLinks = (path: string) =>
+  [
+    ['Your account', '/app'],
+    ['Create an organization', '/app/organizations/new'],
+    ['Sign in to manage', `/sign-in?returnTo=${encodeURIComponent(path)}`],
+  ] as const;
 
 test.describe('public layout: raw server HTML', () => {
   test(
@@ -79,7 +80,7 @@ test.describe('public layout: raw server HTML', () => {
         const nav = /<nav\b[^>]*aria-label="Footer"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
         expect(nav, path).not.toBeNull();
         expect(html.indexOf(nav![0]), path).toBeGreaterThan(footer);
-        for (const [label, href] of FOOTER_LINKS) {
+        for (const [label, href] of footerLinks(path)) {
           expect(nav![1], `${path} ${label}`).toMatch(
             new RegExp(`<a\\b[^>]*href="${href.replace('?', '\\?')}"[^>]*>\\s*${label}\\s*</a>`),
           );

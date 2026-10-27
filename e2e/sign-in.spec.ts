@@ -185,7 +185,7 @@ test.describe('sign-in', () => {
 
   for (const raw of ['//evil.example/x', '/\\evil.example', 'https://evil.example']) {
     test(
-      `returnTo=${JSON.stringify(raw)} lands on / after sign-in`,
+      `returnTo=${JSON.stringify(raw)} lands on /app after sign-in`,
       VIEWPORT_AGNOSTIC,
       async ({ page, context }) => {
         test.skip(!!remoteBaseUrl, LOCAL_ONLY);
@@ -196,8 +196,8 @@ test.describe('sign-in', () => {
         const user = await seedUser();
         const tokens = tokensSettled(page);
         await signInAs(page, user, `/sign-in?returnTo=${encodeURIComponent(raw)}`);
-        await expect(page).toHaveURL(`${baseURL}/`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+        await expect(page).toHaveURL(`${baseURL}/app`);
+        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
         await tokens;
         expect(offSite).toEqual([]);
       },

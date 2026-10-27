@@ -110,7 +110,7 @@ describe('YourOrganizations', () => {
     expect(section.querySelector('[role="status"]')).toBeNull();
     expect(text(section.querySelector('p.font-medium'))).toBe('No organizations yet');
     expect(text(section)).toContain(
-      'Create one to run your leagues on Omni League, or ask an org admin to invite you to theirs.',
+      'Ask your league organizer for an invite or registration link to join a league, or create an organization to run your own.',
     );
     const links = [...section.querySelectorAll('a')];
     expect(links).toHaveLength(1);

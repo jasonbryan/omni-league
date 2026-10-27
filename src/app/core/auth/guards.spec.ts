@@ -74,6 +74,7 @@ describe('auth guards', () => {
     it.each([
       ['', '/app'],
       ['?returnTo=%2Fapp', '/app'],
+      ['?returnTo=%2F', '/app'],
       ['?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
       ['?returnTo=%2F%2Fevil.example%2Fx', '/app'],
       ['?returnTo=https%3A%2F%2Fevil.example', '/app'],

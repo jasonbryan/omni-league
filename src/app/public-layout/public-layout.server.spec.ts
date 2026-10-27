@@ -63,6 +63,11 @@ describe('PublicLayout server render', () => {
     const signIn = body.querySelector('header a[routerlink="/sign-in"]');
     const href = new URL(signIn?.getAttribute('href') ?? '', 'http://localhost');
     expect(`${href.pathname}${href.search}`).toBe('/sign-in?returnTo=%2Forganizations%2Ftest');
+    const manage = body.querySelector('footer a[routerlink="/sign-in"]');
+    const manageHref = new URL(manage?.getAttribute('href') ?? '', 'http://localhost');
+    expect(`${manageHref.pathname}${manageHref.search}`).toBe(
+      '/sign-in?returnTo=%2Forganizations%2Ftest',
+    );
     expect(body.querySelector('main#main[tabindex="-1"] h1')?.textContent).toBe('Page heading');
     expect(
       [...body.querySelectorAll('footer nav[aria-label="Footer"] a')].map((a) =>
