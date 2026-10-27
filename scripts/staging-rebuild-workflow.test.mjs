@@ -283,6 +283,23 @@ describe('the trigger step', () => {
   });
 });
 
+describe('the trigger step with the real curl', () => {
+  const secretPath = 'SECRET-HOOK-ID';
+
+  it('does not print the hook path when curl cannot connect or rejects the URL', () => {
+    for (const hookUrl of [
+      `http://127.0.0.1:1/build_hooks/${secretPath}`,
+      `ht!tp://127.0.0.1/build_hooks/${secretPath}`,
+      '',
+    ]) {
+      const run = runStep('rebuild', 'trigger', { env: { HOOK_URL: hookUrl } });
+      assert.notEqual(run.status, 0, hookUrl);
+      assert.ok(!run.output.includes(secretPath), run.output);
+      assert.ok(!run.output.includes('trigger_title'), run.output);
+    }
+  });
+});
+
 describe('the verify step', () => {
   const page = 'Gulf Coast Sport &amp; Social';
   // bash counts whole seconds, so a limit of 1 can end in under a second.
@@ -314,6 +331,17 @@ describe('the verify step', () => {
   it('ignores an unreadable body while waiting', () => {
     const run = verify({ SLOT_BEFORE: 'staging-b', SLOTS: '_ garbage staging-a' });
     assert.equal(run.status, 0, run.output);
+  });
+
+  it('does not count an unreadable body as a flip while waiting', () => {
+    const run = verify({
+      SLOT_BEFORE: 'staging-a',
+      SLOTS: '_ garbage staging-a',
+      POLL_LIMIT_SECONDS: '1',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.output, /::error[^\n]*still reads staging-a/);
+    assert.doesNotMatch(run.calls, /organizations/, 'no page check without a flip');
   });
 
   it('fails with an error naming the last slot when the slot never flips', () => {
