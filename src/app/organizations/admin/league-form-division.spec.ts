@@ -44,6 +44,16 @@ describe('LeagueForm: the division', () => {
     expect(form.division.playersPerSide()).toBeNull();
   });
 
+  it('fills from the name when it is submitted, as Enter in Name does before Name is left', async () => {
+    const form = create();
+    form.chooseSport('beachVolleyball');
+    form.toggleLocation(REDFISH, true);
+    form.model.set({ name: 'Sunday Coed 4s', slug: 'sunday-coed-4s' });
+    const sendCreate = send();
+    await form.submit(true, sendCreate);
+    expect(sendCreate).toHaveBeenCalledWith(expect.objectContaining({ playersPerSide: 4 }));
+  });
+
   describe('Format', () => {
     it('is refused on submit when none is chosen: nothing is sent and focus goes to Format', async () => {
       const form = create();

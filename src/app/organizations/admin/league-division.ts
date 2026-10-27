@@ -12,6 +12,7 @@ import type { Sport } from '../../../../convex/lib/sports';
 export type DivisionChoice = 'gender' | 'format' | 'level';
 
 const CHOICES: readonly DivisionChoice[] = ['gender', 'format', 'level'];
+const DEFAULT_GENDER: Gender = 'coed';
 const DEFAULT_LEVEL: StandardLevel = 'rec';
 
 export class LeagueDivision {
@@ -72,15 +73,13 @@ export class LeagueDivision {
   fillFromName(name: string, sport: Sport | null): void {
     if (sport === null) return;
     const { gender, playersPerSide, level } = deriveDivisionFromName(name, sport);
-    if (gender !== undefined) this.fill('gender', () => this.gender.set(gender));
-    if (playersPerSide !== undefined) {
-      this.fill('format', () => this.playersPerSide.set(playersPerSide));
-    }
-    if (level !== undefined) this.fill('level', () => this.level.set(level));
+    this.fillOrReset('gender', gender, DEFAULT_GENDER, (value) => this.gender.set(value));
+    this.fillOrReset('format', playersPerSide, null, (value) => this.playersPerSide.set(value));
+    this.fillOrReset('level', level, DEFAULT_LEVEL, (value) => this.level.set(value));
   }
 
   clear(): void {
-    this.gender.set('coed');
+    this.gender.set(DEFAULT_GENDER);
     this.playersPerSide.set(null);
     this.level.set(DEFAULT_LEVEL);
     this.ageGroup.set('adult');
@@ -89,10 +88,21 @@ export class LeagueDivision {
     this.filled.set(new Set());
   }
 
-  private fill(choice: DivisionChoice, set: () => void): void {
+  // A value the name once stated and now does not goes back to its default, so the status line stays true.
+  private fillOrReset<T>(
+    choice: DivisionChoice,
+    stated: T | undefined,
+    fallback: T,
+    set: (value: T) => void,
+  ): void {
     if (this.chosenByHand().has(choice)) return;
-    set();
-    this.filled.update((current) => new Set(current).add(choice));
+    if (stated !== undefined) {
+      set(stated);
+      this.filled.update((current) => new Set(current).add(choice));
+    } else if (this.filled().has(choice)) {
+      set(fallback);
+      this.filled.update((current) => withoutChoice(current, choice));
+    }
   }
 
   private choseByHand(choice: DivisionChoice): void {

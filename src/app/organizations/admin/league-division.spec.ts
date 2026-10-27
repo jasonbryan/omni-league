@@ -58,6 +58,26 @@ describe('LeagueDivision', () => {
       expect(division.playersPerSide()).toBe(3);
     });
 
+    it('returns a filled field to its default when the edited name no longer states it', () => {
+      const division = new LeagueDivision();
+      division.fillFromName("Women's 2s BB", 'beachVolleyball');
+      division.fillFromName("Women's league", 'beachVolleyball');
+      expect([division.gender(), division.playersPerSide(), division.level()]).toEqual([
+        'womens',
+        null,
+        'rec',
+      ]);
+      expect(division.filledFromName()).toEqual(['gender']);
+    });
+
+    it('keeps a field the organizer chose when the edited name no longer states it', () => {
+      const division = new LeagueDivision();
+      division.fillFromName("Women's 2s BB", 'beachVolleyball');
+      division.chooseLevel('a');
+      division.fillFromName("Women's 2s", 'beachVolleyball');
+      expect(division.level()).toBe('a');
+    });
+
     it('stops counting a field as filled once the organizer chooses it', () => {
       const division = new LeagueDivision();
       division.fillFromName(NAME, 'beachVolleyball');

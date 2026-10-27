@@ -1,5 +1,4 @@
 import { ConvexError } from 'convex/values';
-import { CHIP_CHOICE_LABEL_CLASSES } from '../../ui/chip/chip-classes';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import {
@@ -140,14 +139,14 @@ describe('AdminLeagues: the Division group', () => {
       );
     });
 
-    it('draws each choice as a chip, with the radio hidden beside its label', async () => {
+    it('a chip is chosen by pressing its label, and its radio shows no text of its own', async () => {
       await open();
       await choose('sport-beachVolleyball');
       const chip = input('format-4').closest('label')!.querySelector('span')!;
-      expect(chip.className.split(/\s+/).sort()).toEqual(
-        CHIP_CHOICE_LABEL_CLASSES.split(/\s+/).sort(),
-      );
-      expect(input('format-4').className.split(/\s+/).sort()).toEqual(['peer', 'sr-only']);
+      expect(text(input('format-4'))).toBe('');
+      chip.click();
+      await settle();
+      expect(group('format').checked).toEqual(['4v4']);
     });
 
     it('Age group is a native select: Adult, 30+ to 60+, then U6 to U19, with Adult chosen', async () => {

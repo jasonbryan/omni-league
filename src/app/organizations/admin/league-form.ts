@@ -259,6 +259,8 @@ export class LeagueForm {
     send: (values: LeagueValues) => Promise<unknown>,
   ): Promise<LeagueSubmitOutcome> {
     this.alert.set(null);
+    // Enter in Name submits before Name is left.
+    this.fillDivisionFromName();
     let firstInvalid: LeagueField | null = null;
     for (const field of LEAGUE_FIELDS) {
       this.shown[field].submitted();

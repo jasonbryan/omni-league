@@ -284,7 +284,7 @@ test.describe('Leagues: the division chips', () => {
     ).toContainText('Gender was filled in from the name. Change any that are wrong.');
   });
 
-  test('pressing Enter in Name sends nothing without a format and then fills it from the name', async ({
+  test('pressing Enter in Name fills the format from the name first, so the league is created', async ({
     page,
   }) => {
     await openLeagues(page);
@@ -292,7 +292,9 @@ test.describe('Leagues: the division chips', () => {
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await page.locator('#name').fill('Sunday Coed 4s');
     await page.locator('#name').press('Enter');
-    await expect(radio(page, '4v4')).toBeChecked();
     await expect(page.locator('#format-error')).toHaveCount(0);
+    const row = page.locator('#leagues-list > li').first();
+    await expect(row.locator('h3')).toHaveText('Sunday Coed 4s');
+    await expect(row.locator('[data-slot="league-division"]')).toHaveText('Coed · 4v4 · Rec');
   });
 });
