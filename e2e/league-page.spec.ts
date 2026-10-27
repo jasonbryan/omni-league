@@ -80,13 +80,13 @@ async function seed(): Promise<SeededLeague> {
     leagues: [
       { name: LEAGUE, sport: 'beachVolleyball', locations: ['Beta Courts', 'Alpha Field'] },
       {
-        name: 'Open League',
+        name: 'Zeta Open',
         sport: 'beachVolleyball',
         locations: ['Beta Courts'],
         division: DIVISION,
       },
-      { name: 'Closed League', sport: 'beachVolleyball', locations: ['Alpha Field'] },
-      { name: 'Page Two League', sport: 'beachVolleyball', locations: ['Alpha Field'] },
+      { name: 'Zeta Closed', sport: 'beachVolleyball', locations: ['Alpha Field'] },
+      { name: 'Zeta Pages', sport: 'beachVolleyball', locations: ['Alpha Field'] },
       { name: 'Only Drafts', sport: 'beachVolleyball', locations: ['Alpha Field'] },
       { name: 'Quiet League', sport: 'beachVolleyball', locations: ['Alpha Field'] },
       {
@@ -104,9 +104,9 @@ async function seed(): Promise<SeededLeague> {
     seedSeasons(tenant, 'only-drafts', [DRAFT_SEASON]),
     seedSeasons(tenant, 'five-league', numberedSeasons(5)),
     seedSeasons(tenant, 'six-league', numberedSeasons(6)),
-    seedSeasons(tenant, 'open-league', [PAST_SEASON, CURRENT_SEASON, OPEN_SEASON]),
-    seedSeasons(tenant, 'closed-league', [CLOSED_SEASON]),
-    seedSeasons(tenant, 'page-two-league', [...numberedSeasons(6), OPEN_SEASON]),
+    seedSeasons(tenant, 'zeta-open', [PAST_SEASON, CURRENT_SEASON, OPEN_SEASON]),
+    seedSeasons(tenant, 'zeta-closed', [CLOSED_SEASON]),
+    seedSeasons(tenant, 'zeta-pages', [...numberedSeasons(6), OPEN_SEASON]),
   ]);
   return { tenant, path: `${tenant.path}/leagues/${LEAGUE_SLUG}` };
 }
@@ -348,14 +348,14 @@ test.describe('public league page: raw server HTML', () => {
     RAW_HTTP,
     async ({ request }) => {
       const { tenant } = await seed();
-      const path = `${tenant.path}/leagues/open-league`;
+      const path = `${tenant.path}/leagues/zeta-open`;
       const { status, html } = await fetchRawHtml(request, path);
       expect(status).toBe(200);
 
       const breadcrumb = /<nav\b[^>]*aria-label="Breadcrumb"[^>]*>[\s\S]*?<\/nav>/.exec(html)?.[0];
       expect(breadcrumb).toContain(`href="${tenant.path}"`);
       expect(breadcrumb).toContain(`href="${tenant.path}/sports/beach-volleyball"`);
-      expect(html).toMatch(/<h1\b[^>]*>\s*Open League\s*<\/h1>/);
+      expect(html).toMatch(/<h1\b[^>]*>\s*Zeta Open\s*<\/h1>/);
       expect(html).toContain('Coed · 4v4 · BB');
 
       const card = sectionById(html, 'registration-open');
@@ -365,7 +365,7 @@ test.describe('public league page: raw server HTML', () => {
         `Closes ${formatCalendarDate(OPEN_SEASON.registrationDeadline!)}`,
       );
       expect(card).toMatch(
-        new RegExp(`<a\\b[^>]*href="${path}/seasons/open-season"[^>]*data-slot="button"[^>]*>`),
+        new RegExp(`<a\\b[^>]*data-slot="button"[^>]*href="${path}/seasons/open-season"[^>]*>`),
       );
       expect(plainText(card)).toContain('Register for Open Season');
       expect(html.indexOf('id="registration-open"')).toBeLessThan(html.indexOf('id="seasons"'));
@@ -395,7 +395,7 @@ test.describe('public league page: raw server HTML', () => {
       const { tenant } = await seed();
       const { status, html } = await fetchRawHtml(
         request,
-        `${tenant.path}/leagues/page-two-league?page=2`,
+        `${tenant.path}/leagues/zeta-pages?page=2`,
       );
       expect(status).toBe(200);
       expect(seasonNames(html)).toEqual(['Season 02', 'Season 01']);
@@ -408,7 +408,7 @@ test.describe('public league page: raw server HTML', () => {
     RAW_HTTP,
     async ({ request }) => {
       const { tenant } = await seed();
-      const { status, html } = await fetchRawHtml(request, `${tenant.path}/leagues/closed-league`);
+      const { status, html } = await fetchRawHtml(request, `${tenant.path}/leagues/zeta-closed`);
       expect(status).toBe(200);
       expect(html).not.toContain('id="registration-open"');
       expect(seasonNames(html)).toEqual(['Closed Season']);
@@ -475,7 +475,7 @@ test.describe('public league page in the browser', () => {
     await expect(page.getByText('No seasons yet')).toBeVisible();
     await expectAccessible(page);
 
-    await page.goto(`${tenant.path}/leagues/open-league`);
+    await page.goto(`${tenant.path}/leagues/zeta-open`);
     await expect(page.locator('section#registration-open')).toBeVisible();
     await expectAccessible(page);
   });
@@ -485,7 +485,7 @@ test.describe('public league page in the browser', () => {
     consoleGuard,
   }) => {
     const { tenant } = await seed();
-    const path = `${tenant.path}/leagues/open-league`;
+    const path = `${tenant.path}/leagues/zeta-open`;
     await page.goto(path);
     await hydrated(consoleGuard);
     await page.getByRole('link', { name: 'Register for Open Season' }).click();

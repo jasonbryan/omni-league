@@ -134,8 +134,11 @@ function plural(count: number, noun: string): string {
                     </li>
                   </ul>
                 </div>
-                <a [routerLink]="card.href" data-slot="button" [class]="registerButton"
-                  >Register<span class="sr-only"> for {{ card.name }}</span
+                <a
+                  [routerLink]="card.href"
+                  data-slot="button"
+                  [class]="registerButton + ' w-full md:w-auto'"
+                  ><span class="min-w-0 truncate">Register for {{ card.name }}</span
                   ><ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
                 /></a>
               </div>
