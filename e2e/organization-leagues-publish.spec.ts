@@ -120,7 +120,6 @@ test.describe('Leagues: publishing a draft', () => {
       await expect(result(page)).toContainText('It’s on your public page now.');
       await expect(result(page)).toBeFocused();
       await expect(page.locator('app-admin-leagues')).not.toHaveAttribute('inert', '');
-      // The league's own public page (#127), not the organization's (#209).
       await expect(result(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
         'href',
         `${tenant.path}/leagues/sunday-reverse-coed-4s`,
@@ -145,9 +144,7 @@ test.describe('Leagues: publishing a draft', () => {
     }
   });
 
-  test('"View public page" opens the published league’s own public page (#209)', async ({
-    page,
-  }) => {
+  test('"View public page" opens the published league’s own public page', async ({ page }) => {
     const { tenant, base } = await orgAdmin(page);
     await page.goto(`${base}/leagues`);
     await publishButton(page, 'Sunday Reverse Coed 4s').click();

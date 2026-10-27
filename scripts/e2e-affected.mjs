@@ -184,8 +184,6 @@ export const AREAS = [
     specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup', 'validate-on-blur'],
   },
   {
-    // The sticky footer of long forms (#209), shared by the create-league form and the
-    // create-season form on the organizer's league page (#210).
     name: 'sticky form footer',
     test: named('src/app/organizations/admin/', ['sticky-footer']),
     specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup', ...LEAGUE_MANAGEMENT],

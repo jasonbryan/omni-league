@@ -1,6 +1,6 @@
 // The sticky footer of a long form on a phone (ux.md, Layout: "a form taller than the screen keeps
-// its primary action visible"), shared by the create-league form (#209) and the create-season form
-// (#210), so both look and behave alike. Class constants, as button-classes.ts is.
+// its primary action visible"), shared by the create-league and create-season forms so both look
+// and behave alike. Class constants, as button-classes.ts is.
 //
 // The footer holds the form's submit button. It sticks to the bottom of the viewport until the end
 // of the form scrolls past (its containing block is the form), and from 768px (`md`) it is an

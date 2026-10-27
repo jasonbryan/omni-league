@@ -3,9 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { LeagueForm } from './league-form';
 
-// The default choice of Locations (#209, ux.md "Defaults and preselection"): the only location is
-// checked, two or more are not, and a reset goes back to the default.
-
 const id = (name: string) => name as Id<'locations'>;
 const REDFISH = id('loc_redfish');
 const PELICAN = id('loc_pelican');

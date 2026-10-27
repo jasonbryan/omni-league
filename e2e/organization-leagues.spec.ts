@@ -272,7 +272,7 @@ test.describe('Leagues: creating a draft', () => {
   });
 });
 
-test.describe('Leagues: defaults and the next step (#209)', () => {
+test.describe('Leagues: defaults and the next step', () => {
   test('an organization with one location has it checked, again after a create, and the status links to the new league', async ({
     page,
   }, testInfo) => {
@@ -311,7 +311,7 @@ test.describe('Leagues: defaults and the next step (#209)', () => {
   });
 });
 
-test.describe('Leagues: the create form on a phone (#209)', () => {
+test.describe('Leagues: the create form on a phone', () => {
   const PHONE = { width: 360, height: 640 };
 
   test('the Create button stays at the bottom of the viewport while the form is taller than it', async ({

@@ -300,7 +300,6 @@ export class AdminLeagues {
 
   protected readonly published = signal<PublishTarget | null>(null);
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
-  /** The published league's own public page (#127), not the organization's. */
   protected readonly publicPath = computed(() => {
     const league = this.published();
     return league ? publicLeaguePath(this.context.slug(), league.slug) : '';

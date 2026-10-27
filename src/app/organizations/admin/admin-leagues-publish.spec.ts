@@ -218,7 +218,6 @@ describe('AdminLeagues: publishing', () => {
         'It’s on your public page now. View public page',
       );
       const link = region.querySelector('a')!;
-      // The league's own public page (#127), not the organization's (#209).
       expect(link.getAttribute('href')).toBe(
         '/organizations/coastal-bend-rec-club/leagues/sunday-reverse-coed-4s',
       );
