@@ -13,7 +13,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test as base } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { seedTenant, type Tenant } from './support/tenant';
+import { seedTenant, type LeagueSeed, type Tenant } from './support/tenant';
 import { newUser, type TestUser } from './support/users';
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
@@ -98,34 +98,44 @@ const LOCATIONS = [
   { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
   { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
 ];
-const LEAGUES = [
-  { name: 'Coed 7v7 Rec', sport: 'soccer' as const, locations: ['Bayside Athletic Complex'] },
+const LEAGUES: LeagueSeed[] = [
+  {
+    name: 'Coed 7v7 Rec',
+    sport: 'soccer' as const,
+    locations: ['Bayside Athletic Complex'],
+    division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+  },
   {
     name: "Men's Over-30 11v11",
     sport: 'soccer' as const,
     locations: ['Bayside Athletic Complex'],
+    division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
   },
   {
     name: 'Sunday Reverse Coed 4s',
     sport: 'beachVolleyball' as const,
     locations: ['North Beach Sand Courts'],
+    division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
   },
   {
     name: 'Thursday Night Coed 2s',
     sport: 'beachVolleyball' as const,
     locations: ['North Beach Sand Courts'],
+    division: { gender: 'coed', playersPerSide: 2, level: 'b', ageGroup: 'adult' },
   },
   {
     name: 'Tuesday Coed Slow-Pitch',
     sport: 'softball' as const,
     locations: ['Flour Bluff Softball Park'],
     status: 'draft' as const,
+    division: { gender: 'coed', playersPerSide: 10, level: 'rec', ageGroup: 'adult' },
   },
   {
     name: 'Friday Night Coed 6s',
     sport: 'beachVolleyball' as const,
     locations: ['North Beach Sand Courts'],
     status: 'draft' as const,
+    division: { gender: 'coed', playersPerSide: 6, level: 'bb', ageGroup: 'adult' },
   },
 ];
 const COED = 'coed-7v7-rec';
@@ -329,11 +339,12 @@ function normalize(text: string, organization: string): string {
     .map((line) => line.trim())
     .filter((line) => line !== '');
   const kept: string[] = [];
-  let inLimits = false;
+  let skipping = false;
   for (const line of lines) {
-    if (line === 'Limits') inLimits = true;
-    if (inLimits && /^Creat(e draft|ing) season/.test(line)) inLimits = false;
-    if (!inLimits) kept.push(line);
+    // The mockup asks for a format and a minimum roster size, which the league now sets.
+    if (line === 'Limits' || line === 'Format') skipping = true;
+    if (skipping && /^Creat(e draft|ing) season/.test(line)) skipping = false;
+    if (!skipping) kept.push(line);
   }
   return kept.join('\n');
 }
@@ -345,7 +356,7 @@ async function appText(page: Page, organization: string): Promise<string> {
   const text = await page.locator('main#main').evaluate((main: HTMLElement) => {
     const apart = [
       ...main.querySelectorAll<HTMLElement>(
-        '#details, [data-slot="league-division"], a[href$="#details"]',
+        '#details, [data-slot="league-division"], a[href$="#details"], section[aria-labelledby="from-league-heading"]',
       ),
     ];
     const displays = apart.map((element) => element.style.display);
@@ -456,9 +467,6 @@ async function fill(
   await page.locator('#start-date').fill(values.startDate);
   await page.locator('#end-date').fill(values.endDate);
   await page.locator('#registration-deadline').fill(values.registrationDeadline);
-  await page.locator('#create-season').getByRole('radio', { name: '7v7' }).check();
-  // The format sets the minimum in a later render; a minimum typed before it would be overwritten.
-  await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
 }
 
 async function mockupMatches(
@@ -471,8 +479,7 @@ async function mockupMatches(
   scan: 'full' | 'axe' = 'full',
 ) {
   const expected = (await mockupTextsAt(browser, width)).get(state)!;
-  // Polled: the page's text follows the last input in a later render (the minimum roster size's
-  // hint changes after the format is chosen).
+  // Polled: the page's text follows the last input in a later render.
   await expect
     .poll(() => appText(page, organization), { message: `${state} at ${width}px` })
     .toBe(expected.main);
@@ -543,7 +550,6 @@ for (const width of WIDTHS) {
         endDate: '2028-02-23',
         registrationDeadline: '2028-03-01',
       });
-      await page.locator('#minimum-roster-size').fill('6');
       await submit(page).click();
       await expect(page.locator('#end-date-error')).toBeVisible();
       await mockupMatches(page, browser, shared.name, 'errors-rules', width, testInfo);
@@ -683,9 +689,9 @@ for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`/app/organizations/${shared.slug}/leagues/${SLOW_PITCH}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(1);
-      await expect(
-        page.locator('#create-season').getByRole('radio', { name: '10v10' }),
-      ).toBeChecked();
+      await expect(page.locator('[data-slot="season-minimum"]')).toHaveText(
+        '10 players, set by the 10v10 format',
+      );
       await mockupMatches(page, browser, shared.name, 'draft-league-admin', width, testInfo);
     });
 

@@ -3,13 +3,11 @@ import { form, required, type FieldTree } from '@angular/forms/signals';
 import { ConvexError } from 'convex/values';
 import {
   checkSeasonFields,
-  parseWholeNumber,
   SEASON_FIELDS,
   type SeasonField,
   type SeasonInputError,
 } from '../../../../convex/lib/seasonInput';
 import { slugify } from '../../../../convex/lib/slugs';
-import { SPORT_FORMATS, type Format, type Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 
@@ -22,7 +20,6 @@ export interface SeasonTextModel {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
-  minimumRosterSize: string;
 }
 
 export interface SeasonValues {
@@ -31,8 +28,6 @@ export interface SeasonValues {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
-  format: Format;
-  minimumRosterSize: number;
 }
 
 export type SeasonFormAlertKind = 'offline' | 'failed';
@@ -51,6 +46,7 @@ export const SEASON_FORM_ALERTS = {
 export type SeasonSubmitOutcome =
   | { sent: true; values: SeasonValues }
   | { sent: false; focus: SeasonField }
+  | { sent: false; leagueFormatMissing: true }
   | { sent: false; alert: SeasonFormAlertKind };
 
 const RESERVED_SLUG = 'new';
@@ -58,6 +54,16 @@ const RESERVED_SLUG = 'new';
 interface ServerError {
   text: string;
   taken: string | null;
+}
+
+function isLeagueFormatMissing(failure: unknown): boolean {
+  if (!(failure instanceof ConvexError)) return false;
+  const data: unknown = failure.data;
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as Record<string, unknown>)['code'] === 'leagueFormatMissing'
+  );
 }
 
 function inputErrorOf(failure: unknown): SeasonInputError | null {
@@ -78,17 +84,16 @@ const EMPTY: SeasonTextModel = {
   startDate: '',
   endDate: '',
   registrationDeadline: '',
-  minimumRosterSize: '',
 };
 
 /** The rules and messages are `convex/lib/seasonInput.ts`, which `seasons.create` applies again. */
 export class SeasonForm {
   readonly model: WritableSignal<SeasonTextModel> = signal({ ...EMPTY });
   readonly fields: FieldTree<SeasonTextModel>;
-  readonly format = signal<Format | null>(null);
   readonly slugEdited = signal(false);
   readonly submitting = signal(false);
   readonly alert = signal<SeasonFormAlertKind | null>(null);
+  readonly leagueFormatRefused = signal(false);
 
   private readonly clientErrors: Signal<Partial<Record<SeasonField, SeasonInputError>>>;
   private readonly shown: Record<SeasonField, ShownUntilValid>;
@@ -100,11 +105,7 @@ export class SeasonForm {
 
   readonly reservedParts: Signal<{ before: string; after: string } | null>;
 
-  readonly formats: Signal<readonly { key: Format; name: string; minimumRosterSize: number }[]>;
-
-  readonly minimumHint: Signal<string>;
-
-  constructor(sport: () => Sport) {
+  constructor() {
     // `required` puts the attribute on the inputs; the messages are ours (`seasonInput.ts`), so the
     // form and `seasons.create` agree.
     this.fields = form(this.model, (path) => {
@@ -113,25 +114,15 @@ export class SeasonForm {
       required(path.startDate);
       required(path.endDate);
       required(path.registrationDeadline);
-      required(path.minimumRosterSize);
-    });
-    this.formats = computed(() => SPORT_FORMATS[sport()]);
-    this.minimumHint = computed(() => {
-      const chosen = this.formats().find((candidate) => candidate.key === this.format());
-      return chosen
-        ? `At least ${chosen.minimumRosterSize} for ${chosen.name}. Raise it if teams need more players.`
-        : 'Set when you choose a format. You can raise it, never lower it.';
     });
     this.clientErrors = computed(() => {
       const m = this.model();
-      return checkSeasonFields(sport(), {
+      return checkSeasonFields({
         name: m.name,
         slug: m.slug,
         startDate: m.startDate,
         endDate: m.endDate,
         registrationDeadline: m.registrationDeadline,
-        format: this.format(),
-        minimumRosterSize: parseWholeNumber(m.minimumRosterSize),
       });
     });
     const sources: Record<SeasonField, () => unknown> = {
@@ -140,8 +131,6 @@ export class SeasonForm {
       startDate: () => this.model().startDate,
       endDate: () => this.model().endDate,
       registrationDeadline: () => this.model().registrationDeadline,
-      format: () => this.format(),
-      minimumRosterSize: () => [this.model().minimumRosterSize, this.format()],
     };
     const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
     const changed: Record<SeasonField, () => boolean> = {
@@ -150,9 +139,6 @@ export class SeasonForm {
       startDate: () => this.fields.startDate().dirty(),
       endDate: () => this.fields.endDate().dirty(),
       registrationDeadline: () => this.fields.registrationDeadline().dirty(),
-      // A chosen radio is always valid, so leaving it cannot show an error.
-      format: () => false,
-      minimumRosterSize: () => this.fields.minimumRosterSize().dirty(),
     };
     this.shown = Object.fromEntries(
       SEASON_FIELDS.map((field) => [
@@ -183,25 +169,9 @@ export class SeasonForm {
     this.model.update((m) => ({ ...m, name, slug: name.trim() === '' ? '' : slugify(name) }));
   }
 
-  chooseFormat(key: Format): void {
-    this.format.set(key);
-    const chosen = this.formats().find((candidate) => candidate.key === key);
-    if (chosen) {
-      this.model.update((m) => ({ ...m, minimumRosterSize: String(chosen.minimumRosterSize) }));
-    }
-  }
-
-  /** Called when the form is shown and after it clears, because the league's sport is known only once the component's inputs are set. */
-  chooseOnlyFormat(): void {
-    const formats = this.formats();
-    if (formats.length === 1) this.chooseFormat(formats[0].key);
-  }
-
   clear(): void {
     this.model.set({ ...EMPTY });
     this.slugEdited.set(false);
-    this.format.set(null);
-    this.chooseOnlyFormat();
     this.fields().reset();
   }
 
@@ -214,6 +184,7 @@ export class SeasonForm {
     send: (values: SeasonValues) => Promise<unknown>,
   ): Promise<SeasonSubmitOutcome> {
     this.alert.set(null);
+    this.leagueFormatRefused.set(false);
     let firstInvalid: SeasonField | null = null;
     const errors = this.clientErrors();
     for (const field of SEASON_FIELDS) {
@@ -232,8 +203,6 @@ export class SeasonForm {
       startDate: m.startDate,
       endDate: m.endDate,
       registrationDeadline: m.registrationDeadline,
-      format: this.format()!,
-      minimumRosterSize: parseWholeNumber(m.minimumRosterSize)!,
     };
     this.submitting.set(true);
     try {
@@ -248,6 +217,10 @@ export class SeasonForm {
 
   private failed(failure: unknown, slug: string): SeasonSubmitOutcome {
     if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
+    if (isLeagueFormatMissing(failure)) {
+      this.leagueFormatRefused.set(true);
+      return { sent: false, leagueFormatMissing: true };
+    }
     const refusal = inputErrorOf(failure);
     if (refusal) {
       this.serverErrors[refusal.field].set({
