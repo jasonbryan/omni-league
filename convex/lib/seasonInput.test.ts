@@ -1,16 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { ROSTER_SIZE_INPUT_MAX } from './sports';
 import {
   checkSeasonDates,
   checkSeasonFields,
   firstSeasonError,
-  checkSeasonFormat,
   checkSeasonName,
   checkSeasonSlug,
-  checkMinimumRosterSize,
   formatCalendarDate,
   isCalendarDate,
-  parseWholeNumber,
   SEASON_MESSAGES,
 } from './seasonInput';
 
@@ -41,18 +37,6 @@ describe('formatCalendarDate', () => {
   test('writes a date as the lists show it, with no time zone', () => {
     expect(formatCalendarDate('2028-03-01')).toBe('Mar 1, 2028');
     expect(formatCalendarDate('2026-12-31')).toBe('Dec 31, 2026');
-  });
-});
-
-describe('parseWholeNumber', () => {
-  test('is null for empty text, the number for digits, and NaN for anything else', () => {
-    expect(parseWholeNumber('')).toBeNull();
-    expect(parseWholeNumber('   ')).toBeNull();
-    expect(parseWholeNumber(' 9 ')).toBe(9);
-    expect(parseWholeNumber('7.5')).toBeNaN();
-    expect(parseWholeNumber('1e1')).toBeNaN();
-    expect(parseWholeNumber('-3')).toBeNaN();
-    expect(parseWholeNumber('seven')).toBeNaN();
   });
 });
 
@@ -166,60 +150,6 @@ describe('checkSeasonDates', () => {
   });
 });
 
-describe('checkSeasonFormat', () => {
-  test('accepts a format of the sport', () => {
-    expect(checkSeasonFormat('soccer', '7v7')).toBeNull();
-  });
-
-  test('refuses no format and a format of another sport with "Choose a format."', () => {
-    const refusal = { field: 'format', code: 'formatInvalid', message: 'Choose a format.' };
-    expect(checkSeasonFormat('soccer', null)).toEqual(refusal);
-    expect(checkSeasonFormat('soccer', '4v4')).toEqual(refusal);
-    expect(checkSeasonFormat('soccer', '3v3')).toEqual(refusal);
-  });
-});
-
-describe('checkMinimumRosterSize', () => {
-  test('accepts the format minimum, a raised one, and the largest input', () => {
-    for (const value of [7, 9, ROSTER_SIZE_INPUT_MAX]) {
-      expect(checkMinimumRosterSize('soccer', '7v7', value)).toBeNull();
-    }
-  });
-
-  test('refuses an empty value with no format needed', () => {
-    expect(checkMinimumRosterSize('soccer', null, null)).toEqual({
-      field: 'minimumRosterSize',
-      code: 'minimumEmpty',
-      message: 'Enter the minimum roster size.',
-    });
-  });
-
-  test('refuses a value below the format minimum, naming the format and the minimum', () => {
-    expect(checkMinimumRosterSize('soccer', '7v7', 6)).toEqual({
-      field: 'minimumRosterSize',
-      code: 'minimumBelowFormat',
-      message: '7v7 needs at least 7 players. Enter 7 or more.',
-    });
-  });
-
-  test('refuses 100, 7.5, and NaN with the range', () => {
-    for (const value of [100, 7.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(checkMinimumRosterSize('soccer', '7v7', value)).toEqual({
-        field: 'minimumRosterSize',
-        code: 'minimumOutOfRange',
-        message: 'Enter a whole number from 7 to 99.',
-      });
-    }
-  });
-
-  test('with no format chosen, a whole number in 1 to 99 passes and anything else is out of range', () => {
-    expect(checkMinimumRosterSize('soccer', null, 5)).toBeNull();
-    expect(checkMinimumRosterSize('soccer', null, 100)?.message).toBe(
-      'Enter a whole number from 1 to 99.',
-    );
-  });
-});
-
 describe('checkSeasonFields and firstSeasonError', () => {
   const valid = {
     name: 'Fall 2026',
@@ -227,35 +157,25 @@ describe('checkSeasonFields and firstSeasonError', () => {
     startDate: '2026-09-01',
     endDate: '2026-11-15',
     registrationDeadline: '2026-08-25',
-    format: '7v7',
-    minimumRosterSize: 7,
   };
 
   test('accepts the values of a season', () => {
-    expect(checkSeasonFields('soccer', valid)).toEqual({});
+    expect(checkSeasonFields(valid)).toEqual({});
     expect(firstSeasonError({})).toBeNull();
   });
 
   test('refuses every field that is wrong at once, and the first follows the form’s order', () => {
-    const errors = checkSeasonFields('soccer', {
-      ...valid,
-      name: ' ',
-      endDate: '2026-08-01',
-      minimumRosterSize: 6,
-    });
-    expect(Object.keys(errors).sort()).toEqual(['endDate', 'minimumRosterSize', 'name']);
+    const errors = checkSeasonFields({ ...valid, name: ' ', endDate: '2026-08-01' });
+    expect(Object.keys(errors).sort()).toEqual(['endDate', 'name']);
     expect(firstSeasonError(errors)?.field).toBe('name');
-    expect(firstSeasonError({ minimumRosterSize: errors.minimumRosterSize })?.field).toBe(
-      'minimumRosterSize',
-    );
+    expect(firstSeasonError({ endDate: errors.endDate })?.field).toBe('endDate');
   });
+});
 
-  test('checks the minimum against the format chosen', () => {
-    expect(
-      checkSeasonFields('soccer', { ...valid, format: '11v11' }).minimumRosterSize?.message,
-    ).toBe('11v11 needs at least 11 players. Enter 11 or more.');
-    expect(checkSeasonFields('soccer', { ...valid, format: null }).format?.message).toBe(
-      'Choose a format.',
+describe('SEASON_MESSAGES', () => {
+  test('tells the organizer where to set the format', () => {
+    expect(SEASON_MESSAGES.leagueFormatMissing).toBe(
+      'Set this league’s format in its details first.',
     );
   });
 });

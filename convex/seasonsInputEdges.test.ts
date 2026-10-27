@@ -22,7 +22,14 @@ async function setup() {
     const organizationId = await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Coed 7v7',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+        },
+      ],
     });
     const userId = await ctx.db.insert('users', {
       authUserId: 'admin-a',
@@ -53,8 +60,6 @@ const valid = (leagueId: Awaited<ReturnType<typeof setup>>['leagueId']) => ({
   startDate: '2026-09-01',
   endDate: '2026-11-15',
   registrationDeadline: '2026-08-25',
-  format: '7v7' as const,
-  minimumRosterSize: 7,
 });
 
 async function fieldOf(call: Promise<unknown>): Promise<string> {
@@ -148,28 +153,6 @@ describe('seasons.create refuses input a form never sends', () => {
     ).resolves.toBeDefined();
   });
 
-  test.each([
-    -1,
-    0,
-    6,
-    100,
-    7.5,
-    7.0000001,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    Number.NEGATIVE_INFINITY,
-    Number.MAX_SAFE_INTEGER,
-    1e21,
-  ])('the minimum roster size %s for 7v7', async (minimumRosterSize) => {
-    const s = await setup();
-    expect(
-      await fieldOf(
-        s.admin.mutation(api.seasons.create, { ...valid(s.leagueId), minimumRosterSize }),
-      ),
-    ).toBe('minimumRosterSize');
-    expect(await s.t.run((ctx) => ctx.db.query('seasons').collect())).toEqual([]);
-  });
-
   test('the first refusal is the first field in form order', async () => {
     const s = await setup();
     expect(
@@ -179,7 +162,6 @@ describe('seasons.create refuses input a form never sends', () => {
           name: '',
           slug: '',
           startDate: '',
-          minimumRosterSize: 0,
         }),
       ),
     ).toBe('name');

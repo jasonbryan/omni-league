@@ -3,7 +3,6 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
-import { formatLabel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { registrationIsOpen, seasonPhase } from './lib/registration';
 import { checkSeasonFields } from './lib/seasonInput';
@@ -170,7 +169,10 @@ describe('seed:demo', () => {
           organization: organization.slug,
           league: league.slug,
           season,
-          sport: league.sport,
+          leagueDivision: {
+            playersPerSide: league.playersPerSide,
+            minimumRosterSize: league.minimumRosterSize ?? league.playersPerSide,
+          },
         });
       }
       return result;
@@ -262,18 +264,20 @@ describe('seed:demo', () => {
         status: 'published',
       },
     ]);
-    for (const { sport, season } of rows) {
+    for (const { leagueDivision, season } of rows) {
       expect(
-        checkSeasonFields(sport, {
+        checkSeasonFields({
           name: season.name,
           slug: season.slug,
           startDate: season.startDate,
           endDate: season.endDate,
           registrationDeadline: season.registrationDeadline,
-          format: formatLabel(season.playersPerSide!),
-          minimumRosterSize: season.minimumRosterSize,
         }),
       ).toEqual({});
+      expect({
+        playersPerSide: season.playersPerSide,
+        minimumRosterSize: season.minimumRosterSize,
+      }).toEqual(leagueDivision);
     }
   });
 

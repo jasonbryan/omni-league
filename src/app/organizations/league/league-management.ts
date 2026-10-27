@@ -299,7 +299,7 @@ import { SeasonCreateForm } from './season-create-form';
           #createSection
           id="create-season"
           aria-labelledby="create-season-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -309,7 +309,9 @@ import { SeasonCreateForm } from './season-create-form';
           <app-season-create-form
             [leagueId]="league.leagueId"
             [leagueName]="league.name"
-            [sport]="league.sport"
+            [division]="league.division"
+            [detailsHref]="detailsPath()"
+            (detailsOpened)="jumpTo($event, detailsSection)"
           />
         </section>
       </div>

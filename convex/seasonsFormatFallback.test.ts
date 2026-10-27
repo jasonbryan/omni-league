@@ -29,7 +29,14 @@ async function setup() {
     const organizationId = await insertTenant(ctx, {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
-      leagues: [{ name: 'Sand 4s', sport: 'beachVolleyball', locations: ['Alpha Field'] }],
+      leagues: [
+        {
+          name: 'Sand 4s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Field'],
+          division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+        },
+      ],
     });
     const league = (await ctx.db.query('leagues').collect())[0];
     const userId = await ctx.db.insert('users', {
@@ -94,7 +101,7 @@ describe('readers on both season shapes', () => {
 });
 
 describe('seasons.create', () => {
-  test('stores the players per side of the format and no format', async () => {
+  test('stores the players per side of the league and no format', async () => {
     const { t, admin, leagueId } = await setup();
     const { seasonId } = await admin.mutation(api.seasons.create, {
       leagueId,
@@ -103,11 +110,9 @@ describe('seasons.create', () => {
       startDate: '2027-09-01',
       endDate: '2027-11-01',
       registrationDeadline: '2027-08-01',
-      format: '6v6',
-      minimumRosterSize: 6,
     });
     const row = await t.run((ctx) => ctx.db.get('seasons', seasonId));
-    expect(row?.playersPerSide).toBe(6);
+    expect(row?.playersPerSide).toBe(4);
     expect(row).not.toHaveProperty('format');
   });
 });
