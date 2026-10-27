@@ -1206,6 +1206,34 @@ describe('seed:demo seasons dated from the run', () => {
     ]);
   });
 
+  test('shows the public league pages their card, statuses, and empty state', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const orgSlug = 'gulf-coast-sport-social';
+    const sunday = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'sunday-reverse-coed-4s',
+    });
+    const phases = (sunday?.seasons ?? []).map((season) => [season.slug, seasonPhase(season, RUN)]);
+    expect(phases).toEqual([
+      ['summer-2027', 'registrationOpen'],
+      ['current-season', 'inProgress'],
+    ]);
+    const coed = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'coed-7v7-rec',
+    });
+    expect(coed?.seasons?.map((season) => [season.slug, seasonPhase(season, RUN)])).toEqual([
+      ['summer-2027', 'registrationOpen'],
+      ['next-season', 'registrationClosed'],
+    ]);
+    const overThirty = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'men-s-over-30-11v11',
+    });
+    expect(overThirty?.seasons).toEqual([]);
+  });
+
   test('is insert-only: a later run changes no date, so staging keeps the phases of its first run', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
