@@ -1,9 +1,18 @@
-import { expectAccessible } from './support/a11y';
-import { remoteBaseUrl } from './support/env';
+import type { Page } from '@playwright/test';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
-import { seedSeasons, seedTenant, type SeasonSeed, type Tenant } from './support/tenant';
+import { screenshot } from './support/screenshot';
+import {
+  dateFromToday,
+  seedSeasons,
+  seedTenant,
+  type SeasonSeed,
+  type Tenant,
+} from './support/tenant';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -39,6 +48,14 @@ const ONE_DAY: SeasonSeed = {
   startDate: '2027-09-04',
   endDate: '2027-09-04',
 };
+/** Dates counted from the test's clock, so the season stays open however long the suite has run. */
+const OPEN_SEASON: SeasonSeed = {
+  name: 'Fall Open',
+  slug: 'fall-open',
+  startDate: dateFromToday(40),
+  endDate: dateFromToday(100),
+  registrationDeadline: dateFromToday(20),
+};
 const DRAFT_SEASON: SeasonSeed = {
   name: 'Draft Season',
   slug: 'draft-season',
@@ -60,7 +77,12 @@ async function seed(): Promise<SeededSeason> {
       { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' },
     ],
     leagues: [
-      { name: LEAGUE, sport: 'beachVolleyball', locations: ['Beta Courts', 'Alpha Field'] },
+      {
+        name: LEAGUE,
+        sport: 'beachVolleyball',
+        locations: ['Beta Courts', 'Alpha Field'],
+        division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+      },
       {
         name: 'Draft League',
         sport: 'beachVolleyball',
@@ -71,7 +93,14 @@ async function seed(): Promise<SeededSeason> {
     ],
   });
   await Promise.all([
-    seedSeasons(tenant, LEAGUE_SLUG, [SUMMER, NEW_YEAR, CROSS_YEAR, ONE_DAY, DRAFT_SEASON]),
+    seedSeasons(tenant, LEAGUE_SLUG, [
+      SUMMER,
+      NEW_YEAR,
+      CROSS_YEAR,
+      ONE_DAY,
+      OPEN_SEASON,
+      DRAFT_SEASON,
+    ]),
     seedSeasons(tenant, 'draft-league', [SUMMER]),
     seedSeasons(tenant, 'other-league', [
       {
@@ -106,6 +135,26 @@ function textOf(fragment: string | undefined): string {
     .trim();
 }
 
+/** The whole row for a term, with a space where each tag was, so a label and its value stay apart. */
+function detailRow(html: string, term: string): string | undefined {
+  const rows = [...html.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>([\s\S]*?)(?=<dt\b|<\/dl>)/g)];
+  const row = rows.find(([, dt]) => textOf(dt) === term);
+  return row ? spacedText(row[2]) : undefined;
+}
+
+function spacedText(fragment: string | undefined): string {
+  return (fragment ?? '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function registrationCard(html: string): string | undefined {
+  return /<section\b[^>]*id="registration"[^>]*>[\s\S]*?<\/section>/.exec(html)?.[0];
+}
+
 function definition(html: string, term: string): string | undefined {
   const rows = [...html.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>\s*<dd\b[^>]*>([\s\S]*?)<\/dd>/g)];
   return rows.find(([, dt]) => textOf(dt) === term)?.[2];
@@ -133,7 +182,9 @@ test.describe('public season page: raw server HTML', () => {
         expect(headers['netlify-vary'], query).toBe('query');
 
         expect(html.match(/<h1\b/g), query).toHaveLength(1);
-        expect(html, query).toMatch(/<h1\b[^>]*>\s*Summer 2027\s*<\/h1>/);
+        expect(textOf(/<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(html)?.[1]), query).toBe(
+          `${LEAGUE} · Summer 2027`,
+        );
         const breadcrumb = /<nav\b[^>]*aria-label="Breadcrumb"[^>]*>[\s\S]*?<\/nav>/.exec(
           html,
         )?.[0];
@@ -150,17 +201,13 @@ test.describe('public season page: raw server HTML', () => {
         expect(dates, query).toContain('datetime="2027-06-06"');
         expect(dates, query).toContain('datetime="2027-08-29"');
         expect(textOf(dates), query).toBe('Jun 6 – Aug 29, 2027');
-        expect(textOf(definition(html, 'Format')), query).toBe('4v4');
         expect(html, query).not.toContain('4 v 4');
-        expect(textOf(definition(html, 'Team size')), query).toBe('Teams need at least 4 players');
-        expect(textOf(definition(html, 'Locations')), query).toBe('Beta Courts, Alpha Field');
 
         expect(html, query).not.toContain('/sports/');
         expect(html, query).not.toContain('aria-label="Open navigation"');
         expect(html, query).not.toContain(`aria-label="${tenant.name}"`);
 
-        expect(html, query).not.toMatch(/Register|\$\d/);
-        expect(html, query).not.toContain('registration-heading');
+        expect(html, query).not.toMatch(/\$\d/);
 
         expect(html, query).toContain(`<title>Summer 2027 | ${LEAGUE} | Omni League</title>`);
         expect(canonicalHrefs(html), query).toHaveLength(1);
@@ -210,6 +257,75 @@ test.describe('public season page: raw server HTML', () => {
   );
 });
 
+test.describe('public season page: registration card and details in the raw server HTML', () => {
+  test(
+    'an open season: the registration card follows the h1 and precedes the details, with its deadline and the steps',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant } = await seed();
+      const { html } = await fetchRawHtml(
+        request,
+        `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`,
+      );
+      const order = ['<h1', 'id="registration"', 'id="details-heading"', 'id="how-heading"'].map(
+        (marker) => html.indexOf(marker),
+      );
+      expect(order.every((position) => position > 0)).toBe(true);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+
+      const card = spacedText(registrationCard(html));
+      expect(card).toContain('Registration open');
+      const closes = formatDate(OPEN_SEASON.registrationDeadline ?? '');
+      expect(card).toContain(`Registration closes ${closes}`);
+      expect(card).toContain('Captains register a team, then invite their players.');
+      expect(spacedText(html.slice(html.indexOf('id="how-heading"')))).toContain(
+        'Teams need at least 4 players before registration closes. 3 Play Games start',
+      );
+    },
+  );
+
+  test(
+    'a closed season links to the league’s open season, and a league with none shows no link',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant, path } = await seed();
+      const closed = await fetchRawHtml(request, path);
+      const card = registrationCard(closed.html);
+      expect(spacedText(card)).toContain('Registration closed');
+      expect(spacedText(card)).toContain('Registration is open for Fall Open.');
+      expect(card).toContain(`href="${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open"`);
+      expect(closed.html).not.toContain('id="how-heading"');
+      expect(spacedText(card)).not.toContain('Captains register a team');
+
+      const none = await fetchRawHtml(
+        request,
+        `${tenant.path}/leagues/other-league/seasons/other-season`,
+      );
+      const noneCard = registrationCard(none.html);
+      expect(spacedText(noneCard)).toContain('Registration closed');
+      expect(noneCard).not.toContain('<a');
+    },
+  );
+
+  test(
+    'the details hold the dates, division, deadline, and each location with its address, and no weeks line',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { path } = await seed();
+      const { html } = await fetchRawHtml(request, path);
+      expect(detailRow(html, 'Dates')).toBe('Jun 6 – Aug 29, 2027');
+      expect(detailRow(html, 'Division')).toBe(
+        'Coed · 4v4 · BB From the league · teams need at least 4 players',
+      );
+      expect(detailRow(html, 'Registration closes')).toBe('Dec 1, 2025');
+      expect(detailRow(html, 'Locations')).toBe(
+        'Beta Courts 2 Beta Street, Corpus Christi, TX 78402 Alpha Field 1 Alpha Road, Corpus Christi, TX 78412',
+      );
+      expect(spacedText(html)).not.toMatch(/\bweeks?\b/i);
+    },
+  );
+});
+
 test.describe('public season page: dates and locations in the raw server HTML', () => {
   test(
     'a season across two years writes both years, a season of one day writes one date, and one location reads "Location"',
@@ -243,7 +359,9 @@ test.describe('public season page: dates and locations in the raw server HTML', 
         `${tenant.path}/leagues/other-league/seasons/other-season`,
       );
       expect(single.status).toBe(200);
-      expect(textOf(definition(single.html, 'Location'))).toBe('Alpha Field');
+      expect(detailRow(single.html, 'Location')).toBe(
+        'Alpha Field 1 Alpha Road, Corpus Christi, TX 78412',
+      );
       expect(definition(single.html, 'Locations')).toBeUndefined();
     },
   );
@@ -261,9 +379,65 @@ test.describe('public season page in the browser', () => {
     await expect(page).toHaveTitle(`Summer 2027 | ${LEAGUE} | Omni League`);
     await expect(page.getByRole('heading', { level: 2, name: 'Season details' })).toBeVisible();
     await expect(page.locator('main dl')).toContainText('Jun 6 – Aug 29, 2027');
-    await expect(page.locator('main dl')).toContainText('Teams need at least 4 players');
+    await expect(page.locator('main dl')).toContainText('teams need at least 4 players');
     await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toBeVisible();
     await expectAccessible(page);
+  });
+
+  test('the open season passes the axe helper, with nothing fixed over a focused element', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed();
+    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Fall Open' })).toBeVisible();
+    await hydrated(consoleGuard);
+    await expectAccessible(page);
+  });
+
+  test('the card comes before the details on a phone and sits in a sticky right column from 1024px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`);
+    await hydrated(consoleGuard);
+    const card = page.locator('#registration > div');
+    const details = page.locator('section[aria-labelledby="details-heading"]');
+    const cardBox = (await card.boundingBox())!;
+    const detailsBox = (await details.boundingBox())!;
+    const width = page.viewportSize()!.width;
+    if (width < 1024) {
+      expect(cardBox.y).toBeLessThan(detailsBox.y);
+      expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(detailsBox.y);
+      expect(cardBox.y).toBeLessThan(page.viewportSize()!.height);
+    } else {
+      expect(cardBox.x).toBeGreaterThan(detailsBox.x + detailsBox.width - 1);
+      const startY = detailsBox.y;
+      await page.mouse.wheel(0, 400);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+      const scrolledDetails = (await details.boundingBox())!;
+      expect(scrolledDetails.y).toBeLessThan(startY);
+      const stuck = (await card.boundingBox())!;
+      expect(stuck.y).toBeGreaterThanOrEqual(0);
+      expect(stuck.y + stuck.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    }
+    await screenshot(page, testInfo, 'season-open');
+  });
+
+  test('a closed season shows the closed card with its link, and passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { path } = await seed();
+    await page.goto(path);
+    await hydrated(consoleGuard);
+    const card = page.locator('#registration');
+    await expect(card).toContainText('Registration closed');
+    await expect(card.getByRole('link', { name: 'See Fall Open' })).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'season-closed');
   });
 
   test.describe('a draft season', () => {
@@ -370,7 +544,7 @@ test.describe('public season page offline', () => {
     await page.goto(leaguePath);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
-    await expect(h1).toHaveText('Winter 2027-28');
+    await expect(h1).toHaveText('Offline League · Winter 2027-28');
     await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
     await expect(note).toHaveCount(0);
     await crumbs.getByRole('link', { name: 'Offline League' }).click();
@@ -379,7 +553,7 @@ test.describe('public season page offline', () => {
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await page.getByRole('main').getByRole('link', { name: 'Winter 2027-28', exact: true }).click();
-    await expect(h1).toHaveText('Winter 2027-28');
+    await expect(h1).toHaveText('Offline League · Winter 2027-28');
     await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
     await expect(dates.locator('time')).toHaveText(['Dec 1, 2027', 'Feb 20, 2028']);
     await expect(note).toBeVisible();
@@ -395,7 +569,107 @@ test.describe('public season page offline', () => {
 
     await context.setOffline(false);
     await page.goto(winterPath);
-    await expect(h1).toHaveText('Winter 2027-28');
+    await expect(h1).toHaveText('Offline League · Winter 2027-28');
     await expect(note).toHaveCount(0);
+  });
+});
+
+const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed';
+
+function formatDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return `${months[month - 1]} ${day}, ${year}`;
+}
+
+interface Watched {
+  skeletonSeen: boolean;
+  sameH1: boolean;
+}
+
+async function watchSkeleton(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
+    watch.e2eSkeletonSeen = false;
+    const check = () => {
+      const first = document.querySelector('main h1');
+      if (first && !watch.e2eFirstH1) watch.e2eFirstH1 = first;
+      if (document.body.textContent.includes('Loading the season.')) watch.e2eSkeletonSeen = true;
+    };
+    new MutationObserver(check).observe(document, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  });
+}
+
+test.describe('public season page: loading', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test('on a first load the status never appears and the server-rendered h1 is never replaced', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { path } = await seed();
+    await watchSkeleton(page);
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1, name: 'Summer 2027' })).toBeVisible();
+    await hydrated(consoleGuard);
+    const watched = await page.evaluate((): Watched => {
+      const watch = window as Window & { e2eSkeletonSeen?: boolean; e2eFirstH1?: Element };
+      return {
+        skeletonSeen: watch.e2eSkeletonSeen === true,
+        sameH1:
+          watch.e2eFirstH1 !== undefined && watch.e2eFirstH1 === document.querySelector('main h1'),
+      };
+    });
+    expect(watched).toEqual({ skeletonSeen: false, sameH1: true });
+  });
+
+  test('after an in-app navigation the skeleton shows with its status, then the page within 4px of its heading bar', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant, path } = await seed();
+    const held = await holdQueries(page, ['seasons:getPublicPage']);
+    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
+    await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
+    await hydrated(consoleGuard);
+
+    await page.getByRole('main').getByRole('link', { name: 'Summer 2027', exact: true }).click();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page).toHaveURL(`${baseURL}${path}`);
+
+    const skeleton = page.getByTestId('season-skeleton');
+    await expect(skeleton).toBeVisible();
+    await expect(skeleton.getByRole('status')).toHaveText('Loading the season.');
+    await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
+    await expect(page.locator('main').getByRole('heading')).toHaveCount(0);
+    await expect(page.locator('main[id="main"]')).toBeFocused();
+    const scan = await axeScan(page);
+    expect(describeViolations(scan.violations)).toEqual([]);
+    const bar = (await skeleton.locator('span[aria-hidden="true"]').nth(3).boundingBox())!;
+
+    held.release();
+    const h1 = page.getByRole('heading', { level: 1, name: 'Summer 2027' });
+    await expect(h1).toBeVisible();
+    await expect(skeleton).toHaveCount(0);
+    const heading = (await h1.boundingBox())!;
+    expect(Math.abs(heading.y - bar.y)).toBeLessThanOrEqual(4);
+    await expect(page.locator('main[id="main"]')).toBeFocused();
   });
 });

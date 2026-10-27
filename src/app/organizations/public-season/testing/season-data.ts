@@ -10,11 +10,24 @@ export const SUMMER_2027: PublicSeasonData = {
     slug: 'sunday-reverse-coed-4s',
     sportName: 'Beach volleyball',
     locationNames: ['North Beach Sand Courts'],
+    divisionLabel: 'Coed · 4v4 · Rec',
+    locations: [
+      { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+    ],
+    upcomingSeasons: [
+      {
+        name: 'Summer 2027',
+        slug: 'summer-2027',
+        startDate: '2027-06-06',
+        registrationDeadline: '2027-05-23',
+      },
+    ],
   },
   name: 'Summer 2027',
   slug: 'summer-2027',
   startDate: '2027-06-06',
   endDate: '2027-08-29',
+  registrationDeadline: '2027-05-23',
   formatName: '4v4',
   minimumRosterSize: 4,
 };
@@ -30,3 +43,8 @@ export function seasonQueryResults(
 export const SUMMER_2027_VIEW: PublicSeasonView = {
   season: SUMMER_2027,
 };
+
+/** A copy of `value` without `key`, as a saved copy made before the field existed lacks it. */
+export function without<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
+  return Object.fromEntries(Object.entries(value).filter(([name]) => name !== key)) as Omit<T, K>;
+}

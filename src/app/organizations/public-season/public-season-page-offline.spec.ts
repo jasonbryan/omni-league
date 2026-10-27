@@ -118,7 +118,7 @@ describe('PublicSeasonPage offline', () => {
 
     it('shows the season, its details, from the saved copies', () => {
       const main = host(harness).querySelector('main');
-      expect(text(main?.querySelector('h1'))).toBe('Summer 2027');
+      expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
       expect(text(main?.querySelector('dl'))).toContain('Jun 6 – Aug 29, 2027');
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
@@ -144,7 +144,9 @@ describe('PublicSeasonPage offline', () => {
         subscription(name).emit(value);
       }
       await settle(harness);
-      expect(text(host(harness).querySelector('main h1'))).toBe('Summer Live');
+      expect(text(host(harness).querySelector('main h1'))).toBe(
+        'Sunday Reverse Coed 4s · Summer Live',
+      );
       expect(note(harness)).toBeNull();
       expect(JSON.parse(savedEntry() ?? 'null')).toMatchObject({
         v: { name: 'Summer Live' },
@@ -157,7 +159,9 @@ describe('PublicSeasonPage offline', () => {
     plant();
     stubOnLine(true);
     const harness = await open();
-    expect(text(host(harness).querySelector('main h1'))).toBe('Summer 2027');
+    expect(text(host(harness).querySelector('main h1'))).toBe(
+      'Sunday Reverse Coed 4s · Summer 2027',
+    );
     expect(note(harness)).toBeNull();
   });
 
@@ -220,7 +224,9 @@ describe('PublicSeasonPage offline', () => {
     plant();
     stubOnLine(true);
     const harness = await open();
-    expect(text(host(harness).querySelector('main h1'))).toBe('Summer 2027');
+    expect(text(host(harness).querySelector('main h1'))).toBe(
+      'Sunday Reverse Coed 4s · Summer 2027',
+    );
     subscription(SEASON).emit(null);
     await settle(harness);
     expect(savedEntry(SEASON)).toBeNull();

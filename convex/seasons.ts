@@ -10,11 +10,13 @@ import {
 } from './lib/seasonInput';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { leagueLocationNames } from './lib/publicLeague';
+import { leagueLocationsWithAddress, leagueUpcomingSeasons } from './lib/publicSeason';
 import {
   getSeasonPublicPageReturns,
   publicOpenSeasonsValidator,
   publicSeasonsValidator,
   type PublicOpenSeasons,
+  type PublicSeasonPage,
 } from './lib/publicPage';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import {
@@ -171,11 +173,12 @@ export const listPublic = query({
 export const getPublicPage = query({
   args: seasonSlugsValidator.fields,
   returns: getSeasonPublicPageReturns,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicSeasonPage | null> => {
     const found = await findSeasonBySlugs(ctx, args);
     // A draft answers like an unknown season, so nothing public says whether its slug exists.
     if (found?.league.status !== 'published' || found.season.status !== 'published') return null;
     const { organization, league, season } = found;
+    const divisionLabel = await leagueDivisionLabel(ctx, league);
     return {
       organization: { name: organization.name, slug: organization.slug },
       league: {
@@ -183,11 +186,15 @@ export const getPublicPage = query({
         slug: league.slug,
         sportName: sportName(league.sport),
         locationNames: await leagueLocationNames(ctx, organization, league),
+        ...(divisionLabel !== undefined && { divisionLabel }),
+        locations: await leagueLocationsWithAddress(ctx, organization, league),
+        upcomingSeasons: await leagueUpcomingSeasons(ctx, league),
       },
       name: season.name,
       slug: season.slug,
       startDate: season.startDate,
       endDate: season.endDate,
+      registrationDeadline: season.registrationDeadline,
       formatName: formatLabel(seasonPlayersPerSide(season)),
       minimumRosterSize: season.minimumRosterSize,
     };
