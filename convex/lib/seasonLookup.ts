@@ -21,15 +21,23 @@ export interface SeasonSlugs extends LeagueSlugs {
   seasonSlug: string;
 }
 
+export async function findOrganizationBySlug(
+  ctx: Ctx,
+  orgSlug: string,
+): Promise<Doc<'organizations'> | null> {
+  if (!isSlug(orgSlug)) return null;
+  return ctx.db
+    .query('organizations')
+    .withIndex('by_slug', (q) => q.eq('slug', orgSlug))
+    .unique();
+}
+
 export async function findLeagueBySlugs(
   ctx: Ctx,
   { orgSlug, leagueSlug }: LeagueSlugs,
 ): Promise<{ organization: Doc<'organizations'>; league: Doc<'leagues'> } | null> {
-  if (!isSlug(orgSlug) || !isSlug(leagueSlug)) return null;
-  const organization = await ctx.db
-    .query('organizations')
-    .withIndex('by_slug', (q) => q.eq('slug', orgSlug))
-    .unique();
+  if (!isSlug(leagueSlug)) return null;
+  const organization = await findOrganizationBySlug(ctx, orgSlug);
   if (!organization) return null;
   const league = await ctx.db
     .query('leagues')

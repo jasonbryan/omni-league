@@ -5,6 +5,7 @@ import { api, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
 import { formatLabel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { registrationIsOpen, seasonPhase } from './lib/registration';
 import { checkSeasonFields } from './lib/seasonInput';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { insertLeague, insertLocation, insertTenant } from './lib/tenantWrites';
@@ -18,7 +19,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 4 };
+const ROWS = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 6 };
 const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
@@ -135,11 +136,17 @@ async function insertRaw(t: T): Promise<void> {
   });
 }
 
+// 18:00 UTC on Oct 27 is 06:00 on Oct 27 at UTC-12.
+const RUN = Date.UTC(2026, 9, 27, 18);
+
 beforeEach(() => {
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(RUN);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
@@ -150,7 +157,7 @@ describe('seed:demo', () => {
     expect(await counts(t)).toEqual(ROWS);
   });
 
-  test('adds the two demo draft seasons and the two published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
+  test('adds the two demo draft seasons and the four published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     const rows = await t.run(async (ctx) => {
@@ -230,6 +237,30 @@ describe('seed:demo', () => {
         registrationDeadline: '2027-05-19',
         status: 'published',
       },
+      {
+        organization: 'gulf-coast-sport-social',
+        league: 'sunday-reverse-coed-4s',
+        name: 'Current season',
+        slug: 'current-season',
+        playersPerSide: 4,
+        minimumRosterSize: 4,
+        startDate: '2026-10-13',
+        endDate: '2026-12-22',
+        registrationDeadline: '2026-10-06',
+        status: 'published',
+      },
+      {
+        organization: 'gulf-coast-sport-social',
+        league: 'coed-7v7-rec',
+        name: 'Next season',
+        slug: 'next-season',
+        playersPerSide: 7,
+        minimumRosterSize: 7,
+        startDate: '2026-11-01',
+        endDate: '2027-01-24',
+        registrationDeadline: '2026-10-25',
+        status: 'published',
+      },
     ]);
     for (const { sport, season } of rows) {
       expect(
@@ -265,7 +296,7 @@ describe('seed:demo', () => {
       updated: { organizations: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(4);
+    expect(after).toHaveLength(6);
     for (const season of before) expect(after).toContainEqual(season);
     expect(
       after.find((season) => season.slug === 'fall-2027' && season.playersPerSide === 7),
@@ -284,6 +315,8 @@ describe('seed:demo', () => {
     expect(drafts.map((season) => [season.slug, season.status])).toEqual([
       ['fall-2027', 'draft'],
       ['fall-2027', 'draft'],
+      ['current-season', 'published'],
+      ['next-season', 'published'],
     ]);
 
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
@@ -293,7 +326,7 @@ describe('seed:demo', () => {
       updated: { organizations: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(4);
+    expect(after).toHaveLength(6);
     for (const draft of drafts) expect(after).toContainEqual(draft);
     const summers = after.filter((season) => season.slug === 'summer-2027');
     expect(
@@ -324,7 +357,10 @@ describe('seed:demo', () => {
       for (const season of await ctx.db.query('seasons').collect()) {
         if (season.slug !== 'summer-2027') continue;
         await ctx.db.delete('seasons', season._id);
-        await ctx.db.patch('leagues', season.leagueId, { publishedSeasonCount: 0 });
+        const league = (await ctx.db.get('leagues', season.leagueId))!;
+        await ctx.db.patch('leagues', season.leagueId, {
+          publishedSeasonCount: (league.publishedSeasonCount ?? 0) - 1,
+        });
       }
     });
     await t.mutation(internal.seed.insertDemoData, {});
@@ -769,6 +805,7 @@ describe('seed:demo', () => {
           sportName: 'Softball',
           locationNames: [],
           divisionLabel: 'Coed · 9v9 · Rec',
+          seasons: [],
         },
       ],
       page: 1,
@@ -785,6 +822,7 @@ describe('seed:demo', () => {
           sportName: 'Soccer',
           locationNames: ['Old Field'],
           divisionLabel: 'Coed · 4v4 · Rec',
+          seasons: [],
         },
         {
           name: 'Beta League',
@@ -792,6 +830,7 @@ describe('seed:demo', () => {
           sportName: 'Softball',
           locationNames: [],
           divisionLabel: 'Coed · 9v9 · Rec',
+          seasons: [],
         },
       ],
       page: 1,
@@ -894,9 +933,17 @@ describe('seed:demo', () => {
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    const { DEMO, DEMO_SEASONS, DEMO_ACCOUNTS, DEMO_ACCOUNT_DOMAIN, ...functions } = seed;
+    const {
+      DEMO,
+      DEMO_SEASONS,
+      DEMO_RUN_SEASONS,
+      DEMO_ACCOUNTS,
+      DEMO_ACCOUNT_DOMAIN,
+      ...functions
+    } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
+    expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
     expect(Object.keys(DEMO_ACCOUNTS)).toEqual(['admin', 'organizer', 'player']);
     expect(DEMO_ACCOUNT_DOMAIN).toBe('demo.omni-league.test');
     const exports = Object.entries(functions);
@@ -1113,3 +1160,58 @@ async function expectCountersMatchRecountPublished(t: T) {
     }
   });
 }
+
+describe('seed:demo seasons dated from the run', () => {
+  const seasonsOf = (t: T, slug: string) =>
+    t.run(async (ctx) => {
+      const found = [];
+      for (const season of await ctx.db.query('seasons').collect()) {
+        if (season.slug !== slug) continue;
+        const league = (await ctx.db.get('leagues', season.leagueId))!;
+        found.push({ league: league.slug, season });
+      }
+      return found;
+    });
+
+  test('puts one demo season in progress and one with registration closed, whenever it runs', async () => {
+    for (const run of [RUN, Date.UTC(2027, 2, 3, 18), Date.UTC(2028, 1, 29, 18)]) {
+      vi.setSystemTime(run);
+      const t = setup();
+      await t.mutation(internal.seed.insertDemoData, {});
+      const [current] = await seasonsOf(t, 'current-season');
+      const [next] = await seasonsOf(t, 'next-season');
+      expect(current?.league, String(run)).toBe('sunday-reverse-coed-4s');
+      expect(seasonPhase(current.season, run), String(run)).toBe('inProgress');
+      expect(next?.league, String(run)).toBe('coed-7v7-rec');
+      expect(seasonPhase(next.season, run), String(run)).toBe('registrationClosed');
+      expect(current?.season.status).toBe('published');
+      expect(next?.season.status).toBe('published');
+    }
+  });
+
+  test('keeps the Summer 2027 seasons of both leagues open for registration beside them', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const published = await t.query(api.seasons.listOpenForOrganization, {
+      orgSlug: 'gulf-coast-sport-social',
+    });
+    const open = published.filter((season) => registrationIsOpen(season, RUN));
+    expect(open.map((season) => [season.league.slug, season.slug])).toEqual([
+      ['sunday-reverse-coed-4s', 'summer-2027'],
+      ['coed-7v7-rec', 'summer-2027'],
+    ]);
+  });
+
+  test('is insert-only: a later run changes no date, so staging keeps the phases of its first run', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const first = await seasonsOf(t, 'current-season');
+    vi.setSystemTime(RUN + 90 * 24 * 60 * 60 * 1000);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
+      ...NO_ROWS,
+      backfilled: NONE,
+      updated: { organizations: 0 },
+    });
+    expect(await seasonsOf(t, 'current-season')).toEqual(first);
+  });
+});

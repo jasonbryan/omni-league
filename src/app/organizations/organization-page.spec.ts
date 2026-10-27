@@ -34,6 +34,7 @@ async function open(url = `/organizations/${GULF_COAST.slug}`): Promise<RouterTe
 const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
+const OPEN_SEASONS = 'seasons:listOpenForOrganization';
 
 function subscription(name = HEADER): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
@@ -90,6 +91,7 @@ describe('OrganizationPage', () => {
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 1 } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1 } },
+      { name: OPEN_SEASONS, args: { orgSlug: 'gulf-coast-sport-social' } },
     ]);
   });
 
@@ -153,14 +155,35 @@ describe('OrganizationPage', () => {
         ...host(harness).querySelectorAll('section[aria-labelledby="leagues-heading"] li'),
       ].map((row) => [...row.querySelectorAll('h3, p')].map(text));
       expect(lines).toEqual([
-        ['Coed 7v7 Rec', 'Coed · 7v7 · Rec', 'Soccer · Bayside Athletic Complex'],
-        ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+", 'Soccer · Bayside Athletic Complex'],
-        ['Sunday Reverse Coed 4s', 'Coed · 4v4 · BB', 'Beach volleyball · North Beach Sand Courts'],
-        ['Thursday Night Coed 2s', 'Coed · 2v2 · B', 'Beach volleyball · North Beach Sand Courts'],
+        [
+          'Coed 7v7 Rec',
+          'Coed · 7v7 · Rec',
+          'Soccer · Bayside Athletic Complex',
+          'No upcoming season',
+        ],
+        [
+          "Men's Over-30 11v11",
+          "Men's · 11v11 · Rec · 30+",
+          'Soccer · Bayside Athletic Complex',
+          'No upcoming season',
+        ],
+        [
+          'Sunday Reverse Coed 4s',
+          'Coed · 4v4 · BB',
+          'Beach volleyball · North Beach Sand Courts',
+          'No upcoming season',
+        ],
+        [
+          'Thursday Night Coed 2s',
+          'Coed · 2v2 · B',
+          'Beach volleyball · North Beach Sand Courts',
+          'No upcoming season',
+        ],
         [
           'Wednesday Coed Slow-Pitch',
           'Coed · 10v10 · Rec',
           'Softball · Flour Bluff Softball Park, Bayside Athletic Complex',
+          'No upcoming season',
         ],
       ]);
     });
@@ -205,6 +228,7 @@ describe('OrganizationPage', () => {
       expect([...(row?.querySelectorAll('h3, p') ?? [])].map(text)).toEqual([
         'Coed 7v7 Rec',
         'Soccer · Bayside Athletic Complex',
+        'No upcoming season',
       ]);
       expect(host(harness).querySelector('app-server-error-view')).toBeNull();
     });
@@ -273,7 +297,13 @@ describe('OrganizationPage', () => {
         leagueCount: 6,
         locationCount: 4,
         leagues: [
-          { name: 'Adult League', slug: 'adult-league', sportName: 'Soccer', locationNames: [] },
+          {
+            name: 'Adult League',
+            slug: 'adult-league',
+            sportName: 'Soccer',
+            locationNames: [],
+            seasons: [],
+          },
           ...GULF_COAST.leagues.slice(0, 4),
         ],
       });
@@ -391,7 +421,7 @@ describe('OrganizationPage', () => {
   });
 
   describe('loading', () => {
-    it('shows a skeleton with the status until all three results have arrived', async () => {
+    it('shows a skeleton with the status until all four results have arrived', async () => {
       const harness = await open();
       const results = queryResults(GULF_COAST);
       const main = () => host(harness).querySelector('main');
@@ -403,6 +433,9 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(main()?.querySelector('[role="status"]')).not.toBeNull();
       subscription(LOCATIONS).emit(results[LOCATIONS]);
+      await settle(harness);
+      expect(text(main()?.querySelector('[role="status"]'))).toBe('Loading the open seasons.');
+      subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);
       expect(main()?.querySelector('[role="status"]')).toBeNull();
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
@@ -464,11 +497,11 @@ describe('OrganizationPage', () => {
       expect(canonical()).toBeNull();
     });
 
-    for (const name of [LEAGUES, LOCATIONS]) {
+    for (const name of [LEAGUES, LOCATIONS, OPEN_SEASONS]) {
       it(`renders the server-error view when ${name} fails, until it delivers a result`, async () => {
         const harness = await open();
         const results = queryResults(GULF_COAST);
-        for (const other of [HEADER, LEAGUES, LOCATIONS].filter((n) => n !== name)) {
+        for (const other of [HEADER, LEAGUES, LOCATIONS, OPEN_SEASONS].filter((n) => n !== name)) {
           subscription(other).emit(results[other]);
         }
         subscription(name).fail(new Error('connect ECONNREFUSED internal-db.corp.example:443'));

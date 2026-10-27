@@ -36,6 +36,12 @@ function plant(sport: 'soccer' | 'softball', options: { leagues?: boolean } = {}
     results[LOCATIONS],
     SAVED_AT,
   );
+  plantSavedCopy(
+    api.seasons.listOpenForOrganization,
+    { orgSlug: SLUG, sport },
+    results['seasons:listOpenForOrganization'],
+    SAVED_AT,
+  );
 }
 
 async function open(url: string): Promise<RouterTestingHarness> {

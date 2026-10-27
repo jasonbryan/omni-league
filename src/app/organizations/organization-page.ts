@@ -7,6 +7,7 @@ import { api } from '../../../convex/_generated/api';
 import { sportFromSegment } from '../../../convex/lib/sports';
 import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
 import { parseListPage } from '../core/list-page';
+import { injectNow } from '../core/now';
 import { bindPageMeta } from '../core/page-meta';
 import { NotFoundView } from '../not-found/not-found-view';
 import { NotSavedView } from '../offline/not-saved-view';
@@ -15,6 +16,7 @@ import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview } from './organization-overview';
 import { OrganizationSkeleton } from './organization-skeleton';
 import { organizationPath, sportViewCanonicalPath } from './organization-path';
+import { openSeasonsBySoonestDeadline } from './season-status';
 
 type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagues>;
 
@@ -45,6 +47,8 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
           [leaguePaging]="leaguePaging()"
           [busy]="busy()"
           [savedAt]="savedAt()"
+          [openSeasons]="openSeasons()"
+          [now]="now()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -99,7 +103,11 @@ export class OrganizationPage {
   private readonly locations = injectQuery(api.organizations.listPublicLocations, () =>
     this.unknownSport() ? skipToken : { slug: this.slug(), page: 1, ...this.listArgs() },
   );
+  private readonly openSeasonRows = injectQuery(api.seasons.listOpenForOrganization, () =>
+    this.unknownSport() ? skipToken : { orgSlug: this.slug(), ...this.listArgs() },
+  );
   private readonly online = injectOnline();
+  protected readonly now = injectNow();
 
   /**
    * Online, the previous page of the same list stays while the next one loads.
@@ -132,7 +140,8 @@ export class OrganizationPage {
     () =>
       this.header.error() !== undefined ||
       this.leagues.error() !== undefined ||
-      this.locations.error() !== undefined,
+      this.locations.error() !== undefined ||
+      this.openSeasonRows.error() !== undefined,
   );
 
   protected readonly sport = computed(() =>
@@ -146,12 +155,18 @@ export class OrganizationPage {
   protected readonly leagueRows = computed(() => this.shownLeagues()?.value.rows);
   protected readonly locationRows = computed(() => this.locations.value()?.rows);
 
+  // The query reads no clock, so which seasons are open is decided here, at the server's request time or the browser's clock.
+  protected readonly openSeasons = computed(() => {
+    const rows = this.openSeasonRows.value();
+    return rows && openSeasonsBySoonestDeadline(rows, this.now());
+  });
+
   // Online, the hero and chips stay on screen while the lists of another sport load. Offline, a list with no saved copy means the whole page has none.
   protected readonly organization = computed(() => {
     if (this.failed() || this.noLeagueInSport()) return undefined;
     const header = this.header.value();
     if (!header) return undefined;
-    const listsMissing = !this.leagueRows() || !this.locationRows();
+    const listsMissing = !this.leagueRows() || !this.locationRows() || !this.openSeasonRows.value();
     return !this.online() && listsMissing ? undefined : header;
   });
 
@@ -167,9 +182,12 @@ export class OrganizationPage {
 
   protected readonly savedAt = computed(() => {
     if (this.online()) return undefined;
-    const times = [this.header.savedAt(), this.leagues.savedAt(), this.locations.savedAt()].filter(
-      (time) => time !== undefined,
-    );
+    const times = [
+      this.header.savedAt(),
+      this.leagues.savedAt(),
+      this.locations.savedAt(),
+      this.openSeasonRows.savedAt(),
+    ].filter((time) => time !== undefined);
     return times.length > 0 ? Math.min(...times) : undefined;
   });
 

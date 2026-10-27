@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { convexRun } from './convex';
 
 export type Sport = 'beachVolleyball' | 'soccer' | 'softball';
@@ -83,6 +84,8 @@ export interface SeasonSeed {
   slug: string;
   startDate: string;
   endDate: string;
+  /** Defaults to a date long past, so the season is not open for registration. */
+  registrationDeadline?: string;
   status?: 'draft' | 'published';
 }
 
@@ -121,7 +124,7 @@ export async function seedSeasons(
       slug: season.slug,
       startDate: season.startDate,
       endDate: season.endDate,
-      registrationDeadline: '2025-12-01',
+      registrationDeadline: season.registrationDeadline ?? '2025-12-01',
       playersPerSide: 4,
       minimumRosterSize: 4,
       status: season.status ?? 'published',
@@ -140,4 +143,9 @@ export function tallLocations(): { name: string; address: string }[] {
       `${location.address}, Building ${i + 1}, Suite ${i + 1}00, at the north gate of the ` +
       'Corpus Christi Municipal Recreation District grounds, past the visitor parking lot',
   }));
+}
+
+/** A calendar date counted from today's date at UTC-12, the date the pages read, so a season seeded with it keeps its phase as the test runs. */
+export function dateFromToday(days: number): string {
+  return addCalendarDays(dateAtUtcMinus12(Date.now()), days);
 }

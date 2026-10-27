@@ -612,18 +612,21 @@ describe('organizations:listPublicLeagues rows', () => {
           slug: 'coed-7v7-rec',
           sportName: 'Soccer',
           locationNames: ['Bayside Athletic Complex'],
+          seasons: [],
         },
         {
           name: 'Thursday Night Coed 2s',
           slug: 'thursday-night-coed-2s',
           sportName: 'Beach volleyball',
           locationNames: [],
+          seasons: [],
         },
         {
           name: 'Wednesday Coed Slow-Pitch',
           slug: 'wednesday-coed-slow-pitch',
           sportName: 'Softball',
           locationNames: ['North Beach Sand Courts', 'Bayside Athletic Complex'],
+          seasons: [],
         },
       ],
       page: 1,
@@ -765,6 +768,7 @@ describe('organizations:listPublicLeagues rows', () => {
         slug: 'far-league',
         sportName: 'Softball',
         locationNames: ['Row 013', 'Row 001'],
+        seasons: [],
       },
     ]);
   });
@@ -794,6 +798,7 @@ describe('organizations:listPublicLeagues rows', () => {
       slug: 'crossed-league',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
+      seasons: [],
     });
     expect(JSON.stringify(leagues)).not.toContain('B Field');
   });
@@ -813,7 +818,13 @@ describe('organizations:listPublicLeagues rows', () => {
       expect(Object.keys(result).sort()).toEqual(['page', 'pageCount', 'rows', 'total']);
     }
     for (const league of leagues.rows) {
-      expect(Object.keys(league).sort()).toEqual(['locationNames', 'name', 'slug', 'sportName']);
+      expect(Object.keys(league).sort()).toEqual([
+        'locationNames',
+        'name',
+        'seasons',
+        'slug',
+        'sportName',
+      ]);
     }
     expect(JSON.stringify(leagues)).not.toMatch(/customLevelId|standardLevel/);
     for (const location of locations.rows) {

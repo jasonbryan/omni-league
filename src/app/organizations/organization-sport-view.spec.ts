@@ -114,7 +114,7 @@ afterEach(() => {
 });
 
 describe('the sport view queries', () => {
-  it("asks for the organization, and for page 1 of the sport's leagues and locations", async () => {
+  it("asks for the organization, page 1 of the sport's leagues and locations, and its open seasons", async () => {
     await open();
     expect(
       client.activeSubscriptions
@@ -124,6 +124,10 @@ describe('the sport view queries', () => {
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' } },
+      {
+        name: 'seasons:listOpenForOrganization',
+        args: { orgSlug: 'gulf-coast-sport-social', sport: 'soccer' },
+      },
     ]);
   });
 

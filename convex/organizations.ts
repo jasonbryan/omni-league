@@ -3,6 +3,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
 import { leagueDivisionLabel } from './lib/leagueDivision';
+import { leagueRowSeasons } from './lib/publicLeague';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
   checkCityState,
@@ -22,10 +23,11 @@ import {
   getPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
+  type PublicLeagues,
   type PublicLocations,
 } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
-import { isSlug } from './lib/slugs';
+import { findOrganizationBySlug } from './lib/seasonLookup';
 import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from './lib/sports';
 import {
   insertOrganization,
@@ -59,23 +61,12 @@ async function sportNamesAt(
   return names;
 }
 
-async function organizationBySlug(
-  ctx: QueryCtx,
-  slug: string,
-): Promise<Doc<'organizations'> | null> {
-  if (!isSlug(slug)) return null;
-  return ctx.db
-    .query('organizations')
-    .withIndex('by_slug', (q) => q.eq('slug', slug))
-    .unique();
-}
-
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const getPublicPage = query({
   args: { slug: v.string() },
   returns: getPublicPageReturns,
   handler: async (ctx, { slug }) => {
-    const organization = await organizationBySlug(ctx, slug);
+    const organization = await findOrganizationBySlug(ctx, slug);
     if (!organization) return null;
     const sports = [];
     for (const key of Object.keys(SPORT_NAMES) as Sport[]) {
@@ -143,7 +134,7 @@ export const listPublicLocations = query({
   args: { ...listArgs, sport: v.optional(sportValidator) },
   returns: publicLocationsValidator,
   handler: async (ctx, args): Promise<PublicLocations> => {
-    const organization = await organizationBySlug(ctx, args.slug);
+    const organization = await findOrganizationBySlug(ctx, args.slug);
     if (!organization) return EMPTY_LIST;
     const { sport } = args;
     const { read, total } =
@@ -167,8 +158,8 @@ export const listPublicLocations = query({
 export const listPublicLeagues = query({
   args: { ...listArgs, sport: v.optional(sportValidator) },
   returns: publicLeaguesValidator,
-  handler: async (ctx, args) => {
-    const organization = await organizationBySlug(ctx, args.slug);
+  handler: async (ctx, args): Promise<PublicLeagues> => {
+    const organization = await findOrganizationBySlug(ctx, args.slug);
     if (!organization) return EMPTY_LIST;
     const { sport } = args;
     const total =
@@ -199,12 +190,14 @@ export const listPublicLeagues = query({
         if (location?.organizationId === organization._id) locationNames.push(location.name);
       }
       const label = await leagueDivisionLabel(ctx, league);
+      const seasons = await leagueRowSeasons(ctx, league);
       rows.push({
         name: league.name,
         slug: league.slug,
         sportName: sportName(league.sport),
         locationNames,
         ...(label !== undefined && { divisionLabel: label }),
+        seasons,
       });
     }
     return { rows, page, pageCount, total };
@@ -223,7 +216,7 @@ export const getAdminContext = query({
     }),
   ),
   handler: async (ctx, { slug }) => {
-    const organization = await organizationBySlug(ctx, slug);
+    const organization = await findOrganizationBySlug(ctx, slug);
     // Null for any caller: the public page already shows whether the organization exists.
     if (!organization) return null;
     await requireOrgAdminOrForbidden(ctx, organization._id);

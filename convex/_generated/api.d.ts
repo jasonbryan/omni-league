@@ -35,6 +35,7 @@ import type * as lib_previewOrigin from "../lib/previewOrigin.js";
 import type * as lib_publicLeague from "../lib/publicLeague.js";
 import type * as lib_publicList from "../lib/publicList.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
+import type * as lib_registration from "../lib/registration.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_seasonInput from "../lib/seasonInput.js";
 import type * as lib_seasonLookup from "../lib/seasonLookup.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicLeague": typeof lib_publicLeague;
   "lib/publicList": typeof lib_publicList;
   "lib/publicPage": typeof lib_publicPage;
+  "lib/registration": typeof lib_registration;
   "lib/roles": typeof lib_roles;
   "lib/seasonInput": typeof lib_seasonInput;
   "lib/seasonLookup": typeof lib_seasonLookup;

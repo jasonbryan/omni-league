@@ -202,6 +202,7 @@ describe('leagues.publish', () => {
       sportName: 'Softball',
       locationNames: ['Bravo Beach'],
       divisionLabel: 'Coed · 9v9 · Rec',
+      seasons: [],
     });
     expect((await leagues({ sport: 'softball' })).rows.map((row) => row.name)).toEqual([
       'Draft Softball',
