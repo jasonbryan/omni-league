@@ -85,7 +85,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
         <div class="mx-auto w-full max-w-lg">
           <a
             routerLink="/app"
-            class="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground"
+            class="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground pointer-coarse:min-h-11"
             ><ng-icon name="lucideArrowLeft" class="text-base" aria-hidden="true" />Your
             organizations</a
           >

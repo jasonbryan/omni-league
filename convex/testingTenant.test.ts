@@ -371,7 +371,7 @@ describe('sport counters and sportLocations', () => {
     betterAuthTest.register(t, 'betterAuth');
     await t.action(internal.testing.seedLeague, TENANT);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toHaveLength(3);
-    await t.mutation(internal.testing.reset, {});
+    await t.action(internal.testing.reset, {});
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual([]);
     expect(await t.run((ctx) => ctx.db.query('organizations').collect())).toEqual([]);
   }, 30_000);

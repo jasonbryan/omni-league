@@ -257,7 +257,7 @@ describe('YourOrganizations', () => {
       expect(leagueLinks(rows()[0])).toHaveLength(3);
       for (const a of leagueLinks(rows()[0])) {
         expect([...a.classList].sort()).toEqual(
-          'flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted'
+          'flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted'
             .split(' ')
             .sort(),
         );

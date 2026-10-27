@@ -183,7 +183,9 @@ describe('AdminLeagues', () => {
         LEAGUES.map((l) => [l.name, `/app/organizations/${COASTAL.slug}/leagues/${l.slug}`]),
       );
       expect(tokens(links[0].className)).toEqual(
-        tokens('inline-block underline underline-offset-4 hover:text-primary'),
+        tokens(
+          'inline-block underline underline-offset-4 hover:text-primary pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center',
+        ),
       );
       expect(items()[1].querySelectorAll('button')).toHaveLength(1);
     });

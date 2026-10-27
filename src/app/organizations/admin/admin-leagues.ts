@@ -115,7 +115,7 @@ import {
                         <h3 class="me-1 font-medium">
                           <a
                             [routerLink]="leaguePath(row.slug)"
-                            class="inline-block underline underline-offset-4 hover:text-primary"
+                            class="inline-block underline underline-offset-4 hover:text-primary pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                             >{{ row.name }}</a
                           >
                         </h3>

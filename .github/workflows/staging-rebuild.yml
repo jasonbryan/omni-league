@@ -1,0 +1,135 @@
+# STAGING_BUILD_HOOK_URL can queue a build of `main` and nothing else, but anyone holding it can
+# trigger builds at will, so no branch or PR run may read it: this workflow has no `pull_request`
+# trigger, and the `staging-rebuild` environment refuses every branch but `main`.
+name: Rebuild staging
+
+on:
+  schedule:
+    - cron: '17 9 */2 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  rebuild:
+    name: rebuild
+    runs-on: ubuntu-24.04
+    # Longer than the 25 minute poll, so the poll fails the job itself rather than a timeout
+    # cancelling it, which would skip rebuild-issue.
+    timeout-minutes: 35
+    environment: staging-rebuild
+    env:
+      STAGING_URL: https://main--charming-longma-28c00d.netlify.app
+    # Later steps do not run after a failure, so the failed step is read from every step's outcome here.
+    outputs:
+      failed_step: ${{ (steps.secret-check.outcome == 'failure' && 'secret-check') || (steps.slot-before.outcome == 'failure' && 'slot-before') || (steps.trigger.outcome == 'failure' && 'trigger') || (steps.verify.outcome == 'failure' && 'verify') || '' }}
+    steps:
+      # Only whether the secret is set is read here, never its value.
+      - name: secret check
+        id: secret-check
+        env:
+          HAS_HOOK: ${{ secrets.STAGING_BUILD_HOOK_URL != '' }}
+        run: |
+          if [ "$HAS_HOOK" != "true" ]; then
+            echo "::error title=Staging rebuild not configured::The environment secret STAGING_BUILD_HOOK_URL of staging-rebuild is not set. See docs/process/hosting.md, Owner setup."
+            exit 1
+          fi
+      - name: slot before
+        id: slot-before
+        env:
+          RETRY_SECONDS: '5'
+        # A transient fetch error recorded as unknown would let verify pass on the old slot.
+        run: |
+          slot=unknown
+          for attempt in 1 2 3; do
+            body="$(curl -sS --fail --max-time 10 "$STAGING_URL/staging-slot.txt" 2>/dev/null || true)"
+            case "$body" in
+              staging-a | staging-b)
+                slot="$body"
+                break
+                ;;
+            esac
+            if [ "$attempt" -lt 3 ]; then
+              sleep "$RETRY_SECONDS"
+            fi
+          done
+          echo "slot=$slot" >> "$GITHUB_OUTPUT"
+          echo "Staging serves: $slot"
+      - name: trigger
+        id: trigger
+        env:
+          HOOK_URL: ${{ secrets.STAGING_BUILD_HOOK_URL }}
+        run: |
+          curl -sS --fail --max-time 30 --retry 2 -X POST -d '{}' -o /dev/null \
+            "${HOOK_URL}?trigger_title=scheduled+staging+rebuild"
+          echo "Build queued."
+      - name: verify
+        id: verify
+        env:
+          SLOT_BEFORE: ${{ steps.slot-before.outputs.slot }}
+          POLL_SECONDS: '30'
+          POLL_LIMIT_SECONDS: '1500'
+        run: |
+          read_slot() {
+            local body
+            body="$(curl -sS --fail --max-time 10 "$STAGING_URL/staging-slot.txt" 2>/dev/null || true)"
+            case "$body" in
+              staging-a | staging-b) printf '%s' "$body" ;;
+              *) printf unknown ;;
+            esac
+          }
+          deadline=$((SECONDS + POLL_LIMIT_SECONDS))
+          while :; do
+            last="$(read_slot)"
+            if [ "$last" != unknown ] && [ "$last" != "$SLOT_BEFORE" ]; then
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error title=Staging did not rebuild::staging-slot.txt still reads ${last} after ${POLL_LIMIT_SECONDS} s (it read ${SLOT_BEFORE} before the trigger). Check the Netlify deploys of main."
+              exit 1
+            fi
+            sleep "$POLL_SECONDS"
+          done
+          echo "Staging now serves ${last} (it served ${SLOT_BEFORE})."
+          response="$(curl -sS --max-time 20 -w '\n%{http_code}' "$STAGING_URL/organizations/gulf-coast-sport-social" || true)"
+          status="${response##*$'\n'}"
+          page="${response%$'\n'*}"
+          if [ "$status" != "200" ]; then
+            echo "::error title=Staging page check failed::/organizations/gulf-coast-sport-social returned status ${status:-none}, not 200."
+            exit 1
+          fi
+          if ! printf '%s' "$page" | grep -qF -e 'Gulf Coast Sport & Social' -e 'Gulf Coast Sport &amp; Social'; then
+            echo "::error title=Staging page check failed::/organizations/gulf-coast-sport-social returned status 200 without the name Gulf Coast Sport & Social."
+            exit 1
+          fi
+          echo "Staging answers 200 with the demo organization."
+
+  rebuild-issue:
+    name: rebuild-issue
+    needs: rebuild
+    if: ${{ !cancelled() && needs.rebuild.result == 'failure' && github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      FAILED_STEP: ${{ needs.rebuild.outputs.failed_step }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ISSUE_TITLE: Scheduled staging rebuild failed
+    steps:
+      - name: open or update the issue
+        run: |
+          body="$(jq -rn --arg run "$RUN_URL" --arg step "$FAILED_STEP" '
+            "Scheduled staging rebuild: FAIL\n\nRun: \($run)\n\n"
+            + (if $step != ""
+               then "Failed step: `\($step)`"
+               else "No step recorded a failure (the job may not have started). See the run." end)')"
+          number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
+            | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$ISSUE_TITLE" --label type:bug --label area:infra --label status:ready --body "$body"
+          fi
