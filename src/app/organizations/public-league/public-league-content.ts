@@ -162,6 +162,10 @@ function plural(count: number, noun: string): string {
                 <p class="text-sm text-muted-foreground">{{ total() }}</p>
               }
             </div>
+            <p class="mt-1 text-sm text-muted-foreground">
+              Each season is one run of {{ view().league.name }}, with its own dates, registration,
+              teams, and schedule.
+            </p>
             @if (rows().length) {
               <ul
                 role="list"
