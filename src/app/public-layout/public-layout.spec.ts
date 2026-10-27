@@ -166,8 +166,25 @@ describe('PublicLayout', () => {
       expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
         ['Your account', '/app'],
         ['Create an organization', '/app/organizations/new'],
-        ['Sign in to manage', '/sign-in?returnTo=%2Fapp'],
+        ['Sign in to manage', '/sign-in?returnTo=%2Forganizations%2Fgulf-coast'],
       ]);
+    });
+
+    it.each([
+      [
+        '/organizations/gulf-coast/leagues/x?tab=a#top',
+        '%2Forganizations%2Fgulf-coast%2Fleagues%2Fx%3Ftab%3Da%23top',
+      ],
+      ['/', '%2F'],
+      ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '%2Fleagues%2Fx%2Fregister'],
+      ['/sign-up', '%2Fapp'],
+    ])('on %s "Sign in to manage" returns to %s after sign-in', async (url, returnTo) => {
+      const page = await open(url);
+
+      const link = [...page.querySelectorAll('footer nav a')].find(
+        (a) => a.textContent.trim() === 'Sign in to manage',
+      );
+      expect(link?.getAttribute('href')).toBe(`/sign-in?returnTo=${returnTo}`);
     });
   });
 });

@@ -1,16 +1,12 @@
-import { isPlatformServer } from '@angular/common';
-import { ChangeDetectionStrategy, Component, PLATFORM_ID, computed, inject } from '@angular/core';
-import { PRIMARY_OUTLET, Router, RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth/auth.service';
-import { safeReturnTo, returnToOrApp } from '../core/auth/return-to';
 import { AccountLink } from './account-link';
-import { injectCurrentUrl } from './current-url';
+import { injectSignInReturnTo } from './sign-in-return-to';
 
 /**
  * Whether the visitor is signed in is known only in the browser, and only after the session store answers. Until then (a server render, and hydration) the link is "Sign in",
  * so the browser's first render equals the server's and the account link replaces it afterwards, with no hydration mismatch.
- * On `/sign-up` `returnTo` is that page's own `returnTo` (`/app` when it has none or it is not valid), because the page the visitor came from is not this one.
- * As in the skip link (`skipLinkHref`), a server render leaves the query string out of the link: Netlify's CDN may store the HTML, and the browser adds it after hydration.
  */
 @Component({
   selector: 'app-top-bar-account',
@@ -33,22 +29,5 @@ import { injectCurrentUrl } from './current-url';
 })
 export class TopBarAccount {
   protected readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly url = injectCurrentUrl();
-  private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
-
-  protected readonly returnTo = computed(() => {
-    const tree = this.router.parseUrl(this.url());
-    const path = (tree.root.children[PRIMARY_OUTLET]?.segments ?? []).map((s) => s.path).join('/');
-    if (path === 'sign-in') return null;
-    if (path === 'sign-up') {
-      const own: unknown = tree.queryParams['returnTo'];
-      return returnToOrApp(typeof own === 'string' ? own : null);
-    }
-    if (this.onServer) {
-      tree.queryParams = {};
-      tree.fragment = null;
-    }
-    return safeReturnTo(this.router.serializeUrl(tree));
-  });
+  protected readonly returnTo = injectSignInReturnTo();
 }

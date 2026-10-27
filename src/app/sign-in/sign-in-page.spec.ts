@@ -298,11 +298,13 @@ describe('SignInPage', () => {
 
     it.each([
       ['/sign-in?returnTo=%2Fapp', '/app'],
+      ['/sign-in?returnTo=%2F', '/app'],
+      ['/sign-in?returnTo=%2F%3Fx%3D1', '/app'],
       ['/sign-in?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
-      ['/sign-in?returnTo=%2F%2Fevil.example%2Fx', '/'],
-      ['/sign-in?returnTo=%2F%5Cevil.example', '/'],
-      ['/sign-in?returnTo=https%3A%2F%2Fevil.example', '/'],
-      ['/sign-in?returnTo=%2F..%2F%2Fevil.example%2Fx', '/'],
+      ['/sign-in?returnTo=%2F%2Fevil.example%2Fx', '/app'],
+      ['/sign-in?returnTo=%2F%5Cevil.example', '/app'],
+      ['/sign-in?returnTo=https%3A%2F%2Fevil.example', '/app'],
+      ['/sign-in?returnTo=%2F..%2F%2Fevil.example%2Fx', '/app'],
     ])('from %s goes to %s', async (from, to) => {
       await open(from);
       await fill();

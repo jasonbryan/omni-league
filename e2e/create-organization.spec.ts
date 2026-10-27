@@ -58,6 +58,7 @@ test.describe('create an organization', () => {
         'header a[href="/app"]',
         'main button',
         'main a[href="/app/organizations/new"]',
+        'main a[href="/"]',
       ],
     });
     await organizations(page).getByRole('link', { name: 'Create an organization' }).click();

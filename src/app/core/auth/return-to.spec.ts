@@ -1,9 +1,8 @@
-import { AFTER_AUTH_DEFAULT, afterAuthUrl, safeReturnTo, returnToOrApp } from './return-to';
+import { AFTER_AUTH_DEFAULT, safeReturnTo, returnToOrApp } from './return-to';
 
 describe('safeReturnTo', () => {
   it.each([
     ['/app', '/app'],
-    ['/', '/'],
     ['/leagues/gulf-coast/register', '/leagues/gulf-coast/register'],
     ['/organizations/x?tab=leagues#top', '/organizations/x?tab=leagues#top'],
     ['/a/../app', '/app'],
@@ -44,26 +43,11 @@ describe('safeReturnTo', () => {
   });
 });
 
-describe('afterAuthUrl', () => {
-  it('is /app when there is no returnTo', () => {
-    expect(AFTER_AUTH_DEFAULT).toBe('/app');
-    expect(afterAuthUrl(null)).toBe('/app');
-    expect(afterAuthUrl(undefined)).toBe('/app');
-  });
-
-  it('is the validated returnTo otherwise, and / for an unsafe one', () => {
-    expect(afterAuthUrl('/leagues/x/register')).toBe('/leagues/x/register');
-    expect(afterAuthUrl('//evil.example/x')).toBe('/');
-    expect(afterAuthUrl('')).toBe('/');
-  });
-});
-
 describe('returnToOrApp', () => {
   it.each([
     [null, '/app'],
     [undefined, '/app'],
     ['/app', '/app'],
-    ['/', '/'],
     ['/leagues/x/register?team=1#top', '/leagues/x/register?team=1#top'],
     ['/a/../app', '/app'],
   ])('sends returnTo %j to %j', (raw, expected) => {
@@ -84,9 +68,16 @@ describe('returnToOrApp', () => {
     expect(returnToOrApp(raw)).toBe('/app');
   });
 
-  it('keeps a returnTo that is valid but resolves to /', () => {
-    for (const raw of ['/.', '/./', '/..', '/a/..']) expect(returnToOrApp(raw)).toBe('/');
+  it('sends the default after-auth URL for no returnTo', () => {
+    expect(AFTER_AUTH_DEFAULT).toBe('/app');
   });
+
+  it.each(['/', '/?x=1', '/#top', '/.', '/./', '/..', '/a/..'])(
+    'sends %j, the public home with nothing to show a signed-in user, to /app',
+    (raw) => {
+      expect(returnToOrApp(raw)).toBe('/app');
+    },
+  );
 });
 
 // Dot segments and encoded dots resolve to a path that starts with `//` or `/\` after parsing. The router gets the parsed result,

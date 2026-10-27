@@ -113,13 +113,23 @@ describe('YourOrganizations', () => {
       'Create one to run your leagues on Omni League, or ask an org admin to invite you to theirs.',
     );
     const links = [...section.querySelectorAll('a')];
-    expect(links).toHaveLength(1);
+    expect(links).toHaveLength(2);
     expect(links[0]?.getAttribute('href')).toBe('/app/organizations/new');
     expect(text(links[0])).toBe('Create an organization');
     expect([...links[0].classList].sort()).toEqual(
       buttonVariants({ size: 'md' }).split(' ').sort(),
     );
     expect(section.querySelector('ul')).toBeNull();
+  });
+
+  it('none: a player is offered Find a league, the public home, beside Create an organization', async () => {
+    await open();
+    await answer([]);
+    const link = [...section.querySelectorAll('a')].find((a) => text(a) === 'Find a league');
+    expect(link?.getAttribute('href')).toBe('/');
+    expect([...link!.classList].sort()).toEqual(
+      buttonVariants({ variant: 'outline', size: 'lg' }).split(' ').sort(),
+    );
   });
 
   it('one organization (state 3): a row with initials, name, role, Public page, and Manage', async () => {
