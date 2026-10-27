@@ -1,4 +1,4 @@
-export const AFTER_AUTH_DEFAULT = '/app';
+const AFTER_AUTH_DEFAULT = '/app';
 
 const PLACEHOLDER_ORIGIN = 'https://return-to.invalid';
 
@@ -26,11 +26,13 @@ function validReturnTo(raw: string): string | null {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-export function afterAuthUrl(returnTo: string | null | undefined): string {
-  return returnTo === null || returnTo === undefined ? AFTER_AUTH_DEFAULT : safeReturnTo(returnTo);
-}
-
 export function returnToOrApp(returnTo: string | null | undefined): string {
   if (returnTo === null || returnTo === undefined) return AFTER_AUTH_DEFAULT;
-  return validReturnTo(returnTo) ?? AFTER_AUTH_DEFAULT;
+  const valid = validReturnTo(returnTo);
+  return valid === null || isPublicHome(valid) ? AFTER_AUTH_DEFAULT : valid;
+}
+
+// The public home has nothing for a signed-in user.
+function isPublicHome(validPath: string): boolean {
+  return new URL(validPath, PLACEHOLDER_ORIGIN).pathname === '/';
 }

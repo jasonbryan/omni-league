@@ -385,8 +385,9 @@ describe('SignUpPage', () => {
 
     it.each([
       ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
-      ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/'],
-      ['/sign-up?returnTo=https%3A%2F%2Fevil.example', '/'],
+      ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/app'],
+      ['/sign-up?returnTo=https%3A%2F%2Fevil.example', '/app'],
+      ['/sign-up?returnTo=%2F', '/app'],
     ])('from %s goes to %s', async (from, to) => {
       await open(from);
       await fill();
