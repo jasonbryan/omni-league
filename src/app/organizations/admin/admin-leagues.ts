@@ -140,6 +140,11 @@ import {
                           row.sportName
                         }}</span>
                       </div>
+                      @if (row.divisionLabel) {
+                        <p data-slot="league-division" class="mt-1 text-sm font-medium">
+                          {{ row.divisionLabel }}
+                        </p>
+                      }
                       <p class="mt-1.5 flex items-start gap-1.5 text-sm text-muted-foreground">
                         <ng-icon
                           name="lucideMapPin"

@@ -1,0 +1,174 @@
+import { filledFromNameMessage, LeagueDivision } from './league-division';
+
+const NAME = "Wednesday Women's 2s BB";
+
+describe('LeagueDivision', () => {
+  it('starts as Coed, Rec, and Adult with no format and no minimum', () => {
+    const division = new LeagueDivision();
+    expect([
+      division.gender(),
+      division.playersPerSide(),
+      division.level(),
+      division.ageGroup(),
+      division.minimumText(),
+      division.filledFromName(),
+    ]).toEqual(['coed', null, 'rec', 'adult', '', []]);
+  });
+
+  describe('filling in from the name', () => {
+    it('sets gender, format, and level where the name states them', () => {
+      const division = new LeagueDivision();
+      division.fillFromName(NAME, 'beachVolleyball');
+      expect([division.gender(), division.playersPerSide(), division.level()]).toEqual([
+        'womens',
+        2,
+        'bb',
+      ]);
+      expect(division.filledFromName()).toEqual(['gender', 'format', 'level']);
+    });
+
+    it('leaves a field the name does not state at its default', () => {
+      const division = new LeagueDivision();
+      division.fillFromName('Sunday Night Sand', 'beachVolleyball');
+      expect([division.gender(), division.playersPerSide(), division.level()]).toEqual([
+        'coed',
+        null,
+        'rec',
+      ]);
+      expect(division.filledFromName()).toEqual([]);
+    });
+
+    it('never overwrites a field the organizer chose by hand, and fills the rest', () => {
+      const division = new LeagueDivision();
+      division.chooseGender('coed');
+      division.fillFromName(NAME, 'beachVolleyball');
+      expect(division.gender()).toBe('coed');
+      expect([division.playersPerSide(), division.level()]).toEqual([2, 'bb']);
+      expect(division.filledFromName()).toEqual(['format', 'level']);
+    });
+
+    it('fills a field again when the name changes, until the organizer chooses it', () => {
+      const division = new LeagueDivision();
+      division.fillFromName('Coed 4s', 'beachVolleyball');
+      expect(division.playersPerSide()).toBe(4);
+      division.fillFromName('Coed 6s', 'beachVolleyball');
+      expect(division.playersPerSide()).toBe(6);
+      division.chooseFormat(3);
+      division.fillFromName('Coed 2s', 'beachVolleyball');
+      expect(division.playersPerSide()).toBe(3);
+    });
+
+    it('stops counting a field as filled once the organizer chooses it', () => {
+      const division = new LeagueDivision();
+      division.fillFromName(NAME, 'beachVolleyball');
+      division.chooseLevel('a');
+      expect(division.filledFromName()).toEqual(['gender', 'format']);
+    });
+
+    it('does nothing before a sport is chosen', () => {
+      const division = new LeagueDivision();
+      division.fillFromName(NAME, null);
+      expect(division.gender()).toBe('coed');
+      expect(division.playersPerSide()).toBeNull();
+      expect(division.filledFromName()).toEqual([]);
+    });
+  });
+
+  describe('changing the sport', () => {
+    function chosenSixAndBb() {
+      const division = new LeagueDivision();
+      division.chooseGender('mens');
+      division.chooseFormat(6);
+      division.chooseLevel('bb');
+      division.setAgeGroup('over40');
+      return division;
+    }
+
+    it('keeps a format the new sport has and resets a level it does not to Rec', () => {
+      const division = chosenSixAndBb();
+      division.sportChanged('soccer');
+      expect(division.playersPerSide()).toBe(6);
+      expect(division.level()).toBe('rec');
+    });
+
+    it('clears a format the new sport does not have', () => {
+      const division = chosenSixAndBb();
+      division.sportChanged('softball');
+      expect(division.playersPerSide()).toBeNull();
+      expect(division.level()).toBe('rec');
+    });
+
+    it('keeps gender and age group, and a level both sports have', () => {
+      const division = chosenSixAndBb();
+      division.chooseLevel('competitive');
+      division.sportChanged('softball');
+      expect([division.gender(), division.ageGroup(), division.level()]).toEqual([
+        'mens',
+        'over40',
+        'competitive',
+      ]);
+    });
+
+    it('lets the name fill a format that was cleared by the change', () => {
+      const division = new LeagueDivision();
+      division.fillFromName('Coed 6s', 'soccer');
+      expect(division.playersPerSide()).toBe(6);
+      division.sportChanged('softball');
+      expect(division.playersPerSide()).toBeNull();
+      division.fillFromName('Coed 10s', 'softball');
+      expect(division.playersPerSide()).toBe(10);
+    });
+  });
+
+  it('clear() goes back to the defaults', () => {
+    const division = new LeagueDivision();
+    division.fillFromName(NAME, 'beachVolleyball');
+    division.setAgeGroup('u12');
+    division.setMinimumText('5');
+    division.clear();
+    expect([
+      division.gender(),
+      division.playersPerSide(),
+      division.level(),
+      division.ageGroup(),
+      division.minimumText(),
+      division.filledFromName(),
+    ]).toEqual(['coed', null, 'rec', 'adult', '', []]);
+    division.fillFromName(NAME, 'beachVolleyball');
+    expect(division.gender()).toBe('womens');
+  });
+
+  describe('the minimum roster size', () => {
+    it('is undefined when blank and the number when typed', () => {
+      const division = new LeagueDivision();
+      expect(division.minimumRosterSize()).toBeUndefined();
+      division.setMinimumText('  ');
+      expect(division.minimumRosterSize()).toBeUndefined();
+      division.setMinimumText('6');
+      expect(division.minimumRosterSize()).toBe(6);
+      division.setMinimumText('abc');
+      expect(division.minimumRosterSize()).toBeNaN();
+    });
+  });
+});
+
+describe('filledFromNameMessage', () => {
+  it('names what was filled, as the mockup words it for all three', () => {
+    expect(filledFromNameMessage(['gender', 'format', 'level'])).toBe(
+      'Gender, format, and level were filled in from the name. Change any that are wrong.',
+    );
+  });
+
+  it('names only the choices that were filled', () => {
+    expect(filledFromNameMessage(['format', 'level'])).toBe(
+      'Format and level were filled in from the name. Change any that are wrong.',
+    );
+    expect(filledFromNameMessage(['level'])).toBe(
+      'Level was filled in from the name. Change any that are wrong.',
+    );
+  });
+
+  it('is null when nothing was filled', () => {
+    expect(filledFromNameMessage([])).toBeNull();
+  });
+});

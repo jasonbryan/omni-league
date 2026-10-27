@@ -224,6 +224,7 @@ test.describe('a field is checked when the user leaves it', () => {
     const form = page.locator('#create-league form');
     await field(page, 'name').fill('Friday Night Fours');
     await page.getByRole('radio', { name: 'Beach volleyball' }).check();
+    await page.getByRole('radio', { name: '4v4' }).check();
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await form.getByRole('button', { name: /^Create draft league/ }).click();
     await expect(form.getByRole('status').filter({ hasText: 'created as a draft' })).toBeVisible();
