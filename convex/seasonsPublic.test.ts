@@ -113,13 +113,14 @@ describe('seasons.listPublic', () => {
     expect(second).toMatchObject({ page: 2, pageCount: 2, total: 7 });
   });
 
-  test('a row holds the name, slug, dates, and format display name, and no id or other field', async () => {
+  test('a row holds the name, slug, dates, registration deadline, and format display name, and no id or other field', async () => {
     const t = await setup();
     await addSeasons(t, 'org-a', 'coed-7v7', 1, 1, 'published', {
       name: 'Summer 2027',
       slug: 'summer-2027',
       startDate: '2027-06-02',
       endDate: '2027-08-25',
+      registrationDeadline: '2027-05-19',
     });
     const result = await list(t, 1);
     expect(result.rows).toEqual([
@@ -128,6 +129,7 @@ describe('seasons.listPublic', () => {
         slug: 'summer-2027',
         startDate: '2027-06-02',
         endDate: '2027-08-25',
+        registrationDeadline: '2027-05-19',
         formatName: '7v7',
       },
     ]);

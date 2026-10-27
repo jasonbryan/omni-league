@@ -5,12 +5,14 @@ import { map } from 'rxjs';
 import { api } from '../../../../convex/_generated/api';
 import { injectOnline, injectQuery } from '../../core/data/convex';
 import { parseListPage } from '../../core/list-page';
+import { injectNow } from '../../core/now';
 import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
 import { PublicLayout } from '../../public-layout/public-layout';
 import { PublicLeagueContent } from './public-league-content';
+import { PublicLeagueSkeleton } from './public-league-skeleton';
 import {
   publicLeagueCanonicalPath,
   type PublicLeagueSeasons,
@@ -23,18 +25,32 @@ import {
  */
 @Component({
   selector: 'app-public-league-page',
-  imports: [NotFoundView, NotSavedView, PublicLayout, PublicLeagueContent, ServerErrorView],
+  imports: [
+    NotFoundView,
+    NotSavedView,
+    PublicLayout,
+    PublicLeagueContent,
+    PublicLeagueSkeleton,
+    ServerErrorView,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
       @if (view(); as view) {
-        <app-public-league-content [view]="view" [busy]="busy()" [savedAt]="savedAt()" />
+        <app-public-league-content
+          [view]="view"
+          [now]="now()"
+          [busy]="busy()"
+          [savedAt]="savedAt()"
+        />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="retryHref()" />
       } @else if (state() === 'not-saved') {
         <app-not-saved-view [retryHref]="retryHref()" />
+      } @else {
+        <app-public-league-skeleton />
       }
     </app-public-layout>
   `,
@@ -67,6 +83,7 @@ export class PublicLeaguePage {
     page: this.requestedPage(),
   }));
   private readonly online = injectOnline();
+  protected readonly now = injectNow();
 
   /**
    * Offline, a page that has no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL,
