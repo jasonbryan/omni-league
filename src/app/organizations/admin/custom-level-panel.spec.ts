@@ -336,7 +336,51 @@ describe('The custom level panel in the create form', () => {
     });
   });
 
+  describe('Undo offline', () => {
+    it('looks disabled, sends nothing when pressed, says so, and keeps Undo for later', async () => {
+      await withBeachVolleyball();
+      await addGold();
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await o.flush();
+      expect(buttonNamed('Undo').getAttribute('aria-disabled')).toBe('true');
+      expect(buttonNamed('Undo').classList).toContain('opacity-50');
+      await press(buttonNamed('Undo'));
+      expect(o.convex.calls.map((call) => call.name)).not.toContain(REMOVE_LEVEL);
+      expect(text(status())).toContain("You're offline. Nothing was removed.");
+      expect(buttonNamed('Undo')).toBeTruthy();
+      expect(document.activeElement).toBe(status());
+    });
+
+    it('is at least 44px on a touch screen', async () => {
+      await withBeachVolleyball();
+      await addGold();
+      expect(buttonNamed('Undo').classList).toContain('pointer-coarse:min-h-11');
+    });
+  });
+
   describe('changing the sport', () => {
+    it('still says the level was added, for its own sport, with Undo, when the sport changes during Add', async () => {
+      await withBeachVolleyball();
+      await press(toggle());
+      await type('custom-level-name', 'Gold');
+      await pick('a');
+      await press(buttonNamed('Add level'));
+      await choose('sport-soccer');
+      o.convex.calls.find((call) => call.name === CREATE_LEVEL)!.resolve(GOLD.customLevelId);
+      await o.flush();
+      expect(text(status())).toBe('Gold added for beach volleyball. It filters as A. Undo');
+      expect(document.activeElement).toBe(status());
+      expect(checkedLevel()).toBe('Rec');
+      await press(buttonNamed('Undo'));
+      const remove = o.convex.calls.find((call) => call.name === REMOVE_LEVEL)!;
+      expect(remove.args).toEqual({ customLevelId: 'level_gold' });
+      remove.resolve(null);
+      await o.flush();
+      expect(checkedLevel()).toBe('Rec');
+    });
+
     it('closes an open panel and discards its input', async () => {
       await withBeachVolleyball();
       await press(toggle());

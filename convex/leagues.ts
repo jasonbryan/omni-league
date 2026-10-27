@@ -83,7 +83,6 @@ export const listForAdmin = query({
   },
 });
 
-// A level of another organization or sport is refused as not allowed; one deleted meanwhile, as a Level error.
 async function checkedCustomLevel(
   ctx: QueryCtx,
   organizationId: Id<'organizations'>,

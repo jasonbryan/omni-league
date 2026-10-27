@@ -31,7 +31,6 @@ interface LevelChoice {
 export class LeagueDivision {
   readonly gender = signal<Gender>('coed');
   readonly playersPerSide = signal<number | null>(null);
-  /** The level always holds the standard level the league filters as; a custom level only renames it. */
   readonly level = signal<StandardLevel>(DEFAULT_LEVEL);
   readonly customLevelId = signal<Id<'customLevels'> | null>(null);
   readonly ageGroup = signal<AgeGroup>('adult');
@@ -79,11 +78,11 @@ export class LeagueDivision {
     this.choseByHand('level');
   }
 
-  /** Puts back the level chosen before the custom level, unless another level was chosen since. */
   undoCustomLevel(customLevelId: Id<'customLevels'>): void {
     const before = this.levelBeforeCustom;
     this.levelBeforeCustom = null;
-    if (this.customLevelId() !== customLevelId) return;
+    const choiceReplaced = this.customLevelId() !== customLevelId;
+    if (choiceReplaced) return;
     this.level.set(before?.level ?? DEFAULT_LEVEL);
     this.customLevelId.set(before?.customLevelId ?? null);
     this.forget('level');

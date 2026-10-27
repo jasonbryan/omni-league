@@ -604,7 +604,7 @@ export class LeagueCreateForm {
   protected chooseSport(key: string): void {
     const sport = (Object.keys(SPORT_NAMES) as Sport[]).find((candidate) => candidate === key);
     if (!sport) return;
-    this.customLevelPanel()?.reset();
+    this.customLevelPanel()?.closeAndDiscard();
     this.form.chooseSport(sport);
   }
 

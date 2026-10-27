@@ -39,7 +39,7 @@ export interface AddedCustomLevel {
 type PanelAlert = 'offline' | 'failed';
 
 type Status =
-  | { kind: 'added'; level: AddedCustomLevel }
+  | { kind: 'added'; level: AddedCustomLevel; sport: Sport }
   | { kind: 'removed'; name: string }
   | { kind: 'refused'; message: string };
 
@@ -67,7 +67,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
   return { field: field as CustomLevelField, code: code as CustomLevelInputError['code'], message };
 }
 
-/** Sits inside the create form's `<form>`, so its buttons are `type="button"` and Enter in the name adds the level. */
+/** Sits inside the create form's `<form>`, so its buttons are `type="button"`. */
 @Component({
   selector: 'app-custom-level-panel',
   imports: [AdminAlert, NgIcon],
@@ -95,17 +95,23 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
         @switch (status.kind) {
           @case ('added') {
             <span
-              ><span class="font-medium">{{ status.level.name }} added.</span> It filters as
+              ><span class="font-medium">{{ addedText(status) }}</span> It filters as
               {{ label(status.level.standardLevel) }}.</span
             >
             <button
               type="button"
-              class="inline-flex min-h-11 items-center rounded-md font-medium underline underline-offset-4 md:min-h-0"
-              [attr.aria-disabled]="undoing() ? 'true' : null"
+              class="inline-flex items-center rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+              [class.opacity-50]="!online() && !undoing()"
+              [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
               (click)="undo(status.level)"
             >
               {{ undoing() ? 'Undoing…' : 'Undo' }}
             </button>
+            @if (undoOffline()) {
+              <span class="basis-full"
+                >You're offline. Nothing was removed. Try again when you're connected.</span
+              >
+            }
           }
           @case ('removed') {
             <span class="font-medium">{{ status.name }} removed.</span>
@@ -299,6 +305,7 @@ export class CustomLevelPanel {
   protected readonly standard = signal(UNCHOSEN);
   protected readonly submitting = signal(false);
   protected readonly undoing = signal(false);
+  protected readonly undoOffline = signal(false);
   protected readonly alert = signal<PanelAlert | null>(null);
   protected readonly status = signal<Status | null>(null);
 
@@ -348,6 +355,12 @@ export class CustomLevelPanel {
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
 
+  protected addedText(status: { level: AddedCustomLevel; sport: Sport }): string {
+    const forOtherSport = status.sport !== this.sport();
+    const suffix = forOtherSport ? ` for ${SPORT_NAMES[status.sport].toLowerCase()}` : '';
+    return `${status.level.name} added${suffix}.`;
+  }
+
   protected label(level: StandardLevel): string {
     return levelLabel(level);
   }
@@ -363,18 +376,18 @@ export class CustomLevelPanel {
   }
 
   protected cancel(): void {
-    this.reset();
+    this.closeAndDiscard();
     this.focusAfterRender(() => this.toggleButton().nativeElement.focus());
   }
 
-  /** Closes the panel and discards its input and status, as a change of sport does. */
-  reset(): void {
+  closeAndDiscard(): void {
     this.open.set(false);
     this.name.set('');
     this.nameEdited.set(false);
     this.standard.set(UNCHOSEN);
     this.alert.set(null);
     this.status.set(null);
+    this.undoOffline.set(false);
     this.serverErrors.name.set(null);
     this.serverErrors.standardLevel.set(null);
     this.shownName.hide();
@@ -441,13 +454,11 @@ export class CustomLevelPanel {
   protected async undo(level: AddedCustomLevel): Promise<void> {
     if (this.undoing()) return;
     if (!this.online()) {
-      this.status.set({
-        kind: 'refused',
-        message: "You're offline. Nothing was removed. Try again when you're connected.",
-      });
+      this.undoOffline.set(true);
       this.focusStatus();
       return;
     }
+    this.undoOffline.set(false);
     this.undoing.set(true);
     try {
       await this.removeLevel.run({ customLevelId: level.customLevelId });
@@ -466,11 +477,11 @@ export class CustomLevelPanel {
   }
 
   private created(sport: Sport, level: AddedCustomLevel): void {
-    // The level belongs to the sport it was added for; a sport changed meanwhile has closed the panel.
-    if (this.sport() !== sport) return;
-    this.reset();
-    this.status.set({ kind: 'added', level });
-    this.added.emit(level);
+    // A sport changed meanwhile has closed the panel and cleared the choice; the level is saved for its own sport.
+    const stillThisSport = this.sport() === sport;
+    if (stillThisSport) this.closeAndDiscard();
+    this.status.set({ kind: 'added', level, sport });
+    if (stillThisSport) this.added.emit(level);
     this.focusStatus();
   }
 
