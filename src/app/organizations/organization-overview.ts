@@ -244,12 +244,14 @@ export class OrganizationOverview {
     })),
   );
 
+  private readonly shownLeagues = computed(() => this.page().leagues);
+
   constructor() {
     // Moves focus, which only the browser does: a side effect outside Angular. The leagues shown
     // change when the page asked for has arrived, or when a live update replaces them; only the
     // first, after a click on a page link, moves focus.
     effect(() => {
-      this.page().leagues;
+      this.shownLeagues();
       untracked(() => {
         if (!this.pageRequested) return;
         this.pageRequested = false;

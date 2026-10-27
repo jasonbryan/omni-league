@@ -285,7 +285,10 @@ describe('OrganizationPage', () => {
       await settle(harness);
       const nav = host(harness).querySelector('nav[aria-label="Sports"]');
       expect(
-        [...(nav?.querySelectorAll('a') ?? [])].map((a) => [text(a), a.getAttribute('aria-current')]),
+        [...(nav?.querySelectorAll('a') ?? [])].map((a) => [
+          text(a),
+          a.getAttribute('aria-current'),
+        ]),
       ).toEqual([
         ['All sports 5 leagues', 'page'],
         ['Beach volleyball 2 leagues', null],

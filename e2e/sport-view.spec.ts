@@ -7,7 +7,6 @@ import { fetchRawHtml } from './support/raw-html';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { seedTenant, type LeagueSeed, type Tenant } from './support/tenant';
-import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -166,7 +165,7 @@ test.describe('sport chips and the sport view: raw server HTML', () => {
           PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
         );
         expect(headers['netlify-vary'], query).toBe('query');
-        expect(headers.location, query).toBeUndefined();
+        expect(headers['location'], query).toBeUndefined();
 
         expect(chipsOf(html).map((chip) => [chip.text, chip.current])).toEqual([
           [THREE_SPORT_CHIPS[0], false],
@@ -304,46 +303,45 @@ test.describe('the sport view: pages', () => {
 });
 
 test.describe('the sport view in the browser', () => {
-  test(
-    'activating the Soccer chip by keyboard changes the URL and title and focuses main; Back returns to All sports',
-    VIEWPORT_AGNOSTIC,
-    async ({ page, consoleGuard }) => {
-      const target = await threeSports();
-      await page.goto(target.path);
-      await expect(page.getByRole('heading', { level: 1, name: target.name })).toBeVisible();
-      if (!remoteBaseUrl) await hydrated(consoleGuard);
-      const title = await page.title();
+  test('activating the Soccer chip by keyboard changes the URL and title and focuses main; Back returns to All sports', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const target = await threeSports();
+    await page.goto(target.path);
+    await expect(page.getByRole('heading', { level: 1, name: target.name })).toBeVisible();
+    if (!remoteBaseUrl) await hydrated(consoleGuard);
+    const title = await page.title();
 
-      const chips = page.getByRole('navigation', { name: 'Sports' });
-      await expect(chips.getByRole('link', { name: /^All sports/ })).toHaveAttribute(
-        'aria-current',
-        'page',
-      );
-      await chips.getByRole('link', { name: /^Soccer/ }).focus();
-      await page.keyboard.press('Enter');
+    const chips = page.getByRole('navigation', { name: 'Sports' });
+    await expect(chips.getByRole('link', { name: /^All sports/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await chips.getByRole('link', { name: /^Soccer/ }).focus();
+    await page.keyboard.press('Enter');
 
-      await expect(page).toHaveURL(`${baseURL}${target.path}/sports/soccer`);
-      await expect(page).toHaveTitle(`Soccer | ${target.name} | Omni League`);
-      await expect(page.getByRole('heading', { level: 2, name: 'Soccer leagues' })).toBeVisible();
-      await expect(page.locator('main[id="main"]')).toBeFocused();
-      await expect(chips.getByRole('link', { name: /^Soccer/ })).toHaveAttribute(
-        'aria-current',
-        'page',
-      );
-      await expect(page.locator('#locations h3')).toHaveText([BAYSIDE.name]);
+    await expect(page).toHaveURL(`${baseURL}${target.path}/sports/soccer`);
+    await expect(page).toHaveTitle(`Soccer | ${target.name} | Omni League`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Soccer leagues' })).toBeVisible();
+    await expect(page.locator('main[id="main"]')).toBeFocused();
+    await expect(chips.getByRole('link', { name: /^Soccer/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(page.locator('#locations h3')).toHaveText([BAYSIDE.name]);
 
-      await page.goBack();
-      await expect(page).toHaveURL(`${baseURL}${target.path}`);
-      await expect(page).toHaveTitle(title);
-      await expect(chips.getByRole('link', { name: /^All sports/ })).toHaveAttribute(
-        'aria-current',
-        'page',
-      );
-      await expect(
-        page.getByRole('heading', { level: 2, name: 'Leagues', exact: true }),
-      ).toBeVisible();
-    },
-  );
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}${target.path}`);
+    await expect(page).toHaveTitle(title);
+    await expect(chips.getByRole('link', { name: /^All sports/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(
+      page.getByRole('heading', { level: 2, name: 'Leagues', exact: true }),
+    ).toBeVisible();
+  });
 
   test('every chip is 44px tall on a touch screen and 36px with a mouse', async ({
     page,
