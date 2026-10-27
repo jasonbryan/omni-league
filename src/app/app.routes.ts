@@ -15,6 +15,12 @@ export const routes: Routes = [
       import('./organizations/organization-page').then((m) => m.OrganizationPage),
   },
   {
+    // The sport view, a Server route (app.routes.server.ts): the same page filtered to one sport, `?page=N` for its leagues.
+    path: 'organizations/:orgSlug/sports/:sport',
+    loadComponent: () =>
+      import('./organizations/organization-page').then((m) => m.OrganizationPage),
+  },
+  {
     path: 'organizations/:orgSlug/leagues/:leagueSlug',
     loadComponent: () =>
       import('./organizations/public-league/public-league-page').then((m) => m.PublicLeaguePage),

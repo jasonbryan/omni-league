@@ -468,6 +468,112 @@ describe('organizations:listPublicLocations rows', () => {
   });
 });
 
+describe('organizations:listPublicLocations with a sport', () => {
+  test('returns only the locations with a league of the sport, by name, with the sport total', async () => {
+    const t = setup();
+    await seedA(t);
+    const softball = await t.query(api.organizations.listPublicLocations, {
+      slug: 'gulf-coast',
+      page: 1,
+      sport: 'softball',
+    });
+    expect(softball.rows.map((row) => row.name)).toEqual([
+      'Bayside Athletic Complex',
+      'North Beach Sand Courts',
+    ]);
+    expect([softball.page, softball.pageCount, softball.total]).toEqual([1, 1, 2]);
+    const soccer = await t.query(api.organizations.listPublicLocations, {
+      slug: 'gulf-coast',
+      page: 1,
+      sport: 'soccer',
+    });
+    expect(soccer).toEqual({
+      rows: [
+        {
+          name: 'Bayside Athletic Complex',
+          address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+          sportNames: ['Soccer', 'Softball'],
+        },
+      ],
+      page: 1,
+      pageCount: 1,
+      total: 1,
+    });
+  });
+
+  test('is empty for a sport with no league at a location, and for an unknown organization', async () => {
+    const t = setup();
+    await seedA(t);
+    const empty = { rows: [], page: 1, pageCount: 0, total: 0 };
+    expect(
+      await t.query(api.organizations.listPublicLocations, {
+        slug: 'gulf-coast',
+        page: 1,
+        sport: 'beachVolleyball',
+      }),
+    ).toEqual(empty);
+    expect(
+      await t.query(api.organizations.listPublicLocations, {
+        slug: 'nobody',
+        page: 1,
+        sport: 'soccer',
+      }),
+    ).toEqual(empty);
+  });
+
+  test("never lists another organization's locations or a draft league's", async () => {
+    const t = setup();
+    await seedA(t);
+    await seedB(t);
+    await seed(t, {
+      organization: { name: 'Draft Club', slug: 'draft-club' },
+      locations: [{ name: 'Draft Field', address: '2 Draft Road' }],
+      leagues: [
+        { name: 'Draft League', sport: 'soccer', locations: ['Draft Field'], status: 'draft' },
+      ],
+    });
+    const names = async (slug: string) =>
+      (
+        await t.query(api.organizations.listPublicLocations, { slug, page: 1, sport: 'soccer' })
+      ).rows.map((row) => row.name);
+    expect(await names('gulf-coast')).toEqual(['Bayside Athletic Complex']);
+    expect(await names('other-org')).toEqual(['B Field']);
+    expect(await names('draft-club')).toEqual([]);
+  });
+
+  test('pages the sport locations by name, 5 per page, and falls back to page 1 for a page out of range', async () => {
+    const t = setup();
+    await seed(t, {
+      organization: { name: 'Many Fields', slug: 'many-fields' },
+      locations: THIRTEEN.map((name) => ({ name, address: `${name} address` })),
+      leagues: [{ name: 'All Fields', sport: 'soccer', locations: THIRTEEN }],
+    });
+    const page = (n: number) =>
+      t.query(api.organizations.listPublicLocations, {
+        slug: 'many-fields',
+        page: n,
+        sport: 'soccer',
+      });
+    expect((await page(3)).rows.map((row) => row.name)).toEqual(SORTED.slice(10));
+    const first = await page(1);
+    expect(first.rows.map((row) => row.name)).toEqual(SORTED.slice(0, 5));
+    expect([first.pageCount, first.total]).toEqual([3, 13]);
+    expect((await page(9)).rows.map((row) => row.name)).toEqual(SORTED.slice(0, 5));
+  });
+
+  test('rejects a sport outside the validator', async () => {
+    const t = setup();
+    await seedA(t);
+    await expect(
+      t.query(api.organizations.listPublicLocations, {
+        slug: 'gulf-coast',
+        page: 1,
+        sport: 'curling' as unknown as 'soccer',
+      }),
+    ).rejects.toThrow();
+  });
+});
+
 describe('organizations:listPublicLeagues rows', () => {
   test('each row holds the name, sport display name, and location names in the league order', async () => {
     const t = setup();

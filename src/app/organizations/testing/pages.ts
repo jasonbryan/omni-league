@@ -88,6 +88,33 @@ export function queryResults(page: PublicOrganizationPage): Record<string, unkno
   };
 }
 
+/** The results of the three queries for one sport's view: that sport's leagues and the locations where it is played. */
+export function sportQueryResults(
+  page: PublicOrganizationPage,
+  segment: string,
+): Record<string, unknown> {
+  const { leagues, locations, ...header } = page;
+  const sport = header.sports.find((entry) => entry.segment === segment);
+  if (!sport) throw new Error(`No sport ${segment}`);
+  const list = (rows: unknown[], total: number) => ({
+    rows,
+    page: 1,
+    pageCount: Math.min(Math.ceil(total / 5), 40),
+    total,
+  });
+  return {
+    'organizations:getPublicPage': header,
+    'organizations:listPublicLeagues': list(
+      leagues.filter((league) => league.sportName === sport.name).slice(0, 5),
+      sport.leagueCount,
+    ),
+    'organizations:listPublicLocations': list(
+      locations.filter((location) => location.sportNames?.includes(sport.name)),
+      sport.locationCount,
+    ),
+  };
+}
+
 export const PORT_ARANSAS: PublicOrganizationPage = {
   name: 'Port Aransas Beach Volleyball Club',
   slug: 'port-aransas-beach-volleyball-club',

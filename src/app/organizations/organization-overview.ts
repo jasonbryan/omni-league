@@ -1,11 +1,25 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  input,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight, lucideMapPin, lucideTrophy } from '@ng-icons/lucide';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import { OrganizationMark } from './organization-mark';
-import type { PublicOrganizationPage } from './organization-path';
+import { sportViewPath, type PublicOrganizationPage, type PublicSport } from './organization-path';
+import { PageControl } from './page-control';
 import { publicLeaguePath } from './public-league/public-league-path';
+import { SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 
 function plural(count: number, noun: string): string {
@@ -14,7 +28,7 @@ function plural(count: number, noun: string): string {
 
 @Component({
   selector: 'app-organization-overview',
-  imports: [NgIcon, OrganizationMark, RouterLink, SavedCopyNote],
+  imports: [NgIcon, OrganizationMark, PageControl, RouterLink, SavedCopyNote, SportChips],
   providers: [provideIcons({ lucideChevronRight, lucideMapPin, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -33,6 +47,12 @@ function plural(count: number, noun: string): string {
         }
       </div>
     </div>
+    <app-sport-chips
+      [slug]="page().slug"
+      [sports]="page().sports"
+      [leagueCount]="page().leagueCount"
+      [current]="sport()?.segment"
+    />
     @if (isEmpty()) {
       <div class="border-t border-border">
         <div class="mx-auto w-full max-w-6xl px-4 py-12 md:px-8 md:py-20">
@@ -52,7 +72,7 @@ function plural(count: number, noun: string): string {
     }
     @if (!isEmpty() || locations().length) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
-        <div class="grid gap-x-12 border-t border-border lg:grid-cols-3">
+        <div [class]="gridClass()">
           @if (!isEmpty()) {
             <section
               id="leagues"
@@ -60,12 +80,21 @@ function plural(count: number, noun: string): string {
               class="py-8 md:py-12 lg:col-span-2"
             >
               <div class="flex items-baseline justify-between gap-4">
-                <h2 id="leagues-heading" class="text-xl font-semibold tracking-tight md:text-2xl">
-                  Leagues
+                <h2
+                  #heading
+                  id="leagues-heading"
+                  tabindex="-1"
+                  class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+                >
+                  {{ leaguesHeading() }}
                 </h2>
                 <p class="text-sm text-muted-foreground">{{ leagueTotal() }}</p>
               </div>
-              <ul role="list" class="mt-2 divide-y divide-border">
+              <ul
+                role="list"
+                class="mt-2 divide-y divide-border"
+                [attr.aria-busy]="busy() ? 'true' : null"
+              >
                 @for (league of leagues(); track league.id) {
                   <li [id]="league.id" class="group relative">
                     <div class="flex min-h-18 items-center gap-4 py-4">
@@ -91,6 +120,20 @@ function plural(count: number, noun: string): string {
                   </li>
                 }
               </ul>
+              @if (leaguePaging(); as paging) {
+                <div class="-mx-4 md:-mx-5">
+                  <app-page-control
+                    label="Leagues pages"
+                    noun="leagues"
+                    [page]="paging.page"
+                    [pageCount]="paging.pageCount"
+                    [total]="paging.total"
+                    [path]="sportHref()"
+                    fragment="leagues"
+                    (pageActivated)="pageRequested = true"
+                  />
+                </div>
+              }
             </section>
           }
           @if (locations().length) {
@@ -125,6 +168,20 @@ function plural(count: number, noun: string): string {
 export class OrganizationOverview {
   readonly page = input.required<PublicOrganizationPage>();
   readonly savedAt = input<number | undefined>(undefined);
+  /** The sport the page is filtered to (the sport view); none for the whole organization. */
+  readonly sport = input<PublicSport | undefined>(undefined);
+  /** The numbered control's page of `sport`'s leagues; none on the organization page, which lists page 1 only. */
+  readonly leaguePaging = input<{ page: number; pageCount: number; total: number } | undefined>(
+    undefined,
+  );
+  /** The next page of leagues is loading: the rows shown are the previous page's. */
+  readonly busy = input(false);
+
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly injector = inject(Injector);
+
+  /** A visitor activated a link to another page, so focus follows when its leagues arrive. */
+  protected pageRequested = false;
 
   protected readonly isEmpty = computed(
     () => this.page().leagueCount === 0 && this.page().leagues.length === 0,
@@ -148,7 +205,25 @@ export class OrganizationOverview {
       : 'border-t border-border py-8 md:py-12 lg:border-t-0',
   );
 
-  protected readonly leagueTotal = computed(() => plural(this.page().leagueCount, 'league'));
+  protected readonly leagueTotal = computed(() =>
+    plural(this.sport()?.leagueCount ?? this.page().leagueCount, 'league'),
+  );
+
+  protected readonly leaguesHeading = computed(() => {
+    const sport = this.sport();
+    return sport ? `${sport.name} leagues` : 'Leagues';
+  });
+
+  protected readonly sportHref = computed(() =>
+    sportViewPath(this.page().slug, this.sport()?.segment ?? ''),
+  );
+
+  /** The chip row ends in a rule of its own, so the sections below it start without one. */
+  protected readonly gridClass = computed(() =>
+    this.page().sports.length > 1
+      ? 'grid gap-x-12 lg:grid-cols-3'
+      : 'grid gap-x-12 border-t border-border lg:grid-cols-3',
+  );
 
   protected readonly leagues = computed(() =>
     this.page().leagues.map((league, i) => ({
@@ -168,4 +243,18 @@ export class OrganizationOverview {
       sports: sportsCommaList(location.sportNames ?? []),
     })),
   );
+
+  constructor() {
+    // Moves focus, which only the browser does: a side effect outside Angular. The leagues shown
+    // change when the page asked for has arrived, or when a live update replaces them; only the
+    // first, after a click on a page link, moves focus.
+    effect(() => {
+      this.page().leagues;
+      untracked(() => {
+        if (!this.pageRequested) return;
+        this.pageRequested = false;
+        afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
+      });
+    });
+  }
 }

@@ -224,6 +224,7 @@ describe('OrganizationPage', () => {
       expect(root.querySelectorAll('header')).toHaveLength(1);
       expect(root.querySelectorAll('footer')).toHaveLength(1);
       expect([...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'))).toEqual([
+        'Sports',
         'Footer',
       ]);
       expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
@@ -274,6 +275,60 @@ describe('OrganizationPage', () => {
       expect(metaContent('og:title')).toBeNull();
       expect(metaContent('og:url')).toBeNull();
       expect(canonical()).toBeNull();
+    });
+  });
+
+  describe('sport chips', () => {
+    it('shows All sports and one chip per sport under the hero, All sports current', async () => {
+      const harness = await open();
+      emit(GULF_COAST);
+      await settle(harness);
+      const nav = host(harness).querySelector('nav[aria-label="Sports"]');
+      expect(
+        [...(nav?.querySelectorAll('a') ?? [])].map((a) => [text(a), a.getAttribute('aria-current')]),
+      ).toEqual([
+        ['All sports 5 leagues', 'page'],
+        ['Beach volleyball 2 leagues', null],
+        ['Soccer 2 leagues', null],
+        ['Softball 1 league', null],
+      ]);
+    });
+
+    it('shows no chips for an organization with one sport', async () => {
+      const oneSport: PublicOrganizationPage = {
+        ...GULF_COAST,
+        leagueCount: 2,
+        locationCount: 1,
+        sportCount: 1,
+        sports: [GULF_COAST.sports[1]],
+        leagues: GULF_COAST.leagues.slice(0, 2),
+        locations: GULF_COAST.locations.slice(0, 1),
+      };
+      const harness = await open();
+      emit(oneSport);
+      await settle(harness);
+      expect(host(harness).querySelector('nav[aria-label="Sports"]')).toBeNull();
+      expect(
+        host(harness).querySelector('section[aria-labelledby="leagues-heading"]')?.parentElement
+          ?.className,
+      ).toContain('border-t');
+    });
+
+    it('starts the sections below the chips without a rule of their own', async () => {
+      const harness = await open();
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(
+        host(harness).querySelector('section[aria-labelledby="leagues-heading"]')?.parentElement
+          ?.className,
+      ).not.toContain('border-t');
+    });
+
+    it('shows no page control on the organization page, which lists page 1 only', async () => {
+      const harness = await open();
+      emit({ ...GULF_COAST, leagueCount: 13 });
+      await settle(harness);
+      expect(host(harness).querySelector('app-page-control')).toBeNull();
     });
   });
 
@@ -334,6 +389,15 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(main()?.querySelector('[role="status"]')).toBeNull();
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
+    });
+
+    it('draws a row of four chips under the hero, as the mockup does', async () => {
+      const harness = await open();
+      const chips = host(harness).querySelectorAll(
+        'main app-organization-skeleton span.rounded-full',
+      );
+      expect(chips).toHaveLength(4);
+      for (const chip of chips) expect(chip.className).toContain('h-11');
     });
 
     it('hides every bar, so a screen reader hears the status alone', async () => {

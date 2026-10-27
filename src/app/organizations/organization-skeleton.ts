@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
 
-/** Its hero and rows have the sizes of the populated page's, so the content arrives without a shift. */
+/** Its hero, chips, and rows have the sizes of the populated page's, so the content arrives without a shift. */
 @Component({
   selector: 'app-organization-skeleton',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,8 +19,15 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
       </div>
       <span aria-hidden="true" class="${BAR} mt-2 h-6 w-3/5 md:mt-3 md:h-7 md:w-1/3"></span>
     </div>
+    <div class="border-b border-border pb-4 md:pb-6">
+      <div class="mx-auto flex w-full max-w-6xl flex-wrap gap-2 px-4 md:px-8">
+        @for (width of chipWidths; track $index) {
+          <span aria-hidden="true" class="${BAR} h-11 rounded-full md:h-9" [class]="width"></span>
+        }
+      </div>
+    </div>
     <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
-      <div class="grid gap-x-12 border-t border-border lg:grid-cols-3">
+      <div class="grid gap-x-12 lg:grid-cols-3">
         <div class="py-8 md:py-12 lg:col-span-2">
           <span aria-hidden="true" class="${BAR} h-7 w-32"></span>
           <div class="mt-2 divide-y divide-border">
@@ -50,6 +57,7 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
   `,
 })
 export class OrganizationSkeleton {
+  protected readonly chipWidths = ['w-28', 'w-40', 'w-24', 'w-24'];
   protected readonly leagueRows = [1, 2, 3];
   protected readonly locationRows = [1, 2];
 }

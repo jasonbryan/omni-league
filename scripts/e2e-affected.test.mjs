@@ -173,7 +173,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public league page and its paths to the league page, season page, and cache-key specs', () => {
+  it('maps the public league page and its paths to the league page, season page, sport view, and cache-key specs', () => {
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
@@ -186,19 +186,39 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
           'e2e/season-page.spec.ts',
+          'e2e/sport-view.spec.ts',
         ),
         file,
       );
     }
   });
 
-  it('maps the numbered control and the page helper to the league page specs only', () => {
+  it('maps the numbered control and the page helper to the league page and sport view specs only', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/league-page-offline.spec.ts', 'e2e/league-page.spec.ts'),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/league-page-offline.spec.ts',
+          'e2e/league-page.spec.ts',
+          'e2e/sport-view.spec.ts',
+        ),
         file,
       );
+    }
+  });
+
+  it('maps the sport chips and the organization page to the sport view spec', () => {
+    for (const file of [
+      'src/app/organizations/sport-chips.ts',
+      'src/app/organizations/organization-page.ts',
+      'src/app/organizations/organization-overview.ts',
+      'convex/organizations.ts',
+    ]) {
+      const specs = specsFor([file]);
+      assert.ok(specs.includes('e2e/sport-view.spec.ts'), file);
+      assert.ok(specs.includes('e2e/cache-key.spec.ts'), file);
+      assert.ok(!specs.includes('FULL'), file);
     }
   });
 
