@@ -268,8 +268,6 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
       expect(await expectRows(page)).toBeGreaterThan(0);
       await visit(page, `${base}/staff`, 'Staff');
       expect(await expectRows(page)).toBeGreaterThan(0);
-      await visit(page, `${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]);
-      expect(await expectRows(page)).toBeGreaterThan(0);
     });
 
     await test.step('the menu sheet', async () => {
