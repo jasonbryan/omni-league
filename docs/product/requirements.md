@@ -58,6 +58,12 @@ Owner answers, 2026-10-10 (chat):
 - **Waitlist:** when a season is full, new teams go on its waitlist, and an organizer promotes teams from it.
 - **One team per season** ("No" to playing on two teams): a person is on at most one team in a season, and a rostered player cannot also be a free agent in that season.
 
+Owner decision, 2026-10-27 (chat, "Sounds good", accepting option A of leagues vs seasons):
+
+- **League → Season stays,** as in TeamSnap. The league is the lasting thing players know by name, such as Sunday Coed 4s. A season is **one run of the league**, such as Fall 2027, with its own dates, registration, teams, schedule, and standings. The wording on every screen says so (#324).
+- **Public pages lead with what's open now:** the season with registration open and the way to register come first, as in "Sunday Coed 4s · Fall 2027 · Registration open · Register" (#245, #246, #325).
+- **Registration stays part of each season:** team registration, joining a team, and free agent registration (see Registration), at the season's team and player prices (#288).
+
 ## Registration
 
 Three ways to take part, all needed (owner answer, 2026-10-09):
@@ -139,6 +145,45 @@ The web app is also a progressive web app (**PWA**), so no separate mobile app i
 
 Who receives each notification, when reminders are sent, and whether users choose per kind are open (#85). The technology is decided in the `gate:technology` proposal for #79.
 
+## Program types (proposal)
+
+Owner's words, 2026-10-27 (chat): "Sounds good but I also want to be able to support types of programs, like leagues, tournements, camps, and training".
+
+**Requirement:** an organization can offer other types of program besides leagues: tournaments, camps, and training. The model below is the system's **proposal**, not yet decided. Its open questions are on #323, and no slice is planned until the owner answers them.
+
+### Model
+
+- A **program** is something an organization offers for registration. It has one **program type**: league, tournament, camp, or training.
+- **Today's league is the league type.** A program record sits above each league, one to one. Leagues keep their slugs, URLs (`/organizations/<org>/leagues/<league>`), seasons, and data, so nothing built so far changes.
+- Each program has a name, a slug unique within the organization across all types, a sport, a division where the type uses one, its locations, and draft or published status. The type-specific part hangs off it: a league's seasons, a tournament's event, a camp's sessions, or a training program's classes.
+- Comparable products differ mainly in how they split this up. TeamSnap nests program, season, division, and team, with registration per season ([TeamSnap](https://info.teamsnap.com/youth-sports-registration-software.html)). LeagueApps lists camps, clubs, leagues, and tournaments as program types ([LeagueApps](https://leagueapps.com/)). Playpass sells leagues, tournaments, and clubs, plus bookings with a capacity per slot ([Playpass](https://playpass.com/)). The proposal keeps Omni League's League → Season and adds the type above it.
+- **Rejected alternative:** adding a `type` field to the `leagues` table. A camp has no format, minimum roster size, or standings, so the league fields would sit empty. A camp would also be called a "league" in code, the glossary, and URLs.
+
+### What differs by type
+
+| Type       | People register for                                      | Who registers                                       | Structure                                                       | Results                              |
+| ---------- | -------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------ |
+| League     | A season, one run of the league                          | Teams (captain), people joining a team, free agents | Repeating seasons; teams; a schedule of games                   | Standings                            |
+| Tournament | The tournament, one event of one or more days (#323, Q3) | Teams (captain) and people joining a team           | Pools, then a bracket (#323, Q2); maximum teams                 | Pool standings, then bracket results |
+| Camp       | A session with dates, for example June 8 to 12           | Individuals; guardians for minors (#323, Q4)        | Sessions, each with a capacity, an age range, and a price       | None                                 |
+| Training   | A series of classes, or one class (#323, Q5)             | Individuals; guardians for minors (#323, Q4)        | Classes from a weekly pattern, each with a capacity and a coach | None at first                        |
+
+### What every type shares
+
+- The organization, its staff, and its access boundary. A league organizer is assigned programs of any type.
+- Locations, draft then publish, and a public page that leads with what's open now.
+- Registration: an account to register, a deadline, a capacity (maximum teams or places), and a waitlist when full.
+- Payments through Stripe Connect, with the application fee on every registration (#323, Q7).
+- Public listing and search. The organization page lists programs by type, and Find a league becomes **Find a program** (#323, Q6).
+- Offline saved copies of public pages, and demo data for each type.
+
+### Sequence
+
+1. **Leagues first.** The public-site milestone (#240 to #262) and season registration and payments (#129 to #145, #288) finish on leagues.
+2. **The program record above leagues,** with no visible change: a `programs` table, one row per league, kept by the tenant writers, with a `seed:demo` backfill and a migration plan.
+3. **The second type,** chosen by the owner (#323, Q1). The system recommends tournaments, because they reuse teams, rosters, games, and standings.
+4. **The remaining types.** Find a league becomes Find a program when the second type ships, and `/leagues` keeps working.
+
 ## Future (out of scope)
 
 - **Player Pro:** a planned paid subscription for players to track their personal stats across leagues (owner direction, 2026-10-07). Out of scope until the owner raises it; it is why results keep per-player stat lines.
@@ -178,5 +223,6 @@ Questions still open for the owner. The planner records them as `status:blocked`
 8. **Free agents:** what a free agent tells the organizer (position, skill, availability), and whether free agents and waitlisted teams can withdraw (#133, #145).
 9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
 10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
+11. **Program types (#323):** which type ships second, tournament pools and brackets, repeating tournaments, guardians registering minors for camps and training, training classes or bookings, one search or one per type, and the application fee on each type.
 
 Features beyond the above are not yet specified.
