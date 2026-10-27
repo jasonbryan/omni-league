@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
-import type { Id } from './_generated/dataModel';
-import { mutation, query } from './_generated/server';
+import type { Doc, Id } from './_generated/dataModel';
+import { mutation, query, type QueryCtx } from './_generated/server';
 import {
   requireLeagueOrganizer,
   requireLeagueOrganizerOrForbidden,
@@ -24,7 +24,7 @@ import { leagueLocationNames } from './lib/publicLeague';
 import { getLeaguePublicPageReturns } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
-import { sportName, sportValidator } from './lib/sports';
+import { sportName, sportValidator, type Sport } from './lib/sports';
 import { insertDraftLeague, leagueSlugTaken, publishLeague } from './lib/tenantWrites';
 
 export const ADMIN_LEAGUES_LIMIT = 200;
@@ -83,6 +83,24 @@ export const listForAdmin = query({
   },
 });
 
+// A level of another organization or sport is refused as not allowed; one deleted meanwhile, as a Level error.
+async function checkedCustomLevel(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  customLevelId: Id<'customLevels'> | undefined,
+): Promise<Doc<'customLevels'> | null> {
+  if (customLevelId === undefined) return null;
+  const customLevel = await ctx.db.get('customLevels', customLevelId);
+  if (!customLevel) {
+    refuse({ field: 'level', code: 'levelInvalid', message: LEAGUE_MESSAGES.levelInvalid });
+  }
+  if (customLevel.organizationId !== organizationId || customLevel.sport !== sport) {
+    throw new Error('Not allowed');
+  }
+  return customLevel;
+}
+
 export const create = mutation({
   args: {
     organizationId: v.id('organizations'),
@@ -93,6 +111,7 @@ export const create = mutation({
     gender: genderValidator,
     playersPerSide: v.number(),
     level: standardLevelValidator,
+    customLevelId: v.optional(v.id('customLevels')),
     // A string, not the age group validator, so an unknown value is refused with the field's error.
     ageGroup: v.string(),
     minimumRosterSize: v.optional(v.number()),
@@ -110,6 +129,12 @@ export const create = mutation({
     if (minimumError) refuse(minimumError);
     const levelError = checkLeagueLevel(args.sport, args.level);
     if (levelError) refuse(levelError);
+    const customLevel = await checkedCustomLevel(
+      ctx,
+      args.organizationId,
+      args.sport,
+      args.customLevelId,
+    );
     const ageGroup = checkLeagueAgeGroup(args.ageGroup);
     if (!ageGroup.ok) refuse(ageGroup.error);
     const locationIds = [...new Set(args.locationIds)];
@@ -134,7 +159,8 @@ export const create = mutation({
       division: {
         gender: args.gender,
         playersPerSide: args.playersPerSide,
-        level: args.level,
+        level: customLevel?.standardLevel ?? args.level,
+        ...(customLevel && { customLevelId: customLevel._id }),
         ageGroup: ageGroup.ageGroup,
         ...(args.minimumRosterSize !== undefined && {
           minimumRosterSize: args.minimumRosterSize,

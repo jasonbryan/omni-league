@@ -23,6 +23,10 @@ export class ShownUntilValid {
   submitted(): void {
     this.state.set(this.invalid());
   }
+
+  hide(): void {
+    this.state.set(false);
+  }
 }
 
 /** For a field the signal form does not hold, such as a group of checkboxes; a text field uses the signal form's own `dirty()`, which only the user's typing sets. */

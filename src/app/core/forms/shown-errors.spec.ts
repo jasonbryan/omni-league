@@ -31,6 +31,16 @@ describe('ShownUntilValid', () => {
     expect(check.shown()).toBe(false);
   });
 
+  it('hide() takes a shown error away until the next check', () => {
+    const { value, check } = setup();
+    value.set('a');
+    check.left();
+    check.hide();
+    expect(check.shown()).toBe(false);
+    check.submitted();
+    expect(check.shown()).toBe(true);
+  });
+
   it('shows nothing when a changed field is valid as focus leaves it', () => {
     const { value, check } = setup();
     value.set('abc');

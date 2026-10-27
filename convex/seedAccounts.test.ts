@@ -216,6 +216,31 @@ describe('seed:demo accounts: a new deployment', () => {
   );
 
   test(
+    'the admin account sees the demo custom level D in its softball levels and in its league’s label',
+    async () => {
+      const t = setup();
+      await run(t);
+      const { organizations } = await appRows(t);
+      const saguaro = organizations.find((o) => o.slug === SAGUARO);
+      if (!saguaro) throw new Error('demo organization missing');
+      const admin = await as(t, EMAILS.admin);
+      expect(
+        (
+          await admin.query(api.customLevels.listForSport, {
+            organizationId: saguaro._id,
+            sport: 'softball',
+          })
+        ).map(({ name, standardLevel }) => [name, standardLevel]),
+      ).toEqual([['D', 'rec']]);
+      const labels = (
+        await admin.query(api.leagues.listForAdmin, { organizationId: saguaro._id })
+      ).map((league) => league.divisionLabel);
+      expect(labels).toContain("Men's · 10v10 · D (Rec)");
+    },
+    SLOW,
+  );
+
+  test(
     'each account sees what its role should: org admin, assigned organizer, plain player',
     async () => {
       const t = setup();

@@ -204,6 +204,8 @@ test.describe('Leagues: the division chips', () => {
     await page.keyboard.press('ArrowRight');
     await expect(radio(page, 'B')).toBeChecked();
     await page.keyboard.press('Tab');
+    await expect(form(page).getByRole('button', { name: 'Add a custom level' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(form(page).getByLabel('Age group')).toBeFocused();
   });
 

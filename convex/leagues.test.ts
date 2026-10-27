@@ -5,7 +5,12 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { isChoosableSlug } from './lib/slugs';
-import { backfillTenantFields, insertLeague, insertTenant } from './lib/tenantWrites';
+import {
+  backfillTenantFields,
+  insertCustomLevel,
+  insertLeague,
+  insertTenant,
+} from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -214,6 +219,73 @@ describe('leagues.create', () => {
       });
     }
     expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  describe('with a custom level', () => {
+    const customLevel = (
+      s: Setup,
+      organizationId: Id<'organizations'>,
+      sport: 'beachVolleyball' | 'soccer',
+      standardLevel: 'a' | 'rec',
+    ) =>
+      s.t.run((ctx) =>
+        insertCustomLevel(ctx, organizationId, { sport, name: 'Gold', standardLevel }),
+      );
+
+    test('stores the id and the level it filters as, whatever level the caller sent', async () => {
+      const s = await setup();
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+        ...valid(s),
+        level: 'rec',
+        customLevelId,
+      });
+      expect(await s.t.run((ctx) => ctx.db.get('leagues', leagueId))).toMatchObject({
+        level: 'a',
+        customLevelId,
+      });
+      const rows = await s.adminA.query(api.leagues.listForAdmin, {
+        organizationId: s.organizationA,
+      });
+      expect(rows.find((row) => row.leagueId === leagueId)?.divisionLabel).toBe(
+        'Coed · 4v4 · Gold (A)',
+      );
+    });
+
+    test('stores no id for a league without one', async () => {
+      const s = await setup();
+      const { leagueId } = await s.adminA.mutation(api.leagues.create, valid(s));
+      const league = await s.t.run((ctx) => ctx.db.get('leagues', leagueId));
+      expect(league).not.toHaveProperty('customLevelId');
+    });
+
+    test('refuses a level of another organization or of another sport, and writes nothing', async () => {
+      const s = await setup();
+      const before = await snapshot(s.t);
+      const other = await customLevel(s, s.organizationB, 'beachVolleyball', 'a');
+      const otherSport = await customLevel(s, s.organizationA, 'soccer', 'rec');
+      for (const customLevelId of [other, otherSport]) {
+        await expect(
+          s.adminA.mutation(api.leagues.create, { ...valid(s), customLevelId }),
+        ).rejects.toThrow('Not allowed');
+      }
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+
+    test('refuses a level that no longer exists, with the Level field’s error', async () => {
+      const s = await setup();
+      const before = await snapshot(s.t);
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      await s.adminA.mutation(api.customLevels.remove, { customLevelId });
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), customLevelId })),
+      ).toEqual({
+        field: 'level',
+        code: 'levelInvalid',
+        message: 'Choose one of the levels listed.',
+      });
+      expect(await snapshot(s.t)).toEqual(before);
+    });
   });
 
   test('refuses an unknown age group, with the field’s error', async () => {

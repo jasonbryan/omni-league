@@ -33,12 +33,13 @@ import {
   playersPerSideOfSport,
 } from '../../../../convex/lib/divisions';
 import { ROSTER_SIZE_INPUT_MAX, SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
-import { injectMutation, injectOnline } from '../../core/data/convex';
+import { injectMutation, injectOnline, injectQuery, skipToken } from '../../core/data/convex';
 import { Checkbox } from '../../ui/checkbox';
 import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
+import { CustomLevelPanel, type AddedCustomLevel } from './custom-level-panel';
 import {
   DESCRIPTION,
   FIELD,
@@ -55,6 +56,8 @@ import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import { filledFromNameMessage } from './league-division';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
 
+const CUSTOM_KEY_PREFIX = 'custom:';
+
 export interface LeagueLocationChoice {
   locationId: Id<'locations'>;
   name: string;
@@ -62,7 +65,7 @@ export interface LeagueLocationChoice {
 
 @Component({
   selector: 'app-league-create-form',
-  imports: [AdminAlert, Checkbox, ChipRadioGroup, FormField, NgIcon, RouterLink],
+  imports: [AdminAlert, Checkbox, ChipRadioGroup, CustomLevelPanel, FormField, NgIcon, RouterLink],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus, lucideSparkles })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -306,16 +309,24 @@ export interface LeagueLocationChoice {
                   </button>
                 }
               </div>
-              <app-chip-radio-group
-                #levelGroup
-                name="level"
-                legend="Level"
-                [options]="levelOptions()"
-                [value]="form.division.level()"
-                [description]="'Standard levels for ' + sportLabel(sport) + '.'"
-                [error]="form.errors.level()"
-                (chosen)="chooseLevel($event)"
-              />
+              <div>
+                <app-chip-radio-group
+                  #levelGroup
+                  name="level"
+                  legend="Level"
+                  [options]="levelOptions()"
+                  [value]="chosenLevel()"
+                  [description]="levelDescription()"
+                  [error]="form.errors.level()"
+                  (chosen)="chooseLevel($event)"
+                />
+                <app-custom-level-panel
+                  [organizationId]="organizationId()"
+                  [sport]="sport"
+                  (added)="customLevelAdded($event)"
+                  (undone)="form.division.undoCustomLevel($event)"
+                />
+              </div>
               <div
                 role="group"
                 data-slot="field"
@@ -525,6 +536,7 @@ export class LeagueCreateForm {
   private readonly sportGroup = viewChild<ChipRadioGroup>('sportGroup');
   private readonly formatGroup = viewChild<ChipRadioGroup>('formatGroup');
   private readonly levelGroup = viewChild<ChipRadioGroup>('levelGroup');
+  private readonly customLevelPanel = viewChild(CustomLevelPanel);
   private readonly minimumInput = viewChild<ElementRef<HTMLInputElement>>('minimum');
   private readonly ageGroupSelect = viewChild<ElementRef<HTMLSelectElement>>('ageGroup');
   private readonly locationBoxes = viewChildren(Checkbox);
@@ -544,11 +556,36 @@ export class LeagueCreateForm {
     const count = this.form.division.playersPerSide();
     return count === null ? null : String(count);
   });
+  private readonly customLevelList = injectQuery(api.customLevels.listForSport, () => {
+    const sport = this.form.sport();
+    return sport === null ? skipToken : { organizationId: this.organizationId(), sport };
+  });
+  private readonly customLevels = computed(() => this.customLevelList.value() ?? []);
   protected readonly levelOptions = computed<readonly ChipOption[]>(() => {
     const sport = this.form.sport();
-    return sport === null
-      ? []
-      : levelsOfSport(sport).map((key) => ({ key, label: levelLabel(key) }));
+    if (sport === null) return [];
+    return [
+      ...levelsOfSport(sport).map((key) => ({ key, label: levelLabel(key) })),
+      ...this.customLevels().map(({ customLevelId, name }) => ({
+        key: `${CUSTOM_KEY_PREFIX}${customLevelId}`,
+        label: name,
+      })),
+    ];
+  });
+  protected readonly chosenLevel = computed(() => {
+    const customLevelId = this.form.division.customLevelId();
+    return customLevelId === null
+      ? this.form.division.level()
+      : `${CUSTOM_KEY_PREFIX}${customLevelId}`;
+  });
+  protected readonly levelDescription = computed(() => {
+    const sport = this.form.sport();
+    if (sport === null) return null;
+    const standard = `Standard levels for ${this.sportLabel(sport)}.`;
+    const custom = this.customLevels().map(
+      ({ name, standardLevel }) => `${name} (filters as ${levelLabel(standardLevel)})`,
+    );
+    return custom.length === 0 ? standard : `${standard} Your custom levels: ${custom.join(', ')}.`;
   });
   protected readonly filledMessage = computed(() =>
     filledFromNameMessage(this.form.division.filledFromName()),
@@ -566,7 +603,9 @@ export class LeagueCreateForm {
 
   protected chooseSport(key: string): void {
     const sport = (Object.keys(SPORT_NAMES) as Sport[]).find((candidate) => candidate === key);
-    if (sport) this.form.chooseSport(sport);
+    if (!sport) return;
+    this.customLevelPanel()?.reset();
+    this.form.chooseSport(sport);
   }
 
   protected chooseGender(key: string): void {
@@ -579,9 +618,20 @@ export class LeagueCreateForm {
   }
 
   protected chooseLevel(key: string): void {
+    if (key.startsWith(CUSTOM_KEY_PREFIX)) {
+      const custom = this.customLevels().find(
+        ({ customLevelId }) => `${CUSTOM_KEY_PREFIX}${customLevelId}` === key,
+      );
+      if (custom) this.form.division.chooseCustomLevel(custom);
+      return;
+    }
     const sport = this.form.sport();
     const level = sport && levelsOfSport(sport).find((candidate) => candidate === key);
     if (level) this.form.division.chooseLevel(level);
+  }
+
+  protected customLevelAdded({ customLevelId, standardLevel }: AddedCustomLevel): void {
+    this.form.division.chooseCustomLevel({ customLevelId, standardLevel });
   }
 
   protected ageGroupChosen(event: Event): void {
