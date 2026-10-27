@@ -15,7 +15,7 @@ import { plantSavedCopy } from '../../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../../offline/saved-time';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
-import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
+import { seasonQueryResults, SUMMER_2027, without } from './testing/season-data';
 
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
@@ -163,6 +163,28 @@ describe('PublicSeasonPage offline', () => {
       'Sunday Reverse Coed 4s · Summer 2027',
     );
     expect(note(harness)).toBeNull();
+  });
+
+  it('offline: opens a copy saved before the deadline, addresses, division, and upcoming seasons existed', async () => {
+    const { league, ...rest } = SUMMER_2027;
+    const earlierCopy = {
+      ...without(rest, 'registrationDeadline'),
+      league: {
+        name: league.name,
+        slug: league.slug,
+        sportName: league.sportName,
+        locationNames: league.locationNames,
+      },
+    };
+    plant(seasonQueryResults({ season: earlierCopy }));
+    stubOnLine(false);
+    const harness = await open(PATH, { socket: 'down' });
+    const main = host(harness).querySelector('main');
+    expect(host(harness).querySelector('app-not-saved-view')).toBeNull();
+    expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
+    expect(main?.querySelector('#registration')).toBeNull();
+    expect(text(main?.querySelector('dl'))).toContain('North Beach Sand Courts');
+    expect(note(harness)).not.toBeNull();
   });
 
   describe('no saved copy', () => {
