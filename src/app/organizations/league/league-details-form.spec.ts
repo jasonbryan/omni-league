@@ -126,7 +126,9 @@ describe('LeagueDetailsForm', () => {
       expect(form().getAttribute('aria-labelledby')).toBe('details-heading');
       expect(form().hasAttribute('novalidate')).toBe(true);
       expect(text(page.querySelector('label[for="league-name"]'))).toBe('Name');
-      expect(text(page.querySelector('#league-name-description'))).toBe('Up to 100 characters.');
+      expect(text(page.querySelector('#league-name-description'))).toBe(
+        'The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.',
+      );
       expect(text(section().querySelector('fieldset legend'))).toBe('Division');
       expect(text(save())).toBe('Save changes');
       expect(save().className.split(' ')).toEqual(

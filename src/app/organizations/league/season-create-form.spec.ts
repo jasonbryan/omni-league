@@ -75,7 +75,7 @@ describe('SeasonCreateForm', () => {
       expect(form().getAttribute('aria-describedby')).toBe('create-season-note');
       expect(form().hasAttribute('novalidate')).toBe(true);
       expect(text(page.querySelector('#create-season-note'))).toBe(
-        'New seasons start as drafts, which only your staff see.',
+        'A season is one run of Coed 7v7 Rec, with its own dates, registration, teams, and schedule. It starts as a draft, which only your staff see.',
       );
       expect(text(submitButton())).toBe('Create draft season');
       expect(tokens(submitButton().className)).toEqual(
@@ -114,7 +114,7 @@ describe('SeasonCreateForm', () => {
     it('describes the fields as the mockup does', async () => {
       await open();
       expect(text(page.querySelector('#name-description'))).toBe(
-        'Up to 100 characters, for example Spring 2028.',
+        'Up to 100 characters, for example Fall 2027. Players see it with the league’s name.',
       );
       expect(text(page.querySelector('#slug-description'))).toBe(
         '3 to 60 lowercase letters and digits, with single hyphens between them. Unique within Coed 7v7 Rec.',

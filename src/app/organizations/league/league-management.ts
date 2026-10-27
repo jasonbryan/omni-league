@@ -271,8 +271,18 @@ import { SeasonCreateForm } from './season-create-form';
                 /></span>
                 <p class="mt-4 font-medium">No seasons yet</p>
                 <p class="mt-1 max-w-xs text-sm text-balance text-muted-foreground">
-                  Seasons you create appear here as drafts until you publish them.
+                  Each run of {{ league.name }} is a season, with its own dates, registration,
+                  teams, and schedule. Seasons you create appear here as drafts until you publish
+                  them.
                 </p>
+                <a
+                  [href]="createPath()"
+                  data-slot="button"
+                  [class]="outlineButton + ' mt-4'"
+                  (click)="jumpTo($event, createSection)"
+                  ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
+                  season</a
+                >
               </div>
             }
           } @else {

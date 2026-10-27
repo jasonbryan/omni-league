@@ -79,7 +79,7 @@ export interface LeagueLocationChoice {
           [title]="created.name + ' created as a draft.'"
           description="Publish it when it’s ready for players to see."
           class="mb-5"
-          ><a [routerLink]="leaguePath(created.slug)">Add seasons to {{ created.name }}</a>
+          ><a [routerLink]="leaguePath(created.slug)">Add the first season to {{ created.name }}</a>
         </app-admin-alert>
       }
       @if (form.alert(); as kind) {
@@ -120,7 +120,7 @@ export interface LeagueLocationChoice {
             [class]="inputClass"
           />
           <p data-slot="field-description" id="name-description" [class]="descriptionClass">
-            Up to 100 characters.
+            The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.
           </p>
           @if (form.errors.name(); as error) {
             <div role="alert" data-slot="field-error" id="name-error" [class]="errorClass">
