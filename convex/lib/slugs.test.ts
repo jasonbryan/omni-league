@@ -43,7 +43,7 @@ describe('isSlug', () => {
 });
 
 describe('reserved slugs', () => {
-  test('are `new` and the five demo organization slugs, all of which are valid slugs', () => {
+  test('are `new` and the six demo organization slugs, all of which are valid slugs', () => {
     expect([...RESERVED_SLUGS].sort()).toEqual(
       [
         'new',
@@ -52,9 +52,10 @@ describe('reserved slugs', () => {
         'front-range-rec-sports',
         'lakeshore-sand-league',
         'saguaro-valley-softball',
+        'rockport-sand-volleyball',
       ].sort(),
     );
-    expect(DEMO_ORGANIZATION_SLUGS).toHaveLength(5);
+    expect(DEMO_ORGANIZATION_SLUGS).toHaveLength(6);
     for (const slug of RESERVED_SLUGS) {
       expect(isSlug(slug), slug).toBe(true);
       expect(isReservedSlug(slug), slug).toBe(true);

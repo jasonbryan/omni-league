@@ -122,7 +122,7 @@ test.describe('Leagues: publishing a draft', () => {
       await expect(page.locator('app-admin-leagues')).not.toHaveAttribute('inert', '');
       await expect(result(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
         'href',
-        tenant.path,
+        `${tenant.path}/leagues/sunday-reverse-coed-4s`,
       );
       const [resultBox, listBox] = await Promise.all([
         result(page).boundingBox(),
@@ -142,6 +142,18 @@ test.describe('Leagues: publishing a draft', () => {
     } finally {
       await visitor.context().close();
     }
+  });
+
+  test('"View public page" opens the published league’s own public page', async ({ page }) => {
+    const { tenant, base } = await orgAdmin(page);
+    await page.goto(`${base}/leagues`);
+    await publishButton(page, 'Sunday Reverse Coed 4s').click();
+    await dialog(page).getByRole('button', { name: 'Publish league' }).click();
+    await result(page).getByRole('link', { name: 'View public page' }).click();
+    await expect(page).toHaveURL(`${tenant.path}/leagues/sunday-reverse-coed-4s`);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'Sunday Reverse Coed 4s',
+    );
   });
 
   test('Cancel and Escape leave it a draft, write nothing, and return focus to that row’s Publish button', async ({

@@ -218,7 +218,9 @@ describe('AdminLeagues: publishing', () => {
         'It’s on your public page now. View public page',
       );
       const link = region.querySelector('a')!;
-      expect(link.getAttribute('href')).toBe('/organizations/coastal-bend-rec-club');
+      expect(link.getAttribute('href')).toBe(
+        '/organizations/coastal-bend-rec-club/leagues/sunday-reverse-coed-4s',
+      );
       expect(text(link)).toBe('View public page');
       const list = page.querySelector('#leagues-list')!;
       expect(region.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

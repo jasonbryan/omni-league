@@ -1,13 +1,13 @@
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
-import { seedTenant, type TenantSeed } from './support/tenant';
+import { numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
@@ -269,6 +269,183 @@ test.describe('Leagues: creating a draft', () => {
     await jump.click();
     await expect(page.locator('#name')).toBeFocused();
     await expect(page.locator('#name')).toBeInViewport();
+  });
+});
+
+test.describe('Leagues: defaults and the next step', () => {
+  test('an organization with one location has it checked, again after a create, and the status links to the new league', async ({
+    page,
+  }, testInfo) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: [LOCATIONS[0]] });
+    await page.goto(`${base}/leagues`);
+    const only = page.getByRole('checkbox', { name: LOCATIONS[0].name });
+    await expect(only).toBeChecked();
+
+    // Name and Sport are enough: the location needs no tick.
+    await page.locator('#name').fill('Sunday Reverse Coed 4s');
+    await page.getByRole('radio', { name: 'Beach volleyball' }).check();
+    await submit(page).click();
+
+    const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
+    await expect(status).toContainText('Sunday Reverse Coed 4s created as a draft.');
+    await expect(leagueRows(page).first()).toContainText(LOCATIONS[0].name);
+    await expect(page.locator('#name')).toHaveValue('');
+    await expect(only).toBeChecked();
+    await screenshot(page, testInfo, '209-leagues-created-next-step');
+    await expectAccessible(page);
+
+    const next = status.getByRole('link', { name: 'Add seasons to Sunday Reverse Coed 4s' });
+    await expect(next).toHaveAttribute('href', `${base}/leagues/sunday-reverse-coed-4s`);
+    await next.click();
+    await expect(page).toHaveURL(`${base}/leagues/sunday-reverse-coed-4s`);
+    await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(
+      'Sunday Reverse Coed 4s',
+    );
+  });
+
+  test('with two locations none is checked', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    await page.goto(`${base}/leagues`);
+    await expect(form(page).getByRole('checkbox')).toHaveCount(2);
+    await expect(form(page).getByRole('checkbox', { checked: true })).toHaveCount(0);
+  });
+});
+
+test.describe('Leagues: the create form on a phone', () => {
+  const PHONE = { width: 360, height: 640 };
+
+  test('the Create button stays at the bottom of the viewport while the form is taller than it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').focus();
+    expect((await form(page).boundingBox())!.height).toBeGreaterThan(PHONE.height);
+    await expect(submit(page)).toBeInViewport({ ratio: 1 });
+    const box = (await submit(page).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(PHONE.height);
+    expect(box.y).toBeGreaterThan(PHONE.height - 80);
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(submit(page)).toBeInViewport({ ratio: 1 });
+  });
+
+  test('a keyboard user Tabbing through every field never has one under the sticky button (WCAG 2.4.11)', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').focus();
+    const tab = tabKey(page);
+
+    const seen: { control: string; inViewport: boolean; unobscured: boolean }[] = [];
+    for (let step = 0; step < 20; step++) {
+      seen.push(
+        await page.evaluate(() => {
+          const active = document.activeElement as HTMLElement;
+          const rect = active.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+          const hit = inViewport ? document.elementFromPoint(x, y) : null;
+          return {
+            control: [active.id, active.getAttribute('name'), active.tagName].find(Boolean)!,
+            inViewport,
+            unobscured: !!hit && (hit === active || active.contains(hit)),
+          };
+        }),
+      );
+      if (
+        seen.at(-1)!.control !== 'name' &&
+        (await submit(page).evaluate((b) => b === document.activeElement))
+      ) {
+        break;
+      }
+      await page.keyboard.press(tab);
+    }
+
+    expect(seen.map((s) => s.control)).toEqual([
+      'name',
+      'slug',
+      expect.stringMatching(/^sport/),
+      'location-1',
+      'location-2',
+      'location-3',
+      'BUTTON',
+    ]);
+    expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
+  });
+
+  test('Shift+Tab from the Create button back through the fields never leaves one under it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(6) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await submit(page).focus();
+    const back = `Shift+${tabKey(page)}`;
+
+    for (let step = 0; step < 9; step++) {
+      await page.keyboard.press(back);
+      const clear = await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement;
+        const rect = active.getBoundingClientRect();
+        const footer = document.querySelector('[data-slot="form-footer"]')!.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return {
+          control: active.id || active.tagName,
+          visible: rect.top >= 0,
+          above: rect.bottom <= footer.top,
+          hit: !!hit && (hit === active || active.contains(hit)),
+        };
+      });
+      expect(clear, `step ${step + 1}`).toMatchObject({ visible: true, above: true, hit: true });
+    }
+  });
+
+  test('every location, however far down, can be clicked once the page is scrolled to it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(8) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').focus();
+    await expect(submit(page)).toBeInViewport({ ratio: 1 });
+
+    for (let n = 1; n <= 8; n++) {
+      const location = page.getByRole('checkbox', { name: `Location 0${n}` });
+      // Scrolling by hand, as a thumb does, until the checkbox is clear of the sticky button.
+      let box = (await location.boundingBox())!;
+      const footerTop = (await form(page).locator('[data-slot="form-footer"]').boundingBox())!.y;
+      for (let swipe = 0; swipe < 40 && !(box.y >= 0 && box.y + box.height <= footerTop); swipe++) {
+        await page.mouse.wheel(0, box.y < 0 ? -80 : 80);
+        await page.waitForTimeout(30);
+        box = (await location.boundingBox())!;
+      }
+      expect(box.y, `Location 0${n} scrolled into view`).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, `Location 0${n} above the button`).toBeLessThanOrEqual(footerTop);
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(location).toBeChecked();
+    }
+  });
+
+  test('at 1280px the button is in the flow, as before', async ({ page }, testInfo) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`${base}/leagues`);
+    const footer = form(page).locator('[data-slot="form-footer"]');
+    const style = await footer.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { position: css.position, border: css.borderTopWidth, padding: css.paddingTop };
+    });
+    expect(style).toEqual({ position: 'static', border: '0px', padding: '0px' });
+    await expect(submit(page)).toHaveCSS('width', `${(await footer.boundingBox())!.width}px`);
+    await screenshot(page, testInfo, '209-leagues-form-desktop');
   });
 });
 
