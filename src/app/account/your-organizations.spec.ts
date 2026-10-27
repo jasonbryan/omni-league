@@ -128,7 +128,7 @@ describe('YourOrganizations', () => {
     const link = [...section.querySelectorAll('a')].find((a) => text(a) === 'Find a league');
     expect(link?.getAttribute('href')).toBe('/');
     expect([...link!.classList].sort()).toEqual(
-      buttonVariants({ variant: 'outline', size: 'lg' }).split(' ').sort(),
+      buttonVariants({ variant: 'outline', size: 'md' }).split(' ').sort(),
     );
   });
 
