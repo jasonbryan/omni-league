@@ -141,14 +141,17 @@ describe('PublicLeaguePage populated', () => {
     const main = host(harness).querySelector('main');
     const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
     const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
-    expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Sunday Reverse Coed 4s']);
+    expect(links.map(text)).toEqual([
+      'Gulf Coast Sport & Social',
+      'Beach volleyball',
+      'Sunday Reverse Coed 4s',
+    ]);
     expect(links.map((a) => a?.getAttribute('href'))).toEqual([
       '/organizations/gulf-coast-sport-social',
+      '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
       PATH,
     ]);
-    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, 'page']);
-    expect(text(crumbs[2])).toBe('Beach volleyball');
-    expect(crumbs[2].querySelector('a')).toBeNull();
+    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
     expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s');

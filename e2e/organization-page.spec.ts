@@ -246,12 +246,15 @@ test.describe('organization page in the browser', () => {
     await expect(page).toHaveTitle(`${tenant.name} | Omni League`);
 
     await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
-    await expect(page.getByRole('navigation')).toHaveCount(1);
+    await expect(page.getByRole('navigation')).toHaveCount(2);
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
+        'nav[aria-label="Sports"] li:nth-child(1) a',
+        'nav[aria-label="Sports"] li:nth-child(2) a',
+        'nav[aria-label="Sports"] li:nth-child(3) a',
         ...tenant.leagues.map(
           (league) =>
             `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,

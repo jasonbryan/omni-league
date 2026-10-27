@@ -14,6 +14,7 @@ const EDGE_PATHS = [
   '/app/x',
   '/app',
   '/organizations/cache-key-sample',
+  '/organizations/cache-key-sample/sports/soccer',
   '/organizations/cache-key-sample/leagues/cache-key-sample',
   '/organizations/cache-key-sample/leagues/cache-key-sample/seasons/cache-key-sample',
   '/sign-up',
@@ -58,6 +59,7 @@ test.describe('query strings and the CDN', () => {
         unique,
         `/app${unique}`,
         `/organizations${unique}`,
+        `/organizations${unique}/sports/soccer`,
         `/organizations${unique}/leagues/sample`,
         `/organizations${unique}/leagues/sample/seasons/sample`,
         `/sign-up`,
@@ -122,6 +124,49 @@ test.describe('query strings and the CDN', () => {
       expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
 
       for (const sample of [(c: string) => `?page=${c}`, (c: string) => `?page=2&page=${c}`]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(response.headers['netlify-vary'], sample(token)).toBe('query');
+        const names = (body: string) =>
+          [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
+            name.trim(),
+          );
+        expect(names(response.body), sample(token)).toEqual(names(first.body));
+      }
+    },
+  );
+
+  test(
+    'the sport view: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
+    RAW_HTTP,
+    async () => {
+      let path = '/organizations/gulf-coast-sport-social/sports/soccer';
+      if (remoteBaseUrl === undefined) {
+        const tenant = await seedTenant({
+          name: 'E2E Cache Key Sport',
+          locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+          leagues: Array.from({ length: 7 }, (_, i) => ({
+            name: `Soccer League ${i + 1}`,
+            sport: 'soccer' as const,
+            locations: ['Alpha Field'],
+          })),
+        });
+        path = `${tenant.path}/sports/soccer`;
+      }
+      const first = await rawGet(path);
+      expect(first.status).toBe(200);
+      expect(first.headers['netlify-vary']).toBe('query');
+      expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
+
+      for (const sample of [
+        (c: string) => `?page=${c}`,
+        (c: string) => `?page=2&page=${c}`,
+        (c: string) => `?sport=${c}`,
+      ]) {
         const token = canary();
         const response = await rawGet(`${path}${sample(token)}`);
         expect(response.status, sample(token)).toBe(200);

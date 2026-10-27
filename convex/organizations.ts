@@ -10,7 +10,13 @@ import {
   ORGANIZATION_MESSAGES,
   type OrganizationInputError,
 } from './lib/organizationInput';
-import { pageOf, pageRows, PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import {
+  pageOf,
+  pageRows,
+  PUBLIC_LIST_MAX_PAGE,
+  PUBLIC_LIST_MAX_ROWS,
+  PUBLIC_LIST_PAGE_SIZE,
+} from './lib/publicList';
 import {
   getPublicPageReturns,
   publicLeaguesValidator,
@@ -113,21 +119,58 @@ export const getPublicPage = query({
   },
 });
 
+async function locationsThroughPage(
+  ctx: QueryCtx,
+  organization: Doc<'organizations'>,
+  requestedPage: number,
+): Promise<{ read: Doc<'locations'>[]; total: number }> {
+  const total = organization.locationCount ?? 0;
+  const { page } = pageOf(total, requestedPage);
+  const read = await ctx.db
+    .query('locations')
+    .withIndex('by_organizationId_and_sortName', (q) => q.eq('organizationId', organization._id))
+    .take(page * PUBLIC_LIST_PAGE_SIZE);
+  return { read, total };
+}
+
+/** The index orders them by id, so they are read together (at most the most rows a list can reach) and sorted here. */
+async function sportLocations(
+  ctx: QueryCtx,
+  organization: Doc<'organizations'>,
+  sport: Sport,
+): Promise<{ read: Doc<'locations'>[]; total: number }> {
+  const links = await ctx.db
+    .query('sportLocations')
+    .withIndex('by_organizationId_and_sport_and_locationId', (q) =>
+      q.eq('organizationId', organization._id).eq('sport', sport),
+    )
+    .take(PUBLIC_LIST_MAX_ROWS);
+  const read: Doc<'locations'>[] = [];
+  for (const link of links) {
+    if (link.leagueCount < 1) continue;
+    const location = await ctx.db.get('locations', link.locationId);
+    if (location?.organizationId === organization._id) read.push(location);
+  }
+  const key = (location: Doc<'locations'>) => location.sortName ?? sortName(location.name);
+  read.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  return { read, total: read.length };
+}
+
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const listPublicLocations = query({
-  args: listArgs,
+  args: { ...listArgs, sport: v.optional(sportValidator) },
   returns: publicLocationsValidator,
   handler: async (ctx, args): Promise<PublicLocations> => {
     const organization = await organizationBySlug(ctx, args.slug);
     if (!organization) return EMPTY_LIST;
-    const total = organization.locationCount ?? 0;
+    const { sport } = args;
+    const { read, total } =
+      sport === undefined
+        ? await locationsThroughPage(ctx, organization, args.page)
+        : await sportLocations(ctx, organization, sport);
     const { page, pageCount } = pageOf(total, args.page);
-    const read = await ctx.db
-      .query('locations')
-      .withIndex('by_organizationId_and_sortName', (q) => q.eq('organizationId', organization._id))
-      .take(page * PUBLIC_LIST_PAGE_SIZE);
     const rows = [];
-    for (const location of pageRows(read, page)) {
+    for (const location of pageRows(read.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
       rows.push({
         name: location.name,
         address: location.address,

@@ -15,7 +15,7 @@ import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCalendarDays, lucideChevronRight, lucideMapPin } from '@ng-icons/lucide';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
-import { organizationPath } from '../organization-path';
+import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { seasonDates } from '../league/season-dates';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
@@ -40,7 +40,16 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
         </li>
         <li>
-          <span class="font-medium">{{ view().league.sportName }}</span>
+          <!-- A sport the organization no longer lists has no view to link to. -->
+          @if (sportHref(); as sportHref) {
+            <a
+              [routerLink]="sportHref"
+              class="font-medium underline underline-offset-4 hover:text-foreground"
+              >{{ view().league.sportName }}</a
+            >
+          } @else {
+            <span class="font-medium">{{ view().league.sportName }}</span>
+          }
         </li>
         <li aria-hidden="true">
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
@@ -158,6 +167,11 @@ export class PublicLeagueContent {
   protected readonly leagueHref = computed(() =>
     publicLeaguePath(this.view().league.organization.slug, this.view().league.slug),
   );
+  protected readonly sportHref = computed(() => {
+    const { league, organization } = this.view();
+    const sport = organization.sports.find((entry) => entry.name === league.sportName);
+    return sport ? sportViewPath(league.organization.slug, sport.segment) : undefined;
+  });
   protected readonly locationsLabel = computed(() =>
     this.view().league.locationNames.length === 1 ? 'Location: ' : 'Locations: ',
   );

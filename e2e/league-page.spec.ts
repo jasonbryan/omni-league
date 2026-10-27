@@ -120,8 +120,11 @@ test.describe('public league page: raw server HTML', () => {
         )?.[0];
         expect(breadcrumb, query).toBeDefined();
         expect(breadcrumb, query).toContain(`>${tenant.name}</a>`);
-        expect(breadcrumb, query).toContain('>Beach volleyball</span>');
-        expect(html, query).not.toContain('/sports/');
+        expect(breadcrumb, query).toMatch(
+          new RegExp(
+            `<a\\b[^>]*href="[^"]*${tenant.path}/sports/beach-volleyball"[^>]*>Beach volleyball</a>`,
+          ),
+        );
         expect(breadcrumb, query).toMatch(
           new RegExp(`<a\\b[^>]*aria-current="page"[^>]*>${LEAGUE}</a>`),
         );

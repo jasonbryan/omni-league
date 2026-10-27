@@ -1,11 +1,32 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  input,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight, lucideMapPin, lucideTrophy } from '@ng-icons/lucide';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import { OrganizationMark } from './organization-mark';
-import type { PublicOrganizationPage } from './organization-path';
+import {
+  sportViewPath,
+  type PublicLeagueRows,
+  type PublicLocationRows,
+  type PublicOrganizationHeader,
+  type PublicSport,
+} from './organization-path';
+import { OrganizationRowsSkeleton } from './organization-skeleton';
+import { PageControl } from './page-control';
 import { publicLeaguePath } from './public-league/public-league-path';
+import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 
 function plural(count: number, noun: string): string {
@@ -14,7 +35,15 @@ function plural(count: number, noun: string): string {
 
 @Component({
   selector: 'app-organization-overview',
-  imports: [NgIcon, OrganizationMark, RouterLink, SavedCopyNote],
+  imports: [
+    NgIcon,
+    OrganizationMark,
+    OrganizationRowsSkeleton,
+    PageControl,
+    RouterLink,
+    SavedCopyNote,
+    SportChips,
+  ],
   providers: [provideIcons({ lucideChevronRight, lucideMapPin, lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -33,6 +62,12 @@ function plural(count: number, noun: string): string {
         }
       </div>
     </div>
+    <app-sport-chips
+      [slug]="page().slug"
+      [sports]="page().sports"
+      [allSportsLeagueCount]="page().leagueCount"
+      [currentSegment]="sport()?.segment"
+    />
     @if (isEmpty()) {
       <div class="border-t border-border">
         <div class="mx-auto w-full max-w-6xl px-4 py-12 md:px-8 md:py-20">
@@ -50,9 +85,9 @@ function plural(count: number, noun: string): string {
         </div>
       </div>
     }
-    @if (!isEmpty() || locations().length) {
+    @if (!isEmpty() || locationsLoading() || locationRows().length) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
-        <div class="grid gap-x-12 border-t border-border lg:grid-cols-3">
+        <div [class]="gridClass()">
           @if (!isEmpty()) {
             <section
               id="leagues"
@@ -60,61 +95,94 @@ function plural(count: number, noun: string): string {
               class="py-8 md:py-12 lg:col-span-2"
             >
               <div class="flex items-baseline justify-between gap-4">
-                <h2 id="leagues-heading" class="text-xl font-semibold tracking-tight md:text-2xl">
-                  Leagues
+                <h2
+                  #heading
+                  id="leagues-heading"
+                  tabindex="-1"
+                  class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+                >
+                  {{ leaguesHeading() }}
                 </h2>
                 <p class="text-sm text-muted-foreground">{{ leagueTotal() }}</p>
               </div>
-              <ul role="list" class="mt-2 divide-y divide-border">
-                @for (league of leagues(); track league.id) {
-                  <li [id]="league.id" class="group relative">
-                    <div class="flex min-h-18 items-center gap-4 py-4">
-                      <div class="min-w-0 flex-1">
-                        <h3 class="font-medium">
-                          <a
-                            [routerLink]="league.href"
-                            class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
-                            >{{ league.name }}</a
-                          >
-                        </h3>
-                        @if (league.divisionLabel) {
-                          <p class="mt-0.5 text-sm font-medium">{{ league.divisionLabel }}</p>
-                        }
-                        <p class="mt-0.5 text-sm text-muted-foreground">{{ league.where }}</p>
+              @if (leaguesLoading()) {
+                <p role="status" class="sr-only">Loading the leagues.</p>
+                <app-organization-rows-skeleton kind="league" class="mt-2 block" />
+              } @else {
+                <ul
+                  role="list"
+                  class="mt-2 divide-y divide-border"
+                  [attr.aria-busy]="busy() ? 'true' : null"
+                >
+                  @for (league of leagueRows(); track league.id) {
+                    <li [id]="league.id" class="group relative">
+                      <div class="flex min-h-18 items-center gap-4 py-4">
+                        <div class="min-w-0 flex-1">
+                          <h3 class="font-medium">
+                            <a
+                              [routerLink]="league.href"
+                              class="rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring"
+                              >{{ league.name }}</a
+                            >
+                          </h3>
+                          @if (league.divisionLabel) {
+                            <p class="mt-0.5 text-sm font-medium">{{ league.divisionLabel }}</p>
+                          }
+                          <p class="mt-0.5 text-sm text-muted-foreground">{{ league.where }}</p>
+                        </div>
+                        <ng-icon
+                          name="lucideChevronRight"
+                          class="shrink-0 text-lg text-muted-foreground"
+                          aria-hidden="true"
+                        />
                       </div>
-                      <ng-icon
-                        name="lucideChevronRight"
-                        class="shrink-0 text-lg text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                    </div>
-                  </li>
-                }
-              </ul>
+                    </li>
+                  }
+                </ul>
+              }
+              @if (leaguePaging(); as paging) {
+                <div class="-mx-4 md:-mx-5">
+                  <app-page-control
+                    label="Leagues pages"
+                    noun="leagues"
+                    [page]="paging.page"
+                    [pageCount]="paging.pageCount"
+                    [total]="paging.total"
+                    [path]="sportHref()"
+                    fragment="leagues"
+                    (pageActivated)="pageRequested = true"
+                  />
+                </div>
+              }
             </section>
           }
-          @if (locations().length) {
+          @if (locationsLoading() || locationRows().length) {
             <section id="locations" aria-labelledby="locations-heading" [class]="locationsClass()">
               <h2 id="locations-heading" class="text-xl font-semibold tracking-tight md:text-2xl">
                 Locations
               </h2>
-              <ul role="list" class="mt-4 divide-y divide-border">
-                @for (location of locations(); track location.id) {
-                  <li [id]="location.id" class="flex gap-3 py-4">
-                    <span
-                      class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
-                      ><ng-icon name="lucideMapPin" class="text-lg" aria-hidden="true"
-                    /></span>
-                    <div class="min-w-0">
-                      <h3 class="font-medium">{{ location.name }}</h3>
-                      <p class="mt-0.5 text-sm text-muted-foreground">{{ location.address }}</p>
-                      @if (location.sports) {
-                        <p class="mt-1 text-xs text-muted-foreground">{{ location.sports }}</p>
-                      }
-                    </div>
-                  </li>
-                }
-              </ul>
+              @if (locationsLoading()) {
+                <p role="status" class="sr-only">Loading the locations.</p>
+                <app-organization-rows-skeleton kind="location" class="mt-4 block" />
+              } @else {
+                <ul role="list" class="mt-4 divide-y divide-border">
+                  @for (location of locationRows(); track location.id) {
+                    <li [id]="location.id" class="flex gap-3 py-4">
+                      <span
+                        class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
+                        ><ng-icon name="lucideMapPin" class="text-lg" aria-hidden="true"
+                      /></span>
+                      <div class="min-w-0">
+                        <h3 class="font-medium">{{ location.name }}</h3>
+                        <p class="mt-0.5 text-sm text-muted-foreground">{{ location.address }}</p>
+                        @if (location.sports) {
+                          <p class="mt-1 text-xs text-muted-foreground">{{ location.sports }}</p>
+                        }
+                      </div>
+                    </li>
+                  }
+                </ul>
+              }
             </section>
           }
         </div>
@@ -123,14 +191,29 @@ function plural(count: number, noun: string): string {
   `,
 })
 export class OrganizationOverview {
-  readonly page = input.required<PublicOrganizationPage>();
+  readonly page = input.required<PublicOrganizationHeader>();
+  readonly leagues = input.required<PublicLeagueRows | undefined>();
+  readonly locations = input.required<PublicLocationRows | undefined>();
   readonly savedAt = input<number | undefined>(undefined);
+  readonly sport = input<PublicSport | undefined>(undefined);
+  readonly leaguePaging = input<{ page: number; pageCount: number; total: number } | undefined>(
+    undefined,
+  );
+  readonly busy = input(false);
+
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly injector = inject(Injector);
+
+  protected pageRequested = false;
+
+  protected readonly leaguesLoading = computed(() => this.leagues() === undefined);
+  protected readonly locationsLoading = computed(() => this.locations() === undefined);
 
   protected readonly isEmpty = computed(
-    () => this.page().leagueCount === 0 && this.page().leagues.length === 0,
+    () => this.page().leagueCount === 0 && (this.leagues() ?? []).length === 0,
   );
 
-  /** From `getPublicPage`, never the number of rows shown, which is at most 5 per list. */
+  // From `getPublicPage`, never the number of rows shown, which is at most 5 per list.
   protected readonly summary = computed(() => {
     const { leagueCount, locationCount, sports } = this.page();
     if (this.isEmpty()) return 'No leagues published yet';
@@ -148,10 +231,29 @@ export class OrganizationOverview {
       : 'border-t border-border py-8 md:py-12 lg:border-t-0',
   );
 
-  protected readonly leagueTotal = computed(() => plural(this.page().leagueCount, 'league'));
+  protected readonly leagueTotal = computed(() =>
+    plural(this.sport()?.leagueCount ?? this.page().leagueCount, 'league'),
+  );
 
-  protected readonly leagues = computed(() =>
-    this.page().leagues.map((league, i) => ({
+  protected readonly leaguesHeading = computed(() => {
+    const sport = this.sport();
+    return sport ? `${sport.name} leagues` : 'Leagues';
+  });
+
+  protected readonly sportHref = computed(() => {
+    const sport = this.sport();
+    return sport ? sportViewPath(this.page().slug, sport.segment) : '';
+  });
+
+  // The chip row ends in a rule of its own, so the sections below it start without one.
+  protected readonly gridClass = computed(() =>
+    hasSportChoice(this.page().sports)
+      ? 'grid gap-x-12 lg:grid-cols-3'
+      : 'grid gap-x-12 border-t border-border lg:grid-cols-3',
+  );
+
+  protected readonly leagueRows = computed(() =>
+    (this.leagues() ?? []).map((league, i) => ({
       id: `league-${i + 1}`,
       name: league.name,
       href: publicLeaguePath(this.page().slug, league.slug),
@@ -160,12 +262,24 @@ export class OrganizationOverview {
     })),
   );
 
-  protected readonly locations = computed(() =>
-    this.page().locations.map((location, i) => ({
+  protected readonly locationRows = computed(() =>
+    (this.locations() ?? []).map((location, i) => ({
       id: `location-${i + 1}`,
       name: location.name,
       address: location.address,
       sports: sportsCommaList(location.sportNames ?? []),
     })),
   );
+
+  constructor() {
+    // Focus moves only in the browser, and only for a click on a page link: a live update of the shown page leaves it alone.
+    effect(() => {
+      this.leagues();
+      untracked(() => {
+        if (!this.pageRequested) return;
+        this.pageRequested = false;
+        afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
+      });
+    });
+  }
 }
