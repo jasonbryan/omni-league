@@ -99,7 +99,7 @@ describe('Top bar account area', () => {
       const page = await open('/organizations/x');
       const link = signInLink(page)!;
       expect([...link.classList].sort()).toEqual(
-        `${buttonVariants({ variant: 'outline', size: 'lg' })} ms-auto`.split(' ').sort(),
+        `${buttonVariants({ variant: 'outline', size: 'md' })} ms-auto`.split(' ').sort(),
       );
       expect(link.getAttribute('data-slot')).toBe('button');
     });
@@ -136,7 +136,7 @@ describe('Top bar account area', () => {
       await signedIn('Maya Okafor');
       const link = accountLink(page)!;
       expect([...link.classList].sort()).toEqual(
-        `${buttonVariants({ variant: 'ghost', size: 'lg' })} ms-auto min-w-0 max-w-36 ps-1 md:max-w-64`
+        `${buttonVariants({ variant: 'ghost', size: 'md' })} ms-auto min-w-0 max-w-36 ps-1 md:max-w-64`
           .split(' ')
           .sort(),
       );

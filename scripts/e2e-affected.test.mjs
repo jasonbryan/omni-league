@@ -377,6 +377,18 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
+  it('maps the chip classes and the mockup whose kit block the chip spec reads to that spec', () => {
+    assert.deepEqual(
+      specsFor(['src/app/ui/chip/chip-classes.ts']),
+      want('e2e/chip-classes.spec.ts'),
+    );
+    assert.deepEqual(
+      specsFor(['design/mockups/300-public-site-league-form.html']),
+      want('e2e/chip-classes.spec.ts'),
+    );
+    assert.deepEqual(specsFor(['src/app/ui/chip/chip-classes.spec.ts']), want());
+  });
+
   it('maps Convex modules to the specs that exercise them', () => {
     const admin = [
       'organization-admin',

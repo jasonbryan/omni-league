@@ -133,10 +133,10 @@ describe('SignInPage', () => {
       const classes = (element: Element) => [...element.classList].sort();
       const expected = (value: string) => value.split(' ').sort();
       expect(classes(showButton())).toEqual(
-        expected(buttonVariants({ variant: 'outline', size: 'lg' })),
+        expected(buttonVariants({ variant: 'outline', size: 'md' })),
       );
       expect(classes(submitButton())).toEqual(
-        expected(`${buttonVariants({ size: 'lg' })} mt-6 w-full`),
+        expected(`${buttonVariants({ size: 'md' })} mt-6 w-full`),
       );
       expect(submitButton().textContent?.trim()).toBe('Sign in');
     });

@@ -28,4 +28,35 @@ describe('buttonVariants', () => {
     expect(classes).not.toContain('[a]:hover:bg-primary/80');
     expect(classes.filter((name) => name.endsWith('/80'))).toEqual([]);
   });
+
+  it('md: is 36px tall, with the padding of the approved mockups', () => {
+    const classes = buttonVariants({ size: 'md' }).split(/\s+/);
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        'h-9',
+        'gap-1.5',
+        'px-2.5',
+        'has-data-[icon=inline-end]:pe-3',
+        'has-data-[icon=inline-start]:ps-3',
+      ]),
+    );
+  });
+
+  it('lg: is 44px tall at every width, with no other height at any breakpoint or pointer', () => {
+    const classes = buttonVariants({ size: 'lg' }).split(/\s+/);
+    expect(classes).toContain('h-11');
+    expect(classes.filter((name) => /(^|:)(h|min-h|max-h|size)-/.test(name))).toEqual(['h-11']);
+  });
+
+  it('lg: keeps the padding of the approved mockups', () => {
+    const classes = buttonVariants({ size: 'lg' }).split(/\s+/);
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        'gap-2',
+        'px-5',
+        'has-data-[icon=inline-end]:pe-4',
+        'has-data-[icon=inline-start]:ps-4',
+      ]),
+    );
+  });
 });
