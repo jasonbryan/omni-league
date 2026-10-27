@@ -68,7 +68,6 @@ export const publicLeaguesValidator = publicListValidator(publicLeagueValidator)
 export type PublicLocations = Infer<typeof publicLocationsValidator>;
 export type PublicLeagues = Infer<typeof publicLeaguesValidator>;
 
-// `divisionLabel`, `locations`, and `seasons` are optional so a copy saved before they existed stays valid.
 const publicLeaguePageSeasonValidator = v.object({
   name: v.string(),
   slug: v.string(),
@@ -78,6 +77,7 @@ const publicLeaguePageSeasonValidator = v.object({
   minimumRosterSize: v.number(),
 });
 
+// `divisionLabel`, `locations`, and `seasons` are optional so a copy saved before they existed stays valid.
 export const publicLeaguePageValidator = v.object({
   organization: v.object({ name: v.string(), slug: v.string() }),
   name: v.string(),

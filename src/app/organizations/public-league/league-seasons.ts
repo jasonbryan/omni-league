@@ -1,9 +1,6 @@
-import {
-  registrationIsOpen,
-  seasonPhase,
-  type SeasonPhase,
-} from '../../../../convex/lib/registration';
+import { registrationIsOpen, seasonPhase } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
+import { BADGE_TEXT, compare } from '../season-status';
 import type { PublicLeagueHeader } from './public-league-path';
 
 export type LeaguePageSeason = NonNullable<PublicLeagueHeader['seasons']>[number];
@@ -14,10 +11,7 @@ export interface SeasonStatus {
   note: string | undefined;
 }
 
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
-/** The open season with the soonest deadline, whatever the status of the league's other seasons. */
-export function openSeason(
+export function soonestClosingOpenSeason(
   seasons: readonly LeaguePageSeason[] | undefined,
   nowMs: number,
 ): LeaguePageSeason | undefined {
@@ -30,13 +24,6 @@ export function openSeason(
         compare(a.slug, b.slug),
     )[0];
 }
-
-const BADGE_TEXT: Record<SeasonPhase, string> = {
-  registrationOpen: 'Registration open',
-  registrationClosed: 'Registration closed',
-  inProgress: 'In progress',
-  ended: 'Ended',
-};
 
 /** Undefined for a row from a saved copy made before rows held their deadline: it cannot say which phase the season is in. */
 export function seasonStatus(

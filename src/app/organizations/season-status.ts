@@ -24,8 +24,7 @@ export const OPEN_BADGE = `${BADGE} border-transparent bg-secondary text-seconda
 export const OUTLINE_BADGE = `${BADGE} border-border text-foreground`;
 export const MUTED_BADGE = `${BADGE} border-transparent bg-muted text-muted-foreground`;
 
-// An ended season is never a league's next season; its text only completes the map.
-const BADGE_TEXT: Record<SeasonPhase, string> = {
+export const BADGE_TEXT: Record<SeasonPhase, string> = {
   registrationOpen: 'Registration open',
   registrationClosed: 'Registration closed',
   inProgress: 'In progress',
@@ -33,6 +32,8 @@ const BADGE_TEXT: Record<SeasonPhase, string> = {
 };
 
 /** "May 19" from a stored calendar date, read as text so the server and a browser in any time zone agree. */
+export const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 export function closesText(registrationDeadline: string): string {
   return formatCalendarDate(registrationDeadline).replace(/, \d+$/, '');
 }
@@ -70,7 +71,6 @@ export function openSeasonsBySoonestDeadline(
   seasons: PublicOpenSeasonRows,
   nowMs: number,
 ): PublicOpenSeasonRows {
-  const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   return seasons
     .filter((season) => registrationIsOpen(season, nowMs))
     .sort(

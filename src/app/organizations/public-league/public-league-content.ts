@@ -28,7 +28,7 @@ import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { MUTED_BADGE, OPEN_BADGE } from '../season-status';
-import { openSeason, seasonStatus } from './league-seasons';
+import { soonestClosingOpenSeason, seasonStatus } from './league-seasons';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
 const CRUMB_LINK =
@@ -326,7 +326,7 @@ export class PublicLeagueContent {
 
   protected readonly card = computed(() => {
     const { league } = this.view();
-    const season = openSeason(league.seasons, this.now());
+    const season = soonestClosingOpenSeason(league.seasons, this.now());
     if (!season) return undefined;
     const minimum = `teams of at least ${season.minimumRosterSize}`;
     return {

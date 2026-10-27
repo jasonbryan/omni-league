@@ -58,7 +58,7 @@ export const SUNDAY_4S: PublicLeagueHeader = {
   })),
 };
 
-/** A copy of the value without the fields: the shape a saved copy from before they existed has. */
+/** The shape of a saved copy made before the fields existed. */
 export function without<T extends object, K extends keyof T>(value: T, ...keys: K[]): Omit<T, K> {
   const kept = Object.entries(value).filter(([key]) => !keys.includes(key as K));
   return Object.fromEntries(kept) as Omit<T, K>;
