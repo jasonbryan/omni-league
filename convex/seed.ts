@@ -192,6 +192,20 @@ export const DEMO: readonly Tenant[] = [
       },
     ],
   },
+  {
+    organization: { name: 'Rockport Sand Volleyball', slug: 'rockport-sand-volleyball' },
+    locations: [
+      { name: 'Rockport Beach Courts', address: '300 Beach Access Rd, Rockport, TX 78382' },
+    ],
+    leagues: [
+      {
+        name: 'Wednesday Coed 2s',
+        sport: 'beachVolleyball',
+        locations: ['Rockport Beach Courts'],
+        division: division('coed', 2, 'rec'),
+      },
+    ],
+  },
 ];
 
 // Never rename or remove an entry: a renamed one is inserted again next to the old.
@@ -444,6 +458,8 @@ export const DEMO_ACCOUNTS: Readonly<
       },
       // The organization where the custom division level "D" (Rec) shows.
       { organizationSlug: 'saguaro-valley-softball', role: 'orgAdmin', leagueSlugs: [] },
+      // The organization with exactly one location, which the create-league form preselects.
+      { organizationSlug: 'rockport-sand-volleyball', role: 'orgAdmin', leagueSlugs: [] },
     ],
   },
   organizer: {

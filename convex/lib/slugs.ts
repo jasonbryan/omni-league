@@ -16,6 +16,7 @@ export const DEMO_ORGANIZATION_SLUGS: readonly string[] = [
   'front-range-rec-sports',
   'lakeshore-sand-league',
   'saguaro-valley-softball',
+  'rockport-sand-volleyball',
 ];
 
 // `new` shares its path with `/app/organizations/:slug`.

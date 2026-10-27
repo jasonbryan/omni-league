@@ -1,0 +1,8 @@
+// The card around the form must use `overflow-clip`: `overflow-hidden` makes the card the footer's
+// scroll container, so the footer never sticks to the viewport.
+export const STICKY_FOOTER =
+  'sticky bottom-0 z-10 -mx-4 -mb-4 mt-6 border-t border-border bg-card px-4 py-3 md:static md:mx-0 md:mb-0 md:mt-6 md:border-0 md:bg-transparent md:p-0';
+
+// A focused control scrolls only to the viewport edge, which would leave it under the footer (WCAG 2.4.11).
+export const STICKY_FOOTER_CLEARANCE =
+  '[&_:is(input,button,select,textarea,a)]:scroll-mb-24 md:[&_:is(input,button,select,textarea,a)]:scroll-mb-0';
