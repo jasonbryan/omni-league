@@ -199,6 +199,16 @@ describe('customLevels.create', () => {
     expect(await rows(s)).toHaveLength(21);
   });
 
+  test('stores one of two simultaneous creates of the same name and refuses the other as a duplicate', async () => {
+    const s = await setup();
+    const results = await Promise.allSettled([
+      s.adminA.mutation(api.customLevels.create, gold(s)),
+      s.adminA.mutation(api.customLevels.create, { ...gold(s), name: 'gold' }),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect(await rows(s)).toHaveLength(1);
+  });
+
   test('refuses every caller who is not an org admin of the organization and changes nothing', async () => {
     const s = await setup();
     for (const [label, caller, message] of refusedCallers(s)) {

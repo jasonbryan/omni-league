@@ -272,6 +272,34 @@ describe('leagues.create', () => {
       expect(await snapshot(s.t)).toEqual(before);
     });
 
+    test('refuses every caller who is not an org admin of the organization, even with its custom level, and writes nothing', async () => {
+      const s = await setup();
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      const before = await snapshot(s.t);
+      for (const [label, caller, message] of refusedCallers(s)) {
+        await expect(
+          caller.mutation(api.leagues.create, { ...valid(s), customLevelId }),
+          label,
+        ).rejects.toThrow(message);
+      }
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+
+    test('refuses an org admin of another organization who names their own organization with this one’s level', async () => {
+      const s = await setup();
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      const before = await snapshot(s.t);
+      await expect(
+        s.adminB.mutation(api.leagues.create, {
+          ...valid(s),
+          organizationId: s.organizationB,
+          locationIds: [s.bField],
+          customLevelId,
+        }),
+      ).rejects.toThrow('Not allowed');
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+
     test('refuses a level that no longer exists, with the Level field’s error', async () => {
       const s = await setup();
       const before = await snapshot(s.t);
