@@ -298,6 +298,12 @@ describe('OrganizationPage', () => {
       expect(metaContent('og:url')).toBeNull();
       expect(canonical()).toBeNull();
     });
+
+    it('removes its description tag when the visitor leaves the page', async () => {
+      expect(descriptionContent()).not.toBeNull();
+      await harness.navigateByUrl('/elsewhere');
+      expect(descriptionContent()).toBeNull();
+    });
   });
 
   describe('sport chips', () => {
