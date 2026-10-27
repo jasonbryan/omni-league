@@ -489,3 +489,101 @@ describe('leagues.undoUpdate', () => {
     expect(after).toMatchObject({ playersPerSide: 7, minimumRosterSize: 7 });
   });
 });
+
+describe('leagues.update edge cases', () => {
+  test.each([
+    ['a fractional format', { playersPerSide: 4.5 }, 'format', 'formatInvalid'],
+    ['a format that is not a number', { playersPerSide: NaN }, 'format', 'formatInvalid'],
+    [
+      'a fractional minimum',
+      { minimumRosterSize: 4.5 },
+      'minimumRosterSize',
+      'minimumRosterSizeInvalid',
+    ],
+    [
+      'a minimum that is not a number',
+      { minimumRosterSize: NaN },
+      'minimumRosterSize',
+      'minimumRosterSizeInvalid',
+    ],
+    ['a negative minimum', { minimumRosterSize: -1 }, 'minimumRosterSize', 'minimumRosterSizeLow'],
+    [
+      'a minimum above the cap',
+      { minimumRosterSize: 501 },
+      'minimumRosterSize',
+      'minimumRosterSizeInvalid',
+    ],
+  ])('refuses %s with its field error, changing nothing', async (_title, change, field, code) => {
+    const s = await setup();
+    const before = await stored(s);
+    const data = await refusal(
+      s.admin.mutation(api.leagues.update, { ...sundayArgs(s), ...change }),
+    );
+    expect(data).toMatchObject({ field, code });
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('a league created without a division takes one on update, and Undo takes it away again', async () => {
+    const s = await setup();
+    const legacyId = await s.t.run(async (ctx) => {
+      await insertTenant(ctx, {
+        organization: { name: 'Org C', slug: 'org-c' },
+        locations: [{ name: 'Court', address: '1 Court Rd' }],
+        leagues: [{ name: 'Legacy', sport: 'beachVolleyball', locations: ['Court'] }],
+      });
+      const league = (await ctx.db.query('leagues').collect()).find((l) => l.name === 'Legacy')!;
+      const userId = await ctx.db.insert('users', {
+        authUserId: 'admin-c',
+        name: 'admin-c',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId,
+        organizationId: league.organizationId,
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+      return league._id;
+    });
+    const adminC = s.t.withIdentity(identity('admin-c'));
+    const read = () => s.t.run((ctx) => ctx.db.get('leagues', legacyId));
+    expect((await read())!.playersPerSide).toBeUndefined();
+
+    const earlier = await adminC.mutation(api.leagues.update, {
+      leagueId: legacyId,
+      name: 'Legacy Sand',
+      gender: 'coed',
+      playersPerSide: 2,
+      level: 'b',
+      ageGroup: 'adult',
+    });
+    expect(earlier.league).toEqual({ name: 'Legacy' });
+    expect(await read()).toMatchObject({ name: 'Legacy Sand', playersPerSide: 2, level: 'b' });
+
+    await adminC.mutation(api.leagues.undoUpdate, { leagueId: legacyId, ...earlier });
+    const restored = (await read())!;
+    expect(restored).toMatchObject({ name: 'Legacy', sortName: 'legacy' });
+    expect(restored.gender).toBeUndefined();
+    expect(restored.playersPerSide).toBeUndefined();
+    expect(restored.level).toBeUndefined();
+    expect(restored.ageGroup).toBeUndefined();
+  });
+
+  test('an Undo from an earlier save restores the values before that save, even after a later save', async () => {
+    const s = await setup();
+    const first = await s.admin.mutation(api.leagues.update, {
+      ...sundayArgs(s),
+      name: 'First',
+      playersPerSide: 6,
+    });
+    await s.organizer.mutation(api.leagues.update, {
+      ...sundayArgs(s),
+      name: 'Second',
+      playersPerSide: 6,
+    });
+    await s.admin.mutation(api.leagues.undoUpdate, { leagueId: s.sundayId, ...first });
+    const after = await stored(s);
+    expect(after.league).toMatchObject({ name: 'Sunday Reverse Coed 4s', playersPerSide: 4 });
+    expect(after.seasons[1]).toMatchObject({ playersPerSide: 4, minimumRosterSize: 4 });
+  });
+});
