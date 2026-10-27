@@ -116,19 +116,47 @@ test.describe('chip classes in the mockup kit', () => {
     );
   });
 
-  test('forced colors draw the checked and current chips with a 2px outline', async ({ page }) => {
+  test('forced colors draw the checked and current chips as a fill, with no outline until focused', async ({
+    page,
+  }) => {
     await page.emulateMedia({ forcedColors: 'active' });
     await page.getByRole('radio').nth(1).check({ force: true });
 
-    expect(await outline(chipOf(page.getByRole('radio').nth(1)))).toEqual({
-      style: 'solid',
-      width: '2px',
-    });
-    expect((await outline(chipOf(page.getByRole('radio').nth(0)))).style).toBe('none');
-    expect(await outline(page.getByRole('link', { name: 'All sports' }))).toEqual({
-      style: 'solid',
-      width: '2px',
-    });
-    expect((await outline(page.getByRole('link', { name: 'Soccer' }))).style).toBe('none');
+    const checked = chipOf(page.getByRole('radio').nth(1));
+    const unchecked = chipOf(page.getByRole('radio').nth(0));
+    const current = page.getByRole('link', { name: 'All sports' });
+    const other = page.getByRole('link', { name: 'Soccer' });
+    const fill = (chip: Locator) =>
+      chip.evaluate((element) => getComputedStyle(element).backgroundColor);
+
+    expect(await fill(checked)).not.toBe(await fill(unchecked));
+    expect(await fill(current)).not.toBe(await fill(other));
+    expect(await fill(current)).toBe(await fill(checked));
+    for (const chip of [checked, unchecked, current, other]) {
+      expect((await outline(chip)).style).toBe('none');
+    }
+  });
+
+  test('forced colors show focus on a checked chip, which an unfocused one does not have', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: 'active' });
+    const radios = page.getByRole('radio');
+    await radios.nth(0).evaluate((radio) => ((radio as HTMLInputElement).checked = true));
+    const checked = chipOf(radios.nth(0));
+    expect((await outline(checked)).style).toBe('none');
+
+    await page.keyboard.press('Tab');
+    await expect(radios.nth(0)).toBeFocused();
+    expect(await outline(checked)).toEqual({ style: 'solid', width: '2px' });
+    const offset = await checked.evaluate((element) => getComputedStyle(element).outlineOffset);
+    expect(offset).toBe('2px');
+
+    const current = page.getByRole('link', { name: 'All sports' });
+    expect((await outline(current)).style).toBe('none');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(current).toBeFocused();
+    expect((await outline(current)).style).toBe('solid');
   });
 });

@@ -1,16 +1,19 @@
-// Windows contrast themes replace fill and border colours, so the current chip also gets an outline
-// in a system colour.
-const FORCED_COLORS_OUTLINE = 'forced-colors:outline-2 forced-colors:outline-[Highlight]';
-const CHECKED_FORCED_COLORS_OUTLINE =
-  'peer-checked:forced-colors:outline-2 peer-checked:forced-colors:outline-[Highlight]';
+// Windows contrast themes replace fill and border colours, so the current chip is a Highlight fill,
+// and the focus ring is a separate outline in a system colour: an outline for both would not show focus.
+const FORCED_COLORS_FILL =
+  'forced-colors:forced-color-adjust-none forced-colors:border-[Highlight] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]';
+const FORCED_COLORS_LINK_FOCUS = 'forced-colors:focus-visible:outline-[CanvasText]';
+const FORCED_COLORS_CHECKED_FILL =
+  'peer-checked:forced-colors:forced-color-adjust-none peer-checked:forced-colors:border-[Highlight] peer-checked:forced-colors:bg-[Highlight] peer-checked:forced-colors:text-[HighlightText] peer-checked:hover:forced-colors:bg-[Highlight]';
+const FORCED_COLORS_CHOICE_FOCUS = 'peer-focus-visible:forced-colors:outline-[CanvasText]';
 
 const CHIP =
   'inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap pointer-coarse:h-11';
 
 export function chipLinkClasses(current: boolean): string {
   return current
-    ? `${CHIP} border-foreground bg-foreground text-background ${FORCED_COLORS_OUTLINE}`
-    : `${CHIP} border-input hover:bg-muted`;
+    ? `${CHIP} border-foreground bg-foreground text-background ${FORCED_COLORS_FILL} ${FORCED_COLORS_LINK_FOCUS}`
+    : `${CHIP} border-input hover:bg-muted ${FORCED_COLORS_LINK_FOCUS}`;
 }
 
 // A peer variant only matches a later sibling, so the input comes first in the wrapper.
@@ -21,5 +24,6 @@ export const CHIP_CHOICE_LABEL_CLASSES = [
   'cursor-pointer border-input select-none hover:bg-muted',
   'peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-checked:hover:bg-foreground',
   'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring',
-  CHECKED_FORCED_COLORS_OUTLINE,
+  FORCED_COLORS_CHECKED_FILL,
+  FORCED_COLORS_CHOICE_FOCUS,
 ].join(' ');

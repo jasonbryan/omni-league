@@ -11,7 +11,12 @@ const names = (classes: string): string[] => classes.split(/\s+/);
 
 const FINE_POINTER_HEIGHT = 'h-9';
 const COARSE_POINTER_HEIGHT = 'pointer-coarse:h-11';
-const FORCED_COLORS_OUTLINE = ['outline-2', 'outline-[Highlight]'];
+const FORCED_COLORS_FILL = [
+  'forced-color-adjust-none',
+  'border-[Highlight]',
+  'bg-[Highlight]',
+  'text-[HighlightText]',
+];
 
 describe('chipLinkClasses', () => {
   for (const current of [false, true]) {
@@ -28,18 +33,29 @@ describe('chipLinkClasses', () => {
     const classes = names(chipLinkClasses(false));
     expect(classes).toEqual(expect.arrayContaining(['border-input', 'hover:bg-muted']));
     expect(classes).not.toContain('bg-foreground');
-    expect(classes.filter((name) => name.startsWith('forced-colors:'))).toEqual([]);
+    expect(classes.filter((name) => name.includes('Highlight'))).toEqual([]);
   });
 
-  it('current chip: --background on --foreground, with a Highlight outline in forced colors', () => {
+  it('current chip: --background on --foreground, with a Highlight fill in forced colors', () => {
     const classes = names(chipLinkClasses(true));
     expect(classes).toEqual(
       expect.arrayContaining(['border-foreground', 'bg-foreground', 'text-background']),
     );
-    for (const outline of FORCED_COLORS_OUTLINE) {
-      expect(classes).toContain(`forced-colors:${outline}`);
-    }
+    for (const fill of FORCED_COLORS_FILL) expect(classes).toContain(`forced-colors:${fill}`);
     expect(classes).not.toContain('border-input');
+  });
+
+  it('keeps the focus ring in a system colour in forced colors, for every chip link', () => {
+    for (const current of [false, true]) {
+      expect(names(chipLinkClasses(current))).toContain(
+        'forced-colors:focus-visible:outline-[CanvasText]',
+      );
+    }
+  });
+
+  it('draws the current chip with no outline of its own in forced colors', () => {
+    const forced = names(chipLinkClasses(true)).filter((name) => name.startsWith('forced-colors:'));
+    expect(forced.filter((name) => name.includes('outline-2'))).toEqual([]);
   });
 });
 
@@ -74,10 +90,17 @@ describe('choice chip classes', () => {
     );
   });
 
-  it('keeps the checked state visible in forced colors', () => {
-    for (const outline of FORCED_COLORS_OUTLINE) {
-      expect(label).toContain(`peer-checked:forced-colors:${outline}`);
-    }
+  it('keeps the checked state visible in forced colors as a Highlight fill, also on hover', () => {
+    for (const fill of FORCED_COLORS_FILL)
+      expect(label).toContain(`peer-checked:forced-colors:${fill}`);
+    expect(label).toContain('peer-checked:hover:forced-colors:bg-[Highlight]');
+  });
+
+  it('shows focus in forced colors as a system-colour outline, not as the checked state', () => {
+    expect(label).toContain('peer-focus-visible:forced-colors:outline-[CanvasText]');
+    expect(
+      label.filter((name) => name.includes('forced-colors') && name.includes('outline-2')),
+    ).toEqual([]);
   });
 
   it('hides the native input with sr-only, as the peer of the label', () => {
