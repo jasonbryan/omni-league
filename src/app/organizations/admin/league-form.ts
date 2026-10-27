@@ -13,7 +13,7 @@ import {
 import { slugify } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
-import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import { focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
 
 export type { LeagueField };
 export const LEAGUE_FIELDS: readonly LeagueField[] = ['name', 'slug', 'sport', 'locations'];
@@ -81,7 +81,7 @@ export class LeagueForm {
   private readonly defaultSelected: () => ReadonlySet<Id<'locations'>>;
   private readonly clientErrors: Record<LeagueField, Signal<string | null>>;
   private readonly shown: Record<LeagueField, ShownUntilValid>;
-  private readonly locationsChanged = changedSince(() => this.selected());
+  private readonly locationsChanged = signal(false);
   private readonly serverErrors: Record<LeagueField, WritableSignal<ServerError | null>>;
 
   readonly errors: Record<LeagueField, Signal<string | null>>;
@@ -166,6 +166,7 @@ export class LeagueForm {
   }
 
   toggleLocation(id: Id<'locations'>, checked: boolean): void {
+    this.locationsChanged.set(true);
     this.selected.update((current) => {
       const next = new Set(current);
       if (checked) next.add(id);
