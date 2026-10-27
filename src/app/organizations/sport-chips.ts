@@ -2,13 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { RouterLink } from '@angular/router';
 import { organizationPath, sportViewPath, type PublicSport } from './organization-path';
 
-const CHIP =
-  'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 pointer-coarse:min-h-11';
-const OTHER_CHIP = `${CHIP} border-input hover:bg-muted`;
 export function hasSportChoice(sports: readonly PublicSport[]): boolean {
   return sports.length > 1;
 }
 
+const CHIP =
+  'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 pointer-coarse:min-h-11';
+const OTHER_CHIP = `${CHIP} border-input hover:bg-muted`;
 const CURRENT_CHIP = `${CHIP} border-foreground bg-foreground text-background`;
 
 /**

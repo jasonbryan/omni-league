@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
 
-/** The bars of a list while its rows load; the caller says what is loading. */
 @Component({
   selector: 'app-organization-rows-skeleton',
   changeDetection: ChangeDetectionStrategy.OnPush,
