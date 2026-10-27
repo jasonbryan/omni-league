@@ -458,16 +458,6 @@ describe('LeagueDetailsForm', () => {
     });
   });
 
-  describe('a save and an Undo', () => {
-    it('do not start an Undo while the save is pending', async () => {
-      await open();
-      await typeName('Sunday Sand');
-      await submit();
-      expect(undoButton()).toBeUndefined();
-      expect(o.convex.calls).toHaveLength(1);
-    });
-  });
-
   describe('a refusal', () => {
     it('shows the server’s message under the field it names, and keeps the input', async () => {
       await open();

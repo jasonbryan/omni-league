@@ -84,8 +84,7 @@ export class LeagueDetails {
       this.division.minimumText(),
     ].join('|'),
   );
-  /** True once the user edits what was loaded, saved, or restored. */
-  readonly edited = computed(() => this.currentKey() !== this.loadedKey());
+  readonly editedSinceLoad = computed(() => this.currentKey() !== this.loadedKey());
   private readonly clientErrors: Record<DetailsField, Signal<string | null>>;
   private readonly shown: Record<DetailsField, ShownUntilValid>;
   private readonly serverErrors: Record<DetailsField, WritableSignal<string | null>>;

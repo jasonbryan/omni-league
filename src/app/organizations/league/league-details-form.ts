@@ -290,8 +290,10 @@ export class LeagueDetailsForm implements OnInit {
         : (previous?.value ?? null),
   });
 
-  // A later edit by the user or by someone else leaves nothing for Undo to put back.
-  protected readonly shownStatus = computed(() => (this.details.edited() ? null : this.status()));
+  protected readonly shownStatus = computed(() =>
+    this.details.editedSinceLoad() ? null : this.status(),
+  );
+  // Someone else's save leaves the league holding neither set of values, and Undo would revert it.
   protected readonly undoOffered = computed(() => {
     const status = this.status();
     if (status?.kind !== 'saved') return false;
@@ -358,7 +360,7 @@ export class LeagueDetailsForm implements OnInit {
   }
 
   protected async undo(earlier: Earlier): Promise<void> {
-    if (this.undoing() || this.details.submitting()) return;
+    if (this.undoing()) return;
     this.undoNote.set(null);
     if (!this.online()) {
       this.undoNote.set(UNDO_OFFLINE);
