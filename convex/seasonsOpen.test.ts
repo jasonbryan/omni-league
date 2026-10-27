@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
@@ -166,5 +166,78 @@ describe('seasons.listOpenForOrganization', () => {
     const body = seasonsSource.slice(start, end === -1 ? undefined : end);
     expect(body.length).toBeGreaterThan(0);
     expect(body).not.toMatch(/Date\.now\(|new Date\(|Date\.parse\(/);
+  });
+});
+
+describe('seasons.listOpenForOrganization edge cases', () => {
+  test('refuses a sport that is not one of the three', async () => {
+    const t = await setup();
+    await expect(
+      t.query(api.seasons.listOpenForOrganization, { orgSlug: 'org-a', sport: 'cricket' as never }),
+    ).rejects.toThrow();
+  });
+
+  test('is empty when the organization has no published season, and for a sport with none', async () => {
+    const t = await setup();
+    expect(await open(t)).toEqual([]);
+    await add(t, 'org-a', 'coed-7v7', [season('only-soccer', '2030-05-19')]);
+    expect(await open(t, 'org-a', 'softball')).toEqual([]);
+  });
+
+  test('never names a league of another organization when a season points at it', async () => {
+    const t = await setup();
+    await add(t, 'org-a', 'coed-7v7', [season('crossed', '2030-05-19')]);
+    await t.run(async (ctx) => {
+      const orgB = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'org-b'))
+        .unique())!;
+      const orgBLeague = (await ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_slug', (q) =>
+          q.eq('organizationId', orgB._id).eq('slug', 'coed-7v7'),
+        )
+        .unique())!;
+      const [crossed] = await ctx.db.query('seasons').collect();
+      await ctx.db.patch('seasons', crossed._id, { leagueId: orgBLeague._id });
+    });
+    expect(await open(t, 'org-a')).toEqual([]);
+    expect(await open(t, 'org-b')).toEqual([]);
+  });
+
+  test('skips a season whose league no longer exists instead of failing the page', async () => {
+    const t = await setup();
+    await add(t, 'org-a', 'coed-7v7', [season('kept', '2030-05-01')]);
+    await add(t, 'org-a', 'slow-pitch', [season('orphaned', '2030-05-30')]);
+    await t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (row) => row.slug === 'slow-pitch',
+      )!;
+      await ctx.db.delete('leagues', league._id);
+    });
+    expect((await open(t)).map((row) => row.slug)).toEqual(['kept']);
+  });
+
+  test('returns the same cards whatever the clock says, and leaves the filtering to the page', async () => {
+    const t = await setup();
+    await add(t, 'org-a', 'coed-7v7', [
+      season('past-deadline', '2001-01-01', { startDate: '2001-02-01', endDate: '2001-03-01' }),
+      season('future-deadline', '2099-01-01', { startDate: '2099-02-01', endDate: '2099-03-01' }),
+    ]);
+    vi.useFakeTimers();
+    try {
+      const results: string[] = [];
+      for (const now of ['1990-01-01T00:00:00Z', '2030-01-01T00:00:00Z', '2200-01-01T00:00:00Z']) {
+        vi.setSystemTime(new Date(now));
+        results.push(JSON.stringify(await open(t)));
+      }
+      expect(new Set(results).size).toBe(1);
+      expect((JSON.parse(results[0]) as { slug: string }[]).map((row) => row.slug)).toEqual([
+        'future-deadline',
+        'past-deadline',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
