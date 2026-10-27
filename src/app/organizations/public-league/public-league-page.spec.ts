@@ -195,7 +195,7 @@ describe('PublicLeaguePage populated', () => {
       ]);
       const register = card()?.querySelector<HTMLAnchorElement>('a[data-slot="button"]');
       expect(text(register)).toBe('Register for Summer 2027');
-      expect(register?.getAttribute('href')).toBe(`${PATH}/seasons/summer-2027`);
+      expect(register?.getAttribute('href')).toBe(`${PATH}/seasons/summer-2027#registration`);
       expect(register?.className).toContain('h-11');
       const sections = [...host(harness).querySelectorAll('main section')].map((el) => el.id);
       expect(sections.slice(0, 2)).toEqual(['registration-open', 'seasons']);

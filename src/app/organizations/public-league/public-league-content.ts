@@ -136,6 +136,7 @@ function plural(count: number, noun: string): string {
                 </div>
                 <a
                   [routerLink]="card.href"
+                  fragment="registration"
                   data-slot="button"
                   [class]="registerButton + ' w-full md:w-auto'"
                   ><span class="min-w-0 truncate">Register for {{ card.name }}</span

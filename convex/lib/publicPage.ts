@@ -107,6 +107,7 @@ export const publicSeasonsValidator = publicListValidator(publicSeasonValidator)
 
 export type PublicSeasons = Infer<typeof publicSeasonsValidator>;
 
+// `divisionLabel`, `locations`, `upcomingSeasons`, and `registrationDeadline` are optional so a copy saved before they existed stays valid.
 export const publicSeasonPageValidator = v.object({
   organization: v.object({ name: v.string(), slug: v.string() }),
   league: v.object({
@@ -114,11 +115,24 @@ export const publicSeasonPageValidator = v.object({
     slug: v.string(),
     sportName: v.string(),
     locationNames: v.array(v.string()),
+    divisionLabel: v.optional(v.string()),
+    locations: v.optional(v.array(v.object({ name: v.string(), address: v.string() }))),
+    upcomingSeasons: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          slug: v.string(),
+          startDate: v.string(),
+          registrationDeadline: v.string(),
+        }),
+      ),
+    ),
   }),
   name: v.string(),
   slug: v.string(),
   startDate: v.string(),
   endDate: v.string(),
+  registrationDeadline: v.optional(v.string()),
   formatName: v.string(),
   minimumRosterSize: v.number(),
 });

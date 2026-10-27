@@ -199,7 +199,11 @@ function plural(count: number, noun: string): string {
                             Closes
                             <span class="font-medium text-foreground">{{ card.closes }}</span>
                           </p>
-                          <a [routerLink]="card.href" data-slot="button" [class]="registerButton"
+                          <a
+                            [routerLink]="card.href"
+                            fragment="registration"
+                            data-slot="button"
+                            [class]="registerButton"
                             >Register<span class="sr-only">
                               for {{ card.leagueName }}, {{ card.name }}</span
                             ></a
