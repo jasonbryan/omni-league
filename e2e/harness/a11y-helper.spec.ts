@@ -158,6 +158,24 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
+  test('2.4.11: a visually hidden radio whose chip another chip covers fails', async ({ page }) => {
+    const chip = (name: string, label: string) =>
+      '<label style="position:relative;display:inline-flex;width:80px;height:36px;background:#eee">' +
+      `<input type="radio" name="${name}" style="position:absolute;width:1px;height:1px;margin:-1px;` +
+      'padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0)">' +
+      `<span>${label}</span></label>`;
+    await page.setContent(
+      fixture(
+        `<div style="display:flex">${chip('a', 'First')}</div>` +
+          `<div style="position:relative;top:-36px;display:flex">${chip('b', 'Second')}</div>`,
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([
+      expect.stringMatching(/^2\.4\.11 Focus not obscured: input .* is covered by span "Second"/),
+    ]);
+  });
+
   test('2.4.11: an inline link that wraps over lines is not obscured by the text around it', async ({
     page,
   }) => {

@@ -264,6 +264,46 @@ describe('leagues.create', () => {
     expect(await snapshot(s.t)).toEqual(before);
   });
 
+  test('refuses a format or minimum that is not a finite number, and writes nothing', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    for (const playersPerSide of [NaN, Infinity, -Infinity, 0, -4]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), playersPerSide })),
+        String(playersPerSide),
+      ).toMatchObject({ field: 'format', code: 'formatInvalid' });
+    }
+    for (const minimumRosterSize of [NaN, Infinity, -Infinity]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), minimumRosterSize })),
+        String(minimumRosterSize),
+      ).toMatchObject({ field: 'minimumRosterSize', code: 'minimumRosterSizeInvalid' });
+    }
+    for (const minimumRosterSize of [0, -4]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), minimumRosterSize })),
+        String(minimumRosterSize),
+      ).toMatchObject({ field: 'minimumRosterSize', code: 'minimumRosterSizeLow' });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a caller who is not an org admin before it checks the division', async () => {
+    const s = await setup();
+    const invalidDivision = {
+      ...valid(s),
+      playersPerSide: 99,
+      level: 'aa' as const,
+      ageGroup: '?',
+    };
+    await expect(s.adminB.mutation(api.leagues.create, invalidDivision)).rejects.toThrow(
+      'Not allowed',
+    );
+    await expect(s.t.mutation(api.leagues.create, invalidDivision)).rejects.toThrow(
+      'Sign in required',
+    );
+  });
+
   test('trims the name and keeps each location once', async () => {
     const s = await setup();
     const { leagueId } = await s.adminA.mutation(api.leagues.create, {
