@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
   addCalendarDays,
-  calendarDateAt,
-  msUntilNextCalendarDate,
+  dateAtUtcMinus12,
+  msUntilUtcMinus12DateChange,
   registrationIsOpen,
   seasonPhase,
 } from './registration';
@@ -19,12 +19,12 @@ const atUtcMinus12 = (date: string, hour: number, minute: number): number => {
   return Date.UTC(year, month - 1, day, hour + 12, minute);
 };
 
-describe('calendarDateAt', () => {
+describe('dateAtUtcMinus12', () => {
   test('reads the calendar date at UTC-12, so the last time zone to reach a date decides', () => {
-    expect(calendarDateAt(atUtcMinus12('2027-05-19', 0, 0))).toBe('2027-05-19');
-    expect(calendarDateAt(atUtcMinus12('2027-05-19', 23, 59))).toBe('2027-05-19');
-    expect(calendarDateAt(atUtcMinus12('2027-05-20', 0, 0))).toBe('2027-05-20');
-    expect(calendarDateAt(atUtcMinus12('2027-05-19', 0, 0) - 1)).toBe('2027-05-18');
+    expect(dateAtUtcMinus12(atUtcMinus12('2027-05-19', 0, 0))).toBe('2027-05-19');
+    expect(dateAtUtcMinus12(atUtcMinus12('2027-05-19', 23, 59))).toBe('2027-05-19');
+    expect(dateAtUtcMinus12(atUtcMinus12('2027-05-20', 0, 0))).toBe('2027-05-20');
+    expect(dateAtUtcMinus12(atUtcMinus12('2027-05-19', 0, 0) - 1)).toBe('2027-05-18');
   });
 });
 
@@ -66,11 +66,11 @@ describe('seasonPhase', () => {
   });
 });
 
-describe('msUntilNextCalendarDate', () => {
+describe('msUntilUtcMinus12DateChange', () => {
   test('counts to the next 12:00 UTC, when the date at UTC-12 changes', () => {
-    expect(msUntilNextCalendarDate(Date.UTC(2027, 4, 19, 11, 59))).toBe(60_000);
-    expect(msUntilNextCalendarDate(Date.UTC(2027, 4, 19, 12, 0))).toBe(24 * 60 * 60 * 1000);
-    expect(msUntilNextCalendarDate(Date.UTC(2027, 4, 19, 0, 0))).toBe(12 * 60 * 60 * 1000);
+    expect(msUntilUtcMinus12DateChange(Date.UTC(2027, 4, 19, 11, 59))).toBe(60_000);
+    expect(msUntilUtcMinus12DateChange(Date.UTC(2027, 4, 19, 12, 0))).toBe(24 * 60 * 60 * 1000);
+    expect(msUntilUtcMinus12DateChange(Date.UTC(2027, 4, 19, 0, 0))).toBe(12 * 60 * 60 * 1000);
   });
 });
 

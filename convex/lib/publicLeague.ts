@@ -17,7 +17,6 @@ export async function leagueLocationNames(
 
 export const LEAGUE_ROW_SEASONS = 3;
 
-/** The dates a league row needs to name its next season. */
 export async function leagueRowSeasons(ctx: Pick<QueryCtx, 'db'>, league: Doc<'leagues'>) {
   const seasons = await ctx.db
     .query('seasons')

@@ -16,7 +16,7 @@ import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview } from './organization-overview';
 import { OrganizationSkeleton } from './organization-skeleton';
 import { organizationPath, sportViewCanonicalPath } from './organization-path';
-import { openSeasonsOf } from './season-status';
+import { openSeasonsBySoonestDeadline } from './season-status';
 
 type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagues>;
 
@@ -158,7 +158,7 @@ export class OrganizationPage {
   // The query reads no clock, so which seasons are open is decided here, at the server's request time or the browser's clock.
   protected readonly openSeasons = computed(() => {
     const rows = this.openSeasonRows.value();
-    return rows && openSeasonsOf(rows, this.now());
+    return rows && openSeasonsBySoonestDeadline(rows, this.now());
   });
 
   // Online, the hero and chips stay on screen while the lists of another sport load. Offline, a list with no saved copy means the whole page has none.

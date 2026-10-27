@@ -1,13 +1,10 @@
-import { buttonVariants } from '../ui/button/hlm-button';
 import {
   OPEN_BADGE,
   OUTLINE_BADGE,
-  REGISTER_BUTTON,
-  REGISTER_BUTTON_LARGE,
   closesText,
   leagueSeasonStatus,
   nextSeason,
-  openSeasonsOf,
+  openSeasonsBySoonestDeadline,
   type LeagueRowSeason,
 } from './season-status';
 
@@ -80,7 +77,7 @@ describe('leagueSeasonStatus', () => {
   });
 });
 
-describe('openSeasonsOf', () => {
+describe('openSeasonsBySoonestDeadline', () => {
   const card = (slug: string, start: string, deadline: string, league = 'Alpha') => ({
     name: slug,
     slug,
@@ -98,7 +95,7 @@ describe('openSeasonsOf', () => {
       card('soon', '2027-06-01', '2027-05-10'),
       card('started', '2027-04-01', '2027-05-30'),
     ];
-    expect(openSeasonsOf(rows, noon('2027-05-01')).map((row) => row.slug)).toEqual([
+    expect(openSeasonsBySoonestDeadline(rows, noon('2027-05-01')).map((row) => row.slug)).toEqual([
       'soon',
       'late',
     ]);
@@ -110,7 +107,11 @@ describe('openSeasonsOf', () => {
       card('c', '2027-06-01', '2027-05-10', 'Alpha'),
       card('a', '2027-06-01', '2027-05-10', 'Alpha'),
     ];
-    expect(openSeasonsOf(rows, noon('2027-05-01')).map((row) => row.slug)).toEqual(['a', 'c', 'b']);
+    expect(openSeasonsBySoonestDeadline(rows, noon('2027-05-01')).map((row) => row.slug)).toEqual([
+      'a',
+      'c',
+      'b',
+    ]);
   });
 });
 
@@ -121,10 +122,8 @@ describe('closesText', () => {
   });
 });
 
-describe('class constants', () => {
-  it('match the helm button and the secondary badge the mockup draws', () => {
-    expect(REGISTER_BUTTON_LARGE).toBe(buttonVariants({ variant: 'default', size: 'lg' }));
-    expect(REGISTER_BUTTON).toBe(buttonVariants({ variant: 'default', size: 'md' }));
+describe('badge classes', () => {
+  it('match the secondary badge the mockup draws', () => {
     expect(OPEN_BADGE).toContain('bg-secondary text-secondary-foreground');
     expect(OUTLINE_BADGE).toContain('border-border');
   });

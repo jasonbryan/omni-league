@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { addCalendarDays, calendarDateAt } from '../../convex/lib/registration';
+import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { convexRun } from './convex';
 
 export type Sport = 'beachVolleyball' | 'soccer' | 'softball';
@@ -147,5 +147,5 @@ export function tallLocations(): { name: string; address: string }[] {
 
 /** A calendar date counted from today's date at UTC-12, the date the pages read, so a season seeded with it keeps its phase as the test runs. */
 export function dateFromToday(days: number): string {
-  return addCalendarDays(calendarDateAt(Date.now()), days);
+  return addCalendarDays(dateAtUtcMinus12(Date.now()), days);
 }

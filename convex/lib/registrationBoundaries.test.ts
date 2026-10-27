@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
   addCalendarDays,
-  calendarDateAt,
-  msUntilNextCalendarDate,
+  dateAtUtcMinus12,
+  msUntilUtcMinus12DateChange,
   registrationIsOpen,
   seasonPhase,
 } from './registration';
@@ -100,19 +100,19 @@ describe('calendar edges', () => {
 
   test('moves across the dates at UTC-12 the same way in a daylight-saving week', () => {
     // US spring-forward 2027-03-14 has no effect on a UTC-based reading.
-    expect(calendarDateAt(Date.parse('2027-03-14T11:59:59.999Z'))).toBe('2027-03-13');
-    expect(calendarDateAt(Date.parse('2027-03-14T12:00:00.000Z'))).toBe('2027-03-14');
-    expect(calendarDateAt(Date.parse('2027-03-15T11:59:59.999Z'))).toBe('2027-03-14');
+    expect(dateAtUtcMinus12(Date.parse('2027-03-14T11:59:59.999Z'))).toBe('2027-03-13');
+    expect(dateAtUtcMinus12(Date.parse('2027-03-14T12:00:00.000Z'))).toBe('2027-03-14');
+    expect(dateAtUtcMinus12(Date.parse('2027-03-15T11:59:59.999Z'))).toBe('2027-03-14');
   });
 
   test('reads dates before 1970 and far in the future without a shift', () => {
-    expect(calendarDateAt(Date.parse('1969-12-31T11:59:59.999Z'))).toBe('1969-12-30');
-    expect(calendarDateAt(Date.parse('1969-12-31T12:00:00.000Z'))).toBe('1969-12-31');
-    expect(calendarDateAt(Date.parse('2099-12-31T12:00:00.000Z'))).toBe('2099-12-31');
+    expect(dateAtUtcMinus12(Date.parse('1969-12-31T11:59:59.999Z'))).toBe('1969-12-30');
+    expect(dateAtUtcMinus12(Date.parse('1969-12-31T12:00:00.000Z'))).toBe('1969-12-31');
+    expect(dateAtUtcMinus12(Date.parse('2099-12-31T12:00:00.000Z'))).toBe('2099-12-31');
   });
 });
 
-describe('msUntilNextCalendarDate', () => {
+describe('msUntilUtcMinus12DateChange', () => {
   test('always lands on the first millisecond of the next date, from any moment', () => {
     const moments = [
       startOf('2027-05-19'),
@@ -122,11 +122,11 @@ describe('msUntilNextCalendarDate', () => {
       Date.parse('2099-06-15T07:08:09.010Z'),
     ];
     for (const now of moments) {
-      const wait = msUntilNextCalendarDate(now);
+      const wait = msUntilUtcMinus12DateChange(now);
       expect(wait).toBeGreaterThan(0);
       expect(wait).toBeLessThanOrEqual(DAY_MS);
-      expect(calendarDateAt(now + wait)).toBe(addCalendarDays(calendarDateAt(now), 1));
-      expect(calendarDateAt(now + wait - 1)).toBe(calendarDateAt(now));
+      expect(dateAtUtcMinus12(now + wait)).toBe(addCalendarDays(dateAtUtcMinus12(now), 1));
+      expect(dateAtUtcMinus12(now + wait - 1)).toBe(dateAtUtcMinus12(now));
     }
   });
 });

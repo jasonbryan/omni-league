@@ -1,22 +1,30 @@
+import { DOCUMENT } from '@angular/common';
 import { DestroyRef, afterNextRender, inject, signal, type Signal } from '@angular/core';
-import { msUntilNextCalendarDate } from '../../../convex/lib/registration';
+import { msUntilUtcMinus12DateChange } from '../../../convex/lib/registration';
 
-/**
- * The time of the request on the server, and the browser's clock from the first render on, renewed whenever the date at UTC-12 changes.
- * The server HTML may be minutes old when it arrives, so the first render reads the clock again.
- */
 export function injectNow(): Signal<number> {
   const now = signal(Date.now());
   const destroyRef = inject(DestroyRef);
+  const document = inject(DOCUMENT);
+  // Started after render, so a server render leaves no timer pending.
   afterNextRender(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const renew = () => {
+      clearTimeout(timer);
       const current = Date.now();
       now.set(current);
-      timer = setTimeout(renew, msUntilNextCalendarDate(current));
+      timer = setTimeout(renew, msUntilUtcMinus12DateChange(current));
+    };
+    // A device that slept through the date change fires the timer late, and a background tab may be throttled.
+    const renewWhenVisible = () => {
+      if (document.visibilityState === 'visible') renew();
     };
     renew();
-    destroyRef.onDestroy(() => clearTimeout(timer));
+    document.addEventListener('visibilitychange', renewWhenVisible);
+    destroyRef.onDestroy(() => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', renewWhenVisible);
+    });
   });
   return now.asReadonly();
 }

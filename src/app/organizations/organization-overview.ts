@@ -36,15 +36,9 @@ import {
 } from './organization-path';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
+import { PRIMARY_BUTTON, PRIMARY_BUTTON_LARGE } from '../ui/button/button-classes';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
-import {
-  closesText,
-  leagueSeasonStatus,
-  OPEN_BADGE,
-  OUTLINE_BADGE,
-  REGISTER_BUTTON,
-  REGISTER_BUTTON_LARGE,
-} from './season-status';
+import { closesText, leagueSeasonStatus, OPEN_BADGE, OUTLINE_BADGE } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 
@@ -349,13 +343,12 @@ export class OrganizationOverview {
     undefined,
   );
   readonly busy = input(false);
-  /** The seasons registration is open for at `now`, soonest deadline first; undefined while they load. */
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly now = input.required<number>();
 
   protected readonly followLink = inject(FollowLink);
-  protected readonly registerButtonLarge = REGISTER_BUTTON_LARGE;
-  protected readonly registerButton = REGISTER_BUTTON;
+  protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
+  protected readonly registerButton = PRIMARY_BUTTON;
   protected readonly openBadge = OPEN_BADGE;
   protected readonly outlineBadge = OUTLINE_BADGE;
 

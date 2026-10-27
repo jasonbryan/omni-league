@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { resetVisibility, setVisibility } from './service-worker/testing/fake-sw-update';
 import { injectNow } from './now';
 
 @Component({
@@ -21,6 +22,7 @@ describe('injectNow', () => {
   });
 
   afterEach(() => {
+    resetVisibility();
     vi.useRealTimers();
   });
 
@@ -61,6 +63,30 @@ describe('injectNow', () => {
     await fixture.whenStable();
     expect(vi.getTimerCount()).toBe(1);
     fixture.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('reads the clock again when the tab becomes visible, since a sleeping device fires its timer late', async () => {
+    const fixture = TestBed.createComponent(NowProbe);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    vi.setSystemTime(AFTER_DATE_CHANGE + 6 * 60 * 60 * 1000);
+    expect(fixture.componentInstance.now()).toBe(BEFORE_DATE_CHANGE);
+    setVisibility('hidden');
+    expect(fixture.componentInstance.now()).toBe(BEFORE_DATE_CHANGE);
+    setVisibility('visible');
+    expect(fixture.componentInstance.now()).toBe(AFTER_DATE_CHANGE + 6 * 60 * 60 * 1000);
+  });
+
+  it('keeps one timer after the tab becomes visible, and none after the component is destroyed', async () => {
+    const fixture = TestBed.createComponent(NowProbe);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    setVisibility('visible');
+    expect(vi.getTimerCount()).toBe(1);
+    fixture.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+    setVisibility('visible');
     expect(vi.getTimerCount()).toBe(0);
   });
 });

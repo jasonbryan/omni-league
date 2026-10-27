@@ -5,7 +5,6 @@ import {
   type SeasonPhase,
 } from '../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../convex/lib/seasonInput';
-import { BUTTON_BASE } from './page-control';
 import type { PublicOpenSeasonRows } from './organization-path';
 
 export interface LeagueRowSeason extends SeasonDates {
@@ -14,16 +13,10 @@ export interface LeagueRowSeason extends SeasonDates {
 }
 
 export interface SeasonStatusLine {
-  /** Null when the league has no upcoming season, which the line says in plain text. */
   badge: string | null;
   open: boolean;
   text: string;
 }
-
-// Constants, not `buttonVariants()` calls, so the public page's chunk loads no class-merging code. The spec checks them against `buttonVariants`.
-const REGISTER_VARIANT = 'bg-primary text-primary-foreground [a]:hover:bg-primary/90';
-export const REGISTER_BUTTON_LARGE = `${BUTTON_BASE} ${REGISTER_VARIANT} h-11 gap-2 px-5 has-data-[icon=inline-end]:pe-4 has-data-[icon=inline-start]:ps-4`;
-export const REGISTER_BUTTON = `${BUTTON_BASE} ${REGISTER_VARIANT} h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3`;
 
 const BADGE =
   'inline-flex w-fit shrink-0 items-center gap-1 rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap';
@@ -43,7 +36,6 @@ export function closesText(registrationDeadline: string): string {
   return formatCalendarDate(registrationDeadline).replace(/, \d+$/, '');
 }
 
-/** The earliest-starting season that has not ended. */
 export function nextSeason(
   seasons: readonly LeagueRowSeason[],
   nowMs: number,
@@ -73,8 +65,10 @@ export function leagueSeasonStatus(
   };
 }
 
-/** The seasons registration is open for at `nowMs`, soonest deadline first. */
-export function openSeasonsOf(seasons: PublicOpenSeasonRows, nowMs: number): PublicOpenSeasonRows {
+export function openSeasonsBySoonestDeadline(
+  seasons: PublicOpenSeasonRows,
+  nowMs: number,
+): PublicOpenSeasonRows {
   const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   return seasons
     .filter((season) => registrationIsOpen(season, nowMs))
