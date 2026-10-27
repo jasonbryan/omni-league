@@ -52,6 +52,7 @@ const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
 const SEASON_PAGE = ['season-page', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
   'league-management',
+  'league-management-details',
   'league-management-publish',
   'league-management-mockup',
 ];

@@ -175,7 +175,7 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expect(field(page, 'end-date')).toHaveAttribute('aria-invalid', 'true');
 
-    await page.getByRole('radio', { name: '7v7' }).check({ force: true });
+    await page.locator('#create-season').getByRole('radio', { name: '7v7' }).check({ force: true });
     await expect(fieldError(page, 'format')).toHaveCount(0);
     await field(page, 'minimum-roster-size').fill('2');
     await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);

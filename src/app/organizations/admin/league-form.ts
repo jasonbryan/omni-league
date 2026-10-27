@@ -77,7 +77,7 @@ interface ServerError {
   taken: string | null;
 }
 
-function inputErrorOf(failure: unknown): LeagueInputError | null {
+export function inputErrorOf(failure: unknown): LeagueInputError | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   if (typeof data !== 'object' || data === null) return null;
