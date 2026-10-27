@@ -63,6 +63,7 @@ describe('classify: PR into main', () => {
     ['scripts/ci-scope.test.mjs'],
     ['scripts/fixtures/icons.json'],
     ['.github/workflows/clean-previews.yml'],
+    ['.github/workflows/staging-rebuild.yml'],
     ['.github/dependabot.yml', 'docs/process/ci.md'],
     ['design/icons/any.svg'],
     ['design/mockup-kit/mockup-kit.css'],
