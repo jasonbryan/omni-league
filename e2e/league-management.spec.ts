@@ -159,27 +159,25 @@ test.describe('League management: an org admin', () => {
     await expect(page.locator('#details input').first()).toBeFocused();
   });
 
-  test(
-    'a typed date is fully visible in every date field at 360, 1024, and 1280px',
-    VIEWPORT_AGNOSTIC,
-    async ({ page }) => {
-      const { base } = await memberOf(page, 'orgAdmin');
-      for (const width of [360, 1024, 1280]) {
-        await page.setViewportSize({ width, height: 900 });
-        await page.goto(`${base}/leagues/${COED}`);
-        for (const id of ['start-date', 'end-date', 'registration-deadline']) {
-          const input = page.locator(`#${id}`);
-          await input.fill('2026-09-01');
-          const { clientWidth, scrollWidth } = await input.evaluate((el) => ({
-            clientWidth: el.clientWidth,
-            scrollWidth: el.scrollWidth,
-          }));
-          expect(clientWidth, `#${id} at ${width}px`).toBeGreaterThanOrEqual(150);
-          expect(scrollWidth, `#${id} at ${width}px`).toBeLessThanOrEqual(clientWidth);
-        }
+  test('a typed date is fully visible in every date field at 360, 1024, and 1280px', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    for (const width of [360, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base}/leagues/${COED}`);
+      for (const id of ['start-date', 'end-date', 'registration-deadline']) {
+        const input = page.locator(`#${id}`);
+        await input.fill('2026-09-01');
+        const { clientWidth, scrollWidth } = await input.evaluate((el) => ({
+          clientWidth: el.clientWidth,
+          scrollWidth: el.scrollWidth,
+        }));
+        expect(clientWidth, `#${id} at ${width}px`).toBeGreaterThanOrEqual(150);
+        expect(scrollWidth, `#${id} at ${width}px`).toBeLessThanOrEqual(clientWidth);
       }
-    },
-  );
+    }
+  });
 
   test('refuses a deadline on the start date and an end before the start, then accepts the day before', async ({
     page,
