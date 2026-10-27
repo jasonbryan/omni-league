@@ -201,7 +201,7 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **Slice:** one issue covering one user-visible behaviour end to end through Convex and Angular, small enough for one PR (aim under about 400 changed lines). Infrastructure work with no user-visible behaviour is a `type:chore` slice. See [dev cycle, Plan](process/dev-cycle.md#1-plan).
 - **Smoke spec:** `e2e/smoke.spec.ts`, the minimal e2e spec of the placeholder home `/` (raw HTML, axe helper, hydration, malformed-URL 400) that also runs against previews with `E2E_BASE_URL`. See [README, E2E tests](../README.md#e2e-tests).
 - **Smoke tests:** the short checks the deployer runs against a deployed URL to confirm it works. See [deployer](../.claude/agents/deployer.md).
-- **Staging:** the Netlify branch deploy of `main`, `https://main--<site>.netlify.app`, backed by the Convex preview deployment `main` and updated on every merge; public and `noindex`. See [ADR 0010, item 6](decisions/0010-hosting-and-deployment.md#6-per-pr-preview-flow) and [hosting](process/hosting.md).
+- **Staging:** the Netlify branch deploy of `main`, `https://main--<site>.netlify.app`, backed by the Convex preview deployment `staging-a` or `staging-b` (alternating) and reset to the demo data on every merge; public and `noindex`. See [ADR 0010, item 6](decisions/0010-hosting-and-deployment.md#6-per-pr-preview-flow) and [hosting](process/hosting.md).
 - **Status labels:** each open issue carries exactly one, and only the orchestrator changes it. See [dev cycle, Issue state machine](process/dev-cycle.md#issue-state-machine).
   - **`status:blocked`:** waiting on an owner answer; the issue returns to its previous status once answered.
   - **`status:in-progress`:** the implementer is working on it.

@@ -43,7 +43,7 @@ const compareNames = (x: string, y: string) => {
                 <a
                   [routerLink]="item.path"
                   aria-current="page"
-                  class="flex min-h-8 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground"
+                  class="flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground"
                   ><ng-icon
                     name="lucideTrophy"
                     class="shrink-0 text-base"
@@ -53,7 +53,7 @@ const compareNames = (x: string, y: string) => {
               } @else {
                 <a
                   [routerLink]="item.path"
-                  class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+                  class="flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
                   ><ng-icon
                     name="lucideTrophy"
                     class="shrink-0 text-base text-muted-foreground"
@@ -69,7 +69,7 @@ const compareNames = (x: string, y: string) => {
         <li>
           <a
             [routerLink]="publicPath()"
-            class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+            class="flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
             ><ng-icon
               name="lucideGlobe"
               class="shrink-0 text-base text-muted-foreground"
@@ -80,7 +80,7 @@ const compareNames = (x: string, y: string) => {
         <li>
           <a
             routerLink="/app"
-            class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+            class="flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
             ><ng-icon
               name="lucideArrowLeft"
               class="shrink-0 text-base text-muted-foreground"

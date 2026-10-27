@@ -1,3 +1,4 @@
+import { v } from 'convex/values';
 import { env } from '../_generated/server';
 
 // Refuses unless `IS_TEST` is exactly "true", which only the local e2e backend sets.
@@ -20,3 +21,7 @@ export const AUTH_COMPONENT_TABLES = [
   'jwks',
   'rateLimit',
 ] as const;
+
+export const authModelValidator = v.union(
+  ...AUTH_COMPONENT_TABLES.map((model) => v.literal(model)),
+);

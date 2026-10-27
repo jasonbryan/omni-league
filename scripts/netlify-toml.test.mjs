@@ -16,7 +16,7 @@ function command(context) {
 
 const PREVIEW = {
   'deploy-preview': { name: String.raw`\"pr-$REVIEW_ID\"`, flag: '--preview-create' },
-  'branch-deploy': { name: String.raw`\"$HEAD\"`, flag: '--preview-name' },
+  'branch-deploy': { name: String.raw`\"$STAGING_SLOT\"`, flag: '--preview-create' },
 };
 
 // The app registers the service worker only when `scripts/ng-convex.mjs` passes
@@ -55,12 +55,30 @@ describe('netlify.toml demo seed', () => {
     });
   }
 
-  it('only deploy previews recreate their backend; staging reuses it and its data', () => {
+  it('every preview context recreates its backend, and production names none', () => {
     const recreating = Object.keys(PREVIEW).filter((context) =>
       /--preview-create\b/.test(command(context) ?? ''),
     );
-    assert.deepEqual(recreating, ['deploy-preview']);
+    assert.deepEqual(recreating, ['deploy-preview', 'branch-deploy']);
     assert.doesNotMatch(command('production') ?? '', /--preview-(create|name)/);
+  });
+
+  it('staging picks its slot first, and a failed script fails the build', () => {
+    const cmd = command('branch-deploy');
+    assert.ok(cmd, '[context.branch-deploy] has a command');
+    const steps = cmd.split(' && ');
+    assert.deepEqual(steps.slice(0, 3), [
+      'npm ci',
+      String.raw`STAGING_SLOT=\"$(node scripts/staging-slot.mjs)\"`,
+      'export STAGING_SLOT',
+    ]);
+    assert.doesNotMatch(cmd, /export STAGING_SLOT=\$\(/);
+    assert.doesNotMatch(cmd, /--preview-name \\"\$HEAD\\"/);
+    assert.doesNotMatch(cmd, /\$HEAD/);
+  });
+
+  it('deploy previews keep one deployment per PR', () => {
+    assert.match(command('deploy-preview'), /--preview-create \\"pr-\$REVIEW_ID\\"/);
   });
 
   it('no context passes --preview-run (it seeds only a newly created preview)', () => {

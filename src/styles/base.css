@@ -23,3 +23,34 @@
     @apply outline-2 outline-offset-2 outline-ring;
   }
 }
+
+/* Unlayered, so it beats the `h-9`/`size-8` utilities that templates repeat inline. */
+@media (pointer: coarse) {
+  [data-slot='button'],
+  [data-slot='sheet-close'] {
+    min-height: --spacing(11);
+    min-width: --spacing(11);
+  }
+  [data-slot='input'] {
+    min-height: --spacing(11);
+  }
+  /* The label's overlay covers its row, so a tap anywhere on the row toggles the control. */
+  [data-slot='field'][data-orientation='horizontal']:has([role='checkbox'], input[type='radio']) {
+    position: relative;
+    min-height: --spacing(11);
+    padding-block: --spacing(3);
+  }
+  [data-slot='field'][data-orientation='horizontal']:has([role='checkbox'], input[type='radio'])
+    [data-slot='field-label']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  /* Above the overlay, so the control stays reachable and is not covered when focused, and so a link in the description stays tappable. */
+  [data-slot='field'][data-orientation='horizontal'] [role='checkbox'],
+  [data-slot='field'][data-orientation='horizontal'] [data-slot='radio-group-item'],
+  [data-slot='field'][data-orientation='horizontal'] [data-slot='field-description'] a {
+    position: relative;
+    z-index: 1;
+  }
+}

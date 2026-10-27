@@ -75,6 +75,7 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
           <button
             #menuButton
             type="button"
+            data-slot="button"
             class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground size-9 -ms-1.5 lg:hidden"
             aria-label="Open navigation"
             aria-haspopup="dialog"
@@ -85,7 +86,10 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
             <ng-icon name="lucideMenu" class="text-xl" aria-hidden="true" />
           </button>
         }
-        <a routerLink="/" class="flex items-center gap-2 rounded-md text-base font-semibold">
+        <a
+          routerLink="/"
+          class="flex items-center gap-2 rounded-md text-base font-semibold pointer-coarse:min-h-11"
+        >
           <ng-container [ngTemplateOutlet]="brand" />
         </a>
         <app-top-bar-account />

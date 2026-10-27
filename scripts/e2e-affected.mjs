@@ -139,6 +139,7 @@ export const AREAS = [
         '.github/pull_request_template.md',
         '.github/dependabot.yml',
         '.github/workflows/clean-previews.yml',
+        '.github/workflows/staging-rebuild.yml',
       ].includes(file),
     specs: [],
   },

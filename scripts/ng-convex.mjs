@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { checkServerBundle } from './edge-bundle.mjs';
 import { noindexForContext, writeNoindexHeaders } from './noindex.mjs';
+import { writeStagingSlotFile } from './staging-slot-file.mjs';
 import { serviceWorkerDefine, swConfigCheck } from './sw-config-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -142,9 +143,13 @@ async function afterBuild() {
       'the built ngsw.json could cache more than same-origin build files (scripts/sw-config-check.mjs)',
     );
   }
+  const browserDir = join(root, 'dist', 'omni-league', 'browser');
+  if (await writeStagingSlotFile(browserDir, process.env)) {
+    console.log(`staging slot: ${process.env.STAGING_SLOT}`);
+  }
   if (!noindex) return;
   try {
-    await writeNoindexHeaders(join(root, 'dist', 'omni-league', 'browser'));
+    await writeNoindexHeaders(browserDir);
   } catch (error) {
     throw new Error(`could not write the noindex _headers file: ${error.message}`, {
       cause: error,

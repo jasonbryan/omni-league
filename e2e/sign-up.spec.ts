@@ -92,6 +92,7 @@ test.describe('sign-up', () => {
 
   test('the empty form: fields, policy text, Show password, axe, and Tab order', async ({
     page,
+    hasTouch,
   }, testInfo) => {
     await page.goto('/sign-up');
     await expect(
@@ -118,7 +119,7 @@ test.describe('sign-up', () => {
     // Phones use 16px input text so iOS does not zoom.
     const show = page.getByRole('button', { name: 'Show password' });
     for (const control of [field(page, 'name'), password(page), show, createAccount(page)]) {
-      expect((await control.boundingBox())?.height).toBe(36);
+      expect((await control.boundingBox())?.height).toBe(hasTouch ? 44 : 36);
     }
     const phone = (page.viewportSize()?.width ?? 0) < 768;
     for (const id of ['name', 'email', 'password']) {

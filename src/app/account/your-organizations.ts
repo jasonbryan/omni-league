@@ -185,7 +185,7 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
                         <li>
                           <a
                             [routerLink]="league.path"
-                            class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted"
+                            class="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-muted"
                             ><ng-icon
                               name="lucideTrophy"
                               class="shrink-0 text-base text-muted-foreground"

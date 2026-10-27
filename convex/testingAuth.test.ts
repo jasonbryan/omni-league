@@ -128,7 +128,7 @@ describe('IS_TEST guard on the auth additions', () => {
       const t = setup();
       await seedAuthDocs(t);
       await seedSignInFailure(t);
-      await expect(t.mutation(internal.testing.reset, {})).rejects.toThrow(/IS_TEST/);
+      await expect(t.action(internal.testing.reset, {})).rejects.toThrow(/IS_TEST/);
       expect(await authDocs(t, 'jwks')).toHaveLength(1);
       expect(await authDocs(t, 'user')).toHaveLength(1);
       expect(await signInFailureCount(t)).toBe(1);
@@ -179,7 +179,7 @@ describe('testing:reset and the auth component', () => {
     for (const model of AUTH_COMPONENT_TABLES) before += (await authDocs(t, model)).length;
     expect(before).toBeGreaterThanOrEqual(8);
 
-    const result = await t.mutation(internal.testing.reset, {});
+    const result = await t.action(internal.testing.reset, {});
     expect(result).toMatchObject({ documents: 3, authDocuments: before });
     expect(await signInFailureCount(t)).toBe(0);
     for (const model of AUTH_COMPONENT_TABLES) expect(await authDocs(t, model), model).toEqual([]);
