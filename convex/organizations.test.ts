@@ -541,6 +541,31 @@ describe('organizations:listPublicLocations with a sport', () => {
     expect(await names('draft-club')).toEqual([]);
   });
 
+  test("never lists another organization's location, even through a sport row that points to it", async () => {
+    const t = setup();
+    const organizationId = await seedA(t);
+    await seedB(t);
+    await t.run(async (ctx) => {
+      const foreign = (await ctx.db.query('locations').collect()).find(
+        (location) => location.name === 'B Field',
+      );
+      if (!foreign) throw new Error('No B Field');
+      await ctx.db.insert('sportLocations', {
+        organizationId,
+        sport: 'soccer',
+        locationId: foreign._id,
+        leagueCount: 1,
+      });
+    });
+    const soccer = await t.query(api.organizations.listPublicLocations, {
+      slug: 'gulf-coast',
+      page: 1,
+      sport: 'soccer',
+    });
+    expect(soccer.rows.map((row) => row.name)).toEqual(['Bayside Athletic Complex']);
+    expect(soccer.total).toBe(1);
+  });
+
   test('pages the sport locations by name, 5 per page, and falls back to page 1 for a page out of range', async () => {
     const t = setup();
     await seed(t, {

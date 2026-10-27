@@ -4,6 +4,7 @@ import { Title } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { CONVEX_CLIENT } from '../core/data/convex';
+import { LIST_PAGE_SIZE } from '../core/list-page';
 import {
   FakeConvexClient,
   type FakeSubscription,
@@ -72,14 +73,15 @@ const leaguesSection = (harness: RouterTestingHarness) =>
 const locationsSection = (harness: RouterTestingHarness) =>
   host(harness).querySelector('section[aria-labelledby="locations-heading"]');
 
-/** Seven soccer leagues, so the sport view has two pages. */
-const SEVEN_SOCCER: PublicOrganizationPage = {
+const SOCCER_LEAGUES = LIST_PAGE_SIZE + 2;
+
+const TWO_SOCCER_PAGES: PublicOrganizationPage = {
   ...GULF_COAST,
   leagueCount: 10,
   sports: GULF_COAST.sports.map((sport) =>
-    sport.key === 'soccer' ? { ...sport, leagueCount: 7 } : sport,
+    sport.key === 'soccer' ? { ...sport, leagueCount: SOCCER_LEAGUES } : sport,
   ),
-  leagues: Array.from({ length: 7 }, (_, i) => ({
+  leagues: Array.from({ length: SOCCER_LEAGUES }, (_, i) => ({
     name: `Soccer League ${i + 1}`,
     slug: `soccer-league-${i + 1}`,
     sportName: 'Soccer',
@@ -88,14 +90,14 @@ const SEVEN_SOCCER: PublicOrganizationPage = {
 };
 
 function pageTwo(): Record<string, unknown> {
-  const results = sportQueryResults(SEVEN_SOCCER, 'soccer');
+  const results = sportQueryResults(TWO_SOCCER_PAGES, 'soccer');
   return {
     ...results,
     [LEAGUES]: {
-      rows: SEVEN_SOCCER.leagues.slice(5),
+      rows: TWO_SOCCER_PAGES.leagues.slice(LIST_PAGE_SIZE),
       page: 2,
       pageCount: 2,
-      total: 7,
+      total: SOCCER_LEAGUES,
     },
   };
 }
@@ -259,16 +261,26 @@ describe('the sport view not found and failures', () => {
     expect(main?.querySelector('a')?.getAttribute('href')).toBe(`${SOCCER}?page=2`);
   });
 
-  it('shows the skeleton until all three results have arrived', async () => {
+  it('shows the page skeleton until the organization arrives, then the hero with the lists as a skeleton until both lists arrive', async () => {
     const harness = await open();
     const results = sportQueryResults(GULF_COAST, 'soccer');
+    expect(host(harness).querySelector('app-organization-skeleton')).not.toBeNull();
     subscription(HEADER).emit(results[HEADER]);
     subscription(LEAGUES).emit(results[LEAGUES]);
     await settle(harness);
-    expect(host(harness).querySelector('app-organization-skeleton')).not.toBeNull();
+    expect(host(harness).querySelector('app-organization-skeleton')).toBeNull();
+    expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
+    expect(text(leaguesSection(harness)?.querySelector('h2'))).toBe('Soccer leagues');
+    expect(text(locationsSection(harness)?.querySelector('[role="status"]'))).toBe(
+      'Loading the locations.',
+    );
+    expect(leaguesSection(harness)?.querySelector('h3')?.textContent).toContain('Coed 7v7 Rec');
     subscription(LOCATIONS).emit(results[LOCATIONS]);
     await settle(harness);
-    expect(host(harness).querySelector('app-organization-skeleton')).toBeNull();
+    expect(locationsSection(harness)?.querySelector('[role="status"]')).toBeNull();
+    expect([...(locationsSection(harness)?.querySelectorAll('h3') ?? [])].map(text)).toEqual([
+      'Bayside Athletic Complex',
+    ]);
   });
 });
 
@@ -276,20 +288,20 @@ describe('the sport view with several pages', () => {
   let harness: RouterTestingHarness;
   beforeEach(async () => {
     harness = await open();
-    emit(sportQueryResults(SEVEN_SOCCER, 'soccer'));
+    emit(sportQueryResults(TWO_SOCCER_PAGES, 'soccer'));
     await settle(harness);
   });
 
   it('shows the range and ?page=N links under the leagues', () => {
     const nav = host(harness).querySelector('nav[aria-label="Leagues pages"]');
-    expect(text(nav?.querySelector('p'))).toBe('1–5 of 7 leagues');
+    expect(text(nav?.querySelector('p'))).toBe(`1–${LIST_PAGE_SIZE} of ${SOCCER_LEAGUES} leagues`);
     expect([...(nav?.querySelectorAll('a') ?? [])].map((a) => a.getAttribute('href'))).toEqual([
       `${SOCCER}#leagues`,
       `${SOCCER}?page=2#leagues`,
       `${SOCCER}?page=2#leagues`,
     ]);
     expect(text(leaguesSection(harness)?.querySelector('h2')?.nextElementSibling)).toBe(
-      '7 leagues',
+      `${SOCCER_LEAGUES} leagues`,
     );
   });
 
@@ -313,7 +325,7 @@ describe('the sport view with several pages', () => {
     const list = () => leaguesSection(harness)?.querySelector('ul');
     expect(list()?.getAttribute('aria-busy')).toBe('true');
     expect([...(list()?.querySelectorAll('h3') ?? [])].map(text)).toEqual(
-      SEVEN_SOCCER.leagues.slice(0, 5).map((league) => league.name),
+      TWO_SOCCER_PAGES.leagues.slice(0, LIST_PAGE_SIZE).map((league) => league.name),
     );
     subscription(LEAGUES).emit(pageTwo()[LEAGUES]);
     await settle(harness);
@@ -340,7 +352,15 @@ describe('moving between the chips', () => {
     await settle(harness);
     await TestBed.inject(Router).navigateByUrl(`${ORG}/sports/softball`);
     await settle(harness);
-    expect(host(harness).querySelector('app-organization-skeleton')).not.toBeNull();
+    expect(host(harness).querySelector('app-organization-skeleton')).toBeNull();
+    expect(text(host(harness).querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
+    expect(
+      host(harness).querySelector('nav[aria-label="Sports"] [aria-current="page"]')?.textContent,
+    ).toContain('Softball');
+    expect(text(leaguesSection(harness)?.querySelector('h2'))).toBe('Softball leagues');
+    expect(text(leaguesSection(harness)?.querySelector('[role="status"]'))).toBe(
+      'Loading the leagues.',
+    );
     expect(host(harness).textContent).not.toContain('Coed 7v7 Rec');
     emit(sportQueryResults(GULF_COAST, 'softball'));
     await settle(harness);

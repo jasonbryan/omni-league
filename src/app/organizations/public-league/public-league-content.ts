@@ -167,7 +167,6 @@ export class PublicLeagueContent {
   protected readonly leagueHref = computed(() =>
     publicLeaguePath(this.view().league.organization.slug, this.view().league.slug),
   );
-  /** The league's sport view, or `undefined` when the organization lists no such sport. */
   protected readonly sportHref = computed(() => {
     const { league, organization } = this.view();
     const sport = organization.sports.find((entry) => entry.name === league.sportName);

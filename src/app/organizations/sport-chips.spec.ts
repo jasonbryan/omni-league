@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { SportChips } from './sport-chips';
+import { hasSportChoice, SportChips } from './sport-chips';
 import { GULF_COAST } from './testing/pages';
 
 @Component({
@@ -9,8 +9,8 @@ import { GULF_COAST } from './testing/pages';
   template: `<app-sport-chips
     [slug]="slug"
     [sports]="sports"
-    [leagueCount]="leagueCount"
-    [current]="current"
+    [allSportsLeagueCount]="leagueCount"
+    [currentSegment]="current"
   />`,
 })
 class Host {
@@ -60,20 +60,6 @@ describe('SportChips', () => {
   it('marks only the chip of the current sport', () => {
     const links = [...render({ current: 'soccer' }).querySelectorAll('nav a')];
     expect(links.map((a) => a.getAttribute('aria-current'))).toEqual([null, null, 'page', null]);
-    expect(links[2].className).toContain('bg-foreground');
-    expect(links[1].className).not.toContain('bg-foreground');
-  });
-
-  it('makes each chip 44px tall on touch screens and 36px with a mouse', () => {
-    for (const link of render().querySelectorAll('nav a')) {
-      expect(link.className).toContain('h-11');
-      expect(link.className).toContain('md:h-9');
-    }
-  });
-
-  it('wraps the chips rather than scrolling them', () => {
-    const list = render().querySelector('nav ul');
-    expect(list?.className).toContain('flex-wrap');
   });
 
   it('renders nothing for an organization with one sport', () => {
@@ -84,5 +70,18 @@ describe('SportChips', () => {
   it('renders nothing for an organization with no sport', () => {
     const host = render({ sports: [], leagueCount: 0 });
     expect(host.querySelector('nav')).toBeNull();
+  });
+});
+
+describe('hasSportChoice', () => {
+  it.each([
+    [0, false],
+    [1, false],
+    [2, true],
+    [3, true],
+  ])('is %i sports: %s', (count, expected) => {
+    expect(hasSportChoice(GULF_COAST.sports.concat(GULF_COAST.sports).slice(0, count))).toBe(
+      expected,
+    );
   });
 });

@@ -88,7 +88,6 @@ export function queryResults(page: PublicOrganizationPage): Record<string, unkno
   };
 }
 
-/** The results of the three queries for one sport's view: that sport's leagues and the locations where it is played. */
 export function sportQueryResults(
   page: PublicOrganizationPage,
   segment: string,

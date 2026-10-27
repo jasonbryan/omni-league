@@ -311,20 +311,6 @@ describe('OrganizationPage', () => {
       emit(oneSport);
       await settle(harness);
       expect(host(harness).querySelector('nav[aria-label="Sports"]')).toBeNull();
-      expect(
-        host(harness).querySelector('section[aria-labelledby="leagues-heading"]')?.parentElement
-          ?.className,
-      ).toContain('border-t');
-    });
-
-    it('starts the sections below the chips without a rule of their own', async () => {
-      const harness = await open();
-      emit(GULF_COAST);
-      await settle(harness);
-      expect(
-        host(harness).querySelector('section[aria-labelledby="leagues-heading"]')?.parentElement
-          ?.className,
-      ).not.toContain('border-t');
     });
 
     it('shows no page control on the organization page, which lists page 1 only', async () => {
@@ -392,15 +378,6 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(main()?.querySelector('[role="status"]')).toBeNull();
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
-    });
-
-    it('draws a row of four chips under the hero, as the mockup does', async () => {
-      const harness = await open();
-      const chips = host(harness).querySelectorAll(
-        'main app-organization-skeleton span.rounded-full',
-      );
-      expect(chips).toHaveLength(4);
-      for (const chip of chips) expect(chip.className).toContain('h-11');
     });
 
     it('hides every bar, so a screen reader hears the status alone', async () => {

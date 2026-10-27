@@ -119,8 +119,7 @@ export const getPublicPage = query({
   },
 });
 
-/** The organization's locations by name, read up to the end of the page asked for. */
-async function allLocations(
+async function locationsThroughPage(
   ctx: QueryCtx,
   organization: Doc<'organizations'>,
   requestedPage: number,
@@ -134,10 +133,7 @@ async function allLocations(
   return { read, total };
 }
 
-/**
- * The locations with a published league of the sport, by name. The index orders them by id, so they are read together (at most the
- * most rows a list can reach) and sorted here; an organization with more is cut off at that many, the same cap as every public list.
- */
+/** The index orders them by id, so they are read together (at most the most rows a list can reach) and sorted here. */
 async function sportLocations(
   ctx: QueryCtx,
   organization: Doc<'organizations'>,
@@ -153,7 +149,6 @@ async function sportLocations(
   for (const link of links) {
     if (link.leagueCount < 1) continue;
     const location = await ctx.db.get('locations', link.locationId);
-    // Only this organization's locations, as for the leagues list.
     if (location?.organizationId === organization._id) read.push(location);
   }
   const key = (location: Doc<'locations'>) => location.sortName ?? sortName(location.name);
@@ -171,7 +166,7 @@ export const listPublicLocations = query({
     const { sport } = args;
     const { read, total } =
       sport === undefined
-        ? await allLocations(ctx, organization, args.page)
+        ? await locationsThroughPage(ctx, organization, args.page)
         : await sportLocations(ctx, organization, sport);
     const { page, pageCount } = pageOf(total, args.page);
     const rows = [];

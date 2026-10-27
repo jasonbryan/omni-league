@@ -5,9 +5,17 @@ export type PublicOrganizationHeader = NonNullable<
   FunctionReturnType<typeof api.organizations.getPublicPage>
 >;
 
+export type PublicLeagueRows = FunctionReturnType<
+  typeof api.organizations.listPublicLeagues
+>['rows'];
+
+export type PublicLocationRows = FunctionReturnType<
+  typeof api.organizations.listPublicLocations
+>['rows'];
+
 export type PublicOrganizationPage = PublicOrganizationHeader & {
-  leagues: FunctionReturnType<typeof api.organizations.listPublicLeagues>['rows'];
-  locations: FunctionReturnType<typeof api.organizations.listPublicLocations>['rows'];
+  leagues: PublicLeagueRows;
+  locations: PublicLocationRows;
 };
 
 /** Built from the slug, never copied from the current URL, which can carry `?ott=` or a fragment. The path is explicit because `<base href="/">` would resolve a bare `#league-1` to `/#league-1`. */
@@ -22,7 +30,7 @@ export function sportViewPath(orgSlug: string, segment: string): string {
   return `${organizationPath(orgSlug)}/sports/${encodeURIComponent(segment)}`;
 }
 
-/** The bare path, then `?page=N` only when N is more than 1. Built from the query result's page number, an integer, never the request's query string. */
+/** Built from the query result's page number, an integer, never the request's query string. */
 export function sportViewCanonicalPath(orgSlug: string, segment: string, page: number): string {
   const path = sportViewPath(orgSlug, segment);
   return page > 1 ? `${path}?page=${page}` : path;

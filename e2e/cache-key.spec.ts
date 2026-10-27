@@ -140,7 +140,6 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
-  // The sport view reads `?page=N` too. On a preview it uses the demo organization's soccer view.
   test(
     'the sport view: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
     RAW_HTTP,

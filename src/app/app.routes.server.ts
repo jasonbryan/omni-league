@@ -40,7 +40,7 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
   },
   {
-    // The sport view: `Netlify-Vary: query` from the handler (src/server-cache.ts) stores each `?page=N` on its own. The HTML holds only the page number
+    // `Netlify-Vary: query` from the handler (src/server-cache.ts) stores each `?page=N` on its own. The HTML holds only the page number
     // from the query result, never the request's query string.
     path: 'organizations/:orgSlug/sports/:sport',
     renderMode: RenderMode.Server,

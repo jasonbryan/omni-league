@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -343,18 +343,32 @@ test.describe('the sport view in the browser', () => {
     ).toBeVisible();
   });
 
-  test('every chip is 44px tall on a touch screen and 36px with a mouse', async ({
-    page,
-  }, testInfo: TestInfo) => {
+  async function chipHeights(
+    page: Page,
+  ): Promise<{ coarse: boolean; heights: (number | undefined)[] }> {
     const target = await threeSports();
     await page.goto(target.path);
     const links = page.getByRole('navigation', { name: 'Sports' }).getByRole('link');
     await expect(links).toHaveCount(4);
-    const expected = testInfo.project.name === 'chromium-desktop' ? 36 : 44;
-    for (const link of await links.all()) {
-      const box = await link.boundingBox();
-      expect(box?.height).toBe(expected);
-    }
+    const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    const heights = (await links.all()).map(async (link) => (await link.boundingBox())?.height);
+    return { coarse, heights: await Promise.all(heights) };
+  }
+
+  test('every chip is 44px tall with a coarse pointer and 36px with a mouse', async ({ page }) => {
+    const { coarse, heights } = await chipHeights(page);
+    expect(heights).toEqual(Array<number>(4).fill(coarse ? 44 : 36));
+  });
+
+  test.describe('on a wide touch screen', () => {
+    test.use({ viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true });
+
+    test('every chip is still 44px tall', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'one project covers the wide screen');
+      const { coarse, heights } = await chipHeights(page);
+      expect(coarse).toBe(true);
+      expect(heights).toEqual([44, 44, 44, 44]);
+    });
   });
 
   test('the chips wrap on a phone and nothing scrolls sideways', async ({ page }, testInfo) => {

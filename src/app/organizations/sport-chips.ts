@@ -3,8 +3,12 @@ import { RouterLink } from '@angular/router';
 import { organizationPath, sportViewPath, type PublicSport } from './organization-path';
 
 const CHIP =
-  'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9';
+  'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap md:h-9 pointer-coarse:min-h-11';
 const OTHER_CHIP = `${CHIP} border-input hover:bg-muted`;
+export function hasSportChoice(sports: readonly PublicSport[]): boolean {
+  return sports.length > 1;
+}
+
 const CURRENT_CHIP = `${CHIP} border-foreground bg-foreground text-background`;
 
 /**
@@ -16,7 +20,7 @@ const CURRENT_CHIP = `${CHIP} border-foreground bg-foreground text-background`;
   imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (sports().length > 1) {
+    @if (hasChoice()) {
       <div class="border-b border-border pb-4 md:pb-6">
         <nav aria-label="Sports" class="mx-auto w-full max-w-6xl px-4 md:px-8">
           <ul role="list" class="flex flex-wrap gap-2">
@@ -42,11 +46,10 @@ const CURRENT_CHIP = `${CHIP} border-foreground bg-foreground text-background`;
 export class SportChips {
   readonly slug = input.required<string>();
   readonly sports = input.required<readonly PublicSport[]>();
-  /** The organization's published leagues in all sports, from `getPublicPage`. */
-  readonly leagueCount = input.required<number>();
-  /** The segment of the sport the page is filtered to; none for All sports. */
-  readonly current = input<string | undefined>(undefined);
+  readonly allSportsLeagueCount = input.required<number>();
+  readonly currentSegment = input<string | undefined>(undefined);
 
+  protected readonly hasChoice = computed(() => hasSportChoice(this.sports()));
   protected readonly currentChip = CURRENT_CHIP;
   protected readonly otherChip = OTHER_CHIP;
 
@@ -54,16 +57,16 @@ export class SportChips {
     {
       name: 'All sports',
       href: organizationPath(this.slug()),
-      count: this.leagueCount(),
-      noun: this.leagueCount() === 1 ? 'league' : 'leagues',
-      current: this.current() === undefined,
+      count: this.allSportsLeagueCount(),
+      noun: this.allSportsLeagueCount() === 1 ? 'league' : 'leagues',
+      current: this.currentSegment() === undefined,
     },
     ...this.sports().map((sport) => ({
       name: sport.name,
       href: sportViewPath(this.slug(), sport.segment),
       count: sport.leagueCount,
       noun: sport.leagueCount === 1 ? 'league' : 'leagues',
-      current: sport.segment === this.current(),
+      current: sport.segment === this.currentSegment(),
     })),
   ]);
 }

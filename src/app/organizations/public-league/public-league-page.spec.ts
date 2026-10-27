@@ -141,7 +141,6 @@ describe('PublicLeaguePage populated', () => {
     const main = host(harness).querySelector('main');
     const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
     const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
-    // The sport links to its sport view.
     expect(links.map(text)).toEqual([
       'Gulf Coast Sport & Social',
       'Beach volleyball',
