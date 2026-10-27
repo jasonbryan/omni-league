@@ -136,6 +136,12 @@ describe('LeagueDetailsForm', () => {
       );
     });
 
+    it('points the name field at its description while the name is valid', async () => {
+      await open();
+      expect(nameInput().getAttribute('aria-describedby')).toBe('league-name-description');
+      expect(page.querySelector('#league-name-description')).not.toBeNull();
+    });
+
     it('is filled with the league’s own name and division', async () => {
       await open({
         ...SUNDAY,
