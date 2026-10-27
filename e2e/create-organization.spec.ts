@@ -159,8 +159,11 @@ test.describe('create an organization', () => {
 
     await field(page, 'name').focus();
     await page.keyboard.press('Tab');
+    await expect(field(page, 'cityState')).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(field(page, 'slug')).toBeFocused();
     await expect(fieldError(page, 'name')).toHaveCount(0);
+    await expect(fieldError(page, 'cityState')).toHaveCount(0);
     await page.keyboard.type('Bad-Slug');
     await expect(fieldError(page, 'slug')).toHaveCount(0);
 
