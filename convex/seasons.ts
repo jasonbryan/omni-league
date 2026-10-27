@@ -6,6 +6,7 @@ import {
   checkSeasonFields,
   firstSeasonError,
   SEASON_MESSAGES,
+  type LeagueFormatMissingError,
   type SeasonInputError,
 } from './lib/seasonInput';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
@@ -26,13 +27,7 @@ import {
 } from './lib/seasonLookup';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatLabel } from './lib/divisions';
-import {
-  formatValidator,
-  playersPerSideOfFormat,
-  seasonPlayersPerSide,
-  sportName,
-  sportValidator,
-} from './lib/sports';
+import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
@@ -52,13 +47,17 @@ export const create = mutation({
     startDate: v.string(),
     endDate: v.string(),
     registrationDeadline: v.string(),
-    format: formatValidator,
-    minimumRosterSize: v.number(),
   },
   returns: v.object({ seasonId: v.id('seasons') }),
   handler: async (ctx, args) => {
     const { league } = await requireLeagueOrganizer(ctx, args.leagueId);
-    const refusal = firstSeasonError(checkSeasonFields(league.sport, args));
+    if (league.playersPerSide === undefined) {
+      throw new ConvexError({
+        code: 'leagueFormatMissing',
+        message: SEASON_MESSAGES.leagueFormatMissing,
+      } satisfies LeagueFormatMissingError);
+    }
+    const refusal = firstSeasonError(checkSeasonFields(args));
     if (refusal) refuse(refusal);
     if (await seasonSlugTaken(ctx, league._id, args.slug)) {
       refuse({
@@ -73,8 +72,8 @@ export const create = mutation({
       startDate: args.startDate,
       endDate: args.endDate,
       registrationDeadline: args.registrationDeadline,
-      playersPerSide: playersPerSideOfFormat(args.format),
-      minimumRosterSize: args.minimumRosterSize,
+      playersPerSide: league.playersPerSide,
+      minimumRosterSize: league.minimumRosterSize ?? league.playersPerSide,
     });
     return { seasonId };
   },

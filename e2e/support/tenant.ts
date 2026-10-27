@@ -15,6 +15,7 @@ export interface DivisionSeed {
   playersPerSide: number;
   level: 'rec' | 'b' | 'bb' | 'a' | 'aa' | 'open' | 'intermediate' | 'competitive';
   ageGroup: 'adult' | 'over30' | 'over35' | 'over40' | 'over50' | 'over55' | 'over60';
+  minimumRosterSize?: number;
 }
 
 export interface LeagueSeed {

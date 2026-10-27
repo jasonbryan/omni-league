@@ -36,19 +36,11 @@ describe('SeasonCreateForm', () => {
   const formStatus = () => form().querySelector('p[role="status"].sr-only');
   const error = (id: string) => text(page.querySelector(`#${id}-error`)) ?? null;
   const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
-  const format = (key: string) => input(`format-${key}`);
 
   async function type(id: string, value: string) {
     const element = input(id);
     element.value = value;
     element.dispatchEvent(new Event('input'));
-    await o.harness.fixture.whenStable();
-  }
-
-  async function chooseFormat(key: string) {
-    const radio = format(key);
-    radio.checked = true;
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
     await o.harness.fixture.whenStable();
   }
 
@@ -62,7 +54,6 @@ describe('SeasonCreateForm', () => {
     await type('start-date', '2026-09-01');
     await type('end-date', '2026-11-15');
     await type('registration-deadline', '2026-08-25');
-    await chooseFormat('7v7');
   }
 
   const FALL_2026 = {
@@ -72,8 +63,6 @@ describe('SeasonCreateForm', () => {
     startDate: '2026-09-01',
     endDate: '2026-11-15',
     registrationDeadline: '2026-08-25',
-    format: '7v7',
-    minimumRosterSize: 7,
   };
 
   describe('the fields (states 4 and "Messages and attributes")', () => {
@@ -89,11 +78,13 @@ describe('SeasonCreateForm', () => {
         'New seasons start as drafts, which only your staff see.',
       );
       expect(text(submitButton())).toBe('Create draft season');
-      expect(tokens(submitButton().className)).toEqual(tokens(`${PRIMARY_BUTTON} mt-6 w-full`));
+      expect(tokens(submitButton().className)).toEqual(
+        tokens(`${PRIMARY_BUTTON} w-full sm:w-auto`),
+      );
       expect(text(formStatus())).toBe('');
     });
 
-    it('has Name, Slug, three native date fields, and a numeric text Minimum roster size, in focus order', async () => {
+    it('has Name, Slug, and three native date fields, in focus order', async () => {
       await open();
       const fields = [
         ['name', 'Name', 'text'],
@@ -101,7 +92,6 @@ describe('SeasonCreateForm', () => {
         ['start-date', 'Start date', 'date'],
         ['end-date', 'End date', 'date'],
         ['registration-deadline', 'Registration deadline', 'date'],
-        ['minimum-roster-size', 'Minimum roster size', 'text'],
       ] as const;
       for (const [id, label, type] of fields) {
         const field = input(id);
@@ -112,17 +102,12 @@ describe('SeasonCreateForm', () => {
           'off',
         ]);
       }
-      expect(input('minimum-roster-size').getAttribute('inputmode')).toBe('numeric');
       expect([...form().querySelectorAll('input')].map((field) => field.id)).toEqual([
         'name',
         'slug',
         'start-date',
         'end-date',
         'registration-deadline',
-        'format-5v5',
-        'format-7v7',
-        'format-11v11',
-        'minimum-roster-size',
       ]);
     });
 
@@ -140,113 +125,21 @@ describe('SeasonCreateForm', () => {
       expect(text(page.querySelector('#registration-deadline-description'))).toBe(
         'Teams and free agents can register until the end of this day. It must be before the start date.',
       );
-      expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-        'Set when you choose a format. You can raise it, never lower it.',
-      );
-      await chooseFormat('11v11');
-      expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-        'At least 11 for 11v11. Raise it if teams need more players.',
-      );
       expect(input('end-date').getAttribute('aria-describedby')).toBe('end-date-description');
     });
 
-    it('Format is a fieldset of the league’s sport’s formats, none chosen, each described by its minimum', async () => {
+    it('has no Format or Minimum roster size field', async () => {
       await open();
-      const set = page.querySelector<HTMLFieldSetElement>('fieldset#format')!;
-      expect(text(set.querySelector('legend'))).toBe('Format');
-      const radios = [...set.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-      expect(radios.map((r) => [r.id, r.name, r.value, r.checked])).toEqual([
-        ['format-5v5', 'format', '5v5', false],
-        ['format-7v7', 'format', '7v7', false],
-        ['format-11v11', 'format', '11v11', false],
-      ]);
-      expect(
-        radios.map((r) => [
-          text(set.querySelector(`label[for="${r.id}"]`)),
-          text(set.querySelector(`#${r.id}-description`)),
-          r.getAttribute('aria-describedby'),
-        ]),
-      ).toEqual([
-        ['5v5', 'At least 5 players', 'format-5v5-description'],
-        ['7v7', 'At least 7 players', 'format-7v7-description'],
-        ['11v11', 'At least 11 players', 'format-11v11-description'],
-      ]);
-    });
-
-    it('offers beach volleyball’s formats for a beach volleyball league (state 12)', async () => {
-      await open({ ...COED, sport: 'beachVolleyball' });
-      expect(
-        [...page.querySelectorAll<HTMLInputElement>('fieldset#format input')].map((r) => r.value),
-      ).toEqual(['2v2', '4v4', '6v6']);
-    });
-
-    describe('a sport with one format (softball)', () => {
-      const SOFTBALL = { ...COED, sport: 'softball' };
-
-      it('has its only format chosen, Minimum roster size set to its minimum, and the hint naming it', async () => {
-        await open(SOFTBALL);
-        const radios = [...page.querySelectorAll<HTMLInputElement>('fieldset#format input')];
-        expect(radios.map((r) => [r.value, r.checked])).toEqual([['10v10', true]]);
-        expect(input('minimum-roster-size').value).toBe('10');
-        expect(text(page.querySelector('#minimum-roster-size-description'))).toBe(
-          'At least 10 for 10v10. Raise it if teams need more players.',
-        );
-      });
-
-      it('is sent with that format and minimum without the user choosing it', async () => {
-        await open(SOFTBALL);
-        await type('name', 'Fall 2026');
-        await type('start-date', '2026-09-01');
-        await type('end-date', '2026-11-15');
-        await type('registration-deadline', '2026-08-25');
-        await submit();
-        expect(calls()).toEqual([
-          [
-            CREATE_SEASON,
-            expect.objectContaining({ format: '10v10', minimumRosterSize: 10, name: 'Fall 2026' }),
-          ],
-        ]);
-      });
-
-      it('still has it chosen after a season was created, for the next one', async () => {
-        await open(SOFTBALL);
-        await type('name', 'Fall 2026');
-        await type('start-date', '2026-09-01');
-        await type('end-date', '2026-11-15');
-        await type('registration-deadline', '2026-08-25');
-        await submit();
-        o.convex.calls[0].resolve({ seasonId: 'se_new' });
-        await o.flush();
-        expect(input('name').value).toBe('');
-        expect(format('10v10').checked).toBe(true);
-        expect(input('minimum-roster-size').value).toBe('10');
-      });
-
-      it('a sport with several formats still has none chosen', async () => {
-        await open({ ...COED, sport: 'beachVolleyball' });
-        expect(
-          [...page.querySelectorAll<HTMLInputElement>('fieldset#format input')].map(
-            (r) => r.checked,
-          ),
-        ).toEqual([false, false, false]);
-        expect(input('minimum-roster-size').value).toBe('');
-      });
+      expect(page.querySelector('fieldset#format')).toBeNull();
+      expect(form().querySelector('input[type="radio"]')).toBeNull();
+      expect(page.querySelector('#minimum-roster-size')).toBeNull();
+      expect(text(form())).not.toContain('Minimum roster size:');
     });
 
     it('has no limits fieldset: the maximum teams and roster size come later', async () => {
       await open();
       expect(page.querySelector('fieldset#limits')).toBeNull();
       expect(page.querySelector('#maximum-teams')).toBeNull();
-    });
-
-    it('choosing a format sets Minimum roster size to its minimum, again for another format', async () => {
-      await open();
-      expect(input('minimum-roster-size').value).toBe('');
-      await chooseFormat('7v7');
-      expect(input('minimum-roster-size').value).toBe('7');
-      await type('minimum-roster-size', '9');
-      await chooseFormat('11v11');
-      expect(input('minimum-roster-size').value).toBe('11');
     });
 
     it('typing a name fills Slug with slugify(name) until Slug is edited', async () => {
@@ -272,27 +165,17 @@ describe('SeasonCreateForm', () => {
       expect(error('start-date')).toBe('Enter the start date.');
       expect(error('end-date')).toBe('Enter the end date.');
       expect(error('registration-deadline')).toBe('Enter the registration deadline.');
-      expect(error('format')).toBe('Choose a format.');
-      expect(error('minimum-roster-size')).toBe('Enter the minimum roster size.');
       for (const id of ['name', 'slug', 'start-date', 'end-date', 'registration-deadline']) {
         expect(input(id).getAttribute('aria-invalid'), id).toBe('true');
         expect(input(id).getAttribute('aria-describedby'), id).toMatch(new RegExp(`${id}-error$`));
       }
       expect(input('start-date').getAttribute('aria-describedby')).toBe('start-date-error');
       expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
-      expect(input('minimum-roster-size').getAttribute('aria-describedby')).toBe(
-        'minimum-roster-size-description minimum-roster-size-error',
-      );
-      expect(page.querySelector('fieldset#format')?.getAttribute('aria-describedby')).toBe(
-        'format-error',
-      );
-      expect(page.querySelector('#format-error')?.getAttribute('role')).toBe('alert');
-      expect(format('5v5').getAttribute('aria-invalid')).toBe('true');
       expect(document.activeElement).toBe(input('name'));
       expect(calls()).toEqual([]);
     });
 
-    it('focus goes to the first invalid field, in order, down to the first format and Minimum', async () => {
+    it('focus goes to the first invalid field, in order', async () => {
       await open();
       await type('name', 'Fine');
       await type('slug', '');
@@ -309,54 +192,22 @@ describe('SeasonCreateForm', () => {
       expect(document.activeElement).toBe(input('registration-deadline'));
       await type('registration-deadline', '2026-08-25');
       await submit();
-      expect(document.activeElement).toBe(format('5v5'));
-      await chooseFormat('7v7');
-      await type('minimum-roster-size', '');
-      await submit();
-      expect(document.activeElement).toBe(input('minimum-roster-size'));
-      expect(calls()).toEqual([]);
+      expect(calls()).toHaveLength(1);
     });
 
-    it('refused values (state 6): an end before the start, a deadline on the start, a minimum under the format’s', async () => {
+    it('refused values (state 6): an end before the start and a deadline on the start', async () => {
       await open();
       await type('name', 'Spring 2028');
       await type('start-date', '2028-03-01');
       await type('end-date', '2028-02-23');
       await type('registration-deadline', '2028-03-01');
-      await chooseFormat('7v7');
-      await type('minimum-roster-size', '6');
       await submit();
       expect(error('end-date')).toBe('The end date must be on or after the start date.');
       expect(error('registration-deadline')).toBe(
         'The registration deadline must be before the start date, Mar 1, 2028.',
       );
-      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
       expect(error('start-date')).toBeNull();
       expect(document.activeElement).toBe(input('end-date'));
-      expect(calls()).toEqual([]);
-    });
-
-    it('7v7 with a minimum of 6 sends nothing and names 7; with 9 it is sent with 9', async () => {
-      await open();
-      await fill();
-      await type('minimum-roster-size', '6');
-      await submit();
-      expect(error('minimum-roster-size')).toContain('Enter 7 or more');
-      expect(calls()).toEqual([]);
-      await type('minimum-roster-size', '9');
-      expect(error('minimum-roster-size')).toBeNull();
-      await submit();
-      expect(calls()).toEqual([[CREATE_SEASON, { ...FALL_2026, minimumRosterSize: 9 }]]);
-    });
-
-    it('a minimum that is not a whole number or is over 99 gets the range message', async () => {
-      await open();
-      await fill();
-      for (const value of ['7.5', '100', 'seven']) {
-        await type('minimum-roster-size', value);
-        await submit();
-        expect(error('minimum-roster-size'), value).toBe('Enter a whole number from 7 to 99.');
-      }
       expect(calls()).toEqual([]);
     });
 
@@ -389,9 +240,6 @@ describe('SeasonCreateForm', () => {
       await submit();
       await type('name', 'Fine');
       expect(error('name')).toBeNull();
-      await chooseFormat('5v5');
-      expect(error('format')).toBeNull();
-      expect(error('minimum-roster-size')).toBeNull();
       await type('start-date', '2026-09-01');
       expect(error('start-date')).toBeNull();
     });
@@ -416,11 +264,6 @@ describe('SeasonCreateForm', () => {
       await leave('name');
       expect(error('name')).toBe('Use 100 characters or fewer. This name has 101.');
       expect(input('name').getAttribute('aria-invalid')).toBe('true');
-
-      await chooseFormat('7v7');
-      await type('minimum-roster-size', '6');
-      await leave('minimum-roster-size');
-      expect(error('minimum-roster-size')).toBe('7v7 needs at least 7 players. Enter 7 or more.');
     });
 
     it('shows nothing while the user types an invalid partial value', async () => {
@@ -436,8 +279,6 @@ describe('SeasonCreateForm', () => {
         await leave(id);
         expect(error(id), id).toBeNull();
       }
-      await leave('minimum-roster-size');
-      expect(error('minimum-roster-size')).toBeNull();
       await submit();
       expect(error('name')).toBe(SEASON_MESSAGES.nameEmpty);
       expect(error('start-date')).toBe(SEASON_MESSAGES.dateEmpty('startDate'));
@@ -471,6 +312,119 @@ describe('SeasonCreateForm', () => {
         await leave(id);
         expect(error(id), id).toBeNull();
       }
+    });
+  });
+
+  describe('the division from the league (state 7)', () => {
+    const block = () =>
+      page.querySelector<HTMLElement>('section[aria-labelledby="from-league-heading"]')!;
+    const division = () => text(block().querySelector('[data-slot="season-division"]'));
+    const minimum = () => text(block().querySelector('[data-slot="season-minimum"]'));
+    const NO_DIVISION = { ...COED, division: undefined };
+
+    it('shows the league’s division and the minimum its format sets, read-only', async () => {
+      await open();
+      expect(text(block().querySelector('h3'))).toBe('From the league');
+      expect(division()).toBe('Coed · 7v7 · Rec');
+      expect(minimum()).toBe('7 players, set by the 7v7 format');
+      expect(block().querySelector('input, select, textarea, button')).toBeNull();
+    });
+
+    it('says the minimum is raised when the league sets a higher one', async () => {
+      await open({
+        ...COED,
+        division: {
+          ...COED.division,
+          playersPerSide: 6,
+          minimumRosterSize: 8,
+          label: 'Coed · 6v6 · Rec',
+        },
+      });
+      expect(division()).toBe('Coed · 6v6 · Rec');
+      expect(minimum()).toBe('8 players, raised for this league');
+    });
+
+    it('says the format sets the minimum when the league states the same number', async () => {
+      await open({ ...COED, division: { ...COED.division, minimumRosterSize: 7 } });
+      expect(minimum()).toBe('7 players, set by the 7v7 format');
+    });
+
+    it('says Not set yet for a league with no division', async () => {
+      await open(NO_DIVISION);
+      expect(division()).toBe('Not set yet');
+      expect(minimum()).toBe('Not set yet');
+    });
+
+    it('links to the league details and keeps the published seasons note', async () => {
+      await open();
+      const link = block().querySelector<HTMLAnchorElement>('a')!;
+      expect(text(link)).toBe('edit the league details');
+      expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
+      expect(text(block().querySelector('p'))).toBe(
+        'To change them, edit the league details. Seasons already published keep theirs.',
+      );
+    });
+
+    it('a click on the link scrolls to the league details and moves focus into the form', async () => {
+      await open();
+      const scrolled = vi.fn();
+      page.querySelector<HTMLElement>('#details')!.scrollIntoView = scrolled;
+      block().querySelector<HTMLAnchorElement>('a')!.click();
+      await o.harness.fixture.whenStable();
+      expect(scrolled).toHaveBeenCalledOnce();
+      expect(page.querySelector('#details')!.contains(document.activeElement)).toBe(true);
+    });
+
+    it('sends only the name, slug, and dates', async () => {
+      await open();
+      await fill();
+      await submit();
+      expect(calls()).toEqual([[CREATE_SEASON, FALL_2026]]);
+    });
+
+    describe('a league with no format yet', () => {
+      const refuse = () =>
+        o.convex.calls[0].reject(
+          new ConvexError({
+            code: 'leagueFormatMissing',
+            message: SEASON_MESSAGES.leagueFormatMissing,
+          }),
+        );
+
+      const alert = () => form().querySelector<HTMLElement>('[role="alert"][data-slot="alert"]');
+
+      it('shows the message above the action and the details link before anything is pressed', async () => {
+        await open(NO_DIVISION);
+        expect(text(alert())).toBe('Set this league’s format in its details first.');
+        expect(
+          alert()!.compareDocumentPosition(submitButton()) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(block().querySelector('a')!.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
+      });
+
+      it('shows no message for a league that has a division', async () => {
+        await open();
+        expect(alert()).toBeNull();
+      });
+
+      it('focuses the message when the server refuses, and keeps the input', async () => {
+        await open(NO_DIVISION);
+        await fill();
+        await submit();
+        refuse();
+        await o.flush();
+        expect(document.activeElement).toBe(alert());
+        expect(input('name').value).toBe('Fall 2026');
+        expect(form().querySelectorAll('[data-slot="field-error"]')).toHaveLength(0);
+      });
+
+      it('goes away once the league has a division', async () => {
+        await open(NO_DIVISION);
+        o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+        await o.flush();
+        expect(alert()).toBeNull();
+        expect(division()).toBe('Coed · 7v7 · Rec');
+      });
     });
   });
 
@@ -509,8 +463,6 @@ describe('SeasonCreateForm', () => {
       for (const id of ['name', 'slug', 'start-date', 'end-date', 'registration-deadline']) {
         expect(input(id).value, id).toBe('');
       }
-      expect(input('minimum-roster-size').value).toBe('');
-      expect(format('7v7').checked).toBe(false);
       expect(document.activeElement).toBe(submitButton());
       expect(text(submitButton())).toBe('Create draft season');
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
