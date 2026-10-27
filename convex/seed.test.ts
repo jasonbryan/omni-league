@@ -18,7 +18,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 5, locations: 10, customLevels: 1, leagues: 16, seasons: 4 };
+const ROWS = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 4 };
 const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE };
@@ -331,6 +331,19 @@ describe('seed:demo', () => {
         leagues: await ctx.db.query('leagues').collect(),
       })),
     ).toEqual(before);
+  });
+
+  test('the demo admin administers an organization with exactly one location and a league', () => {
+    const administered = seed.DEMO_ACCOUNTS.admin.memberships
+      .filter((membership) => membership.role === 'orgAdmin')
+      .map((membership) => membership.organizationSlug);
+    const single = seed.DEMO.filter(
+      (tenant) =>
+        administered.includes(tenant.organization.slug) &&
+        tenant.locations.length === 1 &&
+        tenant.leagues.length > 0,
+    );
+    expect(single.map((tenant) => tenant.organization.slug)).toEqual(['rockport-sand-volleyball']);
   });
 
   test('every demo organization slug is a valid slug and reserved, so a created organization never gets demo rows', () => {

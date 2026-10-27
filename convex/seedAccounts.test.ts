@@ -23,6 +23,7 @@ const OTHER_PASSWORD = 'a different throwaway phrase 2026';
 const GULF_COAST = 'gulf-coast-sport-social';
 const PORT_ARANSAS = 'port-aransas-beach-volleyball-club';
 const SAGUARO = 'saguaro-valley-softball';
+const ROCKPORT = 'rockport-sand-volleyball';
 const SLOW = 120_000;
 
 function setup() {
@@ -152,7 +153,7 @@ async function membershipsOf(t: T, email: string) {
 }
 
 const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
-const DATA = { organizations: 5, locations: 10, customLevels: 1, leagues: 16, seasons: 4 };
+const DATA = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 4 };
 const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 
 describe('seed:demo accounts: a new deployment', () => {
@@ -164,7 +165,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(result).toEqual({
         ...DATA,
         backfilled: NO_BACKFILL,
-        memberships: 4,
+        memberships: 5,
         invites: 1,
         accounts: ALL('created'),
       });
@@ -189,6 +190,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(await membershipsOf(t, EMAILS.admin)).toEqual([
         { organization: GULF_COAST, role: 'orgAdmin', leagues: [] },
         { organization: PORT_ARANSAS, role: 'orgAdmin', leagues: [] },
+        { organization: ROCKPORT, role: 'orgAdmin', leagues: [] },
         { organization: SAGUARO, role: 'orgAdmin', leagues: [] },
       ]);
       expect(await membershipsOf(t, EMAILS.organizer)).toEqual([
@@ -196,7 +198,7 @@ describe('seed:demo accounts: a new deployment', () => {
       ]);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
       const { memberships, invites, leagues, organizations } = await appRows(t);
-      expect(memberships).toHaveLength(4);
+      expect(memberships).toHaveLength(5);
       expect(invites).toHaveLength(1);
       const gulfCoast = organizations.find((o) => o.slug === GULF_COAST);
       const league = leagues.find((l) => l.slug === 'coed-7v7-rec');
@@ -229,6 +231,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect((await admin.query(api.organizations.listMine, {})).map((o) => o.slug)).toEqual([
         GULF_COAST,
         PORT_ARANSAS,
+        ROCKPORT,
         SAGUARO,
       ]);
       expect(
@@ -366,7 +369,7 @@ describe('seed:demo accounts: a second run', () => {
       expect(second.memberships).toBe(1);
       expect(second.accounts).toEqual(ALL('exists'));
       const after = await appRows(t);
-      expect(after.memberships).toHaveLength(4);
+      expect(after.memberships).toHaveLength(5);
       expect(after.memberships.map((m) => [m.userId, m.organizationId, m.role]).sort()).toEqual(
         before.memberships.map((m) => [m.userId, m.organizationId, m.role]).sort(),
       );
@@ -395,12 +398,12 @@ describe('seed:demo accounts: an address someone else holds', () => {
         player: 'created',
       });
       expect(await membershipsOf(t, EMAILS.organizer)).toEqual([]);
-      expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(3);
+      expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(4);
       expect(await hashes()).toEqual(expect.arrayContaining(hashBefore));
       expect(await authRows(t, 'session')).toEqual(expect.arrayContaining(sessionsBefore));
       expect((await signIn(t, EMAILS.organizer, OTHER_PASSWORD)).status).toBe(200);
       expect((await signIn(t, EMAILS.organizer, PASSWORD)).status).toBe(401);
-      expect(result.memberships).toBe(3);
+      expect(result.memberships).toBe(4);
     },
     SLOW,
   );
@@ -601,9 +604,9 @@ describe('seed:demo accounts: two runs at once', () => {
       expect(third.accounts).toEqual(ALL('exists'));
       const rows = await appRows(t);
       expect(rows.users).toHaveLength(3);
-      expect(rows.memberships).toHaveLength(4);
+      expect(rows.memberships).toHaveLength(5);
       expect(rows.invites).toHaveLength(1);
-      expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(3);
+      expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(4);
       expect(await membershipsOf(t, EMAILS.organizer)).toHaveLength(1);
     },
     SLOW,
@@ -784,7 +787,7 @@ describe('seed:demo accounts: three runs at once', () => {
       expect((await run(t)).accounts).toEqual(ALL('exists'));
       const rows = await appRows(t);
       expect(rows.users).toHaveLength(3);
-      expect(rows.memberships).toHaveLength(4);
+      expect(rows.memberships).toHaveLength(5);
       expect(rows.invites).toHaveLength(1);
     },
     SLOW * 2,
