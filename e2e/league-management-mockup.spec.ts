@@ -339,8 +339,22 @@ function normalize(text: string, organization: string): string {
 }
 
 async function appText(page: Page, organization: string): Promise<string> {
-  // Not `getByRole('main')`: the page behind a dialog is inert, which the role query may skip.
-  return normalize(await page.locator('main#main').innerText(), organization);
+  // Not `getByRole('main')`: the page behind a dialog is inert, which the role query may skip. The
+  // league details are outside this mockup (league-management-details.spec.ts covers them), so
+  // they are hidden while the text is read.
+  const text = await page.locator('main#main').evaluate((main: HTMLElement) => {
+    const apart = [
+      ...main.querySelectorAll<HTMLElement>(
+        '#details, [data-slot="league-division"], a[href$="#details"]',
+      ),
+    ];
+    const displays = apart.map((element) => element.style.display);
+    for (const element of apart) element.style.display = 'none';
+    const read = main.innerText;
+    apart.forEach((element, index) => (element.style.display = displays[index]!));
+    return read;
+  });
+  return normalize(text, organization);
 }
 
 /**
@@ -442,7 +456,7 @@ async function fill(
   await page.locator('#start-date').fill(values.startDate);
   await page.locator('#end-date').fill(values.endDate);
   await page.locator('#registration-deadline').fill(values.registrationDeadline);
-  await page.getByRole('radio', { name: '7v7' }).check();
+  await page.locator('#create-season').getByRole('radio', { name: '7v7' }).check();
   // The format sets the minimum in a later render; a minimum typed before it would be overwritten.
   await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
 }
@@ -669,7 +683,9 @@ for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`/app/organizations/${shared.slug}/leagues/${SLOW_PITCH}`);
       await expect(page.locator('#seasons-list > li')).toHaveCount(1);
-      await expect(page.getByRole('radio', { name: '10v10' })).toBeChecked();
+      await expect(
+        page.locator('#create-season').getByRole('radio', { name: '10v10' }),
+      ).toBeChecked();
       await mockupMatches(page, browser, shared.name, 'draft-league-admin', width, testInfo);
     });
 

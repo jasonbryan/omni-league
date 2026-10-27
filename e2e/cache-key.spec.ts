@@ -199,8 +199,11 @@ test.describe('query strings and the CDN', () => {
       });
       await seedSeasons(tenant, 'pages-league', numberedSeasons(12));
       const path = `${tenant.path}/leagues/pages-league`;
+      // The league page's h3 also name its locations.
       const names = (body: string) =>
-        [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) => name.trim());
+        [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?(Season [^<]*)/g)].map(([, name]) =>
+          name.trim(),
+        );
       const expected: Record<string, string[]> = {
         '?page=2': ['Season 07', 'Season 06', 'Season 05', 'Season 04', 'Season 03'],
         '?page=3': ['Season 02', 'Season 01'],

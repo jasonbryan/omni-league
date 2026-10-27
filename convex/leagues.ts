@@ -6,7 +6,14 @@ import {
   requireLeagueOrganizerOrForbidden,
   requireOrgAdmin,
 } from './lib/access';
-import { genderValidator, standardLevelValidator } from './lib/divisions';
+import {
+  ageGroupValidator,
+  genderValidator,
+  isPlayersPerSideOfSport,
+  standardLevelValidator,
+  type Gender,
+  type StandardLevel,
+} from './lib/divisions';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import {
   checkLeagueAgeGroup,
@@ -20,12 +27,25 @@ import {
   type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
-import { leagueLocationNames } from './lib/publicLeague';
-import { getLeaguePublicPageReturns } from './lib/publicPage';
+import { leaguePageSeasons, leagueLocations } from './lib/publicLeague';
+import { getLeaguePublicPageReturns, type PublicLeaguePage } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
-import { sportName, sportValidator, type Sport } from './lib/sports';
-import { insertDraftLeague, leagueSlugTaken, publishLeague } from './lib/tenantWrites';
+import { ROSTER_SIZE_INPUT_MAX, sportName, sportValidator, type Sport } from './lib/sports';
+import {
+  draftSeasonEarlierValidator,
+  insertDraftLeague,
+  leagueEarlierValidator,
+  leagueHolds,
+  leagueSlugTaken,
+  leagueUpdateEarlierValidator,
+  leagueWrittenValidator,
+  MAX_DRAFT_SEASONS_UPDATED,
+  publishLeague,
+  restoreLeague,
+  updateLeague,
+  type LeagueDivision,
+} from './lib/tenantWrites';
 
 export const ADMIN_LEAGUES_LIMIT = 200;
 
@@ -100,6 +120,40 @@ async function checkedCustomLevel(
   return customLevel;
 }
 
+interface DivisionInput {
+  gender: Gender;
+  playersPerSide: number;
+  level: StandardLevel;
+  customLevelId?: Id<'customLevels'> | undefined;
+  ageGroup: string;
+  minimumRosterSize?: number | undefined;
+}
+
+async function checkedDivision(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport,
+  input: DivisionInput,
+): Promise<LeagueDivision> {
+  const formatError = checkLeagueFormat(sport, input.playersPerSide);
+  if (formatError) refuse(formatError);
+  const minimumError = checkLeagueMinimumRosterSize(input.playersPerSide, input.minimumRosterSize);
+  if (minimumError) refuse(minimumError);
+  const levelError = checkLeagueLevel(sport, input.level);
+  if (levelError) refuse(levelError);
+  const customLevel = await checkedCustomLevel(ctx, organizationId, sport, input.customLevelId);
+  const ageGroup = checkLeagueAgeGroup(input.ageGroup);
+  if (!ageGroup.ok) refuse(ageGroup.error);
+  return {
+    gender: input.gender,
+    playersPerSide: input.playersPerSide,
+    level: customLevel?.standardLevel ?? input.level,
+    ...(customLevel && { customLevelId: customLevel._id }),
+    ageGroup: ageGroup.ageGroup,
+    ...(input.minimumRosterSize !== undefined && { minimumRosterSize: input.minimumRosterSize }),
+  };
+}
+
 export const create = mutation({
   args: {
     organizationId: v.id('organizations'),
@@ -122,20 +176,7 @@ export const create = mutation({
     if (!name.ok) refuse(name.error);
     const slugError = checkLeagueSlug(args.slug);
     if (slugError) refuse(slugError);
-    const formatError = checkLeagueFormat(args.sport, args.playersPerSide);
-    if (formatError) refuse(formatError);
-    const minimumError = checkLeagueMinimumRosterSize(args.playersPerSide, args.minimumRosterSize);
-    if (minimumError) refuse(minimumError);
-    const levelError = checkLeagueLevel(args.sport, args.level);
-    if (levelError) refuse(levelError);
-    const customLevel = await checkedCustomLevel(
-      ctx,
-      args.organizationId,
-      args.sport,
-      args.customLevelId,
-    );
-    const ageGroup = checkLeagueAgeGroup(args.ageGroup);
-    if (!ageGroup.ok) refuse(ageGroup.error);
+    const division = await checkedDivision(ctx, args.organizationId, args.sport, args);
     const locationIds = [...new Set(args.locationIds)];
     const locationsError = checkLeagueLocations(locationIds.length);
     if (locationsError) refuse(locationsError);
@@ -155,18 +196,80 @@ export const create = mutation({
       slug: args.slug,
       sport: args.sport,
       locationIds,
-      division: {
-        gender: args.gender,
-        playersPerSide: args.playersPerSide,
-        level: customLevel?.standardLevel ?? args.level,
-        ...(customLevel && { customLevelId: customLevel._id }),
-        ageGroup: ageGroup.ageGroup,
-        ...(args.minimumRosterSize !== undefined && {
-          minimumRosterSize: args.minimumRosterSize,
-        }),
-      },
+      division,
     });
     return { leagueId };
+  },
+});
+
+export const update = mutation({
+  args: {
+    leagueId: v.id('leagues'),
+    name: v.string(),
+    gender: genderValidator,
+    playersPerSide: v.number(),
+    level: standardLevelValidator,
+    customLevelId: v.optional(v.id('customLevels')),
+    // A string, not the age group validator, so an unknown value is refused with the field's error.
+    ageGroup: v.string(),
+    minimumRosterSize: v.optional(v.number()),
+  },
+  returns: leagueUpdateEarlierValidator,
+  handler: async (ctx, { leagueId, name: typedName, ...input }) => {
+    const { league } = await requireLeagueOrganizer(ctx, leagueId);
+    const name = checkLeagueName(typedName);
+    if (!name.ok) refuse(name.error);
+    const division = await checkedDivision(ctx, league.organizationId, league.sport, input);
+    return updateLeague(ctx, league, { name: name.name, division });
+  },
+});
+
+export const undoUpdate = mutation({
+  args: {
+    leagueId: v.id('leagues'),
+    league: leagueEarlierValidator,
+    draftSeasons: v.array(draftSeasonEarlierValidator),
+    written: leagueWrittenValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, { leagueId, league: values, draftSeasons, written }) => {
+    const { league } = await requireLeagueOrganizer(ctx, leagueId);
+    if (!leagueHolds(league, written)) {
+      refuse({ field: 'name', code: 'changedSince', message: LEAGUE_MESSAGES.changedSince });
+    }
+    // What `update` returned always passes these checks, so a failure is a caller sending its own values.
+    const name = checkLeagueName(values.name);
+    if (!name.ok || draftSeasons.length > MAX_DRAFT_SEASONS_UPDATED) throw new Error('Not allowed');
+    const { gender, playersPerSide, level, ageGroup, customLevelId, minimumRosterSize } = values;
+    // A league without a division cannot be put back to one, so no screen lets a save strip it.
+    if (gender === undefined || playersPerSide === undefined || level === undefined) {
+      throw new Error('Not allowed');
+    }
+    if (ageGroup === undefined) throw new Error('Not allowed');
+    await checkedDivision(ctx, league.organizationId, league.sport, {
+      gender,
+      playersPerSide,
+      level,
+      ageGroup,
+      customLevelId,
+      minimumRosterSize,
+    });
+    for (const season of draftSeasons) {
+      if (
+        !isPlayersPerSideOfSport(league.sport, season.playersPerSide) ||
+        !Number.isInteger(season.minimumRosterSize) ||
+        season.minimumRosterSize < season.playersPerSide ||
+        season.minimumRosterSize > ROSTER_SIZE_INPUT_MAX
+      ) {
+        throw new Error('Not allowed');
+      }
+    }
+    await restoreLeague(ctx, league, {
+      league: { ...values, name: name.name },
+      draftSeasons,
+      written,
+    });
+    return null;
   },
 });
 
@@ -192,6 +295,50 @@ export const publishedCount = query({
   },
 });
 
+const organizerDivisionValidator = v.object({
+  gender: genderValidator,
+  playersPerSide: v.number(),
+  level: standardLevelValidator,
+  customLevel: v.optional(v.object({ customLevelId: v.id('customLevels'), name: v.string() })),
+  ageGroup: ageGroupValidator,
+  minimumRosterSize: v.optional(v.number()),
+  label: v.string(),
+});
+
+// A league not yet backfilled with a division has none.
+async function organizerDivision(ctx: QueryCtx, league: Doc<'leagues'>) {
+  const { gender, playersPerSide, level, ageGroup } = league;
+  const label = await leagueDivisionLabel(ctx, league);
+  if (
+    gender === undefined ||
+    playersPerSide === undefined ||
+    level === undefined ||
+    ageGroup === undefined ||
+    label === undefined
+  ) {
+    return null;
+  }
+  const customLevel =
+    league.customLevelId === undefined
+      ? null
+      : await ctx.db.get('customLevels', league.customLevelId);
+  const ownCustomLevel =
+    customLevel?.organizationId === league.organizationId && customLevel.sport === league.sport
+      ? customLevel
+      : null;
+  return {
+    gender,
+    playersPerSide,
+    level,
+    ...(ownCustomLevel && {
+      customLevel: { customLevelId: ownCustomLevel._id, name: ownCustomLevel.name },
+    }),
+    ageGroup,
+    ...(league.minimumRosterSize !== undefined && { minimumRosterSize: league.minimumRosterSize }),
+    label,
+  };
+}
+
 export const getOrganizerContext = query({
   args: { orgSlug: v.string(), leagueSlug: v.string() },
   returns: v.union(
@@ -205,6 +352,8 @@ export const getOrganizerContext = query({
       locationNames: v.array(v.string()),
       role: roleValidator,
       organization: v.object({ name: v.string(), slug: v.string() }),
+      organizationId: v.id('organizations'),
+      division: v.optional(organizerDivisionValidator),
     }),
   ),
   handler: async (ctx, args) => {
@@ -218,6 +367,7 @@ export const getOrganizerContext = query({
       const location = await ctx.db.get('locations', id);
       if (location?.organizationId === organization._id) locationNames.push(location.name);
     }
+    const division = await organizerDivision(ctx, league);
     return {
       leagueId: league._id,
       name: league.name,
@@ -227,6 +377,8 @@ export const getOrganizerContext = query({
       locationNames,
       role: access.membership.role,
       organization: { name: organization.name, slug: organization.slug },
+      organizationId: organization._id,
+      ...(division && { division }),
     };
   },
 });
@@ -235,17 +387,22 @@ export const getOrganizerContext = query({
 export const getPublicPage = query({
   args: { orgSlug: v.string(), leagueSlug: v.string() },
   returns: getLeaguePublicPageReturns,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicLeaguePage | null> => {
     const found = await findLeagueBySlugs(ctx, args);
     // A draft answers like an unknown league, so nothing public says whether its slug exists.
     if (found?.league.status !== 'published') return null;
     const { organization, league } = found;
+    const locations = await leagueLocations(ctx, organization, league);
+    const divisionLabel = await leagueDivisionLabel(ctx, league);
     return {
       organization: { name: organization.name, slug: organization.slug },
       name: league.name,
       slug: league.slug,
       sportName: sportName(league.sport),
-      locationNames: await leagueLocationNames(ctx, organization, league),
+      ...(divisionLabel !== undefined && { divisionLabel }),
+      locationNames: locations.map((location) => location.name),
+      locations,
+      seasons: await leaguePageSeasons(ctx, league),
     };
   },
 });

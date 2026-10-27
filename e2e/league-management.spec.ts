@@ -67,7 +67,7 @@ async function fillFall2026(page: Page, minimum?: string) {
   await page.locator('#start-date').fill('2026-09-01');
   await page.locator('#end-date').fill('2026-11-15');
   await page.locator('#registration-deadline').fill('2026-08-25');
-  await page.getByRole('radio', { name: '7v7' }).check();
+  await page.locator('#create-season').getByRole('radio', { name: '7v7' }).check();
   await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
   if (minimum !== undefined) await page.locator('#minimum-roster-size').fill(minimum);
 }
@@ -92,7 +92,9 @@ test.describe('League management: an org admin', () => {
     await expect(status).toContainText('Fall 2026 created as a draft.');
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#minimum-roster-size')).toHaveValue('');
-    await expect(page.getByRole('radio', { name: '7v7' })).not.toBeChecked();
+    await expect(
+      page.locator('#create-season').getByRole('radio', { name: '7v7' }),
+    ).not.toBeChecked();
     await expect(submit(page)).toBeFocused();
 
     await expect(rows(page)).toHaveCount(1);
@@ -175,8 +177,8 @@ test.describe('League management: an org admin', () => {
       await page.locator('#start-date').fill('2026-09-01');
       await page.locator('#end-date').fill('2026-11-15');
       await page.locator('#registration-deadline').fill('2026-08-25');
-      await expect(page.getByRole('radio')).toHaveCount(3);
-      await page.getByRole('radio', { name: '4v4' }).check();
+      await expect(page.locator('#create-season').getByRole('radio')).toHaveCount(3);
+      await page.locator('#create-season').getByRole('radio', { name: '4v4' }).check();
       await submit(page).click();
       await expect(rows(page)).toHaveCount(1);
       await expect(rows(page).first()).toContainText('4v4 · at least 4 players');
@@ -233,8 +235,8 @@ test.describe('League management: an org admin', () => {
     await page.locator('#start-date').fill('2026-09-01');
     await page.locator('#end-date').fill('2026-11-15');
     await page.locator('#registration-deadline').fill('2026-08-25');
-    await expect(page.getByRole('radio')).toHaveCount(1);
-    await page.getByRole('radio', { name: '10v10' }).check();
+    await expect(page.locator('#create-season').getByRole('radio')).toHaveCount(1);
+    await page.locator('#create-season').getByRole('radio', { name: '10v10' }).check();
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page).first()).toContainText('10v10 · at least 10 players');

@@ -9,14 +9,15 @@ import {
   type SeasonInputError,
 } from './lib/seasonInput';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
-import { leagueLocationNames } from './lib/publicLeague';
-import { leagueLocationsWithAddress, leagueUpcomingSeasons } from './lib/publicSeason';
+import { leagueLocationNames, leagueLocations } from './lib/publicLeague';
+import { leagueUpcomingSeasons } from './lib/publicSeason';
 import {
   getSeasonPublicPageReturns,
   publicOpenSeasonsValidator,
   publicSeasonsValidator,
   type PublicOpenSeasons,
   type PublicSeasonPage,
+  type PublicSeasons,
 } from './lib/publicPage';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import {
@@ -140,7 +141,7 @@ const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
 export const listPublic = query({
   args: { orgSlug: v.string(), leagueSlug: v.string(), page: v.number() },
   returns: publicSeasonsValidator,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicSeasons> => {
     const found = await findLeagueBySlugs(ctx, args);
     if (found?.league.status !== 'published') return EMPTY_LIST;
     const { league } = found;
@@ -160,6 +161,7 @@ export const listPublic = query({
         slug: season.slug,
         startDate: season.startDate,
         endDate: season.endDate,
+        registrationDeadline: season.registrationDeadline,
         formatName: formatLabel(seasonPlayersPerSide(season)),
       })),
       page,
@@ -187,7 +189,7 @@ export const getPublicPage = query({
         sportName: sportName(league.sport),
         locationNames: await leagueLocationNames(ctx, organization, league),
         ...(divisionLabel !== undefined && { divisionLabel }),
-        locations: await leagueLocationsWithAddress(ctx, organization, league),
+        locations: await leagueLocations(ctx, organization, league),
         upcomingSeasons: await leagueUpcomingSeasons(ctx, league),
       },
       name: season.name,
