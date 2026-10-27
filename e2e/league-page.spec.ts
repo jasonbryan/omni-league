@@ -374,7 +374,9 @@ test.describe('public league page: raw server HTML', () => {
         `Closes ${formatCalendarDate(OPEN_SEASON.registrationDeadline!)}`,
       );
       expect(card).toMatch(
-        new RegExp(`<a\\b[^>]*data-slot="button"[^>]*href="${path}/seasons/open-season"[^>]*>`),
+        new RegExp(
+          `<a\\b[^>]*data-slot="button"[^>]*href="${path}/seasons/open-season#registration"[^>]*>`,
+        ),
       );
       expect(plainText(card)).toContain('Register for Open Season');
       expect(html.indexOf('id="registration-open"')).toBeLessThan(html.indexOf('id="seasons"'));
@@ -502,7 +504,7 @@ test.describe('public league page in the browser', () => {
     await page.goto(path);
     await hydrated(consoleGuard);
     await page.getByRole('link', { name: 'Register for Open Season' }).click();
-    await expect(page).toHaveURL(`${baseURL}${path}/seasons/open-season`);
+    await expect(page).toHaveURL(`${baseURL}${path}/seasons/open-season#registration`);
     await page.goBack();
     await page.getByRole('link', { name: 'Current Season' }).click();
     await expect(page).toHaveURL(`${baseURL}${path}/seasons/current-season`);

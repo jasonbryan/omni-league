@@ -54,7 +54,7 @@ test.describe('public layout: raw server HTML', () => {
     RAW_HTTP,
     async ({ request }) => {
       const { tenant, paths } = await seed();
-      const headings = [tenant.name, LEAGUE, 'Summer 2027'];
+      const headings = [tenant.name, LEAGUE, `${LEAGUE}&nbsp;· Summer 2027`];
 
       for (const [i, path] of paths.entries()) {
         const { status, headers, html } = await fetchRawHtml(request, path);

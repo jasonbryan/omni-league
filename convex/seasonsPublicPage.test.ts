@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
@@ -86,7 +86,7 @@ const get = (t: T, orgSlug: string, leagueSlug: string, seasonSlug: string) =>
   t.query(api.seasons.getPublicPage, { orgSlug, leagueSlug, seasonSlug });
 
 describe('seasons.getPublicPage', () => {
-  test('returns the organization, the league with its sport name and location names in its own order, and the season’s dates, format name, and minimum roster size', async () => {
+  test('returns the organization, the league with its sport name, location names in its own order with their addresses, and the season’s dates, deadline, format name, and minimum roster size', async () => {
     const t = await setup();
     const page = await get(t, 'org-a', 'sand-4s', 'summer-2027');
     expect(page).toEqual({
@@ -96,21 +96,50 @@ describe('seasons.getPublicPage', () => {
         slug: 'sand-4s',
         sportName: 'Beach volleyball',
         locationNames: ['Beta Courts', 'Alpha Field'],
+        locations: [
+          { name: 'Beta Courts', address: '2 Beta St' },
+          { name: 'Alpha Field', address: '1 Alpha St' },
+        ],
+        upcomingSeasons: [
+          {
+            name: 'Summer 2027',
+            slug: 'summer-2027',
+            startDate: '2027-06-06',
+            registrationDeadline: '2027-05-30',
+          },
+        ],
       },
       name: 'Summer 2027',
       slug: 'summer-2027',
       startDate: '2027-06-06',
       endDate: '2027-08-29',
+      registrationDeadline: '2027-05-30',
       formatName: '4v4',
       minimumRosterSize: 5,
     });
   });
 
-  test('holds no id, creation time, status, registration deadline, or counter', async () => {
+  test('holds no id, creation time, status, or counter', async () => {
     const t = await setup();
     const page = await get(t, 'org-a', 'sand-4s', 'summer-2027');
-    expect(JSON.stringify(page)).not.toMatch(
-      /_id|_creationTime|Id"|status|registration|Count|deadline/i,
+    expect(JSON.stringify(page)).not.toMatch(/_id|_creationTime|Id"|status|Count/i);
+  });
+
+  test('carries the league division label once the league has a division', async () => {
+    const t = await setup();
+    expect((await get(t, 'org-a', 'sand-4s', 'summer-2027'))?.league.divisionLabel).toBeUndefined();
+    await t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (candidate) => candidate.slug === 'sand-4s' && candidate.name === 'Sand 4s',
+      )!;
+      await ctx.db.patch('leagues', league._id, {
+        gender: 'coed',
+        playersPerSide: 4,
+        level: 'rec',
+      });
+    });
+    expect((await get(t, 'org-a', 'sand-4s', 'summer-2027'))?.league.divisionLabel).toBe(
+      'Coed · 4v4 · Rec',
     );
   });
 
@@ -188,6 +217,60 @@ describe('seasons.getPublicPage', () => {
     });
     const page = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
     expect(page?.league.locationNames).toEqual(['Alpha Field']);
+  });
+
+  test('upcomingSeasons holds at most three published seasons of the league, newest deadline first, with no draft', async () => {
+    const t = await setup();
+    await t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').collect()).find(
+        (candidate) => candidate.slug === 'coed-7v7',
+      )!;
+      const deadlines: [string, string][] = [
+        ['s1', '2026-01-10'],
+        ['s2', '2026-02-10'],
+        ['s3', '2026-03-10'],
+        ['s4', '2026-04-10'],
+        ['s5', '2026-05-10'],
+      ];
+      for (const [slug, registrationDeadline] of deadlines) {
+        await insertSeason(
+          ctx,
+          league,
+          { ...SUMMER, name: slug.toUpperCase(), slug, registrationDeadline },
+          'published',
+        );
+      }
+      await insertSeason(
+        ctx,
+        league,
+        { ...SUMMER, name: 'Hidden', slug: 'hidden', registrationDeadline: '2030-01-01' },
+        'draft',
+      );
+    });
+    const page = await get(t, 'org-a', 'coed-7v7', 'coed-summer');
+    expect(page?.league.upcomingSeasons?.map((season) => season.slug)).toEqual([
+      'coed-summer',
+      's5',
+      's4',
+    ]);
+  });
+
+  test('upcomingSeasons never holds a draft season or a season of another league or organization', async () => {
+    const t = await setup();
+    const page = await get(t, 'org-a', 'sand-4s', 'summer-2027');
+    expect(page?.league.upcomingSeasons?.map((season) => season.slug)).toEqual(['summer-2027']);
+    expect(JSON.stringify(page)).not.toMatch(/draft-season|b-season|coed-summer/);
+  });
+
+  test('reads no time: the query never calls the clock', async () => {
+    const t = await setup();
+    const now = vi.spyOn(Date, 'now');
+    try {
+      expect(await get(t, 'org-a', 'sand-4s', 'summer-2027')).not.toBeNull();
+      expect(now).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
   });
 
   test('is public: an anonymous caller reads it, and no argument names an id', async () => {

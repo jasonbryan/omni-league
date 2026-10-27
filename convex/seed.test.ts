@@ -1206,6 +1206,25 @@ describe('seed:demo seasons dated from the run', () => {
     ]);
   });
 
+  test('gives the closed demo season a later open season of its league to link to, and the open one its address and division', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const slugs = { orgSlug: 'gulf-coast-sport-social', leagueSlug: 'coed-7v7-rec' };
+    const closed = await t.query(api.seasons.getPublicPage, {
+      ...slugs,
+      seasonSlug: 'next-season',
+    });
+    const upcoming = closed?.league.upcomingSeasons ?? [];
+    expect(upcoming.map((season) => season.slug)).toContain('summer-2027');
+    const next = upcoming.find(
+      (season) => season.slug !== 'next-season' && registrationIsOpen(season, RUN),
+    );
+    expect(next?.slug).toBe('summer-2027');
+    const open = await t.query(api.seasons.getPublicPage, { ...slugs, seasonSlug: 'summer-2027' });
+    expect(open?.league.locations?.[0]?.address).toMatch(/Corpus Christi/);
+    expect(open?.league.divisionLabel).toBe('Coed · 7v7 · Rec');
+  });
+
   test('shows the public league pages their card, statuses, and empty state', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
