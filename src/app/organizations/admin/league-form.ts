@@ -47,6 +47,7 @@ export interface LeagueValues {
   gender: Gender;
   playersPerSide: number;
   level: StandardLevel;
+  customLevelId?: Id<'customLevels'>;
   ageGroup: AgeGroup;
   minimumRosterSize?: number;
 }
@@ -195,7 +196,7 @@ export class LeagueForm {
       sport: this.untilChanged(() => this.sport()),
       format: this.untilChanged(() => this.division.playersPerSide()),
       minimumRosterSize: this.untilChanged(() => this.division.minimumText()),
-      level: this.untilChanged(() => this.division.level()),
+      level: this.untilChanged(() => `${this.division.level()}/${this.division.customLevelId()}`),
       ageGroup: this.untilChanged(() => this.division.ageGroup()),
       locations: this.untilChanged(() => this.chosen()),
     };
@@ -273,6 +274,7 @@ export class LeagueForm {
 
     const { name, slug } = this.model();
     const minimumRosterSize = this.division.minimumRosterSize();
+    const customLevelId = this.division.customLevelId();
     const values: LeagueValues = {
       name: name.trim(),
       slug,
@@ -281,6 +283,7 @@ export class LeagueForm {
       gender: this.division.gender(),
       playersPerSide: this.division.playersPerSide()!,
       level: this.division.level(),
+      ...(customLevelId !== null && { customLevelId }),
       ageGroup: this.division.ageGroup(),
       ...(minimumRosterSize !== undefined && { minimumRosterSize }),
     };

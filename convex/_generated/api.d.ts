@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as customLevels from "../customLevels.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
@@ -16,6 +17,7 @@ import type * as leagues from "../leagues.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_authOrigins from "../lib/authOrigins.js";
 import type * as lib_authUsers from "../lib/authUsers.js";
+import type * as lib_customLevelInput from "../lib/customLevelInput.js";
 import type * as lib_divisions from "../lib/divisions.js";
 import type * as lib_forbidden from "../lib/forbidden.js";
 import type * as lib_inviteInput from "../lib/inviteInput.js";
@@ -60,6 +62,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  customLevels: typeof customLevels;
   health: typeof health;
   http: typeof http;
   invites: typeof invites;
@@ -67,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "lib/access": typeof lib_access;
   "lib/authOrigins": typeof lib_authOrigins;
   "lib/authUsers": typeof lib_authUsers;
+  "lib/customLevelInput": typeof lib_customLevelInput;
   "lib/divisions": typeof lib_divisions;
   "lib/forbidden": typeof lib_forbidden;
   "lib/inviteInput": typeof lib_inviteInput;

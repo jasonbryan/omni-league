@@ -290,6 +290,14 @@ export async function insertCustomLevel(
   });
 }
 
+// The caller has checked access and that no league uses it.
+export async function deleteCustomLevel(
+  ctx: MutationCtx,
+  customLevelId: Id<'customLevels'>,
+): Promise<void> {
+  await ctx.db.delete('customLevels', customLevelId);
+}
+
 export async function insertDraftLeague(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,

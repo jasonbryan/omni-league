@@ -1,4 +1,7 @@
+import type { Id } from '../../../../convex/_generated/dataModel';
 import { filledFromNameMessage, LeagueDivision } from './league-division';
+
+const GOLD = { customLevelId: 'gold' as Id<'customLevels'>, standardLevel: 'a' as const };
 
 const NAME = "Wednesday Women's 2s BB";
 
@@ -169,6 +172,79 @@ describe('LeagueDivision', () => {
       division.setMinimumText('abc');
       expect(division.minimumRosterSize()).toBeNaN();
     });
+  });
+});
+
+describe('LeagueDivision: a custom level', () => {
+  it('chooses the custom level and the standard level it filters as', () => {
+    const division = new LeagueDivision();
+    division.chooseCustomLevel(GOLD);
+    expect([division.customLevelId(), division.level()]).toEqual([GOLD.customLevelId, 'a']);
+  });
+
+  it('is left when a standard level is chosen', () => {
+    const division = new LeagueDivision();
+    division.chooseCustomLevel(GOLD);
+    division.chooseLevel('bb');
+    expect([division.customLevelId(), division.level()]).toEqual([null, 'bb']);
+  });
+
+  it('is not overwritten by a level the name states', () => {
+    const division = new LeagueDivision();
+    division.chooseCustomLevel(GOLD);
+    division.fillFromName('Tuesday BB', 'beachVolleyball');
+    expect([division.customLevelId(), division.level()]).toEqual([GOLD.customLevelId, 'a']);
+  });
+
+  it('is cleared with Level reset to Rec when the sport changes, even to a sport with its standard level', () => {
+    const division = new LeagueDivision();
+    division.chooseCustomLevel({ customLevelId: GOLD.customLevelId, standardLevel: 'rec' });
+    division.sportChanged('soccer');
+    expect([division.customLevelId(), division.level()]).toEqual([null, 'rec']);
+    division.fillFromName('Tuesday Competitive', 'soccer');
+    expect(division.level()).toBe('competitive');
+  });
+
+  it('undo restores the level chosen before, and forgets the custom level', () => {
+    const division = new LeagueDivision();
+    division.chooseLevel('bb');
+    division.chooseCustomLevel(GOLD);
+    division.undoCustomLevel(GOLD.customLevelId);
+    expect([division.customLevelId(), division.level()]).toEqual([null, 'bb']);
+  });
+
+  it('undo restores a level the name filled, so the name can still change it', () => {
+    const division = new LeagueDivision();
+    division.fillFromName('Tuesday BB', 'beachVolleyball');
+    division.chooseCustomLevel(GOLD);
+    division.undoCustomLevel(GOLD.customLevelId);
+    expect([division.level(), division.filledFromName()]).toEqual(['bb', ['level']]);
+    division.fillFromName('Tuesday AA', 'beachVolleyball');
+    expect(division.level()).toBe('aa');
+  });
+
+  it('undo restores an earlier custom level', () => {
+    const division = new LeagueDivision();
+    const silver = { customLevelId: 'silver' as Id<'customLevels'>, standardLevel: 'b' as const };
+    division.chooseCustomLevel(silver);
+    division.chooseCustomLevel(GOLD);
+    division.undoCustomLevel(GOLD.customLevelId);
+    expect([division.customLevelId(), division.level()]).toEqual([silver.customLevelId, 'b']);
+  });
+
+  it('undo leaves the choice alone when another level was chosen since', () => {
+    const division = new LeagueDivision();
+    division.chooseCustomLevel(GOLD);
+    division.chooseLevel('aa');
+    division.undoCustomLevel(GOLD.customLevelId);
+    expect([division.customLevelId(), division.level()]).toEqual([null, 'aa']);
+  });
+
+  it('clear() leaves no custom level', () => {
+    const division = new LeagueDivision();
+    division.chooseCustomLevel(GOLD);
+    division.clear();
+    expect([division.customLevelId(), division.level()]).toEqual([null, 'rec']);
   });
 });
 

@@ -156,15 +156,15 @@ function writeStub(dir, name, lines) {
 /**
  * @param {string} jobName
  * @param {string} name
- * @param {{ env?: Record<string, string>, stubs?: (dir: string) => void }} options
+ * @param {{ env?: Record<string, string>, stubs?: (dir: string) => void, prelude?: string }} options
  */
-function runStep(jobName, name, { env = {}, stubs = () => {} } = {}) {
+function runStep(jobName, name, { env = {}, stubs = () => {}, prelude = '' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'staging-rebuild-'));
   try {
     stubs(dir);
     const output = join(dir, 'github-output');
     writeFileSync(output, '');
-    const result = spawnSync('bash', ['-e', '-c', stepScript(jobName, name)], {
+    const result = spawnSync('bash', ['-e', '-c', `${prelude}${stepScript(jobName, name)}`], {
       cwd: dir,
       encoding: 'utf8',
       env: {
@@ -195,10 +195,14 @@ function runStep(jobName, name, { env = {}, stubs = () => {} } = {}) {
   }
 }
 
+// Unset, SECONDS stops tracking wall time, so the poll limit counts sleeps.
+const VIRTUAL_CLOCK = 'unset SECONDS; SECONDS=0\nsleep() { SECONDS=$((SECONDS + $1)); }\n';
+
 /** @param {string} dir */
 function curlStub(dir) {
   writeStub(dir, 'curl', [
     'echo "$*" >> "$STUB_DIR/calls"',
+    '[ -z "$STUB_DELAY" ] || sleep "$STUB_DELAY"',
     'for url; do :; done',
     'case "$url" in',
     '  */staging-slot.txt)',
@@ -320,14 +324,14 @@ describe('the trigger step with the real curl', () => {
 
 describe('the verify step', () => {
   const page = 'Gulf Coast Sport &amp; Social';
-  // bash counts whole seconds, so a limit of 1 can end in under a second.
-  const fast = { POLL_SECONDS: '0.05', POLL_LIMIT_SECONDS: '5' };
+  const tenPolls = { POLL_SECONDS: '1', POLL_LIMIT_SECONDS: '10' };
 
   /** @param {Record<string, string>} env */
   function verify(env) {
     return runStep('rebuild', 'verify', {
-      env: { PAGE_STATUS: '200', PAGE_BODY: page, ...fast, ...env },
+      env: { PAGE_STATUS: '200', PAGE_BODY: page, ...tenPolls, ...env },
       stubs: curlStub,
+      prelude: VIRTUAL_CLOCK,
     });
   }
 
@@ -351,11 +355,20 @@ describe('the verify step', () => {
     assert.equal(run.status, 0, run.output);
   });
 
+  it('counts polls, not wall time, when every read is slow', () => {
+    const run = verify({
+      SLOT_BEFORE: 'staging-a',
+      SLOT_READS: `${EMPTY_BODY} garbage staging-b`,
+      POLL_LIMIT_SECONDS: '2',
+      STUB_DELAY: '1.1',
+    });
+    assert.equal(run.status, 0, run.output);
+  });
+
   it('does not count an unreadable body as a flip while waiting', () => {
     const run = verify({
       SLOT_BEFORE: 'staging-a',
       SLOT_READS: `${EMPTY_BODY} garbage staging-a`,
-      POLL_LIMIT_SECONDS: '1',
     });
     assert.equal(run.status, 1);
     assert.match(run.output, /::error[^\n]*still reads staging-a/);
@@ -366,7 +379,6 @@ describe('the verify step', () => {
     const run = verify({
       SLOT_BEFORE: 'staging-a',
       SLOT_READS: 'staging-a',
-      POLL_LIMIT_SECONDS: '1',
     });
     assert.equal(run.status, 1);
     assert.equal(run.output.match(/::error/g)?.length, 1);
@@ -375,7 +387,7 @@ describe('the verify step', () => {
   });
 
   it('names unknown as the last slot when the file never becomes readable', () => {
-    const run = verify({ SLOT_BEFORE: 'unknown', SLOT_READS: EMPTY_BODY, POLL_LIMIT_SECONDS: '1' });
+    const run = verify({ SLOT_BEFORE: 'unknown', SLOT_READS: EMPTY_BODY });
     assert.equal(run.status, 1);
     assert.match(run.output, /::error[^\n]*still reads unknown/);
   });
