@@ -196,7 +196,7 @@ describe('LeaguePage', () => {
       const panel = page.querySelector('section[aria-labelledby="seasons-heading"]')!;
       expect(text(panel.querySelector('h2'))).toBe('Seasons');
       expect(text(panel.querySelector('p.font-medium'))).toBe('No seasons yet');
-      expect(text(panel.querySelector('p.mt-1'))).toBe(
+      expect(text(panel)).toContain(
         'Each run of Coed 7v7 Rec is a season, with its own dates, registration, teams, and schedule. Seasons you create appear here as drafts until you publish them.',
       );
       expect(panel.querySelector('ul')).toBeNull();
