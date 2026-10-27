@@ -132,7 +132,7 @@ describe('organizations.create', () => {
       'a'.repeat(61),
       ...DEMO_ORGANIZATION_SLUGS,
     ];
-    expect(slugs).toHaveLength(14);
+    expect(slugs).toHaveLength(15);
     for (const slug of slugs) {
       const data = await refusal(a.mutation(api.organizations.create, { name: 'Org', slug }));
       expect(data, slug).toEqual({ field: 'slug', code: 'slugInvalid', message: FORMAT_MESSAGE });
