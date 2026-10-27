@@ -31,9 +31,9 @@ export const BADGE_TEXT: Record<SeasonPhase, string> = {
   ended: 'Ended',
 };
 
-/** "May 19" from a stored calendar date, read as text so the server and a browser in any time zone agree. */
 export const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** "May 19" from a stored calendar date, read as text so the server and a browser in any time zone agree. */
 export function closesText(registrationDeadline: string): string {
   return formatCalendarDate(registrationDeadline).replace(/, \d+$/, '');
 }
