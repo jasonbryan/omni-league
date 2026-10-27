@@ -13,9 +13,11 @@ export const publicSportValidator = v.object({
   locationCount: v.number(),
 });
 
+// `cityState` is optional so a copy saved before it existed stays valid.
 export const publicPageValidator = v.object({
   name: v.string(),
   slug: v.string(),
+  cityState: v.optional(v.string()),
   leagueCount: v.number(),
   locationCount: v.number(),
   sportCount: v.number(),

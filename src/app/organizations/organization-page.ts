@@ -189,11 +189,12 @@ export class OrganizationPage {
       const page = this.organization();
       if (!page || !this.leagueRows() || !this.locationRows()) return null;
       const sport = this.sport();
+      const inCity = page.cityState === undefined ? '' : ` in ${page.cityState}`;
       if (!sport) {
         return {
           title: `${page.name} | Omni League`,
           ogTitle: page.name,
-          ogDescription: `Leagues and locations of ${page.name} on Omni League.`,
+          ogDescription: `Leagues and locations of ${page.name} on Omni League${inCity}.`,
           ogType: 'website',
           path: organizationPath(page.slug),
         };
@@ -201,7 +202,7 @@ export class OrganizationPage {
       return {
         title: `${sport.name} | ${page.name} | Omni League`,
         ogTitle: `${sport.name} | ${page.name}`,
-        ogDescription: `${sport.name} leagues and locations of ${page.name} on Omni League.`,
+        ogDescription: `${sport.name} leagues and locations of ${page.name} on Omni League${inCity}.`,
         ogType: 'website',
         path: sportViewCanonicalPath(page.slug, sport.segment, this.leaguePaging()?.page ?? 1),
       };

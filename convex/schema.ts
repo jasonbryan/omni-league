@@ -25,6 +25,7 @@ export default defineSchema({
   organizations: defineTable({
     name: v.string(),
     slug: v.string(),
+    cityState: v.optional(v.string()),
     leagueCount: v.optional(v.number()),
     locationCount: v.optional(v.number()),
     sportLeagueCounts: v.optional(sportCountsValidator),

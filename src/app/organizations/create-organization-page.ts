@@ -25,8 +25,10 @@ import {
 import { ConvexError } from 'convex/values';
 import { api } from '../../../convex/_generated/api';
 import {
+  checkCityState,
   checkOrganizationName,
   checkOrganizationSlug,
+  CITY_STATE_HINT,
   ORGANIZATION_MESSAGES,
   type OrganizationInputError,
 } from '../../../convex/lib/organizationInput';
@@ -45,11 +47,12 @@ export const MESSAGES = {
 
 const RESERVED_SLUG = 'new';
 
-type FieldName = 'name' | 'slug';
-const FIELDS: readonly FieldName[] = ['name', 'slug'];
+type FieldName = 'name' | 'cityState' | 'slug';
+const FIELDS: readonly FieldName[] = ['name', 'cityState', 'slug'];
 
 interface CreateModel {
   name: string;
+  cityState: string;
   slug: string;
 }
 
@@ -65,7 +68,9 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
   const data: unknown = failure.data;
   if (typeof data !== 'object' || data === null) return null;
   const { field, code, message } = data as Record<string, unknown>;
-  if ((field !== 'name' && field !== 'slug') || typeof code !== 'string') return null;
+  if ((field !== 'name' && field !== 'cityState' && field !== 'slug') || typeof code !== 'string') {
+    return null;
+  }
   if (typeof message !== 'string') return null;
   return { field, code: code as OrganizationInputError['code'], message };
 }
@@ -196,6 +201,57 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                   role="group"
                   data-slot="field"
                   data-orientation="vertical"
+                  [attr.data-matches-spartan-invalid]="errors.cityState() ? 'true' : null"
+                  [attr.data-invalid]="errors.cityState() ? 'true' : null"
+                  class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                >
+                  <label
+                    for="cityState"
+                    data-slot="field-label"
+                    class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                    >City, state</label
+                  >
+                  <input
+                    #cityState
+                    id="cityState"
+                    type="text"
+                    data-slot="input"
+                    autocomplete="off"
+                    [formField]="fields.cityState"
+                    (blur)="left('cityState')"
+                    [attr.aria-describedby]="describedBy('cityState', 'cityState-description')"
+                    [attr.aria-invalid]="errors.cityState() ? 'true' : null"
+                    [attr.data-invalid]="errors.cityState() ? 'true' : null"
+                    [attr.data-matches-spartan-invalid]="errors.cityState() ? 'true' : null"
+                    class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                  />
+                  <p
+                    data-slot="field-description"
+                    id="cityState-description"
+                    class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                  >
+                    {{ cityStateHint }}
+                  </p>
+                  @if (errors.cityState(); as error) {
+                    <div
+                      role="alert"
+                      data-slot="field-error"
+                      id="cityState-error"
+                      class="text-destructive text-sm font-normal flex items-start gap-1.5"
+                    >
+                      <ng-icon
+                        name="lucideCircleAlert"
+                        class="mt-0.5 shrink-0 text-base"
+                        aria-hidden="true"
+                      />
+                      <span>{{ error }}</span>
+                    </div>
+                  }
+                </div>
+                <div
+                  role="group"
+                  data-slot="field"
+                  data-orientation="vertical"
                   [attr.data-matches-spartan-invalid]="errors.slug() ? 'true' : null"
                   [attr.data-invalid]="errors.slug() ? 'true' : null"
                   class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
@@ -299,10 +355,11 @@ export class CreateOrganizationPage {
   private readonly create = injectMutation(api.organizations.create);
 
   protected readonly messages = MESSAGES;
+  protected readonly cityStateHint = CITY_STATE_HINT;
   protected readonly online = injectOnline();
   protected readonly host = inject(DOCUMENT).location.host;
 
-  private readonly model = signal<CreateModel>({ name: '', slug: '' });
+  private readonly model = signal<CreateModel>({ name: '', cityState: '', slug: '' });
   // `required` puts the attribute on both inputs; the messages are ours (checkOrganizationName and
   // checkOrganizationSlug), so the page and `organizations.create` agree.
   protected readonly fields = form(this.model, (path) => {
@@ -321,6 +378,10 @@ export class CreateOrganizationPage {
       const checked = checkOrganizationName(this.model().name);
       return checked.ok ? null : checked.error.message;
     }),
+    cityState: computed(() => {
+      const checked = checkCityState(this.model().cityState);
+      return checked.ok ? null : checked.error.message;
+    }),
     slug: computed(() => checkOrganizationSlug(this.model().slug)?.message ?? null),
   };
 
@@ -328,6 +389,10 @@ export class CreateOrganizationPage {
     name: new ShownUntilValid(
       () => this.clientErrors.name() !== null,
       () => this.fields.name().dirty(),
+    ),
+    cityState: new ShownUntilValid(
+      () => this.clientErrors.cityState() !== null,
+      () => this.fields.cityState().dirty(),
     ),
     slug: new ShownUntilValid(
       () => this.clientErrors.slug() !== null,
@@ -337,11 +402,13 @@ export class CreateOrganizationPage {
 
   private readonly serverErrors: Record<FieldName, WritableSignal<ServerError | null>> = {
     name: this.untilChanged(() => this.model().name),
+    cityState: this.untilChanged(() => this.model().cityState),
     slug: this.untilChanged(() => this.model().slug),
   };
 
   protected readonly errors: Record<FieldName, Signal<string | null>> = {
     name: this.shownError('name'),
+    cityState: this.shownError('cityState'),
     slug: this.shownError('slug'),
   };
 
@@ -358,6 +425,7 @@ export class CreateOrganizationPage {
   });
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
+  private readonly cityStateInput = viewChild.required<ElementRef<HTMLInputElement>>('cityState');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
   private readonly alert = viewChild<ElementRef<HTMLElement>>('alert');
 
@@ -399,9 +467,14 @@ export class CreateOrganizationPage {
     }
 
     const { name, slug } = this.model();
+    const cityState = checkCityState(this.model().cityState);
     this.submitting.set(true);
     try {
-      await this.create.run({ name: name.trim(), slug });
+      await this.create.run({
+        name: name.trim(),
+        slug,
+        ...(cityState.ok && cityState.value !== null && { cityState: cityState.value }),
+      });
     } catch (failure) {
       this.submitting.set(false);
       this.showFailure(failure, slug);
@@ -434,7 +507,11 @@ export class CreateOrganizationPage {
   }
 
   private focusAfterRender(field: FieldName): void {
-    const inputs = { name: this.nameInput, slug: this.slugInput };
+    const inputs = {
+      name: this.nameInput,
+      cityState: this.cityStateInput,
+      slug: this.slugInput,
+    };
     afterNextRender(() => inputs[field]().nativeElement.focus(), { injector: this.injector });
   }
 

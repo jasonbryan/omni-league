@@ -87,6 +87,11 @@ function metaContent(html: string, property: string): string | undefined {
   return tag ? /\bcontent="([^"]*)"/.exec(tag)?.[1] : undefined;
 }
 
+function metaName(html: string, name: string): string | undefined {
+  const tag = new RegExp(`<meta\\b[^>]*\\bname="${name}"[^>]*>`).exec(html)?.[0];
+  return tag ? /\bcontent="([^"]*)"/.exec(tag)?.[1] : undefined;
+}
+
 function canonicalHrefs(html: string): string[] {
   return [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/g)].map(
     ([tag]) => /\bhref="([^"]*)"/.exec(tag)?.[1] ?? '',
@@ -120,6 +125,24 @@ async function hydrated(consoleGuard: { hydrated: boolean }): Promise<void> {
 
 test.describe('organization page: raw server HTML', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'the description tags end with the City, state when the organization has one, and are as before without',
+    RAW_HTTP,
+    async ({ request }) => {
+      const withCity = await seedTenant({ cityState: 'Corpus Christi, TX' });
+      const without = await seedTenant();
+      const { html } = await fetchRawHtml(request, withCity.path);
+      const expected = `Leagues and locations of ${withCity.name} on Omni League in Corpus Christi, TX.`;
+      expect(metaContent(html, 'og:description')).toBe(expected);
+      expect(metaName(html, 'description')).toBe(expected);
+
+      const { html: plain } = await fetchRawHtml(request, without.path);
+      const plainExpected = `Leagues and locations of ${without.name} on Omni League.`;
+      expect(metaContent(plain, 'og:description')).toBe(plainExpected);
+      expect(metaName(plain, 'description')).toBe(plainExpected);
+    },
+  );
 
   test(
     '200 with the public Cache-Control, content, meta, row ids, and tiles; a query string changes nothing',

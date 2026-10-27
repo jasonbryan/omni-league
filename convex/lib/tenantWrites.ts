@@ -45,7 +45,7 @@ export const leagueSeedValidator = v.object({
 });
 
 export const tenantValidator = v.object({
-  organization: v.object({ name: v.string(), slug: v.string() }),
+  organization: v.object({ name: v.string(), slug: v.string(), cityState: v.optional(v.string()) }),
   locations: v.array(v.object({ name: v.string(), address: v.string() })),
   leagues: v.array(leagueSeedValidator),
 });
@@ -98,19 +98,29 @@ async function assertSlugFree(ctx: MutationCtx, slug: string): Promise<void> {
 
 export async function insertOrganization(
   ctx: MutationCtx,
-  organization: { name: string; slug: string },
+  organization: { name: string; slug: string; cityState?: string | undefined },
 ): Promise<Id<'organizations'>> {
-  const { name, slug } = organization;
+  const { name, slug, cityState } = organization;
   // Reserved slugs are allowed: the demo seeds use them.
   await assertSlugFree(ctx, slug);
   return ctx.db.insert('organizations', {
     name,
     slug,
+    ...(cityState !== undefined && { cityState }),
     leagueCount: 0,
     locationCount: 0,
     sportLeagueCounts: {},
     sportLocationCounts: {},
   });
+}
+
+/** `null` removes it, so the organization shows none. */
+export async function updateOrganizationCityState(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  cityState: string | null,
+): Promise<void> {
+  await ctx.db.patch('organizations', organizationId, { cityState: cityState ?? undefined });
 }
 
 export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id<'organizations'>> {

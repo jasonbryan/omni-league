@@ -495,6 +495,7 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
         'Locations',
         'Leagues',
         'Staff',
+        'Details',
         'Public page',
         'Your organizations',
       ]);

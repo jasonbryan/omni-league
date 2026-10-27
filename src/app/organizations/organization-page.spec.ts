@@ -60,6 +60,8 @@ function text(element: Element | null | undefined): string {
 const head = () => TestBed.inject(DOCUMENT).head;
 const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
+const descriptionContent = () =>
+  head().querySelector('meta[name="description"]')?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
 // Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
@@ -70,7 +72,9 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear();
   // The page removes its tags on destroy; make sure no spec leaks one into the next.
-  for (const el of head().querySelectorAll('meta[property^="og:"], link[rel="canonical"]')) {
+  for (const el of head().querySelectorAll(
+    'meta[property^="og:"], meta[name="description"], link[rel="canonical"]',
+  )) {
     el.remove();
   }
 });
@@ -242,6 +246,24 @@ describe('OrganizationPage', () => {
       expect(metaContent('og:url')).toBe(`${origin}/organizations/gulf-coast-sport-social`);
       expect(canonical()).toBe(`${origin}/organizations/gulf-coast-sport-social`);
       expect(head().querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
+    });
+
+    it('sets the description tags from the result, as today, when the organization has no City, state', () => {
+      const description = 'Leagues and locations of Gulf Coast Sport & Social on Omni League.';
+      expect(metaContent('og:description')).toBe(description);
+      expect(descriptionContent()).toBe(description);
+    });
+
+    it('ends the description tags with the City, state when there is one, and drops it when it goes', async () => {
+      emit({ ...GULF_COAST, cityState: 'Corpus Christi, TX' });
+      await settle(harness);
+      const description =
+        'Leagues and locations of Gulf Coast Sport & Social on Omni League in Corpus Christi, TX.';
+      expect(metaContent('og:description')).toBe(description);
+      expect(descriptionContent()).toBe(description);
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(metaContent('og:description')).not.toContain('Corpus Christi');
     });
 
     it('updates the rows and the hero line in place when page 1 or the totals change', async () => {

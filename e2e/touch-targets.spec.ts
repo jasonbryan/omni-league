@@ -227,6 +227,7 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
       [`${base}/locations`, 'Locations'],
       [`${base}/leagues`, 'Leagues'],
       [`${base}/staff`, 'Staff'],
+      [`${base}/details`, 'Details'],
       [`${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]],
     ];
     for (const [path, heading] of routes) {

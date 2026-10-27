@@ -100,6 +100,11 @@ export const routes: Routes = [
             loadComponent: () =>
               import('./organizations/admin/admin-staff').then((m) => m.AdminStaff),
           },
+          {
+            path: 'details',
+            loadComponent: () =>
+              import('./organizations/admin/admin-details').then((m) => m.AdminDetails),
+          },
         ],
       },
       {
