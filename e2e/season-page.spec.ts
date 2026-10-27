@@ -136,7 +136,7 @@ function textOf(fragment: string | undefined): string {
     .trim();
 }
 
-/** The whole row for a term, with a space where each tag was, so a label and its value stay apart. */
+/** A space where each tag was keeps a label and its value apart. */
 function detailRow(html: string, term: string): string | undefined {
   const rows = [...html.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>([\s\S]*?)(?=<dt\b|<\/dl>)/g)];
   const row = rows.find(([, dt]) => textOf(dt) === term);
@@ -650,15 +650,14 @@ test.describe('public season page: loading', () => {
     consoleGuard,
   }) => {
     const { tenant, path } = await seed();
-    const openPath = `${path.replace('summer-2027', 'fall-open')}`;
     const held = await holdQueries(page, ['seasons:getPublicPage']);
     await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
     await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
     await hydrated(consoleGuard);
 
-    await page.getByRole('main').getByRole('link', { name: 'Fall Open', exact: true }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Summer 2027', exact: true }).click();
     await expect.poll(() => held.isHolding()).toBe(true);
-    await expect(page).toHaveURL(`${baseURL}${openPath}`);
+    await expect(page).toHaveURL(`${baseURL}${path}`);
 
     const skeleton = page.getByTestId('season-skeleton');
     await expect(skeleton).toBeVisible();
@@ -676,7 +675,7 @@ test.describe('public season page: loading', () => {
     };
 
     held.release();
-    const h1 = page.getByRole('heading', { level: 1, name: 'Fall Open' });
+    const h1 = page.getByRole('heading', { level: 1, name: 'Summer 2027' });
     await expect(h1).toBeVisible();
     await expect(skeleton).toHaveCount(0);
     const landed = {

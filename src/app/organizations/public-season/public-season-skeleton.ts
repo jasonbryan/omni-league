@@ -38,15 +38,12 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
             data-testid="season-skeleton-card"
             class="rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6"
           >
-            <div class="flex h-14 flex-col gap-1">
-              <span aria-hidden="true" class="${BAR} h-6 w-full"></span>
-              <span aria-hidden="true" class="${BAR} h-6 w-2/3"></span>
+            <span aria-hidden="true" class="${BAR} h-7 w-full"></span>
+            <div class="mt-4 flex h-10 flex-col justify-between">
+              <span aria-hidden="true" class="${BAR} h-4 w-full"></span>
+              <span aria-hidden="true" class="${BAR} h-4 w-2/3"></span>
             </div>
-            <div class="mt-4 flex h-15 flex-col justify-between">
-              @for (line of lines; track line) {
-                <span aria-hidden="true" class="${BAR} h-4 w-full"></span>
-              }
-            </div>
+            <span aria-hidden="true" class="${BAR} mt-5 h-11 w-full"></span>
           </div>
         </div>
         <div
@@ -71,5 +68,4 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
 })
 export class PublicSeasonSkeleton {
   protected readonly facts = [1, 2, 3, 4];
-  protected readonly lines = [1, 2, 3];
 }

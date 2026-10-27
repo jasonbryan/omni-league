@@ -44,7 +44,7 @@ export const SUMMER_2027_VIEW: PublicSeasonView = {
   season: SUMMER_2027,
 };
 
-/** A copy of `value` without `key`, as a saved copy made before the field existed lacks it. */
+/** A saved copy made before the field existed lacks it. */
 export function without<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => name !== key)) as Omit<T, K>;
 }

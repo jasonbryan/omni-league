@@ -15,13 +15,11 @@ import { BUTTON_BASE } from '../../ui/button/button-classes';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
-import { PHASE_LABEL, registrationCard } from './public-season-registration';
-import { OPEN_BADGE, OUTLINE_BADGE } from '../season-status';
+import { registrationCard } from './public-season-registration';
+import { BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
 import type { SeasonPhase } from '../../../../convex/lib/registration';
 import type { PublicSeasonView } from './public-season-view';
 
-const CLOSED_BADGE =
-  'inline-flex w-fit shrink-0 items-center gap-1 rounded-4xl border border-transparent bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground';
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
 const CRUMB_LINK =
   'inline-flex min-h-11 items-center rounded-md font-medium hover:text-foreground hover:underline md:min-h-0';
@@ -221,7 +219,7 @@ export class PublicSeasonContent {
   readonly now = input.required<number>();
 
   protected readonly openBadge = OPEN_BADGE;
-  protected readonly phaseLabel = (phase: SeasonPhase) => PHASE_LABEL[phase];
+  protected readonly phaseLabel = (phase: SeasonPhase) => BADGE_TEXT[phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
@@ -230,11 +228,9 @@ export class PublicSeasonContent {
 
   protected readonly season = computed(() => this.view().season);
   protected readonly card = computed(() => registrationCard(this.season(), this.now()));
-  protected readonly phaseBadge = computed(() => {
-    const phase = this.card()?.phase;
-    if (phase === 'registrationOpen') return OPEN_BADGE;
-    return phase === 'inProgress' ? OUTLINE_BADGE : CLOSED_BADGE;
-  });
+  protected readonly phaseBadge = computed(() =>
+    this.card()?.phase === 'registrationOpen' ? OPEN_BADGE : MUTED_BADGE,
+  );
   protected readonly dates = computed(() =>
     seasonDateParts(this.season().startDate, this.season().endDate),
   );

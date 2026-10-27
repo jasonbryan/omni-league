@@ -4,19 +4,13 @@ import {
   type SeasonPhase,
 } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
+import { compare } from '../season-status';
 import type { PublicSeasonData } from './public-season-view';
 
 export interface NextOpenSeason {
   name: string;
   slug: string;
 }
-
-export const PHASE_LABEL: Record<SeasonPhase, string> = {
-  registrationOpen: 'Registration open',
-  registrationClosed: 'Registration closed',
-  inProgress: 'In progress',
-  ended: 'Ended',
-};
 
 export type RegistrationCard =
   | { kind: 'open'; phase: 'registrationOpen'; closes: string }
@@ -28,11 +22,6 @@ export type RegistrationCard =
       next: NextOpenSeason | undefined;
     };
 
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-/** The league's other season with the soonest deadline that is still open at `nowMs`. */
 function nextOpenSeason(season: PublicSeasonData, nowMs: number): NextOpenSeason | undefined {
   const open = (season.league.upcomingSeasons ?? [])
     .filter((other) => other.slug !== season.slug && registrationIsOpen(other, nowMs))

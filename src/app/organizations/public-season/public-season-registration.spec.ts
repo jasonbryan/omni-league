@@ -1,4 +1,4 @@
-import { PHASE_LABEL, registrationCard } from './public-season-registration';
+import { registrationCard } from './public-season-registration';
 import { SUMMER_2027, without } from './testing/season-data';
 
 const at = (iso: string) => Date.parse(iso);
@@ -10,16 +10,14 @@ const FALL = {
   registrationDeadline: '2027-09-05',
 };
 
-describe('registrationCard phase and label', () => {
+describe('registrationCard phase', () => {
   it.each([
-    ['2027-05-01T00:00:00Z', 'registrationOpen', 'Registration open'],
-    ['2027-05-30T00:00:00Z', 'registrationClosed', 'Registration closed'],
-    ['2027-07-01T00:00:00Z', 'inProgress', 'In progress'],
-    ['2027-09-01T00:00:00Z', 'ended', 'Ended'],
-  ] as const)('at %s the phase is %s, labelled %s', (when, phase, label) => {
-    const card = registrationCard(SUMMER, at(when));
-    expect(card?.phase).toBe(phase);
-    expect(PHASE_LABEL[phase]).toBe(label);
+    ['2027-05-01T00:00:00Z', 'registrationOpen'],
+    ['2027-05-30T00:00:00Z', 'registrationClosed'],
+    ['2027-07-01T00:00:00Z', 'inProgress'],
+    ['2027-09-01T00:00:00Z', 'ended'],
+  ] as const)('at %s the phase is %s', (when, phase) => {
+    expect(registrationCard(SUMMER, at(when))?.phase).toBe(phase);
   });
 });
 

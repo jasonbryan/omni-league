@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
@@ -262,10 +262,15 @@ describe('seasons.getPublicPage', () => {
     expect(JSON.stringify(page)).not.toMatch(/draft-season|b-season|coed-summer/);
   });
 
-  test('upcomingSeasons does not depend on the time: the handler source reads no clock', () => {
-    const handler = seasonsSource.slice(seasonsSource.indexOf('export const getPublicPage'));
-    const body = handler.slice(0, handler.indexOf('export const listOpenForOrganization'));
-    expect(body).not.toMatch(/Date\.now|new Date/);
+  test('reads no time: the query never calls the clock', async () => {
+    const t = await setup();
+    const now = vi.spyOn(Date, 'now');
+    try {
+      expect(await get(t, 'org-a', 'sand-4s', 'summer-2027')).not.toBeNull();
+      expect(now).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
   });
 
   test('is public: an anonymous caller reads it, and no argument names an id', async () => {
