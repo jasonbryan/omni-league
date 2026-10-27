@@ -20,8 +20,8 @@ import {
   type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
-import { leagueLocationNames } from './lib/publicLeague';
-import { getLeaguePublicPageReturns } from './lib/publicPage';
+import { leaguePageSeasons, leagueLocations } from './lib/publicLeague';
+import { getLeaguePublicPageReturns, type PublicLeaguePage } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import { sportName, sportValidator, type Sport } from './lib/sports';
@@ -235,17 +235,22 @@ export const getOrganizerContext = query({
 export const getPublicPage = query({
   args: { orgSlug: v.string(), leagueSlug: v.string() },
   returns: getLeaguePublicPageReturns,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicLeaguePage | null> => {
     const found = await findLeagueBySlugs(ctx, args);
     // A draft answers like an unknown league, so nothing public says whether its slug exists.
     if (found?.league.status !== 'published') return null;
     const { organization, league } = found;
+    const locations = await leagueLocations(ctx, organization, league);
+    const divisionLabel = await leagueDivisionLabel(ctx, league);
     return {
       organization: { name: organization.name, slug: organization.slug },
       name: league.name,
       slug: league.slug,
       sportName: sportName(league.sport),
-      locationNames: await leagueLocationNames(ctx, organization, league),
+      ...(divisionLabel !== undefined && { divisionLabel }),
+      locationNames: locations.map((location) => location.name),
+      locations,
+      seasons: await leaguePageSeasons(ctx, league),
     };
   },
 });
