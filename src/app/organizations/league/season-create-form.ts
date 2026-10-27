@@ -182,7 +182,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             </div>
           }
         </div>
-        <div class="grid gap-6 sm:grid-cols-2">
+        <div class="grid gap-6 sm:max-lg:grid-cols-2">
           @for (date of dateFields; track date.field) {
             <div
               role="group"
@@ -191,7 +191,9 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
               [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
               [class]="
-                date.field === 'registrationDeadline' ? fieldClass + ' sm:col-span-2' : fieldClass
+                date.field === 'registrationDeadline'
+                  ? fieldClass + ' sm:max-lg:col-span-2'
+                  : fieldClass
               "
             >
               <label [for]="date.id" data-slot="field-label" [class]="labelClass">{{
@@ -245,7 +247,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         </div>
         <section aria-labelledby="from-league-heading" class="rounded-lg bg-muted p-4">
           <h3 id="from-league-heading" class="text-sm font-medium">From the league</h3>
-          <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          <dl class="mt-3 grid gap-3 text-sm sm:max-lg:grid-cols-2">
             <div>
               <dt class="text-muted-foreground">Division</dt>
               <dd class="mt-0.5 font-medium" data-slot="season-division">
