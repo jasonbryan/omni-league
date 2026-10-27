@@ -1,10 +1,11 @@
 import {
   OPEN_BADGE,
-  OUTLINE_BADGE,
+  MUTED_BADGE,
   closesText,
   leagueSeasonStatus,
   nextSeason,
   openSeasonsBySoonestDeadline,
+  soonestClosingOpenSeason,
   type LeagueRowSeason,
 } from './season-status';
 
@@ -42,6 +43,7 @@ describe('leagueSeasonStatus', () => {
       badge: 'Registration open',
       open: true,
       text: 'NEXT · closes May 19',
+      season: { name: 'NEXT', slug: 'next' },
     });
   });
 
@@ -50,6 +52,7 @@ describe('leagueSeasonStatus', () => {
       badge: 'Registration closed',
       open: false,
       text: 'NEXT',
+      season: { name: 'NEXT', slug: 'next' },
     });
   });
 
@@ -58,13 +61,37 @@ describe('leagueSeasonStatus', () => {
       badge: 'In progress',
       open: false,
       text: 'CURRENT',
+      season: { name: 'CURRENT', slug: 'current' },
     });
   });
 
   it('says there is no upcoming season when only ended seasons remain, and when there are none', () => {
-    const none = { badge: null, open: false, text: 'No upcoming season' };
+    const none = { badge: null, open: false, text: 'No upcoming season', season: null };
     expect(leagueSeasonStatus([ENDED], noon('2026-10-27'))).toEqual(none);
     expect(leagueSeasonStatus([], noon('2026-10-27'))).toEqual(none);
+  });
+
+  it('leads with the season open for registration over one in progress', () => {
+    expect(leagueSeasonStatus([CURRENT, LATER], noon('2027-08-01'))).toEqual({
+      badge: 'Registration open',
+      open: true,
+      text: 'LATER · closes Aug 29',
+      season: { name: 'LATER', slug: 'later' },
+    });
+  });
+
+  it('leads with the open season even when a not-open season starts earlier', () => {
+    const closed = season('closed', '2027-06-01', '2027-08-30', '2027-05-19');
+    const open = season('open', '2027-06-10', '2027-08-30', '2027-06-05');
+    expect(leagueSeasonStatus([closed, open], noon('2027-05-25'))?.season?.slug).toBe('open');
+  });
+
+  it('shows the next season when none is open', () => {
+    const underway = season('underway', '2027-03-01', '2027-07-01', '2027-02-01');
+    expect(leagueSeasonStatus([NEXT, underway], noon('2027-05-25'))).toMatchObject({
+      badge: 'In progress',
+      season: { slug: 'underway' },
+    });
   });
 
   it('says nothing for a saved copy made before rows held their seasons', () => {
@@ -74,6 +101,47 @@ describe('leagueSeasonStatus', () => {
   it('moves a season from open to closed as the clock passes its deadline', () => {
     expect(leagueSeasonStatus([NEXT], noon('2027-05-19'))?.badge).toBe('Registration open');
     expect(leagueSeasonStatus([NEXT], noon('2027-05-20'))?.badge).toBe('Registration closed');
+  });
+});
+
+describe('soonestClosingOpenSeason', () => {
+  const at = (...rest: [string, string, string, string]) => season(...rest);
+  const now = noon('2027-04-01');
+
+  it('is the open season, whatever the status of the others', () => {
+    const inProgress = at('current', '2027-03-01', '2027-05-30', '2027-02-15');
+    const open = at('summer', '2027-06-06', '2027-08-29', '2027-05-23');
+    expect(soonestClosingOpenSeason([inProgress, open], now)?.slug).toBe('summer');
+  });
+
+  it('is the one with the soonest deadline when several are open', () => {
+    const later = at('fall', '2027-09-12', '2027-11-14', '2027-08-29');
+    const sooner = at('summer', '2027-06-06', '2027-08-29', '2027-05-23');
+    expect(soonestClosingOpenSeason([later, sooner], now)?.slug).toBe('summer');
+  });
+
+  it('breaks a tie of deadlines by the earlier start date, then the lower slug', () => {
+    const later = at('a', '2027-07-01', '2027-08-29', '2027-05-23');
+    const earlier = at('c', '2027-06-06', '2027-08-29', '2027-05-23');
+    const sameStart = at('b', '2027-06-06', '2027-08-29', '2027-05-23');
+    expect(soonestClosingOpenSeason([later, earlier], now)?.slug).toBe('c');
+    expect(soonestClosingOpenSeason([earlier, sameStart, later], now)?.slug).toBe('b');
+  });
+
+  it('keeps registration open through the deadline date and closes it the day after', () => {
+    const summer = at('summer', '2027-06-06', '2027-08-29', '2027-05-23');
+    expect(soonestClosingOpenSeason([summer], noon('2027-05-23'))).toBeDefined();
+    expect(soonestClosingOpenSeason([summer], noon('2027-05-24'))).toBeUndefined();
+  });
+
+  it('is none for a season that has started, whatever its deadline', () => {
+    const started = at('started', '2027-06-06', '2027-08-29', '2027-07-01');
+    expect(soonestClosingOpenSeason([started], noon('2027-06-06'))).toBeUndefined();
+  });
+
+  it('is none without seasons, and for a copy saved before the page held them', () => {
+    expect(soonestClosingOpenSeason([], now)).toBeUndefined();
+    expect(soonestClosingOpenSeason(undefined, now)).toBeUndefined();
   });
 });
 
@@ -123,8 +191,8 @@ describe('closesText', () => {
 });
 
 describe('badge classes', () => {
-  it('match the secondary badge the mockup draws', () => {
+  it('are the secondary badge for Registration open and the muted badge for the other phases', () => {
     expect(OPEN_BADGE).toContain('bg-secondary text-secondary-foreground');
-    expect(OUTLINE_BADGE).toContain('border-border');
+    expect(MUTED_BADGE).toContain('bg-muted text-muted-foreground');
   });
 });

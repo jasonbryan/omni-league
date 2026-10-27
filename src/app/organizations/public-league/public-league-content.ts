@@ -27,8 +27,8 @@ import { PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { seasonDates } from '../league/season-dates';
 import { organizationPath, sportViewPath } from '../organization-path';
 import { PageControl } from '../page-control';
-import { MUTED_BADGE, OPEN_BADGE } from '../season-status';
-import { soonestClosingOpenSeason, seasonStatus } from './league-seasons';
+import { MUTED_BADGE, OPEN_BADGE, soonestClosingOpenSeason } from '../season-status';
+import { seasonStatus } from './league-seasons';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
 const CRUMB_LINK =

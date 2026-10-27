@@ -38,7 +38,7 @@ import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-sk
 import { PageControl } from './page-control';
 import { PRIMARY_BUTTON, PRIMARY_BUTTON_LARGE } from '../ui/button/button-classes';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
-import { closesText, leagueSeasonStatus, OPEN_BADGE, OUTLINE_BADGE } from './season-status';
+import { closesText, leagueSeasonStatus, MUTED_BADGE, OPEN_BADGE } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 
@@ -269,11 +269,21 @@ function plural(count: number, noun: string): string {
                               @if (status.badge) {
                                 <span
                                   data-slot="badge"
-                                  [class]="status.open ? openBadge : outlineBadge"
+                                  [class]="status.open ? openBadge : mutedBadge"
                                   >{{ status.badge }}</span
                                 >
                               }
                               <span class="text-xs text-muted-foreground">{{ status.text }}</span>
+                              @if (league.register; as register) {
+                                <a
+                                  [routerLink]="register.href"
+                                  fragment="registration"
+                                  class="relative z-10 rounded-md text-xs font-medium text-primary underline underline-offset-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                                  >Register<span class="sr-only">
+                                    for {{ league.name }}, {{ register.seasonName }}</span
+                                  ></a
+                                >
+                              }
                             </p>
                           }
                         </div>
@@ -354,7 +364,7 @@ export class OrganizationOverview {
   protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
   protected readonly registerButton = PRIMARY_BUTTON;
   protected readonly openBadge = OPEN_BADGE;
-  protected readonly outlineBadge = OUTLINE_BADGE;
+  protected readonly mutedBadge = MUTED_BADGE;
 
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly injector = inject(Injector);
@@ -435,14 +445,24 @@ export class OrganizationOverview {
   );
 
   protected readonly leagueRows = computed(() =>
-    (this.leagues() ?? []).map((league, i) => ({
-      id: `league-${i + 1}`,
-      name: league.name,
-      href: publicLeaguePath(this.page().slug, league.slug),
-      divisionLabel: league.divisionLabel,
-      where: [league.sportName, league.locationNames.join(', ')].filter(Boolean).join(' · '),
-      status: leagueSeasonStatus(league.seasons, this.now()),
-    })),
+    (this.leagues() ?? []).map((league, i) => {
+      const status = leagueSeasonStatus(league.seasons, this.now());
+      return {
+        id: `league-${i + 1}`,
+        name: league.name,
+        href: publicLeaguePath(this.page().slug, league.slug),
+        divisionLabel: league.divisionLabel,
+        where: [league.sportName, league.locationNames.join(', ')].filter(Boolean).join(' · '),
+        status,
+        register:
+          status?.open && status.season
+            ? {
+                href: publicSeasonPath(this.page().slug, league.slug, status.season.slug),
+                seasonName: status.season.name,
+              }
+            : undefined,
+      };
+    }),
   );
 
   protected readonly locationRows = computed(() =>

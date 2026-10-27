@@ -83,6 +83,22 @@ describe('registrationCard', () => {
     expect(card).toMatchObject({ kind: 'closed', next: { name: 'Fall 2027', slug: 'fall-2027' } });
   });
 
+  it('links the open season that starts first when two share a deadline, then the lower slug', () => {
+    const upcoming = (...seasons: (typeof FALL)[]) => ({
+      ...SUMMER,
+      league: { ...SUMMER.league, upcomingSeasons: seasons },
+    });
+    const tied = { ...FALL, registrationDeadline: '2027-08-20' };
+    const later = { ...tied, name: 'Z', slug: 'z', startDate: '2027-09-20' };
+    const earlier = { ...tied, name: 'Y', slug: 'y', startDate: '2027-09-12' };
+    const sameStart = { ...tied, name: 'X', slug: 'x', startDate: '2027-09-12' };
+    const now = at('2027-08-01T00:00:00Z');
+    expect(registrationCard(upcoming(later, earlier), now)).toMatchObject({ next: { slug: 'y' } });
+    expect(registrationCard(upcoming(earlier, sameStart, later), now)).toMatchObject({
+      next: { slug: 'x' },
+    });
+  });
+
   it('links nothing when no other season is open', () => {
     const league = {
       ...SUMMER,
