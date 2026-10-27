@@ -1,4 +1,4 @@
-import { AFTER_AUTH_DEFAULT, safeReturnTo, returnToOrApp } from './return-to';
+import { safeReturnTo, returnToOrApp } from './return-to';
 
 describe('safeReturnTo', () => {
   it.each([
@@ -66,10 +66,6 @@ describe('returnToOrApp', () => {
     '/\t/evil.example',
   ])('sends the unsafe returnTo %j to /app', (raw) => {
     expect(returnToOrApp(raw)).toBe('/app');
-  });
-
-  it('sends the default after-auth URL for no returnTo', () => {
-    expect(AFTER_AUTH_DEFAULT).toBe('/app');
   });
 
   it.each(['/', '/?x=1', '/#top', '/.', '/./', '/..', '/a/..'])(

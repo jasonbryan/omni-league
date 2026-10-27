@@ -11,6 +11,7 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const LEAGUE = 'Sunday Reverse Coed 4s';
+const PLAYER_NEXT_STEP = 'Ask your league organizer for an invite or registration link';
 const LOCATION = { name: 'Redfish Flats Fields', address: '880 Redfish Flats Ln, Rockport, TX' };
 
 const organization = () =>
@@ -29,7 +30,7 @@ async function signInFrom(page: Page, user: TestUser, from: string, link: 'top-b
   await page.locator('#email').fill(user.email);
   await page.locator('#password').fill(user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  return tokens;
+  return { tokens };
 }
 
 test.describe('after sign-in', () => {
@@ -42,7 +43,7 @@ test.describe('after sign-in', () => {
         const user = await seedUser(newUser('Return'));
         const from = `${tenant.path}?utm=a#leagues`;
 
-        await signInFrom(page, user, from, link);
+        const { tokens } = await signInFrom(page, user, from, link);
 
         await expect(page).toHaveURL(`${baseURL}${from}`);
         await expect(
@@ -51,6 +52,7 @@ test.describe('after sign-in', () => {
         await expect(page.locator('header a[href="/app"]')).toHaveAccessibleName(
           `Account: ${user.name}`,
         );
+        await tokens;
       });
     }
 
@@ -74,12 +76,13 @@ test.describe('after sign-in', () => {
         const user = await seedUser(newUser('Pages'));
         const from = `${tenant.path}${relative}`;
 
-        await signInFrom(page, user, from, 'top-bar');
+        const { tokens } = await signInFrom(page, user, from, 'top-bar');
 
         await expect(page).toHaveURL(`${baseURL}${from}`);
         await expect(page.locator('header a[href="/app"]')).toHaveAccessibleName(
           `Account: ${user.name}`,
         );
+        await tokens;
       });
     }
 
@@ -113,6 +116,7 @@ test.describe('after sign-in', () => {
         const user = newUser('UnsafeUp');
 
         await page.goto(`/sign-up?returnTo=${encodeURIComponent(raw)}`);
+        const tokens = tokensSettled(page);
         await page.locator('#name').fill(user.name);
         await page.locator('#email').fill(user.email);
         await page.locator('#password').fill(user.password);
@@ -120,6 +124,7 @@ test.describe('after sign-in', () => {
         await page.getByRole('button', { name: /Create account/ }).click();
 
         await expect(page).toHaveURL(`${baseURL}/app`, { timeout: 20_000 });
+        await tokens;
       });
     }
 
@@ -128,21 +133,24 @@ test.describe('after sign-in', () => {
     }) => {
       const user = await seedUser(newUser('Home'));
 
-      await signInFrom(page, user, '/', 'top-bar');
+      const { tokens } = await signInFrom(page, user, '/', 'top-bar');
 
       await expect(page).toHaveURL(`${baseURL}/app`);
       await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+      await tokens;
     });
 
     test('a sign-in link with an off-site returnTo lands on /app', async ({ page }) => {
       const user = await seedUser(newUser('Offsite'));
 
       await page.goto(`/sign-in?returnTo=${encodeURIComponent('//evil.example/x')}`);
+      const tokens = tokensSettled(page);
       await page.locator('#email').fill(user.email);
       await page.locator('#password').fill(user.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
 
       await expect(page).toHaveURL(`${baseURL}/app`);
+      await tokens;
     });
 
     test('sign-up from a public page follows the same rule', async ({ page }) => {
@@ -152,6 +160,7 @@ test.describe('after sign-in', () => {
       await page.goto(tenant.path);
       await page.locator('header a[href^="/sign-in"]').click();
       await page.getByRole('link', { name: 'Create an account' }).click();
+      const tokens = tokensSettled(page);
       await page.locator('#name').fill(user.name);
       await page.locator('#email').fill(user.email);
       await page.locator('#password').fill(user.password);
@@ -159,6 +168,7 @@ test.describe('after sign-in', () => {
       await page.getByRole('button', { name: /Create account/ }).click();
 
       await expect(page).toHaveURL(`${baseURL}${tenant.path}`, { timeout: 20_000 });
+      await tokens;
     });
   });
 
@@ -215,14 +225,14 @@ test.describe('after sign-in', () => {
       await expectAccessible(page);
     });
 
-    test('a player with no organization is offered Find a league and Create an organization', async ({
+    test('a player with no organization is told how to join a league and can create an organization', async ({
       page,
     }) => {
       const user = await seedUser(newUser('Player'));
 
       await landOnApp(page, user);
 
-      await expect(page.getByRole('link', { name: 'Find a league' })).toHaveAttribute('href', '/');
+      await expect(page.getByRole('main')).toContainText(PLAYER_NEXT_STEP);
       await expect(page.getByRole('link', { name: 'Create an organization' })).toBeVisible();
       await expectAccessible(page);
     });

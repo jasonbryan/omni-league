@@ -178,6 +178,8 @@ describe('PublicLayout', () => {
       ['/', '%2F'],
       ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '%2Fleagues%2Fx%2Fregister'],
       ['/sign-up', '%2Fapp'],
+      ['/sign-in?returnTo=%2Fleagues%2Fx%2Fregister', '%2Fleagues%2Fx%2Fregister'],
+      ['/sign-in', '%2Fapp'],
     ])('on %s "Sign in to manage" returns to %s after sign-in', async (url, returnTo) => {
       const page = await open(url);
 

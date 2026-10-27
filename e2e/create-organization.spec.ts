@@ -48,7 +48,7 @@ test.describe('create an organization', () => {
     await signUp(page, newUser('None'));
     await expect(organizations(page).getByText('No organizations yet')).toBeVisible();
     await expect(organizations(page)).toContainText(
-      'Create one to run your leagues on Omni League, or ask an org admin to invite you to theirs.',
+      'Ask your league organizer for an invite or registration link to join a league, or create an organization to run your own.',
     );
     await screenshot(page, testInfo, '64-app-none');
     await expectAccessible(page, {
@@ -58,7 +58,6 @@ test.describe('create an organization', () => {
         'header a[href="/app"]',
         'main button',
         'main a[href="/app/organizations/new"]',
-        'main a[href="/"]',
       ],
     });
     await organizations(page).getByRole('link', { name: 'Create an organization' }).click();

@@ -93,7 +93,7 @@ const FOOTER_LINK_CLASSES =
                   <li>
                     <a
                       routerLink="/sign-in"
-                      [queryParams]="{ returnTo: signInReturnTo() ?? '/app' }"
+                      [queryParams]="{ returnTo: signIn().returnTo }"
                       [class]="footerLink"
                       >Sign in to manage</a
                     >
@@ -126,7 +126,7 @@ export class PublicLayout {
   private readonly onServer = isPlatformServer(inject(PLATFORM_ID));
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
 
-  protected readonly signInReturnTo = injectSignInReturnTo();
+  protected readonly signIn = injectSignInReturnTo();
   protected readonly footerLink = FOOTER_LINK_CLASSES;
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),

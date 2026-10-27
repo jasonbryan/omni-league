@@ -110,26 +110,16 @@ describe('YourOrganizations', () => {
     expect(section.querySelector('[role="status"]')).toBeNull();
     expect(text(section.querySelector('p.font-medium'))).toBe('No organizations yet');
     expect(text(section)).toContain(
-      'Create one to run your leagues on Omni League, or ask an org admin to invite you to theirs.',
+      'Ask your league organizer for an invite or registration link to join a league, or create an organization to run your own.',
     );
     const links = [...section.querySelectorAll('a')];
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(1);
     expect(links[0]?.getAttribute('href')).toBe('/app/organizations/new');
     expect(text(links[0])).toBe('Create an organization');
     expect([...links[0].classList].sort()).toEqual(
       buttonVariants({ size: 'md' }).split(' ').sort(),
     );
     expect(section.querySelector('ul')).toBeNull();
-  });
-
-  it('none: a player is offered Find a league, the public home, beside Create an organization', async () => {
-    await open();
-    await answer([]);
-    const link = [...section.querySelectorAll('a')].find((a) => text(a) === 'Find a league');
-    expect(link?.getAttribute('href')).toBe('/');
-    expect([...link!.classList].sort()).toEqual(
-      buttonVariants({ variant: 'outline', size: 'md' }).split(' ').sort(),
-    );
   });
 
   it('one organization (state 3): a row with initials, name, role, Public page, and Manage', async () => {
