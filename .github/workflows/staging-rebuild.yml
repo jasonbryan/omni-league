@@ -36,12 +36,23 @@ jobs:
           fi
       - name: slot before
         id: slot-before
+        env:
+          RETRY_SECONDS: '5'
+        # A transient fetch error recorded as unknown would let verify pass on the old slot.
         run: |
-          slot="$(curl -sS --fail --max-time 10 "$STAGING_URL/staging-slot.txt" 2>/dev/null || true)"
-          case "$slot" in
-            staging-a | staging-b) ;;
-            *) slot=unknown ;;
-          esac
+          slot=unknown
+          for attempt in 1 2 3; do
+            body="$(curl -sS --fail --max-time 10 "$STAGING_URL/staging-slot.txt" 2>/dev/null || true)"
+            case "$body" in
+              staging-a | staging-b)
+                slot="$body"
+                break
+                ;;
+            esac
+            if [ "$attempt" -lt 3 ]; then
+              sleep "$RETRY_SECONDS"
+            fi
+          done
           echo "slot=$slot" >> "$GITHUB_OUTPUT"
           echo "Staging serves: $slot"
       - name: trigger
@@ -114,7 +125,7 @@ jobs:
             "Scheduled staging rebuild: FAIL\n\nRun: \($run)\n\n"
             + (if $step != ""
                then "Failed step: `\($step)`"
-               else "No step is recorded as failed: the job was cancelled or timed out. See the run." end)')"
+               else "No step recorded a failure (the job may not have started). See the run." end)')"
           number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
             | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
           if [ -n "$number" ]; then

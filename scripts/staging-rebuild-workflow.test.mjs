@@ -16,6 +16,7 @@ const code = workflow
 
 const HOOK_URL = 'https://api.example.test/build_hooks/SECRET-HOOK-ID';
 const STAGING_URL = 'https://staging.example.test';
+const EMPTY_BODY = 'empty-body';
 
 /** @param {string} name */
 function job(name) {
@@ -171,6 +172,8 @@ function runStep(jobName, name, { env = {}, stubs = () => {} } = {}) {
         GITHUB_OUTPUT: output,
         STAGING_URL,
         STUB_DIR: dir,
+        EMPTY_BODY,
+        RETRY_SECONDS: '0',
         ...env,
       },
     });
@@ -192,11 +195,7 @@ function runStep(jobName, name, { env = {}, stubs = () => {} } = {}) {
   }
 }
 
-/**
- * A curl that logs every call to "calls". Reads of staging-slot.txt answer the next word of
- * SLOTS (the last word repeats; "_" is an empty body). The org page answers PAGE_BODY and
- * PAGE_STATUS. Any other URL is the hook and answers HOOK_EXIT.
- */
+/** @param {string} dir */
 function curlStub(dir) {
   writeStub(dir, 'curl', [
     'echo "$*" >> "$STUB_DIR/calls"',
@@ -204,8 +203,8 @@ function curlStub(dir) {
     'case "$url" in',
     '  */staging-slot.txt)',
     '    n=$(cat "$STUB_DIR/count" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$STUB_DIR/count"',
-    '    word=$(printf "%s\\n" $SLOTS | sed -n "${n}p"); [ -n "$word" ] || word=$(printf "%s\\n" $SLOTS | tail -n 1)',
-    '    [ "$word" = "_" ] && word=""',
+    '    word=$(printf "%s\\n" $SLOT_READS | sed -n "${n}p"); [ -n "$word" ] || word=$(printf "%s\\n" $SLOT_READS | tail -n 1)',
+    '    [ "$word" = "$EMPTY_BODY" ] && word=""',
     '    printf "%s" "$word" ;;',
     '  */organizations/*) printf "%s\\n%s" "$PAGE_BODY" "$PAGE_STATUS" ;;',
     '  *) exit "${HOOK_EXIT:-0}" ;;',
@@ -237,24 +236,43 @@ describe('the secret check step', () => {
 describe('the slot before step', () => {
   it('records the slot staging serves', () => {
     for (const slot of ['staging-a', 'staging-b']) {
-      const run = runStep('rebuild', 'slot before', { env: { SLOTS: slot }, stubs: curlStub });
+      const run = runStep('rebuild', 'slot before', { env: { SLOT_READS: slot }, stubs: curlStub });
       assert.equal(run.status, 0);
       assert.equal(run.githubOutput, `slot=${slot}\n`);
     }
   });
 
   it('records unknown for an empty, wrong, or missing body', () => {
-    for (const slot of ['_', 'staging-c', 'Not Found']) {
-      const run = runStep('rebuild', 'slot before', { env: { SLOTS: slot }, stubs: curlStub });
+    for (const slot of [EMPTY_BODY, 'staging-c', 'Not Found']) {
+      const run = runStep('rebuild', 'slot before', { env: { SLOT_READS: slot }, stubs: curlStub });
       assert.equal(run.status, 0, slot);
       assert.equal(run.githubOutput, 'slot=unknown\n', slot);
     }
     const run = runStep('rebuild', 'slot before', {
-      env: { SLOTS: 'staging-a' },
+      env: { SLOT_READS: 'staging-a' },
       stubs: (dir) => writeStub(dir, 'curl', ['exit 22']),
     });
     assert.equal(run.status, 0);
     assert.equal(run.githubOutput, 'slot=unknown\n');
+  });
+
+  it('retries a failed read before recording unknown', () => {
+    const run = runStep('rebuild', 'slot before', {
+      env: { SLOT_READS: `${EMPTY_BODY} garbage staging-b` },
+      stubs: curlStub,
+    });
+    assert.equal(run.status, 0);
+    assert.equal(run.githubOutput, 'slot=staging-b\n');
+    assert.equal(run.calls.trim().split('\n').length, 3);
+  });
+
+  it('records unknown after three failed reads', () => {
+    const run = runStep('rebuild', 'slot before', {
+      env: { SLOT_READS: `${EMPTY_BODY} ${EMPTY_BODY} ${EMPTY_BODY} staging-b` },
+      stubs: curlStub,
+    });
+    assert.equal(run.githubOutput, 'slot=unknown\n');
+    assert.equal(run.calls.trim().split('\n').length, 3);
   });
 });
 
@@ -314,7 +332,7 @@ describe('the verify step', () => {
   }
 
   it('passes when the slot flips and the organization page answers 200 with its name', () => {
-    const run = verify({ SLOT_BEFORE: 'staging-a', SLOTS: 'staging-a staging-a staging-b' });
+    const run = verify({ SLOT_BEFORE: 'staging-a', SLOT_READS: 'staging-a staging-a staging-b' });
     assert.equal(run.status, 0, run.output);
     assert.match(run.output, /Staging now serves staging-b \(it served staging-a\)/);
   });
@@ -322,21 +340,21 @@ describe('the verify step', () => {
   it('passes when the slot flips from unknown, and matches the name unencoded', () => {
     const run = verify({
       SLOT_BEFORE: 'unknown',
-      SLOTS: '_ staging-a',
+      SLOT_READS: `${EMPTY_BODY} staging-a`,
       PAGE_BODY: 'x Gulf Coast Sport & Social x',
     });
     assert.equal(run.status, 0, run.output);
   });
 
   it('ignores an unreadable body while waiting', () => {
-    const run = verify({ SLOT_BEFORE: 'staging-b', SLOTS: '_ garbage staging-a' });
+    const run = verify({ SLOT_BEFORE: 'staging-b', SLOT_READS: `${EMPTY_BODY} garbage staging-a` });
     assert.equal(run.status, 0, run.output);
   });
 
   it('does not count an unreadable body as a flip while waiting', () => {
     const run = verify({
       SLOT_BEFORE: 'staging-a',
-      SLOTS: '_ garbage staging-a',
+      SLOT_READS: `${EMPTY_BODY} garbage staging-a`,
       POLL_LIMIT_SECONDS: '1',
     });
     assert.equal(run.status, 1);
@@ -345,7 +363,11 @@ describe('the verify step', () => {
   });
 
   it('fails with an error naming the last slot when the slot never flips', () => {
-    const run = verify({ SLOT_BEFORE: 'staging-a', SLOTS: 'staging-a', POLL_LIMIT_SECONDS: '1' });
+    const run = verify({
+      SLOT_BEFORE: 'staging-a',
+      SLOT_READS: 'staging-a',
+      POLL_LIMIT_SECONDS: '1',
+    });
     assert.equal(run.status, 1);
     assert.equal(run.output.match(/::error/g)?.length, 1);
     assert.match(run.output, /::error[^\n]*still reads staging-a/);
@@ -353,19 +375,23 @@ describe('the verify step', () => {
   });
 
   it('names unknown as the last slot when the file never becomes readable', () => {
-    const run = verify({ SLOT_BEFORE: 'unknown', SLOTS: '_', POLL_LIMIT_SECONDS: '1' });
+    const run = verify({ SLOT_BEFORE: 'unknown', SLOT_READS: EMPTY_BODY, POLL_LIMIT_SECONDS: '1' });
     assert.equal(run.status, 1);
     assert.match(run.output, /::error[^\n]*still reads unknown/);
   });
 
   it('fails when the organization page is not 200', () => {
-    const run = verify({ SLOT_BEFORE: 'staging-a', SLOTS: 'staging-b', PAGE_STATUS: '503' });
+    const run = verify({ SLOT_BEFORE: 'staging-a', SLOT_READS: 'staging-b', PAGE_STATUS: '503' });
     assert.equal(run.status, 1);
     assert.match(run.output, /::error[^\n]*status 503/);
   });
 
   it('fails when the organization page lacks the name', () => {
-    const run = verify({ SLOT_BEFORE: 'staging-a', SLOTS: 'staging-b', PAGE_BODY: 'Not found' });
+    const run = verify({
+      SLOT_BEFORE: 'staging-a',
+      SLOT_READS: 'staging-b',
+      PAGE_BODY: 'Not found',
+    });
     assert.equal(run.status, 1);
     assert.match(run.output, /::error[^\n]*without the name/);
   });
@@ -424,9 +450,9 @@ describe('the rebuild issue step', () => {
     assert.match(calls, /Failed step: `trigger`/);
   });
 
-  it('says no step is recorded when the job was cancelled or timed out', { skip }, () => {
+  it('says no step recorded a failure when none did', { skip }, () => {
     const calls = runIssue({ FAILED_STEP: '' });
     assert.match(calls, /Scheduled staging rebuild: FAIL/);
-    assert.match(calls, /No step is recorded as failed/);
+    assert.match(calls, /No step recorded a failure \(the job may not have started\)/);
   });
 });
