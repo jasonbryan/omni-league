@@ -26,9 +26,9 @@ async function render(url: string) {
 
 const BASE = `/app/organizations/${COASTAL.slug}`;
 const CURRENT =
-  'flex min-h-8 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground';
+  'flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground';
 const OTHER =
-  'flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted';
+  'flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted';
 const classes = (element: Element) => [...element.classList].sort();
 const tokens = (value: string) => value.split(' ').sort();
 

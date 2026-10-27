@@ -95,7 +95,7 @@ import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './pub
                   <h3 class="font-medium">
                     <a
                       [routerLink]="season.href"
-                      class="underline underline-offset-4 hover:text-primary"
+                      class="underline underline-offset-4 hover:text-primary pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                       >{{ season.name }}</a
                     >
                   </h3>

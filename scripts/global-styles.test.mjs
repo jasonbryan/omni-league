@@ -56,6 +56,19 @@ describe('src/styles/base.css', () => {
     );
     assert.match(css, /:focus-visible\s*\{\s*@apply outline-2 outline-offset-2 outline-ring;\s*\}/);
   });
+
+  it('sizes buttons and fields to 44px on coarse pointers only', async () => {
+    const css = withoutComments(await read('src', 'styles', 'base.css'));
+    const start = css.indexOf('@media (pointer: coarse)');
+    assert.ok(start > css.indexOf('@layer base'), 'a media block after the base layer');
+    const block = css.slice(start);
+    assert.match(
+      block,
+      /\[data-slot='button'\],\s*\[data-slot='sheet-close'\]\s*\{\s*min-height:\s*--spacing\(11\);\s*min-width:\s*--spacing\(11\);\s*\}/,
+    );
+    assert.match(block, /\[data-slot='input'\]\s*\{\s*min-height:\s*--spacing\(11\);\s*\}/);
+    assert.doesNotMatch(css.slice(0, start), /pointer:\s*coarse/);
+  });
 });
 
 describe('the two stylesheets that import the base file', () => {
