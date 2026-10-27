@@ -3,6 +3,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
 import { leagueDivisionLabel } from './lib/leagueDivision';
+import { leagueRowSeasons } from './lib/publicLeague';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
   checkCityState,
@@ -22,6 +23,7 @@ import {
   getPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
+  type PublicLeagues,
   type PublicLocations,
 } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
@@ -167,7 +169,7 @@ export const listPublicLocations = query({
 export const listPublicLeagues = query({
   args: { ...listArgs, sport: v.optional(sportValidator) },
   returns: publicLeaguesValidator,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PublicLeagues> => {
     const organization = await organizationBySlug(ctx, args.slug);
     if (!organization) return EMPTY_LIST;
     const { sport } = args;
@@ -199,12 +201,14 @@ export const listPublicLeagues = query({
         if (location?.organizationId === organization._id) locationNames.push(location.name);
       }
       const label = await leagueDivisionLabel(ctx, league);
+      const seasons = await leagueRowSeasons(ctx, league);
       rows.push({
         name: league.name,
         slug: league.slug,
         sportName: sportName(league.sport),
         locationNames,
         ...(label !== undefined && { divisionLabel: label }),
+        seasons,
       });
     }
     return { rows, page, pageCount, total };

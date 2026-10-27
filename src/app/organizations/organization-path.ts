@@ -13,9 +13,12 @@ export type PublicLocationRows = FunctionReturnType<
   typeof api.organizations.listPublicLocations
 >['rows'];
 
+export type PublicOpenSeasonRows = FunctionReturnType<typeof api.seasons.listOpenForOrganization>;
+
 export type PublicOrganizationPage = PublicOrganizationHeader & {
   leagues: PublicLeagueRows;
   locations: PublicLocationRows;
+  openSeasons?: PublicOpenSeasonRows;
 };
 
 /** Built from the slug, never copied from the current URL, which can carry `?ott=` or a fragment. The path is explicit because `<base href="/">` would resolve a bare `#league-1` to `/#league-1`. */

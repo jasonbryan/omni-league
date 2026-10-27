@@ -13,19 +13,38 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronRight, lucideMapPin, lucideTrophy } from '@ng-icons/lucide';
+import {
+  lucideArrowDown,
+  lucideCalendarDays,
+  lucideChevronRight,
+  lucideMapPin,
+  lucideTrophy,
+  lucideUsers,
+} from '@ng-icons/lucide';
+import { FollowLink } from '../shell/follow-link';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import { OrganizationMark } from './organization-mark';
+import { seasonDates } from './league/season-dates';
 import {
+  organizationPath,
   sportViewPath,
   type PublicLeagueRows,
+  type PublicOpenSeasonRows,
   type PublicLocationRows,
   type PublicOrganizationHeader,
   type PublicSport,
 } from './organization-path';
-import { OrganizationRowsSkeleton } from './organization-skeleton';
+import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
-import { publicLeaguePath } from './public-league/public-league-path';
+import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
+import {
+  closesText,
+  leagueSeasonStatus,
+  OPEN_BADGE,
+  OUTLINE_BADGE,
+  REGISTER_BUTTON,
+  REGISTER_BUTTON_LARGE,
+} from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
 import { sportsCommaList, sportsInSentence } from './sport-list';
 
@@ -37,6 +56,7 @@ function plural(count: number, noun: string): string {
   selector: 'app-organization-overview',
   imports: [
     NgIcon,
+    OpenSeasonsSkeleton,
     OrganizationMark,
     OrganizationRowsSkeleton,
     PageControl,
@@ -44,21 +64,53 @@ function plural(count: number, noun: string): string {
     SavedCopyNote,
     SportChips,
   ],
-  providers: [provideIcons({ lucideChevronRight, lucideMapPin, lucideTrophy })],
+  providers: [
+    provideIcons({
+      lucideArrowDown,
+      lucideCalendarDays,
+      lucideChevronRight,
+      lucideMapPin,
+      lucideTrophy,
+      lucideUsers,
+    }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
     <div class="mx-auto w-full max-w-6xl px-4 pt-6 pb-6 md:px-8 md:pt-12 md:pb-10">
-      <div class="min-w-0">
-        <div class="flex items-start gap-3 md:items-center md:gap-4">
-          <app-organization-mark [name]="page().name" />
-          <h1 class="min-w-0 text-2xl font-semibold tracking-tight text-balance md:text-5xl">
-            {{ page().name }}
-          </h1>
+      <div class="flex flex-col gap-5 md:flex-row md:items-end md:justify-between md:gap-8">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-start gap-3 md:items-center md:gap-4">
+            <app-organization-mark [name]="page().name" />
+            <h1 class="min-w-0 text-2xl font-semibold tracking-tight text-balance md:text-5xl">
+              {{ page().name }}
+            </h1>
+          </div>
+          <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">{{ summary() }}</p>
+          @if (savedAt(); as savedAt) {
+            <app-saved-copy-note [savedAt]="savedAt" />
+          }
         </div>
-        <p class="mt-2 text-muted-foreground md:mt-3 md:text-lg">{{ summary() }}</p>
-        @if (savedAt(); as savedAt) {
-          <app-saved-copy-note [savedAt]="savedAt" />
+        @if (!isEmpty()) {
+          @if (openCards() === undefined) {
+            <span
+              aria-hidden="true"
+              class="block h-11 w-56 rounded-md bg-muted motion-safe:animate-pulse md:shrink-0"
+            ></span>
+          } @else if (openCards()?.length) {
+            <div class="flex flex-wrap gap-3 md:shrink-0">
+              <a
+                [href]="openHref()"
+                data-slot="button"
+                (click)="followLink.clicked($event)"
+                [class]="registerButtonLarge"
+                >Register for a season<ng-icon
+                  name="lucideArrowDown"
+                  data-icon="inline-end"
+                  aria-hidden="true"
+              /></a>
+            </div>
+          }
         }
       </div>
     </div>
@@ -87,6 +139,91 @@ function plural(count: number, noun: string): string {
     }
     @if (!isEmpty() || locationsLoading() || locationRows().length) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
+        @if (!isEmpty()) {
+          <section
+            id="registration-open"
+            aria-labelledby="registration-open-heading"
+            class="py-8 md:py-12"
+          >
+            <h2
+              id="registration-open-heading"
+              class="text-xl font-semibold tracking-tight md:text-2xl"
+            >
+              Registration open
+            </h2>
+            @if (openCards(); as cards) {
+              @if (cards.length) {
+                <p class="mt-1 text-sm text-muted-foreground">
+                  Register a team, or register as a free agent and an organizer places you on one.
+                </p>
+                <ul role="list" class="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
+                  @for (card of cards; track card.href) {
+                    <li
+                      class="flex flex-col rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                    >
+                      <p>
+                        <span data-slot="badge" [class]="openBadge">{{ card.sportName }}</span>
+                      </p>
+                      <h3 class="mt-3 text-lg font-semibold tracking-tight">
+                        <a
+                          [routerLink]="card.href"
+                          class="rounded-md hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                          >{{ card.leagueName }}</a
+                        >
+                      </h3>
+                      <p class="text-sm text-muted-foreground">{{ card.name }}</p>
+                      <ul role="list" class="mt-4 space-y-2 text-sm">
+                        <li class="flex items-start gap-2.5">
+                          <ng-icon
+                            name="lucideCalendarDays"
+                            class="mt-0.5 shrink-0 text-base text-muted-foreground"
+                            aria-hidden="true"
+                          />{{ card.dates }}
+                        </li>
+                        <li class="flex items-start gap-2.5">
+                          <ng-icon
+                            name="lucideUsers"
+                            class="mt-0.5 shrink-0 text-base text-muted-foreground"
+                            aria-hidden="true"
+                          />{{ card.teams }}
+                        </li>
+                        @if (card.where) {
+                          <li class="flex items-start gap-2.5">
+                            <ng-icon
+                              name="lucideMapPin"
+                              class="mt-0.5 shrink-0 text-base text-muted-foreground"
+                              aria-hidden="true"
+                            />{{ card.where }}
+                          </li>
+                        }
+                      </ul>
+                      <div class="mt-auto pt-5">
+                        <div
+                          class="flex items-center justify-between gap-3 border-t border-border pt-4"
+                        >
+                          <p class="text-sm text-muted-foreground">
+                            Closes
+                            <span class="font-medium text-foreground">{{ card.closes }}</span>
+                          </p>
+                          <a [routerLink]="card.href" data-slot="button" [class]="registerButton"
+                            >Register<span class="sr-only">
+                              for {{ card.leagueName }}, {{ card.name }}</span
+                            ></a
+                          >
+                        </div>
+                      </div>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="mt-1 text-sm text-muted-foreground">{{ noOpenText() }}</p>
+              }
+            } @else {
+              <p role="status" class="sr-only">Loading the open seasons.</p>
+              <app-open-seasons-skeleton />
+            }
+          </section>
+        }
         <div [class]="gridClass()">
           @if (!isEmpty()) {
             <section
@@ -129,6 +266,18 @@ function plural(count: number, noun: string): string {
                             <p class="mt-0.5 text-sm font-medium">{{ league.divisionLabel }}</p>
                           }
                           <p class="mt-0.5 text-sm text-muted-foreground">{{ league.where }}</p>
+                          @if (league.status; as status) {
+                            <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              @if (status.badge) {
+                                <span
+                                  data-slot="badge"
+                                  [class]="status.open ? openBadge : outlineBadge"
+                                  >{{ status.badge }}</span
+                                >
+                              }
+                              <span class="text-xs text-muted-foreground">{{ status.text }}</span>
+                            </p>
+                          }
                         </div>
                         <ng-icon
                           name="lucideChevronRight"
@@ -200,6 +349,15 @@ export class OrganizationOverview {
     undefined,
   );
   readonly busy = input(false);
+  /** The seasons registration is open for at `now`, soonest deadline first; undefined while they load. */
+  readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
+  readonly now = input.required<number>();
+
+  protected readonly followLink = inject(FollowLink);
+  protected readonly registerButtonLarge = REGISTER_BUTTON_LARGE;
+  protected readonly registerButton = REGISTER_BUTTON;
+  protected readonly openBadge = OPEN_BADGE;
+  protected readonly outlineBadge = OUTLINE_BADGE;
 
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly injector = inject(Injector);
@@ -245,11 +403,38 @@ export class OrganizationOverview {
     return sport ? sportViewPath(this.page().slug, sport.segment) : '';
   });
 
-  // The chip row ends in a rule of its own, so the sections below it start without one.
+  // The chip row ends in a rule of its own, so the sections below it start without one, unless the Registration open section sits between.
   protected readonly gridClass = computed(() =>
-    hasSportChoice(this.page().sports)
-      ? 'grid gap-x-12 lg:grid-cols-3'
-      : 'grid gap-x-12 border-t border-border lg:grid-cols-3',
+    !this.isEmpty() || !hasSportChoice(this.page().sports)
+      ? 'grid gap-x-12 border-t border-border lg:grid-cols-3'
+      : 'grid gap-x-12 lg:grid-cols-3',
+  );
+
+  protected readonly pagePath = computed(() => {
+    const { slug } = this.page();
+    const sport = this.sport();
+    return sport ? sportViewPath(slug, sport.segment) : organizationPath(slug);
+  });
+  protected readonly openHref = computed(() => `${this.pagePath()}#registration-open`);
+
+  protected readonly noOpenText = computed(() => {
+    const sport = this.sport()?.name.toLowerCase();
+    return `No ${sport ? `${sport} ` : ''}season is open for registration right now. Each league below shows its next season once it is published.`;
+  });
+
+  protected readonly openCards = computed(() =>
+    this.openSeasons()?.map((season) => ({
+      href: publicSeasonPath(this.page().slug, season.league.slug, season.slug),
+      sportName: season.league.sportName,
+      leagueName: season.league.name,
+      name: season.name,
+      dates: seasonDates(season.startDate, season.endDate),
+      teams: season.league.divisionLabel
+        ? `${season.league.divisionLabel}, teams of at least ${season.minimumRosterSize}`
+        : `Teams of at least ${season.minimumRosterSize}`,
+      where: season.league.locationNames.join(', '),
+      closes: closesText(season.registrationDeadline),
+    })),
   );
 
   protected readonly leagueRows = computed(() =>
@@ -259,6 +444,7 @@ export class OrganizationOverview {
       href: publicLeaguePath(this.page().slug, league.slug),
       divisionLabel: league.divisionLabel,
       where: [league.sportName, league.locationNames.join(', ')].filter(Boolean).join(' · '),
+      status: leagueSeasonStatus(league.seasons, this.now()),
     })),
   );
 

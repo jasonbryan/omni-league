@@ -357,6 +357,8 @@ describe('seed:demo divisions on an empty deployment', () => {
     expect(seasons.map((row) => formatLabel(row.playersPerSide!)).sort()).toEqual([
       '4v4',
       '4v4',
+      '4v4',
+      '7v7',
       '7v7',
       '7v7',
     ]);

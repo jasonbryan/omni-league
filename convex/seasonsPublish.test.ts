@@ -332,7 +332,7 @@ describe('seasons.publish edge cases', () => {
     expect(await seasons(s.t)).toEqual(before);
   });
 
-  test('publishing a season changes no result of the public queries, and an anonymous caller cannot list the season', async () => {
+  test('publishing a season changes only its league row on the public pages, and an anonymous caller cannot list the season', async () => {
     const s = await setup();
     const publicResults = () =>
       Promise.all([
@@ -341,10 +341,30 @@ describe('seasons.publish edge cases', () => {
         s.t.query(api.organizations.listPublicLocations, { slug: 'org-a', page: 1 }),
         s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page: 1, sport: 'soccer' }),
       ]);
-    const before = await publicResults();
+    const [header, leagues, locations, soccer] = await publicResults();
     await s.adminA.mutation(api.seasons.publish, { seasonId: s.seasonL });
-    expect(await publicResults()).toEqual(before);
-    expect(JSON.stringify(await publicResults())).not.toMatch(/season|fall-2027|Fall 2027/i);
+    const [headerAfter, leaguesAfter, locationsAfter, soccerAfter] = await publicResults();
+    expect(headerAfter).toEqual(header);
+    expect(locationsAfter).toEqual(locations);
+    const withoutSeasons = (list: typeof leagues) =>
+      list.rows.map((row) =>
+        Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'seasons')),
+      );
+    expect(withoutSeasons(leaguesAfter)).toEqual(withoutSeasons(leagues));
+    expect(withoutSeasons(soccerAfter)).toEqual(withoutSeasons(soccer));
+    const publishedSeasons = (list: typeof leagues) =>
+      list.rows.flatMap((row) => row.seasons ?? []);
+    expect(publishedSeasons(leaguesAfter)).toHaveLength(publishedSeasons(leagues).length + 1);
+    for (const season of publishedSeasons(leaguesAfter)) {
+      expect(Object.keys(season).sort()).toEqual([
+        'endDate',
+        'name',
+        'registrationDeadline',
+        'slug',
+        'startDate',
+      ]);
+    }
+    expect(JSON.stringify(await publicResults())).not.toMatch(/_id|_creationTime|status/);
     const leagueId = (await seasons(s.t)).find((season) => season._id === s.seasonL)!.leagueId;
     await expect(s.t.query(api.seasons.listForOrganizer, { leagueId })).rejects.toThrow(
       'Sign in required',

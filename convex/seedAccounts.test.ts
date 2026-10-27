@@ -153,7 +153,7 @@ async function membershipsOf(t: T, email: string) {
 }
 
 const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
-const DATA = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 4 };
+const DATA = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 6 };
 const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 
 describe('seed:demo accounts: a new deployment', () => {

@@ -133,5 +133,10 @@ export default defineSchema({
   })
     .index('by_leagueId_and_slug', ['leagueId', 'slug'])
     .index('by_leagueId_and_startDate', ['leagueId', 'startDate'])
-    .index('by_leagueId_and_status_and_startDate', ['leagueId', 'status', 'startDate']),
+    .index('by_leagueId_and_status_and_startDate', ['leagueId', 'status', 'startDate'])
+    .index('by_organizationId_and_status_and_registrationDeadline', [
+      'organizationId',
+      'status',
+      'registrationDeadline',
+    ]),
 });

@@ -7,6 +7,7 @@ import {
   getSeasonPublicPageReturns,
   publicLeaguesValidator,
   publicLocationsValidator,
+  publicOpenSeasonsValidator,
   publicSeasonsValidator,
 } from '../../../../../convex/lib/publicPage';
 
@@ -32,6 +33,7 @@ const ORGANIZATION_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.organizations.getPublicPage, getPublicPageReturns, 1),
   savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
   savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
+  savedQuery(api.seasons.listOpenForOrganization, publicOpenSeasonsValidator, 1),
 ];
 
 const LEAGUE_PAGE_QUERIES: readonly OfflineSavedQuery[] = [

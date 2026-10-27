@@ -17,6 +17,7 @@ import { insertMembership } from './lib/memberships';
 import { verifyPassword } from './lib/password';
 import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { addCalendarDays, calendarDateAt } from './lib/registration';
 import type { Role } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import type { SeasonStatus } from './lib/seasonStatus';
@@ -323,6 +324,55 @@ export const DEMO_SEASONS: readonly {
   },
 ];
 
+interface RunSeason {
+  organizationSlug: string;
+  leagueSlug: string;
+  name: string;
+  slug: string;
+  playersPerSide: number;
+  /** Days from the date of the run to each date of the season; negative is before it. */
+  deadlineDays: number;
+  startDays: number;
+  endDays: number;
+}
+
+// Dated from the run, so one season is in progress and one is past its deadline on a new deployment. Insert-only like the rest, so a
+// reused staging keeps the dates of its first run.
+export const DEMO_RUN_SEASONS: readonly RunSeason[] = [
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'sunday-reverse-coed-4s',
+    name: 'Current season',
+    slug: 'current-season',
+    playersPerSide: 4,
+    deadlineDays: -21,
+    startDays: -14,
+    endDays: 56,
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'coed-7v7-rec',
+    name: 'Next season',
+    slug: 'next-season',
+    playersPerSide: 7,
+    deadlineDays: -2,
+    startDays: 5,
+    endDays: 89,
+  },
+];
+
+function runSeason(demo: RunSeason, today: string): NewSeason {
+  return {
+    name: demo.name,
+    slug: demo.slug,
+    startDate: addCalendarDays(today, demo.startDays),
+    endDate: addCalendarDays(today, demo.endDays),
+    registrationDeadline: addCalendarDays(today, demo.deadlineDays),
+    playersPerSide: demo.playersPerSide,
+    minimumRosterSize: demo.playersPerSide,
+  };
+}
+
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
@@ -445,6 +495,17 @@ export const insertDemoData = internalMutation({
       if (!found) continue;
       if (await seasonSlugTaken(ctx, found.league._id, season.slug)) continue;
       await insertSeason(ctx, found.league, season, status);
+      inserted.seasons++;
+    }
+    const today = calendarDateAt(Date.now());
+    for (const demo of DEMO_RUN_SEASONS) {
+      const found = await findLeagueBySlugs(ctx, {
+        orgSlug: demo.organizationSlug,
+        leagueSlug: demo.leagueSlug,
+      });
+      if (!found) continue;
+      if (await seasonSlugTaken(ctx, found.league._id, demo.slug)) continue;
+      await insertSeason(ctx, found.league, runSeason(demo, today), 'published');
       inserted.seasons++;
     }
     return { ...inserted, backfilled, updated };
