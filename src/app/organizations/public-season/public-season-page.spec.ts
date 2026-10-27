@@ -204,7 +204,7 @@ describe('PublicSeasonPage populated', () => {
     const open = card(harness);
     expect(text(open?.querySelector('h2'))).toBe('Registration');
     expect(spaced(open)).toContain('Registration open');
-    expect(spaced(open)).toContain('Registration closes May 23, 2027');
+    expect(spaced(open)).toContain('Registration open · closes May 23, 2027');
     expect(spaced(open)).toContain(
       'Captains register a team, then invite their players. Without a team? Register as a free agent, and an organizer places you on one.',
     );
@@ -227,9 +227,11 @@ describe('PublicSeasonPage populated', () => {
 
   it('sets the title and the Open Graph tags from the results, with the season’s path as canonical', () => {
     expect(TestBed.inject(Title).getTitle()).toBe(
-      'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
+      'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
     );
-    expect(metaContent('og:title')).toBe('Summer 2027');
+    expect(metaContent('og:title')).toBe(
+      'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
+    );
     expect(metaContent('og:type')).toBe('website');
     expect(metaContent('og:description')).toBe(
       'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
@@ -366,6 +368,28 @@ describe('PublicSeasonPage registration card', () => {
         },
       },
     });
+
+  it.each([
+    ['2027-05-01', 'Registration open'],
+    ['2027-05-30', 'Registration closed'],
+    ['2027-07-01', 'In progress'],
+    ['2027-09-15', 'Ended'],
+  ])('on %s the badge beside the heading reads %s', async (date, label) => {
+    vi.setSystemTime(at(date));
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const row = host(harness).querySelector('main h1')?.previousElementSibling;
+    expect([...(row?.children ?? [])].map(text)).toEqual(['Beach volleyball', label]);
+    expect(text(row?.querySelector('[data-testid="season-phase"]'))).toBe(label);
+  });
+
+  it('shows no phase badge for a saved copy made before the deadline was stored', async () => {
+    const harness = await open();
+    emit(seasonQueryResults({ season: without(SUMMER_2027, 'registrationDeadline') }));
+    await settle(harness);
+    expect(host(harness).querySelector('[data-testid="season-phase"]')).toBeNull();
+  });
 
   it('shows the closed card with a link to the league’s open season', async () => {
     vi.setSystemTime(at('2027-07-01'));

@@ -121,7 +121,7 @@ describe('PublicSeasonPage offline', () => {
       expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
       expect(text(main?.querySelector('dl'))).toContain('Jun 6 – Aug 29, 2027');
       expect(TestBed.inject(Title).getTitle()).toBe(
-        'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
+        'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
       );
     });
 

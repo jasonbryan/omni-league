@@ -15,8 +15,9 @@ import { BUTTON_BASE } from '../../ui/button/button-classes';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
-import { registrationCard } from './public-season-registration';
-import { OPEN_BADGE } from '../season-status';
+import { PHASE_LABEL, registrationCard } from './public-season-registration';
+import { OPEN_BADGE, OUTLINE_BADGE } from '../season-status';
+import type { SeasonPhase } from '../../../../convex/lib/registration';
 import type { PublicSeasonView } from './public-season-view';
 
 const CLOSED_BADGE =
@@ -70,11 +71,16 @@ const FACT_ICON =
           </li>
         </ol>
       </nav>
-      <div class="mt-4 md:mt-6">
+      <div class="mt-4 flex flex-wrap items-center gap-2 md:mt-6">
         <span data-slot="badge" [class]="openBadge">{{ season().league.sportName }}</span>
+        @if (card(); as card) {
+          <span data-testid="season-phase" [class]="phaseBadge()">{{
+            phaseLabel(card.phase)
+          }}</span>
+        }
       </div>
       <h1 class="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-5xl">
-        {{ season().league.name }} &middot; {{ season().name }}
+        {{ season().league.name }}&nbsp;&middot; {{ season().name }}
       </h1>
       @if (savedAt(); as savedAt) {
         <app-saved-copy-note [savedAt]="savedAt" />
@@ -86,28 +92,24 @@ const FACT_ICON =
           <section
             id="registration"
             aria-labelledby="registration-heading"
-            class="scroll-mt-20 pt-2 lg:col-start-3 lg:row-start-1 lg:pt-10"
+            class="scroll-mt-20 pt-2 lg:col-start-3 lg:row-start-1 lg:pt-10 lg:pb-10"
           >
             <div
               class="rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24"
             >
               <h2 id="registration-heading" class="sr-only">Registration</h2>
               @if (card.kind === 'open') {
-                <p>
-                  <span [class]="openBadge">Registration open</span>
+                <p class="text-lg font-semibold tracking-tight">
+                  Registration open &middot; closes {{ card.closes }}
                 </p>
-                <p class="mt-3 text-sm text-muted-foreground">Registration closes</p>
-                <p class="text-xl font-semibold tracking-tight">{{ card.closes }}</p>
                 <p class="mt-4 text-sm text-muted-foreground">
                   Captains register a team, then invite their players. Without a team? Register as a
                   free agent, and an organizer places you on one.
                 </p>
               } @else {
-                <p>
-                  <span [class]="closedBadge">Registration closed</span>
+                <p class="text-lg font-semibold tracking-tight">
+                  Registration closed on {{ card.closedOn }}
                 </p>
-                <p class="mt-3 text-sm text-muted-foreground">Registration closed on</p>
-                <p class="text-xl font-semibold tracking-tight">{{ card.closedOn }}</p>
                 <p class="mt-4 text-sm text-muted-foreground">
                   {{ card.note }}
                   @if (card.next; as next) {
@@ -219,7 +221,7 @@ export class PublicSeasonContent {
   readonly now = input.required<number>();
 
   protected readonly openBadge = OPEN_BADGE;
-  protected readonly closedBadge = CLOSED_BADGE;
+  protected readonly phaseLabel = (phase: SeasonPhase) => PHASE_LABEL[phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
@@ -228,6 +230,11 @@ export class PublicSeasonContent {
 
   protected readonly season = computed(() => this.view().season);
   protected readonly card = computed(() => registrationCard(this.season(), this.now()));
+  protected readonly phaseBadge = computed(() => {
+    const phase = this.card()?.phase;
+    if (phase === 'registrationOpen') return OPEN_BADGE;
+    return phase === 'inProgress' ? OUTLINE_BADGE : CLOSED_BADGE;
+  });
   protected readonly dates = computed(() =>
     seasonDateParts(this.season().startDate, this.season().endDate),
   );

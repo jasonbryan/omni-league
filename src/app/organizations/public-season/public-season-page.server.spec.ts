@@ -160,9 +160,11 @@ describe('PublicSeasonPage server render', () => {
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
-      'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
+      'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
     );
-    expect(meta(head, 'og:title')).toBe('Summer 2027');
+    expect(meta(head, 'og:title')).toBe(
+      'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
+    );
     expect(meta(head, 'og:type')).toBe('website');
     expect(meta(head, 'og:description')).toBe(
       'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
@@ -217,8 +219,7 @@ describe('PublicSeasonPage server render', () => {
     const { html, body } = await render(SEASON_PATH, answer());
     const registration = body.querySelector('main #registration');
     expect(text(registration)).toContain('Registration open');
-    expect(text(registration)).toContain('Registration closes');
-    expect(text(registration)).toContain('May 23, 2027');
+    expect(text(registration)).toContain('Registration open · closes May 23, 2027');
     const order = ['<h1', 'id="registration"', 'id="details-heading"', 'id="how-heading"'].map(
       (marker) => html.indexOf(marker),
     );

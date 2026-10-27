@@ -1,4 +1,8 @@
-import { registrationIsOpen, seasonPhase } from '../../../../convex/lib/registration';
+import {
+  registrationIsOpen,
+  seasonPhase,
+  type SeasonPhase,
+} from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import type { PublicSeasonData } from './public-season-view';
 
@@ -7,9 +11,22 @@ export interface NextOpenSeason {
   slug: string;
 }
 
+export const PHASE_LABEL: Record<SeasonPhase, string> = {
+  registrationOpen: 'Registration open',
+  registrationClosed: 'Registration closed',
+  inProgress: 'In progress',
+  ended: 'Ended',
+};
+
 export type RegistrationCard =
-  | { kind: 'open'; closes: string }
-  | { kind: 'closed'; closedOn: string; note: string; next: NextOpenSeason | undefined };
+  | { kind: 'open'; phase: 'registrationOpen'; closes: string }
+  | {
+      kind: 'closed';
+      phase: Exclude<SeasonPhase, 'registrationOpen'>;
+      closedOn: string;
+      note: string;
+      next: NextOpenSeason | undefined;
+    };
 
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -32,12 +49,12 @@ export function registrationCard(
   if (registrationDeadline === undefined) return undefined;
   const phase = seasonPhase({ ...season, registrationDeadline }, nowMs);
   const closes = formatCalendarDate(registrationDeadline);
-  if (phase === 'registrationOpen') return { kind: 'open', closes };
+  if (phase === 'registrationOpen') return { kind: 'open', phase, closes };
   const note =
     phase === 'inProgress'
       ? 'This season is underway.'
       : phase === 'ended'
         ? 'This season has ended.'
         : `This season starts ${formatCalendarDate(season.startDate)}.`;
-  return { kind: 'closed', closedOn: closes, note, next: nextOpenSeason(season, nowMs) };
+  return { kind: 'closed', phase, closedOn: closes, note, next: nextOpenSeason(season, nowMs) };
 }

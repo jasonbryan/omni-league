@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -129,6 +129,7 @@ function textOf(fragment: string | undefined): string {
   return (fragment ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&ndash;/g, '–')
     .replace(/\s+/g, ' ')
@@ -209,12 +210,16 @@ test.describe('public season page: raw server HTML', () => {
 
         expect(html, query).not.toMatch(/\$\d/);
 
-        expect(html, query).toContain(`<title>Summer 2027 | ${LEAGUE} | Omni League</title>`);
+        expect(html, query).toContain(
+          `<title>${LEAGUE} · Summer 2027 | ${tenant.name} | Omni League</title>`,
+        );
         expect(canonicalHrefs(html), query).toHaveLength(1);
         expect(canonicalHrefs(html)[0].endsWith(path), query).toBe(true);
         expect(canonicalHrefs(html)[0], query).not.toContain('?');
         expect(metaContent(html, 'og:url')?.endsWith(path), query).toBe(true);
-        expect(metaContent(html, 'og:title'), query).toBe('Summer 2027');
+        expect(metaContent(html, 'og:title'), query).toBe(
+          `${LEAGUE} · Summer 2027 | ${tenant.name} | Omni League`,
+        );
         expect(metaContent(html, 'og:type'), query).toBe('website');
         expect(metaContent(html, 'og:description'), query).toBe(
           'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
@@ -276,7 +281,7 @@ test.describe('public season page: registration card and details in the raw serv
       const card = spacedText(registrationCard(html));
       expect(card).toContain('Registration open');
       const closes = formatDate(OPEN_SEASON.registrationDeadline ?? '');
-      expect(card).toContain(`Registration closes ${closes}`);
+      expect(card).toContain(`Registration open · closes ${closes}`);
       expect(card).toContain('Captains register a team, then invite their players.');
       expect(spacedText(html.slice(html.indexOf('id="how-heading"')))).toContain(
         'Teams need at least 4 players before registration closes. 3 Play Games start',
@@ -372,11 +377,11 @@ test.describe('public season page in the browser', () => {
     page,
     consoleGuard,
   }) => {
-    const { path } = await seed();
+    const { tenant, path } = await seed();
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1, name: 'Summer 2027' })).toBeVisible();
     await hydrated(consoleGuard);
-    await expect(page).toHaveTitle(`Summer 2027 | ${LEAGUE} | Omni League`);
+    await expect(page).toHaveTitle(`${LEAGUE} · Summer 2027 | ${tenant.name} | Omni League`);
     await expect(page.getByRole('heading', { level: 2, name: 'Season details' })).toBeVisible();
     await expect(page.locator('main dl')).toContainText('Jun 6 – Aug 29, 2027');
     await expect(page.locator('main dl')).toContainText('teams need at least 4 players');
@@ -500,7 +505,7 @@ test.describe('public season page in the browser', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Summer 2027' })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe(path);
     await expect(page.locator('main#main')).toBeFocused();
-    await expect(page).toHaveTitle(`Summer 2027 | ${LEAGUE} | Omni League`);
+    await expect(page).toHaveTitle(`${LEAGUE} · Summer 2027 | ${tenant.name} | Omni League`);
     await expect(page.locator('main dl')).toContainText('Jun 6 – Aug 29, 2027');
 
     await page
@@ -640,19 +645,20 @@ test.describe('public season page: loading', () => {
     expect(watched).toEqual({ skeletonSeen: false, sameH1: true });
   });
 
-  test('after an in-app navigation the skeleton shows with its status, then the page within 4px of its heading bar', async ({
+  test('after an in-app navigation the skeleton shows with its status, then the heading, the card, and the details land within 4px of their bars', async ({
     page,
     consoleGuard,
   }) => {
     const { tenant, path } = await seed();
+    const openPath = `${path.replace('summer-2027', 'fall-open')}`;
     const held = await holdQueries(page, ['seasons:getPublicPage']);
     await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}`);
     await expect(page.getByRole('heading', { level: 1, name: LEAGUE })).toBeVisible();
     await hydrated(consoleGuard);
 
-    await page.getByRole('main').getByRole('link', { name: 'Summer 2027', exact: true }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Fall Open', exact: true }).click();
     await expect.poll(() => held.isHolding()).toBe(true);
-    await expect(page).toHaveURL(`${baseURL}${path}`);
+    await expect(page).toHaveURL(`${baseURL}${openPath}`);
 
     const skeleton = page.getByTestId('season-skeleton');
     await expect(skeleton).toBeVisible();
@@ -662,14 +668,28 @@ test.describe('public season page: loading', () => {
     await expect(page.locator('main[id="main"]')).toBeFocused();
     const scan = await axeScan(page);
     expect(describeViolations(scan.violations)).toEqual([]);
-    const bar = (await skeleton.locator('span[aria-hidden="true"]').nth(3).boundingBox())!;
+    const top = async (locator: Locator) => (await locator.boundingBox())!.y;
+    const barTops = {
+      heading: await top(page.getByTestId('season-skeleton-heading')),
+      card: await top(page.getByTestId('season-skeleton-card')),
+      details: await top(page.getByTestId('season-skeleton-details')),
+    };
 
     held.release();
-    const h1 = page.getByRole('heading', { level: 1, name: 'Summer 2027' });
+    const h1 = page.getByRole('heading', { level: 1, name: 'Fall Open' });
     await expect(h1).toBeVisible();
     await expect(skeleton).toHaveCount(0);
-    const heading = (await h1.boundingBox())!;
-    expect(Math.abs(heading.y - bar.y)).toBeLessThanOrEqual(4);
+    const landed = {
+      heading: await top(h1),
+      card: await top(page.locator('#registration > div')),
+      details: await top(page.locator('section[aria-labelledby="details-heading"]')),
+    };
+    for (const part of ['heading', 'card', 'details'] as const) {
+      expect(
+        Math.abs(landed[part] - barTops[part]),
+        `${part}: the bar is at ${barTops[part]}, the page at ${landed[part]}`,
+      ).toBeLessThanOrEqual(4);
+    }
     await expect(page.locator('main[id="main"]')).toBeFocused();
   });
 });

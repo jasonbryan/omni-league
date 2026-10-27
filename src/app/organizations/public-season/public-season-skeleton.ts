@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
 
-/** The phone breadcrumb is two rows tall because three crumbs wrap there, so the heading does not move when the page replaces it. */
+/** At phone widths the breadcrumb and the heading each wrap to two lines, so the skeleton reserves two of each and the page replaces it without a shift. */
 @Component({
   selector: 'app-public-season-skeleton',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -18,22 +18,41 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
           <span aria-hidden="true" class="${BAR} h-4 w-40"></span>
         </div>
       </div>
-      <span aria-hidden="true" class="${BAR} mt-4 h-5.5 w-32 rounded-full md:mt-6"></span>
-      <span aria-hidden="true" class="${BAR} mt-3 h-9 w-1/2 md:h-12 md:w-1/2"></span>
+      <div class="mt-4 flex gap-2 md:mt-6">
+        <span aria-hidden="true" class="${BAR} h-5.5 w-28 rounded-full"></span>
+        <span aria-hidden="true" class="${BAR} h-5.5 w-32 rounded-full"></span>
+      </div>
+      <div class="mt-3 flex h-18 flex-col gap-2 md:h-12">
+        <span
+          aria-hidden="true"
+          data-testid="season-skeleton-heading"
+          class="${BAR} h-7 w-4/5 md:h-12 md:w-1/2"
+        ></span>
+        <span aria-hidden="true" class="${BAR} h-7 w-1/2 md:hidden"></span>
+      </div>
     </div>
     <div class="border-t border-border">
       <div class="mx-auto grid w-full max-w-6xl gap-x-12 px-4 md:px-8 lg:grid-cols-3">
         <div class="pt-2 lg:col-start-3 lg:row-start-1 lg:pt-10">
           <div
-            class="flex flex-col gap-3 rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6"
+            data-testid="season-skeleton-card"
+            class="rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6"
           >
-            <span aria-hidden="true" class="${BAR} h-5.5 w-36 rounded-full"></span>
-            <span aria-hidden="true" class="${BAR} h-4 w-28"></span>
-            <span aria-hidden="true" class="${BAR} h-7 w-40"></span>
-            <span aria-hidden="true" class="${BAR} mt-2 h-11 w-full"></span>
+            <div class="flex h-14 flex-col gap-1">
+              <span aria-hidden="true" class="${BAR} h-6 w-full"></span>
+              <span aria-hidden="true" class="${BAR} h-6 w-2/3"></span>
+            </div>
+            <div class="mt-4 flex h-15 flex-col justify-between">
+              @for (line of lines; track line) {
+                <span aria-hidden="true" class="${BAR} h-4 w-full"></span>
+              }
+            </div>
           </div>
         </div>
-        <div class="py-8 md:py-10 lg:col-span-2 lg:row-start-1">
+        <div
+          data-testid="season-skeleton-details"
+          class="py-8 md:py-10 lg:col-span-2 lg:row-start-1"
+        >
           <div class="grid sm:grid-cols-2 sm:gap-x-8">
             @for (fact of facts; track fact) {
               <div class="flex gap-4 py-4">
@@ -52,4 +71,5 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
 })
 export class PublicSeasonSkeleton {
   protected readonly facts = [1, 2, 3, 4];
+  protected readonly lines = [1, 2, 3];
 }

@@ -96,9 +96,10 @@ export class PublicSeasonPage {
       if (!view) return null;
       const { season } = view;
       const dates = seasonDates(season.startDate, season.endDate);
+      const heading = `${season.league.name} · ${season.name}`;
       return {
-        title: `${season.name} | ${season.league.name} | Omni League`,
-        ogTitle: season.name,
+        title: `${heading} | ${season.organization.name} | Omni League`,
+        ogTitle: `${heading} | ${season.organization.name} | Omni League`,
         ogDescription: `${dates}. ${season.formatName}, teams need at least ${season.minimumRosterSize} players.`,
         ogType: 'website',
         // The page the query served, built from its slugs, never the request's.
