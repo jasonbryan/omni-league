@@ -58,7 +58,8 @@ function cityStateRefusal(failure: unknown): string | null {
         <p class="text-sm font-medium text-muted-foreground">{{ organization.name }}</p>
         <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">Details</h1>
         <p class="mt-2 max-w-2xl text-sm text-muted-foreground">
-          How your organization appears to players. Changes show on your public page straight away.
+          How your organization appears to players. Changes show on your public page within a few
+          minutes.
         </p>
       </div>
       <section
@@ -83,7 +84,7 @@ function cityStateRefusal(failure: unknown): string | null {
                   #noticeAlert
                   kind="success"
                   title="Details saved."
-                  description="Your public page and its link previews show them now."
+                  description="Your public page and its link previews show them within a few minutes."
                   class="mb-5"
                 >
                   <ng-container [ngTemplateOutlet]="undoAction" />

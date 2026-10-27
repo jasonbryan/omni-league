@@ -64,7 +64,7 @@ describe('AdminDetails', () => {
       expect(text(main.querySelector('h1'))).toBe('Details');
       expect(text(main.querySelector('p.text-sm.font-medium'))).toBe('Coastal Bend Rec Club');
       expect(text(main.querySelector('h1 + p'))).toBe(
-        'How your organization appears to players. Changes show on your public page straight away.',
+        'How your organization appears to players. Changes show on your public page within a few minutes.',
       );
       expect(TestBed.inject(Title).getTitle()).toBe(
         'Details | Coastal Bend Rec Club | Omni League',

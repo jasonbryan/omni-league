@@ -176,3 +176,54 @@ test.describe('the Details page', () => {
     });
   }
 });
+
+test.describe('the Details page: the server refuses a value', () => {
+  test.use({ expectedConvexErrors: ['organizations:updateDetails'] });
+
+  test('its message shows under the field, the input stays, and the field is focused', async ({
+    page,
+  }) => {
+    // The page checks the same rule first, so only an answer made up here reaches the refusal path.
+    const message = 'The server did not accept this City, state.';
+    await page.routeWebSocket(/127\.0\.0\.1:3210/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((raw) => {
+        const text = typeof raw === 'string' ? raw : raw.toString();
+        try {
+          const parsed = JSON.parse(text) as {
+            type?: string;
+            udfPath?: string;
+            requestId?: number;
+          };
+          if (parsed.type === 'Mutation' && parsed.udfPath === 'organizations:updateDetails') {
+            ws.send(
+              JSON.stringify({
+                type: 'MutationResponse',
+                requestId: parsed.requestId,
+                success: false,
+                result: 'Server Error',
+                errorData: { field: 'cityState', code: 'cityStateInvalid', message },
+                logLines: [],
+              }),
+            );
+            return;
+          }
+        } catch {
+          // not JSON: pass on
+        }
+        server.send(raw);
+      });
+      server.onMessage((raw) => ws.send(raw));
+    });
+    await openDetails(page, 'orgAdmin', 'Corpus Christi, TX');
+    await field(page).fill('Austin, TX');
+    await saveButton(page).click();
+    await expect(fieldError(page)).toHaveText(message);
+    await expect(field(page)).toBeFocused();
+    await expect(field(page)).toHaveValue('Austin, TX');
+    await expect(field(page)).toHaveAttribute('aria-invalid', 'true');
+    await expect(status(page)).toHaveCount(0);
+    await field(page).fill('Austin, Texas');
+    await expect(fieldError(page)).toHaveCount(0);
+  });
+});
