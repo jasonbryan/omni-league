@@ -814,7 +814,9 @@ test.describe('organization page: Registration open', () => {
 
       for (const season of ['sooner-season', 'later-season']) {
         const href = `${tenant.path}/leagues/open-league/seasons/${season}`;
-        expect(section, season).toMatch(new RegExp(`<a\\b[^>]*href="[^"]*${href}"[^>]*>Register`));
+        expect(section, season).toMatch(
+          new RegExp(`<a\\b[^>]*href="[^"]*${href}#registration"[^>]*>Register`),
+        );
       }
       expect(plainText(section)).toContain('Register for Open League, Sooner Season');
       expect(html).toMatch(
@@ -883,12 +885,18 @@ test.describe('organization page: Registration open', () => {
     await expectAccessible(page);
   });
 
-  test('browser: a Register link opens the season page', async ({ page, consoleGuard }) => {
+  test('browser: a Register link opens the season page at its registration card', async ({
+    page,
+    consoleGuard,
+  }) => {
     const tenant = await openSeasonsTenant();
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
     await page.getByRole('link', { name: 'Register for Open League, Sooner Season' }).click();
-    await expect(page).toHaveURL(`${tenant.path}/leagues/open-league/seasons/sooner-season`);
+    await expect(page).toHaveURL(
+      `${tenant.path}/leagues/open-league/seasons/sooner-season#registration`,
+    );
     await expect(page.getByRole('heading', { level: 1, name: 'Sooner Season' })).toBeVisible();
+    await expect(page.locator('#registration')).toBeVisible();
   });
 });

@@ -197,12 +197,12 @@ describe('the Registration open section', () => {
       );
     });
 
-    it('links the title and a Register button to the season page, named for the league and season', () => {
+    it('links the title to the season page and a Register button to its registration card, named for the league and season', () => {
       const card = section(harness)?.querySelector(':scope > ul > li');
       const href =
         '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/summer-2027';
       const links = [...(card?.querySelectorAll('a') ?? [])];
-      expect(links.map((a) => a.getAttribute('href'))).toEqual([href, href]);
+      expect(links.map((a) => a.getAttribute('href'))).toEqual([href, `${href}#registration`]);
       expect(text(links[1])).toBe('Register for Coed 7v7 Rec, Summer 2027');
       expect(links[1].getAttribute('data-slot')).toBe('button');
     });
