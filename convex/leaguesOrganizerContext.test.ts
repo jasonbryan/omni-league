@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { FORBIDDEN_CODE } from './lib/forbidden';
-import { insertTenant } from './lib/tenantWrites';
+import { insertCustomLevel, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -120,6 +120,7 @@ describe('leagues.getOrganizerContext', () => {
       locationNames: ['Alpha Field', 'Bravo Beach'],
       role: 'orgAdmin',
       organization: { name: 'Org A', slug: 'org-a' },
+      organizationId: expect.any(String) as string,
     });
   });
 
@@ -127,6 +128,43 @@ describe('leagues.getOrganizerContext', () => {
     const s = await setup();
     const context = await s.as('organizer-l').query(api.leagues.getOrganizerContext, L);
     expect(context).toMatchObject({ slug: 'coed-7v7', role: 'leagueOrganizer' });
+  });
+
+  test('gives the division with its label, and the league’s own custom level', async () => {
+    const s = await setup();
+    const customLevelId = await s.t.run(async (ctx) => {
+      const organizationId = (await ctx.db.get('leagues', s.ids.l))!.organizationId;
+      const id = await insertCustomLevel(ctx, organizationId, {
+        sport: 'soccer',
+        name: 'D',
+        standardLevel: 'rec',
+      });
+      await ctx.db.patch('leagues', s.ids.l, {
+        gender: 'coed',
+        playersPerSide: 7,
+        level: 'rec',
+        customLevelId: id,
+        ageGroup: 'adult',
+        minimumRosterSize: 9,
+      });
+      return id;
+    });
+    const context = await s.as('organizer-l').query(api.leagues.getOrganizerContext, L);
+    expect(context?.division).toEqual({
+      gender: 'coed',
+      playersPerSide: 7,
+      level: 'rec',
+      customLevel: { customLevelId, name: 'D' },
+      ageGroup: 'adult',
+      minimumRosterSize: 9,
+      label: 'Coed · 7v7 · D (Rec)',
+    });
+  });
+
+  test('gives no division for a league that has none', async () => {
+    const s = await setup();
+    const context = await s.as('admin-a').query(api.leagues.getOrganizerContext, L);
+    expect(context).not.toHaveProperty('division');
   });
 
   test('gives staff of a draft league the league with status draft', async () => {

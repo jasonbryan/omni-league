@@ -25,6 +25,7 @@ export type LeagueInputCode =
   | 'ageGroupInvalid'
   | 'minimumRosterSizeLow'
   | 'minimumRosterSizeInvalid'
+  | 'draftSeasonsTooMany'
   | 'locationsEmpty';
 
 export type LeagueField =
@@ -52,6 +53,8 @@ export const LEAGUE_MESSAGES = {
     `${formatLabel(playersPerSide)} needs at least ${playersPerSide} players. Enter ${playersPerSide} or more.`,
   minimumRosterSizeInvalid: (playersPerSide: number) =>
     `Enter a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}.`,
+  draftSeasonsTooMany:
+    'This league has too many draft seasons to update. Publish or remove some first.',
   locationsEmpty: 'Choose at least one location.',
 } as const;
 

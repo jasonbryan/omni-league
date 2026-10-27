@@ -90,6 +90,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/sticky-footer.ts']),
       want(
+        'e2e/league-management-details.spec.ts',
         'e2e/league-management-mockup.spec.ts',
         'e2e/league-management-publish.spec.ts',
         'e2e/league-management.spec.ts',
