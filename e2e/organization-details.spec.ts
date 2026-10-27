@@ -1,6 +1,3 @@
-// The Details page: City, state saved, undone, and checked. Each test signs up its own user and
-// seeds its own organization, so the tests need the local Convex backend and are skipped with
-// E2E_BASE_URL set.
 import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -177,6 +174,16 @@ test.describe('the Details page', () => {
   }
 });
 
+function updateDetailsRequestId(frame: string): number | null {
+  try {
+    const parsed = JSON.parse(frame) as { type?: string; udfPath?: string; requestId?: number };
+    const isUpdate = parsed.type === 'Mutation' && parsed.udfPath === 'organizations:updateDetails';
+    return isUpdate && parsed.requestId !== undefined ? parsed.requestId : null;
+  } catch {
+    return null;
+  }
+}
+
 test.describe('the Details page: the server refuses a value', () => {
   test.use({ expectedConvexErrors: ['organizations:updateDetails'] });
 
@@ -188,30 +195,21 @@ test.describe('the Details page: the server refuses a value', () => {
     await page.routeWebSocket(/127\.0\.0\.1:3210/, (ws) => {
       const server = ws.connectToServer();
       ws.onMessage((raw) => {
-        const text = typeof raw === 'string' ? raw : raw.toString();
-        try {
-          const parsed = JSON.parse(text) as {
-            type?: string;
-            udfPath?: string;
-            requestId?: number;
-          };
-          if (parsed.type === 'Mutation' && parsed.udfPath === 'organizations:updateDetails') {
-            ws.send(
-              JSON.stringify({
-                type: 'MutationResponse',
-                requestId: parsed.requestId,
-                success: false,
-                result: 'Server Error',
-                errorData: { field: 'cityState', code: 'cityStateInvalid', message },
-                logLines: [],
-              }),
-            );
-            return;
-          }
-        } catch {
-          // not JSON: pass on
+        const requestId = updateDetailsRequestId(typeof raw === 'string' ? raw : raw.toString());
+        if (requestId === null) {
+          server.send(raw);
+          return;
         }
-        server.send(raw);
+        ws.send(
+          JSON.stringify({
+            type: 'MutationResponse',
+            requestId,
+            success: false,
+            result: 'Server Error',
+            errorData: { field: 'cityState', code: 'cityStateInvalid', message },
+            logLines: [],
+          }),
+        );
       });
       server.onMessage((raw) => ws.send(raw));
     });

@@ -114,7 +114,6 @@ export async function insertOrganization(
   });
 }
 
-/** `null` removes it, so the organization shows none. */
 export async function updateOrganizationCityState(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,

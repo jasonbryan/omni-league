@@ -43,7 +43,7 @@ function cityStateRefusal(failure: unknown): string | null {
 }
 
 /**
- * Save acts at once and its status carries Undo, which puts the earlier value back. The status takes focus, because it sits above the field and Save is sticky at the bottom on phones.
+ * The status takes focus, because it sits above the field and Save is sticky at the bottom on phones.
  * Only the admin area renders this page, and only once the caller is known to be an org admin of this organization.
  */
 @Component({
@@ -275,10 +275,7 @@ export class AdminDetails {
   protected readonly saveClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly undoClass = `${OUTLINE_BUTTON} pointer-coarse:min-h-11 pointer-coarse:px-4`;
 
-  /** What is stored now, so a save knows the value Undo puts back. */
-  private stored: string | null = this.organization()?.cityState ?? null;
-
-  private readonly model = signal({ cityState: this.stored ?? '' });
+  private readonly model = signal({ cityState: this.organization()?.cityState ?? '' });
   protected readonly fields = form(this.model);
 
   protected readonly saving = signal(false);
@@ -336,6 +333,7 @@ export class AdminDetails {
       this.show({ kind: 'offline' });
       return;
     }
+    const previous = organization.cityState ?? null;
     this.saving.set(true);
     try {
       await this.update.run({
@@ -348,8 +346,6 @@ export class AdminDetails {
       return;
     }
     this.saving.set(false);
-    const previous = this.stored;
-    this.stored = checked.value;
     this.model.set({ cityState: checked.value ?? '' });
     this.show({ kind: 'saved', previous });
   }
@@ -375,7 +371,6 @@ export class AdminDetails {
       return;
     }
     this.undoing.set(false);
-    this.stored = previous;
     this.model.set({ cityState: previous ?? '' });
     this.show({ kind: 'restored' });
   }

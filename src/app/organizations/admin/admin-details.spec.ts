@@ -210,6 +210,20 @@ describe('AdminDetails', () => {
       expect(document.activeElement).toBe(status());
     });
 
+    it('Undo restores the value stored just before the save, even when another admin changed it after the page opened', async () => {
+      o.subscription(GET_ADMIN_CONTEXT)!.emit({ ...COASTAL, cityState: 'Dallas, TX' });
+      await o.flush();
+      await type('cityState', 'Austin, TX');
+      await press(save());
+      o.convex.calls[0]?.resolve(null);
+      await o.flush();
+      await press(undo()!);
+      expect(o.convex.calls[1]?.args).toEqual({
+        organizationId: COASTAL.organizationId,
+        cityState: 'Dallas, TX',
+      });
+    });
+
     it('a failed Undo keeps Undo and shows an error status with the value unchanged', async () => {
       await type('cityState', 'Austin, TX');
       await press(save());
