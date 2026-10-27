@@ -7,12 +7,12 @@
 [context.deploy-preview]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"pr-$REVIEW_ID\" && node scripts/check-deploy-env.mjs preview --preview-name \"pr-$REVIEW_ID\" && npx convex run seed:demo --preview-name \"pr-$REVIEW_ID\""
 
-# `--preview-name`, not `--preview-create`: it reuses the deployment named main (and creates it when
-# none exists), so staging keeps its data between deploys. `--preview-create` deletes and recreates
-# the deployment on every deploy. PR previews keep `--preview-create`: a fresh backend per push is
-# wanted there.
+# Staging alternates between two Convex deployments, staging-a and staging-b. `--preview-create`
+# deletes and recreates the one the published site is not using (`scripts/staging-slot.mjs` reads
+# its `/staging-slot.txt`), so the live frontend keeps a live backend until Netlify publishes the
+# new one. The script is its own step so a crash fails the build, which `export X=$(...)` would hide.
 [context.branch-deploy]
-  command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-name \"$HEAD\" && node scripts/check-deploy-env.mjs preview --preview-name \"$HEAD\" && npx convex run seed:demo --preview-name \"$HEAD\""
+  command = "npm ci && STAGING_SLOT=\"$(node scripts/staging-slot.mjs)\" && export STAGING_SLOT && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL --preview-create \"$STAGING_SLOT\" && node scripts/check-deploy-env.mjs preview --preview-name \"$STAGING_SLOT\" && npx convex run seed:demo --preview-name \"$STAGING_SLOT\""
 
 [context.production]
   command = "npm ci && npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name CONVEX_URL"
