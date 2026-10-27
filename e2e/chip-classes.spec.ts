@@ -116,6 +116,24 @@ test.describe('chip classes in the mockup kit', () => {
     );
   });
 
+  test('hovering fills an unchecked chip and leaves a checked chip as it is', async ({ page }) => {
+    const hoverable = await page.evaluate(() => matchMedia('(hover: hover)').matches);
+    test.skip(!hoverable, 'touch screens have no hover');
+    const background = (chip: Locator) =>
+      chip.evaluate((element) => getComputedStyle(element).backgroundColor);
+    const radios = page.getByRole('radio');
+    await radios.nth(0).check({ force: true });
+    const checked = chipOf(radios.nth(0));
+    const other = chipOf(radios.nth(1));
+    const checkedBefore = await background(checked);
+    const otherBefore = await background(other);
+
+    await checked.hover();
+    expect(await background(checked)).toBe(checkedBefore);
+    await other.hover();
+    expect(await background(other)).not.toBe(otherBefore);
+  });
+
   test('forced colors draw the checked and current chips as a fill, with no outline until focused', async ({
     page,
   }) => {

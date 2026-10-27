@@ -11,12 +11,7 @@ const names = (classes: string): string[] => classes.split(/\s+/);
 
 const FINE_POINTER_HEIGHT = 'h-9';
 const COARSE_POINTER_HEIGHT = 'pointer-coarse:h-11';
-const FORCED_COLORS_FILL = [
-  'forced-color-adjust-none',
-  'border-[Highlight]',
-  'bg-[Highlight]',
-  'text-[HighlightText]',
-];
+const FORCED_COLORS_FILL = ['forced-color-adjust-none', 'bg-[Highlight]', 'text-[HighlightText]'];
 
 describe('chipLinkClasses', () => {
   for (const current of [false, true]) {
@@ -69,13 +64,17 @@ describe('choice chip classes', () => {
     expect(label).toEqual(expect.arrayContaining(['rounded-full', 'border', 'border-input']));
   });
 
+  it('hovers only an unchecked chip, so a checked chip keeps its fill', () => {
+    expect(label).toContain('not-peer-checked:hover:bg-muted');
+    expect(label).not.toContain('hover:bg-muted');
+  });
+
   it('draws the checked chip as --background on --foreground', () => {
     expect(label).toEqual(
       expect.arrayContaining([
         'peer-checked:border-foreground',
         'peer-checked:bg-foreground',
         'peer-checked:text-background',
-        'peer-checked:hover:bg-foreground',
       ]),
     );
   });
@@ -90,10 +89,9 @@ describe('choice chip classes', () => {
     );
   });
 
-  it('keeps the checked state visible in forced colors as a Highlight fill, also on hover', () => {
+  it('keeps the checked state visible in forced colors as a Highlight fill', () => {
     for (const fill of FORCED_COLORS_FILL)
       expect(label).toContain(`peer-checked:forced-colors:${fill}`);
-    expect(label).toContain('peer-checked:hover:forced-colors:bg-[Highlight]');
   });
 
   it('shows focus in forced colors as a system-colour outline, not as the checked state', () => {
