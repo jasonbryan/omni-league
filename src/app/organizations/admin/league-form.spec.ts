@@ -69,3 +69,32 @@ describe('LeagueForm: the location default', () => {
     expect(none.form.chosen()).toEqual([]);
   });
 });
+
+describe('LeagueForm: the locations error', () => {
+  function create(initial: Id<'locations'>[]) {
+    const available = signal<Id<'locations'>[]>(initial);
+    return TestBed.runInInjectionContext(() => new LeagueForm(() => available()));
+  }
+
+  it('builds before the locations arrive and shows no error for the default choice', () => {
+    const form = create([REDFISH]);
+    form.left('locations');
+    expect(form.errors.locations()).toBeNull();
+  });
+
+  it('shows the error once the user clears the only location and leaves the group', () => {
+    const form = create([REDFISH]);
+    form.toggleLocation(REDFISH, false);
+    expect(form.errors.locations()).toBeNull();
+    form.left('locations');
+    expect(form.errors.locations()).not.toBeNull();
+  });
+
+  it('shows no error again after a create puts the default back', () => {
+    const form = create([REDFISH]);
+    form.toggleLocation(REDFISH, false);
+    form.left('locations');
+    form.clear();
+    expect(form.errors.locations()).toBeNull();
+  });
+});
