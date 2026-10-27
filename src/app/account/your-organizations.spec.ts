@@ -117,7 +117,7 @@ describe('YourOrganizations', () => {
     expect(links[0]?.getAttribute('href')).toBe('/app/organizations/new');
     expect(text(links[0])).toBe('Create an organization');
     expect([...links[0].classList].sort()).toEqual(
-      buttonVariants({ size: 'lg' }).split(' ').sort(),
+      buttonVariants({ size: 'md' }).split(' ').sort(),
     );
     expect(section.querySelector('ul')).toBeNull();
   });
@@ -129,7 +129,7 @@ describe('YourOrganizations', () => {
     expect(text(header)).toBe('Your organizationsCreate an organization');
     expect(header?.querySelector('a')?.getAttribute('href')).toBe('/app/organizations/new');
     expect([...header!.querySelector('a')!.classList].sort()).toEqual(
-      buttonVariants({ variant: 'outline', size: 'lg' }).split(' ').sort(),
+      buttonVariants({ variant: 'outline', size: 'md' }).split(' ').sort(),
     );
 
     expect(section.querySelector('ul')?.getAttribute('role')).toBe('list');

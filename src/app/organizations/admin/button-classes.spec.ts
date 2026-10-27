@@ -6,11 +6,11 @@ const tokens = (value: string) => value.split(' ').sort();
 describe('the admin area button classes', () => {
   it('are the helm button output the mockup draws, at the 36px size', () => {
     expect(tokens(OUTLINE_BUTTON)).toEqual(
-      tokens(buttonVariants({ variant: 'outline', size: 'lg' })),
+      tokens(buttonVariants({ variant: 'outline', size: 'md' })),
     );
-    expect(tokens(PRIMARY_BUTTON)).toEqual(tokens(buttonVariants({ size: 'lg' })));
+    expect(tokens(PRIMARY_BUTTON)).toEqual(tokens(buttonVariants({ size: 'md' })));
     expect(tokens(DESTRUCTIVE_BUTTON)).toEqual(
-      tokens(buttonVariants({ variant: 'destructive', size: 'lg' })),
+      tokens(buttonVariants({ variant: 'destructive', size: 'md' })),
     );
   });
 });

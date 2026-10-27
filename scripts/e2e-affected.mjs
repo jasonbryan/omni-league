@@ -141,12 +141,19 @@ export const AREAS = [
     specs: [],
   },
 
-  // The one design file an e2e spec opens; every other file under design/ is read by no spec.
+  // The design files an e2e spec opens; every other file under design/ is read by no spec.
   {
     name: 'leagues mockup',
     test: (file) => file === 'design/mockups/66-69-organization-leagues.html',
     specs: ['organization-leagues-mockup'],
   },
+  {
+    // chip-classes.spec.ts takes the kit CSS from this mockup's inlined block.
+    name: 'chip mockup',
+    test: (file) => file === 'design/mockups/300-public-site-league-form.html',
+    specs: ['chip-classes'],
+  },
+  { name: 'chip classes', test: inDir('src/app/ui/chip/'), specs: ['chip-classes'] },
   { name: 'design files', test: inDir('design/'), specs: [] },
 
   // The harness probes run inside console-fixture.spec.ts.

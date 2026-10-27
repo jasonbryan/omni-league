@@ -1,0 +1,134 @@
+import type { Locator, Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  CHIP_CHOICE_INPUT_CLASSES,
+  CHIP_CHOICE_LABEL_CLASSES,
+  CHIP_CHOICE_WRAPPER_CLASSES,
+  chipLinkClasses,
+} from '../src/app/ui/chip/chip-classes';
+import { expect, test } from './support/fixtures';
+
+const MOCKUP = join(process.cwd(), 'design', 'mockups', '300-public-site-league-form.html');
+const KIT_BLOCK = /<style id="mockup-kit">([\s\S]*?)<\/style>/;
+const KIT_CSS = KIT_BLOCK.exec(readFileSync(MOCKUP, 'utf8'))?.[1] ?? '';
+
+const COARSE_POINTER = '(pointer: coarse)';
+const FINE_POINTER_HEIGHT = 36;
+const COARSE_POINTER_HEIGHT = 44;
+
+const SPORTS = ['Beach volleyball', 'Soccer', 'Softball'];
+
+const choice = (type: 'radio' | 'checkbox', name: string, label: string): string =>
+  `<label class="${CHIP_CHOICE_WRAPPER_CLASSES}"><input type="${type}" name="${name}" class="${CHIP_CHOICE_INPUT_CLASSES}" /><span class="${CHIP_CHOICE_LABEL_CLASSES}">${label}</span></label>`;
+
+const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>Chips</title><style>${KIT_CSS}</style></head><body class="p-4">
+  <fieldset>
+    <legend class="mb-1.5 text-sm font-medium">Sport</legend>
+    <div class="flex flex-wrap gap-2">${SPORTS.map((sport) => choice('radio', 'sport', sport)).join('')}</div>
+  </fieldset>
+  <div class="mt-4 flex flex-wrap gap-2">${choice('checkbox', 'open', 'Open')}</div>
+  <nav class="mt-4 flex flex-wrap gap-2" aria-label="Sports">
+    <a href="#all" aria-current="page" class="${chipLinkClasses(true)}">All sports</a>
+    <a href="#soccer" class="${chipLinkClasses(false)}">Soccer</a>
+  </nav>
+  <div id="foreground-probe" class="bg-foreground"></div>
+</body></html>`;
+
+test.beforeEach(async ({ page }) => {
+  expect(KIT_CSS, `${MOCKUP} has no inlined mockup kit; run npm run design:css`).not.toBe('');
+  await page.setContent(PAGE);
+});
+
+const chipOf = (input: Locator): Locator => input.locator('xpath=following-sibling::span');
+
+async function outline(chip: Locator): Promise<{ style: string; width: string }> {
+  return chip.evaluate((element) => {
+    const { outlineStyle, outlineWidth } = getComputedStyle(element);
+    return { style: outlineStyle, width: outlineWidth };
+  });
+}
+
+async function expectedHeight(page: Page): Promise<number> {
+  const coarse = await page.evaluate((query) => matchMedia(query).matches, COARSE_POINTER);
+  return coarse ? COARSE_POINTER_HEIGHT : FINE_POINTER_HEIGHT;
+}
+
+test.describe('chip classes in the mockup kit', () => {
+  test('Right arrow checks and focuses the next radio, and its chip shows a focus ring', async ({
+    page,
+  }) => {
+    const radios = page.getByRole('radio');
+    await page.keyboard.press('Tab');
+    await expect(radios.nth(0)).toBeFocused();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(radios.nth(1)).toBeChecked();
+    await expect(radios.nth(1)).toBeFocused();
+    await expect(radios.nth(0)).not.toBeChecked();
+    expect((await outline(chipOf(radios.nth(1)))).style).not.toBe('none');
+    expect((await outline(chipOf(radios.nth(0)))).style).toBe('none');
+  });
+
+  test('Space toggles the checkbox chip, and the focused chip shows a focus ring', async ({
+    page,
+  }) => {
+    const checkbox = page.getByRole('checkbox');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(checkbox).toBeFocused();
+    expect((await outline(chipOf(checkbox))).style).not.toBe('none');
+
+    await page.keyboard.press('Space');
+    await expect(checkbox).toBeChecked();
+    await page.keyboard.press('Space');
+    await expect(checkbox).not.toBeChecked();
+  });
+
+  test('every chip is 36px on fine pointers and 44px on touch screens', async ({ page }) => {
+    const height = await expectedHeight(page);
+    const chips = page.locator('span.rounded-full, a.rounded-full');
+    await expect(chips).toHaveCount(SPORTS.length + 3);
+    for (const chip of await chips.all()) {
+      expect(Math.round((await chip.boundingBox())?.height ?? 0)).toBe(height);
+    }
+  });
+
+  test('the checked and current chips are --background on --foreground', async ({ page }) => {
+    const foreground = await page
+      .locator('#foreground-probe')
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+    const unchecked = await chipOf(page.getByRole('radio').nth(0)).evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    expect(unchecked).not.toBe(foreground);
+
+    await page.getByRole('radio').nth(0).check({ force: true });
+    const checked = chipOf(page.getByRole('radio').nth(0));
+    await expect(checked).toHaveCSS('background-color', foreground);
+    await expect(page.getByRole('link', { name: 'All sports' })).toHaveCSS(
+      'background-color',
+      foreground,
+    );
+    await expect(page.getByRole('link', { name: 'Soccer' })).not.toHaveCSS(
+      'background-color',
+      foreground,
+    );
+  });
+
+  test('forced colors draw the checked and current chips with a 2px outline', async ({ page }) => {
+    await page.emulateMedia({ forcedColors: 'active' });
+    await page.getByRole('radio').nth(1).check({ force: true });
+
+    expect(await outline(chipOf(page.getByRole('radio').nth(1)))).toEqual({
+      style: 'solid',
+      width: '2px',
+    });
+    expect((await outline(chipOf(page.getByRole('radio').nth(0)))).style).toBe('none');
+    expect(await outline(page.getByRole('link', { name: 'All sports' }))).toEqual({
+      style: 'solid',
+      width: '2px',
+    });
+    expect((await outline(page.getByRole('link', { name: 'Soccer' }))).style).toBe('none');
+  });
+});
