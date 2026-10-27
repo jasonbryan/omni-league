@@ -334,7 +334,6 @@ export class LeagueCreateForm {
 
   readonly organizationId = input.required<Id<'organizations'>>();
   readonly organizationName = input.required<string>();
-  /** The organization's slug, for the link to the new league's management page. */
   readonly organizationSlug = input.required<string>();
   readonly locations = input.required<readonly LeagueLocationChoice[]>();
 

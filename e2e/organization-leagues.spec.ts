@@ -327,7 +327,6 @@ test.describe('Leagues: the create form on a phone', () => {
     expect(box.y + box.height).toBeLessThanOrEqual(PHONE.height);
     expect(box.y).toBeGreaterThan(PHONE.height - 80);
 
-    // Scrolled to the end of the form, the button is still there, now at the form's own end.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect(submit(page)).toBeInViewport({ ratio: 1 });
   });
@@ -367,7 +366,6 @@ test.describe('Leagues: the create form on a phone', () => {
       await page.keyboard.press(tab);
     }
 
-    // Name, Slug, the Sport group, the three locations, then the button itself.
     expect(seen.map((s) => s.control)).toEqual([
       'name',
       'slug',
@@ -375,7 +373,7 @@ test.describe('Leagues: the create form on a phone', () => {
       'location-1',
       'location-2',
       'location-3',
-      expect.any(String),
+      'BUTTON',
     ]);
     expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
   });
