@@ -169,6 +169,30 @@ describe('LeagueForm: the division', () => {
       );
     });
 
+    it('sends the custom level and the standard level it filters as', async () => {
+      const form = create();
+      form.chooseSport('beachVolleyball');
+      form.toggleLocation(REDFISH, true);
+      form.division.chooseFormat(4);
+      const customLevelId = 'level_gold' as Id<'customLevels'>;
+      form.division.chooseCustomLevel({ customLevelId, standardLevel: 'a' });
+      const sendCreate = send();
+      await form.submit(true, sendCreate);
+      expect(sendCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ level: 'a', customLevelId }),
+      );
+    });
+
+    it('sends no custom level id when a standard level is chosen', async () => {
+      const form = create();
+      form.chooseSport('beachVolleyball');
+      form.toggleLocation(REDFISH, true);
+      form.division.chooseFormat(4);
+      const sendCreate = send();
+      await form.submit(true, sendCreate);
+      expect(sendCreate.mock.calls[0][0]).not.toHaveProperty('customLevelId');
+    });
+
     it('keeps every field after a refused submit', async () => {
       const form = create();
       form.chooseSport('beachVolleyball');

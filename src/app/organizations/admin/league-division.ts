@@ -1,4 +1,5 @@
 import { computed, signal, type Signal } from '@angular/core';
+import type { Id } from '../../../../convex/_generated/dataModel';
 import {
   deriveDivisionFromName,
   isLevelOfSport,
@@ -15,15 +16,29 @@ const CHOICES: readonly DivisionChoice[] = ['gender', 'format', 'level'];
 const DEFAULT_GENDER: Gender = 'coed';
 const DEFAULT_LEVEL: StandardLevel = 'rec';
 
+export interface ChosenCustomLevel {
+  customLevelId: Id<'customLevels'>;
+  standardLevel: StandardLevel;
+}
+
+interface LevelChoice {
+  level: StandardLevel;
+  customLevelId: Id<'customLevels'> | null;
+  byHand: boolean;
+  filled: boolean;
+}
+
 export class LeagueDivision {
   readonly gender = signal<Gender>('coed');
   readonly playersPerSide = signal<number | null>(null);
   readonly level = signal<StandardLevel>(DEFAULT_LEVEL);
+  readonly customLevelId = signal<Id<'customLevels'> | null>(null);
   readonly ageGroup = signal<AgeGroup>('adult');
   readonly minimumText = signal('');
 
   private readonly chosenByHand = signal<ReadonlySet<DivisionChoice>>(new Set());
   private readonly filled = signal<ReadonlySet<DivisionChoice>>(new Set());
+  private levelBeforeCustom: LevelChoice | null = null;
 
   readonly filledFromName: Signal<readonly DivisionChoice[]> = computed(() =>
     CHOICES.filter((choice) => this.filled().has(choice)),
@@ -47,7 +62,32 @@ export class LeagueDivision {
 
   chooseLevel(level: StandardLevel): void {
     this.level.set(level);
+    this.customLevelId.set(null);
     this.choseByHand('level');
+  }
+
+  chooseCustomLevel({ customLevelId, standardLevel }: ChosenCustomLevel): void {
+    this.levelBeforeCustom = {
+      level: this.level(),
+      customLevelId: this.customLevelId(),
+      byHand: this.chosenByHand().has('level'),
+      filled: this.filled().has('level'),
+    };
+    this.level.set(standardLevel);
+    this.customLevelId.set(customLevelId);
+    this.choseByHand('level');
+  }
+
+  undoCustomLevel(customLevelId: Id<'customLevels'>): void {
+    const before = this.levelBeforeCustom;
+    this.levelBeforeCustom = null;
+    const choiceReplaced = this.customLevelId() !== customLevelId;
+    if (choiceReplaced) return;
+    this.level.set(before?.level ?? DEFAULT_LEVEL);
+    this.customLevelId.set(before?.customLevelId ?? null);
+    this.forget('level');
+    if (before?.byHand) this.chosenByHand.update((current) => new Set(current).add('level'));
+    if (before?.filled) this.filled.update((current) => new Set(current).add('level'));
   }
 
   setAgeGroup(ageGroup: AgeGroup): void {
@@ -64,8 +104,9 @@ export class LeagueDivision {
       this.playersPerSide.set(null);
       this.forget('format');
     }
-    if (!isLevelOfSport(sport, this.level())) {
+    if (this.customLevelId() !== null || !isLevelOfSport(sport, this.level())) {
       this.level.set(DEFAULT_LEVEL);
+      this.customLevelId.set(null);
       this.forget('level');
     }
   }
@@ -82,6 +123,8 @@ export class LeagueDivision {
     this.gender.set(DEFAULT_GENDER);
     this.playersPerSide.set(null);
     this.level.set(DEFAULT_LEVEL);
+    this.customLevelId.set(null);
+    this.levelBeforeCustom = null;
     this.ageGroup.set('adult');
     this.minimumText.set('');
     this.chosenByHand.set(new Set());
