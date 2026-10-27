@@ -129,6 +129,35 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
+  const hiddenRadioChip =
+    '<label style="position:relative;display:inline-flex">' +
+    '<input type="radio" name="g" style="position:absolute;width:1px;height:1px;margin:-1px;' +
+    'padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0)">' +
+    '<span style="display:inline-flex;height:36px;padding:0 16px;border:1px solid #000">Chip</span>' +
+    '</label>';
+
+  test('2.4.11: a visually hidden radio drawn by its own label is not obscured by that label', async ({
+    page,
+  }) => {
+    await page.setContent(fixture(hiddenRadioChip));
+    expect((await tabWalk(page)).failures).toEqual([]);
+  });
+
+  test('2.4.11: a sticky element covering a visually hidden radio and its label fails', async ({
+    page,
+  }) => {
+    await page.setContent(
+      fixture(
+        '<div style="position:sticky;top:0;height:60px;background:#fff;z-index:1">Banner</div>' +
+          `<div style="position:relative;top:-50px">${hiddenRadioChip}</div>`,
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([
+      expect.stringMatching(/^2\.4\.11 Focus not obscured: input .* is covered by div "Banner"/),
+    ]);
+  });
+
   test('2.4.11: an inline link that wraps over lines is not obscured by the text around it', async ({
     page,
   }) => {

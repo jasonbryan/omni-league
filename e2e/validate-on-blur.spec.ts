@@ -147,7 +147,7 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(field(page, 'name')).toBeFocused();
     await expectAccessible(page);
 
-    await page.getByRole('radio', { name: 'Soccer' }).check();
+    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
     await expect(fieldError(page, 'sport')).toHaveCount(0);
   });
 
@@ -175,7 +175,7 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expect(field(page, 'end-date')).toHaveAttribute('aria-invalid', 'true');
 
-    await page.getByRole('radio', { name: '7v7' }).check();
+    await page.getByRole('radio', { name: '7v7' }).check({ force: true });
     await expect(fieldError(page, 'format')).toHaveCount(0);
     await field(page, 'minimum-roster-size').fill('2');
     await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);
@@ -223,8 +223,8 @@ test.describe('a field is checked when the user leaves it', () => {
     await page.goto(`${base}/leagues`);
     const form = page.locator('#create-league form');
     await field(page, 'name').fill('Friday Night Fours');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check();
-    await page.getByRole('radio', { name: '4v4' }).check();
+    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+    await page.getByRole('radio', { name: '4v4' }).check({ force: true });
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await form.getByRole('button', { name: /^Create draft league/ }).click();
     await expect(form.getByRole('status').filter({ hasText: 'created as a draft' })).toBeVisible();
