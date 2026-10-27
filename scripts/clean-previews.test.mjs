@@ -187,6 +187,17 @@ describe('selectCandidates (what may be considered for deletion)', () => {
     assert.deepEqual(kept([main]), ['main-staging']);
   });
 
+  it('never considers a staging slot or main, and keeps all three', () => {
+    const slots = ['staging-a', 'staging-b', 'main'].map((name) =>
+      deployment(`animal-${name}`, { previewIdentifier: name, reference: `preview/${name}` }),
+    );
+    assert.deepEqual(considered(slots), []);
+    assert.deepEqual(
+      kept(slots),
+      slots.map((d) => d.name),
+    );
+  });
+
   it('never considers a dev, prod, or custom deployment, even one named pr-<n>', () => {
     for (const deploymentType of ['dev', 'prod', 'custom']) {
       const d = prDeployment(5, { deploymentType });
@@ -361,6 +372,19 @@ describe('runClean', () => {
     assert.equal(await h.run(), 0);
     assert.deepEqual(h.ghCalls, [9]);
     assert.deepEqual(h.deletes(), [`${BASE_URL}/deployments/animal-9/delete`]);
+  });
+
+  it('deletes only the merged pr-<n> among the staging slots, main, and it', async () => {
+    const slot = (name) =>
+      deployment(`animal-${name}`, { previewIdentifier: name, reference: `preview/${name}` });
+    const h = harness({
+      deployments: [slot('staging-a'), slot('staging-b'), slot('main'), prDeployment(12)],
+      states: { 12: 'MERGED' },
+      args: { yes: true },
+    });
+    assert.equal(await h.run(), 0);
+    assert.deepEqual(h.ghCalls, [12]);
+    assert.deepEqual(h.deletes(), [`${BASE_URL}/deployments/animal-12/delete`]);
   });
 
   it('never deletes dev, prod, or other-project deployments in the list', async () => {
