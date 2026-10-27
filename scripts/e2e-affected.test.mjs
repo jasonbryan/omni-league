@@ -472,6 +472,7 @@ describe('selectSpecs: files that cannot change an e2e result', () => {
     '.github/pull_request_template.md',
     '.github/dependabot.yml',
     '.github/workflows/clean-previews.yml',
+    '.github/workflows/staging-rebuild.yml',
     '.github/ISSUE_TEMPLATE/feature.yml',
     'e2e/harness/probes/skipped.probe.ts',
   ];

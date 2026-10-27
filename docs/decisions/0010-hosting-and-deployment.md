@@ -8,6 +8,7 @@
 - **Amended:** 2026-10-10, by #158: previews are cleaned up after their PR merges, by a workflow on `main` that holds one environment secret. See "Amendment: preview cleanup (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-13, by #222: staging reuses its Convex deployment, so its data survives a deploy. See "Amendment: staging keeps its Convex data (2026-10-13)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-14, by #229: staging resets to the demo data on every merge, through two alternating Convex deployments. See "Amendment: staging resets to the demo data on every merge (2026-10-14)" at the end. It supersedes the 2026-10-13 amendment. Where the sections above disagree with the amendment, the amendment applies.
+- **Amended:** 2026-10-26, by #304: a scheduled workflow rebuilds staging every 2 days through a Netlify build hook, so its Convex deployment never expires. See "Amendment: scheduled staging rebuild (2026-10-26)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -768,3 +769,31 @@ The owner wants staging to come back to the same seeded data after every merge, 
 **Other ADRs.** ADR 0012's premise that staging gets a new `*.convex.site` URL on every merge holds again, as before the 2026-10-13 amendment. `SITE_URL` and `PREVIEW_ORIGIN_PATTERN` key on the Netlify origin `main--<site>`, not on the Convex deployment name, so both slots work.
 
 **Sources.** `npx convex deploy --help` (CLI 1.46), [preview deployments](https://docs.convex.dev/production/hosting/preview-deployments), Netlify's `DEPLOY_PRIME_URL` ([build environment variables](https://docs.netlify.com/build/configure-builds/environment-variables/)).
+
+## Amendment: scheduled staging rebuild (2026-10-26)
+
+Convex deletes a preview deployment 5 days after it is created, and each merge creates the served staging slot afresh. In a week with no merge, staging therefore went down (#304). Owner decision, 2026-10-26: a scheduled workflow calls a Netlify build hook for `main` every 2 days ("Looks good for 304", in reply to the recommendation "B, 2 days"). The repository is public, so Actions minutes are free.
+
+Netlify scheduled functions were considered and rejected. Netlify runs them only on published production deploys, not on branch deploys, and staging is a branch deploy. A function would have needed a second Netlify project.
+
+| Rule in this ADR                                                                              | Was                                                             | Now                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No deploy secret exists in GitHub (item 8, Consequences)                                      | No secret in GitHub for deploys; one cleanup token (2026-10-10) | For this hook only, one more environment secret, `STAGING_BUILD_HOOK_URL`, in the GitHub environment `staging-rebuild`, whose deployment branches are limited to `main`. It can queue a build of `main` and nothing else. If it leaks, the owner deletes the hook in Netlify and creates a new one. Only `staging-rebuild.yml` uses it.                 |
+| GitHub Actions row: "Netlify builds and deploys, so no deploy Action is added" (Consequences) | No deploy Action                                                | For this hook only, `staging-rebuild.yml` runs on `schedule` and `workflow_dispatch` with `permissions: {}`, no checkout, and no `uses:`, using the preinstalled `curl`, `jq`, and `gh`. It does not build or deploy: Netlify builds from Git as before. The workflow asks for a build, then checks that staging flipped to the other slot and answers. |
+
+**How it runs.** The cron is `17 9 */2 * *` (UTC; minute 17 avoids the top of the hour). Job `rebuild` reads the slot staging serves from `staging-slot.txt`, posts to the hook, and polls the file for up to 25 minutes until it names a different valid slot. It then checks that `/organizations/gulf-coast-sport-social` answers 200 with the demo organization's name. A failed scheduled run opens or updates the issue `Scheduled staging rebuild failed`. A merge build that flips the slot first still passes the check. Operating reference and the owner's setup: [hosting, Scheduled staging rebuild](../process/hosting.md#scheduled-staging-rebuild).
+
+**Interval: every 2 days.**
+
+- One failed or dropped run puts the next at day 4, inside the 5-day expiry. Every 3 days would put it at day 6, after the expiry.
+- `*/2` counts days of the month, so the gap is 1 to 2 days at month ends and never more.
+- Each slot lives at most 4 days, so the previous staging deploy stays a working rollback target.
+- GitHub documents that a `schedule` run can be delayed or dropped under load. The days of slack cover one such run.
+
+**Data reset.** Each rebuild is a `branch-deploy` of `main`, so it recreates the slot staging is not serving and runs `seed:demo` on it, as in the 2026-10-14 amendment. Staging's data now resets every 2 days as well as on every merge.
+
+**Retry.** The trigger step uses `curl --retry 2`. If a response is lost, the retry can queue a second build. That is harmless: it gives two flips in a row.
+
+**60-day limit.** In a public repository, GitHub turns scheduled workflows off after 60 days with no repository activity, and they stay off after commits resume. This affects `staging-rebuild.yml`, `e2e.yml`, and `clean-previews.yml`. Detection and the fix are in [hosting, Scheduled staging rebuild](../process/hosting.md#scheduled-staging-rebuild).
+
+**Sources.** [Netlify build hooks](https://docs.netlify.com/build/configure-builds/build-hooks/), [Netlify scheduled functions](https://docs.netlify.com/build/functions/scheduled-functions/), [GitHub, events that trigger workflows: schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), [Convex preview deployments](https://docs.convex.dev/production/hosting/preview-deployments).
