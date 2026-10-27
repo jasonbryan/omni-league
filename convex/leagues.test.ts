@@ -729,7 +729,13 @@ describe('drafts stay off the public page', () => {
     const list = await s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page: 1 });
     expect(list).toEqual({
       rows: [
-        { name: 'Coed 7v7', slug: 'coed-7v7', sportName: 'Soccer', locationNames: ['Alpha Field'] },
+        {
+          name: 'Coed 7v7',
+          slug: 'coed-7v7',
+          sportName: 'Soccer',
+          locationNames: ['Alpha Field'],
+          seasons: [],
+        },
       ],
       page: 1,
       pageCount: 1,

@@ -28,11 +28,19 @@ export type PublicPage = Infer<typeof publicPageValidator>;
 
 export const getPublicPageReturns = v.union(v.null(), publicPageValidator);
 
-// `sportNames` and `divisionLabel` are optional so a copy saved before they existed stays valid.
+// `sportNames`, `divisionLabel`, and `seasons` are optional so a copy saved before they existed stays valid.
 const publicLocationValidator = v.object({
   name: v.string(),
   address: v.string(),
   sportNames: v.optional(v.array(v.string())),
+});
+
+const publicLeagueSeasonValidator = v.object({
+  name: v.string(),
+  slug: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
 });
 
 const publicLeagueValidator = v.object({
@@ -41,6 +49,7 @@ const publicLeagueValidator = v.object({
   sportName: v.string(),
   locationNames: v.array(v.string()),
   divisionLabel: v.optional(v.string()),
+  seasons: v.optional(v.array(publicLeagueSeasonValidator)),
 });
 
 function publicListValidator<Row extends Validator<unknown, 'required', string>>(row: Row) {
@@ -102,3 +111,23 @@ export const publicSeasonPageValidator = v.object({
 export type PublicSeasonPage = Infer<typeof publicSeasonPageValidator>;
 
 export const getSeasonPublicPageReturns = v.union(v.null(), publicSeasonPageValidator);
+
+const publicOpenSeasonValidator = v.object({
+  name: v.string(),
+  slug: v.string(),
+  startDate: v.string(),
+  endDate: v.string(),
+  registrationDeadline: v.string(),
+  minimumRosterSize: v.number(),
+  league: v.object({
+    name: v.string(),
+    slug: v.string(),
+    sportName: v.string(),
+    divisionLabel: v.optional(v.string()),
+    locationNames: v.array(v.string()),
+  }),
+});
+
+export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
+
+export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;

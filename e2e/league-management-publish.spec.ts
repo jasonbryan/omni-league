@@ -150,8 +150,7 @@ test.describe('League management: publishing a season', () => {
 
     await expect(publishButton(page, 'Spring 2027')).toBeVisible();
     const raw = await fetchRawHtml(request, tenant.path);
-    expect(raw.html).not.toContain('Fall 2027');
-    expect(raw.html).not.toContain('Summer 2027');
+    expect(raw.html).not.toContain('Spring 2027');
   });
 
   test('Cancel and Escape leave it a draft, write nothing, and return focus to that row’s Publish button', async ({

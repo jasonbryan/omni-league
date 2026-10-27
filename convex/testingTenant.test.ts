@@ -110,6 +110,7 @@ describe('testing:seedLeague', () => {
         sportName: 'Soccer',
         locationNames: ['Field One'],
         divisionLabel: 'Coed · 4v4 · Rec',
+        seasons: [],
       },
       {
         name: 'League B',
@@ -117,6 +118,7 @@ describe('testing:seedLeague', () => {
         sportName: 'Softball',
         locationNames: ['Field Two', 'Field One'],
         divisionLabel: 'Coed · 9v9 · Rec',
+        seasons: [],
       },
     ]);
   });
@@ -214,6 +216,7 @@ describe('testing:addLeague', () => {
       sportName: 'Beach volleyball',
       locationNames: ['Field One'],
       divisionLabel: 'Coed · 2v2 · Rec',
+      seasons: [],
     });
     expect(leagues.total).toBe(3);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'e2e-org-a1b2' })).toMatchObject({

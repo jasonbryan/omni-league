@@ -26,11 +26,13 @@ let client: FakeConvexClient;
 const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
+const OPEN_SEASONS = 'seasons:listOpenForOrganization';
 
 const queries = (slug: string) => [
   { fn: api.organizations.getPublicPage, name: HEADER, args: { slug } },
   { fn: api.organizations.listPublicLeagues, name: LEAGUES, args: { slug, page: 1 } },
   { fn: api.organizations.listPublicLocations, name: LOCATIONS, args: { slug, page: 1 } },
+  { fn: api.seasons.listOpenForOrganization, name: OPEN_SEASONS, args: { orgSlug: slug } },
 ];
 
 function plant(page: PublicOrganizationPage = GULF_COAST, savedAt = SAVED_AT): void {
@@ -155,7 +157,7 @@ describe('OrganizationPage offline', () => {
         v: { name: 'Gulf Coast Live' },
         savedAt: NOW,
       });
-      for (const name of [LEAGUES, LOCATIONS]) {
+      for (const name of [LEAGUES, LOCATIONS, OPEN_SEASONS]) {
         expect(JSON.parse(savedEntry(GULF_COAST.slug, name) ?? 'null'), name).toMatchObject({
           savedAt: NOW,
         });
@@ -171,10 +173,13 @@ describe('OrganizationPage offline', () => {
     });
   });
 
-  it('shows a copy saved before the division and sports lines existed, without them', async () => {
+  it('shows a copy saved before the division, sports, and season lines existed, without them', async () => {
     localStorage.clear();
     const stripped = structuredClone(GULF_COAST);
-    for (const league of stripped.leagues) delete league.divisionLabel;
+    for (const league of stripped.leagues) {
+      delete league.divisionLabel;
+      delete league.seasons;
+    }
     for (const location of stripped.locations) delete location.sportNames;
     plant(stripped);
     stubOnLine(false);
@@ -222,6 +227,63 @@ describe('OrganizationPage offline', () => {
     vi.advanceTimersByTime(1);
     await settle(harness);
     expect(note(harness)).not.toBeNull();
+  });
+
+  describe('open seasons from the saved copy', () => {
+    const SAVED_OPEN = [
+      {
+        name: 'Summer 2027',
+        slug: 'summer-2027',
+        startDate: '2026-11-20',
+        endDate: '2027-02-20',
+        registrationDeadline: '2026-10-12',
+        minimumRosterSize: 7,
+        league: {
+          name: 'Coed 7v7 Rec',
+          slug: 'coed-7v7-rec',
+          sportName: 'Soccer',
+          divisionLabel: 'Coed · 7v7 · Rec',
+          locationNames: ['Bayside Athletic Complex'],
+        },
+      },
+      {
+        name: 'Fall 2026',
+        slug: 'fall-2026',
+        startDate: '2026-10-15',
+        endDate: '2026-12-15',
+        registrationDeadline: '2026-10-01',
+        minimumRosterSize: 4,
+        league: {
+          name: 'Sunday Reverse Coed 4s',
+          slug: 'sunday-reverse-coed-4s',
+          sportName: 'Beach volleyball',
+          locationNames: [],
+        },
+      },
+    ];
+
+    const cards = (harness: RouterTestingHarness) =>
+      [...host(harness).querySelectorAll('#registration-open > ul > li h3')].map(text);
+
+    it('shows the cards of the saved copy that are open at view time, and the hero button', async () => {
+      plant({ ...GULF_COAST, openSeasons: SAVED_OPEN });
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      expect(cards(harness)).toEqual(['Coed 7v7 Rec']);
+      expect(host(harness).querySelector('main a[href$="#registration-open"]')).not.toBeNull();
+    });
+
+    it('drops a season whose deadline passed after the copy was saved', async () => {
+      plant({ ...GULF_COAST, openSeasons: SAVED_OPEN });
+      vi.setSystemTime(Date.UTC(2026, 9, 13, 18));
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      expect(cards(harness)).toEqual([]);
+      expect(text(host(harness).querySelector('#registration-open h2 + p'))).toContain(
+        'No season is open',
+      );
+      expect(host(harness).querySelector('main a[href$="#registration-open"]')).toBeNull();
+    });
   });
 
   describe('no saved copy (state 2)', () => {
@@ -286,6 +348,7 @@ describe('OrganizationPage offline', () => {
       ['the header', HEADER],
       ['the leagues list', LEAGUES],
       ['the locations list', LOCATIONS],
+      ['the open seasons', OPEN_SEASONS],
     ])('offline with %s not saved: shows the not-saved view', async (_, missing) => {
       plant();
       const missingQuery = queries(GULF_COAST.slug).find((q) => q.name === missing);
@@ -302,6 +365,8 @@ describe('OrganizationPage offline', () => {
       [LEAGUES, { rows: [{ name: 'Coed' }], page: 1, pageCount: 1, total: 1 }],
       [LOCATIONS, { rows: [], page: 1 }],
       [LOCATIONS, null],
+      [OPEN_SEASONS, 'none'],
+      [OPEN_SEASONS, [{ name: 'Summer 2027' }]],
     ])(
       'offline with an unusable saved list (%s): shows the not-saved view and removes it',
       async (name, value) => {
