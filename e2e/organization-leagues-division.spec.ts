@@ -297,4 +297,31 @@ test.describe('Leagues: the division chips', () => {
     await expect(row.locator('h3')).toHaveText('Sunday Coed 4s');
     await expect(row.locator('[data-slot="league-division"]')).toHaveText('Coed · 4v4 · Rec');
   });
+
+  test('a name edit that no longer states a filled value returns it to its default, and a hand-chosen one stays', async ({
+    page,
+  }) => {
+    await openLeagues(page);
+    await chip(page, 'Beach volleyball').click();
+    await page.locator('#name').fill('Wednesday Women’s 2s BB');
+    await page.locator('#name').blur();
+    await expect(radio(page, 'BB')).toBeChecked();
+
+    await page.locator('#name').fill('Wednesday Women’s 4s');
+    await page.locator('#name').blur();
+    await expect(radio(page, "Women's")).toBeChecked();
+    await expect(radio(page, '4v4')).toBeChecked();
+    await expect(radio(page, 'Rec')).toBeChecked();
+    await expect(
+      form(page).getByRole('group', { name: 'Division' }).getByRole('status'),
+    ).toContainText('Gender and format were filled in from the name.');
+
+    await chip(page, 'A').click();
+    await page.locator('#name').fill('Wednesday night');
+    await page.locator('#name').blur();
+    await expect(radio(page, 'Coed')).toBeChecked();
+    await expect(form(page).locator('#format input:checked')).toHaveCount(0);
+    await expect(radio(page, 'A')).toBeChecked();
+    await expect(form(page).getByText('filled in from the name')).toHaveCount(0);
+  });
 });
