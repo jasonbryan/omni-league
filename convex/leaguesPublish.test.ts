@@ -53,6 +53,12 @@ async function setup() {
         slug: name.toLowerCase().replace(/ /g, '-'),
         sport,
         locationIds,
+        division: {
+          gender: 'coed',
+          playersPerSide: sport === 'beachVolleyball' ? 4 : 9,
+          level: 'rec',
+          ageGroup: 'adult',
+        },
       });
     const draftSoccer = await draft(organizationA, 'Draft Soccer', 'soccer', [x, y]);
     const draftSoftball = await draft(organizationA, 'Draft Softball', 'softball', [y]);
@@ -195,6 +201,7 @@ describe('leagues.publish', () => {
       slug: 'draft-softball',
       sportName: 'Softball',
       locationNames: ['Bravo Beach'],
+      divisionLabel: 'Coed · 9v9 · Rec',
     });
     expect((await leagues({ sport: 'softball' })).rows.map((row) => row.name)).toEqual([
       'Draft Softball',

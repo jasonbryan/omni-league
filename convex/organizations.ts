@@ -2,7 +2,7 @@ import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireOrgAdminOrForbidden, requireUser } from './lib/access';
-import { customLevelLabel, divisionLabel, levelLabel } from './lib/divisions';
+import { leagueDivisionLabel } from './lib/leagueDivision';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
   checkOrganizationName,
@@ -34,31 +34,6 @@ export { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE };
 const listArgs = { slug: v.string(), page: v.number() };
 
 const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
-
-async function publicDivisionLabel(
-  ctx: QueryCtx,
-  league: Doc<'leagues'>,
-): Promise<string | undefined> {
-  const { gender, playersPerSide, level, ageGroup, customLevelId } = league;
-  if (gender === undefined || playersPerSide === undefined || level === undefined) {
-    return undefined;
-  }
-  const customLevel =
-    customLevelId === undefined ? null : await ctx.db.get('customLevels', customLevelId);
-  // A level of another organization or sport falls back to the standard level, so bad data cannot fail the page.
-  const ownCustomLevel =
-    customLevel?.organizationId === league.organizationId && customLevel.sport === league.sport
-      ? customLevel
-      : null;
-  return divisionLabel({
-    gender,
-    playersPerSide,
-    levelLabel: ownCustomLevel
-      ? customLevelLabel(ownCustomLevel.name, ownCustomLevel.standardLevel, league.sport)
-      : levelLabel(level),
-    ...(ageGroup !== undefined && { ageGroup }),
-  });
-}
 
 async function sportNamesAt(
   ctx: QueryCtx,
@@ -216,7 +191,7 @@ export const listPublicLeagues = query({
         // Only this organization's locations: a league can never name another organization's.
         if (location?.organizationId === organization._id) locationNames.push(location.name);
       }
-      const label = await publicDivisionLabel(ctx, league);
+      const label = await leagueDivisionLabel(ctx, league);
       rows.push({
         name: league.name,
         slug: league.slug,
