@@ -35,6 +35,7 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 export interface PublishTarget {
   leagueId: Id<'leagues'>;
   name: string;
+  slug: string;
 }
 
 export interface PublishOutcome extends PublishTarget {
