@@ -240,6 +240,7 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
 
     await test.step('rows of check boxes and radio buttons', async () => {
       await visit(page, `${base}/leagues`, 'Leagues');
+      await expect(page.locator('#create-league form')).toBeVisible();
       expect(await expectRows(page)).toBeGreaterThan(0);
       await visit(page, `${base}/staff`, 'Staff');
       expect(await expectRows(page)).toBeGreaterThan(0);

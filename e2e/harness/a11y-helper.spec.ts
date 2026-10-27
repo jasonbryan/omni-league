@@ -129,6 +129,53 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
+  const hiddenRadioChip =
+    '<label style="position:relative;display:inline-flex">' +
+    '<input type="radio" name="g" style="position:absolute;width:1px;height:1px;margin:-1px;' +
+    'padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0)">' +
+    '<span style="display:inline-flex;height:36px;padding:0 16px;border:1px solid #000">Chip</span>' +
+    '</label>';
+
+  test('2.4.11: a visually hidden radio drawn by its own label is not obscured by that label', async ({
+    page,
+  }) => {
+    await page.setContent(fixture(hiddenRadioChip));
+    expect((await tabWalk(page)).failures).toEqual([]);
+  });
+
+  test('2.4.11: a sticky element covering a visually hidden radio and its label fails', async ({
+    page,
+  }) => {
+    await page.setContent(
+      fixture(
+        '<div style="position:sticky;top:0;height:60px;background:#fff;z-index:1">Banner</div>' +
+          `<div style="position:relative;top:-50px">${hiddenRadioChip}</div>`,
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([
+      expect.stringMatching(/^2\.4\.11 Focus not obscured: input .* is covered by div "Banner"/),
+    ]);
+  });
+
+  test('2.4.11: a visually hidden radio whose chip another chip covers fails', async ({ page }) => {
+    const chip = (name: string, label: string) =>
+      '<label style="position:relative;display:inline-flex;width:80px;height:36px;background:#eee">' +
+      `<input type="radio" name="${name}" style="position:absolute;width:1px;height:1px;margin:-1px;` +
+      'padding:0;border:0;overflow:hidden;clip:rect(0,0,0,0)">' +
+      `<span>${label}</span></label>`;
+    await page.setContent(
+      fixture(
+        `<div style="display:flex">${chip('a', 'First')}</div>` +
+          `<div style="position:relative;top:-36px;display:flex">${chip('b', 'Second')}</div>`,
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([
+      expect.stringMatching(/^2\.4\.11 Focus not obscured: input .* is covered by span "Second"/),
+    ]);
+  });
+
   test('2.4.11: an inline link that wraps over lines is not obscured by the text around it', async ({
     page,
   }) => {

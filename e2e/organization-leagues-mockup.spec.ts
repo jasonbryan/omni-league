@@ -102,14 +102,26 @@ async function signedInAdmin(page: Page, seed: TenantSeed) {
 const submit = (page: Page) =>
   page.locator('#create-league form').getByRole('button', { name: /^Create draft league/ });
 
+// This mockup predates the division: the Division group, the Sport hint, and each row's division
+// label. 300-public-site-league-form.html draws them, and organization-leagues-division.spec.ts
+// covers them.
+const AFTER_THIS_MOCKUP = [
+  '#create-league form fieldset:has(> legend:text-is("Division"))',
+  '#sport-description',
+  '#leagues-list [data-slot="league-division"]',
+].join(', ');
+
 async function appText(page: Page, organization: string): Promise<string> {
+  const hidden = page.locator(AFTER_THIS_MOCKUP);
+  await hidden.evaluateAll((elements) => elements.forEach((el) => el.setAttribute('hidden', '')));
   const text = await page.getByRole('main').innerText();
+  await hidden.evaluateAll((elements) => elements.forEach((el) => el.removeAttribute('hidden')));
   return normalize(text, [organization]);
 }
 
 async function fill(page: Page, league: { name: string }) {
   await page.locator('#name').fill(league.name);
-  await page.getByRole('radio', { name: 'Beach volleyball' }).check();
+  await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
   await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
 }
 

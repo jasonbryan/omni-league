@@ -43,13 +43,20 @@ const submit = (page: Page) => form(page).getByRole('button', { name: /^Create d
 const leagueRows = (page: Page) => page.locator('#leagues-list > li');
 const leagueTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Leagues' });
 
+const DEFAULT_FORMAT: Record<string, string> = {
+  'Beach volleyball': '4v4',
+  Soccer: '7v7',
+  Softball: '10v10',
+};
+
 async function createDraft(
   page: Page,
   league: { name: string; slug?: string; sport: string; locations: string[] },
 ) {
   await page.locator('#name').fill(league.name);
   if (league.slug !== undefined) await page.locator('#slug').fill(league.slug);
-  await page.getByRole('radio', { name: league.sport }).check();
+  await page.getByRole('radio', { name: league.sport }).check({ force: true });
+  await page.getByRole('radio', { name: DEFAULT_FORMAT[league.sport] }).check({ force: true });
   for (const location of league.locations) {
     await page.getByRole('checkbox', { name: location }).click();
   }
@@ -69,7 +76,8 @@ test.describe('Leagues: creating a draft', () => {
     await expectAccessible(page);
 
     await page.locator('#name').fill('  Sunday Reverse Coed 4s ');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check();
+    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+    await expect(page.getByRole('radio', { name: '4v4' })).toBeChecked();
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await screenshot(page, testInfo, '66-leagues-filled');
     await submit(page).click();
@@ -86,6 +94,7 @@ test.describe('Leagues: creating a draft', () => {
     const row = leagueRows(page).first();
     await expect(row.locator('h3')).toHaveText('Sunday Reverse Coed 4s');
     await expect(row.locator('[data-slot="badge"]')).toHaveText(['Draft', 'Beach volleyball']);
+    await expect(row.locator('[data-slot="league-division"]')).toHaveText('Coed · 4v4 · Rec');
     await expect(row).toContainText('Pelican Shoals Sand Courts');
     await screenshot(page, testInfo, '66-leagues-created');
     await expectAccessible(page);
@@ -168,7 +177,11 @@ test.describe('Leagues: creating a draft', () => {
     await submit(page).click();
     await expect(page.locator('#name-error')).toHaveCount(0);
     await expect(page.locator('#sport-error')).toBeVisible();
-    await page.getByRole('radio', { name: 'Soccer' }).check();
+    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
+    await submit(page).click();
+    await expect(page.locator('#format-error')).toBeVisible();
+    await expect(page.getByRole('radio', { name: '4v4' })).toBeFocused();
+    await page.getByRole('radio', { name: '7v7' }).check({ force: true });
     await submit(page).click();
     await expect(page.locator('#locations-error')).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' })).toBeFocused();
@@ -179,7 +192,7 @@ test.describe('Leagues: creating a draft', () => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Fine');
-    await page.getByRole('radio', { name: 'Soccer' }).check();
+    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
     await page.getByRole('checkbox', { name: 'Redfish Flats Fields' }).click();
     for (const slug of ['Bad Slug', 'ab', 'new']) {
       await page.locator('#slug').fill(slug);
@@ -283,7 +296,7 @@ test.describe('Leagues: defaults and the next step', () => {
 
     // Name and Sport are enough: the location needs no tick.
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check();
+    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
     await submit(page).click();
 
     const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
@@ -345,7 +358,9 @@ test.describe('Leagues: the create form on a phone', () => {
       seen.push(
         await page.evaluate(() => {
           const active = document.activeElement as HTMLElement;
-          const rect = active.getBoundingClientRect();
+          // A chip's radio is visually hidden: its label is what the user sees.
+          const face = active.closest('label') ?? active;
+          const rect = face.getBoundingClientRect();
           const x = rect.left + rect.width / 2;
           const y = rect.top + rect.height / 2;
           const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
@@ -353,7 +368,7 @@ test.describe('Leagues: the create form on a phone', () => {
           return {
             control: [active.id, active.getAttribute('name'), active.tagName].find(Boolean)!,
             inViewport,
-            unobscured: !!hit && (hit === active || active.contains(hit)),
+            unobscured: !!hit && face.contains(hit),
           };
         }),
       );
@@ -391,7 +406,9 @@ test.describe('Leagues: the create form on a phone', () => {
       await page.keyboard.press(back);
       const clear = await page.evaluate(() => {
         const active = document.activeElement as HTMLElement;
-        const rect = active.getBoundingClientRect();
+        // A chip's radio is visually hidden: its label is what the user sees.
+        const face = active.closest('label') ?? active;
+        const rect = face.getBoundingClientRect();
         const footer = document.querySelector('[data-slot="form-footer"]')!.getBoundingClientRect();
         const hit = document.elementFromPoint(
           rect.left + rect.width / 2,
@@ -401,7 +418,7 @@ test.describe('Leagues: the create form on a phone', () => {
           control: active.id || active.tagName,
           visible: rect.top >= 0,
           above: rect.bottom <= footer.top,
-          hit: !!hit && (hit === active || active.contains(hit)),
+          hit: !!hit && face.contains(hit),
         };
       });
       expect(clear, `step ${step + 1}`).toMatchObject({ visible: true, above: true, hit: true });

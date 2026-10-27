@@ -294,7 +294,7 @@ export async function insertCustomLevel(
 export async function insertDraftLeague(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
-  league: NewLeague,
+  league: NewLeague & { division: LeagueDivision },
 ): Promise<Id<'leagues'>> {
   return insertLeagueRow(ctx, organizationId, league, 'draft');
 }

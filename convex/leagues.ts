@@ -6,8 +6,14 @@ import {
   requireLeagueOrganizerOrForbidden,
   requireOrgAdmin,
 } from './lib/access';
+import { genderValidator, standardLevelValidator } from './lib/divisions';
+import { leagueDivisionLabel } from './lib/leagueDivision';
 import {
+  checkLeagueAgeGroup,
+  checkLeagueFormat,
+  checkLeagueLevel,
   checkLeagueLocations,
+  checkLeagueMinimumRosterSize,
   checkLeagueName,
   checkLeagueSlug,
   LEAGUE_MESSAGES,
@@ -38,6 +44,7 @@ export const listForAdmin = query({
       sportName: v.string(),
       status: leagueStatusValidator,
       locationNames: v.array(v.string()),
+      divisionLabel: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, { organizationId }) => {
@@ -61,6 +68,7 @@ export const listForAdmin = query({
         const name = await nameOf(id);
         if (name !== null) names.push(name);
       }
+      const label = await leagueDivisionLabel(ctx, league);
       rows.push({
         leagueId: league._id,
         name: league.name,
@@ -68,6 +76,7 @@ export const listForAdmin = query({
         sportName: sportName(league.sport),
         status: league.status ?? ('draft' as const),
         locationNames: names,
+        ...(label !== undefined && { divisionLabel: label }),
       });
     }
     return rows;
@@ -81,6 +90,12 @@ export const create = mutation({
     slug: v.string(),
     sport: sportValidator,
     locationIds: v.array(v.id('locations')),
+    gender: genderValidator,
+    playersPerSide: v.number(),
+    level: standardLevelValidator,
+    // A string, not the age group validator, so an unknown value is refused with the field's error.
+    ageGroup: v.string(),
+    minimumRosterSize: v.optional(v.number()),
   },
   returns: v.object({ leagueId: v.id('leagues') }),
   handler: async (ctx, args) => {
@@ -89,6 +104,14 @@ export const create = mutation({
     if (!name.ok) refuse(name.error);
     const slugError = checkLeagueSlug(args.slug);
     if (slugError) refuse(slugError);
+    const formatError = checkLeagueFormat(args.sport, args.playersPerSide);
+    if (formatError) refuse(formatError);
+    const minimumError = checkLeagueMinimumRosterSize(args.playersPerSide, args.minimumRosterSize);
+    if (minimumError) refuse(minimumError);
+    const levelError = checkLeagueLevel(args.sport, args.level);
+    if (levelError) refuse(levelError);
+    const ageGroup = checkLeagueAgeGroup(args.ageGroup);
+    if (!ageGroup.ok) refuse(ageGroup.error);
     const locationIds = [...new Set(args.locationIds)];
     const locationsError = checkLeagueLocations(locationIds.length);
     if (locationsError) refuse(locationsError);
@@ -108,6 +131,15 @@ export const create = mutation({
       slug: args.slug,
       sport: args.sport,
       locationIds,
+      division: {
+        gender: args.gender,
+        playersPerSide: args.playersPerSide,
+        level: args.level,
+        ageGroup: ageGroup.ageGroup,
+        ...(args.minimumRosterSize !== undefined && {
+          minimumRosterSize: args.minimumRosterSize,
+        }),
+      },
     });
     return { leagueId };
   },

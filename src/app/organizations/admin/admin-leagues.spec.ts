@@ -91,6 +91,13 @@ describe('AdminLeagues', () => {
     await o.harness.fixture.whenStable();
   }
 
+  async function chooseFormat(count: number) {
+    const radio = input(`format-${count}`);
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    await o.harness.fixture.whenStable();
+  }
+
   async function toggleLocation(n: number) {
     location(n).click();
     await o.harness.fixture.whenStable();
@@ -104,6 +111,7 @@ describe('AdminLeagues', () => {
   async function fill() {
     await type('name', 'Sunday Reverse Coed 4s');
     await chooseSport('beachVolleyball');
+    await chooseFormat(4);
     await toggleLocation(1);
   }
 
@@ -286,6 +294,7 @@ describe('AdminLeagues', () => {
       expect(location(1).getAttribute('aria-checked')).toBe('true');
       await type('name', 'Sunday Reverse Coed 4s');
       await chooseSport('beachVolleyball');
+      await chooseFormat(4);
       await submit();
       expect(calls()).toEqual([
         [
@@ -296,6 +305,10 @@ describe('AdminLeagues', () => {
             slug: 'sunday-reverse-coed-4s',
             sport: 'beachVolleyball',
             locationIds: ['loc_pelican'],
+            gender: 'coed',
+            playersPerSide: 4,
+            level: 'rec',
+            ageGroup: 'adult',
           },
         ],
       ]);
@@ -305,6 +318,7 @@ describe('AdminLeagues', () => {
       await open([], ONLY);
       await type('name', 'Sunday Reverse Coed 4s');
       await chooseSport('beachVolleyball');
+      await chooseFormat(4);
       await submit();
       o.convex.calls[0].resolve({ leagueId: 'lg_new' });
       await o.flush();
@@ -318,6 +332,7 @@ describe('AdminLeagues', () => {
       expect(location(1).getAttribute('aria-checked')).toBe('false');
       await type('name', 'Sunday Reverse Coed 4s');
       await chooseSport('beachVolleyball');
+      await chooseFormat(4);
       await submit();
       expect(o.convex.calls).toHaveLength(0);
       expect(error('locations')).toBe('Choose at least one location.');
@@ -368,7 +383,7 @@ describe('AdminLeagues', () => {
       expect(text(formStatus())).toBe('');
     });
 
-    it('Sport is a fieldset with a legend and three radios in sport order, none chosen', async () => {
+    it('Sport is a fieldset with a legend and three chip radios in sport order, none chosen', async () => {
       await open([]);
       const set = page.querySelector<HTMLFieldSetElement>('fieldset#sport')!;
       expect(text(set.querySelector('legend'))).toBe('Sport');
@@ -427,7 +442,7 @@ describe('AdminLeagues', () => {
         expect(input(id).getAttribute('aria-describedby')).toBe(`${id}-description ${id}-error`);
       }
       expect(page.querySelector('fieldset#sport')?.getAttribute('aria-describedby')).toBe(
-        'sport-error',
+        'sport-description sport-error',
       );
       expect(page.querySelector('fieldset#locations')?.getAttribute('aria-describedby')).toBe(
         'locations-description locations-error',
@@ -440,7 +455,7 @@ describe('AdminLeagues', () => {
       expect(calls()).toEqual([]);
     });
 
-    it('focus goes to the first invalid field: Slug, then the first sport, then the first location', async () => {
+    it('focus goes to the first invalid field: Slug, then the first sport, then the first format, then the first location', async () => {
       await open([]);
       await type('name', 'Fine');
       await type('slug', '');
@@ -453,6 +468,10 @@ describe('AdminLeagues', () => {
       await chooseSport('soccer');
       await submit();
       expect(error('sport')).toBeNull();
+      expect(document.activeElement).toBe(input('format-4'));
+      await chooseFormat(7);
+      await submit();
+      expect(error('format')).toBeNull();
       expect(document.activeElement).toBe(location(1));
       expect(calls()).toEqual([]);
     });
@@ -589,6 +608,7 @@ describe('AdminLeagues', () => {
       await open([]);
       await type('name', '  Sunday Reverse Coed 4s ');
       await chooseSport('beachVolleyball');
+      await chooseFormat(4);
       await toggleLocation(3);
       await toggleLocation(1);
       await submit();
@@ -601,6 +621,10 @@ describe('AdminLeagues', () => {
             slug: 'sunday-reverse-coed-4s',
             sport: 'beachVolleyball',
             locationIds: ['loc_pelican', 'loc_tern'],
+            gender: 'coed',
+            playersPerSide: 4,
+            level: 'rec',
+            ageGroup: 'adult',
           },
         ],
       ]);

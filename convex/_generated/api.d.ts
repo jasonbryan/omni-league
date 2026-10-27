@@ -22,6 +22,7 @@ import type * as lib_inviteInput from "../lib/inviteInput.js";
 import type * as lib_inviteLookup from "../lib/inviteLookup.js";
 import type * as lib_inviteStatus from "../lib/inviteStatus.js";
 import type * as lib_inviteToken from "../lib/inviteToken.js";
+import type * as lib_leagueDivision from "../lib/leagueDivision.js";
 import type * as lib_leagueInput from "../lib/leagueInput.js";
 import type * as lib_leagueStatus from "../lib/leagueStatus.js";
 import type * as lib_locationInput from "../lib/locationInput.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inviteLookup": typeof lib_inviteLookup;
   "lib/inviteStatus": typeof lib_inviteStatus;
   "lib/inviteToken": typeof lib_inviteToken;
+  "lib/leagueDivision": typeof lib_leagueDivision;
   "lib/leagueInput": typeof lib_leagueInput;
   "lib/leagueStatus": typeof lib_leagueStatus;
   "lib/locationInput": typeof lib_locationInput;

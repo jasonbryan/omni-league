@@ -1,6 +1,15 @@
-// Imports only other `convex/lib` input files, so the app can import it.
+// Imports only `convex/values` and other `convex/lib` files that do the same, so the app can import it.
+import {
+  ageGroupValidator,
+  formatLabel,
+  isLevelOfSport,
+  isPlayersPerSideOfSport,
+  type AgeGroup,
+  type StandardLevel,
+} from './divisions';
 import { ORGANIZATION_MESSAGES } from './organizationInput';
 import { isChoosableSlug } from './slugs';
+import { ROSTER_SIZE_INPUT_MAX, type Sport } from './sports';
 
 export const MAX_LEAGUE_NAME_LENGTH = 100;
 
@@ -11,9 +20,15 @@ export type LeagueInputCode =
   | 'slugInvalid'
   | 'slugTaken'
   | 'sportEmpty'
+  | 'formatInvalid'
+  | 'levelInvalid'
+  | 'ageGroupInvalid'
+  | 'minimumRosterSizeLow'
+  | 'minimumRosterSizeInvalid'
   | 'locationsEmpty';
 
-export type LeagueField = 'name' | 'slug' | 'sport' | 'locations';
+export type LeagueField =
+  'name' | 'slug' | 'sport' | 'format' | 'minimumRosterSize' | 'level' | 'ageGroup' | 'locations';
 
 export interface LeagueInputError {
   field: LeagueField;
@@ -30,6 +45,13 @@ export const LEAGUE_MESSAGES = {
   slugTaken: (slug: string) =>
     `${slug} is already used by another league here. Choose another slug.`,
   sportEmpty: 'Choose a sport.',
+  formatInvalid: 'Choose a format. Players filter leagues by it.',
+  levelInvalid: 'Choose one of the levels listed.',
+  ageGroupInvalid: 'Choose an age group from the list.',
+  minimumRosterSizeLow: (playersPerSide: number) =>
+    `${formatLabel(playersPerSide)} needs at least ${playersPerSide} players. Enter ${playersPerSide} or more.`,
+  minimumRosterSizeInvalid: (playersPerSide: number) =>
+    `Enter a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}.`,
   locationsEmpty: 'Choose at least one location.',
 } as const;
 
@@ -70,4 +92,51 @@ export function checkLeagueLocations(locationCount: number): LeagueInputError | 
   return locationCount === 0
     ? { field: 'locations', code: 'locationsEmpty', message: LEAGUE_MESSAGES.locationsEmpty }
     : null;
+}
+
+export function checkLeagueFormat(
+  sport: Sport,
+  playersPerSide: number | null,
+): LeagueInputError | null {
+  if (playersPerSide !== null && isPlayersPerSideOfSport(sport, playersPerSide)) return null;
+  return { field: 'format', code: 'formatInvalid', message: LEAGUE_MESSAGES.formatInvalid };
+}
+
+export function checkLeagueLevel(sport: Sport, level: StandardLevel): LeagueInputError | null {
+  if (isLevelOfSport(sport, level)) return null;
+  return { field: 'level', code: 'levelInvalid', message: LEAGUE_MESSAGES.levelInvalid };
+}
+
+export function checkLeagueAgeGroup(
+  ageGroup: string,
+): { ok: true; ageGroup: AgeGroup } | { ok: false; error: LeagueInputError } {
+  const known = ageGroupValidator.members.find((member) => member.value === ageGroup);
+  if (known) return { ok: true, ageGroup: known.value };
+  return {
+    ok: false,
+    error: { field: 'ageGroup', code: 'ageGroupInvalid', message: LEAGUE_MESSAGES.ageGroupInvalid },
+  };
+}
+
+export function checkLeagueMinimumRosterSize(
+  playersPerSide: number,
+  minimumRosterSize: number | undefined,
+): LeagueInputError | null {
+  if (minimumRosterSize === undefined) return null;
+  const field = 'minimumRosterSize';
+  if (!Number.isInteger(minimumRosterSize) || minimumRosterSize > ROSTER_SIZE_INPUT_MAX) {
+    return {
+      field,
+      code: 'minimumRosterSizeInvalid',
+      message: LEAGUE_MESSAGES.minimumRosterSizeInvalid(playersPerSide),
+    };
+  }
+  if (minimumRosterSize < playersPerSide) {
+    return {
+      field,
+      code: 'minimumRosterSizeLow',
+      message: LEAGUE_MESSAGES.minimumRosterSizeLow(playersPerSide),
+    };
+  }
+  return null;
 }
