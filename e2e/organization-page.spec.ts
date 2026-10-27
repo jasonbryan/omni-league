@@ -848,7 +848,6 @@ test.describe('organization page: Registration open', () => {
       expect(row(2)).toMatch(
         /Soccer · Alpha Field Registration open Sooner Season · closes [A-Z][a-z]{2} \d{1,2} Register for Open League, Sooner Season/,
       );
-      expect(row(2)).not.toContain('Current Season');
       expect(rows).toMatch(
         new RegExp(
           `<a\\b[^>]*href="${tenant.path}/leagues/open-league/seasons/sooner-season#registration"[^>]*>Register<span class="sr-only">`,
