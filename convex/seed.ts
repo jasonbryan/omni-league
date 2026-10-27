@@ -211,7 +211,11 @@ export const DEMO: readonly Tenant[] = [
     ],
   },
   {
-    organization: { name: 'Rockport Sand Volleyball', slug: 'rockport-sand-volleyball' },
+    organization: {
+      name: 'Rockport Sand Volleyball',
+      slug: 'rockport-sand-volleyball',
+      cityState: 'Rockport, TX',
+    },
     locations: [
       { name: 'Rockport Beach Courts', address: '300 Beach Access Rd, Rockport, TX 78382' },
     ],
