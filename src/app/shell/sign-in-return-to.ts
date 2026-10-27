@@ -6,7 +6,6 @@ import { injectCurrentUrl } from './current-url';
 
 export interface SignInReturnTo {
   returnTo: string;
-  /** The top bar shows no Sign in link there. */
   onSignInPage: boolean;
 }
 
