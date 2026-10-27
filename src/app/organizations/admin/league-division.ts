@@ -16,6 +16,15 @@ const CHOICES: readonly DivisionChoice[] = ['gender', 'format', 'level'];
 const DEFAULT_GENDER: Gender = 'coed';
 const DEFAULT_LEVEL: StandardLevel = 'rec';
 
+export interface SavedDivision {
+  gender: Gender;
+  playersPerSide: number;
+  level: StandardLevel;
+  customLevelId?: Id<'customLevels'> | undefined;
+  ageGroup: AgeGroup;
+  minimumRosterSize?: number | undefined;
+}
+
 export interface ChosenCustomLevel {
   customLevelId: Id<'customLevels'>;
   standardLevel: StandardLevel;
@@ -39,6 +48,8 @@ export class LeagueDivision {
   private readonly chosenByHand = signal<ReadonlySet<DivisionChoice>>(new Set());
   private readonly filled = signal<ReadonlySet<DivisionChoice>>(new Set());
   private levelBeforeCustom: LevelChoice | null = null;
+  // A saved division is not news when the name states it again.
+  private loaded = false;
 
   readonly filledFromName: Signal<readonly DivisionChoice[]> = computed(() =>
     CHOICES.filter((choice) => this.filled().has(choice)),
@@ -111,12 +122,32 @@ export class LeagueDivision {
     }
   }
 
+  /** A saved custom level counts as chosen by hand, so the name never replaces it. */
+  load(saved: SavedDivision): void {
+    this.gender.set(saved.gender);
+    this.playersPerSide.set(saved.playersPerSide);
+    this.level.set(saved.level);
+    this.customLevelId.set(saved.customLevelId ?? null);
+    this.ageGroup.set(saved.ageGroup);
+    this.minimumText.set(
+      saved.minimumRosterSize === undefined ? '' : String(saved.minimumRosterSize),
+    );
+    this.levelBeforeCustom = null;
+    this.chosenByHand.set(new Set(saved.customLevelId === undefined ? [] : ['level']));
+    this.filled.set(new Set());
+    this.loaded = true;
+  }
+
   fillFromName(name: string, sport: Sport | null): void {
     if (sport === null) return;
     const { gender, playersPerSide, level } = deriveDivisionFromName(name, sport);
-    this.fillOrReset('gender', gender, DEFAULT_GENDER, (value) => this.gender.set(value));
-    this.fillOrReset('format', playersPerSide, null, (value) => this.playersPerSide.set(value));
-    this.fillOrReset('level', level, DEFAULT_LEVEL, (value) => this.level.set(value));
+    this.fillOrReset('gender', gender, this.gender(), DEFAULT_GENDER, (value) =>
+      this.gender.set(value),
+    );
+    this.fillOrReset('format', playersPerSide, this.playersPerSide(), null, (value) =>
+      this.playersPerSide.set(value),
+    );
+    this.fillOrReset('level', level, this.level(), DEFAULT_LEVEL, (value) => this.level.set(value));
   }
 
   clear(): void {
@@ -129,16 +160,19 @@ export class LeagueDivision {
     this.minimumText.set('');
     this.chosenByHand.set(new Set());
     this.filled.set(new Set());
+    this.loaded = false;
   }
 
   // A value the name once stated and now does not goes back to its default, so the status line stays true.
   private fillOrReset<T>(
     choice: DivisionChoice,
     stated: T | undefined,
+    current: T,
     fallback: T,
     set: (value: T) => void,
   ): void {
     if (this.chosenByHand().has(choice)) return;
+    if (this.loaded && stated === current) return;
     if (stated !== undefined) {
       set(stated);
       this.filled.update((current) => new Set(current).add(choice));

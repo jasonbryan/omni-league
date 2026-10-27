@@ -9,6 +9,7 @@ import {
   GULF,
   LEAGUE_ROUTES,
   LEAGUE_URL,
+  LIST_CUSTOM_LEVELS,
   LIST_FOR_ORGANIZER,
   SEASONS,
 } from './testing/league-harness';
@@ -59,6 +60,7 @@ describe('LeaguePage', () => {
         [GET_ORGANIZER_CONTEXT, { orgSlug: GULF.slug, leagueSlug: COED.slug }],
         [ME, {}],
         [LIST_FOR_ORGANIZER, { leagueId: COED.leagueId }],
+        [LIST_CUSTOM_LEVELS, { organizationId: COED.organizationId, sport: 'soccer' }],
       ]);
     });
 
@@ -118,6 +120,30 @@ describe('LeaguePage', () => {
       await o.flush();
       expect(scrolled).toHaveBeenCalledTimes(1);
       expect(document.activeElement).toBe(page.querySelector('#name'));
+    });
+  });
+
+  describe('the league details', () => {
+    it('is a section under the seasons, with its own link to jump to it from every width', async () => {
+      await open(COED, []);
+      const link = [...page.querySelectorAll<HTMLAnchorElement>('main a[data-slot="button"]')].find(
+        (a) => text(a) === 'Edit details',
+      )!;
+      expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
+      expect(link.classList.contains('lg:hidden')).toBe(false);
+      const section = page.querySelector<HTMLElement>('#details')!;
+      expect(section.tagName).toBe('SECTION');
+      const scrolled = vi.fn();
+      section.scrollIntoView = scrolled;
+      link.click();
+      await o.flush();
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(page.querySelector('#league-name'));
+    });
+
+    it('is shown to the league organizer too', async () => {
+      await open(COED_AS_ORGANIZER, []);
+      expect(page.querySelector('#details form')).not.toBeNull();
     });
   });
 

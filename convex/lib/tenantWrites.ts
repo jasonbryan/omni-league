@@ -1,4 +1,4 @@
-import { v, type Infer } from 'convex/values';
+import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import {
@@ -14,6 +14,7 @@ import {
   type Gender,
   type StandardLevel,
 } from './divisions';
+import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
@@ -306,6 +307,157 @@ export async function insertDraftLeague(
   return insertLeagueRow(ctx, organizationId, league, 'draft');
 }
 
+export const MAX_DRAFT_SEASONS_UPDATED = 200;
+
+export const leagueEarlierValidator = v.object({
+  name: v.string(),
+  gender: v.optional(genderValidator),
+  playersPerSide: v.optional(v.number()),
+  level: v.optional(standardLevelValidator),
+  customLevelId: v.optional(v.id('customLevels')),
+  ageGroup: v.optional(ageGroupValidator),
+  minimumRosterSize: v.optional(v.number()),
+});
+
+export const draftSeasonEarlierValidator = v.object({
+  seasonId: v.id('seasons'),
+  playersPerSide: v.number(),
+  minimumRosterSize: v.number(),
+});
+
+export const leagueWrittenValidator = v.object({
+  name: v.string(),
+  gender: genderValidator,
+  playersPerSide: v.number(),
+  level: standardLevelValidator,
+  customLevelId: v.optional(v.id('customLevels')),
+  ageGroup: ageGroupValidator,
+  minimumRosterSize: v.optional(v.number()),
+});
+
+export const leagueUpdateEarlierValidator = v.object({
+  league: leagueEarlierValidator,
+  draftSeasons: v.array(draftSeasonEarlierValidator),
+  written: leagueWrittenValidator,
+});
+
+export type LeagueEarlier = Infer<typeof leagueEarlierValidator>;
+export type DraftSeasonEarlier = Infer<typeof draftSeasonEarlierValidator>;
+export type LeagueWritten = Infer<typeof leagueWrittenValidator>;
+export type LeagueUpdateEarlier = Infer<typeof leagueUpdateEarlierValidator>;
+
+export function leagueHolds(league: Doc<'leagues'>, written: LeagueWritten): boolean {
+  return (
+    league.name === written.name &&
+    league.gender === written.gender &&
+    league.playersPerSide === written.playersPerSide &&
+    league.level === written.level &&
+    league.customLevelId === written.customLevelId &&
+    league.ageGroup === written.ageGroup &&
+    league.minimumRosterSize === written.minimumRosterSize
+  );
+}
+
+function effectiveMinimum(division: {
+  playersPerSide?: number | undefined;
+  minimumRosterSize?: number | undefined;
+}): number | undefined {
+  return division.minimumRosterSize ?? division.playersPerSide;
+}
+
+// The caller has checked access and the input. Draft seasons follow the league only when its
+// players per side or its effective minimum changes, so a rename leaves a season's own minimum.
+export async function updateLeague(
+  ctx: MutationCtx,
+  league: Doc<'leagues'>,
+  change: { name: string; division: LeagueDivision },
+): Promise<LeagueUpdateEarlier> {
+  assertDivision(league.sport, change.division);
+  const earlier: LeagueEarlier = {
+    name: league.name,
+    ...(league.gender !== undefined && { gender: league.gender }),
+    ...(league.playersPerSide !== undefined && { playersPerSide: league.playersPerSide }),
+    ...(league.level !== undefined && { level: league.level }),
+    ...(league.customLevelId !== undefined && { customLevelId: league.customLevelId }),
+    ...(league.ageGroup !== undefined && { ageGroup: league.ageGroup }),
+    ...(league.minimumRosterSize !== undefined && { minimumRosterSize: league.minimumRosterSize }),
+  };
+  const seasonsFollow =
+    league.playersPerSide !== change.division.playersPerSide ||
+    effectiveMinimum(league) !== effectiveMinimum(change.division);
+  const draftSeasons: DraftSeasonEarlier[] = [];
+  if (seasonsFollow) {
+    const drafts = await ctx.db
+      .query('seasons')
+      .withIndex('by_leagueId_and_status_and_startDate', (q) =>
+        q.eq('leagueId', league._id).eq('status', 'draft'),
+      )
+      .take(MAX_DRAFT_SEASONS_UPDATED + 1);
+    if (drafts.length > MAX_DRAFT_SEASONS_UPDATED) {
+      throw new ConvexError({
+        field: 'format',
+        code: 'draftSeasonsTooMany',
+        message: LEAGUE_MESSAGES.draftSeasonsTooMany,
+      } satisfies LeagueInputError);
+    }
+    const playersPerSide = change.division.playersPerSide;
+    const minimumRosterSize = effectiveMinimum(change.division)!;
+    for (const season of drafts) {
+      const current = seasonPlayersPerSide(season);
+      if (current === playersPerSide && season.minimumRosterSize === minimumRosterSize) continue;
+      draftSeasons.push({
+        seasonId: season._id,
+        playersPerSide: current,
+        minimumRosterSize: season.minimumRosterSize,
+      });
+      await ctx.db.patch('seasons', season._id, { playersPerSide, minimumRosterSize });
+    }
+  }
+  await ctx.db.patch('leagues', league._id, {
+    name: change.name,
+    sortName: sortName(change.name),
+    ...leagueDivisionPatch(change.division),
+  });
+  const { customLevelId, minimumRosterSize } = change.division;
+  const written: LeagueWritten = {
+    name: change.name,
+    gender: change.division.gender,
+    playersPerSide: change.division.playersPerSide,
+    level: change.division.level,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ageGroup: change.division.ageGroup,
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
+  return { league: earlier, draftSeasons, written };
+}
+
+function isDraftOf(season: Doc<'seasons'> | null, league: Doc<'leagues'>): boolean {
+  return season?.leagueId === league._id && season.status === 'draft';
+}
+
+export async function restoreLeague(
+  ctx: MutationCtx,
+  league: Doc<'leagues'>,
+  earlier: LeagueUpdateEarlier,
+): Promise<void> {
+  const { league: values } = earlier;
+  await ctx.db.patch('leagues', league._id, {
+    name: values.name,
+    sortName: sortName(values.name),
+    gender: values.gender,
+    playersPerSide: values.playersPerSide,
+    level: values.level,
+    customLevelId: values.customLevelId,
+    ageGroup: values.ageGroup,
+    minimumRosterSize: values.minimumRosterSize,
+  });
+  for (const { seasonId, playersPerSide, minimumRosterSize } of earlier.draftSeasons) {
+    const season = await ctx.db.get('seasons', seasonId);
+    if (!isDraftOf(season, league)) continue;
+    await ctx.db.patch('seasons', seasonId, { playersPerSide, minimumRosterSize });
+  }
+}
+
 export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
   if (league.status === 'published') return;
   await ctx.db.patch('leagues', league._id, { status: 'published' });
@@ -424,6 +576,12 @@ function assertDivision(sport: Sport, division: LeagueDivision): void {
       `Minimum roster size ${minimumRosterSize} must be a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}`,
     );
   }
+}
+
+// Every division field is set, so one the change leaves out is cleared.
+function leagueDivisionPatch(division: LeagueDivision) {
+  const { customLevelId, minimumRosterSize, ...required } = division;
+  return { ...required, customLevelId, minimumRosterSize };
 }
 
 function divisionFields(division: LeagueDivision | undefined) {

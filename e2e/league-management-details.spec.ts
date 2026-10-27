@@ -1,0 +1,170 @@
+import type { Page } from '@playwright/test';
+import { expectAccessible } from './support/a11y';
+import { convexRun } from './support/convex';
+import { remoteBaseUrl } from './support/env';
+import { expect, test } from './support/fixtures';
+import { screenshot } from './support/screenshot';
+import { signUp } from './support/session';
+import { seedSeasons, seedTenant } from './support/tenant';
+import { newUser } from './support/users';
+
+test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
+
+const SUNDAY = 'sunday-reverse-coed-4s';
+
+async function openDetails(page: Page, role: 'orgAdmin' | 'leagueOrganizer' = 'orgAdmin') {
+  const user = newUser('Admin');
+  await signUp(page, user);
+  const tenant = await seedTenant({
+    name: 'E2E League Details',
+    locations: [{ name: 'North Beach Sand Courts', address: '4001 Beach Rd, Corpus Christi, TX' }],
+    leagues: [
+      {
+        name: 'Sunday Reverse Coed 4s',
+        sport: 'beachVolleyball',
+        locations: ['North Beach Sand Courts'],
+        division: { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+      },
+      {
+        name: 'Thursday Night Coed 2s',
+        sport: 'beachVolleyball',
+        locations: ['North Beach Sand Courts'],
+        division: { gender: 'coed', playersPerSide: 2, level: 'b', ageGroup: 'adult' },
+      },
+    ],
+  });
+  await seedSeasons(tenant, SUNDAY, [
+    {
+      name: 'Summer 2027',
+      slug: 'summer-2027',
+      startDate: '2027-06-06',
+      endDate: '2027-08-29',
+      status: 'published',
+    },
+    {
+      name: 'Fall 2027',
+      slug: 'fall-2027',
+      startDate: '2027-09-12',
+      endDate: '2027-11-14',
+      status: 'draft',
+    },
+  ]);
+  if (role === 'orgAdmin') {
+    await convexRun('testing:addMembership', {
+      organizationSlug: tenant.slug,
+      email: user.email,
+      role,
+    });
+  } else {
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: tenant.slug,
+      email: user.email,
+      leagueSlugs: [SUNDAY],
+    });
+  }
+  const path = `/app/organizations/${tenant.slug}/leagues/${SUNDAY}`;
+  await page.goto(path);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Sunday Reverse Coed 4s' }),
+  ).toBeVisible();
+  return { tenant, path };
+}
+
+const details = (page: Page) => page.locator('#details');
+const save = (page: Page) => details(page).getByRole('button', { name: 'Save changes' });
+const status = (page: Page) => details(page).locator('[data-slot="save-status"]');
+const chip = (page: Page, group: string, label: string) =>
+  details(page).locator(`#details-${group}`).getByRole('radio', { name: label, exact: true });
+const seasonRow = (page: Page, name: string) =>
+  page.locator('#seasons-list > li').filter({ has: page.getByRole('heading', { name }) });
+
+test.describe('League management: league details', () => {
+  test('an org admin changes the format to 6v6: draft Fall 2027 follows, published Summer 2027 keeps 4v4, and Undo returns both', async ({
+    page,
+  }, testInfo) => {
+    await openDetails(page);
+    await expect(details(page).getByRole('heading', { name: 'League details' })).toBeVisible();
+    await expect(details(page).getByLabel('Name')).toHaveValue('Sunday Reverse Coed 4s');
+    await expect(chip(page, 'format', '4v4')).toBeChecked();
+    await expect(page.locator('#details-format-description')).toHaveText(
+      'Players on each side, and so the minimum roster size. A change applies to new seasons; Summer 2027 keeps 4v4.',
+    );
+    await expect(seasonRow(page, 'Fall 2027')).toContainText('4v4 · at least 4 players');
+    await screenshot(page, testInfo, '237-league-details');
+    await expectAccessible(page);
+
+    await chip(page, 'format', '6v6').check({ force: true });
+    await save(page).click();
+
+    await expect(status(page)).toContainText('League details saved.');
+    await expect(status(page).getByRole('button', { name: 'Undo' })).toBeVisible();
+    await expect(seasonRow(page, 'Fall 2027')).toContainText('6v6 · at least 6 players');
+    await expect(seasonRow(page, 'Summer 2027')).toContainText('4v4 · at least 4 players');
+    await expect(page.locator('[data-slot="league-division"]')).toHaveText('Coed · 6v6 · BB');
+    await screenshot(page, testInfo, '237-league-details-saved');
+    await expectAccessible(page);
+
+    await status(page).getByRole('button', { name: 'Undo' }).click();
+    await expect(status(page)).toContainText('Earlier details restored.');
+    await expect(status(page).locator('[tabindex="-1"]')).toBeFocused();
+    await expect(chip(page, 'format', '4v4')).toBeChecked();
+    await expect(seasonRow(page, 'Fall 2027')).toContainText('4v4 · at least 4 players');
+    await expect(seasonRow(page, 'Summer 2027')).toContainText('4v4 · at least 4 players');
+    await expect(page.locator('[data-slot="league-division"]')).toHaveText('Coed · 4v4 · BB');
+  });
+
+  test('a renamed league shows its new name on the public league page and moves in the organization’s list', async ({
+    page,
+  }) => {
+    const { tenant } = await openDetails(page);
+    await details(page).getByLabel('Name').fill('Aardvark Sand');
+    await save(page).click();
+    await expect(status(page)).toContainText('League details saved.');
+    await expect(page.getByRole('heading', { level: 1, name: 'Aardvark Sand' })).toBeVisible();
+
+    await page.goto(`${tenant.path}/leagues/${SUNDAY}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Aardvark Sand' })).toBeVisible();
+    await page.goto(tenant.path);
+    await expect(page.getByRole('main').getByRole('heading', { level: 3 })).toHaveText([
+      'Aardvark Sand',
+      'Thursday Night Coed 2s',
+      'North Beach Sand Courts',
+    ]);
+  });
+
+  test('an empty name is refused under the field, keeps the other edits, and sends nothing', async ({
+    page,
+  }) => {
+    await openDetails(page);
+    await chip(page, 'format', '6v6').check({ force: true });
+    await details(page).getByLabel('Name').fill('');
+    await save(page).click();
+    await expect(page.locator('#league-name-error')).toHaveText('Enter the league’s name.');
+    await expect(details(page).getByLabel('Name')).toBeFocused();
+    await expect(chip(page, 'format', '6v6')).toBeChecked();
+    await expect(status(page)).toHaveText('');
+  });
+
+  test('a league organizer saves the details of their league, and sees no way to add a custom level', async ({
+    page,
+  }) => {
+    await openDetails(page, 'leagueOrganizer');
+    await expect(details(page).getByRole('button', { name: 'Add a custom level' })).toHaveCount(0);
+    await details(page).getByLabel('Name').fill('Sunday Sand');
+    await save(page).click();
+    await expect(status(page)).toContainText('League details saved.');
+    await expect(page.getByRole('heading', { level: 1, name: 'Sunday Sand' })).toBeVisible();
+  });
+
+  test('keeps Save in view on a phone while the form is taller than the screen', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout only');
+    await openDetails(page);
+    await page.getByRole('link', { name: 'Edit details' }).click();
+    await details(page).getByLabel('Name').focus();
+    await expect(save(page)).toBeInViewport();
+    await screenshot(page, testInfo, '237-league-details-phone');
+    await expectAccessible(page);
+  });
+});

@@ -240,6 +240,72 @@ describe('LeagueDivision: a custom level', () => {
     expect([division.customLevelId(), division.level()]).toEqual([null, 'aa']);
   });
 
+  describe('loading a saved division', () => {
+    const SAVED = {
+      gender: 'mens' as const,
+      playersPerSide: 4,
+      level: 'a' as const,
+      customLevelId: GOLD.customLevelId,
+      ageGroup: 'over40' as const,
+      minimumRosterSize: 6,
+    };
+
+    it('sets every choice, and shows a minimum of 6 as text', () => {
+      const division = new LeagueDivision();
+      division.load(SAVED);
+      expect([
+        division.gender(),
+        division.playersPerSide(),
+        division.level(),
+        division.customLevelId(),
+        division.ageGroup(),
+        division.minimumText(),
+        division.filledFromName(),
+      ]).toEqual(['mens', 4, 'a', GOLD.customLevelId, 'over40', '6', []]);
+    });
+
+    it('leaves the minimum blank when the saved division has none', () => {
+      const division = new LeagueDivision();
+      division.load({ ...SAVED, minimumRosterSize: undefined, customLevelId: undefined });
+      expect([division.minimumText(), division.customLevelId()]).toEqual(['', null]);
+    });
+
+    it('replaces what was loaded or typed before', () => {
+      const division = new LeagueDivision();
+      division.chooseGender('womens');
+      division.setMinimumText('9');
+      division.load(SAVED);
+      expect([division.gender(), division.minimumText()]).toEqual(['mens', '6']);
+    });
+
+    it('fills a choice from the name when the name states a different value', () => {
+      const division = new LeagueDivision();
+      division.load({ ...SAVED, customLevelId: undefined });
+      division.fillFromName("Women's 6s BB", 'beachVolleyball');
+      expect([division.gender(), division.playersPerSide(), division.level()]).toEqual([
+        'womens',
+        6,
+        'bb',
+      ]);
+      expect(division.filledFromName()).toEqual(['gender', 'format', 'level']);
+    });
+
+    it('keeps a saved custom level, which the name does not override', () => {
+      const division = new LeagueDivision();
+      division.load(SAVED);
+      division.fillFromName("Women's 6s BB", 'beachVolleyball');
+      expect([division.level(), division.customLevelId()]).toEqual(['a', GOLD.customLevelId]);
+      expect(division.filledFromName()).toEqual(['gender', 'format']);
+    });
+
+    it('says nothing about a choice the name states as it already is', () => {
+      const division = new LeagueDivision();
+      division.load({ ...SAVED, customLevelId: undefined, level: 'bb', gender: 'womens' });
+      division.fillFromName("Women's 4s BB", 'beachVolleyball');
+      expect(division.filledFromName()).toEqual([]);
+    });
+  });
+
   it('clear() leaves no custom level', () => {
     const division = new LeagueDivision();
     division.chooseCustomLevel(GOLD);

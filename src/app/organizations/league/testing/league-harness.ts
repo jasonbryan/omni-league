@@ -13,6 +13,14 @@ export const COED = {
   locationNames: ['Bayside Athletic Complex'],
   role: 'orgAdmin',
   organization: GULF,
+  organizationId: 'org_gulf',
+  division: {
+    gender: 'coed',
+    playersPerSide: 7,
+    level: 'rec',
+    ageGroup: 'adult',
+    label: 'Coed · 7v7 · Rec',
+  },
 };
 
 export const COED_AS_ORGANIZER = { ...COED, role: 'leagueOrganizer' };
@@ -47,6 +55,9 @@ export const LIST_FOR_ORGANIZER = 'seasons:listForOrganizer';
 export const CREATE_SEASON = 'seasons:create';
 export const PUBLISH_SEASON = 'seasons:publish';
 export const LIST_MINE = 'organizations:listMine';
+export const UPDATE_LEAGUE = 'leagues:update';
+export const UNDO_UPDATE_LEAGUE = 'leagues:undoUpdate';
+export const LIST_CUSTOM_LEVELS = 'customLevels:listForSport';
 
 export const MINE_AS_ORGANIZER = [
   {
