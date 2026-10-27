@@ -272,7 +272,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           </p>
         </section>
       </div>
-      @if (leagueFormatMissing()) {
+      @if (divisionMissing()) {
         <app-admin-alert
           #leagueAlert
           kind="error"
@@ -313,7 +313,6 @@ export class SeasonCreateForm {
 
   readonly leagueId = input.required<Id<'leagues'>>();
   readonly leagueName = input.required<string>();
-  /** Absent for a league whose division has not been set yet. */
   readonly division = input<OrganizerLeague['division']>();
   readonly detailsHref = input.required<string>();
   readonly detailsOpened = output<MouseEvent>();
@@ -337,10 +336,7 @@ export class SeasonCreateForm {
     };
   });
 
-  // Shown only while the league still has no division, so fixing it in the details clears the message.
-  protected readonly leagueFormatMissing = computed(
-    () => this.form.leagueFormatRefused() && !this.division(),
-  );
+  protected readonly divisionMissing = computed(() => !this.division());
 
   protected readonly fieldGroupClass = FIELD_GROUP;
   protected readonly footerClass = STICKY_FOOTER;

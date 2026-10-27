@@ -33,7 +33,6 @@ export interface SeasonInputError {
   message: string;
 }
 
-/** Refuses a season of a league that has no players per side, so there is nothing to copy. */
 export interface LeagueFormatMissingError {
   code: 'leagueFormatMissing';
   message: string;

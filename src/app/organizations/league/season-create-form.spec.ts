@@ -391,42 +391,39 @@ describe('SeasonCreateForm', () => {
           }),
         );
 
-      it('shows the refusal above the action, focuses it, and keeps the input', async () => {
+      const alert = () => form().querySelector<HTMLElement>('[role="alert"][data-slot="alert"]');
+
+      it('shows the message above the action and the details link before anything is pressed', async () => {
+        await open(NO_DIVISION);
+        expect(text(alert())).toBe('Set this league’s format in its details first.');
+        expect(
+          alert()!.compareDocumentPosition(submitButton()) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(block().querySelector('a')!.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
+      });
+
+      it('shows no message for a league that has a division', async () => {
+        await open();
+        expect(alert()).toBeNull();
+      });
+
+      it('focuses the message when the server refuses, and keeps the input', async () => {
         await open(NO_DIVISION);
         await fill();
         await submit();
         refuse();
         await o.flush();
-        const alert = form().querySelector<HTMLElement>('[role="alert"][data-slot="alert"]')!;
-        expect(text(alert)).toBe('Set this league’s format in its details first.');
-        expect(
-          alert.compareDocumentPosition(submitButton()) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
-        expect(document.activeElement).toBe(alert);
+        expect(document.activeElement).toBe(alert());
         expect(input('name').value).toBe('Fall 2026');
         expect(form().querySelectorAll('[data-slot="field-error"]')).toHaveLength(0);
       });
 
       it('goes away once the league has a division', async () => {
         await open(NO_DIVISION);
-        await fill();
-        await submit();
-        refuse();
-        await o.flush();
         o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
         await o.flush();
-        expect(form().querySelector('[data-slot="alert"]')).toBeNull();
+        expect(alert()).toBeNull();
         expect(division()).toBe('Coed · 7v7 · Rec');
-      });
-
-      it('is cleared by the next press', async () => {
-        await open(NO_DIVISION);
-        await fill();
-        await submit();
-        refuse();
-        await o.flush();
-        await submit();
-        expect(form().querySelector('[role="alert"][data-slot="alert"]')).toBeNull();
       });
     });
   });

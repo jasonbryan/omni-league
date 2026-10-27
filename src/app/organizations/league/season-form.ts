@@ -93,7 +93,6 @@ export class SeasonForm {
   readonly slugEdited = signal(false);
   readonly submitting = signal(false);
   readonly alert = signal<SeasonFormAlertKind | null>(null);
-  readonly leagueFormatRefused = signal(false);
 
   private readonly clientErrors: Signal<Partial<Record<SeasonField, SeasonInputError>>>;
   private readonly shown: Record<SeasonField, ShownUntilValid>;
@@ -184,7 +183,6 @@ export class SeasonForm {
     send: (values: SeasonValues) => Promise<unknown>,
   ): Promise<SeasonSubmitOutcome> {
     this.alert.set(null);
-    this.leagueFormatRefused.set(false);
     let firstInvalid: SeasonField | null = null;
     const errors = this.clientErrors();
     for (const field of SEASON_FIELDS) {
@@ -218,7 +216,6 @@ export class SeasonForm {
   private failed(failure: unknown, slug: string): SeasonSubmitOutcome {
     if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
     if (isLeagueFormatMissing(failure)) {
-      this.leagueFormatRefused.set(true);
       return { sent: false, leagueFormatMissing: true };
     }
     const refusal = inputErrorOf(failure);

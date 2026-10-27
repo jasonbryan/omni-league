@@ -341,7 +341,7 @@ function normalize(text: string, organization: string): string {
   const kept: string[] = [];
   let skipping = false;
   for (const line of lines) {
-    // The mockup asks for a format and a minimum roster size, which the league now sets.
+    // The mockup draws Format and Minimum roster size; the app takes both from the league.
     if (line === 'Limits' || line === 'Format') skipping = true;
     if (skipping && /^Creat(e draft|ing) season/.test(line)) skipping = false;
     if (!skipping) kept.push(line);
