@@ -116,6 +116,7 @@ test.describe('the admin area: entry and navigation', () => {
         'Locations',
         'Leagues',
         'Staff',
+        'Details',
         'Public page',
         'Your organizations',
       ]);

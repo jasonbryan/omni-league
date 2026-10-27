@@ -4,6 +4,7 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideArrowLeft,
+  lucideBuilding2,
   lucideGlobe,
   lucideLayoutDashboard,
   lucideMapPin,
@@ -32,6 +33,7 @@ function pathOf(url: string): string {
   providers: [
     provideIcons({
       lucideArrowLeft,
+      lucideBuilding2,
       lucideGlobe,
       lucideLayoutDashboard,
       lucideMapPin,
@@ -125,6 +127,7 @@ export class AdminSidebar {
       { label: 'Locations', icon: 'lucideMapPin', path: adminPath(slug, 'locations') },
       { label: 'Leagues', icon: 'lucideTrophy', path: adminPath(slug, 'leagues') },
       { label: 'Staff', icon: 'lucideUsers', path: adminPath(slug, 'staff') },
+      { label: 'Details', icon: 'lucideBuilding2', path: adminPath(slug, 'details') },
     ].map((link) => ({ ...link, current: ariaCurrentFor(link.path, link.label === 'Leagues') }));
   });
 }

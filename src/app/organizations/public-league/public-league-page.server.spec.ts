@@ -184,6 +184,19 @@ describe('PublicLeaguePage server render', () => {
     expect(html).not.toContain('x=1');
   });
 
+  it('writes one description tag that matches og:description', async () => {
+    const { head } = await render(LEAGUE_PATH, sunday);
+    const description = meta(head, 'og:description');
+    expect(description).toBe(
+      'Seasons of Sunday Reverse Coed 4s from Gulf Coast Sport & Social on Omni League.',
+    );
+    expect(
+      [...head.querySelectorAll('meta[name="description"]')].map((tag) =>
+        tag.getAttribute('content'),
+      ),
+    ).toEqual([description]);
+  });
+
   it('renders page 2 from ?page=2, with ?page=2 in the canonical, og:url, and the control’s links', async () => {
     const { html, body, head, queries } = await render(
       `${LEAGUE_PATH}?page=2&utm_source=x`,

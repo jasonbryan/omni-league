@@ -204,6 +204,31 @@ describe('OrganizationPage server render', () => {
     expect(html).not.toContain('x=1');
   });
 
+  it('writes one description tag that matches og:description, ending with the City, state when set', async () => {
+    const { head } = await render('/organizations/gulf-coast-sport-social', (name) =>
+      Promise.resolve(queryResults({ ...GULF_COAST, cityState: 'Corpus Christi, TX' })[name]),
+    );
+    const expected =
+      'Leagues and locations of Gulf Coast Sport & Social on Omni League in Corpus Christi, TX.';
+    expect(meta(head, 'og:description')).toBe(expected);
+    expect(
+      [...head.querySelectorAll('meta[name="description"]')].map((tag) =>
+        tag.getAttribute('content'),
+      ),
+    ).toEqual([expected]);
+  });
+
+  it('writes no description tag on the not-found view', async () => {
+    const { head } = await render('/organizations/does-not-exist', (name) =>
+      Promise.resolve(
+        name === 'organizations:getPublicPage'
+          ? null
+          : { rows: [], page: 1, pageCount: 0, total: 0 },
+      ),
+    );
+    expect(head.querySelector('meta[name="description"]')).toBeNull();
+  });
+
   it('renders the empty hero line and no Leagues or Locations section for an organization with no leagues', async () => {
     const { body, responseInit } = await render(
       '/organizations/port-aransas-beach-volleyball-club',

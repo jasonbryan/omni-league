@@ -14,12 +14,15 @@ const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 const FORMAT_MESSAGE =
   'Use 3 to 60 lowercase letters and digits, with single hyphens between them. Some slugs, like new, are reserved.';
 
+const CITY_STATE_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.';
+
 const FORM_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
   'header a[href="/app"]',
   'main a[href="/app"]',
   '#name',
+  '#cityState',
   '#slug',
   'button[type="submit"]',
 ];
@@ -89,10 +92,15 @@ test.describe('create an organization', () => {
     );
     // 16px input text on phones so iOS does not zoom.
     const phone = (page.viewportSize()?.width ?? 0) < 768;
-    for (const control of [field(page, 'name'), field(page, 'slug'), createButton(page)]) {
+    for (const control of [
+      field(page, 'name'),
+      field(page, 'cityState'),
+      field(page, 'slug'),
+      createButton(page),
+    ]) {
       expect((await control.boundingBox())?.height).toBe(hasTouch ? 44 : 36);
     }
-    for (const id of ['name', 'slug']) {
+    for (const id of ['name', 'cityState', 'slug']) {
       await expect(field(page, id)).toHaveCSS('font-size', phone ? '16px' : '14px');
     }
     await screenshot(page, testInfo, '64-new-empty');
@@ -151,8 +159,11 @@ test.describe('create an organization', () => {
 
     await field(page, 'name').focus();
     await page.keyboard.press('Tab');
+    await expect(field(page, 'cityState')).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(field(page, 'slug')).toBeFocused();
     await expect(fieldError(page, 'name')).toHaveCount(0);
+    await expect(fieldError(page, 'cityState')).toHaveCount(0);
     await page.keyboard.type('Bad-Slug');
     await expect(fieldError(page, 'slug')).toHaveCount(0);
 
@@ -169,6 +180,48 @@ test.describe('create an organization', () => {
     await expect(fieldError(page, 'slug')).toHaveCount(0);
     await expect(field(page, 'slug')).not.toHaveAttribute('aria-invalid', 'true');
     await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
+  });
+
+  test('City, state is optional, checked when the user leaves it, and stored when valid', async ({
+    page,
+  }) => {
+    const org = newOrganization('City');
+    await signUp(page, newUser('City'));
+    await openForm(page);
+    await expect(page.locator('#cityState-description')).toHaveText('Such as Corpus Christi, TX');
+    await field(page, 'name').fill(org.name);
+    await field(page, 'slug').fill(org.slug);
+
+    await field(page, 'cityState').fill('X');
+    await expect(fieldError(page, 'cityState')).toHaveCount(0);
+    await field(page, 'cityState').blur();
+    await expect(fieldError(page, 'cityState')).toHaveText(CITY_STATE_MESSAGE);
+    await expect(field(page, 'cityState')).toHaveAttribute('aria-invalid', 'true');
+    await field(page, 'cityState').fill('c'.repeat(61));
+    await field(page, 'cityState').blur();
+    await expect(fieldError(page, 'cityState')).toHaveText(CITY_STATE_MESSAGE);
+    await createButton(page).click();
+    await expect(field(page, 'cityState')).toBeFocused();
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
+
+    await field(page, 'cityState').fill('  Corpus   Christi, TX ');
+    await expect(fieldError(page, 'cityState')).toHaveCount(0);
+    await createButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/${org.slug}`);
+    await page.goto(`/app/organizations/${org.slug}/details`);
+    await expect(field(page, 'cityState')).toHaveValue('Corpus Christi, TX');
+  });
+
+  test('leaving City, state blank stores none', VIEWPORT_AGNOSTIC, async ({ page }) => {
+    const org = newOrganization('Blank');
+    await signUp(page, newUser('Blank'));
+    await openForm(page);
+    await field(page, 'name').fill(org.name);
+    await field(page, 'slug').fill(org.slug);
+    await createButton(page).click();
+    await expect(page).toHaveURL(`${baseURL}/app/organizations/${org.slug}`);
+    await page.goto(`/app/organizations/${org.slug}/details`);
+    await expect(field(page, 'cityState')).toHaveValue('');
   });
 
   test('a whitespace-only and a 101-character name are refused with the field error', async ({

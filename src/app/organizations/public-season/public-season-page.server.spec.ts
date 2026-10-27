@@ -196,6 +196,17 @@ describe('PublicSeasonPage server render', () => {
     expect(html).not.toContain('x=1');
   });
 
+  it('writes one description tag that matches og:description', async () => {
+    const { head } = await render(SEASON_PATH, answer());
+    const description = meta(head, 'og:description');
+    expect(description).toBe('Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.');
+    expect(
+      [...head.querySelectorAll('meta[name="description"]')].map((tag) =>
+        tag.getAttribute('content'),
+      ),
+    ).toEqual([description]);
+  });
+
   it('renders no price and no registration action', async () => {
     const { body } = await render(SEASON_PATH, answer());
     const main = text(body.querySelector('main'));

@@ -23,6 +23,7 @@ export function bindPageMeta(meta: () => PageMeta | null): void {
 
   const clear = (): void => {
     for (const property of OG_PROPERTIES) tags.removeTag(`property="${property}"`);
+    tags.removeTag('name="description"');
     document.head.querySelector('link[rel="canonical"]')?.remove();
   };
 
@@ -44,6 +45,7 @@ export function bindPageMeta(meta: () => PageMeta | null): void {
     for (const property of OG_PROPERTIES) {
       tags.updateTag({ property, content: content[property] });
     }
+    tags.updateTag({ name: 'description', content: current.ogDescription });
     let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!link) {
       link = document.createElement('link');

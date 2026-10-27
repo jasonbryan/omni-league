@@ -96,6 +96,44 @@ describe('organizations.create', () => {
     });
   });
 
+  test('stores the City, state trimmed and collapsed, and none when blank or left out', async () => {
+    const { t, a } = await setup();
+    await a.mutation(api.organizations.create, {
+      name: 'With',
+      slug: 'with-city',
+      cityState: ' Corpus   Christi, TX ',
+    });
+    await a.mutation(api.organizations.create, {
+      name: 'Blank',
+      slug: 'blank-city',
+      cityState: '  ',
+    });
+    await a.mutation(api.organizations.create, { name: 'Left out', slug: 'left-out' });
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query('organizations').collect();
+      expect(Object.fromEntries(rows.map((row) => [row.slug, row.cityState]))).toEqual({
+        'with-city': 'Corpus Christi, TX',
+        'blank-city': undefined,
+        'left-out': undefined,
+      });
+    });
+  });
+
+  test('refuses a City, state of 1 or 61 characters and creates nothing', async () => {
+    const { t, a } = await setup();
+    for (const cityState of ['X', 'c'.repeat(61)]) {
+      const data = await refusal(
+        a.mutation(api.organizations.create, { name: 'Org', slug: 'valid-slug', cityState }),
+      );
+      expect(data).toEqual({
+        field: 'cityState',
+        code: 'cityStateInvalid',
+        message: 'Use 2 to 60 characters, such as Corpus Christi, TX.',
+      });
+    }
+    expect(await counts(t)).toEqual({ organizations: 0, memberships: 0, sportLocations: 0 });
+  });
+
   test('refuses a slug already taken, by a created or a seeded organization, and creates nothing', async () => {
     const { t, a, b } = await setup();
     await a.mutation(api.organizations.create, { name: 'First', slug: 'first-org' });

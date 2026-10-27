@@ -25,6 +25,7 @@ export interface LeagueSeed {
 }
 
 export interface TenantSeed {
+  cityState?: string;
   name?: string;
   locations?: { name: string; address: string }[];
   leagues?: LeagueSeed[];
@@ -55,7 +56,12 @@ export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
   const slug = `e2e-${id}`;
   const locations = seed.locations ?? [];
   const leagues = seed.leagues ?? [];
-  await convexRun('testing:seedLeague', { organization: { name, slug }, locations, leagues });
+  const organization = {
+    name,
+    slug,
+    ...(seed.cityState !== undefined && { cityState: seed.cityState }),
+  };
+  await convexRun('testing:seedLeague', { organization, locations, leagues });
   return {
     name,
     slug,

@@ -165,6 +165,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(result).toEqual({
         ...DATA,
         backfilled: NO_BACKFILL,
+        updated: { organizations: 0 },
         memberships: 5,
         invites: 1,
         accounts: ALL('created'),
@@ -365,6 +366,7 @@ describe('seed:demo accounts: a second run', () => {
         leagues: 0,
         seasons: 0,
         backfilled: NO_BACKFILL,
+        updated: { organizations: 0 },
         memberships: 0,
         invites: 0,
         accounts: ALL('exists'),
@@ -483,6 +485,7 @@ describe('seed:demo accounts: the password', () => {
       expect(result).toEqual({
         ...DATA,
         backfilled: NO_BACKFILL,
+        updated: { organizations: 0 },
         memberships: 0,
         invites: 1,
         accounts: ALL('skipped:unset'),

@@ -1,10 +1,11 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
+  checkCityState,
   checkOrganizationName,
   checkOrganizationSlug,
   ORGANIZATION_MESSAGES,
@@ -26,7 +27,12 @@ import {
 import { roleValidator } from './lib/roles';
 import { isSlug } from './lib/slugs';
 import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from './lib/sports';
-import { insertOrganization, organizationSlugTaken, sortName } from './lib/tenantWrites';
+import {
+  insertOrganization,
+  organizationSlugTaken,
+  sortName,
+  updateOrganizationCityState,
+} from './lib/tenantWrites';
 import { getCurrentUser } from './lib/users';
 
 export { PUBLIC_LIST_MAX_PAGE, PUBLIC_LIST_PAGE_SIZE };
@@ -86,6 +92,7 @@ export const getPublicPage = query({
     return {
       name: organization.name,
       slug: organization.slug,
+      ...(organization.cityState !== undefined && { cityState: organization.cityState }),
       leagueCount: organization.leagueCount ?? 0,
       locationCount: organization.locationCount ?? 0,
       sportCount: sports.length,
@@ -208,14 +215,24 @@ export const getAdminContext = query({
   args: { slug: v.string() },
   returns: v.union(
     v.null(),
-    v.object({ organizationId: v.id('organizations'), name: v.string(), slug: v.string() }),
+    v.object({
+      organizationId: v.id('organizations'),
+      name: v.string(),
+      slug: v.string(),
+      cityState: v.optional(v.string()),
+    }),
   ),
   handler: async (ctx, { slug }) => {
     const organization = await organizationBySlug(ctx, slug);
     // Null for any caller: the public page already shows whether the organization exists.
     if (!organization) return null;
     await requireOrgAdminOrForbidden(ctx, organization._id);
-    return { organizationId: organization._id, name: organization.name, slug: organization.slug };
+    return {
+      organizationId: organization._id,
+      name: organization.name,
+      slug: organization.slug,
+      ...(organization.cityState !== undefined && { cityState: organization.cityState }),
+    };
   },
 });
 
@@ -295,12 +312,14 @@ function refuse(error: OrganizationInputError): never {
 }
 
 export const create = mutation({
-  args: { name: v.string(), slug: v.string() },
+  args: { name: v.string(), slug: v.string(), cityState: v.optional(v.string()) },
   returns: v.object({ slug: v.string() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const name = checkOrganizationName(args.name);
     if (!name.ok) refuse(name.error);
+    const cityState = checkCityState(args.cityState ?? '');
+    if (!cityState.ok) refuse(cityState.error);
     const slugError = checkOrganizationSlug(args.slug);
     if (slugError) refuse(slugError);
     if (await organizationSlugTaken(ctx, args.slug)) {
@@ -310,8 +329,24 @@ export const create = mutation({
         message: ORGANIZATION_MESSAGES.slugTaken(args.slug),
       });
     }
-    const organizationId = await insertOrganization(ctx, { name: name.name, slug: args.slug });
+    const organizationId = await insertOrganization(ctx, {
+      name: name.name,
+      slug: args.slug,
+      cityState: cityState.value ?? undefined,
+    });
     await insertOrgAdminMembership(ctx, user._id, organizationId);
     return { slug: args.slug };
+  },
+});
+
+export const updateDetails = mutation({
+  args: { organizationId: v.id('organizations'), cityState: v.union(v.string(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    const cityState = checkCityState(args.cityState ?? '');
+    if (!cityState.ok) refuse(cityState.error);
+    await updateOrganizationCityState(ctx, args.organizationId, cityState.value);
+    return null;
   },
 });

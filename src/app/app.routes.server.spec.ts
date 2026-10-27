@@ -10,6 +10,7 @@ import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminStaff } from './organizations/admin/admin-staff';
+import { AdminDetails } from './organizations/admin/admin-details';
 import { LeaguePage } from './organizations/league/league-page';
 import { AdminLocations } from './organizations/admin/admin-locations';
 import { AdminOverview } from './organizations/admin/admin-overview';
@@ -216,12 +217,19 @@ describe('Route tables', () => {
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);
-    expect(admin?.children?.map((r) => r.path)).toEqual(['', 'locations', 'leagues', 'staff']);
+    expect(admin?.children?.map((r) => r.path)).toEqual([
+      '',
+      'locations',
+      'leagues',
+      'staff',
+      'details',
+    ]);
     expect(admin?.children?.[0]?.pathMatch).toBe('full');
     expect(await admin?.children?.[0]?.loadComponent?.()).toBe(AdminOverview);
     expect(await admin?.children?.[1]?.loadComponent?.()).toBe(AdminLocations);
     expect(await admin?.children?.[2]?.loadComponent?.()).toBe(AdminLeagues);
     expect(await admin?.children?.[3]?.loadComponent?.()).toBe(AdminStaff);
+    expect(await admin?.children?.[4]?.loadComponent?.()).toBe(AdminDetails);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Your account | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);

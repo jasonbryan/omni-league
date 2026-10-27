@@ -344,6 +344,7 @@ describe('seed:demo divisions on an empty deployment', () => {
       leagues: 0,
       seasons: 0,
       backfilled: ZERO_BACKFILL,
+      updated: { organizations: 0 },
     });
 
     expect(await read()).toEqual(before);
