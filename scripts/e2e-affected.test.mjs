@@ -223,12 +223,14 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the numbered control and the page helper to the league page and sport view specs only', () => {
+  it('maps the numbered control and the page helper to the league page, sport view, and find page specs only', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
       assert.deepEqual(
         specsFor([file]),
         want(
           'e2e/cache-key.spec.ts',
+          'e2e/find-a-league.spec.ts',
+          'e2e/find-organizations.spec.ts',
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
           'e2e/sport-view.spec.ts',
@@ -252,7 +254,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the find page and its Convex search to the find page and cache-key specs, and its unit specs to none', () => {
+  it('maps the find page and its Convex search to the find page, organizations list, and cache-key specs, and its unit specs to none', () => {
     for (const file of [
       'src/app/find/find-page.ts',
       'src/app/find/find-content.ts',
@@ -261,7 +263,11 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/find-a-league.spec.ts'),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/find-a-league.spec.ts',
+          'e2e/find-organizations.spec.ts',
+        ),
         file,
       );
     }

@@ -54,8 +54,7 @@ export class FindOrganizationsSkeleton {
 }
 
 /**
- * The organizations browsed before a search. The page control links are built from the query result's page numbers only, so the server HTML holds
- * no value from the request's query string.
+ * The page control links are built from the query result's page numbers only, so the server HTML holds no value from the request's query string.
  */
 @Component({
   selector: 'app-find-organizations',

@@ -20,6 +20,7 @@ const pr = { event: 'pull_request', base: 'main' };
 const FULL = 'FULL';
 const accept = 'e2e/accept-invite.spec.ts';
 const findPage = 'e2e/find-a-league.spec.ts';
+const findOrganizations = 'e2e/find-organizations.spec.ts';
 const withAlways = (...filters) => [...new Set([...ALWAYS, ...filters])].sort();
 
 /**
@@ -86,7 +87,7 @@ describe('tracing a file with no rule to the files that import it', () => {
       (root) => {
         assert.deepEqual(
           select(root, ['src/app/util/a.ts']).specs,
-          withAlways(accept, 'e2e/cache-key.spec.ts', findPage),
+          withAlways(accept, 'e2e/cache-key.spec.ts', findPage, findOrganizations),
         );
       },
     );
@@ -269,7 +270,7 @@ describe('tracing a file with no rule to the files that import it', () => {
       (root) => {
         assert.deepEqual(
           select(root, ['src/app/find/find-page.ts']).specs,
-          withAlways('e2e/cache-key.spec.ts', findPage),
+          withAlways('e2e/cache-key.spec.ts', findPage, findOrganizations),
         );
       },
     );
@@ -326,7 +327,7 @@ describe('tracing a file with no rule to the files that import it', () => {
         (root) => {
           assert.deepEqual(
             select(root, ['src/app/find/find-page.ts']).specs,
-            withAlways('e2e/cache-key.spec.ts', findPage),
+            withAlways('e2e/cache-key.spec.ts', findPage, findOrganizations),
           );
         },
       );
@@ -496,7 +497,7 @@ describe('tracing a file with no rule to the files that import it', () => {
         (root) => {
           assert.deepEqual(
             select(root, ['convex/lib/helper.ts']).specs,
-            withAlways('e2e/cache-key.spec.ts', findPage),
+            withAlways('e2e/cache-key.spec.ts', findPage, findOrganizations),
           );
         },
       );

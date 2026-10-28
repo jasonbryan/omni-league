@@ -755,8 +755,7 @@ async function recountPublishedSeasons(ctx: MutationCtx, leagueId: Id<'leagues'>
 
 export const BACKFILL_SCAN_LIMIT = 1000;
 
-/** The organizations list fields still unset on the row, with `hasPublishedLeague` recounted from its leagues' statuses. */
-async function listFields(
+async function unsetOrganizationListFields(
   ctx: MutationCtx,
   organization: Doc<'organizations'>,
 ): Promise<{ sortName?: string; hasPublishedLeague?: boolean }> {
@@ -825,7 +824,11 @@ export async function backfillTenantFields(
       if (organization.sortName !== undefined && organization.hasPublishedLeague !== undefined) {
         continue;
       }
-      await ctx.db.patch('organizations', organizationId, await listFields(ctx, organization));
+      await ctx.db.patch(
+        'organizations',
+        organizationId,
+        await unsetOrganizationListFields(ctx, organization),
+      );
       backfilled.organizations++;
       continue;
     }
@@ -866,7 +869,7 @@ export async function backfillTenantFields(
       locationCount: locations.length,
       sportLeagueCounts,
       sportLocationCounts,
-      ...(await listFields(ctx, organization)),
+      ...(await unsetOrganizationListFields(ctx, organization)),
     });
     backfilled.organizations++;
   }

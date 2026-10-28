@@ -19,8 +19,11 @@ const COURTS = { name: 'Sand Courts', address: '1 Beach Rd, Corpus Christi, TX 7
 
 /**
  * The list is global and ordered by name, so the tests that count pages seed seven organizations whose names start with a digit,
- * which sorts before every other name, and only the desktop project does it.
+ * which sorts before every other name, and only the desktop project does it. The digits fall with the clock, so a retry's batch
+ * (the serial group runs again as a whole) sorts before the batch of the failed attempt.
  */
+const BATCH = String(9_999_999_999_999 - Date.now()).padStart(13, '0');
+const PREFIX = `${BATCH} Browse`;
 const WORDS = ['echo', 'Delta', 'charlie', 'Bravo', 'alpha', 'Foxtrot', 'Golf'];
 const SORTED_WORDS = ['alpha', 'Bravo', 'charlie', 'Delta', 'echo', 'Foxtrot', 'Golf'];
 
@@ -42,7 +45,7 @@ async function seedSeven(): Promise<Seeded> {
     byWord.set(
       word,
       await seedTenant({
-        name: `00 Browse ${word}`,
+        name: `${PREFIX} ${word}`,
         ...(word === 'alpha' && { cityState: 'Austin, TX' }),
         locations: [COURTS],
         leagues: [
@@ -56,11 +59,11 @@ async function seedSeven(): Promise<Seeded> {
     );
   }
   const draftsOnly = await seedTenant({
-    name: '00 Browse Drafts',
+    name: `${PREFIX} Drafts`,
     locations: [COURTS],
     leagues: [{ name: 'Draft League', sport: 'soccer', locations: [COURTS.name], status: 'draft' }],
   });
-  const noLeagues = await seedTenant({ name: '00 Browse Empty' });
+  const noLeagues = await seedTenant({ name: `${PREFIX} Empty` });
   return { byWord, draftsOnly, noLeagues };
 }
 

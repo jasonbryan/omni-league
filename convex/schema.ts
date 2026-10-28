@@ -31,7 +31,6 @@ export default defineSchema({
     sportLeagueCounts: v.optional(sportCountsValidator),
     sportLocationCounts: v.optional(sportCountsValidator),
     sortName: v.optional(v.string()),
-    // True once a league of the organization is published; the organizations list reads it through an index.
     hasPublishedLeague: v.optional(v.boolean()),
   })
     .index('by_slug', ['slug'])

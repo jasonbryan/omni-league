@@ -81,7 +81,6 @@ export const searchLeaguesValidator = v.object({
 
 export type SearchLeagues = Infer<typeof searchLeaguesValidator>;
 
-// The organizations browsed before a search. `cityState` is omitted when the organization has none.
 const searchOrganizationValidator = v.object({
   name: v.string(),
   slug: v.string(),
