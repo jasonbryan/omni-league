@@ -47,7 +47,7 @@ const FOOTER_LINK_CLASSES =
       >
         <!-- The field sits in the middle column and the account side in the last, so neither moves when the account link replaces "Sign in". -->
         <div
-          class="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,24rem)_minmax(0,1fr)] md:gap-6 md:px-8"
+          class="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 md:grid md:grid-cols-[minmax(max-content,1fr)_minmax(0,24rem)_minmax(0,1fr)] md:gap-6 md:px-8"
         >
           <a
             routerLink="/"
