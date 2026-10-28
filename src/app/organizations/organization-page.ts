@@ -109,7 +109,7 @@ export class OrganizationPage {
   private readonly openSeasonRows = injectQuery(api.seasons.listOpenForOrganization, () =>
     this.unknownSport() ? skipToken : { orgSlug: this.slug(), ...this.listArgs() },
   );
-  // Signed-out views and the server render skip it, so public pages cost no extra function call.
+  // Signed-out views and the server render skip it, so signed-out visitors cost no extra function call.
   protected readonly viewerIsOrgAdmin = injectQuery(api.organizations.viewerIsOrgAdmin, () =>
     this.auth.convexAuthenticated() ? { slug: this.slug() } : skipToken,
   );

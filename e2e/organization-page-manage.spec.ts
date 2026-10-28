@@ -181,13 +181,13 @@ test.describe('organization page: Manage', () => {
       ]);
     }
     await signedInAs(page, 'orgAdmin', tenant);
-    const held = await holdQueries(page, [OPEN_SEASONS], { armed: false });
+    const held = await holdQueries(page, [OPEN_SEASONS], { watchFromStart: false });
     await page.goto(`${tenant.path}/sports/soccer`);
     await expect(manage(page)).toBeVisible();
     await expect(
       page.getByRole('main').getByRole('link', { name: 'Register for a season' }),
     ).toBeVisible();
-    held.arm();
+    held.watchNewSubscriptions();
     const chips = page.getByRole('navigation', { name: 'Sports' });
     const before = await chips.boundingBox();
 
