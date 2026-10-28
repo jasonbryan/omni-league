@@ -82,7 +82,7 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
             <ng-icon name="lucideMenu" class="text-xl" aria-hidden="true" />
           </button>
           <p class="min-w-0 flex-1 truncate text-sm font-semibold">{{ title() }}</p>
-          <app-account-row variant="initials" />
+          <app-account-row variant="slimBar" />
         </header>
         <app-offline-note />
         <main #main id="main" tabindex="-1" class="min-w-0 flex-1 focus:outline-none">
@@ -125,7 +125,7 @@ export class Shell {
 
   protected readonly sidebar = contentChild(ShellSidebar);
   protected readonly title = computed(
-    () => this.sidebar()?.appShellSidebarTitle() ?? 'Omni League',
+    () => this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
   );
   protected readonly skeletonWidths = ['w-full', 'w-5/6', 'w-4/6', 'w-5/6'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');

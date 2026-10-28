@@ -14,13 +14,12 @@ import {
   SIDEBAR_ROW,
   SIDEBAR_ROW_CURRENT,
 } from './sidebar-classes';
-import { pathOf } from './url-path';
+import { pathWithoutQueryOrTrailingSlash } from './url-path';
 
 const HOME_PATH = '/app';
 
 /**
- * The sidebar of every `/app` view that has none of its own. The shell renders it twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`.
- * The organizations come from `organizations.listMine`, asked only once Convex has accepted the token.
+ * The shell renders it twice while the phone sheet is open (the desktop column and the sheet), so it carries no `id`.
  */
 @Component({
   selector: 'app-home-sidebar',
@@ -95,7 +94,9 @@ export class HomeSidebar {
   protected readonly currentIcon = SIDEBAR_ICON_CURRENT;
   protected readonly groupLabel = SIDEBAR_GROUP_LABEL;
 
-  protected readonly onHome = computed(() => pathOf(this.url()) === HOME_PATH);
+  protected readonly onHome = computed(
+    () => pathWithoutQueryOrTrailingSlash(this.url()) === HOME_PATH,
+  );
   protected readonly loading = computed(
     () => this.mine.value() === undefined && this.mine.error() === undefined,
   );

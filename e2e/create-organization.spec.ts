@@ -16,15 +16,14 @@ const FORMAT_MESSAGE =
 
 const CITY_STATE_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.';
 
-/** What an `/app` page puts before `<main>` in the Tab order: the slim bar below 1024px, the sidebar from it. */
-const shellOrder = (): string[] =>
+const tabOrderBeforeMain = (): string[] =>
   test.info().project.use.isMobile
     ? ['button[aria-label="Open navigation"]', 'header a[href="/app/account"]']
     : ['a[href="/"]', 'nav[aria-label="Your account"] a[href="/app"]', 'a[href="/app/account"]'];
 
 const formOrder = (): string[] => [
   'a[href$="#main"]',
-  ...shellOrder(),
+  ...tabOrderBeforeMain(),
   'main a[href="/app"]',
   '#name',
   '#cityState',
@@ -62,7 +61,7 @@ test.describe('create an organization', () => {
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
-        ...shellOrder(),
+        ...tabOrderBeforeMain(),
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
       ],

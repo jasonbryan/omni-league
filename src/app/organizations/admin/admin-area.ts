@@ -29,7 +29,7 @@ import { AdminSidebar } from './admin-sidebar';
       @switch (context.state()) {
         @case ('ready') {
           @if (context.organization(); as organization) {
-            <ng-template appShellSidebar [appShellSidebarTitle]="organization.name">
+            <ng-template appShellSidebar [appShellOrganizationName]="organization.name">
               <app-admin-sidebar [organization]="organization" />
             </ng-template>
           }

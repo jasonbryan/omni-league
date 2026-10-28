@@ -13,14 +13,14 @@ import {
 } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
 import {
-  SIDEBAR_HEAD,
+  SIDEBAR_HEAD_LINK,
   SIDEBAR_ICON,
   SIDEBAR_ICON_CURRENT,
   SIDEBAR_MARK,
   SIDEBAR_ROW,
   SIDEBAR_ROW_CURRENT,
 } from '../../shell/sidebar-classes';
-import { pathOf } from '../../shell/url-path';
+import { pathWithoutQueryOrTrailingSlash } from '../../shell/url-path';
 import { initials } from '../initials';
 import { injectAdminCounts } from './admin-counts';
 import type { AdminOrganization } from './admin-context';
@@ -92,7 +92,7 @@ export class AdminSidebar {
   readonly organization =
     input.required<Pick<AdminOrganization, 'organizationId' | 'name' | 'slug'>>();
 
-  protected readonly head = SIDEBAR_HEAD;
+  protected readonly head = SIDEBAR_HEAD_LINK;
   protected readonly mark = SIDEBAR_MARK;
   protected readonly row = SIDEBAR_ROW;
   protected readonly currentRow = SIDEBAR_ROW_CURRENT;
@@ -116,7 +116,7 @@ export class AdminSidebar {
 
   protected readonly sections = computed(() => {
     const { slug } = this.organization();
-    const here = pathOf(this.url());
+    const here = pathWithoutQueryOrTrailingSlash(this.url());
     const ariaCurrentFor = (path: string, includeChildren = false): 'page' | 'true' | null =>
       here === path ? 'page' : includeChildren && here.startsWith(`${path}/`) ? 'true' : null;
     return [

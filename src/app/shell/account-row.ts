@@ -7,13 +7,12 @@ import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
 import { injectCurrentUrl } from './current-url';
 import { initialsOf } from './initials';
-import { pathOf } from './url-path';
+import { pathWithoutQueryOrTrailingSlash } from './url-path';
 
 const ACCOUNT_PATH = '/app/account';
 const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
 
 /**
- * The account at the foot of the sidebar (`row`) and the initials in the slim bar (`initials`).
  * `users.me` is asked only once Convex has accepted the token, so the first answer is the caller's own and a shared device never shows the previous user's email.
  */
 @Component({
@@ -25,7 +24,7 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
   template: `
     @if (state() === 'loading') {
       <span role="status" class="sr-only">Loading your account.</span>
-      @if (variant() === 'row') {
+      @if (variant() === 'sidebar') {
         <div aria-hidden="true" class="flex min-h-11 items-center gap-3 p-2">
           <span [class]="pulse + ' size-9 shrink-0 rounded-full'"></span>
           <span class="min-w-0 flex-1">
@@ -38,7 +37,7 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
           <span [class]="pulse + ' size-9 rounded-full'"></span>
         </span>
       }
-    } @else if (variant() === 'row') {
+    } @else if (variant() === 'sidebar') {
       <a
         [routerLink]="path"
         [attr.aria-current]="current() ? 'page' : null"
@@ -80,7 +79,7 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
   `,
 })
 export class AccountRow {
-  readonly variant = input<'row' | 'initials'>('row');
+  readonly variant = input<'sidebar' | 'slimBar'>('sidebar');
 
   private readonly auth = inject(AuthService);
   private readonly url = injectCurrentUrl();
@@ -94,7 +93,6 @@ export class AccountRow {
   protected readonly avatar =
     'flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-accent-foreground';
 
-  /** A failed query, or a user with no record, leaves the link with no personal detail. */
   protected readonly state = computed<'loading' | 'ready' | 'failed'>(() => {
     if (!this.auth.convexAuthenticated()) return 'loading';
     if (this.me.error()) return 'failed';
@@ -105,5 +103,7 @@ export class AccountRow {
   protected readonly name = computed(() => this.me.value()?.name ?? '');
   protected readonly email = computed(() => this.me.value()?.email ?? '');
   protected readonly initials = computed(() => initialsOf(this.name()));
-  protected readonly current = computed(() => pathOf(this.url()) === ACCOUNT_PATH);
+  protected readonly current = computed(
+    () => pathWithoutQueryOrTrailingSlash(this.url()) === ACCOUNT_PATH,
+  );
 }

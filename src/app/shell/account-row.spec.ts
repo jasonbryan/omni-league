@@ -13,7 +13,7 @@ import { AccountRow } from './account-row';
   imports: [AccountRow],
   template: `
     <app-account-row id="row" />
-    <app-account-row id="bar" variant="initials" />
+    <app-account-row id="bar" variant="slimBar" />
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

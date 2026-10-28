@@ -7,7 +7,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { injectQuery, skipToken } from '../../core/data/convex';
 import {
   SIDEBAR_GROUP_LABEL,
-  SIDEBAR_HEAD,
+  SIDEBAR_HEAD_LINK,
   SIDEBAR_ICON,
   SIDEBAR_ICON_CURRENT,
   SIDEBAR_MARK,
@@ -79,7 +79,7 @@ export class LeagueSidebar {
 
   private readonly auth = inject(AuthService);
 
-  protected readonly head = SIDEBAR_HEAD;
+  protected readonly head = SIDEBAR_HEAD_LINK;
   protected readonly mark = SIDEBAR_MARK;
   protected readonly row = SIDEBAR_ROW;
   protected readonly currentRow = SIDEBAR_ROW_CURRENT;

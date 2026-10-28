@@ -671,6 +671,18 @@ describe('the files under src/app that run the full suite', () => {
     }
   });
 
+  it('keeps a file with a rule of its own in the full suite when only the phone sheet imports it', () => {
+    withRepo(
+      {
+        'src/app/shell/shell-sidebar.ts': 'export const sidebar = 1;\n',
+        'src/app/shell/shell-sheet.ts': "import { sidebar } from './shell-sidebar';\n",
+      },
+      (root) => {
+        assert.deepEqual(specsFor(['src/app/shell/shell-sidebar.ts'], root), [FULL]);
+      },
+    );
+  });
+
   it('maps the phone sheet itself to the shell specs', () => {
     const specs = specsFor(['src/app/shell/shell-sheet.ts']);
     assert.ok(!specs.includes(FULL));

@@ -6,7 +6,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
-import { TopBarTestPage } from './testing/test-pages';
+import { PublicTopBarTestPage } from './testing/test-pages';
 
 describe('Top bar account area', () => {
   let auth: FakeAuthClient;
@@ -20,7 +20,7 @@ describe('Top bar account area', () => {
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
-        provideRouter([{ path: '**', component: TopBarTestPage }]),
+        provideRouter([{ path: '**', component: PublicTopBarTestPage }]),
       ],
     });
     if (session !== undefined) auth.emitSession(session);

@@ -12,7 +12,7 @@ import {
   GET_ADMIN_CONTEXT,
   openAdmin,
   text,
-  expectSubscriptions,
+  expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
@@ -193,7 +193,7 @@ describe('AdminStaff', () => {
   describe('the page (states 1 and 2)', () => {
     it('asks the staff, pending, and league lists with the organization id, only after the context says ready', async () => {
       await open();
-      expectSubscriptions(o.convex, [
+      expectPageAndShellSubscriptions(o.convex, [
         [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
         [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
         [LIST_PENDING, { organizationId: COASTAL.organizationId }],

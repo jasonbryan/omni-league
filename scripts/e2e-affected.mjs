@@ -609,8 +609,7 @@ export const AREAS = [
     specs: ['app-shell', 'shell-sheet', SESSION],
   },
   {
-    // import() loads the sheet, so no importer shows what uses it: a file only it imports (the button, the
-    // sheet parts, the helpers) cannot be traced to its specs and stays in the full suite.
+    // Any file the sheet imports, directly or not, keeps the full suite.
     name: 'app shell sheet',
     test: named('src/app/shell/', ['shell-sheet']),
     specs: ['app-shell', 'shell-sheet', SESSION],
@@ -874,6 +873,9 @@ function widenToImporters(file, rule, selected, context, visiting) {
   if (graph.unresolved.length > 0) throw new FullSuite(graph.unresolved.join('; '));
   for (const importer of graph.importers.get(file) ?? []) {
     const importerRule = AREAS.find((area) => area.test(importer));
+    if (importerRule?.directOnly) {
+      throw new FullSuite(`${file} is reached through ${importer}, which a dynamic import() loads`);
+    }
     if (importerRule === rule) {
       widenToImporters(importer, rule, selected, context, visiting);
     } else if (importerRule) {

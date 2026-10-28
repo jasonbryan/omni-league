@@ -10,7 +10,7 @@ import {
   LIST_FOR_ADMIN,
   openAdmin,
   text,
-  expectSubscriptions,
+  expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
@@ -74,7 +74,7 @@ describe('AdminOverview', () => {
 
   it('asks the location list, the published-league counter, the league list, and the staff lists with the organization id', async () => {
     const { convex, subscription } = await open();
-    expectSubscriptions(convex, [
+    expectPageAndShellSubscriptions(convex, [
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
       [PUBLISHED_COUNT, { organizationId: COASTAL.organizationId }],

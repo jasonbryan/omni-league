@@ -58,8 +58,7 @@ const accountLink = (page: Page, user: TestUser) =>
 const menuButton = (page: Page) => page.getByRole('button', { name: 'Open navigation' });
 const dialogOf = (page: Page) => page.getByRole('dialog', { name: 'Navigation' });
 
-/** Whether `later` comes after `earlier` in the document. */
-async function follows(earlier: Locator, later: Locator): Promise<boolean> {
+async function isAfterInDocument(earlier: Locator, later: Locator): Promise<boolean> {
   const handle = await later.elementHandle();
   return earlier.evaluate(
     (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING),
@@ -110,7 +109,7 @@ test.describe('the app shell', () => {
       await expect(row).toHaveAttribute('href', '/app/account');
       await expect(row).toContainText(user.name);
       await expect(row).toContainText(user.email);
-      expect(await follows(nav, row)).toBe(true);
+      expect(await isAfterInDocument(nav, row)).toBe(true);
       await screenshot(page, testInfo, 'app-shell-admin');
     });
 
@@ -138,7 +137,9 @@ test.describe('the app shell', () => {
         await expect(nav.getByRole('link', { name: absent, exact: true })).toHaveCount(0);
       }
       await expect(nav.getByRole('link', { name: 'View public page' })).toHaveCount(0);
-      await expect(nav.locator('.tabular-nums')).toHaveCount(0);
+      await expect(
+        nav.getByRole('link', { name: /^(Leagues|Locations|Staff)\s*\d+$/ }),
+      ).toHaveCount(0);
 
       const row = accountLink(page, user);
       await expect(row).toBeVisible();

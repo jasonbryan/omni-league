@@ -21,7 +21,7 @@ export class PlainTestPage {}
   imports: [Shell, ShellSidebar],
   template: `
     <app-shell>
-      <ng-template appShellSidebar appShellSidebarTitle="Test organization">
+      <ng-template appShellSidebar appShellOrganizationName="Test organization">
         <nav aria-label="Test organization">
           <a class="sidebar-link" href="/organizations/test#row-2">Row 2</a>
           <a class="other-path" href="/elsewhere?x=1#top">Elsewhere</a>
@@ -50,7 +50,6 @@ export class SidebarTestPage {}
 })
 export class PendingTestPage {}
 
-/** The public top bar's account area, as the public layout draws it. */
 @Component({
   selector: 'app-top-bar-test-page',
   imports: [RouterLink, TopBarAccount],
@@ -62,4 +61,4 @@ export class PendingTestPage {}
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TopBarTestPage {}
+export class PublicTopBarTestPage {}

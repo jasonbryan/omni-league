@@ -9,7 +9,7 @@ import { STICKY_FOOTER } from './sticky-footer';
 import {
   adminRoutes,
   COASTAL,
-  expectSubscriptions,
+  expectPageAndShellSubscriptions,
   GET_ADMIN_CONTEXT,
   openAdmin,
   text,
@@ -80,7 +80,7 @@ describe('AdminDetails', () => {
 
     it('asks nothing beyond the admin context', async () => {
       await open();
-      expectSubscriptions(o.convex, [[GET_ADMIN_CONTEXT, { slug: COASTAL.slug }]]);
+      expectPageAndShellSubscriptions(o.convex, [[GET_ADMIN_CONTEXT, { slug: COASTAL.slug }]]);
     });
 
     it('shows the name read-only and the City, state with its current value and hint', async () => {

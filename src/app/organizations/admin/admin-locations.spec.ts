@@ -13,7 +13,7 @@ import {
   LIST_FOR_ADMIN,
   openAdmin,
   text,
-  expectSubscriptions,
+  expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'locations', component: AdminLocations }]);
@@ -63,7 +63,7 @@ describe('AdminLocations', () => {
   describe('the page (states 7 and 8)', () => {
     it('asks locations.listForAdmin with the organization id, after the context says ready', async () => {
       await open();
-      expectSubscriptions(o.convex, [
+      expectPageAndShellSubscriptions(o.convex, [
         [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
         [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
       ]);
