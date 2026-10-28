@@ -35,6 +35,7 @@ describe('UpdatePrompt', () => {
   let reload: ReturnType<typeof vi.fn>;
   let fixture: ComponentFixture<UpdatePrompt>;
   let host: HTMLElement;
+  let unsavedField: HTMLInputElement;
 
   const card = () => host.querySelector<HTMLElement>('section');
   const status = () => host.querySelector<HTMLElement>('[role="status"]');
@@ -54,12 +55,18 @@ describe('UpdatePrompt', () => {
       ],
     });
     TestBed.inject(AppUpdates).start();
+    // Unsaved input is what keeps a new version from loading by itself and shows the prompt.
+    unsavedField = document.createElement('input');
+    document.body.append(unsavedField);
+    unsavedField.dispatchEvent(new Event('input', { bubbles: true }));
     fixture = TestBed.createComponent(UpdatePrompt);
     host = fixture.nativeElement as HTMLElement;
     TestBed.tick();
   });
 
   afterEach(() => {
+    unsavedField.remove();
+    sessionStorage.clear();
     fixture.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -86,7 +93,7 @@ describe('UpdatePrompt', () => {
       expect(section?.getAttribute('aria-labelledby')).toBe(heading?.id);
       expect(text(heading)).toBe('A new version of Omni League is ready');
       expect(text(section?.querySelector('p'))).toBe(
-        "Reload to start using it. Finish anything you're typing first.",
+        "It loads by itself when you leave this page, so you can finish what you're typing.",
       );
     });
 

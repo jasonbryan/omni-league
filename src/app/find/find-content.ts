@@ -1,15 +1,20 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   input,
   linkedSignal,
   output,
+  signal,
+  viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight, lucideCircleAlert, lucideSearch } from '@ng-icons/lucide';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
+import { isPlainClick } from '../shell/follow-link';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import { initials } from '../organizations/initials';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
@@ -25,6 +30,9 @@ const RESULT_NOUN = { one: 'league', many: 'leagues' } as const;
 
 const LINK_CLASSES =
   'rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring';
+
+const TEXT_LINK_CLASSES =
+  'inline-flex items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11';
 
 @Component({
   selector: 'app-find-content',
@@ -58,6 +66,7 @@ const LINK_CLASSES =
               aria-hidden="true"
             />
             <input
+              #field
               id="find-q"
               name="q"
               type="search"
@@ -103,7 +112,9 @@ const LINK_CLASSES =
             }
             @default {
               @if (rows().length > 0) {
-                <p role="status" class="text-sm text-muted-foreground">{{ countLine() }}</p>
+                <p #resultStatus role="status" tabindex="-1" class="text-sm text-muted-foreground">
+                  {{ countLine() }}
+                </p>
                 <ul role="list" class="mt-2 max-w-3xl divide-y divide-border">
                   @for (row of rows(); track row.href) {
                     <li class="group relative">
@@ -145,14 +156,35 @@ const LINK_CLASSES =
                 </ul>
               } @else {
                 <div class="flex max-w-md flex-col items-start">
-                  <p role="status" class="font-medium">No {{ noun.many }} match “{{ query() }}”</p>
+                  <p #resultStatus role="status" tabindex="-1" class="font-medium">
+                    No {{ noun.many }} match “{{ query() }}”
+                  </p>
                   <p class="mt-1 text-sm text-muted-foreground">
                     Omni League has beach volleyball, soccer, and softball leagues. Try a league
                     name, an organization, or a location such as “North Beach”.
                   </p>
+                  @if (suggestions().length > 0) {
+                    <p id="suggestions-heading" class="mt-4 text-sm font-medium">
+                      Try fewer words:
+                    </p>
+                    <ul role="list" aria-labelledby="suggestions-heading" class="mt-1">
+                      @for (suggestion of suggestions(); track suggestion) {
+                        <li>
+                          <a
+                            [routerLink]="action"
+                            [queryParams]="{ q: suggestion }"
+                            [class]="suggestionClasses"
+                            (click)="followed('status', $event)"
+                            >{{ suggestion }}</a
+                          >
+                        </li>
+                      }
+                    </ul>
+                  }
                   <a
                     [routerLink]="action"
-                    class="mt-4 inline-flex items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
+                    [class]="clearClasses"
+                    (click)="followed('field', $event)"
                     >Clear the search</a
                   >
                 </div>
@@ -177,8 +209,14 @@ export class FindContent {
   protected readonly noun = RESULT_NOUN;
   protected readonly searchButton = SEARCH_BUTTON;
   protected readonly linkClasses = LINK_CLASSES;
+  protected readonly suggestionClasses = TEXT_LINK_CLASSES;
+  protected readonly clearClasses = `mt-4 ${TEXT_LINK_CLASSES}`;
   protected readonly openBadge = OPEN_BADGE;
   protected readonly mutedBadge = MUTED_BADGE;
+
+  private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
+  private readonly resultStatus = viewChild<ElementRef<HTMLElement>>('resultStatus');
+  private readonly pendingFocus = signal<{ target: 'status' | 'field'; from: string } | null>(null);
 
   protected readonly draft = linkedSignal(() => this.query());
   protected readonly retryHref = computed(() => findPath(this.query()));
@@ -196,6 +234,8 @@ export class FindContent {
     })),
   );
 
+  protected readonly suggestions = computed(() => this.results()?.suggestions ?? []);
+
   protected readonly countLine = computed(() => {
     const count = this.rows().length;
     if (this.results()?.more) {
@@ -210,8 +250,28 @@ export class FindContent {
     this.status() === 'results' && this.rows().length === 0 ? 'py-10 md:py-16' : 'py-6 md:py-10',
   );
 
+  constructor() {
+    // The followed link leaves the page with the old results, so focus waits for the new ones.
+    afterRenderEffect(() => {
+      const pending = this.pendingFocus();
+      if (!pending || pending.from === this.query()) return;
+      if (pending.target === 'field') {
+        this.field().nativeElement.focus();
+      } else {
+        if (this.status() !== 'results') return;
+        this.resultStatus()?.nativeElement.focus();
+      }
+      this.pendingFocus.set(null);
+    });
+  }
+
+  protected followed(target: 'status' | 'field', event: MouseEvent): void {
+    if (isPlainClick(event)) this.pendingFocus.set({ target, from: this.query() });
+  }
+
   protected submit(event: Event): void {
     event.preventDefault();
+    this.pendingFocus.set(null);
     this.searched.emit(parseSearchQuery([this.draft()]));
   }
 }

@@ -153,10 +153,10 @@ test.describe('sign-in', () => {
       const tokens = tokensSettled(page);
       await signInAs(page, user, '/sign-in?returnTo=%2Fapp');
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Signed-in account' })).toContainText(
-        user.name,
-      );
+      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+      await expect(
+        page.getByRole('link', { name: `Account settings: ${user.name}` }),
+      ).toBeVisible();
       await tokens;
       expect((await accountByEmail(user.email))?.sessions).toBeGreaterThanOrEqual(1);
 
@@ -198,7 +198,7 @@ test.describe('sign-in', () => {
         const tokens = tokensSettled(page);
         await signInAs(page, user, `/sign-in?returnTo=${encodeURIComponent(raw)}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
         await tokens;
         expect(offSite).toEqual([]);
       },
