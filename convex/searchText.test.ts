@@ -420,4 +420,42 @@ describe('searchText sport and division words', () => {
       'Soccer Draft Soccer Coed 7v7 Rec Gulf Coast Sport & Social Harbor Fields Galveston, TX',
     );
   });
+
+  test('changing a league from a custom level to a standard level drops the custom level words', async () => {
+    const { t, organizationId } = await setup();
+    await t.run(async (ctx) => {
+      await insertCustomLevel(ctx, organizationId, {
+        sport: 'soccer',
+        name: 'D',
+        standardLevel: 'rec',
+      });
+      await insertLeague(ctx, organizationId, {
+        name: 'Tuesday Dees',
+        sport: 'soccer',
+        locations: ['Harbor Fields'],
+        division: {
+          gender: 'coed',
+          playersPerSide: 7,
+          level: 'rec',
+          customLevel: 'D',
+          ageGroup: 'adult',
+        },
+      });
+    });
+    const league = await leagueSlugged(t, organizationId, 'tuesday-dees');
+    expect(league.customLevelId).toBeDefined();
+
+    await t.run((ctx) =>
+      updateLeague(ctx, league, {
+        name: league.name,
+        division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+      }),
+    );
+
+    const changed = await leagueSlugged(t, organizationId, 'tuesday-dees');
+    expect(changed.customLevelId).toBeUndefined();
+    expect((await searchTexts(t, organizationId))['tuesday-dees']).toBe(
+      'Tuesday Dees Soccer Coed 7v7 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+    );
+  });
 });
