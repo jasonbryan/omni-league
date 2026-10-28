@@ -97,10 +97,8 @@ export class AccountSettingsPage {
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
 
-  // A signed-in user with no `users` row has no name to show, which reads as a failure to load.
-  protected readonly failed = computed(
-    () => this.me.error() !== undefined || this.me.value() === null,
-  );
+  private readonly noUserRecord = computed(() => this.me.value() === null);
+  protected readonly failed = computed(() => this.me.error() !== undefined || this.noUserRecord());
   protected readonly loading = computed(() => this.me.value() === undefined);
   protected readonly name = computed(() => this.me.value()?.name ?? null);
   protected readonly email = computed(() => this.me.value()?.email ?? null);
