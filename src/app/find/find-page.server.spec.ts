@@ -22,6 +22,7 @@ import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { provideSpartanHlm } from '../ui/utils';
 import { at, COED_RESULTS, NO_RESULTS, OPEN_DAY } from './testing/find-data';
+import { NO_ORGANIZATIONS, ORGANIZATIONS, organizationsPage } from './testing/organizations-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -57,6 +58,7 @@ function metaInRenderDocument(): Meta {
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = 'https://omni.example';
 const SERVER_ERROR = 'This page is temporarily unavailable';
+const ORGANIZATIONS_QUERY = 'search:organizations';
 const CONNECTION_REFUSED = 'connect ECONNREFUSED internal-db.corp.example:443';
 
 interface Rendered {
@@ -69,7 +71,8 @@ interface Rendered {
 
 async function render(
   path: string,
-  query: (name: string, args: unknown) => Promise<unknown> = () => Promise.resolve(COED_RESULTS),
+  query: (name: string, args: unknown) => Promise<unknown> = (name) =>
+    Promise.resolve(name === ORGANIZATIONS_QUERY ? ORGANIZATIONS : COED_RESULTS),
   timeoutMs = 5000,
 ): Promise<Rendered> {
   const queries: { name: string; args: unknown }[] = [];
@@ -126,9 +129,9 @@ const meta = (head: HTMLHeadElement, selector: string) =>
   head.querySelector(selector)?.getAttribute('content') ?? null;
 
 describe('FindPage server render', () => {
-  it('renders /leagues with the form only, asks no query, and answers 200 with the public Cache-Control', async () => {
+  it('renders /leagues with the form and the organizations, asks no search, and answers 200 with the public Cache-Control', async () => {
     const { body, head, responseInit, queries } = await render('/leagues');
-    expect(queries).toEqual([]);
+    expect(queries).toEqual([{ name: ORGANIZATIONS_QUERY, args: { page: 1 } }]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
     expect(head.querySelector('title')?.textContent).toBe('Find a league | Omni League');
@@ -136,12 +139,82 @@ describe('FindPage server render', () => {
     expect(
       body.querySelector('main form[role="search"][action="/leagues"] input[name="q"]'),
     ).not.toBeNull();
-    expect(body.querySelector('main section')).toBeNull();
+    expect(body.querySelector('main section[aria-labelledby="results-heading"]')).toBeNull();
+    expect([...body.querySelectorAll('main section ul > li h3')].map(text)).toEqual([
+      'Front Range Rec Sports',
+      'Gulf Coast Sport & Social',
+      'Saguaro Valley Softball',
+    ]);
     expect(head.querySelector('meta[name="robots"]')).toBeNull();
     expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
       `${ORIGIN}/leagues`,
     );
     expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
+  });
+
+  it('renders page 2 of the organizations with the canonical /leagues?page=2, and no other parameter in the HTML', async () => {
+    const { html, body, head, responseInit, queries } = await render(
+      '/leagues?page=2&ott=SECRET&utm_source=CANARYabc',
+      (name, args) =>
+        Promise.resolve(
+          name === ORGANIZATIONS_QUERY ? organizationsPage((args as { page: number }).page) : null,
+        ),
+    );
+    expect(queries).toEqual([{ name: ORGANIZATIONS_QUERY, args: { page: 2 } }]);
+    expect(responseInit.status).toBeUndefined();
+    expect([...body.querySelectorAll('main section ul > li h3')].map(text)).toEqual([
+      'Club 6',
+      'Club 7',
+    ]);
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}/leagues?page=2`,
+    );
+    expect(meta(head, 'meta[property="og:url"]')).toBe(`${ORIGIN}/leagues?page=2`);
+    expect(html).not.toContain('SECRET');
+    expect(html).not.toContain('CANARYabc');
+    expect(html).not.toContain('ott=');
+  });
+
+  it.each(['?page=0', '?page=abc', '?page=2&page=3'])(
+    '%s asks page 1 of the organizations with 200 and the canonical /leagues',
+    async (query) => {
+      const { head, responseInit, queries } = await render(`/leagues${query}`);
+      expect(queries).toEqual([{ name: ORGANIZATIONS_QUERY, args: { page: 1 } }]);
+      expect(responseInit.status).toBeUndefined();
+      expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+        `${ORIGIN}/leagues`,
+      );
+    },
+  );
+
+  it('renders the empty text with no page control when no organization has a published league', async () => {
+    const { body, responseInit } = await render('/leagues', () =>
+      Promise.resolve(NO_ORGANIZATIONS),
+    );
+    expect(responseInit.status).toBeUndefined();
+    expect(text(body.querySelector('main section'))).toContain(
+      'No organizations have published a league yet.',
+    );
+    expect(body.querySelector('nav[aria-label="Organizations pages"]')).toBeNull();
+  });
+
+  it('renders the server-error view with 503 and Cache-Control: no-store when the organizations fail', async () => {
+    const { html, body, responseInit } = await render('/leagues?page=2&ott=SECRET', () =>
+      Promise.reject(new Error(CONNECTION_REFUSED)),
+    );
+    expect(responseInit.status).toBe(503);
+    expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+    expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
+    expect(body.querySelector('main a')?.getAttribute('href')).toBe('/leagues?page=2');
+    expect(html).not.toContain('internal-db');
+    expect(html).not.toContain('SECRET');
+  });
+
+  it('renders the server-error view with 503 and no-store when the organizations time out', async () => {
+    const { body, responseInit } = await render('/leagues', () => new Promise(() => undefined), 30);
+    expect(responseInit.status).toBe(503);
+    expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+    expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
   });
 
   it('renders the results of ?q, noindex, with the canonical /leagues and no other parameter in the HTML', async () => {

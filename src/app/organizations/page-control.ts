@@ -160,7 +160,7 @@ export class PageControl {
   readonly pageCount = input.required<number>();
   readonly total = input.required<number>();
   readonly path = input.required<string>();
-  readonly fragment = input.required<string>();
+  readonly fragment = input.required<string | undefined>();
   readonly queryFor = input<(page: number) => Params>(listPageQuery);
   readonly pageActivated = output<number>();
 

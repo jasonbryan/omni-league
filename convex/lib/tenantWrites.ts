@@ -60,6 +60,16 @@ export function sortName(name: string): string {
   return name.toLowerCase();
 }
 
+// An organization's `sortName` and `hasPublishedLeague` feed the organizations list: a writer that renames an organization, or unpublishes or deletes its last published league, must keep both current.
+async function markHasPublishedLeague(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+): Promise<void> {
+  const organization = await organizationOf(ctx, organizationId);
+  if (organization.hasPublishedLeague === true) return;
+  await ctx.db.patch('organizations', organizationId, { hasPublishedLeague: true });
+}
+
 export const MAX_LEAGUES_SEARCH_UPDATED = 200;
 
 // Every writer of a league's name or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
@@ -158,6 +168,8 @@ export async function insertOrganization(
     name,
     slug,
     ...(cityState !== undefined && { cityState }),
+    sortName: sortName(name),
+    hasPublishedLeague: false,
     leagueCount: 0,
     locationCount: 0,
     sportLeagueCounts: {},
@@ -528,6 +540,7 @@ export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): P
       league,
     ),
   });
+  await markHasPublishedLeague(ctx, league.organizationId);
   const wasPublicAndCounted = league.status === undefined;
   if (wasPublicAndCounted) return;
   await increment(ctx, league.organizationId, 'leagueCount');
@@ -622,6 +635,7 @@ async function insertLeagueRow(
     ...divisionFields(league.division),
   });
   if (status === 'published') {
+    await markHasPublishedLeague(ctx, organizationId);
     await increment(ctx, organizationId, 'leagueCount');
     await countLeagueInSport(ctx, organizationId, league.sport, league.locationIds);
   }
@@ -741,6 +755,25 @@ async function recountPublishedSeasons(ctx: MutationCtx, leagueId: Id<'leagues'>
 
 export const BACKFILL_SCAN_LIMIT = 1000;
 
+/** The organizations list fields still unset on the row, with `hasPublishedLeague` recounted from its leagues' statuses. */
+async function listFields(
+  ctx: MutationCtx,
+  organization: Doc<'organizations'>,
+): Promise<{ sortName?: string; hasPublishedLeague?: boolean }> {
+  const published = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_status_and_sortName', (q) =>
+      q.eq('organizationId', organization._id).eq('status', 'published'),
+    )
+    .first();
+  return {
+    ...(organization.sortName === undefined && { sortName: sortName(organization.name) }),
+    ...(organization.hasPublishedLeague === undefined && {
+      hasPublishedLeague: published !== null,
+    }),
+  };
+}
+
 export const backfilledValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
@@ -782,15 +815,20 @@ export async function backfillTenantFields(
     backfilled.leagues++;
   }
   for (const organization of await ctx.db.query('organizations').take(BACKFILL_SCAN_LIMIT)) {
-    if (
+    const countersSet =
       organization.leagueCount !== undefined &&
       organization.locationCount !== undefined &&
       organization.sportLeagueCounts !== undefined &&
-      organization.sportLocationCounts !== undefined
-    ) {
+      organization.sportLocationCounts !== undefined;
+    const organizationId = organization._id;
+    if (countersSet) {
+      if (organization.sortName !== undefined && organization.hasPublishedLeague !== undefined) {
+        continue;
+      }
+      await ctx.db.patch('organizations', organizationId, await listFields(ctx, organization));
+      backfilled.organizations++;
       continue;
     }
-    const organizationId = organization._id;
     const locations = await ctx.db
       .query('locations')
       .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
@@ -828,6 +866,7 @@ export async function backfillTenantFields(
       locationCount: locations.length,
       sportLeagueCounts,
       sportLocationCounts,
+      ...(await listFields(ctx, organization)),
     });
     backfilled.organizations++;
   }

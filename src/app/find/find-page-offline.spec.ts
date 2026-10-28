@@ -11,6 +11,7 @@ import { formatSavedTime } from '../offline/saved-time';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { FindPage } from './find-page';
 import { at, COED_RESULTS, OPEN_DAY } from './testing/find-data';
+import { ORGANIZATIONS } from './testing/organizations-data';
 
 const NOW = at(OPEN_DAY);
 const SAVED_AT = NOW - 3 * 60 * 60 * 1000;
@@ -114,11 +115,43 @@ describe('FindPage offline', () => {
     expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
   });
 
-  it('shows the form with no note when no search is open', async () => {
+  it('lists the organizations browse query among the saved queries', () => {
+    expect(
+      OFFLINE_SAVED_QUERIES.some(
+        (listed) => getFunctionName(listed.query) === 'search:organizations',
+      ),
+    ).toBe(true);
+  });
+
+  it('opens the organizations viewed online from their saved copy, with the saved-copy note under the intro', async () => {
+    plantSavedCopy(api.search.organizations, { page: 1 }, ORGANIZATIONS, SAVED_AT);
     stubOnLine(false);
     const harness = await open('/leagues');
-    expect(host(harness).querySelector('main form[role="search"]')).not.toBeNull();
-    expect(host(harness).querySelector('[data-saved-copy-note], app-not-saved-view')).toBeNull();
+    const main = host(harness).querySelector('main')!;
+    expect(main.querySelector('form[role="search"]')).not.toBeNull();
+    expect([...main.querySelectorAll('section ul > li h3')].map(text)).toEqual([
+      'Front Range Rec Sports',
+      'Gulf Coast Sport & Social',
+      'Saguaro Valley Softball',
+    ]);
+    expect(text(main.querySelector('[data-saved-copy-note]'))).toBe(
+      `Saved copy from ${formatSavedTime(SAVED_AT, NOW).text}. It may have changed since.`,
+    );
+    expect(main.querySelector('app-not-saved-view')).toBeNull();
+  });
+
+  it('shows the not-saved view for a page of organizations that was not viewed', async () => {
+    plantSavedCopy(api.search.organizations, { page: 1 }, ORGANIZATIONS, SAVED_AT);
+    stubOnLine(false);
+    const harness = await open('/leagues?page=2');
+    expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+    expect(host(harness).querySelector('[data-saved-copy-note]')).toBeNull();
+  });
+
+  it('shows the not-saved view for the organizations when nothing was saved', async () => {
+    stubOnLine(false);
+    const harness = await open('/leagues');
+    expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
   });
 
   it('online before the first live result shows the saved copy with no note', async () => {
