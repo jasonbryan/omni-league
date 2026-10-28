@@ -81,4 +81,22 @@ describe('the admin alert offline kind', () => {
     await fixture.whenStable();
     expect(title(host)).toBe("Can't reach Omni League right now. Nothing was sent.");
   });
+
+  it('keeps the unreachable title when the socket reconnects, and drops it when the socket next goes down', async () => {
+    const client = new FakeConvexClient();
+    client.setConnected(false);
+    TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: client }] });
+    const fixture = TestBed.createComponent(OfflineHost);
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    TestBed.inject(ConvexConnection).markSiteReached();
+
+    client.setConnected(true);
+    await fixture.whenStable();
+    expect(title(host)).toBe("Can't reach Omni League right now. Nothing was sent.");
+
+    client.setConnected(false);
+    await fixture.whenStable();
+    expect(title(host)).toBe("You're offline. Nothing was sent.");
+  });
 });
