@@ -84,6 +84,8 @@ export default defineSchema({
     ageGroup: v.optional(ageGroupValidator),
     /** Absent means `playersPerSide`; when set it is at least that, and at most `ROSTER_SIZE_INPUT_MAX`. */
     minimumRosterSize: v.optional(v.number()),
+    /** The words a search finds the league by: its name, its organization's name, its locations' names, and City, state. */
+    searchText: v.optional(v.string()),
   })
     .index('by_organizationId_and_name', ['organizationId', 'name'])
     .index('by_organizationId_and_slug', ['organizationId', 'slug'])
@@ -96,7 +98,11 @@ export default defineSchema({
       'sortName',
     ])
     // Whether any league still uses a custom level, so deleting one reads an index, not the table.
-    .index('by_customLevelId', ['customLevelId']),
+    .index('by_customLevelId', ['customLevelId'])
+    .searchIndex('search_searchText', {
+      searchField: 'searchText',
+      filterFields: ['status', 'sport'],
+    }),
 
   // A level an organization names for one sport (a letter class such as "D"), mapped to the
   // standard level that filters use. `nameKey` is `name` trimmed, with inner whitespace collapsed

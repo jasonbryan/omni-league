@@ -238,6 +238,23 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
+  it('maps the find page and its Convex search to the find page and cache-key specs, and its unit specs to none', () => {
+    for (const file of [
+      'src/app/find/find-page.ts',
+      'src/app/find/find-content.ts',
+      'convex/search.ts',
+      'convex/lib/searchQuery.ts',
+    ]) {
+      assert.deepEqual(
+        specsFor([file]),
+        want('e2e/cache-key.spec.ts', 'e2e/find-a-league.spec.ts'),
+        file,
+      );
+    }
+    assert.deepEqual(specsFor(['src/app/find/find-page.spec.ts']), want());
+    assert.deepEqual(specsFor(['src/app/find/testing/find-data.ts']), want());
+  });
+
   it('maps the form field-error helper to the specs that fill in a form, and its unit spec to none', () => {
     const specs = specsFor(['src/app/core/forms/shown-errors.ts']);
     assert.ok(!specs.includes('FULL'));

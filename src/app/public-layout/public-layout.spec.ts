@@ -159,11 +159,12 @@ describe('PublicLayout', () => {
       expect(labels(footer.querySelectorAll('nav h2'))).toEqual(['Players', 'Organizers']);
     });
 
-    it('links Your account, Create an organization, and Sign in to manage', async () => {
+    it('links Find a league, Your account, Create an organization, and Sign in to manage', async () => {
       const page = await open();
 
       const links = [...page.querySelectorAll('footer nav a')];
       expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
+        ['Find a league', '/leagues'],
         ['Your account', '/app'],
         ['Create an organization', '/app/organizations/new'],
         ['Sign in to manage', '/sign-in?returnTo=%2Forganizations%2Fgulf-coast'],

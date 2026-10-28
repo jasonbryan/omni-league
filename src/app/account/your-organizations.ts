@@ -15,6 +15,7 @@ import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
 import { adminPath } from '../organizations/admin/admin-path';
+import { OUTLINE_BUTTON } from '../ui/button/button-classes';
 
 export function organizationInitials(name: string): string {
   return name
@@ -121,7 +122,7 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
             Ask your league organizer for an invite or registration link to join a league, or create
             an organization to run your own.
           </p>
-          <div class="mt-5">
+          <div class="mt-5 flex flex-wrap justify-center gap-2">
             <a
               routerLink="/app/organizations/new"
               data-slot="button"
@@ -129,6 +130,7 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
               ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create an
               organization</a
             >
+            <a routerLink="/leagues" data-slot="button" [class]="outlineButton">Find a league</a>
           </div>
         </div>
       } @else {
@@ -228,6 +230,7 @@ export class YourOrganizations {
     this.auth.convexAuthenticated() ? {} : skipToken,
   );
 
+  protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly placeholders = [1, 2];
   protected readonly failed = computed(() => this.mine.error() !== undefined);
   protected readonly loading = computed(() => this.mine.value() === undefined);

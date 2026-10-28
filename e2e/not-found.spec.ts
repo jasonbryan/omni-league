@@ -370,6 +370,7 @@ test.describe('not-found page', () => {
         'header a[href^="/sign-in"]',
         'main a[href="/"]',
         'footer a[href="/"]',
+        'footer a[href="/leagues"]',
         'footer a[href="/app"]',
         'footer a[href="/app/organizations/new"]',
         'footer a[href^="/sign-in"]',

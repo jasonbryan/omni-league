@@ -25,6 +25,7 @@ const SIGN_UP_ORDER = [
   'button[type="submit"]',
   'main p a[href^="/sign-in"]',
   'footer a[href="/"]',
+  'footer a[href="/leagues"]',
   'footer a[href="/app"]',
   'footer a[href="/app/organizations/new"]',
   'footer a[href^="/sign-in"]',
@@ -314,6 +315,7 @@ test.describe('sign-up', () => {
         'header a[href="/app"]',
         'main button',
         'main a[href="/app/organizations/new"]',
+        'main a[href="/leagues"]',
       ],
     });
 

@@ -9,6 +9,7 @@ import {
   publicLocationsValidator,
   publicOpenSeasonsValidator,
   publicSeasonsValidator,
+  searchLeaguesValidator,
 } from '../../../../../convex/lib/publicPage';
 
 export interface OfflineSavedQuery {
@@ -45,6 +46,10 @@ const SEASON_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.seasons.getPublicPage, getSeasonPublicPageReturns, 1),
 ];
 
+const FIND_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
+  savedQuery(api.search.leagues, searchLeaguesValidator, 1),
+];
+
 /**
  * A query is listed only if it is deliberately public (no `ctx.auth` check) and its result does not depend on the caller, so a saved
  * copy never holds signed-in or per-user data. A query that reads the caller's identity, or ever may, is never listed.
@@ -53,4 +58,5 @@ export const OFFLINE_SAVED_QUERIES: readonly OfflineSavedQuery[] = [
   ...ORGANIZATION_PAGE_QUERIES,
   ...LEAGUE_PAGE_QUERIES,
   ...SEASON_PAGE_QUERIES,
+  ...FIND_PAGE_QUERIES,
 ];

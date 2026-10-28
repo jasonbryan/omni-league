@@ -61,6 +61,24 @@ function publicListValidator<Row extends Validator<unknown, 'required', string>>
   });
 }
 
+// The rows of a text search over published leagues: each names its organization, so a result needs no second query.
+const searchLeagueValidator = v.object({
+  organization: v.object({ name: v.string(), slug: v.string() }),
+  name: v.string(),
+  slug: v.string(),
+  sportName: v.string(),
+  locationNames: v.array(v.string()),
+  divisionLabel: v.optional(v.string()),
+  seasons: v.array(publicLeagueSeasonValidator),
+});
+
+export const searchLeaguesValidator = v.object({
+  rows: v.array(searchLeagueValidator),
+  more: v.boolean(),
+});
+
+export type SearchLeagues = Infer<typeof searchLeaguesValidator>;
+
 export const publicLocationsValidator = publicListValidator(publicLocationValidator);
 
 export const publicLeaguesValidator = publicListValidator(publicLeagueValidator);

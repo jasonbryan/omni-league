@@ -18,6 +18,7 @@ import {
   lucideCalendarDays,
   lucideChevronRight,
   lucideMapPin,
+  lucidePencil,
   lucideTrophy,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -36,7 +37,11 @@ import {
 } from './organization-path';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
-import { PRIMARY_BUTTON, PRIMARY_BUTTON_LARGE } from '../ui/button/button-classes';
+import {
+  OUTLINE_BUTTON_LARGE,
+  PRIMARY_BUTTON,
+  PRIMARY_BUTTON_LARGE,
+} from '../ui/button/button-classes';
 import { publicLeaguePath, publicSeasonPath } from './public-league/public-league-path';
 import { closesText, leagueSeasonStatus, MUTED_BADGE, OPEN_BADGE } from './season-status';
 import { hasSportChoice, SportChips } from './sport-chips';
@@ -64,6 +69,7 @@ function plural(count: number, noun: string): string {
       lucideCalendarDays,
       lucideChevronRight,
       lucideMapPin,
+      lucidePencil,
       lucideTrophy,
       lucideUsers,
     }),
@@ -85,14 +91,22 @@ function plural(count: number, noun: string): string {
             <app-saved-copy-note [savedAt]="savedAt" />
           }
         </div>
-        @if (!isEmpty()) {
-          @if (openCards() === undefined) {
-            <span
-              aria-hidden="true"
-              class="block h-11 w-56 rounded-md bg-muted motion-safe:animate-pulse md:shrink-0"
-            ></span>
-          } @else if (openCards()?.length) {
-            <div class="flex flex-wrap gap-3 md:shrink-0">
+        <div
+          data-hero-actions
+          class="flex min-h-11 flex-wrap items-center gap-2 md:shrink-0 md:gap-3"
+        >
+          @if (canManage()) {
+            <a [routerLink]="manageHref()" data-slot="button" [class]="manageButton"
+              ><ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Manage</a
+            >
+          }
+          @if (!isEmpty()) {
+            @if (openCards() === undefined) {
+              <span
+                aria-hidden="true"
+                class="block h-11 w-48 rounded-md bg-muted motion-safe:animate-pulse"
+              ></span>
+            } @else if (openCards()?.length) {
               <a
                 [href]="openHref()"
                 data-slot="button"
@@ -103,9 +117,9 @@ function plural(count: number, noun: string): string {
                   data-icon="inline-end"
                   aria-hidden="true"
               /></a>
-            </div>
+            }
           }
-        }
+        </div>
       </div>
     </div>
     <app-sport-chips
@@ -359,10 +373,12 @@ export class OrganizationOverview {
   readonly busy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly now = input.required<number>();
+  readonly canManage = input(false);
 
   protected readonly followLink = inject(FollowLink);
   protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
   protected readonly registerButton = PRIMARY_BUTTON;
+  protected readonly manageButton = OUTLINE_BUTTON_LARGE;
   protected readonly openBadge = OPEN_BADGE;
   protected readonly mutedBadge = MUTED_BADGE;
 
@@ -422,6 +438,7 @@ export class OrganizationOverview {
     const sport = this.sport();
     return sport ? sportViewPath(slug, sport.segment) : organizationPath(slug);
   });
+  protected readonly manageHref = computed(() => `/app/organizations/${this.page().slug}`);
   protected readonly openHref = computed(() => `${this.pagePath()}#registration-open`);
 
   protected readonly noOpenText = computed(() => {

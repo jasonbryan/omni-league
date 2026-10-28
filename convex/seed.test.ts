@@ -607,14 +607,19 @@ describe('seed:demo', () => {
     const after = await snapshot(t);
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
     const DIVISION = ['gender', 'playersPerSide', 'level', 'ageGroup'] as const;
+    // The City, state the seed sets on this organization is part of each league's search text.
     const withoutBackfill = (league: Doc<'leagues'>) => ({
       ...league,
       publishedSeasonCount: 0,
+      searchText: undefined,
       ...Object.fromEntries(DIVISION.map((field) => [field, undefined])),
     });
     expect(after.leagues.slice(0, before.leagues.length).map(withoutBackfill)).toEqual(
       before.leagues.map(withoutBackfill),
     );
+    for (const league of after.leagues.slice(0, before.leagues.length)) {
+      expect(league.searchText).toMatch(/^.+ Gulf Coast Sport & Social .+ Corpus Christi, TX$/);
+    }
     expect(after.leagues.find((league) => league.name === 'Sunday Reverse Coed 4s')).toMatchObject({
       gender: 'coed',
       playersPerSide: 4,

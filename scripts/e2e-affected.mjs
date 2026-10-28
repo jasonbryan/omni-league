@@ -50,6 +50,8 @@ const SPORT_VIEW = ['sport-view', 'cache-key'];
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'cache-key'];
+// cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
+const FIND_PAGE = ['find-a-league', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
   'league-management',
   'league-management-details',
@@ -247,6 +249,11 @@ export const AREAS = [
     specs: SEASON_PAGE,
   },
   {
+    name: 'find a league page',
+    test: inDir('src/app/find/'),
+    specs: FIND_PAGE,
+  },
+  {
     name: 'numbered page control',
     test: named('src/app/organizations/', ['page-control']),
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
@@ -295,6 +302,7 @@ export const AREAS = [
     test: inDir('src/app/public-layout/'),
     specs: [
       'public-layout',
+      'find-a-league',
       ...PUBLIC_PAGE,
       ...LEAGUE_PAGE,
       ...SEASON_PAGE,
@@ -336,6 +344,12 @@ export const AREAS = [
       ...SPORT_VIEW,
       ...LEAGUE_MANAGEMENT,
     ],
+  },
+  {
+    name: 'convex search',
+    test: (file) =>
+      named('convex/', ['search'])(file) || named('convex/lib/', ['searchQuery'])(file),
+    specs: FIND_PAGE,
   },
   {
     name: 'convex seasons',
