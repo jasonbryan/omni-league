@@ -75,6 +75,8 @@ const searchLeagueValidator = v.object({
 export const searchLeaguesValidator = v.object({
   rows: v.array(searchLeagueValidator),
   more: v.boolean(),
+  // Optional so a copy saved before it existed stays valid.
+  suggestions: v.optional(v.array(v.string())),
 });
 
 export type SearchLeagues = Infer<typeof searchLeaguesValidator>;

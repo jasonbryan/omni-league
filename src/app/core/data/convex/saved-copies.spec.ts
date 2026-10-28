@@ -406,6 +406,29 @@ describe('ConvexSavedCopies', () => {
       expect(savedKeys()).toEqual([]);
     });
 
+    describe('a saved search', () => {
+      const searchLeagues = api.search.leagues;
+      const args = { q: 'coed 4s austin' };
+
+      it('uses a copy saved before suggestions existed', () => {
+        const copy = { rows: [], more: false };
+        plantSavedCopy(searchLeagues, args, copy, START);
+        expect(store.read(searchLeagues, args)?.value).toEqual(copy);
+      });
+
+      it('uses a copy with suggestions', () => {
+        const copy = { rows: [], more: false, suggestions: ['coed 4s'] };
+        plantSavedCopy(searchLeagues, args, copy, START);
+        expect(store.read(searchLeagues, args)?.value).toEqual(copy);
+      });
+
+      it('does not use a copy whose suggestions are not strings, and removes it', () => {
+        plantSavedCopy(searchLeagues, args, { rows: [], more: false, suggestions: [1] }, START);
+        expect(store.read(searchLeagues, args)).toBeUndefined();
+        expect(savedKeys()).toEqual([]);
+      });
+    });
+
     it('uses a list with extra fields inside its rows', () => {
       const leagues = list([{ ...league, logo: 'x' }]);
       const locations = list([{ ...location, lat: 1.5 }]);
