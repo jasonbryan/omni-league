@@ -435,7 +435,6 @@ export const insertDemoData = internalMutation({
   returns: resultValidator,
   handler: async (ctx) => {
     assertPreviewDeployment();
-    const tenantBackfilled = await backfillTenantFields(ctx);
     const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
     const updated = { organizations: 0 };
     // Existing organizations get their custom levels first, so a demo league can name its level.
@@ -447,10 +446,8 @@ export const insertDemoData = internalMutation({
         .unique();
       if (existing) inserted.customLevels += await ensureCustomLevels(ctx, existing._id, slug);
     }
-    const backfilled = {
-      ...tenantBackfilled,
-      ...(await backfillDivisionFields(ctx, DEMO_DIVISIONS)),
-    };
+    const divisionBackfilled = await backfillDivisionFields(ctx, DEMO_DIVISIONS);
+    const backfilled = { ...(await backfillTenantFields(ctx)), ...divisionBackfilled };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
