@@ -278,7 +278,12 @@ describe('the specs of the importers outside a hand rule', () => {
         (root) => {
           assert.deepEqual(
             specsFor(['src/app/invites/a.ts'], root),
-            withAlways(specFile('accept-invite'), specFile('cache-key'), specFile('find-a-league')),
+            withAlways(
+              specFile('accept-invite'),
+              specFile('cache-key'),
+              specFile('find-a-league'),
+              specFile('find-organizations'),
+            ),
           );
         },
       );
@@ -293,7 +298,12 @@ describe('the specs of the importers outside a hand rule', () => {
         (root) => {
           assert.deepEqual(
             specsFor(['src/app/invites/a.ts'], root),
-            withAlways(specFile('accept-invite'), specFile('cache-key'), specFile('find-a-league')),
+            withAlways(
+              specFile('accept-invite'),
+              specFile('cache-key'),
+              specFile('find-a-league'),
+              specFile('find-organizations'),
+            ),
           );
         },
       );
@@ -321,7 +331,12 @@ describe('the specs of the importers outside a hand rule', () => {
         (root) => {
           assert.deepEqual(
             specsFor(['src/app/invites/a.ts'], root),
-            withAlways(specFile('accept-invite'), specFile('cache-key'), specFile('find-a-league')),
+            withAlways(
+              specFile('accept-invite'),
+              specFile('cache-key'),
+              specFile('find-a-league'),
+              specFile('find-organizations'),
+            ),
           );
         },
       );

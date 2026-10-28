@@ -538,7 +538,7 @@ describe('tracing a file with no rule to the files that import it', () => {
       });
       assert.deepEqual(selection, {
         scope: 'affected',
-        specs: withAlways('e2e/cache-key.spec.ts', findPage),
+        specs: withAlways('e2e/cache-key.spec.ts', findPage, findOrganizations),
       });
     });
   });
