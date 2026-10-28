@@ -437,7 +437,7 @@ describe('OrganizationPage', () => {
       expect(text(main()?.querySelector('[role="status"]'))).toBe('Loading the open seasons.');
       subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);
-      expect(main()?.querySelector('[role="status"]')).toBeNull();
+      expect(main()?.querySelector('app-organization-skeleton')).toBeNull();
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
     });
 

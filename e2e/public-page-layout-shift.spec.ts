@@ -10,8 +10,12 @@ import { newUser } from './support/users';
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const GOOD_CLS = 0.1;
+// Equals PAGE_LOAD_WAIT_MS in src/app/public-layout/page-load-wait.ts, which imports Angular, and the e2e runner does not load it.
+const PAGE_LOAD_WAIT_MS = 10_000;
 const SETTLE_AFTER_IDLE_MS = 1_000;
 const SKELETONS = ['organization-skeleton', 'league-skeleton', 'season-skeleton'];
+
+const footer = (page: Page) => page.getByRole('contentinfo');
 
 interface Watch {
   e2eShift?: number;
@@ -156,6 +160,40 @@ test.describe('a hard load of a public page', () => {
     await expect(page.getByRole('contentinfo')).toBeVisible();
   });
 
+  test('answered with the client shell shows the unavailable view and the footer after the wait for a held league query, then the page when the answer arrives', async ({
+    page,
+  }) => {
+    const tenant = await tenantWithSeason();
+    const path = `${tenant.path}/leagues/alpha-league`;
+    const held = await holdQueries(page, ['leagues:getPublicPage']);
+    await page.clock.install();
+    await answerWithClientShell(page, path);
+    await page.goto(path);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.getByTestId('league-skeleton')).toBeVisible();
+    await expect(footer(page)).toBeHidden();
+    const announcement = page.locator('main app-page-load-status [role="status"]');
+    await expect(announcement).toHaveText('');
+
+    await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' }),
+    ).toBeVisible();
+    await expect(page.getByTestId('league-skeleton')).toHaveCount(0);
+    await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+    await expect(announcement).toHaveText('This page is temporarily unavailable.');
+    await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', path);
+
+    held.release();
+    await expect(page.getByRole('heading', { level: 1, name: /Alpha League/ })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: /temporarily unavailable/ }),
+    ).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+    await expect(announcement).toHaveText('');
+  });
+
   test('by client-side navigation still shows the loading state when signed in', async ({
     page,
   }) => {
@@ -209,8 +247,6 @@ test.describe('a hard load of a public page', () => {
       });
     });
   }
-
-  const footer = (page: Page) => page.getByRole('contentinfo');
 
   // A skeleton that never leaves would hide the footer for good, so each state that replaces it must show the footer.
   test.describe('a page that is not a skeleton', () => {

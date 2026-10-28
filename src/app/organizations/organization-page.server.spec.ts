@@ -175,7 +175,7 @@ describe('OrganizationPage server render', () => {
       '4410 Ocean Dr, Corpus Christi, TX 78412',
       'Soccer, softball',
     ]);
-    expect(body.querySelector('main [role="status"]')).toBeNull();
+    expect([...body.querySelectorAll('main [role="status"]')].map(text)).toEqual(['']);
 
     expect(publicFrame(body)).toEqual({ ...PUBLIC_FRAME, navs: ['Sports', 'Footer'] });
     const chips = [...body.querySelectorAll('nav[aria-label="Sports"] a')];
@@ -310,6 +310,18 @@ describe('OrganizationPage server render', () => {
     expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
     expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
   });
+
+  it('answers 503 at the default 5 second server timeout for a held query', async () => {
+    const started = Date.now();
+    const { body, responseInit } = await render(
+      '/organizations/gulf-coast-sport-social',
+      () => new Promise(() => undefined),
+    );
+    expect(Date.now() - started).toBeGreaterThanOrEqual(4_900);
+    expect(responseInit.status).toBe(503);
+    expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
+    expect(body.querySelector('[data-page-loading]')).toBeNull();
+  }, 15_000);
 
   for (const failing of [
     'organizations:listPublicLeagues',
