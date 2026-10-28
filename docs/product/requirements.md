@@ -142,6 +142,7 @@ The web app is also a progressive web app (**PWA**), so no separate mobile app i
 - **Works on a weak signal.** The app shell and recently viewed public pages, such as schedules and standings, load offline or on poor field wifi, with a clear note that the user is offline. Changes, such as registering or reporting a score, need a connection.
 - **Push notifications:** game reminders, schedule changes, and score updates. On iPhone and iPad they work only after the app is installed to the Home Screen (an Apple limit).
 - **Not chosen: offline score entry.** A score cannot be entered offline to be sent later.
+- **Updates apply by themselves.** Owner's words, 2026-10-27 (chat): "When a change is made and i load main it sometimes shows an offline warning. Then shortly after is says a new version is avaliable and i have to hit restart or update. This should be automatic". A new version of the app loads without a press and without losing anything the user typed: it waits while a form has unsaved input or a change is being sent, and loads when the user leaves the page.
 
 Who receives each notification, when reminders are sent, and whether users choose per kind are open (#85). The technology is decided in the `gate:technology` proposal for #79.
 

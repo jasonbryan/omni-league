@@ -14,6 +14,7 @@ import {
   provideConvex,
   type CallRef,
 } from './index';
+import { ChangesInFlight } from '../../changes-in-flight';
 import { FakeConvexClient } from './testing/fake-convex-client';
 
 const createTeam = makeFunctionReference<'mutation', { name: string }, string>('teams:create');
@@ -75,6 +76,22 @@ for (const helper of helpers) {
       await second;
 
       expect(ref.error()).toBeUndefined();
+    });
+
+    it('counts as a change in flight until it settles, whether it resolves or rejects', async () => {
+      const changes = TestBed.inject(ChangesInFlight);
+      const first = ref.run({ name: 'Sharks' });
+      expect(changes.active()).toBe(true);
+
+      client.calls[0].resolve('team1');
+      await first;
+      expect(changes.active()).toBe(false);
+
+      const second = ref.run({ name: 'Jets' });
+      expect(changes.active()).toBe(true);
+      client.calls[1].reject(new Error('offline'));
+      await expect(second).rejects.toThrow('offline');
+      expect(changes.active()).toBe(false);
     });
 
     it('stays pending until the last of two overlapping calls settles', async () => {
