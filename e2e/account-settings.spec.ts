@@ -16,6 +16,50 @@ const SIGN_OUT_PATH = '/api/auth/sign-out';
 const TOUCH_TARGET = 44;
 const NARROWEST_VIEWPORT = { width: 320, height: 640 };
 
+const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
+type Forced = 'failure' | 'no-row' | 'real';
+
+interface Modification {
+  type: string;
+  queryId: number;
+  udfPath?: string;
+  errorMessage?: string;
+  value?: unknown;
+}
+
+// Rewrites the server's answers to users.me, so the page sees a failed query or a missing users row.
+async function forceMeAnswer(page: Page): Promise<(forced: Forced) => void> {
+  let forced: Forced = 'failure';
+  await page.routeWebSocket(CONVEX_SOCKET, (ws) => {
+    const server = ws.connectToServer();
+    const meQueries = new Set<number>();
+    ws.onMessage((message) => {
+      const sent = JSON.parse(String(message)) as { modifications?: Modification[] };
+      for (const change of sent.modifications ?? []) {
+        if (change.type === 'Add' && change.udfPath === 'users:me') meQueries.add(change.queryId);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const received = JSON.parse(String(message)) as { modifications?: Modification[] };
+      if (forced === 'real' || !received.modifications) {
+        ws.send(message);
+        return;
+      }
+      received.modifications = received.modifications.map((change) => {
+        if (change.type !== 'QueryUpdated' || !meQueries.has(change.queryId)) return change;
+        return forced === 'failure'
+          ? { ...change, type: 'QueryFailed', errorMessage: 'forced failure', value: undefined }
+          : { ...change, value: null };
+      });
+      ws.send(JSON.stringify(received));
+    });
+  });
+  return (next) => {
+    forced = next;
+  };
+}
+
 const signOutButton = (page: Page) => page.getByRole('button', { name: /^Sign out|Signing out/ });
 const details = (page: Page) => page.getByRole('region', { name: 'Your details' });
 const topBarLink = (page: Page) => page.locator('header a[href="/app/account"]');
@@ -92,6 +136,44 @@ test.describe('account settings', () => {
     await expect(page).toHaveTitle('Home | Omni League');
     await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+  });
+
+  test.describe('when users.me does not give the details', () => {
+    test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+
+    for (const [forced, title] of [
+      ['failure', 'fails'],
+      ['no-row', 'finds no users row'],
+    ] as const) {
+      test(`shows the alert when it ${title}, keeps Sign out, and Try again reloads and recovers`, async ({
+        page,
+      }, testInfo) => {
+        const user = newUser('Retry');
+        await signUp(page, user);
+        const force = await forceMeAnswer(page);
+        force(forced);
+        await page.goto(ACCOUNT_PATH);
+
+        const alert = page.getByRole('alert');
+        await expect(alert).toContainText('Your account details could not be loaded.');
+        await expect(details(page)).not.toContainText(user.email);
+        await expect(signOutButton(page)).toBeVisible();
+        const tryAgain = alert.getByRole('link', { name: 'Try again' });
+        await expect(tryAgain).toHaveAttribute('href', ACCOUNT_PATH);
+        await screenshot(page, testInfo, `account-settings-${forced}`);
+
+        force('real');
+        await page.evaluate(
+          () => ((window as Window & { sameDocument?: boolean }).sameDocument = true),
+        );
+        await tryAgain.click();
+        await expect(details(page)).toContainText(user.email);
+        await expect(page.getByRole('alert')).toHaveCount(0);
+        expect(
+          await page.evaluate(() => (window as Window & { sameDocument?: boolean }).sameDocument),
+        ).toBeUndefined();
+      });
+    }
   });
 
   test.describe('signed out', VIEWPORT_AGNOSTIC, () => {
