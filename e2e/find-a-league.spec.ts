@@ -433,6 +433,52 @@ test.describe('find a league: in the browser', () => {
     await expect(field(page)).toBeFocused();
   });
 
+  test('a suggestion followed with the keyboard moves a visible focus to the new results and announces the count', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seed();
+    await page.goto(url(`coed 4s ${id} austin`));
+    await hydrated(consoleGuard);
+    await results(page)
+      .getByRole('link', { name: `coed 4s ${id}` })
+      .focus();
+    await page.keyboard.press('Enter');
+    await expect(rowNames(page)).toHaveText([SUNDAY]);
+    const status = results(page).getByRole('status');
+    await expect(status).toBeFocused();
+    await expect(status).toHaveText(`1 league matches “coed 4s ${id}”`);
+    expect(await status.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+    await expectAccessible(page);
+  });
+
+  test('Clear the search followed with the keyboard moves a visible focus to the search field', async ({
+    page,
+    consoleGuard,
+  }) => {
+    await page.goto(url('pickleball'));
+    await hydrated(consoleGuard);
+    await results(page).getByRole('link', { name: 'Clear the search' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(field(page)).toBeFocused();
+    expect(await field(page).evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe('none');
+  });
+
+  test('a suggestion opened in a new tab leaves the page and its focus as they were', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { id } = await seed();
+    await page.goto(url(`coed 4s ${id} austin`));
+    await hydrated(consoleGuard);
+    const link = results(page).getByRole('link', { name: `coed 4s ${id}` });
+    await link.click({ modifiers: ['ControlOrMeta'] });
+    await expect(page).toHaveURL(`${baseURL}${url(`coed 4s ${id} austin`)}`);
+    await expect(field(page)).not.toBeFocused();
+    await expect(results(page).getByRole('status')).not.toBeFocused();
+  });
+
   async function failTheSearch(page: Page): Promise<() => void> {
     let failing = true;
     const searchIds = new Set<number>();
