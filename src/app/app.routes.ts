@@ -10,7 +10,16 @@ export const routes: Routes = [
     loadComponent: () => import('./placeholder/placeholder').then((m) => m.Placeholder),
   },
   {
+    path: 'leagues',
+    loadComponent: () => import('./find/find-page').then((m) => m.FindPage),
+  },
+  {
     path: 'organizations/:orgSlug',
+    loadComponent: () =>
+      import('./organizations/organization-page').then((m) => m.OrganizationPage),
+  },
+  {
+    path: 'organizations/:orgSlug/sports/:sport',
     loadComponent: () =>
       import('./organizations/organization-page').then((m) => m.OrganizationPage),
   },
@@ -101,6 +110,11 @@ export const routes: Routes = [
             path: 'staff',
             loadComponent: () =>
               import('./organizations/admin/admin-staff').then((m) => m.AdminStaff),
+          },
+          {
+            path: 'details',
+            loadComponent: () =>
+              import('./organizations/admin/admin-details').then((m) => m.AdminDetails),
           },
         ],
       },

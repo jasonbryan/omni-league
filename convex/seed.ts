@@ -17,6 +17,7 @@ import { insertMembership } from './lib/memberships';
 import { verifyPassword } from './lib/password';
 import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
 import type { SeasonStatus } from './lib/seasonStatus';
@@ -33,6 +34,7 @@ import {
   insertSeason,
   insertTenant,
   seasonSlugTaken,
+  updateOrganizationCityState,
   type DemoDivision,
   type DivisionSeed,
   type NewSeason,
@@ -51,7 +53,11 @@ function division(
 // Insert-only: never rename or remove an entry, or the seed inserts it again next to the old one.
 export const DEMO: readonly Tenant[] = [
   {
-    organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
+    organization: {
+      name: 'Gulf Coast Sport & Social',
+      slug: 'gulf-coast-sport-social',
+      cityState: 'Corpus Christi, TX',
+    },
     locations: [
       { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
       { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
@@ -94,12 +100,17 @@ export const DEMO: readonly Tenant[] = [
     organization: {
       name: 'Port Aransas Beach Volleyball Club',
       slug: 'port-aransas-beach-volleyball-club',
+      cityState: 'Port Aransas, TX',
     },
     locations: [],
     leagues: [],
   },
   {
-    organization: { name: 'Front Range Rec Sports', slug: 'front-range-rec-sports' },
+    organization: {
+      name: 'Front Range Rec Sports',
+      slug: 'front-range-rec-sports',
+      cityState: 'Denver, CO',
+    },
     locations: [
       { name: 'Cottonwood Creek Fields', address: '1850 Cottonwood Creek Pkwy, Denver, CO 80219' },
       { name: 'Bluebird Softball Complex', address: '7720 Bluebird Ridge Rd, Aurora, CO 80016' },
@@ -139,7 +150,11 @@ export const DEMO: readonly Tenant[] = [
     ],
   },
   {
-    organization: { name: 'Lakeshore Sand League', slug: 'lakeshore-sand-league' },
+    organization: {
+      name: 'Lakeshore Sand League',
+      slug: 'lakeshore-sand-league',
+      cityState: 'Chicago, IL',
+    },
     locations: [
       { name: 'Driftwood Beach Courts', address: '2600 Driftwood Shore Dr, Chicago, IL 60614' },
       { name: 'Harbor Point Sand Courts', address: '915 Harbor Point Ave, Evanston, IL 60201' },
@@ -166,7 +181,11 @@ export const DEMO: readonly Tenant[] = [
     ],
   },
   {
-    organization: { name: 'Saguaro Valley Softball', slug: 'saguaro-valley-softball' },
+    organization: {
+      name: 'Saguaro Valley Softball',
+      slug: 'saguaro-valley-softball',
+      cityState: 'Phoenix, AZ',
+    },
     locations: [
       { name: 'Saguaro Ridge Park', address: '3180 Saguaro Ridge Rd, Phoenix, AZ 85042' },
       { name: 'Mesquite Flats Diamonds', address: '640 Mesquite Flats Ln, Tempe, AZ 85281' },
@@ -193,7 +212,11 @@ export const DEMO: readonly Tenant[] = [
     ],
   },
   {
-    organization: { name: 'Rockport Sand Volleyball', slug: 'rockport-sand-volleyball' },
+    organization: {
+      name: 'Rockport Sand Volleyball',
+      slug: 'rockport-sand-volleyball',
+      cityState: 'Rockport, TX',
+    },
     locations: [
       { name: 'Rockport Beach Courts', address: '300 Beach Access Rd, Rockport, TX 78382' },
     ],
@@ -301,6 +324,54 @@ export const DEMO_SEASONS: readonly {
   },
 ];
 
+interface RunSeason {
+  organizationSlug: string;
+  leagueSlug: string;
+  name: string;
+  slug: string;
+  playersPerSide: number;
+  deadlineDaysFromRun: number;
+  startDaysFromRun: number;
+  endDaysFromRun: number;
+}
+
+// Dated from the run, so each new deployment shows one season in progress and one past its deadline. Insert-only like the rest, so a
+// preview reused across pushes keeps the dates of its first run.
+export const DEMO_RUN_SEASONS: readonly RunSeason[] = [
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'sunday-reverse-coed-4s',
+    name: 'Current season',
+    slug: 'current-season',
+    playersPerSide: 4,
+    deadlineDaysFromRun: -21,
+    startDaysFromRun: -14,
+    endDaysFromRun: 56,
+  },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'coed-7v7-rec',
+    name: 'Next season',
+    slug: 'next-season',
+    playersPerSide: 7,
+    deadlineDaysFromRun: -2,
+    startDaysFromRun: 5,
+    endDaysFromRun: 89,
+  },
+];
+
+function runSeason(demo: RunSeason, today: string): NewSeason {
+  return {
+    name: demo.name,
+    slug: demo.slug,
+    startDate: addCalendarDays(today, demo.startDaysFromRun),
+    endDate: addCalendarDays(today, demo.endDaysFromRun),
+    registrationDeadline: addCalendarDays(today, demo.deadlineDaysFromRun),
+    playersPerSide: demo.playersPerSide,
+    minimumRosterSize: demo.playersPerSide,
+  };
+}
+
 const resultValidator = v.object({
   organizations: v.number(),
   locations: v.number(),
@@ -308,6 +379,7 @@ const resultValidator = v.object({
   leagues: v.number(),
   seasons: v.number(),
   backfilled: v.object({ ...backfilledValidator.fields, ...divisionBackfilledValidator.fields }),
+  updated: v.object({ organizations: v.number() }),
 });
 
 // Refuses to write on production, even when run from the dashboard or the CLI.
@@ -323,19 +395,24 @@ function assertPreviewDeployment(): void {
 async function ensureOrganization(
   ctx: MutationCtx,
   tenant: Tenant,
-): Promise<{ id: Id<'organizations'>; inserted: boolean }> {
-  const { slug } = tenant.organization;
+): Promise<{ id: Id<'organizations'>; inserted: boolean; updated: boolean }> {
+  const { slug, cityState } = tenant.organization;
   const existing = await ctx.db
     .query('organizations')
     .withIndex('by_slug', (q) => q.eq('slug', slug))
     .unique();
-  if (existing) return { id: existing._id, inserted: false };
+  if (existing) {
+    // The one update to an existing row, for a reused staging; it changes nothing once set.
+    const updated = existing.cityState === undefined && cityState !== undefined;
+    if (updated) await updateOrganizationCityState(ctx, existing._id, cityState);
+    return { id: existing._id, inserted: false, updated };
+  }
   const id = await insertTenant(ctx, {
     organization: tenant.organization,
     locations: [],
     leagues: [],
   });
-  return { id, inserted: true };
+  return { id, inserted: true, updated: false };
 }
 
 async function ensureCustomLevels(
@@ -360,6 +437,7 @@ export const insertDemoData = internalMutation({
     assertPreviewDeployment();
     const tenantBackfilled = await backfillTenantFields(ctx);
     const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
+    const updated = { organizations: 0 };
     // Existing organizations get their custom levels first, so a demo league can name its level.
     for (const tenant of DEMO) {
       const slug = tenant.organization.slug;
@@ -377,6 +455,7 @@ export const insertDemoData = internalMutation({
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
       if (organization.inserted) inserted.organizations++;
+      if (organization.updated) updated.organizations++;
 
       for (const location of tenant.locations) {
         const existing = await ctx.db
@@ -417,7 +496,18 @@ export const insertDemoData = internalMutation({
       await insertSeason(ctx, found.league, season, status);
       inserted.seasons++;
     }
-    return { ...inserted, backfilled };
+    const today = dateAtUtcMinus12(Date.now());
+    for (const demo of DEMO_RUN_SEASONS) {
+      const found = await findLeagueBySlugs(ctx, {
+        orgSlug: demo.organizationSlug,
+        leagueSlug: demo.leagueSlug,
+      });
+      if (!found) continue;
+      if (await seasonSlugTaken(ctx, found.league._id, demo.slug)) continue;
+      await insertSeason(ctx, found.league, runSeason(demo, today), 'published');
+      inserted.seasons++;
+    }
+    return { ...inserted, backfilled, updated };
   },
 });
 

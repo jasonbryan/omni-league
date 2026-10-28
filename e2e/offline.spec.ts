@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
-import { seedTenant } from './support/tenant';
+import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 
@@ -123,5 +123,70 @@ test.describe('offline note', () => {
     await context.setOffline(false);
     await page.clock.fastForward(10_000);
     await expect(note).toBeHidden();
+  });
+});
+
+test.describe('open seasons offline', () => {
+  test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: needs the local Convex backend');
+
+  test('the section shows from the saved copy, and a season whose deadline has passed since is dropped', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await seedTenant({
+      name: 'E2E Offline Open',
+      locations: [
+        { name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' },
+        { name: 'Beta Diamond', address: '2 Beta Road, Corpus Christi, TX 78412' },
+      ],
+      leagues: [
+        { name: 'Soccer League', sport: 'soccer', locations: ['Alpha Field'] },
+        { name: 'Softball League', sport: 'softball', locations: ['Beta Diamond'] },
+      ],
+    });
+    await seedSeasons(tenant, 'soccer-league', [
+      {
+        name: 'Soon Season',
+        slug: 'soon-season',
+        startDate: dateFromToday(20),
+        endDate: dateFromToday(80),
+        registrationDeadline: dateFromToday(1),
+      },
+      {
+        name: 'Later Season',
+        slug: 'later-season',
+        startDate: dateFromToday(30),
+        endDate: dateFromToday(90),
+        registrationDeadline: dateFromToday(10),
+      },
+    ]);
+    const cards = page.locator('#registration-open > ul > li h3 + p');
+    const chips = page.getByRole('navigation', { name: 'Sports' });
+    await page.clock.install();
+
+    // The sport view is viewed online too, so it has a saved copy to open offline.
+    await page.goto(tenant.path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await chips.getByRole('link', { name: /^Soccer/ }).click();
+    await expect(cards).toHaveText(['Soon Season', 'Later Season']);
+    await chips.getByRole('link', { name: /^All sports/ }).click();
+    await expect(page).toHaveURL(tenant.path);
+    await expect(page.locator('app-saved-copy-note')).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await chips.getByRole('link', { name: /^Soccer/ }).click();
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(cards).toHaveText(['Soon Season', 'Later Season']);
+    await expect(page.getByRole('link', { name: 'Register for a season' })).toBeVisible();
+
+    // Two days on, the saved copy still lists the season; the page applies the date.
+    await page.clock.fastForward('48:00:00');
+    await expect(cards).toHaveText(['Later Season']);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+
+    await context.setOffline(false);
   });
 });

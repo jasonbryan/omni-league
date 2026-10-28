@@ -344,6 +344,7 @@ describe('seed:demo divisions on an empty deployment', () => {
       leagues: 0,
       seasons: 0,
       backfilled: ZERO_BACKFILL,
+      updated: { organizations: 0 },
     });
 
     expect(await read()).toEqual(before);
@@ -356,6 +357,8 @@ describe('seed:demo divisions on an empty deployment', () => {
     expect(seasons.map((row) => formatLabel(row.playersPerSide!)).sort()).toEqual([
       '4v4',
       '4v4',
+      '4v4',
+      '7v7',
       '7v7',
       '7v7',
     ]);

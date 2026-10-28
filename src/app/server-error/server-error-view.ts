@@ -27,7 +27,7 @@ import { setServerErrorStatus } from '../core/server-error-status';
         Omni League could not load it just now. It will appear here as soon as it loads, or you can
         try again.
       </p>
-      <!-- A plain link, so it works before hydration. The classes are the not-found view's hlmBtn size="lg" plus mt-8. -->
+      <!-- A plain link, so it works before hydration. The classes are the not-found view's hlmBtn size="md" plus mt-8. -->
       <a
         [href]="retryHref()"
         data-slot="button"

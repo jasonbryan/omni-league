@@ -42,6 +42,7 @@ async function setup() {
         slug: name.toLowerCase().replace(/ /g, '-'),
         sport: 'soccer',
         locationIds,
+        division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
       });
     const one = await draft('Draft One', [x, y]);
     const two = await draft('Draft Two', [x]);

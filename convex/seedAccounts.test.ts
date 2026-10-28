@@ -153,7 +153,7 @@ async function membershipsOf(t: T, email: string) {
 }
 
 const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
-const DATA = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 4 };
+const DATA = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 6 };
 const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 
 describe('seed:demo accounts: a new deployment', () => {
@@ -165,6 +165,7 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(result).toEqual({
         ...DATA,
         backfilled: NO_BACKFILL,
+        updated: { organizations: 0 },
         memberships: 5,
         invites: 1,
         accounts: ALL('created'),
@@ -211,6 +212,31 @@ describe('seed:demo accounts: a new deployment', () => {
       });
       expect(invites[0]?.tokenHash).toMatch(/^[0-9a-f]{64}$/);
       expect(invites[0]?.expiresAt).toBeGreaterThan(Date.now());
+    },
+    SLOW,
+  );
+
+  test(
+    'the admin account sees the demo custom level D in its softball levels and in its league’s label',
+    async () => {
+      const t = setup();
+      await run(t);
+      const { organizations } = await appRows(t);
+      const saguaro = organizations.find((o) => o.slug === SAGUARO);
+      if (!saguaro) throw new Error('demo organization missing');
+      const admin = await as(t, EMAILS.admin);
+      expect(
+        (
+          await admin.query(api.customLevels.listForSport, {
+            organizationId: saguaro._id,
+            sport: 'softball',
+          })
+        ).map(({ name, standardLevel }) => [name, standardLevel]),
+      ).toEqual([['D', 'rec']]);
+      const labels = (
+        await admin.query(api.leagues.listForAdmin, { organizationId: saguaro._id })
+      ).map((league) => league.divisionLabel);
+      expect(labels).toContain("Men's · 10v10 · D (Rec)");
     },
     SLOW,
   );
@@ -340,6 +366,7 @@ describe('seed:demo accounts: a second run', () => {
         leagues: 0,
         seasons: 0,
         backfilled: NO_BACKFILL,
+        updated: { organizations: 0 },
         memberships: 0,
         invites: 0,
         accounts: ALL('exists'),
@@ -458,6 +485,7 @@ describe('seed:demo accounts: the password', () => {
       expect(result).toEqual({
         ...DATA,
         backfilled: NO_BACKFILL,
+        updated: { organizations: 0 },
         memberships: 0,
         invites: 1,
         accounts: ALL('skipped:unset'),

@@ -218,7 +218,12 @@ async function readStep(key: string): Promise<StepInfo> {
   const inViewport =
     rect.width > 0 && rect.height > 0 && x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
   const hit = inViewport ? document.elementFromPoint(x, y) : null;
-  let unobscured = !!hit && (hit === active || active.contains(hit));
+  // A visually hidden control (a chip's radio) is drawn by its own label, which is what a pointer reaches.
+  const hiddenControlLabel =
+    rect.width <= 1 && rect.height <= 1 && hit instanceof Element
+      ? hit.closest('label')?.control === active
+      : false;
+  let unobscured = !!hit && (hit === active || active.contains(hit) || hiddenControlLabel);
   if (inViewport && !unobscured) {
     // An inline element that wraps (a link in a sentence) has one box per line, and the centre of
     // their union can fall beside the shorter line, on the text around it. The element is obscured

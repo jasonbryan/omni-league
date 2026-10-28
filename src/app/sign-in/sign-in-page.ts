@@ -17,7 +17,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
-import { afterAuthUrl, returnToOrApp } from '../core/auth/return-to';
+import { returnToOrApp } from '../core/auth/return-to';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 
@@ -342,7 +342,7 @@ export class SignInPage {
     const result = await this.auth.signIn({ email: email.trim(), password });
     this.submitting.set(false);
     if (result.ok) {
-      await this.router.navigateByUrl(afterAuthUrl(this.returnTo), { replaceUrl: true });
+      await this.router.navigateByUrl(returnToOrApp(this.returnTo), { replaceUrl: true });
       return;
     }
     this.showFailure(result);

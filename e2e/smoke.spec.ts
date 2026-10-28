@@ -121,6 +121,7 @@ test.describe('smoke: placeholder home', () => {
         'header a[href="/"]',
         'header a[href^="/sign-in"]',
         'footer a[href="/"]',
+        'footer a[href="/leagues"]',
         'footer a[href="/app"]',
         'footer a[href="/app/organizations/new"]',
         'footer a[href^="/sign-in"]',

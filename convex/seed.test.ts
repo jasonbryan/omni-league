@@ -3,8 +3,8 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
-import { formatLabel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { registrationIsOpen, seasonPhase } from './lib/registration';
 import { checkSeasonFields } from './lib/seasonInput';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
 import { insertLeague, insertLocation, insertTenant } from './lib/tenantWrites';
@@ -18,10 +18,10 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 4 };
+const ROWS = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 6 };
 const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
-const FULL = { ...ROWS, backfilled: NONE };
+const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
 
 async function counts(t: T) {
   return t.run(async (ctx) => ({
@@ -135,11 +135,17 @@ async function insertRaw(t: T): Promise<void> {
   });
 }
 
+// 18:00 UTC on Oct 27 is 06:00 on Oct 27 at UTC-12.
+const RUN = Date.UTC(2026, 9, 27, 18);
+
 beforeEach(() => {
   vi.stubEnv('PREVIEW_ORIGIN_PATTERN', PREVIEW_ORIGIN_PATTERN);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(RUN);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
@@ -150,7 +156,7 @@ describe('seed:demo', () => {
     expect(await counts(t)).toEqual(ROWS);
   });
 
-  test('adds the two demo draft seasons and the two published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
+  test('adds the two demo draft seasons and the four published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     const rows = await t.run(async (ctx) => {
@@ -163,7 +169,10 @@ describe('seed:demo', () => {
           organization: organization.slug,
           league: league.slug,
           season,
-          sport: league.sport,
+          leagueDivision: {
+            playersPerSide: league.playersPerSide,
+            minimumRosterSize: league.minimumRosterSize ?? league.playersPerSide,
+          },
         });
       }
       return result;
@@ -230,19 +239,45 @@ describe('seed:demo', () => {
         registrationDeadline: '2027-05-19',
         status: 'published',
       },
+      {
+        organization: 'gulf-coast-sport-social',
+        league: 'sunday-reverse-coed-4s',
+        name: 'Current season',
+        slug: 'current-season',
+        playersPerSide: 4,
+        minimumRosterSize: 4,
+        startDate: '2026-10-13',
+        endDate: '2026-12-22',
+        registrationDeadline: '2026-10-06',
+        status: 'published',
+      },
+      {
+        organization: 'gulf-coast-sport-social',
+        league: 'coed-7v7-rec',
+        name: 'Next season',
+        slug: 'next-season',
+        playersPerSide: 7,
+        minimumRosterSize: 7,
+        startDate: '2026-11-01',
+        endDate: '2027-01-24',
+        registrationDeadline: '2026-10-25',
+        status: 'published',
+      },
     ]);
-    for (const { sport, season } of rows) {
+    for (const { leagueDivision, season } of rows) {
       expect(
-        checkSeasonFields(sport, {
+        checkSeasonFields({
           name: season.name,
           slug: season.slug,
           startDate: season.startDate,
           endDate: season.endDate,
           registrationDeadline: season.registrationDeadline,
-          format: formatLabel(season.playersPerSide!),
-          minimumRosterSize: season.minimumRosterSize,
         }),
       ).toEqual({});
+      expect({
+        playersPerSide: season.playersPerSide,
+        minimumRosterSize: season.minimumRosterSize,
+      }).toEqual(leagueDivision);
     }
   });
 
@@ -262,9 +297,10 @@ describe('seed:demo', () => {
       ...NO_ROWS,
       seasons: 1,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(4);
+    expect(after).toHaveLength(6);
     for (const season of before) expect(after).toContainEqual(season);
     expect(
       after.find((season) => season.slug === 'fall-2027' && season.playersPerSide === 7),
@@ -283,15 +319,18 @@ describe('seed:demo', () => {
     expect(drafts.map((season) => [season.slug, season.status])).toEqual([
       ['fall-2027', 'draft'],
       ['fall-2027', 'draft'],
+      ['current-season', 'published'],
+      ['next-season', 'published'],
     ]);
 
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       seasons: 2,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(4);
+    expect(after).toHaveLength(6);
     for (const draft of drafts) expect(after).toContainEqual(draft);
     const summers = after.filter((season) => season.slug === 'summer-2027');
     expect(
@@ -305,6 +344,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     expect(await snapshot(t)).toEqual(settled);
   });
@@ -321,7 +361,10 @@ describe('seed:demo', () => {
       for (const season of await ctx.db.query('seasons').collect()) {
         if (season.slug !== 'summer-2027') continue;
         await ctx.db.delete('seasons', season._id);
-        await ctx.db.patch('leagues', season.leagueId, { publishedSeasonCount: 0 });
+        const league = (await ctx.db.get('leagues', season.leagueId))!;
+        await ctx.db.patch('leagues', season.leagueId, {
+          publishedSeasonCount: (league.publishedSeasonCount ?? 0) - 1,
+        });
       }
     });
     await t.mutation(internal.seed.insertDemoData, {});
@@ -366,6 +409,7 @@ describe('seed:demo', () => {
     expect(gulf).toEqual({
       name: 'Gulf Coast Sport & Social',
       slug: 'gulf-coast-sport-social',
+      cityState: 'Corpus Christi, TX',
       leagueCount: 5,
       locationCount: 3,
       sportCount: 3,
@@ -440,6 +484,7 @@ describe('seed:demo', () => {
     ).toEqual({
       name: 'Port Aransas Beach Volleyball Club',
       slug: 'port-aransas-beach-volleyball-club',
+      cityState: 'Port Aransas, TX',
       leagueCount: 0,
       locationCount: 0,
       sportCount: 0,
@@ -510,6 +555,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
   });
@@ -555,19 +601,25 @@ describe('seed:demo', () => {
       leagues: ROWS.leagues - 4,
       seasons: ROWS.seasons,
       backfilled: { ...NONE, leagueDivisions: 4 },
+      updated: { organizations: 1 },
     });
 
     const after = await snapshot(t);
     expect(after.locations.slice(0, before.locations.length)).toEqual(before.locations);
     const DIVISION = ['gender', 'playersPerSide', 'level', 'ageGroup'] as const;
+    // The City, state the seed sets on this organization is part of each league's search text.
     const withoutBackfill = (league: Doc<'leagues'>) => ({
       ...league,
       publishedSeasonCount: 0,
+      searchText: undefined,
       ...Object.fromEntries(DIVISION.map((field) => [field, undefined])),
     });
     expect(after.leagues.slice(0, before.leagues.length).map(withoutBackfill)).toEqual(
       before.leagues.map(withoutBackfill),
     );
+    for (const league of after.leagues.slice(0, before.leagues.length)) {
+      expect(league.searchText).toMatch(/^.+ Gulf Coast Sport & Social .+ Corpus Christi, TX$/);
+    }
     expect(after.leagues.find((league) => league.name === 'Sunday Reverse Coed 4s')).toMatchObject({
       gender: 'coed',
       playersPerSide: 4,
@@ -577,6 +629,7 @@ describe('seed:demo', () => {
     const gulf = after.organizations.find((organization) => organization._id === gulfId);
     expect(gulf).toEqual({
       ...before.organizations[0],
+      cityState: 'Corpus Christi, TX',
       leagueCount: 5,
       locationCount: 3,
       sportLeagueCounts: { beachVolleyball: 2, soccer: 2, softball: 1 },
@@ -674,6 +727,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
       backfilled: { ...NONE, leagueDivisions: 1 },
+      updated: { organizations: 0 },
     });
 
     const after = await snapshot(t);
@@ -717,6 +771,7 @@ describe('seed:demo', () => {
       leagues: ROWS.leagues,
       seasons: ROWS.seasons,
       backfilled: { organizations: 2, locations: 3, leagues: 2, seasons: 0, leagueDivisions: 2 },
+      updated: { organizations: 1 },
     });
 
     const { organizations, locations, leagues } = await snapshot(t);
@@ -759,6 +814,7 @@ describe('seed:demo', () => {
           sportName: 'Softball',
           locationNames: [],
           divisionLabel: 'Coed · 9v9 · Rec',
+          seasons: [],
         },
       ],
       page: 1,
@@ -775,6 +831,7 @@ describe('seed:demo', () => {
           sportName: 'Soccer',
           locationNames: ['Old Field'],
           divisionLabel: 'Coed · 4v4 · Rec',
+          seasons: [],
         },
         {
           name: 'Beta League',
@@ -782,6 +839,7 @@ describe('seed:demo', () => {
           sportName: 'Softball',
           locationNames: [],
           divisionLabel: 'Coed · 9v9 · Rec',
+          seasons: [],
         },
       ],
       page: 1,
@@ -793,6 +851,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
   });
@@ -837,6 +896,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
       backfilled: { ...NONE, organizations: 1, leagues: 3, leagueDivisions: 3 },
+      updated: { organizations: 0 },
     });
     expect((await sportStored(t))['mid-club']).toEqual({
       leagues: { soccer: 2, softball: 1 },
@@ -850,6 +910,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
@@ -881,9 +942,17 @@ describe('seed:demo', () => {
   });
 
   test('every export is an internal function, so no client can call it', () => {
-    const { DEMO, DEMO_SEASONS, DEMO_ACCOUNTS, DEMO_ACCOUNT_DOMAIN, ...functions } = seed;
+    const {
+      DEMO,
+      DEMO_SEASONS,
+      DEMO_RUN_SEASONS,
+      DEMO_ACCOUNTS,
+      DEMO_ACCOUNT_DOMAIN,
+      ...functions
+    } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
+    expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
     expect(Object.keys(DEMO_ACCOUNTS)).toEqual(['admin', 'organizer', 'player']);
     expect(DEMO_ACCOUNT_DOMAIN).toBe('demo.omni-league.test');
     const exports = Object.entries(functions);
@@ -986,6 +1055,7 @@ describe('seed:demo backfill against a recount', () => {
       await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
         ...NO_ROWS,
         backfilled: NONE,
+        updated: { organizations: 0 },
       });
       await expectCountersMatchRecount(t);
     }
@@ -1079,6 +1149,7 @@ describe('seed:demo and league status', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
+      updated: { organizations: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
@@ -1098,3 +1169,105 @@ async function expectCountersMatchRecountPublished(t: T) {
     }
   });
 }
+
+describe('seed:demo seasons dated from the run', () => {
+  const seasonsOf = (t: T, slug: string) =>
+    t.run(async (ctx) => {
+      const found = [];
+      for (const season of await ctx.db.query('seasons').collect()) {
+        if (season.slug !== slug) continue;
+        const league = (await ctx.db.get('leagues', season.leagueId))!;
+        found.push({ league: league.slug, season });
+      }
+      return found;
+    });
+
+  test('puts one demo season in progress and one with registration closed, whenever it runs', async () => {
+    for (const run of [RUN, Date.UTC(2027, 2, 3, 18), Date.UTC(2028, 1, 29, 18)]) {
+      vi.setSystemTime(run);
+      const t = setup();
+      await t.mutation(internal.seed.insertDemoData, {});
+      const [current] = await seasonsOf(t, 'current-season');
+      const [next] = await seasonsOf(t, 'next-season');
+      expect(current?.league, String(run)).toBe('sunday-reverse-coed-4s');
+      expect(seasonPhase(current.season, run), String(run)).toBe('inProgress');
+      expect(next?.league, String(run)).toBe('coed-7v7-rec');
+      expect(seasonPhase(next.season, run), String(run)).toBe('registrationClosed');
+      expect(current?.season.status).toBe('published');
+      expect(next?.season.status).toBe('published');
+    }
+  });
+
+  test('keeps the Summer 2027 seasons of both leagues open for registration beside them', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const published = await t.query(api.seasons.listOpenForOrganization, {
+      orgSlug: 'gulf-coast-sport-social',
+    });
+    const open = published.filter((season) => registrationIsOpen(season, RUN));
+    expect(open.map((season) => [season.league.slug, season.slug])).toEqual([
+      ['sunday-reverse-coed-4s', 'summer-2027'],
+      ['coed-7v7-rec', 'summer-2027'],
+    ]);
+  });
+
+  test('gives the closed demo season a later open season of its league to link to, and the open one its address and division', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const slugs = { orgSlug: 'gulf-coast-sport-social', leagueSlug: 'coed-7v7-rec' };
+    const closed = await t.query(api.seasons.getPublicPage, {
+      ...slugs,
+      seasonSlug: 'next-season',
+    });
+    const upcoming = closed?.league.upcomingSeasons ?? [];
+    expect(upcoming.map((season) => season.slug)).toContain('summer-2027');
+    const next = upcoming.find(
+      (season) => season.slug !== 'next-season' && registrationIsOpen(season, RUN),
+    );
+    expect(next?.slug).toBe('summer-2027');
+    const open = await t.query(api.seasons.getPublicPage, { ...slugs, seasonSlug: 'summer-2027' });
+    expect(open?.league.locations?.[0]?.address).toMatch(/Corpus Christi/);
+    expect(open?.league.divisionLabel).toBe('Coed · 7v7 · Rec');
+  });
+
+  test('shows the public league pages their card, statuses, and empty state', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const orgSlug = 'gulf-coast-sport-social';
+    const sunday = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'sunday-reverse-coed-4s',
+    });
+    const phases = (sunday?.seasons ?? []).map((season) => [season.slug, seasonPhase(season, RUN)]);
+    expect(phases).toEqual([
+      ['summer-2027', 'registrationOpen'],
+      ['current-season', 'inProgress'],
+    ]);
+    const coed = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'coed-7v7-rec',
+    });
+    expect(coed?.seasons?.map((season) => [season.slug, seasonPhase(season, RUN)])).toEqual([
+      ['summer-2027', 'registrationOpen'],
+      ['next-season', 'registrationClosed'],
+    ]);
+    const overThirty = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'men-s-over-30-11v11',
+    });
+    expect(overThirty?.seasons).toEqual([]);
+  });
+
+  test('is insert-only: a later run changes no date, so staging keeps the phases of its first run', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const first = await seasonsOf(t, 'current-season');
+    vi.setSystemTime(RUN + 90 * 24 * 60 * 60 * 1000);
+    await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
+      ...NO_ROWS,
+      backfilled: NONE,
+      updated: { organizations: 0 },
+    });
+    expect(await seasonsOf(t, 'current-season')).toEqual(first);
+  });
+});

@@ -27,10 +27,16 @@ import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(at('2027-04-01'));
 });
 afterEach(() => {
   restoreDomGlobals();
+  vi.useRealTimers();
 });
+
+// 18:00 UTC is 06:00 on that date at UTC-12.
+const at = (date: string) => Date.parse(`${date}T18:00:00Z`);
 
 /**
  * `Meta` with its tags created in the render's own document. `Meta` creates them through the root
@@ -154,9 +160,11 @@ describe('PublicSeasonPage server render', () => {
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
 
     expect(head.querySelector('title')?.textContent).toBe(
-      'Summer 2027 | Sunday Reverse Coed 4s | Omni League',
+      'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
     );
-    expect(meta(head, 'og:title')).toBe('Summer 2027');
+    expect(meta(head, 'og:title')).toBe(
+      'Sunday Reverse Coed 4s · Summer 2027 | Gulf Coast Sport & Social | Omni League',
+    );
     expect(meta(head, 'og:type')).toBe('website');
     expect(meta(head, 'og:description')).toBe(
       'Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.',
@@ -166,7 +174,7 @@ describe('PublicSeasonPage server render', () => {
     expect(canonicals).toHaveLength(1);
     expect(canonicals[0].getAttribute('href')).toBe(`${ORIGIN}${SEASON_PATH}`);
 
-    expect(text(body.querySelector('main h1'))).toBe('Summer 2027');
+    expect(text(body.querySelector('main h1'))).toBe('Sunday Reverse Coed 4s · Summer 2027');
     expect(
       [...body.querySelectorAll('main nav[aria-label="Breadcrumb"] a')].map((a) => href(a)),
     ).toEqual([
@@ -176,13 +184,13 @@ describe('PublicSeasonPage server render', () => {
     ]);
     expect([...body.querySelectorAll('main dl > div')].map((row) => text(row))).toEqual([
       'Dates Jun 6 – Aug 29, 2027',
-      'Format 4v4',
-      'Team size Teams need at least 4 players',
-      'Location North Beach Sand Courts',
+      'Division Coed · 4v4 · Rec From the league · teams need at least 4 players',
+      'Registration closes May 23, 2027',
+      'Location North Beach Sand Courts3500 Surfside Blvd, Corpus Christi, TX 78402',
     ]);
     expect(
       [...body.querySelectorAll('main dl time')].map((time) => time.getAttribute('datetime')),
-    ).toEqual(['2027-06-06', '2027-08-29']);
+    ).toEqual(['2027-06-06', '2027-08-29', '2027-05-23']);
     const frame = publicFrame(body);
     expect({ ...frame, navs: [] }).toEqual({ ...PUBLIC_FRAME, navs: [] });
     expect(frame.navs.at(-1)).toBe('Footer');
@@ -196,11 +204,55 @@ describe('PublicSeasonPage server render', () => {
     expect(html).not.toContain('x=1');
   });
 
-  it('renders no price and no registration action', async () => {
-    const { body } = await render(SEASON_PATH, answer());
-    const main = text(body.querySelector('main'));
-    expect(main).not.toMatch(/\$|price|fee|register/i);
-    expect(body.querySelectorAll('main button')).toHaveLength(0);
+  it('writes one description tag that matches og:description', async () => {
+    const { head } = await render(SEASON_PATH, answer());
+    const description = meta(head, 'og:description');
+    expect(description).toBe('Jun 6 – Aug 29, 2027. 4v4, teams need at least 4 players.');
+    expect(
+      [...head.querySelectorAll('meta[name="description"]')].map((tag) =>
+        tag.getAttribute('content'),
+      ),
+    ).toEqual([description]);
+  });
+
+  it('renders the open registration card after the h1 and before the details, with no price', async () => {
+    const { html, body } = await render(SEASON_PATH, answer());
+    const registration = body.querySelector('main #registration');
+    expect(text(registration)).toContain('Registration open');
+    expect(text(registration)).toContain('Registration open · closes May 23, 2027');
+    const order = ['<h1', 'id="registration"', 'id="details-heading"', 'id="how-heading"'].map(
+      (marker) => html.indexOf(marker),
+    );
+    expect(order.every((position) => position > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(text(body.querySelector('main'))).not.toMatch(/\$|price|fee/i);
+  });
+
+  it('renders the closed card with the link to the league’s open season when the clock is past the deadline', async () => {
+    vi.setSystemTime(at('2027-07-01'));
+    const season = {
+      ...SUMMER_2027,
+      league: {
+        ...SUMMER_2027.league,
+        upcomingSeasons: [
+          ...(SUMMER_2027.league.upcomingSeasons ?? []),
+          {
+            name: 'Fall 2027',
+            slug: 'fall-2027',
+            startDate: '2027-09-12',
+            registrationDeadline: '2027-09-05',
+          },
+        ],
+      },
+    };
+    const { body } = await render(SEASON_PATH, answer({ season }));
+    const registration = body.querySelector('main #registration');
+    expect(text(registration)).toContain('Registration closed');
+    expect(text(registration)).not.toContain('Registration open');
+    expect(href(registration?.querySelector('a'))).toBe(
+      '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s/seasons/fall-2027',
+    );
+    expect(body.querySelector('main #how-heading')).toBeNull();
   });
 
   it.each([

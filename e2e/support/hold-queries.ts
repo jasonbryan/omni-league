@@ -14,10 +14,16 @@ const changes = (message: string | Buffer): Change[] =>
 export interface HeldQueries {
   isHolding: () => boolean;
   release: () => void;
+  watchNewSubscriptions: () => void;
 }
 
 // Frames after a held answer are kept too, because Convex applies transitions in order.
-export async function holdQueries(page: Page, udfPaths: readonly string[]): Promise<HeldQueries> {
+export async function holdQueries(
+  page: Page,
+  udfPaths: readonly string[],
+  { watchFromStart = true }: { watchFromStart?: boolean } = {},
+): Promise<HeldQueries> {
+  let watching = watchFromStart;
   const queryIds = new Set<number>();
   const kept: (string | Buffer)[] = [];
   let holding = false;
@@ -27,7 +33,12 @@ export async function holdQueries(page: Page, udfPaths: readonly string[]): Prom
     const server = ws.connectToServer();
     ws.onMessage((message) => {
       for (const change of changes(message)) {
-        if (change.type === 'Add' && change.udfPath && udfPaths.includes(change.udfPath)) {
+        if (
+          watching &&
+          change.type === 'Add' &&
+          change.udfPath &&
+          udfPaths.includes(change.udfPath)
+        ) {
           queryIds.add(change.queryId);
         }
       }
@@ -47,5 +58,11 @@ export async function holdQueries(page: Page, udfPaths: readonly string[]): Prom
       else ws.send(message);
     });
   });
-  return { isHolding: () => holding, release: () => release() };
+  return {
+    isHolding: () => holding,
+    release: () => release(),
+    watchNewSubscriptions: () => {
+      watching = true;
+    },
+  };
 }

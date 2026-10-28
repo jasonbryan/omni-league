@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { ConvexError } from 'convex/values';
-import { ORGANIZATION_MESSAGES } from '../../../convex/lib/organizationInput';
+import { CITY_STATE_HINT, ORGANIZATION_MESSAGES } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
@@ -121,7 +121,7 @@ describe('CreateOrganizationPage', () => {
 
     it("draws the buttons with the mockup's unmerged class strings", () => {
       expect([...submitButton().classList].sort()).toEqual(
-        `${buttonVariants({ size: 'lg' })} mt-6 w-full`.split(' ').sort(),
+        `${buttonVariants({ size: 'md' })} mt-6 w-full`.split(' ').sort(),
       );
       expect(submitButton().textContent?.trim()).toBe('Create organization');
       expect(status()?.textContent?.trim()).toBe('');
@@ -467,6 +467,88 @@ describe('CreateOrganizationPage', () => {
       expect(box?.textContent).not.toContain('Connection lost');
       await submit();
       expect(alert()).toBeNull();
+    });
+  });
+
+  describe('the optional City, state', () => {
+    beforeEach(() => open());
+
+    const CITY_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.';
+
+    async function leave(id: string) {
+      input(id).dispatchEvent(new Event('blur'));
+      await harness.fixture.whenStable();
+    }
+
+    it('comes after Name and before Slug, optional, with the hint', () => {
+      const ids = [...page.querySelectorAll<HTMLInputElement>('form input')].map((i) => i.id);
+      expect(ids).toEqual(['name', 'cityState', 'slug']);
+      expect(page.querySelector('label[for="cityState"]')?.textContent?.trim()).toBe('City, state');
+      expect(input('cityState').required).toBe(false);
+      expect(input('cityState').getAttribute('aria-describedby')).toBe('cityState-description');
+      expect(page.querySelector('#cityState-description')?.textContent?.trim()).toBe(
+        CITY_STATE_HINT,
+      );
+    });
+
+    it('shows the error under the field when it is left with 1 or 61 characters, and clears it once valid', async () => {
+      await type('cityState', 'X');
+      expect(error('cityState')).toBeNull();
+      await leave('cityState');
+      expect(error('cityState')).toBe(CITY_MESSAGE);
+      expect(input('cityState').getAttribute('aria-invalid')).toBe('true');
+      expect(input('cityState').getAttribute('aria-describedby')).toBe(
+        'cityState-description cityState-error',
+      );
+      await type('cityState', 'Austin, TX');
+      expect(error('cityState')).toBeNull();
+      await type('cityState', 'c'.repeat(61));
+      await leave('cityState');
+      expect(error('cityState')).toBe(CITY_MESSAGE);
+    });
+
+    it('a blank field is never an error', async () => {
+      await type('cityState', '   ');
+      await leave('cityState');
+      expect(error('cityState')).toBeNull();
+      await type('name', NAME);
+      await submit();
+      expect(convex.calls).toHaveLength(1);
+    });
+
+    it('a submit with an invalid value sends nothing and focuses it when Name is fine', async () => {
+      await type('name', NAME);
+      await type('cityState', 'X');
+      await submit();
+      expect(error('cityState')).toBe(CITY_MESSAGE);
+      expect(document.activeElement).toBe(input('cityState'));
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('sends it trimmed and collapsed, and leaves it out when blank', async () => {
+      await type('name', NAME);
+      await type('cityState', '  Corpus   Christi, TX ');
+      await submit();
+      expect(convex.calls[0]?.args).toEqual({
+        name: NAME,
+        slug: SLUG,
+        cityState: 'Corpus Christi, TX',
+      });
+    });
+
+    it('shows a server refusal under the field and keeps the input', async () => {
+      await type('name', NAME);
+      await type('cityState', 'Austin, TX');
+      await submit();
+      convex.calls[0]?.reject(
+        new ConvexError({ field: 'cityState', code: 'cityStateInvalid', message: CITY_MESSAGE }),
+      );
+      await flush();
+      expect(error('cityState')).toBe(CITY_MESSAGE);
+      expect(document.activeElement).toBe(input('cityState'));
+      expect(input('cityState').value).toBe('Austin, TX');
+      await type('cityState', 'Austin, Texas');
+      expect(error('cityState')).toBeNull();
     });
   });
 

@@ -147,13 +147,11 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(field(page, 'name')).toBeFocused();
     await expectAccessible(page);
 
-    await page.getByRole('radio', { name: 'Soccer' }).check();
+    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
     await expect(fieldError(page, 'sport')).toHaveCount(0);
   });
 
-  test('create season: Slug, dates, and the minimum are checked on leaving; Format only on a submit', async ({
-    page,
-  }) => {
+  test('create season: Slug and dates are checked on leaving', async ({ page }) => {
     const { base } = await orgAdmin(page);
     await page.goto(`${base}/leagues/coed-7v7-rec`);
     const form = page.locator('#create-season form');
@@ -175,19 +173,10 @@ test.describe('a field is checked when the user leaves it', () => {
     );
     await expect(field(page, 'end-date')).toHaveAttribute('aria-invalid', 'true');
 
-    await page.getByRole('radio', { name: '7v7' }).check();
-    await expect(fieldError(page, 'format')).toHaveCount(0);
-    await field(page, 'minimum-roster-size').fill('2');
-    await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);
-    await field(page, 'name').focus();
-    await expect(fieldError(page, 'minimum-roster-size')).toContainText('7v7 needs at least 7');
-    await expect(field(page, 'minimum-roster-size')).toHaveAttribute('aria-invalid', 'true');
     await expectAccessible(page);
 
     await field(page, 'end-date').fill('2026-11-15');
     await expect(fieldError(page, 'end-date')).toHaveCount(0);
-    await field(page, 'minimum-roster-size').fill('7');
-    await expect(fieldError(page, 'minimum-roster-size')).toHaveCount(0);
 
     await page.reload();
     await expect(form).toBeVisible();
@@ -196,7 +185,6 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(fieldError(page, 'name')).toHaveCount(0);
     await form.getByRole('button', { name: /^Create draft season/ }).click();
     await expect(fieldError(page, 'name')).toHaveText('Enter the season’s name.');
-    await expect(fieldError(page, 'format')).toHaveText('Choose a format.');
     await expect(field(page, 'name')).toBeFocused();
   });
 
@@ -223,7 +211,8 @@ test.describe('a field is checked when the user leaves it', () => {
     await page.goto(`${base}/leagues`);
     const form = page.locator('#create-league form');
     await field(page, 'name').fill('Friday Night Fours');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check();
+    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+    await page.getByRole('radio', { name: '4v4' }).check({ force: true });
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await form.getByRole('button', { name: /^Create draft league/ }).click();
     await expect(form.getByRole('status').filter({ hasText: 'created as a draft' })).toBeVisible();

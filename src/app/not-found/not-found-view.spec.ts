@@ -105,10 +105,10 @@ describe('NotFoundView', () => {
     );
   });
 
-  it('styles the home link as hlmBtn size="lg" with mt-8', async () => {
+  it('styles the home link as hlmBtn size="md" with mt-8', async () => {
     const host = await render();
     const link = host.querySelector('a');
-    const expected = hlm(buttonVariants({ size: 'lg' }), 'mt-8');
+    const expected = hlm(buttonVariants({ size: 'md' }), 'mt-8');
     expect(classList(link)).toEqual(expected.split(/\s+/).sort());
     expect(link?.getAttribute('data-slot')).toBe('button');
   });

@@ -44,12 +44,17 @@ const PUBLIC_PAGE = [
   'navigation-focus',
 ];
 
+// cache-key samples the sport view's `?page=N` parameter. The league page's breadcrumb links to the sport view.
+const SPORT_VIEW = ['sport-view', 'cache-key'];
 // cache-key samples the league page's `?page=N` parameter.
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'cache-key'];
+// cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
+const FIND_PAGE = ['find-a-league', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
   'league-management',
+  'league-management-details',
   'league-management-publish',
   'league-management-mockup',
 ];
@@ -142,12 +147,19 @@ export const AREAS = [
     specs: [],
   },
 
-  // The one design file an e2e spec opens; every other file under design/ is read by no spec.
+  // The design files an e2e spec opens; every other file under design/ is read by no spec.
   {
     name: 'leagues mockup',
     test: (file) => file === 'design/mockups/66-69-organization-leagues.html',
     specs: ['organization-leagues-mockup'],
   },
+  {
+    // chip-classes.spec.ts takes the kit CSS from this mockup's inlined block.
+    name: 'chip mockup',
+    test: (file) => file === 'design/mockups/300-public-site-league-form.html',
+    specs: ['chip-classes'],
+  },
+  { name: 'chip classes', test: inDir('src/app/ui/chip/'), specs: ['chip-classes'] },
   { name: 'design files', test: inDir('design/'), specs: [] },
 
   // The harness probes run inside console-fixture.spec.ts.
@@ -219,16 +231,17 @@ export const AREAS = [
       'organization-skeleton',
       'organization-path',
       'sport-list',
+      'sport-chips',
       'initials',
     ]),
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE],
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW],
   },
   {
     // The season page builds its links from the league page's paths, and the league page's rows link
     // to it.
     name: 'public league page',
     test: inDir('src/app/organizations/public-league/'),
-    specs: [...LEAGUE_PAGE, ...SEASON_PAGE],
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW],
   },
   {
     name: 'public season page',
@@ -236,14 +249,19 @@ export const AREAS = [
     specs: SEASON_PAGE,
   },
   {
+    name: 'find a league page',
+    test: inDir('src/app/find/'),
+    specs: FIND_PAGE,
+  },
+  {
     name: 'numbered page control',
     test: named('src/app/organizations/', ['page-control']),
-    specs: LEAGUE_PAGE,
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
     name: 'list page helper',
     test: named('src/app/core/', ['list-page']),
-    specs: LEAGUE_PAGE,
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
   },
   {
     // Every form shares this field-error rule: sign-up, sign-in, create organization, the
@@ -270,7 +288,7 @@ export const AREAS = [
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
     // league-page.spec.ts and season-page.spec.ts assert the league and season pages' 404.
-    specs: ['not-found', 'organization-page', 'league-page', 'season-page', ...ADMIN],
+    specs: ['not-found', 'organization-page', 'sport-view', 'league-page', 'season-page', ...ADMIN],
   },
   {
     name: 'offline views',
@@ -290,9 +308,11 @@ export const AREAS = [
     test: inDir('src/app/public-layout/'),
     specs: [
       'public-layout',
+      'find-a-league',
       ...PUBLIC_PAGE,
       ...LEAGUE_PAGE,
       ...SEASON_PAGE,
+      ...SPORT_VIEW,
       'accept-invite',
       'install',
       'not-found',
@@ -312,17 +332,30 @@ export const AREAS = [
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
-    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, SESSION],
+    specs: [...PUBLIC_PAGE, ...ADMIN, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW, SESSION],
   },
   {
     name: 'convex locations',
     test: named('convex/', ['locations']),
-    specs: [...ADMIN, ...LOCATION_ADMIN, ...PUBLIC_PAGE],
+    specs: [...ADMIN, ...LOCATION_ADMIN, ...PUBLIC_PAGE, ...SPORT_VIEW],
   },
   {
     name: 'convex leagues',
     test: named('convex/', ['leagues']),
-    specs: [...ADMIN, ...LEAGUE_ADMIN, ...PUBLIC_PAGE, ...LEAGUE_PAGE, ...LEAGUE_MANAGEMENT],
+    specs: [
+      ...ADMIN,
+      ...LEAGUE_ADMIN,
+      ...PUBLIC_PAGE,
+      ...LEAGUE_PAGE,
+      ...SPORT_VIEW,
+      ...LEAGUE_MANAGEMENT,
+    ],
+  },
+  {
+    name: 'convex search',
+    test: (file) =>
+      named('convex/', ['search'])(file) || named('convex/lib/', ['searchQuery'])(file),
+    specs: FIND_PAGE,
   },
   {
     name: 'convex seasons',

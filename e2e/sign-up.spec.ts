@@ -25,6 +25,7 @@ const SIGN_UP_ORDER = [
   'button[type="submit"]',
   'main p a[href^="/sign-in"]',
   'footer a[href="/"]',
+  'footer a[href="/leagues"]',
   'footer a[href="/app"]',
   'footer a[href="/app/organizations/new"]',
   'footer a[href^="/sign-in"]',
@@ -311,6 +312,7 @@ test.describe('sign-up', () => {
         'header a[href="/"]',
         'header a[href="/app/account"]',
         'main a[href="/app/organizations/new"]',
+        'main a[href="/leagues"]',
       ],
     });
 
@@ -333,10 +335,10 @@ test.describe('sign-up', () => {
     await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fapp$/);
   });
 
-  test('returnTo=//evil.example/x lands on /', VIEWPORT_AGNOSTIC, async ({ page }) => {
+  test('returnTo=//evil.example/x lands on /app', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, newUser('Return'), '/sign-up?returnTo=%2F%2Fevil.example%2Fx');
-    await expect(page).toHaveURL(`${baseURL}/`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
   });
 
   for (const raw of [
@@ -348,14 +350,14 @@ test.describe('sign-up', () => {
     '/%2e%2e//evil.example/x',
   ]) {
     test(
-      `returnTo=${JSON.stringify(raw)} lands on / after sign-up and on /app when signed in`,
+      `returnTo=${JSON.stringify(raw)} lands on /app after sign-up and when signed in`,
       VIEWPORT_AGNOSTIC,
       async ({ page }) => {
         const query = `?returnTo=${encodeURIComponent(raw)}`;
         const tokens = tokensSettled(page);
         await signUp(page, newUser('Variant'), `/sign-up${query}`);
-        await expect(page).toHaveURL(`${baseURL}/`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
+        await expect(page).toHaveURL(`${baseURL}/app`);
+        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
         await tokens;
 
         await page.goto(`/sign-up${query}`);

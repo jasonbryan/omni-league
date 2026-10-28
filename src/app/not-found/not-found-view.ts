@@ -27,7 +27,7 @@ import { setNotFoundStatus } from '../core/not-found-status';
       <p class="mt-3 text-balance text-muted-foreground">
         Check the address for typos, or start again from the home page.
       </p>
-      <!-- The classes are those of hlmBtn size="lg" plus mt-8, so the view needs none of the helm button code. -->
+      <!-- The classes are those of hlmBtn size="md" plus mt-8, so the view needs none of the helm button code. -->
       <a
         routerLink="/"
         data-slot="button"

@@ -5,7 +5,12 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { isChoosableSlug } from './lib/slugs';
-import { backfillTenantFields, insertLeague, insertTenant } from './lib/tenantWrites';
+import {
+  backfillTenantFields,
+  insertCustomLevel,
+  insertLeague,
+  insertTenant,
+} from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -109,6 +114,10 @@ const valid = (s: Setup) => ({
   slug: 'sunday-reverse-coed-4s',
   sport: 'beachVolleyball' as const,
   locationIds: [s.bravo],
+  gender: 'coed' as const,
+  playersPerSide: 4,
+  level: 'bb' as const,
+  ageGroup: 'adult',
 });
 
 describe('leagues.create', () => {
@@ -125,6 +134,274 @@ describe('leagues.create', () => {
       status: 'draft',
       sortName: 'sunday reverse coed 4s',
     });
+  });
+
+  test('stores the division, and no minimum roster size when none is asked for', async () => {
+    const s = await setup();
+    const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+      ...valid(s),
+      gender: 'womens',
+      ageGroup: 'over40',
+    });
+    const league = await s.t.run((ctx) => ctx.db.get('leagues', leagueId));
+    expect(league).toMatchObject({
+      gender: 'womens',
+      playersPerSide: 4,
+      level: 'bb',
+      ageGroup: 'over40',
+    });
+    expect(league).not.toHaveProperty('minimumRosterSize');
+  });
+
+  test('stores a minimum roster size from the format up to 99', async () => {
+    const s = await setup();
+    for (const [slug, minimumRosterSize] of [
+      ['min-four', 4],
+      ['min-six', 6],
+      ['min-max', 99],
+    ] as const) {
+      const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+        ...valid(s),
+        slug,
+        minimumRosterSize,
+      });
+      const league = await s.t.run((ctx) => ctx.db.get('leagues', leagueId));
+      expect(league?.minimumRosterSize, slug).toBe(minimumRosterSize);
+    }
+  });
+
+  test('refuses a format outside the sport’s range, with the field’s error', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    for (const [sport, playersPerSide] of [
+      ['beachVolleyball', 7],
+      ['beachVolleyball', 1],
+      ['soccer', 3],
+      ['softball', 11],
+      ['soccer', 4.5],
+    ] as const) {
+      expect(
+        await refusal(
+          s.adminA.mutation(api.leagues.create, {
+            ...valid(s),
+            sport,
+            level: 'rec',
+            playersPerSide,
+          }),
+        ),
+        `${sport} ${playersPerSide}`,
+      ).toEqual({
+        field: 'format',
+        code: 'formatInvalid',
+        message: 'Choose a format. Players filter leagues by it.',
+      });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a level of another sport, with the field’s error', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    for (const [sport, playersPerSide, level] of [
+      ['soccer', 7, 'bb'],
+      ['softball', 10, 'a'],
+      ['beachVolleyball', 4, 'intermediate'],
+    ] as const) {
+      expect(
+        await refusal(
+          s.adminA.mutation(api.leagues.create, { ...valid(s), sport, playersPerSide, level }),
+        ),
+        `${sport} ${level}`,
+      ).toEqual({
+        field: 'level',
+        code: 'levelInvalid',
+        message: 'Choose one of the levels listed.',
+      });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  describe('with a custom level', () => {
+    const customLevel = (
+      s: Setup,
+      organizationId: Id<'organizations'>,
+      sport: 'beachVolleyball' | 'soccer',
+      standardLevel: 'a' | 'rec',
+    ) =>
+      s.t.run((ctx) =>
+        insertCustomLevel(ctx, organizationId, { sport, name: 'Gold', standardLevel }),
+      );
+
+    test('stores the id and the level it filters as, whatever level the caller sent', async () => {
+      const s = await setup();
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+        ...valid(s),
+        level: 'rec',
+        customLevelId,
+      });
+      expect(await s.t.run((ctx) => ctx.db.get('leagues', leagueId))).toMatchObject({
+        level: 'a',
+        customLevelId,
+      });
+      const rows = await s.adminA.query(api.leagues.listForAdmin, {
+        organizationId: s.organizationA,
+      });
+      expect(rows.find((row) => row.leagueId === leagueId)?.divisionLabel).toBe(
+        'Coed · 4v4 · Gold (A)',
+      );
+    });
+
+    test('stores no id for a league without one', async () => {
+      const s = await setup();
+      const { leagueId } = await s.adminA.mutation(api.leagues.create, valid(s));
+      const league = await s.t.run((ctx) => ctx.db.get('leagues', leagueId));
+      expect(league).not.toHaveProperty('customLevelId');
+    });
+
+    test('refuses a level of another organization or of another sport, and writes nothing', async () => {
+      const s = await setup();
+      const before = await snapshot(s.t);
+      const other = await customLevel(s, s.organizationB, 'beachVolleyball', 'a');
+      const otherSport = await customLevel(s, s.organizationA, 'soccer', 'rec');
+      for (const customLevelId of [other, otherSport]) {
+        await expect(
+          s.adminA.mutation(api.leagues.create, { ...valid(s), customLevelId }),
+        ).rejects.toThrow('Not allowed');
+      }
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+
+    test('refuses every caller who is not an org admin of the organization, even with its custom level, and writes nothing', async () => {
+      const s = await setup();
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      const before = await snapshot(s.t);
+      for (const [label, caller, message] of refusedCallers(s)) {
+        await expect(
+          caller.mutation(api.leagues.create, { ...valid(s), customLevelId }),
+          label,
+        ).rejects.toThrow(message);
+      }
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+
+    test('refuses an org admin of another organization who names their own organization with this one’s level', async () => {
+      const s = await setup();
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      const before = await snapshot(s.t);
+      await expect(
+        s.adminB.mutation(api.leagues.create, {
+          ...valid(s),
+          organizationId: s.organizationB,
+          locationIds: [s.bField],
+          customLevelId,
+        }),
+      ).rejects.toThrow('Not allowed');
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+
+    test('refuses a level that no longer exists, with the Level field’s error', async () => {
+      const s = await setup();
+      const before = await snapshot(s.t);
+      const customLevelId = await customLevel(s, s.organizationA, 'beachVolleyball', 'a');
+      await s.adminA.mutation(api.customLevels.remove, { customLevelId });
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), customLevelId })),
+      ).toEqual({
+        field: 'level',
+        code: 'levelInvalid',
+        message: 'Choose one of the levels listed.',
+      });
+      expect(await snapshot(s.t)).toEqual(before);
+    });
+  });
+
+  test('refuses an unknown age group, with the field’s error', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    for (const ageGroup of ['over45', 'U10', '', 'senior']) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), ageGroup })),
+        ageGroup,
+      ).toEqual({
+        field: 'ageGroup',
+        code: 'ageGroupInvalid',
+        message: 'Choose an age group from the list.',
+      });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a gender outside the three', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    await expect(
+      s.adminA.mutation(api.leagues.create, {
+        ...valid(s),
+        // @ts-expect-error -- not a gender key
+        gender: 'open',
+      }),
+    ).rejects.toThrow();
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a minimum roster size below the format, and one that is not a whole number up to 99', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    expect(
+      await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), minimumRosterSize: 3 })),
+    ).toEqual({
+      field: 'minimumRosterSize',
+      code: 'minimumRosterSizeLow',
+      message: '4v4 needs at least 4 players. Enter 4 or more.',
+    });
+    for (const minimumRosterSize of [100, 4.5]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), minimumRosterSize })),
+        String(minimumRosterSize),
+      ).toMatchObject({ field: 'minimumRosterSize', code: 'minimumRosterSizeInvalid' });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a format or minimum that is not a finite number, and writes nothing', async () => {
+    const s = await setup();
+    const before = await snapshot(s.t);
+    for (const playersPerSide of [NaN, Infinity, -Infinity, 0, -4]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), playersPerSide })),
+        String(playersPerSide),
+      ).toMatchObject({ field: 'format', code: 'formatInvalid' });
+    }
+    for (const minimumRosterSize of [NaN, Infinity, -Infinity]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), minimumRosterSize })),
+        String(minimumRosterSize),
+      ).toMatchObject({ field: 'minimumRosterSize', code: 'minimumRosterSizeInvalid' });
+    }
+    for (const minimumRosterSize of [0, -4]) {
+      expect(
+        await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), minimumRosterSize })),
+        String(minimumRosterSize),
+      ).toMatchObject({ field: 'minimumRosterSize', code: 'minimumRosterSizeLow' });
+    }
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses a caller who is not an org admin before it checks the division', async () => {
+    const s = await setup();
+    const invalidDivision = {
+      ...valid(s),
+      playersPerSide: 99,
+      level: 'aa' as const,
+      ageGroup: '?',
+    };
+    await expect(s.adminB.mutation(api.leagues.create, invalidDivision)).rejects.toThrow(
+      'Not allowed',
+    );
+    await expect(s.t.mutation(api.leagues.create, invalidDivision)).rejects.toThrow(
+      'Sign in required',
+    );
   });
 
   test('trims the name and keeps each location once', async () => {
@@ -145,6 +422,7 @@ describe('leagues.create', () => {
     await s.adminA.mutation(api.leagues.create, {
       ...valid(s),
       sport: 'soccer',
+      level: 'rec',
       locationIds: [s.bravo],
     });
     const after = await snapshot(s.t);
@@ -297,17 +575,18 @@ describe('leagues.listForAdmin', () => {
   test('lists drafts and published leagues by name ignoring case, with sport name, status, and location names', async () => {
     const s = await setup();
     await s.adminA.mutation(api.leagues.create, {
-      organizationId: s.organizationA,
+      ...valid(s),
       name: 'beta 4s',
       slug: 'beta-4s',
-      sport: 'beachVolleyball',
       locationIds: [s.bravo, s.alpha],
     });
     await s.adminA.mutation(api.leagues.create, {
-      organizationId: s.organizationA,
+      ...valid(s),
       name: 'Alpha Slow-Pitch',
       slug: 'alpha-slow-pitch',
       sport: 'softball',
+      playersPerSide: 10,
+      level: 'rec',
       locationIds: [s.bravo],
     });
     const rows = await s.adminA.query(api.leagues.listForAdmin, {
@@ -322,6 +601,7 @@ describe('leagues.listForAdmin', () => {
         sportName: 'Softball',
         status: 'draft',
         locationNames: ['bravo Beach'],
+        divisionLabel: 'Coed · 10v10 · Rec',
       },
       {
         name: 'beta 4s',
@@ -329,6 +609,7 @@ describe('leagues.listForAdmin', () => {
         sportName: 'Beach volleyball',
         status: 'draft',
         locationNames: ['bravo Beach', 'Alpha Field'],
+        divisionLabel: 'Coed · 4v4 · BB',
       },
       {
         name: 'Coed 7v7',
@@ -385,6 +666,33 @@ describe('leagues.listForAdmin', () => {
     ).resolves.toEqual([]);
   });
 
+  test('returns each league’s divisionLabel, and none for a league without a division', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const { leagueId } = await insertLeague(ctx, s.organizationA, {
+        name: 'Youth Girls',
+        sport: 'soccer',
+        locations: [],
+        division: {
+          gender: 'womens',
+          playersPerSide: 7,
+          level: 'competitive',
+          ageGroup: 'u12',
+          minimumRosterSize: 9,
+        },
+      });
+      expect(leagueId).toBeDefined();
+    });
+    const rows = await s.adminA.query(api.leagues.listForAdmin, {
+      organizationId: s.organizationA,
+    });
+    expect(rows.map((row) => [row.name, row.divisionLabel])).toEqual([
+      ['Coed 7v7', undefined],
+      ['Youth Girls', 'Girls · 7v7 · Competitive · U12'],
+    ]);
+    expect(rows[0]).not.toHaveProperty('divisionLabel');
+  });
+
   test('a league row with no status is listed as a draft, never as published', async () => {
     const s = await setup();
     await s.t.run((ctx) =>
@@ -421,7 +729,13 @@ describe('drafts stay off the public page', () => {
     const list = await s.t.query(api.organizations.listPublicLeagues, { slug: 'org-a', page: 1 });
     expect(list).toEqual({
       rows: [
-        { name: 'Coed 7v7', slug: 'coed-7v7', sportName: 'Soccer', locationNames: ['Alpha Field'] },
+        {
+          name: 'Coed 7v7',
+          slug: 'coed-7v7',
+          sportName: 'Soccer',
+          locationNames: ['Alpha Field'],
+          seasons: [],
+        },
       ],
       page: 1,
       pageCount: 1,
@@ -438,6 +752,7 @@ describe('drafts stay off the public page', () => {
     await s.adminA.mutation(api.leagues.create, {
       ...valid(s),
       sport: 'soccer',
+      level: 'rec',
       locationIds: [s.bravo],
     });
     expect(await s.t.query(api.organizations.getPublicPage, { slug: 'org-a' })).toEqual(pageBefore);

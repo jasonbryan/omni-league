@@ -18,6 +18,7 @@ import {
   lucideCircleDashed,
   lucideGlobe,
   lucideMapPin,
+  lucidePencil,
   lucidePlus,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -33,6 +34,7 @@ import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
 import { publicLeaguePath } from '../public-league/public-league-path';
 import { LeagueContext } from './league-context';
+import { LeagueDetailsForm } from './league-details-form';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
@@ -44,7 +46,14 @@ import { SeasonCreateForm } from './season-create-form';
  */
 @Component({
   selector: 'app-league-management',
-  imports: [AdminAlert, NgIcon, PublishSeasonDialog, RouterLink, SeasonCreateForm],
+  imports: [
+    AdminAlert,
+    LeagueDetailsForm,
+    NgIcon,
+    PublishSeasonDialog,
+    RouterLink,
+    SeasonCreateForm,
+  ],
   providers: [
     provideIcons({
       lucideCalendarClock,
@@ -53,6 +62,7 @@ import { SeasonCreateForm } from './season-create-form';
       lucideCircleDashed,
       lucideGlobe,
       lucideMapPin,
+      lucidePencil,
       lucidePlus,
       lucideUsers,
     }),
@@ -106,12 +116,29 @@ import { SeasonCreateForm } from './season-create-form';
               >
             </p>
           }
+          @if (league.division; as division) {
+            <p class="mt-2 font-medium" data-slot="league-division">{{ division.label }}</p>
+          }
         </div>
-        <!-- The fragment link is explicit: a bare #create-season would resolve against <base href="/"> to the home page. -->
-        <a [href]="createPath()" data-slot="button" [class]="jumpClass" (click)="jumpToForm($event)"
-          ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
-          season</a
-        >
+        <div class="flex flex-wrap gap-2">
+          <!-- The fragment links are explicit: a bare #create-season would resolve against <base href="/"> to the home page. -->
+          <a
+            [href]="createPath()"
+            data-slot="button"
+            [class]="jumpClass"
+            (click)="jumpTo($event, createSection)"
+            ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
+            season</a
+          >
+          <a
+            [href]="detailsPath()"
+            data-slot="button"
+            [class]="outlineButton"
+            (click)="jumpTo($event, detailsSection)"
+            ><ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Edit
+            details</a
+          >
+        </div>
       </div>
       <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
         <section
@@ -244,8 +271,18 @@ import { SeasonCreateForm } from './season-create-form';
                 /></span>
                 <p class="mt-4 font-medium">No seasons yet</p>
                 <p class="mt-1 max-w-xs text-sm text-balance text-muted-foreground">
-                  Seasons you create appear here as drafts until you publish them.
+                  Each run of {{ league.name }} is a season, with its own dates, registration,
+                  teams, and schedule. Seasons you create appear here as drafts until you publish
+                  them.
                 </p>
+                <a
+                  [href]="createPath()"
+                  data-slot="button"
+                  [class]="outlineButton + ' mt-4'"
+                  (click)="jumpTo($event, createSection)"
+                  ><ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create a
+                  season</a
+                >
               </div>
             }
           } @else {
@@ -272,7 +309,7 @@ import { SeasonCreateForm } from './season-create-form';
           #createSection
           id="create-season"
           aria-labelledby="create-season-heading"
-          class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -282,10 +319,23 @@ import { SeasonCreateForm } from './season-create-form';
           <app-season-create-form
             [leagueId]="league.leagueId"
             [leagueName]="league.name"
-            [sport]="league.sport"
+            [division]="league.division"
+            [detailsHref]="detailsPath()"
+            (detailsOpened)="jumpTo($event, detailsSection)"
           />
         </section>
       </div>
+      <section
+        #detailsSection
+        id="details"
+        aria-labelledby="details-heading"
+        class="mt-4 max-w-2xl overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 md:mt-6"
+      >
+        <div class="flex min-h-13 items-center border-b border-border px-4 py-3 md:px-6">
+          <h2 id="details-heading" class="font-semibold">League details</h2>
+        </div>
+        <app-league-details-form [league]="league" [seasons]="rows() ?? []" />
+      </section>
       @if (league.status === 'published') {
         <app-publish-season-dialog (dismissed)="publishDismissed($event)" />
       }
@@ -327,7 +377,9 @@ export class LeagueManagement {
   );
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
-  private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
+  protected readonly detailsPath = computed(
+    () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#details`,
+  );
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
@@ -363,10 +415,8 @@ export class LeagueManagement {
     );
   }
 
-  protected jumpToForm(event: MouseEvent): void {
+  protected jumpTo(event: MouseEvent, section: HTMLElement): void {
     if (!isPlainClick(event)) return;
-    const section = this.createSection()?.nativeElement;
-    if (!section) return;
     event.preventDefault();
     section.scrollIntoView();
     section.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });

@@ -2,8 +2,13 @@ import { computed, linkedSignal, signal, type Signal, type WritableSignal } from
 import { form, required, type FieldTree } from '@angular/forms/signals';
 import { ConvexError } from 'convex/values';
 import type { Id } from '../../../../convex/_generated/dataModel';
+import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/divisions';
 import {
+  checkLeagueAgeGroup,
+  checkLeagueFormat,
+  checkLeagueLevel,
   checkLeagueLocations,
+  checkLeagueMinimumRosterSize,
   checkLeagueName,
   checkLeagueSlug,
   LEAGUE_MESSAGES,
@@ -13,10 +18,21 @@ import {
 import { slugify } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
-import { focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import { LeagueDivision } from './league-division';
 
 export type { LeagueField };
-export const LEAGUE_FIELDS: readonly LeagueField[] = ['name', 'slug', 'sport', 'locations'];
+// The order of the page, which is the order focus follows to the first invalid field.
+export const LEAGUE_FIELDS: readonly LeagueField[] = [
+  'name',
+  'slug',
+  'sport',
+  'format',
+  'minimumRosterSize',
+  'level',
+  'ageGroup',
+  'locations',
+];
 
 export interface LeagueTextModel {
   name: string;
@@ -28,6 +44,12 @@ export interface LeagueValues {
   slug: string;
   sport: Sport;
   locationIds: Id<'locations'>[];
+  gender: Gender;
+  playersPerSide: number;
+  level: StandardLevel;
+  customLevelId?: Id<'customLevels'>;
+  ageGroup: AgeGroup;
+  minimumRosterSize?: number;
 }
 
 export type LeagueFormAlertKind = 'offline' | 'failed';
@@ -55,7 +77,7 @@ interface ServerError {
   taken: string | null;
 }
 
-function inputErrorOf(failure: unknown): LeagueInputError | null {
+export function inputErrorOf(failure: unknown): LeagueInputError | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   if (typeof data !== 'object' || data === null) return null;
@@ -70,7 +92,9 @@ function inputErrorOf(failure: unknown): LeagueInputError | null {
 export class LeagueForm {
   readonly model: WritableSignal<LeagueTextModel> = signal({ name: '', slug: '' });
   readonly fields: FieldTree<LeagueTextModel>;
-  readonly sport = signal<Sport | null>(null);
+  private readonly chosenSport = signal<Sport | null>(null);
+  readonly sport = this.chosenSport.asReadonly();
+  readonly division = new LeagueDivision();
   readonly selected: WritableSignal<ReadonlySet<Id<'locations'>>>;
   readonly slugEdited = signal(false);
   readonly submitting = signal(false);
@@ -120,14 +144,44 @@ export class LeagueForm {
       }),
       slug: computed(() => checkLeagueSlug(this.model().slug)?.message ?? null),
       sport: computed(() => (this.sport() === null ? LEAGUE_MESSAGES.sportEmpty : null)),
+      // Without a sport the Division choices are hidden and Sport carries the error.
+      format: computed(() => {
+        const sport = this.sport();
+        return sport === null
+          ? null
+          : (checkLeagueFormat(sport, this.division.playersPerSide())?.message ?? null);
+      }),
+      minimumRosterSize: computed(() => {
+        const playersPerSide = this.division.playersPerSide();
+        if (playersPerSide === null) return null;
+        return (
+          checkLeagueMinimumRosterSize(playersPerSide, this.division.minimumRosterSize())
+            ?.message ?? null
+        );
+      }),
+      level: computed(() => {
+        const sport = this.sport();
+        return sport === null
+          ? null
+          : (checkLeagueLevel(sport, this.division.level())?.message ?? null);
+      }),
+      ageGroup: computed(() => {
+        const checked = checkLeagueAgeGroup(this.division.ageGroup());
+        return checked.ok ? null : checked.error.message;
+      }),
       locations: computed(() => checkLeagueLocations(this.chosen().length)?.message ?? null),
     };
+    const minimumChanged = changedSince(this.division.minimumText);
     const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
     const changed: Record<LeagueField, () => boolean> = {
       name: () => this.fields.name().dirty(),
       slug: slugChanged,
       // A chosen radio is always valid, so leaving it cannot show an error.
       sport: () => false,
+      format: () => false,
+      level: () => false,
+      ageGroup: () => false,
+      minimumRosterSize: minimumChanged,
       locations: () => this.locationsChanged(),
     };
     this.shown = Object.fromEntries(
@@ -140,14 +194,15 @@ export class LeagueForm {
       name: this.untilChanged(() => this.model().name),
       slug: this.untilChanged(() => this.model().slug),
       sport: this.untilChanged(() => this.sport()),
+      format: this.untilChanged(() => this.division.playersPerSide()),
+      minimumRosterSize: this.untilChanged(() => this.division.minimumText()),
+      level: this.untilChanged(() => `${this.division.level()}/${this.division.customLevelId()}`),
+      ageGroup: this.untilChanged(() => this.division.ageGroup()),
       locations: this.untilChanged(() => this.chosen()),
     };
-    this.errors = {
-      name: this.shownError('name'),
-      slug: this.shownError('slug'),
-      sport: this.shownError('sport'),
-      locations: this.shownError('locations'),
-    };
+    this.errors = Object.fromEntries(
+      LEAGUE_FIELDS.map((field) => [field, this.shownError(field)]),
+    ) as Record<LeagueField, Signal<string | null>>;
     this.takenSlug = computed(() =>
       this.shown.slug.shown() ? null : (this.serverErrors.slug()?.taken ?? null),
     );
@@ -165,6 +220,12 @@ export class LeagueForm {
     this.model.update((m) => ({ ...m, name, slug: name.trim() === '' ? '' : slugify(name) }));
   }
 
+  chooseSport(sport: Sport): void {
+    this.chosenSport.set(sport);
+    this.division.sportChanged(sport);
+    this.fillDivisionFromName();
+  }
+
   toggleLocation(id: Id<'locations'>, checked: boolean): void {
     this.locationsChanged.set(true);
     this.selected.update((current) => {
@@ -178,7 +239,8 @@ export class LeagueForm {
   clear(): void {
     this.model.set({ name: '', slug: '' });
     this.slugEdited.set(false);
-    this.sport.set(null);
+    this.chosenSport.set(null);
+    this.division.clear();
     this.selected.set(this.defaultSelected());
     this.fields().reset();
     this.locationsChanged.set(false);
@@ -186,6 +248,7 @@ export class LeagueForm {
 
   left(field: LeagueField): void {
     this.shown[field].left();
+    if (field === 'name') this.fillDivisionFromName();
   }
 
   leftGroup(field: LeagueField, event: FocusEvent): void {
@@ -197,6 +260,8 @@ export class LeagueForm {
     send: (values: LeagueValues) => Promise<unknown>,
   ): Promise<LeagueSubmitOutcome> {
     this.alert.set(null);
+    // Enter in Name submits before Name is left.
+    this.fillDivisionFromName();
     let firstInvalid: LeagueField | null = null;
     for (const field of LEAGUE_FIELDS) {
       this.shown[field].submitted();
@@ -208,11 +273,19 @@ export class LeagueForm {
     if (pressedOffline) return this.showAlert('offline');
 
     const { name, slug } = this.model();
+    const minimumRosterSize = this.division.minimumRosterSize();
+    const customLevelId = this.division.customLevelId();
     const values: LeagueValues = {
       name: name.trim(),
       slug,
       sport: this.sport()!,
       locationIds: this.chosen(),
+      gender: this.division.gender(),
+      playersPerSide: this.division.playersPerSide()!,
+      level: this.division.level(),
+      ...(customLevelId !== null && { customLevelId }),
+      ageGroup: this.division.ageGroup(),
+      ...(minimumRosterSize !== undefined && { minimumRosterSize }),
     };
     this.submitting.set(true);
     try {
@@ -223,6 +296,10 @@ export class LeagueForm {
       this.submitting.set(false);
     }
     return { sent: true, values };
+  }
+
+  private fillDivisionFromName(): void {
+    this.division.fillFromName(this.model().name, this.sport());
   }
 
   private failed(failure: unknown, slug: string): LeagueSubmitOutcome {

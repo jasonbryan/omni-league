@@ -21,7 +21,7 @@ import {
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { provideSpartanHlm } from '../ui/utils';
-import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
+import { GULF_COAST, PORT_ARANSAS, queryResults, sportQueryResults } from './testing/pages';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -136,6 +136,7 @@ describe('OrganizationPage server render', () => {
       { name: 'organizations:getPublicPage', args: { slug } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1 } },
       { name: 'organizations:listPublicLocations', args: { slug, page: 1 } },
+      { name: 'seasons:listOpenForOrganization', args: { orgSlug: slug } },
     ]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
@@ -167,6 +168,7 @@ describe('OrganizationPage server render', () => {
       "Men's Over-30 11v11",
       "Men's · 11v11 · Rec · 30+",
       'Soccer · Bayside Athletic Complex',
+      'No upcoming season',
     ]);
     expect(lines(body.querySelector('#location-1'))).toEqual([
       'Bayside Athletic Complex',
@@ -175,7 +177,24 @@ describe('OrganizationPage server render', () => {
     ]);
     expect(body.querySelector('main [role="status"]')).toBeNull();
 
-    expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
+    expect(publicFrame(body)).toEqual({ ...PUBLIC_FRAME, navs: ['Sports', 'Footer'] });
+    const chips = [...body.querySelectorAll('nav[aria-label="Sports"] a')];
+    expect(
+      chips.map((a) => [
+        text(a),
+        new URL(a.getAttribute('href') ?? '', ORIGIN).pathname,
+        a.getAttribute('aria-current'),
+      ]),
+    ).toEqual([
+      ['All sports 5 leagues', '/organizations/gulf-coast-sport-social', 'page'],
+      [
+        'Beach volleyball 2 leagues',
+        '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
+        null,
+      ],
+      ['Soccer 2 leagues', '/organizations/gulf-coast-sport-social/sports/soccer', null],
+      ['Softball 1 league', '/organizations/gulf-coast-sport-social/sports/softball', null],
+    ]);
     expect(body.querySelector('a')?.getAttribute('href')).toBe(
       '/organizations/gulf-coast-sport-social#main',
     );
@@ -185,6 +204,31 @@ describe('OrganizationPage server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
+  });
+
+  it('writes one description tag that matches og:description, ending with the City, state when set', async () => {
+    const { head } = await render('/organizations/gulf-coast-sport-social', (name) =>
+      Promise.resolve(queryResults({ ...GULF_COAST, cityState: 'Corpus Christi, TX' })[name]),
+    );
+    const expected =
+      'Leagues and locations of Gulf Coast Sport & Social on Omni League in Corpus Christi, TX.';
+    expect(meta(head, 'og:description')).toBe(expected);
+    expect(
+      [...head.querySelectorAll('meta[name="description"]')].map((tag) =>
+        tag.getAttribute('content'),
+      ),
+    ).toEqual([expected]);
+  });
+
+  it('writes no description tag on the not-found view', async () => {
+    const { head } = await render('/organizations/does-not-exist', (name) =>
+      Promise.resolve(
+        name === 'organizations:getPublicPage'
+          ? null
+          : { rows: [], page: 1, pageCount: 0, total: 0 },
+      ),
+    );
+    expect(head.querySelector('meta[name="description"]')).toBeNull();
   });
 
   it('renders the empty hero line and no Leagues or Locations section for an organization with no leagues', async () => {
@@ -267,7 +311,11 @@ describe('OrganizationPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
   });
 
-  for (const failing of ['organizations:listPublicLeagues', 'organizations:listPublicLocations']) {
+  for (const failing of [
+    'organizations:listPublicLeagues',
+    'organizations:listPublicLocations',
+    'seasons:listOpenForOrganization',
+  ]) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
       const { html, body, head, responseInit } = await render(
         '/organizations/gulf-coast-sport-social?ott=SECRET',
@@ -299,6 +347,226 @@ describe('OrganizationPage server render', () => {
       expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
       expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
       expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
+    });
+  }
+});
+
+describe('Registration open on the server', () => {
+  const NOW = Date.UTC(2027, 3, 1, 18);
+  const season = (name: string, deadline: string, roster: number) => ({
+    name,
+    slug: name.toLowerCase().replaceAll(' ', '-'),
+    startDate: '2027-06-02',
+    endDate: '2027-08-25',
+    registrationDeadline: deadline,
+    minimumRosterSize: roster,
+    league: {
+      name: 'Coed 7v7 Rec',
+      slug: 'coed-7v7-rec',
+      sportName: 'Soccer',
+      divisionLabel: 'Coed · 7v7 · Rec',
+      locationNames: ['Bayside Athletic Complex'],
+    },
+  });
+  const withOpen = (name: string) =>
+    Promise.resolve(
+      queryResults({
+        ...GULF_COAST,
+        openSeasons: [
+          season('Late 2027', '2027-05-30', 7),
+          season('Soon 2027', '2027-04-20', 7),
+          season('Past 2027', '2027-03-01', 7),
+        ],
+      })[name],
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('puts the open cards, soonest first, and the hero link in the raw HTML, with no query string', async () => {
+    const { html, body } = await render(
+      '/organizations/gulf-coast-sport-social?ott=SECRET',
+      withOpen,
+    );
+    const section = body.querySelector('#registration-open');
+    expect([...(section?.querySelectorAll(':scope > ul > li h3') ?? [])].map(text)).toEqual([
+      'Coed 7v7 Rec',
+      'Coed 7v7 Rec',
+    ]);
+    expect([...(section?.querySelectorAll(':scope > ul > li h3 + p') ?? [])].map(text)).toEqual([
+      'Soon 2027',
+      'Late 2027',
+    ]);
+    expect(
+      [...(section?.querySelectorAll(':scope > ul > li a[data-slot="button"]') ?? [])].map(
+        (a) => new URL(a.getAttribute('href') ?? '', ORIGIN).pathname,
+      ),
+    ).toEqual([
+      '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/soon-2027',
+      '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/late-2027',
+    ]);
+    const hero = body.querySelector('main a[href$="#registration-open"]');
+    expect(text(hero)).toBe('Register for a season');
+    expect(hero?.getAttribute('href')).toBe(
+      '/organizations/gulf-coast-sport-social#registration-open',
+    );
+    expect(html).not.toContain('SECRET');
+  });
+});
+
+describe('sport view server render', () => {
+  const SOCCER = '/organizations/gulf-coast-sport-social/sports/soccer';
+  const soccer = (name: string) => Promise.resolve(sportQueryResults(GULF_COAST, 'soccer')[name]);
+
+  it('renders the sport view with the Soccer chip current, its leagues and locations, and its meta', async () => {
+    const { html, body, head, responseInit, queries } = await render(SOCCER, soccer);
+
+    const slug = 'gulf-coast-sport-social';
+    expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
+      { name: 'organizations:getPublicPage', args: { slug } },
+      { name: 'organizations:listPublicLeagues', args: { slug, page: 1, sport: 'soccer' } },
+      { name: 'organizations:listPublicLocations', args: { slug, page: 1, sport: 'soccer' } },
+      { name: 'seasons:listOpenForOrganization', args: { orgSlug: slug, sport: 'soccer' } },
+    ]);
+    expect(responseInit.status).toBeUndefined();
+    expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
+    expect(head.querySelector('title')?.textContent).toBe(
+      'Soccer | Gulf Coast Sport & Social | Omni League',
+    );
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}${SOCCER}`,
+    );
+    expect(meta(head, 'og:url')).toBe(`${ORIGIN}${SOCCER}`);
+    expect(
+      [...body.querySelectorAll('nav[aria-label="Sports"] a')].map((a) => [
+        text(a),
+        a.getAttribute('aria-current'),
+      ]),
+    ).toEqual([
+      ['All sports 5 leagues', null],
+      ['Beach volleyball 2 leagues', null],
+      ['Soccer 2 leagues', 'page'],
+      ['Softball 1 league', null],
+    ]);
+    expect(text(body.querySelector('#leagues-heading'))).toBe('Soccer leagues');
+    expect([...body.querySelectorAll('#leagues li h3')].map(text)).toEqual([
+      'Coed 7v7 Rec',
+      "Men's Over-30 11v11",
+    ]);
+    expect([...body.querySelectorAll('#locations li h3')].map(text)).toEqual([
+      'Bayside Athletic Complex',
+    ]);
+    expect(text(body.querySelector('main h1'))).toBe('Gulf Coast Sport & Social');
+    expect(publicFrame(body)).toEqual({ ...PUBLIC_FRAME, navs: ['Sports', 'Footer'] });
+    expect(html).not.toContain('ott=');
+  });
+
+  it.each(['?page=0', '?page=abc', '?page=2&page=3', '?ott=SECRET&page=9999'])(
+    'asks for page 1 and holds none of the query string for %s',
+    async (query) => {
+      const { html, queries, responseInit } = await render(`${SOCCER}${query}`, soccer);
+      expect(responseInit.status).toBeUndefined();
+      expect(queries.find((q) => q.name === 'organizations:listPublicLeagues')?.args).toEqual({
+        slug: 'gulf-coast-sport-social',
+        page: 1,
+        sport: 'soccer',
+      });
+      expect(html).not.toContain('SECRET');
+      expect(html).not.toContain('abc');
+      expect(html).not.toContain('page=3');
+      expect(html).not.toContain('9999');
+    },
+  );
+
+  it('puts the page from the result, never the request, in the canonical', async () => {
+    const { head } = await render(`${SOCCER}?page=2`, (name) =>
+      Promise.resolve(
+        name === 'organizations:listPublicLeagues'
+          ? { rows: GULF_COAST.leagues.slice(0, 1), page: 2, pageCount: 2, total: 7 }
+          : sportQueryResults(GULF_COAST, 'soccer')[name],
+      ),
+    );
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}${SOCCER}?page=2`,
+    );
+  });
+
+  it.each(['curling', 'beachVolleyball', 'Soccer', 'soccer%2F'])(
+    'answers 404 without asking a query for the segment %s',
+    async (segment) => {
+      const { body, head, responseInit, queries } = await render(
+        `/organizations/gulf-coast-sport-social/sports/${segment}`,
+        gulfCoast,
+      );
+      expect(queries).toEqual([]);
+      expect(responseInit.status).toBe(404);
+      expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
+      expect(text(body.querySelector('main h1'))).toBe('Page not found');
+      expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
+    },
+  );
+
+  it('answers 404 for a sport the organization has no published league in', async () => {
+    const header = queryResults(GULF_COAST)['organizations:getPublicPage'] as typeof GULF_COAST;
+    const { body, responseInit } = await render(
+      '/organizations/gulf-coast-sport-social/sports/softball',
+      (name) =>
+        Promise.resolve(
+          name === 'organizations:getPublicPage'
+            ? { ...header, sports: header.sports.filter((sport) => sport.key !== 'softball') }
+            : { rows: [], page: 1, pageCount: 0, total: 0 },
+        ),
+    );
+    expect(responseInit.status).toBe(404);
+    expect(text(body.querySelector('main h1'))).toBe('Page not found');
+  });
+
+  it('answers 404 for an unknown organization', async () => {
+    const { responseInit } = await render('/organizations/nobody/sports/soccer', (name) =>
+      Promise.resolve(
+        name === 'organizations:getPublicPage'
+          ? null
+          : { rows: [], page: 1, pageCount: 0, total: 0 },
+      ),
+    );
+    expect(responseInit.status).toBe(404);
+  });
+
+  for (const failing of [
+    'organizations:getPublicPage',
+    'organizations:listPublicLeagues',
+    'organizations:listPublicLocations',
+    'seasons:listOpenForOrganization',
+  ]) {
+    it(`answers 503 with no-store when ${failing} fails`, async () => {
+      const { html, body, responseInit } = await render(`${SOCCER}?ott=SECRET`, (name) =>
+        name === failing
+          ? Promise.reject(new Error('connect ECONNREFUSED internal-db.corp.example:443'))
+          : soccer(name),
+      );
+      expect(responseInit.status).toBe(503);
+      expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+      expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
+      expect(
+        new URL(body.querySelector('main a')?.getAttribute('href') ?? '', ORIGIN).pathname,
+      ).toBe(SOCCER);
+      expect(html).not.toContain('internal-db');
+      expect(html).not.toContain('SECRET');
+    });
+
+    it(`answers 503 with no-store when ${failing} times out`, async () => {
+      const { responseInit } = await render(
+        SOCCER,
+        (name) => (name === failing ? new Promise(() => undefined) : soccer(name)),
+        30,
+      );
+      expect(responseInit.status).toBe(503);
+      expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
     });
   }
 });

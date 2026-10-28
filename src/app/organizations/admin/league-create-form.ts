@@ -14,7 +14,12 @@ import {
 import { FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
+import {
+  lucideCircleAlert,
+  lucideLoaderCircle,
+  lucidePlus,
+  lucideSparkles,
+} from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
@@ -23,6 +28,7 @@ import { Checkbox } from '../../ui/checkbox';
 import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';
 import { PRIMARY_BUTTON } from './button-classes';
+import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import {
   DESCRIPTION,
   FIELD,
@@ -34,13 +40,10 @@ import {
   INPUT,
   LABEL,
   LEGEND,
-  RADIO_EDGE,
-  RADIO_EDGE_INVALID,
-  RADIO_INDICATOR,
-  RADIO_INPUT,
-  RADIO_ITEM,
 } from './field-classes';
 import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
+import { filledFromNameMessage } from './league-division';
+import { LeagueDivisionFields } from './league-division-fields';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
 
 export interface LeagueLocationChoice {
@@ -50,8 +53,16 @@ export interface LeagueLocationChoice {
 
 @Component({
   selector: 'app-league-create-form',
-  imports: [AdminAlert, Checkbox, FormField, NgIcon, RouterLink],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
+  imports: [
+    AdminAlert,
+    Checkbox,
+    ChipRadioGroup,
+    FormField,
+    LeagueDivisionFields,
+    NgIcon,
+    RouterLink,
+  ],
+  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus, lucideSparkles })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -68,7 +79,7 @@ export interface LeagueLocationChoice {
           [title]="created.name + ' created as a draft.'"
           description="Publish it when it’s ready for players to see."
           class="mb-5"
-          ><a [routerLink]="leaguePath(created.slug)">Add seasons to {{ created.name }}</a>
+          ><a [routerLink]="leaguePath(created.slug)">Add the first season to {{ created.name }}</a>
         </app-admin-alert>
       }
       @if (form.alert(); as kind) {
@@ -109,7 +120,7 @@ export interface LeagueLocationChoice {
             [class]="inputClass"
           />
           <p data-slot="field-description" id="name-description" [class]="descriptionClass">
-            Up to 100 characters.
+            The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.
           </p>
           @if (form.errors.name(); as error) {
             <div role="alert" data-slot="field-error" id="name-error" [class]="errorClass">
@@ -175,67 +186,49 @@ export interface LeagueLocationChoice {
             </div>
           }
         </div>
-        <fieldset
-          id="sport"
-          data-slot="field-set"
-          [attr.aria-describedby]="form.errors.sport() ? 'sport-error' : null"
-          [attr.data-invalid]="form.errors.sport() ? 'true' : null"
-          [class]="fieldSetClass"
-        >
-          <legend
-            data-slot="field-legend"
-            data-variant="label"
-            [class]="legendClass + (form.errors.sport() ? ' text-destructive' : '')"
-          >
-            Sport
-          </legend>
-          <div data-slot="radio-group" class="grid gap-3">
-            @for (option of sports; track option.key) {
-              <div
-                role="group"
-                data-slot="field"
-                data-orientation="horizontal"
-                [attr.data-matches-spartan-invalid]="form.errors.sport() ? 'true' : null"
-                [class]="fieldHorizontalClass"
+        <app-chip-radio-group
+          #sportGroup
+          name="sport"
+          legend="Sport"
+          [options]="sports"
+          [value]="form.sport()"
+          description="The division options below are this sport’s."
+          [error]="form.errors.sport()"
+          (chosen)="chooseSport($event)"
+        />
+        <fieldset data-slot="field-set" class="border-t border-border pt-5">
+          <legend class="float-start w-full text-base font-semibold">Division</legend>
+          <p class="clear-both pt-1 text-sm text-muted-foreground">
+            Players filter leagues by these on your public page and in Find a league.
+          </p>
+          <div role="status">
+            @if (filledMessage(); as message) {
+              <p
+                class="mt-3 flex items-start gap-2 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground"
               >
-                <span
-                  data-slot="radio-group-item"
-                  [attr.data-checked]="form.sport() === option.key ? 'true' : null"
-                  [class]="radioClass()"
-                  ><input
-                    #sportRadio
-                    type="radio"
-                    [id]="'sport-' + option.key"
-                    name="sport"
-                    [value]="option.key"
-                    [checked]="form.sport() === option.key"
-                    [attr.aria-invalid]="form.errors.sport() ? 'true' : null"
-                    (change)="form.sport.set(option.key)"
-                    [class]="radioInputClass" /><span
-                    aria-hidden="true"
-                    [class]="radioIndicatorClass"
-                  ></span
-                ></span>
-                <div data-slot="field-content" [class]="contentClass">
-                  <label
-                    [attr.for]="'sport-' + option.key"
-                    data-slot="field-label"
-                    [class]="labelClass"
-                    >{{ option.name }}</label
-                  >
-                </div>
-              </div>
+                <ng-icon
+                  name="lucideSparkles"
+                  class="mt-0.5 shrink-0 text-base"
+                  aria-hidden="true"
+                />
+                <span>{{ message }}</span>
+              </p>
             }
           </div>
-          @if (form.errors.sport(); as error) {
-            <div role="alert" data-slot="field-error" id="sport-error" [class]="errorClass">
-              <ng-icon
-                name="lucideCircleAlert"
-                class="mt-0.5 shrink-0 text-base"
-                aria-hidden="true"
-              />
-              <span>{{ error }}</span>
-            </div>
+          @if (form.sport(); as sport) {
+            <app-league-division-fields
+              class="mt-5"
+              [division]="form.division"
+              [sport]="sport"
+              [organizationId]="organizationId()"
+              [errors]="form.errors"
+              formatDescription="Players on each side. It sets the minimum roster size of every season of this league."
+              (minimumLeft)="form.left('minimumRosterSize')"
+            />
+          } @else {
+            <p class="mt-3 text-sm text-muted-foreground">
+              Choose a sport to see its formats and levels.
+            </p>
           }
         </fieldset>
         <fieldset
@@ -340,10 +333,9 @@ export class LeagueCreateForm {
   protected readonly online = injectOnline();
   protected readonly form = new LeagueForm(() => this.locations().map((l) => l.locationId));
   protected readonly alerts = LEAGUE_FORM_ALERTS;
-  protected readonly sports = (Object.keys(SPORT_NAMES) as Sport[]).map((key) => ({
-    key,
-    name: SPORT_NAMES[key],
-  }));
+  protected readonly sports: readonly ChipOption[] = (Object.keys(SPORT_NAMES) as Sport[]).map(
+    (key) => ({ key, label: SPORT_NAMES[key] }),
+  );
 
   protected readonly fieldGroupClass = FIELD_GROUP;
   protected readonly fieldClass = FIELD;
@@ -355,15 +347,9 @@ export class LeagueCreateForm {
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
   protected readonly contentClass = FIELD_CONTENT;
-  protected readonly radioInputClass = RADIO_INPUT;
-  protected readonly radioIndicatorClass = RADIO_INDICATOR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly footerClass = STICKY_FOOTER;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
-
-  protected readonly radioClass = computed(
-    () => `${RADIO_ITEM} ${this.form.errors.sport() ? RADIO_EDGE_INVALID : RADIO_EDGE}`,
-  );
 
   protected readonly created = signal<{ name: string; slug: string } | null>(null);
 
@@ -373,10 +359,22 @@ export class LeagueCreateForm {
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly slugInput = viewChild.required<ElementRef<HTMLInputElement>>('slug');
-  private readonly sportRadios = viewChildren<ElementRef<HTMLInputElement>>('sportRadio');
+  private readonly sportGroup = viewChild<ChipRadioGroup>('sportGroup');
+  private readonly divisionFields = viewChild(LeagueDivisionFields);
   private readonly locationBoxes = viewChildren(Checkbox);
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
+
+  protected readonly filledMessage = computed(() =>
+    filledFromNameMessage(this.form.division.filledFromName()),
+  );
+
+  protected chooseSport(key: string): void {
+    const sport = (Object.keys(SPORT_NAMES) as Sport[]).find((candidate) => candidate === key);
+    if (!sport) return;
+    this.divisionFields()?.closeCustomLevelPanel();
+    this.form.chooseSport(sport);
+  }
 
   protected describedBy(field: 'name' | 'slug', description: string): string {
     return this.form.errors[field]() ? `${description} ${field}-error` : description;
@@ -398,6 +396,7 @@ export class LeagueCreateForm {
     if (outcome.sent) {
       this.created.set({ name: outcome.values.name, slug: outcome.values.slug });
       this.form.clear();
+      this.divisionFields()?.collapseMinimum();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {
       this.focusAfterRender(() => this.focusField(outcome.focus));
@@ -407,13 +406,22 @@ export class LeagueCreateForm {
   }
 
   private focusField(field: LeagueField): void {
-    const targets = {
-      name: () => this.nameInput().nativeElement,
-      slug: () => this.slugInput().nativeElement,
-      sport: () => this.sportRadios()[0]?.nativeElement,
-      locations: () => this.locationBoxes()[0],
-    } as const;
-    targets[field]()?.focus();
+    switch (field) {
+      case 'name':
+        this.nameInput().nativeElement.focus();
+        break;
+      case 'slug':
+        this.slugInput().nativeElement.focus();
+        break;
+      case 'sport':
+        this.sportGroup()?.focus();
+        break;
+      case 'locations':
+        this.locationBoxes()[0]?.focus();
+        break;
+      default:
+        this.divisionFields()?.focus(field);
+    }
   }
 
   private focusAfterRender(focus: () => void): void {

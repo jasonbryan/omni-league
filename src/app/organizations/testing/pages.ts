@@ -41,6 +41,7 @@ export const GULF_COAST: PublicOrganizationPage = {
       divisionLabel: 'Coed · 7v7 · Rec',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
+      seasons: [],
     },
     {
       name: "Men's Over-30 11v11",
@@ -48,6 +49,7 @@ export const GULF_COAST: PublicOrganizationPage = {
       divisionLabel: "Men's · 11v11 · Rec · 30+",
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
+      seasons: [],
     },
     {
       name: 'Sunday Reverse Coed 4s',
@@ -55,6 +57,7 @@ export const GULF_COAST: PublicOrganizationPage = {
       divisionLabel: 'Coed · 4v4 · BB',
       sportName: 'Beach volleyball',
       locationNames: ['North Beach Sand Courts'],
+      seasons: [],
     },
     {
       name: 'Thursday Night Coed 2s',
@@ -62,6 +65,7 @@ export const GULF_COAST: PublicOrganizationPage = {
       divisionLabel: 'Coed · 2v2 · B',
       sportName: 'Beach volleyball',
       locationNames: ['North Beach Sand Courts'],
+      seasons: [],
     },
     {
       name: 'Wednesday Coed Slow-Pitch',
@@ -69,12 +73,13 @@ export const GULF_COAST: PublicOrganizationPage = {
       divisionLabel: 'Coed · 10v10 · Rec',
       sportName: 'Softball',
       locationNames: ['Flour Bluff Softball Park', 'Bayside Athletic Complex'],
+      seasons: [],
     },
   ],
 };
 
 export function queryResults(page: PublicOrganizationPage): Record<string, unknown> {
-  const { leagues, locations, ...header } = page;
+  const { leagues, locations, openSeasons = [], ...header } = page;
   const list = (rows: unknown[], total: number) => ({
     rows,
     page: 1,
@@ -85,6 +90,36 @@ export function queryResults(page: PublicOrganizationPage): Record<string, unkno
     'organizations:getPublicPage': header,
     'organizations:listPublicLeagues': list(leagues, header.leagueCount),
     'organizations:listPublicLocations': list(locations, header.locationCount),
+    'seasons:listOpenForOrganization': openSeasons,
+  };
+}
+
+export function sportQueryResults(
+  page: PublicOrganizationPage,
+  segment: string,
+): Record<string, unknown> {
+  const { leagues, locations, openSeasons = [], ...header } = page;
+  const sport = header.sports.find((entry) => entry.segment === segment);
+  if (!sport) throw new Error(`No sport ${segment}`);
+  const list = (rows: unknown[], total: number) => ({
+    rows,
+    page: 1,
+    pageCount: Math.min(Math.ceil(total / 5), 40),
+    total,
+  });
+  return {
+    'organizations:getPublicPage': header,
+    'organizations:listPublicLeagues': list(
+      leagues.filter((league) => league.sportName === sport.name).slice(0, 5),
+      sport.leagueCount,
+    ),
+    'organizations:listPublicLocations': list(
+      locations.filter((location) => location.sportNames?.includes(sport.name)),
+      sport.locationCount,
+    ),
+    'seasons:listOpenForOrganization': openSeasons.filter(
+      (season) => season.league.sportName === sport.name,
+    ),
   };
 }
 

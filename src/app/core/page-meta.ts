@@ -9,6 +9,8 @@ export interface PageMeta {
   readonly ogType: 'website';
   /** Built from the query result, never copied from the request URL: the query string can carry a one-time token and the HTML is CDN-cacheable. */
   readonly path: string;
+  /** For a view that depends on the query string, such as a search, so it is not indexed under its canonical. */
+  readonly noindex?: boolean;
 }
 
 const OG_PROPERTIES = ['og:title', 'og:description', 'og:type', 'og:url'] as const;
@@ -23,6 +25,8 @@ export function bindPageMeta(meta: () => PageMeta | null): void {
 
   const clear = (): void => {
     for (const property of OG_PROPERTIES) tags.removeTag(`property="${property}"`);
+    tags.removeTag('name="description"');
+    tags.removeTag('name="robots"');
     document.head.querySelector('link[rel="canonical"]')?.remove();
   };
 
@@ -44,6 +48,9 @@ export function bindPageMeta(meta: () => PageMeta | null): void {
     for (const property of OG_PROPERTIES) {
       tags.updateTag({ property, content: content[property] });
     }
+    tags.updateTag({ name: 'description', content: current.ogDescription });
+    if (current.noindex) tags.updateTag({ name: 'robots', content: 'noindex' });
+    else tags.removeTag('name="robots"');
     let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!link) {
       link = document.createElement('link');

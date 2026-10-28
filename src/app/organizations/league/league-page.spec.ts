@@ -9,6 +9,7 @@ import {
   GULF,
   LEAGUE_ROUTES,
   LEAGUE_URL,
+  LIST_CUSTOM_LEVELS,
   LIST_FOR_ORGANIZER,
   SEASONS,
 } from './testing/league-harness';
@@ -59,6 +60,7 @@ describe('LeaguePage', () => {
         [GET_ORGANIZER_CONTEXT, { orgSlug: GULF.slug, leagueSlug: COED.slug }],
         [ME, {}],
         [LIST_FOR_ORGANIZER, { leagueId: COED.leagueId }],
+        [LIST_CUSTOM_LEVELS, { organizationId: COED.organizationId, sport: 'soccer' }],
       ]);
     });
 
@@ -121,6 +123,30 @@ describe('LeaguePage', () => {
     });
   });
 
+  describe('the league details', () => {
+    it('is a section under the seasons, with its own link to jump to it from every width', async () => {
+      await open(COED, []);
+      const link = [...page.querySelectorAll<HTMLAnchorElement>('main a[data-slot="button"]')].find(
+        (a) => text(a) === 'Edit details',
+      )!;
+      expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
+      expect(link.classList.contains('lg:hidden')).toBe(false);
+      const section = page.querySelector<HTMLElement>('#details')!;
+      expect(section.tagName).toBe('SECTION');
+      const scrolled = vi.fn();
+      section.scrollIntoView = scrolled;
+      link.click();
+      await o.flush();
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(page.querySelector('#league-name'));
+    });
+
+    it('is shown to the league organizer too', async () => {
+      await open(COED_AS_ORGANIZER, []);
+      expect(page.querySelector('#details form')).not.toBeNull();
+    });
+  });
+
   describe('a league organizer (states 12 and 13)', () => {
     it('gets the same page with the league organizer’s sidebar: the organization, "Your leagues", and two links', async () => {
       await open(COED_AS_ORGANIZER, []);
@@ -171,9 +197,32 @@ describe('LeaguePage', () => {
       expect(text(panel.querySelector('h2'))).toBe('Seasons');
       expect(text(panel.querySelector('p.font-medium'))).toBe('No seasons yet');
       expect(text(panel)).toContain(
-        'Seasons you create appear here as drafts until you publish them.',
+        'Each run of Coed 7v7 Rec is a season, with its own dates, registration, teams, and schedule. Seasons you create appear here as drafts until you publish them.',
       );
       expect(panel.querySelector('ul')).toBeNull();
+    });
+
+    it('none yet: the empty state’s "Create a season" link jumps to the form and moves focus to it', async () => {
+      await open(COED, []);
+      const link = page.querySelector<HTMLAnchorElement>(
+        'section[aria-labelledby="seasons-heading"] a',
+      )!;
+      expect(text(link)).toBe('Create a season');
+      expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#create-season`);
+      const section = page.querySelector<HTMLElement>('#create-season')!;
+      const scrolled = vi.fn();
+      section.scrollIntoView = scrolled;
+      link.click();
+      await o.flush();
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(page.querySelector('#name'));
+    });
+
+    it('populated: the list carries no "Create a season" link', async () => {
+      await open(COED, SEASONS);
+      expect(
+        page.querySelector('section[aria-labelledby="seasons-heading"] a[href$="#create-season"]'),
+      ).toBeNull();
     });
 
     it('populated (state 3): a row per season, in the order given, with status, dates, deadline, and format', async () => {

@@ -1,4 +1,4 @@
-import { v, type Infer } from 'convex/values';
+import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import {
@@ -14,7 +14,9 @@ import {
   type Gender,
   type StandardLevel,
 } from './divisions';
+import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
+import { joinSearchText } from './searchQuery';
 import type { SeasonStatus } from './seasonStatus';
 import { isChoosableSlug, isSlug, MAX_SLUG_LENGTH, MIN_SLUG_LENGTH, slugify } from './slugs';
 import {
@@ -45,7 +47,7 @@ export const leagueSeedValidator = v.object({
 });
 
 export const tenantValidator = v.object({
-  organization: v.object({ name: v.string(), slug: v.string() }),
+  organization: v.object({ name: v.string(), slug: v.string(), cityState: v.optional(v.string()) }),
   locations: v.array(v.object({ name: v.string(), address: v.string() })),
   leagues: v.array(leagueSeedValidator),
 });
@@ -56,6 +58,55 @@ export type Tenant = Infer<typeof tenantValidator>;
 
 export function sortName(name: string): string {
   return name.toLowerCase();
+}
+
+export const MAX_LEAGUES_SEARCH_UPDATED = 200;
+
+// Every writer of a league's name or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
+async function leagueSearchText(
+  ctx: Pick<MutationCtx, 'db'>,
+  organization: Doc<'organizations'>,
+  league: { name: string; locationIds: readonly Id<'locations'>[] },
+): Promise<string> {
+  const locationNames: string[] = [];
+  for (const id of league.locationIds) {
+    const location = await ctx.db.get('locations', id);
+    if (location?.organizationId === organization._id) locationNames.push(location.name);
+  }
+  return joinSearchText([league.name, organization.name, ...locationNames, organization.cityState]);
+}
+
+async function organizationOf(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+): Promise<Doc<'organizations'>> {
+  const organization = await ctx.db.get('organizations', organizationId);
+  if (!organization) throw new Error('No organization has this id');
+  return organization;
+}
+
+async function refreshLeaguesSearchText(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  locationId?: Id<'locations'>,
+): Promise<void> {
+  const organization = await organizationOf(ctx, organizationId);
+  const leagues = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_name', (q) => q.eq('organizationId', organizationId))
+    .take(MAX_LEAGUES_SEARCH_UPDATED + 1);
+  if (leagues.length > MAX_LEAGUES_SEARCH_UPDATED) {
+    throw new Error(
+      `Organization ${JSON.stringify(organization.slug)} has more than ${MAX_LEAGUES_SEARCH_UPDATED} leagues, so their search text cannot be rewritten in one change`,
+    );
+  }
+  for (const league of leagues) {
+    if (locationId !== undefined && !league.locationIds.includes(locationId)) continue;
+    const searchText = await leagueSearchText(ctx, organization, league);
+    if (league.searchText !== searchText) {
+      await ctx.db.patch('leagues', league._id, { searchText });
+    }
+  }
 }
 
 type Counter = 'leagueCount' | 'locationCount';
@@ -98,19 +149,29 @@ async function assertSlugFree(ctx: MutationCtx, slug: string): Promise<void> {
 
 export async function insertOrganization(
   ctx: MutationCtx,
-  organization: { name: string; slug: string },
+  organization: { name: string; slug: string; cityState?: string | undefined },
 ): Promise<Id<'organizations'>> {
-  const { name, slug } = organization;
+  const { name, slug, cityState } = organization;
   // Reserved slugs are allowed: the demo seeds use them.
   await assertSlugFree(ctx, slug);
   return ctx.db.insert('organizations', {
     name,
     slug,
+    ...(cityState !== undefined && { cityState }),
     leagueCount: 0,
     locationCount: 0,
     sportLeagueCounts: {},
     sportLocationCounts: {},
   });
+}
+
+export async function updateOrganizationCityState(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  cityState: string | null,
+): Promise<void> {
+  await ctx.db.patch('organizations', organizationId, { cityState: cityState ?? undefined });
+  await refreshLeaguesSearchText(ctx, organizationId);
 }
 
 export async function insertTenant(ctx: MutationCtx, tenant: Tenant): Promise<Id<'organizations'>> {
@@ -168,6 +229,7 @@ export async function updateLocation(
     address: change.address,
     sortName: sortName(change.name),
   });
+  await refreshLeaguesSearchText(ctx, location.organizationId, location._id);
 }
 
 export async function insertLeague(
@@ -281,17 +343,191 @@ export async function insertCustomLevel(
   });
 }
 
+// The caller has checked access and that no league uses it.
+export async function deleteCustomLevel(
+  ctx: MutationCtx,
+  customLevelId: Id<'customLevels'>,
+): Promise<void> {
+  await ctx.db.delete('customLevels', customLevelId);
+}
+
 export async function insertDraftLeague(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
-  league: NewLeague,
+  league: NewLeague & { division: LeagueDivision },
 ): Promise<Id<'leagues'>> {
   return insertLeagueRow(ctx, organizationId, league, 'draft');
 }
 
+export const MAX_DRAFT_SEASONS_UPDATED = 200;
+
+export const leagueEarlierValidator = v.object({
+  name: v.string(),
+  gender: v.optional(genderValidator),
+  playersPerSide: v.optional(v.number()),
+  level: v.optional(standardLevelValidator),
+  customLevelId: v.optional(v.id('customLevels')),
+  ageGroup: v.optional(ageGroupValidator),
+  minimumRosterSize: v.optional(v.number()),
+});
+
+export const draftSeasonEarlierValidator = v.object({
+  seasonId: v.id('seasons'),
+  playersPerSide: v.number(),
+  minimumRosterSize: v.number(),
+});
+
+export const leagueWrittenValidator = v.object({
+  name: v.string(),
+  gender: genderValidator,
+  playersPerSide: v.number(),
+  level: standardLevelValidator,
+  customLevelId: v.optional(v.id('customLevels')),
+  ageGroup: ageGroupValidator,
+  minimumRosterSize: v.optional(v.number()),
+});
+
+export const leagueUpdateEarlierValidator = v.object({
+  league: leagueEarlierValidator,
+  draftSeasons: v.array(draftSeasonEarlierValidator),
+  written: leagueWrittenValidator,
+});
+
+export type LeagueEarlier = Infer<typeof leagueEarlierValidator>;
+export type DraftSeasonEarlier = Infer<typeof draftSeasonEarlierValidator>;
+export type LeagueWritten = Infer<typeof leagueWrittenValidator>;
+export type LeagueUpdateEarlier = Infer<typeof leagueUpdateEarlierValidator>;
+
+export function leagueHolds(league: Doc<'leagues'>, written: LeagueWritten): boolean {
+  return (
+    league.name === written.name &&
+    league.gender === written.gender &&
+    league.playersPerSide === written.playersPerSide &&
+    league.level === written.level &&
+    league.customLevelId === written.customLevelId &&
+    league.ageGroup === written.ageGroup &&
+    league.minimumRosterSize === written.minimumRosterSize
+  );
+}
+
+function effectiveMinimum(division: {
+  playersPerSide?: number | undefined;
+  minimumRosterSize?: number | undefined;
+}): number | undefined {
+  return division.minimumRosterSize ?? division.playersPerSide;
+}
+
+// The caller has checked access and the input. Draft seasons follow the league only when its
+// players per side or its effective minimum changes, so a rename leaves a season's own minimum.
+export async function updateLeague(
+  ctx: MutationCtx,
+  league: Doc<'leagues'>,
+  change: { name: string; division: LeagueDivision },
+): Promise<LeagueUpdateEarlier> {
+  assertDivision(league.sport, change.division);
+  const earlier: LeagueEarlier = {
+    name: league.name,
+    ...(league.gender !== undefined && { gender: league.gender }),
+    ...(league.playersPerSide !== undefined && { playersPerSide: league.playersPerSide }),
+    ...(league.level !== undefined && { level: league.level }),
+    ...(league.customLevelId !== undefined && { customLevelId: league.customLevelId }),
+    ...(league.ageGroup !== undefined && { ageGroup: league.ageGroup }),
+    ...(league.minimumRosterSize !== undefined && { minimumRosterSize: league.minimumRosterSize }),
+  };
+  const seasonsFollow =
+    league.playersPerSide !== change.division.playersPerSide ||
+    effectiveMinimum(league) !== effectiveMinimum(change.division);
+  const draftSeasons: DraftSeasonEarlier[] = [];
+  if (seasonsFollow) {
+    const drafts = await ctx.db
+      .query('seasons')
+      .withIndex('by_leagueId_and_status_and_startDate', (q) =>
+        q.eq('leagueId', league._id).eq('status', 'draft'),
+      )
+      .take(MAX_DRAFT_SEASONS_UPDATED + 1);
+    if (drafts.length > MAX_DRAFT_SEASONS_UPDATED) {
+      throw new ConvexError({
+        field: 'format',
+        code: 'draftSeasonsTooMany',
+        message: LEAGUE_MESSAGES.draftSeasonsTooMany,
+      } satisfies LeagueInputError);
+    }
+    const playersPerSide = change.division.playersPerSide;
+    const minimumRosterSize = effectiveMinimum(change.division)!;
+    for (const season of drafts) {
+      const current = seasonPlayersPerSide(season);
+      if (current === playersPerSide && season.minimumRosterSize === minimumRosterSize) continue;
+      draftSeasons.push({
+        seasonId: season._id,
+        playersPerSide: current,
+        minimumRosterSize: season.minimumRosterSize,
+      });
+      await ctx.db.patch('seasons', season._id, { playersPerSide, minimumRosterSize });
+    }
+  }
+  await ctx.db.patch('leagues', league._id, {
+    name: change.name,
+    sortName: sortName(change.name),
+    searchText: await leagueSearchText(ctx, await organizationOf(ctx, league.organizationId), {
+      name: change.name,
+      locationIds: league.locationIds,
+    }),
+    ...leagueDivisionPatch(change.division),
+  });
+  const { customLevelId, minimumRosterSize } = change.division;
+  const written: LeagueWritten = {
+    name: change.name,
+    gender: change.division.gender,
+    playersPerSide: change.division.playersPerSide,
+    level: change.division.level,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ageGroup: change.division.ageGroup,
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
+  return { league: earlier, draftSeasons, written };
+}
+
+function isDraftOf(season: Doc<'seasons'> | null, league: Doc<'leagues'>): boolean {
+  return season?.leagueId === league._id && season.status === 'draft';
+}
+
+export async function restoreLeague(
+  ctx: MutationCtx,
+  league: Doc<'leagues'>,
+  earlier: LeagueUpdateEarlier,
+): Promise<void> {
+  const { league: values } = earlier;
+  await ctx.db.patch('leagues', league._id, {
+    name: values.name,
+    sortName: sortName(values.name),
+    searchText: await leagueSearchText(ctx, await organizationOf(ctx, league.organizationId), {
+      name: values.name,
+      locationIds: league.locationIds,
+    }),
+    gender: values.gender,
+    playersPerSide: values.playersPerSide,
+    level: values.level,
+    customLevelId: values.customLevelId,
+    ageGroup: values.ageGroup,
+    minimumRosterSize: values.minimumRosterSize,
+  });
+  for (const { seasonId, playersPerSide, minimumRosterSize } of earlier.draftSeasons) {
+    const season = await ctx.db.get('seasons', seasonId);
+    if (!isDraftOf(season, league)) continue;
+    await ctx.db.patch('seasons', seasonId, { playersPerSide, minimumRosterSize });
+  }
+}
+
 export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): Promise<void> {
   if (league.status === 'published') return;
-  await ctx.db.patch('leagues', league._id, { status: 'published' });
+  await ctx.db.patch('leagues', league._id, {
+    status: 'published',
+    searchText: await leagueSearchText(
+      ctx,
+      await organizationOf(ctx, league.organizationId),
+      league,
+    ),
+  });
   const wasPublicAndCounted = league.status === undefined;
   if (wasPublicAndCounted) return;
   await increment(ctx, league.organizationId, 'leagueCount');
@@ -369,6 +605,10 @@ async function insertLeagueRow(
   status: LeagueStatus,
 ): Promise<Id<'leagues'>> {
   if (league.division) assertDivision(league.sport, league.division);
+  const searchText = await leagueSearchText(ctx, await organizationOf(ctx, organizationId), {
+    name: league.name,
+    locationIds: league.locationIds,
+  });
   const leagueId = await ctx.db.insert('leagues', {
     organizationId,
     name: league.name,
@@ -376,6 +616,7 @@ async function insertLeagueRow(
     sport: league.sport,
     locationIds: league.locationIds,
     sortName: sortName(league.name),
+    searchText,
     status,
     publishedSeasonCount: 0,
     ...divisionFields(league.division),
@@ -407,6 +648,12 @@ function assertDivision(sport: Sport, division: LeagueDivision): void {
       `Minimum roster size ${minimumRosterSize} must be a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}`,
     );
   }
+}
+
+// Every division field is set, so one the change leaves out is cleared.
+function leagueDivisionPatch(division: LeagueDivision) {
+  const { customLevelId, minimumRosterSize, ...required } = division;
+  return { ...required, customLevelId, minimumRosterSize };
 }
 
 function divisionFields(division: LeagueDivision | undefined) {
@@ -510,19 +757,27 @@ export async function backfillTenantFields(
     backfilled.locations++;
   }
   // Runs before the organization pass, whose recount reads each league's status.
+  const organizations = new Map<Id<'organizations'>, Doc<'organizations'>>();
   for (const league of await ctx.db.query('leagues').take(BACKFILL_SCAN_LIMIT)) {
     if (
       league.sortName !== undefined &&
       league.status !== undefined &&
-      league.publishedSeasonCount !== undefined
+      league.publishedSeasonCount !== undefined &&
+      league.searchText !== undefined
     ) {
       continue;
+    }
+    let organization = organizations.get(league.organizationId);
+    if (!organization) {
+      organization = await organizationOf(ctx, league.organizationId);
+      organizations.set(league.organizationId, organization);
     }
     await ctx.db.patch('leagues', league._id, {
       sortName: league.sortName ?? sortName(league.name),
       status: league.status ?? 'published',
       publishedSeasonCount:
         league.publishedSeasonCount ?? (await recountPublishedSeasons(ctx, league._id)),
+      searchText: league.searchText ?? (await leagueSearchText(ctx, organization, league)),
     });
     backfilled.leagues++;
   }

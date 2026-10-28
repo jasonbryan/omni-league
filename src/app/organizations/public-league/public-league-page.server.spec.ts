@@ -21,14 +21,17 @@ import {
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
 import { provideSpartanHlm } from '../../ui/utils';
-import { leagueQueryResults, NO_SEASONS, seasonsPage } from './testing/league-data';
+import { at, leagueQueryResults, NO_SEASONS, OPEN_DAY, seasonsPage } from './testing/league-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
 beforeEach(() => {
   restoreDomGlobals = snapshotDomGlobals();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(at(OPEN_DAY));
 });
 afterEach(() => {
+  vi.useRealTimers();
   restoreDomGlobals();
 });
 
@@ -171,6 +174,16 @@ describe('PublicLeaguePage server render', () => {
       'Spring 2026',
     ]);
     expect(text(body.querySelector('nav[aria-label="Seasons pages"] p'))).toBe('1–5 of 7 seasons');
+    expect(text(body.querySelector('main section#registration-open h3'))).toBe('Summer 2027');
+    expect(text(body.querySelector('main section#registration-open a[data-slot="button"]'))).toBe(
+      'Register for Summer 2027',
+    );
+    expect(text(body.querySelector('main section#where'))).toContain(
+      '3500 Surfside Blvd, Corpus Christi, TX 78402',
+    );
+    expect(text(body.querySelector('main section#where > p'))).toBe(
+      'Run by Gulf Coast Sport & Social',
+    );
     const frame = publicFrame(body);
     expect({ ...frame, navs: [] }).toEqual({ ...PUBLIC_FRAME, navs: [] });
     expect(frame.navs.at(-1)).toBe('Footer');
@@ -182,6 +195,19 @@ describe('PublicLeaguePage server render', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('ott=');
     expect(html).not.toContain('x=1');
+  });
+
+  it('writes one description tag that matches og:description', async () => {
+    const { head } = await render(LEAGUE_PATH, sunday);
+    const description = meta(head, 'og:description');
+    expect(description).toBe(
+      'Seasons of Sunday Reverse Coed 4s from Gulf Coast Sport & Social on Omni League.',
+    );
+    expect(
+      [...head.querySelectorAll('meta[name="description"]')].map((tag) =>
+        tag.getAttribute('content'),
+      ),
+    ).toEqual([description]);
   });
 
   it('renders page 2 from ?page=2, with ?page=2 in the canonical, og:url, and the control’s links', async () => {

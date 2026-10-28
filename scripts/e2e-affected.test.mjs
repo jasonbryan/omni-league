@@ -90,6 +90,7 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/sticky-footer.ts']),
       want(
+        'e2e/league-management-details.spec.ts',
         'e2e/league-management-mockup.spec.ts',
         'e2e/league-management-publish.spec.ts',
         'e2e/league-management.spec.ts',
@@ -197,7 +198,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public league page and its paths to the league page, season page, and cache-key specs', () => {
+  it('maps the public league page and its paths to the league page, season page, sport view, and cache-key specs', () => {
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
@@ -210,20 +211,57 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
           'e2e/season-page.spec.ts',
+          'e2e/sport-view.spec.ts',
         ),
         file,
       );
     }
   });
 
-  it('maps the numbered control and the page helper to the league page specs only', () => {
+  it('maps the numbered control and the page helper to the league page and sport view specs only', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/league-page-offline.spec.ts', 'e2e/league-page.spec.ts'),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/league-page-offline.spec.ts',
+          'e2e/league-page.spec.ts',
+          'e2e/sport-view.spec.ts',
+        ),
         file,
       );
     }
+  });
+
+  it('maps the sport chips and the organization page to the sport view spec', () => {
+    for (const file of [
+      'src/app/organizations/sport-chips.ts',
+      'src/app/organizations/organization-page.ts',
+      'src/app/organizations/organization-overview.ts',
+      'convex/organizations.ts',
+    ]) {
+      const specs = specsFor([file]);
+      assert.ok(specs.includes('e2e/sport-view.spec.ts'), file);
+      assert.ok(specs.includes('e2e/cache-key.spec.ts'), file);
+      assert.ok(!specs.includes('FULL'), file);
+    }
+  });
+
+  it('maps the find page and its Convex search to the find page and cache-key specs, and its unit specs to none', () => {
+    for (const file of [
+      'src/app/find/find-page.ts',
+      'src/app/find/find-content.ts',
+      'convex/search.ts',
+      'convex/lib/searchQuery.ts',
+    ]) {
+      assert.deepEqual(
+        specsFor([file]),
+        want('e2e/cache-key.spec.ts', 'e2e/find-a-league.spec.ts'),
+        file,
+      );
+    }
+    assert.deepEqual(specsFor(['src/app/find/find-page.spec.ts']), want());
+    assert.deepEqual(specsFor(['src/app/find/testing/find-data.ts']), want());
   });
 
   it('maps the form field-error helper to the specs that fill in a form, and its unit spec to none', () => {
@@ -384,6 +422,18 @@ describe('selectSpecs: mapped areas', () => {
       specsFor(['design/mockups/80-app-icon.html', 'design/mockup-kit/x.css']),
       want(),
     );
+  });
+
+  it('maps the chip classes and the mockup whose kit block the chip spec reads to that spec', () => {
+    assert.deepEqual(
+      specsFor(['src/app/ui/chip/chip-classes.ts']),
+      want('e2e/chip-classes.spec.ts'),
+    );
+    assert.deepEqual(
+      specsFor(['design/mockups/300-public-site-league-form.html']),
+      want('e2e/chip-classes.spec.ts'),
+    );
+    assert.deepEqual(specsFor(['src/app/ui/chip/chip-classes.spec.ts']), want());
   });
 
   it('maps Convex modules to the specs that exercise them', () => {

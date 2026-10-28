@@ -165,13 +165,13 @@ describe('SignUpPage', () => {
       const classes = (element: Element) => [...element.classList].sort();
       const expected = (value: string) => value.split(' ').sort();
       expect(classes(showButton())).toEqual(
-        expected(buttonVariants({ variant: 'outline', size: 'lg' })),
+        expected(buttonVariants({ variant: 'outline', size: 'md' })),
       );
       expect(classes(showButton())).toEqual(
         expect.arrayContaining(['border-transparent', 'border-border']),
       );
       expect(classes(submitButton())).toEqual(
-        expected(`${buttonVariants({ size: 'lg' })} mt-6 w-full`),
+        expected(`${buttonVariants({ size: 'md' })} mt-6 w-full`),
       );
       expect(submitButton().getAttribute('data-slot')).toBe('button');
     });
@@ -385,8 +385,9 @@ describe('SignUpPage', () => {
 
     it.each([
       ['/sign-up?returnTo=%2Fleagues%2Fx%2Fregister', '/leagues/x/register'],
-      ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/'],
-      ['/sign-up?returnTo=https%3A%2F%2Fevil.example', '/'],
+      ['/sign-up?returnTo=%2F%2Fevil.example%2Fx', '/app'],
+      ['/sign-up?returnTo=https%3A%2F%2Fevil.example', '/app'],
+      ['/sign-up?returnTo=%2F', '/app'],
     ])('from %s goes to %s', async (from, to) => {
       await open(from);
       await fill();

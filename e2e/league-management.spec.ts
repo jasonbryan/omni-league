@@ -20,19 +20,43 @@ const LOCATIONS = [
 ];
 
 const LEAGUES: NonNullable<TenantSeed['leagues']> = [
-  { name: 'Coed 7v7 Rec', sport: 'soccer', locations: ['Redfish Flats Fields'] },
-  { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Pelican Shoals Sand Courts'] },
+  {
+    name: 'Coed 7v7 Rec',
+    sport: 'soccer',
+    locations: ['Redfish Flats Fields'],
+    division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+  },
+  {
+    name: 'Sand 2s',
+    sport: 'beachVolleyball',
+    locations: ['Pelican Shoals Sand Courts'],
+    division: { gender: 'coed', playersPerSide: 2, level: 'b', ageGroup: 'adult' },
+  },
   {
     name: 'Draft Softball',
     sport: 'softball',
     locations: ['Redfish Flats Fields'],
     status: 'draft',
+    division: { gender: 'coed', playersPerSide: 10, level: 'rec', ageGroup: 'adult' },
+  },
+  {
+    name: 'Raised Sand 6s',
+    sport: 'beachVolleyball',
+    locations: ['Pelican Shoals Sand Courts'],
+    division: {
+      gender: 'coed',
+      playersPerSide: 6,
+      level: 'bb',
+      ageGroup: 'adult',
+      minimumRosterSize: 8,
+    },
   },
 ];
 
 const COED = 'coed-7v7-rec';
 const SAND = 'sand-2s';
 const SOFTBALL = 'draft-softball';
+const RAISED = 'raised-sand-6s';
 
 type Role = 'orgAdmin' | 'leagueOrganizer' | null;
 
@@ -60,16 +84,14 @@ const main = (page: Page) => page.getByRole('main');
 const form = (page: Page) => page.locator('#create-season form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft season/ });
 const rows = (page: Page) => page.locator('#seasons-list > li');
+const fromLeague = (page: Page) => page.locator('section[aria-labelledby="from-league-heading"]');
 
-async function fillFall2026(page: Page, minimum?: string) {
+async function fillFall2026(page: Page) {
   await page.locator('#name').fill('Fall 2026');
   await expect(page.locator('#slug')).toHaveValue('fall-2026');
   await page.locator('#start-date').fill('2026-09-01');
   await page.locator('#end-date').fill('2026-11-15');
   await page.locator('#registration-deadline').fill('2026-08-25');
-  await page.getByRole('radio', { name: '7v7' }).check();
-  await expect(page.locator('#minimum-roster-size')).toHaveValue('7');
-  if (minimum !== undefined) await page.locator('#minimum-roster-size').fill(minimum);
 }
 
 test.describe('League management: an org admin', () => {
@@ -81,6 +103,14 @@ test.describe('League management: an org admin', () => {
     await expect(page).toHaveTitle(`Coed 7v7 Rec | ${tenant.name} | Omni League`);
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
     await expect(page.getByText('No seasons yet')).toBeVisible();
+    await expect(page.locator('#create-season').getByRole('radio')).toHaveCount(0);
+    await expect(page.locator('#minimum-roster-size')).toHaveCount(0);
+    await expect(fromLeague(page).locator('[data-slot="season-division"]')).toHaveText(
+      'Coed · 7v7 · Rec',
+    );
+    await expect(fromLeague(page).locator('[data-slot="season-minimum"]')).toHaveText(
+      '7 players, set by the 7v7 format',
+    );
     await screenshot(page, testInfo, '125-league-empty');
     await expectAccessible(page);
 
@@ -91,8 +121,6 @@ test.describe('League management: an org admin', () => {
     const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
     await expect(status).toContainText('Fall 2026 created as a draft.');
     await expect(page.locator('#name')).toHaveValue('');
-    await expect(page.locator('#minimum-roster-size')).toHaveValue('');
-    await expect(page.getByRole('radio', { name: '7v7' })).not.toBeChecked();
     await expect(submit(page)).toBeFocused();
 
     await expect(rows(page)).toHaveCount(1);
@@ -106,24 +134,49 @@ test.describe('League management: an org admin', () => {
     await expectAccessible(page);
   });
 
-  test('a minimum of 6 for 7v7 creates nothing and names 7; 9 creates the season with 9', async ({
+  test('a league with a raised minimum shows it and gives its seasons that minimum', async ({
     page,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin');
-    await page.goto(`${base}/leagues/${COED}`);
-    await fillFall2026(page, '6');
-    await submit(page).click();
-    await expect(page.locator('#minimum-roster-size-error')).toHaveText(
-      '7v7 needs at least 7 players. Enter 7 or more.',
+    await page.goto(`${base}/leagues/${RAISED}`);
+    await expect(fromLeague(page).locator('[data-slot="season-division"]')).toHaveText(
+      'Coed · 6v6 · BB',
     );
-    await expect(page.locator('#minimum-roster-size')).toBeFocused();
-    await expect(rows(page)).toHaveCount(0);
-    await expect(page.getByText('No seasons yet')).toBeVisible();
-
-    await page.locator('#minimum-roster-size').fill('9');
+    await expect(fromLeague(page).locator('[data-slot="season-minimum"]')).toHaveText(
+      '8 players, raised for this league',
+    );
+    await fillFall2026(page);
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
-    await expect(rows(page).first()).toContainText('7v7 · at least 9 players');
+    await expect(rows(page).first()).toContainText('6v6 · at least 8 players');
+  });
+
+  test('the link in the league block moves to the league details', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await fromLeague(page).getByRole('link', { name: 'edit the league details' }).click();
+    await expect(page.locator('#details')).toBeInViewport();
+    await expect(page.locator('#details input').first()).toBeFocused();
+  });
+
+  test('a typed date is fully visible in every date field at 360, 1024, and 1280px', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    for (const width of [360, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base}/leagues/${COED}`);
+      for (const id of ['start-date', 'end-date', 'registration-deadline']) {
+        const input = page.locator(`#${id}`);
+        await input.fill('2026-09-01');
+        const { clientWidth, scrollWidth } = await input.evaluate((el) => ({
+          clientWidth: el.clientWidth,
+          scrollWidth: el.scrollWidth,
+        }));
+        expect(clientWidth, `#${id} at ${width}px`).toBeGreaterThanOrEqual(150);
+        expect(scrollWidth, `#${id} at ${width}px`).toBeLessThanOrEqual(clientWidth);
+      }
+    }
   });
 
   test('refuses a deadline on the start date and an end before the start, then accepts the day before', async ({
@@ -175,11 +228,9 @@ test.describe('League management: an org admin', () => {
       await page.locator('#start-date').fill('2026-09-01');
       await page.locator('#end-date').fill('2026-11-15');
       await page.locator('#registration-deadline').fill('2026-08-25');
-      await expect(page.getByRole('radio')).toHaveCount(3);
-      await page.getByRole('radio', { name: '4v4' }).check();
       await submit(page).click();
       await expect(rows(page)).toHaveCount(1);
-      await expect(rows(page).first()).toContainText('4v4 · at least 4 players');
+      await expect(rows(page).first()).toContainText('2v2 · at least 2 players');
     });
   });
 
@@ -233,8 +284,6 @@ test.describe('League management: an org admin', () => {
     await page.locator('#start-date').fill('2026-09-01');
     await page.locator('#end-date').fill('2026-11-15');
     await page.locator('#registration-deadline').fill('2026-08-25');
-    await expect(page.getByRole('radio')).toHaveCount(1);
-    await page.getByRole('radio', { name: '10v10' }).check();
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page).first()).toContainText('10v10 · at least 10 players');

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { addCalendarDays, dateAtUtcMinus12 } from '../../convex/lib/registration';
 import { convexRun } from './convex';
 
 export type Sport = 'beachVolleyball' | 'soccer' | 'softball';
@@ -14,6 +15,7 @@ export interface DivisionSeed {
   playersPerSide: number;
   level: 'rec' | 'b' | 'bb' | 'a' | 'aa' | 'open' | 'intermediate' | 'competitive';
   ageGroup: 'adult' | 'over30' | 'over35' | 'over40' | 'over50' | 'over55' | 'over60';
+  minimumRosterSize?: number;
 }
 
 export interface LeagueSeed {
@@ -25,6 +27,7 @@ export interface LeagueSeed {
 }
 
 export interface TenantSeed {
+  cityState?: string;
   name?: string;
   locations?: { name: string; address: string }[];
   leagues?: LeagueSeed[];
@@ -55,7 +58,12 @@ export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
   const slug = `e2e-${id}`;
   const locations = seed.locations ?? [];
   const leagues = seed.leagues ?? [];
-  await convexRun('testing:seedLeague', { organization: { name, slug }, locations, leagues });
+  const organization = {
+    name,
+    slug,
+    ...(seed.cityState !== undefined && { cityState: seed.cityState }),
+  };
+  await convexRun('testing:seedLeague', { organization, locations, leagues });
   return {
     name,
     slug,
@@ -77,6 +85,8 @@ export interface SeasonSeed {
   slug: string;
   startDate: string;
   endDate: string;
+  /** Defaults to a date long past, so the season is not open for registration. */
+  registrationDeadline?: string;
   status?: 'draft' | 'published';
 }
 
@@ -115,7 +125,7 @@ export async function seedSeasons(
       slug: season.slug,
       startDate: season.startDate,
       endDate: season.endDate,
-      registrationDeadline: '2025-12-01',
+      registrationDeadline: season.registrationDeadline ?? '2025-12-01',
       playersPerSide: 4,
       minimumRosterSize: 4,
       status: season.status ?? 'published',
@@ -134,4 +144,9 @@ export function tallLocations(): { name: string; address: string }[] {
       `${location.address}, Building ${i + 1}, Suite ${i + 1}00, at the north gate of the ` +
       'Corpus Christi Municipal Recreation District grounds, past the visitor parking lot',
   }));
+}
+
+/** A calendar date counted from today's date at UTC-12, the date the pages read, so a season seeded with it keeps its phase as the test runs. */
+export function dateFromToday(days: number): string {
+  return addCalendarDays(dateAtUtcMinus12(Date.now()), days);
 }

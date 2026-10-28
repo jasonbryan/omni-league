@@ -440,6 +440,7 @@ test.describe('Staff: members and the Overview tile', () => {
         'Locations',
         'Leagues',
         'Staff',
+        'Details',
         'Public page',
         'Your organizations',
       ]);

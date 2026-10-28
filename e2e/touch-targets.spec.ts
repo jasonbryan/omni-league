@@ -6,6 +6,7 @@ import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
 import {
+  dateFromToday,
   numberedLocations,
   numberedSeasons,
   seedSeasons,
@@ -189,6 +190,29 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     expect(linkIsHit, 'a link in a check box row description is not covered by the row').toBe(true);
   });
 
+  test('the open seasons of the organization page: the cards, their Register links, and the hero button', async ({
+    page,
+  }) => {
+    const tenant = await seedPublicTenant();
+    await seedSeasons(tenant, FIRST_LEAGUE, [
+      {
+        name: 'Open Season',
+        slug: 'open-season',
+        startDate: dateFromToday(30),
+        endDate: dateFromToday(90),
+        registrationDeadline: dateFromToday(10),
+      },
+    ]);
+    await visit(page, tenant.path, tenant.name);
+    const section = page.locator('#registration-open');
+    await expect(section.locator(':scope > ul > li')).toHaveCount(1);
+    expect(await expectTargets(page, section)).toBeGreaterThan(1);
+    expect(
+      await expectTargets(page, page.getByRole('link', { name: 'Register for a season' })),
+    ).toBe(1);
+    await expectAccessible(page);
+  });
+
   test('the app: Your organizations, create organization, the admin pages, the league page, and the menu sheet', async ({
     page,
   }) => {
@@ -228,6 +252,7 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
       [`${base}/locations`, 'Locations'],
       [`${base}/leagues`, 'Leagues'],
       [`${base}/staff`, 'Staff'],
+      [`${base}/details`, 'Details'],
       [`${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]],
     ];
     for (const [path, heading] of routes) {
@@ -240,10 +265,9 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
 
     await test.step('rows of check boxes and radio buttons', async () => {
       await visit(page, `${base}/leagues`, 'Leagues');
+      await expect(page.locator('#create-league form')).toBeVisible();
       expect(await expectRows(page)).toBeGreaterThan(0);
       await visit(page, `${base}/staff`, 'Staff');
-      expect(await expectRows(page)).toBeGreaterThan(0);
-      await visit(page, `${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]);
       expect(await expectRows(page)).toBeGreaterThan(0);
     });
 

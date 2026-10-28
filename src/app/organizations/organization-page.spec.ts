@@ -34,6 +34,7 @@ async function open(url = `/organizations/${GULF_COAST.slug}`): Promise<RouterTe
 const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
+const OPEN_SEASONS = 'seasons:listOpenForOrganization';
 
 function subscription(name = HEADER): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
@@ -60,6 +61,8 @@ function text(element: Element | null | undefined): string {
 const head = () => TestBed.inject(DOCUMENT).head;
 const metaContent = (property: string) =>
   head().querySelector(`meta[property="${property}"]`)?.getAttribute('content') ?? null;
+const descriptionContent = () =>
+  head().querySelector('meta[name="description"]')?.getAttribute('content') ?? null;
 const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
 
 // Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
@@ -70,7 +73,9 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear();
   // The page removes its tags on destroy; make sure no spec leaks one into the next.
-  for (const el of head().querySelectorAll('meta[property^="og:"], link[rel="canonical"]')) {
+  for (const el of head().querySelectorAll(
+    'meta[property^="og:"], meta[name="description"], link[rel="canonical"]',
+  )) {
     el.remove();
   }
 });
@@ -86,6 +91,7 @@ describe('OrganizationPage', () => {
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 1 } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1 } },
+      { name: OPEN_SEASONS, args: { orgSlug: 'gulf-coast-sport-social' } },
     ]);
   });
 
@@ -149,14 +155,35 @@ describe('OrganizationPage', () => {
         ...host(harness).querySelectorAll('section[aria-labelledby="leagues-heading"] li'),
       ].map((row) => [...row.querySelectorAll('h3, p')].map(text));
       expect(lines).toEqual([
-        ['Coed 7v7 Rec', 'Coed · 7v7 · Rec', 'Soccer · Bayside Athletic Complex'],
-        ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+", 'Soccer · Bayside Athletic Complex'],
-        ['Sunday Reverse Coed 4s', 'Coed · 4v4 · BB', 'Beach volleyball · North Beach Sand Courts'],
-        ['Thursday Night Coed 2s', 'Coed · 2v2 · B', 'Beach volleyball · North Beach Sand Courts'],
+        [
+          'Coed 7v7 Rec',
+          'Coed · 7v7 · Rec',
+          'Soccer · Bayside Athletic Complex',
+          'No upcoming season',
+        ],
+        [
+          "Men's Over-30 11v11",
+          "Men's · 11v11 · Rec · 30+",
+          'Soccer · Bayside Athletic Complex',
+          'No upcoming season',
+        ],
+        [
+          'Sunday Reverse Coed 4s',
+          'Coed · 4v4 · BB',
+          'Beach volleyball · North Beach Sand Courts',
+          'No upcoming season',
+        ],
+        [
+          'Thursday Night Coed 2s',
+          'Coed · 2v2 · B',
+          'Beach volleyball · North Beach Sand Courts',
+          'No upcoming season',
+        ],
         [
           'Wednesday Coed Slow-Pitch',
           'Coed · 10v10 · Rec',
           'Softball · Flour Bluff Softball Park, Bayside Athletic Complex',
+          'No upcoming season',
         ],
       ]);
     });
@@ -201,6 +228,7 @@ describe('OrganizationPage', () => {
       expect([...(row?.querySelectorAll('h3, p') ?? [])].map(text)).toEqual([
         'Coed 7v7 Rec',
         'Soccer · Bayside Athletic Complex',
+        'No upcoming season',
       ]);
       expect(host(harness).querySelector('app-server-error-view')).toBeNull();
     });
@@ -224,6 +252,7 @@ describe('OrganizationPage', () => {
       expect(root.querySelectorAll('header')).toHaveLength(1);
       expect(root.querySelectorAll('footer')).toHaveLength(1);
       expect([...root.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label'))).toEqual([
+        'Sports',
         'Footer',
       ]);
       expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
@@ -243,6 +272,24 @@ describe('OrganizationPage', () => {
       expect(head().querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     });
 
+    it('sets the description tags from the result, as today, when the organization has no City, state', () => {
+      const description = 'Leagues and locations of Gulf Coast Sport & Social on Omni League.';
+      expect(metaContent('og:description')).toBe(description);
+      expect(descriptionContent()).toBe(description);
+    });
+
+    it('ends the description tags with the City, state when there is one, and drops it when it goes', async () => {
+      emit({ ...GULF_COAST, cityState: 'Corpus Christi, TX' });
+      await settle(harness);
+      const description =
+        'Leagues and locations of Gulf Coast Sport & Social on Omni League in Corpus Christi, TX.';
+      expect(metaContent('og:description')).toBe(description);
+      expect(descriptionContent()).toBe(description);
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(metaContent('og:description')).not.toContain('Corpus Christi');
+    });
+
     it('updates the rows and the hero line in place when page 1 or the totals change', async () => {
       const before = client.subscriptions.length;
       emit({
@@ -250,7 +297,13 @@ describe('OrganizationPage', () => {
         leagueCount: 6,
         locationCount: 4,
         leagues: [
-          { name: 'Adult League', slug: 'adult-league', sportName: 'Soccer', locationNames: [] },
+          {
+            name: 'Adult League',
+            slug: 'adult-league',
+            sportName: 'Soccer',
+            locationNames: [],
+            seasons: [],
+          },
           ...GULF_COAST.leagues.slice(0, 4),
         ],
       });
@@ -274,6 +327,55 @@ describe('OrganizationPage', () => {
       expect(metaContent('og:title')).toBeNull();
       expect(metaContent('og:url')).toBeNull();
       expect(canonical()).toBeNull();
+    });
+
+    it('removes its description tag when the visitor leaves the page', async () => {
+      expect(descriptionContent()).not.toBeNull();
+      await harness.navigateByUrl('/elsewhere');
+      expect(descriptionContent()).toBeNull();
+    });
+  });
+
+  describe('sport chips', () => {
+    it('shows All sports and one chip per sport under the hero, All sports current', async () => {
+      const harness = await open();
+      emit(GULF_COAST);
+      await settle(harness);
+      const nav = host(harness).querySelector('nav[aria-label="Sports"]');
+      expect(
+        [...(nav?.querySelectorAll('a') ?? [])].map((a) => [
+          text(a),
+          a.getAttribute('aria-current'),
+        ]),
+      ).toEqual([
+        ['All sports 5 leagues', 'page'],
+        ['Beach volleyball 2 leagues', null],
+        ['Soccer 2 leagues', null],
+        ['Softball 1 league', null],
+      ]);
+    });
+
+    it('shows no chips for an organization with one sport', async () => {
+      const oneSport: PublicOrganizationPage = {
+        ...GULF_COAST,
+        leagueCount: 2,
+        locationCount: 1,
+        sportCount: 1,
+        sports: [GULF_COAST.sports[1]],
+        leagues: GULF_COAST.leagues.slice(0, 2),
+        locations: GULF_COAST.locations.slice(0, 1),
+      };
+      const harness = await open();
+      emit(oneSport);
+      await settle(harness);
+      expect(host(harness).querySelector('nav[aria-label="Sports"]')).toBeNull();
+    });
+
+    it('shows no page control on the organization page, which lists page 1 only', async () => {
+      const harness = await open();
+      emit({ ...GULF_COAST, leagueCount: 13 });
+      await settle(harness);
+      expect(host(harness).querySelector('app-page-control')).toBeNull();
     });
   });
 
@@ -319,7 +421,7 @@ describe('OrganizationPage', () => {
   });
 
   describe('loading', () => {
-    it('shows a skeleton with the status until all three results have arrived', async () => {
+    it('shows a skeleton with the status until all four results have arrived', async () => {
       const harness = await open();
       const results = queryResults(GULF_COAST);
       const main = () => host(harness).querySelector('main');
@@ -331,6 +433,9 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(main()?.querySelector('[role="status"]')).not.toBeNull();
       subscription(LOCATIONS).emit(results[LOCATIONS]);
+      await settle(harness);
+      expect(text(main()?.querySelector('[role="status"]'))).toBe('Loading the open seasons.');
+      subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);
       expect(main()?.querySelector('[role="status"]')).toBeNull();
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
@@ -392,11 +497,11 @@ describe('OrganizationPage', () => {
       expect(canonical()).toBeNull();
     });
 
-    for (const name of [LEAGUES, LOCATIONS]) {
+    for (const name of [LEAGUES, LOCATIONS, OPEN_SEASONS]) {
       it(`renders the server-error view when ${name} fails, until it delivers a result`, async () => {
         const harness = await open();
         const results = queryResults(GULF_COAST);
-        for (const other of [HEADER, LEAGUES, LOCATIONS].filter((n) => n !== name)) {
+        for (const other of [HEADER, LEAGUES, LOCATIONS, OPEN_SEASONS].filter((n) => n !== name)) {
           subscription(other).emit(results[other]);
         }
         subscription(name).fail(new Error('connect ECONNREFUSED internal-db.corp.example:443'));

@@ -1,6 +1,7 @@
 import { RenderMode } from '@angular/ssr';
 import { AccountPage } from './account/account-page';
 import { AccountSettingsPage } from './account/account-settings-page';
+import { FindPage } from './find/find-page';
 import { AcceptInvitePage } from './invites/accept-invite-page';
 import { captureInviteToken } from './invites/capture-invite-token';
 import { routes } from './app.routes';
@@ -11,6 +12,7 @@ import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminStaff } from './organizations/admin/admin-staff';
+import { AdminDetails } from './organizations/admin/admin-details';
 import { LeaguePage } from './organizations/league/league-page';
 import { AdminLocations } from './organizations/admin/admin-locations';
 import { AdminOverview } from './organizations/admin/admin-overview';
@@ -39,7 +41,7 @@ function directives(value: string): Map<string, string | true> {
 }
 
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, organizations/:orgSlug Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, leagues Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       {
@@ -68,7 +70,17 @@ describe('Route tables', () => {
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
       },
       {
+        path: 'leagues',
+        renderMode: RenderMode.Server,
+        headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+      },
+      {
         path: 'organizations/:orgSlug',
+        renderMode: RenderMode.Server,
+        headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
+      },
+      {
+        path: 'organizations/:orgSlug/sports/:sport',
         renderMode: RenderMode.Server,
         headers: { 'Cache-Control': PUBLIC_PAGE_CACHE },
       },
@@ -113,10 +125,12 @@ describe('Route tables', () => {
     ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the league page, the season page, sign-up, sign-in, invites/accept, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, sign-up, sign-in, invites/accept, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
+      'leagues',
       'organizations/:orgSlug',
+      'organizations/:orgSlug/sports/:sport',
       'organizations/:orgSlug/leagues/:leagueSlug',
       'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
       'sign-up',
@@ -131,8 +145,20 @@ describe('Route tables', () => {
     expect(home.title).toBe('Omni League');
   });
 
+  it('leagues lazy-loads the find page', async () => {
+    const route = routes.find((r) => r.path === 'leagues');
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(FindPage);
+  });
+
   it('organizations/:orgSlug lazy-loads the organization page', async () => {
     const route = routes.find((r) => r.path === 'organizations/:orgSlug');
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(OrganizationPage);
+  });
+
+  it('organizations/:orgSlug/sports/:sport lazy-loads the organization page, which filters to the sport', async () => {
+    const route = routes.find((r) => r.path === 'organizations/:orgSlug/sports/:sport');
     expect(route?.component).toBeUndefined();
     expect(await route?.loadComponent?.()).toBe(OrganizationPage);
   });
@@ -209,12 +235,19 @@ describe('Route tables', () => {
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);
-    expect(admin?.children?.map((r) => r.path)).toEqual(['', 'locations', 'leagues', 'staff']);
+    expect(admin?.children?.map((r) => r.path)).toEqual([
+      '',
+      'locations',
+      'leagues',
+      'staff',
+      'details',
+    ]);
     expect(admin?.children?.[0]?.pathMatch).toBe('full');
     expect(await admin?.children?.[0]?.loadComponent?.()).toBe(AdminOverview);
     expect(await admin?.children?.[1]?.loadComponent?.()).toBe(AdminLocations);
     expect(await admin?.children?.[2]?.loadComponent?.()).toBe(AdminLeagues);
     expect(await admin?.children?.[3]?.loadComponent?.()).toBe(AdminStaff);
+    expect(await admin?.children?.[4]?.loadComponent?.()).toBe(AdminDetails);
     expect(account?.path).toBe('');
     expect(account?.title).toBe('Home | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);

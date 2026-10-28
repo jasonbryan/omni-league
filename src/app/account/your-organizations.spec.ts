@@ -104,20 +104,25 @@ describe('YourOrganizations', () => {
     expect(section.querySelector('a')).toBeNull();
   });
 
-  it('none (state 2): the empty state with the Create an organization button', async () => {
+  it('none (state 2): the empty state with the Create an organization and Find a league buttons', async () => {
     await open();
     await answer([]);
     expect(section.querySelector('[role="status"]')).toBeNull();
     expect(text(section.querySelector('p.font-medium'))).toBe('No organizations yet');
     expect(text(section)).toContain(
-      'Create one to run your leagues on Omni League, or ask an org admin to invite you to theirs.',
+      'Ask your league organizer for an invite or registration link to join a league, or create an organization to run your own.',
     );
     const links = [...section.querySelectorAll('a')];
-    expect(links).toHaveLength(1);
+    expect(links).toHaveLength(2);
     expect(links[0]?.getAttribute('href')).toBe('/app/organizations/new');
     expect(text(links[0])).toBe('Create an organization');
     expect([...links[0].classList].sort()).toEqual(
-      buttonVariants({ size: 'lg' }).split(' ').sort(),
+      buttonVariants({ size: 'md' }).split(' ').sort(),
+    );
+    expect(links[1]?.getAttribute('href')).toBe('/leagues');
+    expect(text(links[1])).toBe('Find a league');
+    expect([...links[1].classList].sort()).toEqual(
+      buttonVariants({ variant: 'outline', size: 'md' }).split(' ').sort(),
     );
     expect(section.querySelector('ul')).toBeNull();
   });
@@ -129,7 +134,7 @@ describe('YourOrganizations', () => {
     expect(text(header)).toBe('Your organizationsCreate an organization');
     expect(header?.querySelector('a')?.getAttribute('href')).toBe('/app/organizations/new');
     expect([...header!.querySelector('a')!.classList].sort()).toEqual(
-      buttonVariants({ variant: 'outline', size: 'lg' }).split(' ').sort(),
+      buttonVariants({ variant: 'outline', size: 'md' }).split(' ').sort(),
     );
 
     expect(section.querySelector('ul')?.getAttribute('role')).toBe('list');

@@ -63,12 +63,17 @@ describe('PublicLayout server render', () => {
     const signIn = body.querySelector('header a[routerlink="/sign-in"]');
     const href = new URL(signIn?.getAttribute('href') ?? '', 'http://localhost');
     expect(`${href.pathname}${href.search}`).toBe('/sign-in?returnTo=%2Forganizations%2Ftest');
+    const manage = body.querySelector('footer a[routerlink="/sign-in"]');
+    const manageHref = new URL(manage?.getAttribute('href') ?? '', 'http://localhost');
+    expect(`${manageHref.pathname}${manageHref.search}`).toBe(
+      '/sign-in?returnTo=%2Forganizations%2Ftest',
+    );
     expect(body.querySelector('main#main[tabindex="-1"] h1')?.textContent).toBe('Page heading');
     expect(
       [...body.querySelectorAll('footer nav[aria-label="Footer"] a')].map((a) =>
         a.textContent.trim(),
       ),
-    ).toEqual(['Your account', 'Create an organization', 'Sign in to manage']);
+    ).toEqual(['Find a league', 'Your account', 'Create an organization', 'Sign in to manage']);
 
     expect(html).not.toContain('Open navigation');
     expect(body.querySelector('aside, button, [role="dialog"]')).toBeNull();

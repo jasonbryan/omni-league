@@ -42,7 +42,7 @@ describe('AdminSidebar', () => {
     expect(text(nav.querySelector('p.text-xs'))).toBe('Admin area');
   });
 
-  it('lists Overview, Locations, Leagues, and Staff, then Public page and Your organizations, in two lists', async () => {
+  it('lists Overview, Locations, Leagues, Staff, and Details, then Public page and Your organizations, in two lists', async () => {
     const { host } = await render(BASE);
     const lists = [...host.querySelectorAll('nav ul')];
     expect(lists).toHaveLength(2);
@@ -54,6 +54,7 @@ describe('AdminSidebar', () => {
       ['Locations', `${BASE}/locations`],
       ['Leagues', `${BASE}/leagues`],
       ['Staff', `${BASE}/staff`],
+      ['Details', `${BASE}/details`],
     ]);
     expect(links(lists[1])).toEqual([
       ['Public page', `/organizations/${COASTAL.slug}`],
@@ -103,6 +104,15 @@ describe('AdminSidebar', () => {
     const current = host.querySelectorAll('[aria-current="page"]');
     expect(current).toHaveLength(1);
     expect(text(current[0])).toBe('Staff');
+    expect(classes(current[0])).toEqual(tokens(CURRENT));
+  });
+
+  it('marks Details current with aria-current="page" on the details path', async () => {
+    const { host } = await render(`${BASE}/details`);
+    const current = host.querySelectorAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(text(current[0])).toBe('Details');
+    expect(current[0].getAttribute('href')).toBe(`${BASE}/details`);
     expect(classes(current[0])).toEqual(tokens(CURRENT));
   });
 
