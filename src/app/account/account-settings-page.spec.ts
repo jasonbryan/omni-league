@@ -145,7 +145,7 @@ describe('AccountSettingsPage', () => {
     const button = signOutButton(page)!;
     expect(button.getAttribute('type')).toBe('button');
     expect([...button.classList].sort()).toEqual(
-      buttonVariants({ variant: 'outline', size: 'lg' }).split(' ').sort(),
+      buttonVariants({ variant: 'outline', size: 'md' }).split(' ').sort(),
     );
     button.click();
     await settle();

@@ -338,7 +338,7 @@ test.describe('sign-up', () => {
   test('returnTo=//evil.example/x lands on /app', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, newUser('Return'), '/sign-up?returnTo=%2F%2Fevil.example%2Fx');
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   });
 
   for (const raw of [
@@ -357,7 +357,7 @@ test.describe('sign-up', () => {
         const tokens = tokensSettled(page);
         await signUp(page, newUser('Variant'), `/sign-up${query}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
         await tokens;
 
         await page.goto(`/sign-up${query}`);

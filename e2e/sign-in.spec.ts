@@ -198,7 +198,7 @@ test.describe('sign-in', () => {
         const tokens = tokensSettled(page);
         await signInAs(page, user, `/sign-in?returnTo=${encodeURIComponent(raw)}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
         await tokens;
         expect(offSite).toEqual([]);
       },
