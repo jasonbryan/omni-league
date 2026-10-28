@@ -589,10 +589,23 @@ export const AREAS = [
     specs: [SESSION],
   },
   {
-    // The account link shows on every page of a signed-in visitor, and the specs that sign a user in read it.
+    // The account link shows on every public page for a signed-in visitor, and the specs that sign a user in read it.
     name: 'account link',
     test: named('src/app/shell/', ['account-link']),
     specs: [SESSION],
+  },
+  {
+    // The shell wraps every signed-in page, so the specs that sign a user in run with it.
+    name: 'app shell',
+    test: named('src/app/shell/', [
+      'shell',
+      'shell-sidebar',
+      'account-row',
+      'home-sidebar',
+      'sidebar-classes',
+      'url-path',
+    ]),
+    specs: ['app-shell', 'shell-sheet', SESSION],
   },
   {
     name: 'not-found view',

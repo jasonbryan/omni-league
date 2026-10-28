@@ -14,32 +14,23 @@ import {
   contentChild,
   createComponent,
   inject,
+  input,
   inputBinding,
   signal,
   viewChild,
   type ComponentRef,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, NavigationStart, Router, RouterLink } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideMenu, lucideTrophy } from '@ng-icons/lucide';
+import { lucideMenu } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
+import { AccountRow } from './account-row';
+import { HomeSidebar } from './home-sidebar';
 import { OfflineNote } from './offline-note';
 import type { ShellSheet } from './shell-sheet';
 import { ShellSidebar } from './shell-sidebar';
-import { TopBarAccount } from './top-bar-account';
-
-/**
- * A bare `#main` would resolve to `/#main` because of `<base href="/">`. The router's URL is the source, not `location`, and leading slashes and backslashes collapse to one,
- * since a browser reads them as the start of another host (`/(//evil.com)` serializes to `//evil.com`). With `withQuery` false the query string is dropped:
- * Netlify's CDN may store the HTML of a public page, and a query string can carry a one-time token.
- */
-export function skipLinkHref(router: Router, url: string, withQuery = true): string {
-  const tree = router.parseUrl(url);
-  tree.fragment = 'main';
-  if (!withQuery) tree.queryParams = {};
-  return router.serializeUrl(tree).replace(/^[/\\]+/, '/');
-}
+import { skipLinkHref } from './skip-link';
 
 /** Imports the phone sheet's chunk. A token so that tests can hold the import back. */
 export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('./shell-sheet')>>(
@@ -54,8 +45,8 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
  */
 @Component({
   selector: 'app-shell',
-  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink, TopBarAccount],
-  providers: [provideIcons({ lucideMenu, lucideTrophy })],
+  imports: [AccountRow, HomeSidebar, NgIcon, NgTemplateOutlet, OfflineNote],
+  providers: [provideIcons({ lucideMenu })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'dropPendingOpen()' },
   template: `
@@ -65,18 +56,23 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
       class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
       >Skip to main content</a
     >
-    <div class="flex min-h-dvh flex-col">
-      <!-- The negative scroll margin cancels html's scroll-padding-top (base.css) on the header and everything in it. The header is always in view, so focusing one of its controls (by Tab, or focus returning to the menu button as the sheet closes) must not scroll the page. -->
-      <header
-        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
-      >
-        @if (sidebar()) {
+    <div class="min-h-dvh bg-background lg:flex lg:[--top-bar-h:0px]">
+      <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
+        <div class="sticky top-0 flex h-dvh flex-col px-3 py-4">
+          <ng-container [ngTemplateOutlet]="sidebarBody" />
+        </div>
+      </div>
+      <div class="flex min-h-dvh min-w-0 flex-1 flex-col">
+        <!-- The negative scroll margin cancels html's scroll-padding-top (base.css) on the header and everything in it. The header is always in view, so focusing one of its controls (by Tab, or focus returning to the menu button as the sheet closes) must not scroll the page. -->
+        <header
+          class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:hidden [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
+        >
           <!-- The classes are those of hlmBtn variant="ghost" size="icon-lg", so the server-rendered button needs none of the helm button code. -->
           <button
             #menuButton
             type="button"
             data-slot="button"
-            class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground size-9 -ms-1.5 lg:hidden"
+            class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground size-9 -ms-1.5"
             aria-label="Open navigation"
             aria-haspopup="dialog"
             [attr.aria-expanded]="sheetOpen()"
@@ -85,39 +81,34 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
           >
             <ng-icon name="lucideMenu" class="text-xl" aria-hidden="true" />
           </button>
-        }
-        <a
-          routerLink="/"
-          class="flex items-center gap-2 rounded-md text-base font-semibold pointer-coarse:min-h-11"
-        >
-          <ng-container [ngTemplateOutlet]="brand" />
-        </a>
-        <app-top-bar-account />
-      </header>
-      <app-offline-note />
-      <div class="flex flex-1">
-        @if (sidebar(); as sidebar) {
-          <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
-            <div
-              class="sticky top-[calc(3.5rem+var(--offline-note-h,0px))] max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))] overflow-y-auto px-3 py-5"
-            >
-              <ng-container [ngTemplateOutlet]="sidebar.template" />
-            </div>
-          </div>
-        }
+          <p class="min-w-0 flex-1 truncate text-sm font-semibold">{{ title() }}</p>
+          <app-account-row variant="initials" />
+        </header>
+        <app-offline-note />
         <main #main id="main" tabindex="-1" class="min-w-0 flex-1 focus:outline-none">
           <ng-content />
         </main>
       </div>
     </div>
 
-    <ng-template #brand>
-      <span
-        class="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
-      >
-        <ng-icon name="lucideTrophy" class="text-lg" aria-hidden="true" />
-      </span>
-      Omni League
+    <ng-template #sidebarBody>
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        @if (sidebar(); as sidebar) {
+          <ng-container [ngTemplateOutlet]="sidebar.template" />
+        } @else if (sidebarPending()) {
+          <p role="status" class="sr-only">Loading navigation.</p>
+          <div aria-hidden="true" class="flex flex-col gap-2 px-2">
+            @for (width of skeletonWidths; track $index) {
+              <div [class]="'h-9 rounded-lg bg-muted motion-safe:animate-pulse ' + width"></div>
+            }
+          </div>
+        } @else {
+          <app-home-sidebar />
+        }
+      </div>
+      <div class="shrink-0 border-t border-sidebar-border pt-3">
+        <app-account-row />
+      </div>
     </ng-template>
   `,
 })
@@ -129,10 +120,17 @@ export class Shell {
   private readonly environmentInjector = inject(EnvironmentInjector);
   private readonly injector = inject(Injector);
 
+  /** True while the page waits for the sidebar it will render, so the home sidebar does not show first. */
+  readonly sidebarPending = input(false);
+
   protected readonly sidebar = contentChild(ShellSidebar);
+  protected readonly title = computed(
+    () => this.sidebar()?.appShellSidebarTitle() ?? 'Omni League',
+  );
+  protected readonly skeletonWidths = ['w-full', 'w-5/6', 'w-4/6', 'w-5/6'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
-  private readonly brand = viewChild.required<TemplateRef<unknown>>('brand');
+  private readonly sidebarBodyTemplate = viewChild.required<TemplateRef<unknown>>('sidebarBody');
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -204,16 +202,14 @@ export class Shell {
     // The shell's onDestroy has already run, so a sheet created now would never be destroyed and
     // could still open over the next page.
     if (this.destroyRef.destroyed) return null;
-    const sidebar = this.sidebar();
     const menuButton = this.menuButton()?.nativeElement;
-    if (!sidebar || !menuButton) throw new Error('app-shell: no sidebar for the sheet');
+    if (!menuButton) throw new Error('app-shell: no menu button for the sheet');
     // The element injector keeps the shell's providers in reach.
     const ref = createComponent(ShellSheet, {
       environmentInjector: this.environmentInjector,
       elementInjector: this.injector,
       bindings: [
-        inputBinding('sidebar', () => this.sidebar()?.template ?? sidebar.template),
-        inputBinding('brand', this.brand),
+        inputBinding('sidebar', this.sidebarBodyTemplate),
         inputBinding('returnFocus', () => menuButton),
       ],
     });

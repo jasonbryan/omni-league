@@ -16,10 +16,15 @@ const FORMAT_MESSAGE =
 
 const CITY_STATE_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.';
 
-const FORM_ORDER = [
+/** What an `/app` page puts before `<main>` in the Tab order: the slim bar below 1024px, the sidebar from it. */
+const shellOrder = (): string[] =>
+  test.info().project.use.isMobile
+    ? ['button[aria-label="Open navigation"]', 'header a[href="/app/account"]']
+    : ['a[href="/"]', 'nav[aria-label="Your account"] a[href="/app"]', 'a[href="/app/account"]'];
+
+const formOrder = (): string[] => [
   'a[href$="#main"]',
-  'header a[href="/"]',
-  'header a[href="/app/account"]',
+  ...shellOrder(),
   'main a[href="/app"]',
   '#name',
   '#cityState',
@@ -57,8 +62,7 @@ test.describe('create an organization', () => {
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
-        'header a[href="/"]',
-        'header a[href="/app/account"]',
+        ...shellOrder(),
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
       ],
@@ -104,7 +108,7 @@ test.describe('create an organization', () => {
       await expect(field(page, id)).toHaveCSS('font-size', phone ? '16px' : '14px');
     }
     await screenshot(page, testInfo, '64-new-empty');
-    await expectAccessible(page, { expectedOrder: FORM_ORDER });
+    await expectAccessible(page, { expectedOrder: formOrder() });
   });
 
   test(
@@ -147,7 +151,7 @@ test.describe('create an organization', () => {
     }
     await expect(field(page, 'name')).toBeFocused();
     await screenshot(page, testInfo, '64-new-errors-required');
-    await expectAccessible(page, { expectedOrder: FORM_ORDER });
+    await expectAccessible(page, { expectedOrder: formOrder() });
     await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
   });
 
@@ -174,7 +178,7 @@ test.describe('create an organization', () => {
       'aria-describedby',
       'slug-description slug-error',
     );
-    await expectAccessible(page, { expectedOrder: FORM_ORDER });
+    await expectAccessible(page, { expectedOrder: formOrder() });
 
     await field(page, 'slug').fill('fixed-slug');
     await expect(fieldError(page, 'slug')).toHaveCount(0);
@@ -274,7 +278,7 @@ test.describe('create an organization', () => {
     await field(page, 'slug').fill('new');
     await createButton(page).click();
     await screenshot(page, testInfo, '64-new-reserved');
-    await expectAccessible(page, { expectedOrder: FORM_ORDER });
+    await expectAccessible(page, { expectedOrder: formOrder() });
   });
 
   test.describe('a slug that is taken', () => {
@@ -300,7 +304,7 @@ test.describe('create an organization', () => {
       await expect(field(page, 'name')).toHaveValue('Another Organization');
       await expect(page).toHaveURL(`${baseURL}/app/organizations/new`);
       await screenshot(page, testInfo, '64-new-taken');
-      await expectAccessible(page, { expectedOrder: FORM_ORDER });
+      await expectAccessible(page, { expectedOrder: formOrder() });
 
       const free = newOrganization('Free');
       await field(page, 'slug').fill(free.slug);

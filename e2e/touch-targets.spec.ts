@@ -335,7 +335,7 @@ test.describe('desktop: controls keep their sizes', () => {
     const base = `/app/organizations/${tenant.slug}`;
     await visit(page, `${base}/locations`, 'Locations');
     const nav = page.getByRole('navigation', { name: `${tenant.name} admin` });
-    expect(await heightOf(nav.getByRole('link', { name: 'Locations' }))).toBe(32);
+    expect(await heightOf(nav.getByRole('link', { name: 'Locations' }))).toBe(36);
     expect(await heightOf(page.getByRole('button', { name: /^Add location/ }))).toBe(36);
     await visit(page, `${tenant.path}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]);
     expect(

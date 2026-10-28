@@ -6,7 +6,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
-import { PlainTestPage } from './testing/test-pages';
+import { TopBarTestPage } from './testing/test-pages';
 
 describe('Top bar account area', () => {
   let auth: FakeAuthClient;
@@ -20,7 +20,7 @@ describe('Top bar account area', () => {
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
-        provideRouter([{ path: '**', component: PlainTestPage }]),
+        provideRouter([{ path: '**', component: TopBarTestPage }]),
       ],
     });
     if (session !== undefined) auth.emitSession(session);
@@ -34,7 +34,7 @@ describe('Top bar account area', () => {
   const signInLink = (page: HTMLElement) =>
     header(page).querySelector<HTMLAnchorElement>('a[href^="/sign-in"]');
   const accountLink = (page: HTMLElement) =>
-    header(page).querySelector<HTMLAnchorElement>('a[href="/app"], a[href="/app/account"]');
+    header(page).querySelector<HTMLAnchorElement>('a[href="/app"]');
 
   async function signedIn(name: string | null) {
     TestBed.inject(AuthService).onChange(true);
@@ -142,37 +142,6 @@ describe('Top bar account area', () => {
       );
       expect(link.classList.contains('max-w-36')).toBe(true);
       expect(link.querySelector('.truncate')).not.toBeNull();
-    });
-
-    describe('inside the app', () => {
-      it.each(['/app', '/app/organizations/new', '/app/no/such/page'])(
-        'on %s the link opens Account settings, named "Account settings: <name>"',
-        async (url) => {
-          const page = await open(url, { id: 's1' });
-          await signedIn('Maya Okafor');
-          const link = accountLink(page)!;
-          expect(link.getAttribute('href')).toBe('/app/account');
-          expect(link.querySelector('.sr-only')?.textContent).toBe('Account settings: ');
-          expect(link.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-            'MOAccount settings: Maya Okafor',
-          );
-        },
-      );
-
-      it('marks the link as the current page on /app/account', async () => {
-        const page = await open('/app/account', { id: 's1' });
-        await signedIn('Devon Reyes');
-        expect(accountLink(page)?.getAttribute('aria-current')).toBe('page');
-      });
-
-      it.each(['/app', '/app/organizations/new', '/app/account/extra'])(
-        'does not mark the link as the current page on %s',
-        async (url) => {
-          const page = await open(url, { id: 's1' });
-          await signedIn('Devon Reyes');
-          expect(accountLink(page)?.hasAttribute('aria-current')).toBe(false);
-        },
-      );
     });
 
     it('keeps opening /app on a public page, whatever the path looks like', async () => {

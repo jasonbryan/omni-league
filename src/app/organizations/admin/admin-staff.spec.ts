@@ -10,9 +10,9 @@ import {
   adminRoutes,
   COASTAL,
   GET_ADMIN_CONTEXT,
-  ME,
   openAdmin,
   text,
+  expectSubscriptions,
 } from './testing/admin-harness';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'staff', component: AdminStaff }]);
@@ -193,9 +193,8 @@ describe('AdminStaff', () => {
   describe('the page (states 1 and 2)', () => {
     it('asks the staff, pending, and league lists with the organization id, only after the context says ready', async () => {
       await open();
-      expect(o.convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
+      expectSubscriptions(o.convex, [
         [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
-        [ME, {}],
         [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
         [LIST_PENDING, { organizationId: COASTAL.organizationId }],
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],

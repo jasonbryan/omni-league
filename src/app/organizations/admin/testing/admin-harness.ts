@@ -1,3 +1,4 @@
+import { expect } from 'vitest';
 import { Component, type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, type Routes } from '@angular/router';
@@ -83,3 +84,27 @@ export function adminRoutes(AdminArea: Type<unknown>, children: Routes): Routes 
 
 export const text = (element: Element | null | undefined) =>
   element?.textContent?.replace(/\s+/g, ' ').trim();
+
+type Asked = [name: string, args: unknown];
+
+const askedKey = ([name, args]: Asked) => `${name} ${JSON.stringify(args)}`;
+
+/** What the shell adds to every admin page: the account row and the slim bar's `users.me`, and the admin sidebar's four counts. */
+export const SHELL_SUBSCRIPTIONS: Asked[] = [
+  ['users:me', {}],
+  ['users:me', {}],
+  ...[
+    'leagues:publishedCount',
+    'leagues:listForAdmin',
+    'locations:listForAdmin',
+    'memberships:listForOrganization',
+  ].map((name): Asked => [name, { organizationId: COASTAL.organizationId }]),
+];
+
+/** The page asks for these, besides the shell's. */
+export function expectSubscriptions(convex: FakeConvexClient, page: Asked[]): void {
+  const asked = convex.activeSubscriptions.map((s): Asked => [s.name, s.args]);
+  expect(asked.map(askedKey).sort()).toEqual(
+    [...page, ...SHELL_SUBSCRIPTIONS].map(askedKey).sort(),
+  );
+}

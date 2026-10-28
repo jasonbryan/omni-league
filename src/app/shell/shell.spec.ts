@@ -3,18 +3,26 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { CONVEX_CLIENT } from '../core/data/convex';
+import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
-import { LOAD_SHELL_SHEET, Shell, skipLinkHref } from './shell';
+import { LOAD_SHELL_SHEET, Shell } from './shell';
+import { skipLinkHref } from './skip-link';
 import { LOAD_PAGE } from './follow-link';
-import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
+import { PendingTestPage, PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
 async function render(
   page: Type<unknown>,
   url = '/',
   routes: Routes = [{ path: '**', component: page }],
 ): Promise<RouterTestingHarness> {
-  TestBed.configureTestingModule({ providers: [provideRouter(routes)] });
+  TestBed.configureTestingModule({
+    providers: [
+      { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+      provideRouter(routes),
+    ],
+  });
   const harness = await RouterTestingHarness.create();
   await harness.navigateByUrl(url);
   return harness;
@@ -153,39 +161,52 @@ describe('Shell', () => {
     });
   });
 
-  describe('top bar', () => {
-    it('is a header with the logo and "Omni League" linking to /', async () => {
+  describe('slim bar', () => {
+    it('is a header shown below 1024px only, with the menu button, the title, and the account initials', async () => {
       const harness = await render(PlainTestPage);
-      const header = host(harness).querySelector('header');
-      const home = header?.querySelector('a');
-      expect(home?.getAttribute('href')).toBe('/');
-      expect(home?.textContent.trim()).toBe('Omni League');
-      expect(home?.querySelector('ng-icon[aria-hidden="true"] svg')).not.toBeNull();
-      expect(
-        [...header!.querySelectorAll('a')].map((a) => [
-          a.textContent.trim(),
-          a.getAttribute('href'),
-        ]),
-      ).toEqual([
-        ['Omni League', '/'],
-        ['Sign in', '/sign-in?returnTo=%2F'],
-      ]);
+      const header = host(harness).querySelector('header')!;
+      expect(header.classList).toContain('lg:hidden');
+      expect(header.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
+      expect(header.querySelector('p')?.textContent).toBe('Omni League');
+      expect(header.querySelector('app-account-row')).not.toBeNull();
+      expect(header.querySelectorAll('a')).toHaveLength(0);
+    });
+
+    it("names the page's organization", async () => {
+      const harness = await render(SidebarTestPage);
+      expect(host(harness).querySelector('header p')?.textContent).toBe('Test organization');
+    });
+
+    it('has no Sign in link and no link to the public home', async () => {
+      const harness = await render(PlainTestPage);
+      expect(host(harness).querySelector('a[href^="/sign-in"]')).toBeNull();
+      expect(host(harness).querySelector('header a[href="/"]')).toBeNull();
     });
   });
 
   describe('sidebar slot', () => {
-    it('without a sidebar template: no sidebar column, no menu button, and no nav', async () => {
+    const column = (harness: RouterTestingHarness) =>
+      main(harness).parentElement!.previousElementSibling!;
+
+    it('without a sidebar template: renders the home sidebar and the account row in the column before main', async () => {
       const harness = await render(PlainTestPage);
-      expect(host(harness).querySelector('button')).toBeNull();
-      expect(host(harness).querySelector('nav')).toBeNull();
-      expect(main(harness).parentElement?.children).toHaveLength(1);
+      const navs = host(harness).querySelectorAll('nav');
+      expect(navs).toHaveLength(1);
+      expect(navs[0]?.getAttribute('aria-label')).toBe('Your account');
+      expect(column(harness).contains(navs[0] ?? null)).toBe(true);
+      expect(column(harness).querySelector('app-account-row')).not.toBeNull();
+      expect(menuButton(harness)).not.toBeNull();
     });
 
-    it('with a sidebar template: renders it once, in a column before main, and the menu button', async () => {
+    it('with a sidebar template: renders it once in the column, with the account row after it, and not the home sidebar', async () => {
       const harness = await render(SidebarTestPage);
       const navs = host(harness).querySelectorAll('nav[aria-label="Test organization"]');
       expect(navs).toHaveLength(1);
-      expect(main(harness).previousElementSibling?.contains(navs[0])).toBe(true);
+      expect(host(harness).querySelector('nav[aria-label="Your account"]')).toBeNull();
+      const col = column(harness);
+      expect(col.contains(navs[0] ?? null)).toBe(true);
+      const row = col.querySelector('app-account-row')!;
+      expect(navs[0].compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       const button = menuButton(harness);
       expect(button.getAttribute('aria-haspopup')).toBe('dialog');
       expect(button.getAttribute('aria-expanded')).toBe('false');
@@ -194,11 +215,26 @@ describe('Shell', () => {
       expect(dialog()).toBeNull();
     });
 
-    it('styles the menu button as hlmBtn variant="ghost" size="icon-lg", hidden from 1024px', async () => {
+    it('hides the column below 1024px and the top bar from 1024px', async () => {
+      const harness = await render(SidebarTestPage);
+      expect([...column(harness).classList]).toEqual(
+        expect.arrayContaining(['hidden', 'lg:block']),
+      );
+      expect(host(harness).querySelector('header')?.classList).toContain('lg:hidden');
+    });
+
+    it('shows a loading skeleton, not the home sidebar, while the page waits for its sidebar', async () => {
+      const harness = await render(PendingTestPage);
+      expect(host(harness).querySelector('nav')).toBeNull();
+      expect(column(harness).querySelector('[role="status"]')?.textContent).toContain('Loading');
+      expect(column(harness).querySelector('app-account-row')).not.toBeNull();
+    });
+
+    it('styles the menu button as hlmBtn variant="ghost" size="icon-lg"', async () => {
       const harness = await render(SidebarTestPage);
       const expected = hlm(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), '-ms-1.5');
       expect(menuButton(harness).className.split(/\s+/).sort()).toEqual(
-        [...expected.split(/\s+/), 'lg:hidden'].sort(),
+        expected.split(/\s+/).sort(),
       );
     });
 
@@ -305,6 +341,7 @@ describe('Shell', () => {
       expect(sheet?.getAttribute('aria-modal')).toBe('true');
       expect(sheet?.getAttribute('aria-label')).toBe('Navigation');
       expect(sheet?.querySelector('nav[aria-label="Test organization"]')).not.toBeNull();
+      expect(sheet?.querySelector('app-account-row')).not.toBeNull();
       expect(menuButton(harness).getAttribute('aria-expanded')).toBe('true');
       // The helm content's own "Close" button is hidden, so "Close navigation" is the only one.
       const buttons = sheet?.querySelectorAll('button') ?? [];
