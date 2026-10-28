@@ -26,6 +26,8 @@ export const LEGEND =
 
 export const FIELD_ERROR = 'text-destructive text-sm font-normal flex items-start gap-1.5';
 
+export const FIELD_NOTE = 'text-foreground text-sm font-normal flex items-start gap-1.5';
+
 export const FIELD_CONTENT = 'group/field-content flex flex-1 flex-col leading-snug gap-0.5';
 
 export const RADIO_ITEM =

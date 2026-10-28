@@ -124,12 +124,15 @@ test.describe('public layout: signed in', () => {
     },
   );
 
-  test('/app keeps the app shell: its 56px top bar and no footer', async ({ page }) => {
+  test('/app keeps the app shell: a 56px slim bar below 1024px, none from it, and no footer', async ({
+    page,
+  }) => {
     // /app is a Client route: the browser renders it, so there is no hydration log to wait for.
     await signUp(page, newUser('Shell'));
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.locator('footer')).toHaveCount(0);
-    expect((await page.locator('header').boundingBox())?.height).toBe(56);
+    const bar = await page.locator('header').boundingBox();
+    expect(bar?.height).toBe(test.info().project.use.isMobile ? 56 : undefined);
   });
 });
 

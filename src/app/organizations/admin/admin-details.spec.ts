@@ -6,7 +6,14 @@ import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
 import { PRIMARY_BUTTON } from './button-classes';
 import { STICKY_FOOTER } from './sticky-footer';
-import { adminRoutes, COASTAL, GET_ADMIN_CONTEXT, openAdmin, text } from './testing/admin-harness';
+import {
+  adminRoutes,
+  COASTAL,
+  expectPageAndShellSubscriptions,
+  GET_ADMIN_CONTEXT,
+  openAdmin,
+  text,
+} from './testing/admin-harness';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'details', component: AdminDetails }]);
 const URL = `/app/organizations/${COASTAL.slug}/details`;
@@ -73,9 +80,7 @@ describe('AdminDetails', () => {
 
     it('asks nothing beyond the admin context', async () => {
       await open();
-      expect(o.convex.activeSubscriptions.map((s) => s.name).sort()).toEqual(
-        [GET_ADMIN_CONTEXT, 'users:me'].sort(),
-      );
+      expectPageAndShellSubscriptions(o.convex, [[GET_ADMIN_CONTEXT, { slug: COASTAL.slug }]]);
     });
 
     it('shows the name read-only and the City, state with its current value and hint', async () => {

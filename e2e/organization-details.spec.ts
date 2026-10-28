@@ -141,7 +141,7 @@ test.describe('the Details page', () => {
       await page.goto(base);
       const menu = await adminNav(page, tenant.name);
       await expect(menu.locator('[aria-current="page"]')).toHaveText('Overview');
-      await menu.getByRole('link', { name: 'Details' }).click();
+      await menu.getByRole('link', { name: 'Details', exact: true }).click();
       await expect(page).toHaveURL(`${baseURL}${base}/details`);
     }
   });

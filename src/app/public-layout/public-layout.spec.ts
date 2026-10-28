@@ -69,6 +69,13 @@ describe('PublicLayout', () => {
       expect(page.querySelector('header nav')).toBeNull();
     });
 
+    it('hides the footer, and only the footer, while a page skeleton is inside it', async () => {
+      const page = await open();
+
+      const layout = page.querySelector('footer')!.parentElement!;
+      expect(layout.className).toContain('[&:has([data-page-loading])>footer]:hidden');
+    });
+
     it('projects the page into main, after the header and before the footer', async () => {
       const page = await open();
 

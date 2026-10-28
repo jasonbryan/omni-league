@@ -311,8 +311,13 @@ test.describe('sign-up', () => {
     await expectAccessible(page, {
       expectedOrder: [
         'a[href$="#main"]',
-        'header a[href="/"]',
-        'header a[href="/app/account"]',
+        ...(test.info().project.use.isMobile
+          ? ['button[aria-label="Open navigation"]', 'header a[href="/app/account"]']
+          : [
+              'a[href="/"]',
+              'nav[aria-label="Your account"] a[href="/app"]',
+              'a[href="/app/account"]',
+            ]),
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
       ],

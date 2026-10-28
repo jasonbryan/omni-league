@@ -45,7 +45,7 @@ describe('e2eArgs', () => {
 
   it('runs the full suite, with the extra arguments only, for a shared file', () => {
     const { args, specs } = e2eArgs(
-      ['src/app/shell/shell-sheet.ts'],
+      ['src/app/core/auth/auth.service.ts'],
       ['--project=chromium-desktop'],
       {
         sessionSpecs,
@@ -57,7 +57,7 @@ describe('e2eArgs', () => {
 
   it('keeps every spec in a full run that also names a spec', () => {
     const { args, specs } = e2eArgs(
-      ['src/app/shell/shell-sheet.ts'],
+      ['src/app/core/auth/auth.service.ts'],
       ['e2e/season-page.spec.ts', '--project=chromium-desktop'],
       { sessionSpecs },
     );
@@ -67,7 +67,7 @@ describe('e2eArgs', () => {
 
   it('keeps every spec in a full run when a filter has no directory or ends in a line number', () => {
     for (const filter of ['season-page', 'season-page.spec.ts:42']) {
-      const { args } = e2eArgs(['src/app/shell/shell-sheet.ts'], [filter], { sessionSpecs });
+      const { args } = e2eArgs(['src/app/core/auth/auth.service.ts'], [filter], { sessionSpecs });
       assert.deepEqual(args, ['e2e/', filter]);
     }
   });
@@ -212,8 +212,8 @@ describe('npm run e2e:affected entry point', () => {
   it('runs the full suite when a changed file is shared code', () => {
     const { dir } = projectWithStubE2eRun();
     try {
-      mkdirSync(join(dir, 'src', 'app', 'shell'), { recursive: true });
-      writeFileSync(join(dir, 'src', 'app', 'shell', 'shell.ts'), 'new');
+      mkdirSync(join(dir, 'src', 'app', 'core', 'auth'), { recursive: true });
+      writeFileSync(join(dir, 'src', 'app', 'core', 'auth', 'auth.service.ts'), 'new');
       const result = run(dir, []);
       assert.deepEqual(JSON.parse(result.stdout), []);
       assert.match(result.stderr, /need the full suite/);

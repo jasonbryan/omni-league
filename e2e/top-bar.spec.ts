@@ -162,8 +162,10 @@ test.describe('top bar', () => {
 
       await link.click();
       await expect(page).toHaveURL(`${baseURL}/app`);
-      const settingsLink = page.locator('header a[href="/app/account"]');
-      await expect(settingsLink).toHaveAccessibleName(`Account settings: ${user.name}`);
+      const settingsLink = page.getByRole('link', { name: /^Account settings: / });
+      await expect(settingsLink).toHaveAccessibleName(
+        new RegExp(`^Account settings: ${user.name}`),
+      );
       await expect(settingsLink).not.toHaveAttribute('aria-current');
 
       await settingsLink.click();

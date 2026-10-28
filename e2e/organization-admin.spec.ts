@@ -112,21 +112,21 @@ test.describe('the admin area: entry and navigation', () => {
       await expect(main(page).getByRole('heading', { level: 1, name: current })).toBeVisible();
       const nav = await adminNav(page, tenant.name);
       await expect(nav.getByRole('link')).toHaveText([
+        /Switch organization/,
         'Overview',
-        'Locations',
-        'Leagues',
-        'Staff',
+        /^Leagues\d*$/,
+        /^Locations\d*$/,
+        /^Staff\d*$/,
         'Details',
-        'Public page',
-        'Your organizations',
+        'View public page',
       ]);
-      await expect(nav.locator('[aria-current="page"]')).toHaveText(current);
+      await expect(nav.locator('[aria-current="page"]')).toHaveText(new RegExp(`^${current}\\d*$`));
       await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
-      await expect(nav.getByRole('link', { name: 'Public page' })).toHaveAttribute(
+      await expect(nav.getByRole('link', { name: 'View public page' })).toHaveAttribute(
         'href',
         `/organizations/${tenant.slug}`,
       );
-      await expect(nav.getByRole('link', { name: 'Your organizations' })).toHaveAttribute(
+      await expect(nav.getByRole('link', { name: /Switch organization/ })).toHaveAttribute(
         'href',
         '/app',
       );
@@ -136,7 +136,7 @@ test.describe('the admin area: entry and navigation', () => {
         await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused();
       } else {
         await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
-        const column = page.locator('main').locator('xpath=preceding-sibling::div[1]');
+        const column = page.locator('main').locator('xpath=../preceding-sibling::div[1]');
         expect((await column.boundingBox())?.width).toBe(256);
       }
     }
@@ -450,7 +450,8 @@ test.describe('who may open the admin area', () => {
           );
           await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
           await expect(page.locator('body')).not.toContainText(LOCATIONS[0].name);
-          await expect(page.locator('body')).not.toContainText(tenant.name);
+          // The home sidebar lists the organizations this user belongs to, so the page itself is checked.
+          await expect(main(page)).not.toContainText(tenant.name);
         }
         expect(frames.join('\n')).toContain('organizations:getAdminContext');
         expect(frames.join('\n')).not.toContain('locations:listForAdmin');

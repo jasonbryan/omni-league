@@ -68,10 +68,10 @@ test.describe('the phone sheet on the admin area', () => {
       .toBe(true);
 
     await page.evaluate(() => {
-      document.querySelector<HTMLAnchorElement>('header a[href="/"]')?.click();
+      document.querySelector<HTMLAnchorElement>('nav a[href="/app"]')?.click();
     });
-    await expect(page).toHaveURL(`${baseURL}/`);
-    await expect(menuButton(page)).toHaveCount(0);
+    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
     await expect(dialogOf(page)).toHaveCount(0);
     await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
     await expect(page.locator('.cdk-overlay-pane')).toHaveCount(0);

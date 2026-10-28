@@ -46,15 +46,16 @@ const PUBLIC_PAGE = [
   'top-bar',
   'auth-session',
   'public-layout',
+  'public-page-layout-shift',
   'navigation-focus',
 ];
 
 // cache-key samples the sport view's `?page=N` parameter. The league page's breadcrumb links to the sport view.
 const SPORT_VIEW = ['sport-view', 'cache-key'];
 // cache-key samples the league page's `?page=N` parameter.
-const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
+const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the season route.
-const SEASON_PAGE = ['season-page', 'cache-key'];
+const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
 const FIND_PAGE = ['find-a-league', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
@@ -350,6 +351,7 @@ export function buildImportGraph(root) {
  *   test: (file: string) => boolean,
  *   specs: string[],
  *   full?: boolean,
+ *   directOnly?: boolean,
  *   widen?: boolean,
  *   derive?: (graph: ImportGraph, root: string) => { extraSpecs?: string[], filesToSelect?: string[] },
  * }} Rule
@@ -589,10 +591,30 @@ export const AREAS = [
     specs: [SESSION],
   },
   {
-    // The account link shows on every page of a signed-in visitor, and the specs that sign a user in read it.
+    // The account link shows on every public page for a signed-in visitor, and the specs that sign a user in read it.
     name: 'account link',
     test: named('src/app/shell/', ['account-link']),
     specs: [SESSION],
+  },
+  {
+    // The shell wraps every signed-in page, so the specs that sign a user in run with it.
+    name: 'app shell',
+    test: named('src/app/shell/', [
+      'shell',
+      'shell-sidebar',
+      'account-row',
+      'home-sidebar',
+      'sidebar-classes',
+      'url-path',
+    ]),
+    specs: ['app-shell', 'shell-sheet', SESSION],
+  },
+  {
+    // Any file the sheet imports, directly or not, keeps the full suite.
+    name: 'app shell sheet',
+    test: named('src/app/shell/', ['shell-sheet']),
+    specs: ['app-shell', 'shell-sheet', SESSION],
+    directOnly: true,
   },
   {
     name: 'not-found view',
@@ -852,6 +874,9 @@ function widenToImporters(file, rule, selected, context, visiting) {
   if (graph.unresolved.length > 0) throw new FullSuite(graph.unresolved.join('; '));
   for (const importer of graph.importers.get(file) ?? []) {
     const importerRule = AREAS.find((area) => area.test(importer));
+    if (importerRule?.directOnly) {
+      throw new FullSuite(`${file} is reached through ${importer}, which a dynamic import() loads`);
+    }
     if (importerRule === rule) {
       widenToImporters(importer, rule, selected, context, visiting);
     } else if (importerRule) {
@@ -892,6 +917,9 @@ function traceImporters(file, graph, selected, context, visiting, seen) {
   let reached = 0;
   for (const importer of importers) {
     const rule = AREAS.find((area) => area.test(importer));
+    if (rule?.directOnly) {
+      throw new FullSuite(`${file} is reached through ${importer}, which a dynamic import() loads`);
+    }
     if (rule) {
       addRuleSpecs(rule, importer, selected, context, visiting);
       reached += 1;

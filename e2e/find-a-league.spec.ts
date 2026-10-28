@@ -240,6 +240,86 @@ test.describe('find a league: raw server HTML', () => {
     },
   );
 
+  test.describe('by sport and division', () => {
+    const SUNDAY_ELEVEN = 'Sunday Eleven';
+    const FALL_JUNIORS = 'Fall Juniors';
+    const SUNSET_SIXES = 'Sunset Sixes';
+    const MONDAY_NIGHTS = 'Monday Nights';
+    const CREEK = 'Cottonwood Creek Fields';
+
+    /** No name in the tenant holds a sport, gender, format, level, or age word. */
+    async function seedDivisions(): Promise<string> {
+      const tenant = await seedTenant({
+        name: 'Cottonwood Collective',
+        locations: [{ name: CREEK, address: '12 Creek Rd, Fort Collins, CO 80521' }],
+        leagues: [
+          {
+            name: SUNDAY_ELEVEN,
+            sport: 'soccer',
+            locations: [CREEK],
+            division: {
+              gender: 'womens',
+              playersPerSide: 11,
+              level: 'intermediate',
+              ageGroup: 'adult',
+            },
+          },
+          {
+            name: FALL_JUNIORS,
+            sport: 'soccer',
+            locations: [CREEK],
+            division: { gender: 'womens', playersPerSide: 7, level: 'rec', ageGroup: 'u10' },
+          },
+          {
+            name: SUNSET_SIXES,
+            sport: 'beachVolleyball',
+            locations: [CREEK],
+            division: { gender: 'coed', playersPerSide: 6, level: 'rec', ageGroup: 'adult' },
+          },
+          {
+            name: MONDAY_NIGHTS,
+            sport: 'softball',
+            locations: [CREEK],
+            division: { gender: 'coed', playersPerSide: 10, level: 'rec', ageGroup: 'adult' },
+          },
+        ],
+      });
+      return tenant.slug.replace(/^e2e-/, '');
+    }
+
+    const namesFor = async (request: APIRequestContext, q: string) =>
+      resultNames((await raw(request, url(q))).html).sort();
+
+    test('a sport name lists the leagues of that sport', RAW_HTTP, async ({ request }) => {
+      const id = await seedDivisions();
+      expect(await namesFor(request, `soccer ${id}`)).toEqual([FALL_JUNIORS, SUNDAY_ELEVEN]);
+      expect(await namesFor(request, `volleyball ${id}`)).toEqual([SUNSET_SIXES]);
+    });
+
+    test('a level lists the leagues at that level', RAW_HTTP, async ({ request }) => {
+      const id = await seedDivisions();
+      expect(await namesFor(request, `intermediate ${id}`)).toEqual([SUNDAY_ELEVEN]);
+    });
+
+    test(
+      'a gender, an age group, and a sport together list one league',
+      RAW_HTTP,
+      async ({ request }) => {
+        const id = await seedDivisions();
+        expect(await namesFor(request, `girls u10 soccer ${id}`)).toEqual([FALL_JUNIORS]);
+      },
+    );
+
+    test(
+      'womens, typed without the apostrophe, lists the adult league and not the girls league',
+      RAW_HTTP,
+      async ({ request }) => {
+        const id = await seedDivisions();
+        expect(await namesFor(request, `womens ${id}`)).toEqual([SUNDAY_ELEVEN]);
+      },
+    );
+  });
+
   test('a search with no match shows the no-results state', RAW_HTTP, async ({ request }) => {
     const { headers, html } = await raw(request, url('pickleball'));
     expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));

@@ -224,6 +224,7 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/cache-key.spec.ts',
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
+          'e2e/public-page-layout-shift.spec.ts',
           'e2e/season-page.spec.ts',
           'e2e/sport-view.spec.ts',
         ),
@@ -236,7 +237,13 @@ describe('selectSpecs: mapped areas', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
       const specs = specsFor([file]);
       assert.ok(!specs.includes('FULL'), file);
-      for (const name of ['cache-key', 'league-page-offline', 'league-page', 'sport-view']) {
+      for (const name of [
+        'cache-key',
+        'league-page-offline',
+        'league-page',
+        'public-page-layout-shift',
+        'sport-view',
+      ]) {
         assert.ok(specs.includes(`e2e/${name}.spec.ts`), `${file}: ${name}`);
       }
     }
@@ -308,7 +315,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public season page, its content, and its paths to the season page and cache-key specs', () => {
+  it('maps the public season page, its content, and its paths to the season page, layout shift, and cache-key specs', () => {
     for (const file of [
       'src/app/organizations/public-season/public-season-page.ts',
       'src/app/organizations/public-season/public-season-content.ts',
@@ -316,7 +323,11 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/season-page.spec.ts'),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/public-page-layout-shift.spec.ts',
+          'e2e/season-page.spec.ts',
+        ),
         file,
       );
     }
@@ -420,6 +431,17 @@ describe('selectSpecs: mapped areas', () => {
       assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
     }
     assert.ok(!specs.includes('FULL'));
+  });
+
+  it('maps the public layout and the page skeletons to the layout shift spec', () => {
+    for (const file of [
+      'src/app/public-layout/public-layout.ts',
+      'src/app/organizations/organization-skeleton.ts',
+      'src/app/organizations/public-league/public-league-skeleton.ts',
+      'src/app/organizations/public-season/public-season-skeleton.ts',
+    ]) {
+      assert.ok(specsFor([file]).includes('e2e/public-page-layout-shift.spec.ts'), file);
+    }
   });
 
   it('maps each mockup that a spec reads to that spec, and every other design file to nothing', () => {
@@ -559,7 +581,6 @@ describe('selectSpecs: files that cannot change an e2e result', () => {
 
 describe('selectSpecs: the full suite', () => {
   const shared = [
-    'src/app/shell/shell-sheet.ts',
     'src/app/core/auth/auth.service.ts',
     'src/app/core/data/convex/inject-query.ts',
     'src/app/core/service-worker/app-updates.ts',
@@ -601,7 +622,7 @@ describe('selectSpecs: the full suite', () => {
 
   it('is full when one shared file is among mapped ones', () => {
     assert.deepEqual(
-      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell-sheet.ts']),
+      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/core/auth/auth.service.ts']),
       ['FULL'],
     );
   });
@@ -778,7 +799,7 @@ describe('the command line', () => {
   });
 
   it('prints the full scope for a shared file', () => {
-    assert.equal(run('src/app/shell/shell-sheet.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
+    assert.equal(run('src/app/core/auth/auth.service.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
   });
 });
 

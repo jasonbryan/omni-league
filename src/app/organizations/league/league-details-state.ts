@@ -16,7 +16,8 @@ import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid, changedSince } from '../../core/forms/shown-errors';
 import { ConvexError } from 'convex/values';
-import { LeagueDivision, type SavedDivision } from '../admin/league-division';
+import { fieldNoteText, type FieldNote } from '../admin/field-note';
+import { LeagueDivision, type DivisionDetail, type SavedDivision } from '../admin/league-division';
 import { inputErrorOf } from '../admin/league-form';
 import type { OrganizerLeague } from './league-context';
 
@@ -51,6 +52,18 @@ export interface SavedDetails {
 
 export type ExpectedDetails = NonNullable<FunctionArgs<typeof api.leagues.update>['expected']>;
 
+export type NoteField = 'name' | DivisionDetail;
+
+// The order of the page, which is the order the notes are announced in.
+const NOTE_FIELDS: readonly NoteField[] = [
+  'name',
+  'gender',
+  'format',
+  'minimumRosterSize',
+  'level',
+  'ageGroup',
+];
+
 export type DetailsAlertKind = 'offline' | 'failed' | 'changed';
 
 export interface CurrentLeague {
@@ -66,6 +79,7 @@ export function savedDetails(name: string, division: OrganizerLeague['division']
       playersPerSide: division.playersPerSide,
       level: division.level,
       customLevelId: division.customLevel?.customLevelId,
+      customLevelName: division.customLevel?.name,
       ageGroup: division.ageGroup,
       minimumRosterSize: division.minimumRosterSize,
     },
@@ -122,21 +136,17 @@ export class LeagueDetails {
   readonly submitting = signal(false);
   readonly alert = signal<DetailsAlertKind | null>(null);
   readonly errors: Record<DetailsField, Signal<string | null>>;
+  readonly notes: Record<NoteField, Signal<FieldNote | null>>;
+  readonly announcement: Signal<readonly string[]>;
 
-  private baselineName = '';
-  private readonly loadedKey = signal('');
-  private readonly currentKey = computed(() =>
-    [
-      this.model().name,
-      this.division.gender(),
-      this.division.playersPerSide(),
-      this.division.level(),
-      this.division.customLevelId(),
-      this.division.ageGroup(),
-      this.division.minimumText(),
-    ].join('|'),
+  private readonly baselineName = signal('');
+  private readonly nameNote = linkedSignal<string, FieldNote | null>({
+    source: () => this.model().name,
+    computation: () => null,
+  });
+  readonly editedSinceLoad = computed(
+    () => this.model().name !== this.baselineName() || this.division.edited().size > 0,
   );
-  readonly editedSinceLoad = computed(() => this.currentKey() !== this.loadedKey());
   private readonly clientErrors: Record<DetailsField, Signal<string | null>>;
   private readonly shown: Record<DetailsField, ShownUntilValid>;
   private readonly serverErrors: Record<DetailsField, WritableSignal<string | null>>;
@@ -188,6 +198,20 @@ export class LeagueDetails {
       level: this.untilChanged(() => `${this.division.level()}/${this.division.customLevelId()}`),
       ageGroup: this.untilChanged(() => this.division.ageGroup()),
     };
+    this.notes = { name: this.nameNote, ...this.division.notes };
+    const shownTexts = computed(() =>
+      NOTE_FIELDS.flatMap((field) => {
+        const note = this.notes[field]();
+        return note ? [fieldNoteText(note)] : [];
+      }),
+    );
+    this.announcement = linkedSignal<readonly string[], readonly string[]>({
+      source: shownTexts,
+      computation: (texts, previous) => {
+        const announcedBefore = new Set(previous?.source);
+        return texts.filter((text) => !announcedBefore.has(text));
+      },
+    });
     this.errors = Object.fromEntries(
       DETAILS_FIELDS.map((field) => [
         field,
@@ -199,12 +223,12 @@ export class LeagueDetails {
   }
 
   load(saved: SavedDetails): void {
-    this.baselineName = saved.name;
+    this.baselineName.set(saved.name);
     this.model.set({ name: saved.name });
+    this.nameNote.set(null);
     if (saved.division) this.division.load(saved.division);
     else this.division.clear();
     this.fields().reset();
-    this.loadedKey.set(this.currentKey());
     this.alert.set(null);
     for (const field of DETAILS_FIELDS) this.shown[field].hide();
   }
@@ -242,7 +266,7 @@ export class LeagueDetails {
     };
     this.submitting.set(true);
     try {
-      const result = await send(values, expectedOf(this.baselineName, this.division.baseline));
+      const result = await send(values, expectedOf(this.baselineName(), this.division.baseline));
       return { sent: true, values, result };
     } catch (failure) {
       return this.failed(failure);
@@ -254,7 +278,7 @@ export class LeagueDetails {
   // Only a rename can state a division, so a form saved without touching the name keeps its choices.
   private fillDivisionFromName(): void {
     const name = this.model().name;
-    if (name.trim() === this.baselineName.trim()) return;
+    if (name.trim() === this.baselineName().trim()) return;
     this.division.fillFromName(name, this.sport());
   }
 
@@ -275,12 +299,20 @@ export class LeagueDetails {
     return this.showAlert('failed');
   }
 
-  private takeNewerLeague(newer: SavedDetails): void {
-    if (this.model().name.trim() === this.baselineName.trim()) {
-      this.model.set({ name: newer.name });
-      this.fields().reset();
+  takeNewerLeague(newer: SavedDetails): void {
+    if (newer.name !== this.baselineName()) {
+      const typed = this.model().name.trim();
+      if (typed === this.baselineName().trim()) {
+        this.model.set({ name: newer.name });
+        this.fields().reset();
+        this.nameNote.set(null);
+      } else {
+        this.nameNote.set(
+          typed === newer.name.trim() ? null : { kind: 'changed', value: newer.name },
+        );
+      }
+      this.baselineName.set(newer.name);
     }
-    this.baselineName = newer.name;
     if (newer.division) this.division.takeSavedByOthers(newer.division);
   }
 
