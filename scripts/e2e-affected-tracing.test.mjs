@@ -701,8 +701,8 @@ describe('the public-page specs', () => {
   const readSpec = (file) => readFileSync(join(repoRoot, file), 'utf8');
   const found = findPublicPageSpecs(repoRoot);
 
-  // The specs that the plan review named. A change to the finder cannot drop one unnoticed.
-  const named = [
+  // A change to the finder cannot drop one unnoticed.
+  const KNOWN_PUBLIC_PAGE_SPECS = [
     'organization-admin',
     'organization-details',
     'organization-leagues-publish',
@@ -715,8 +715,8 @@ describe('the public-page specs', () => {
     'offline-note-height',
   ].map((name) => `e2e/${name}.spec.ts`);
 
-  it('finds the specs that the plan review named', () => {
-    for (const file of named) assert.ok(found.includes(file), file);
+  it('finds the known public-page specs', () => {
+    for (const file of KNOWN_PUBLIC_PAGE_SPECS) assert.ok(found.includes(file), file);
   });
 
   it('finds every spec on disk that opens a public path, calls a public query, or uses a tenant path', () => {
@@ -734,7 +734,7 @@ describe('the public-page specs', () => {
         (text.includes('seedTenant') && /\b\w*[tT]enant\w*\.path\b|\b\w+\.path\}/.test(text))
       );
     });
-    assert.ok(expected.length >= named.length, expected.join(', '));
+    assert.ok(expected.length >= KNOWN_PUBLIC_PAGE_SPECS.length, expected.join(', '));
     assert.deepEqual(
       found.filter((file) => expected.includes(file)),
       expected,
@@ -817,6 +817,39 @@ describe('the public-page specs', () => {
       }
     });
 
+    it('lists every Convex function that uses an export of a convex/lib/public*.ts file', () => {
+      const helperExports = ['publicPage', 'publicLeague', 'publicSeason', 'publicList'].flatMap(
+        (name) =>
+          [
+            ...readFileSync(join(convexDir, 'lib', `${name}.ts`), 'utf8').matchAll(
+              /^export (?:async )?(?:const|function) (\w+)/gm,
+            ),
+          ].map((match) => match[1]),
+      );
+      assert.ok(helperExports.length > 10, helperExports.join(', '));
+      const users = [];
+      for (const file of readdirSync(convexDir).filter((name) =>
+        /^(?!.*\.test\.).*\.ts$/.test(name),
+      )) {
+        const blocks = readFileSync(join(convexDir, file), 'utf8')
+          .split(/^export /m)
+          .slice(1);
+        for (const block of blocks) {
+          const head = /^(?:async )?(?:const|function) (\w+)/.exec(block);
+          if (head && helperExports.some((name) => new RegExp(`\\b${name}\\b`).test(block))) {
+            users.push(`${file.slice(0, -3)}:${head[1]}`);
+          }
+        }
+      }
+      assert.ok(users.length >= 7, users.join(', '));
+      for (const name of users) {
+        assert.ok(
+          PUBLIC_QUERIES.includes(name) || name.startsWith('search:'),
+          `${name} uses a public read helper but is not in PUBLIC_QUERIES`,
+        );
+      }
+    });
+
     it('lists only queries that exist', () => {
       const names = queries.map((query) => query.name);
       for (const name of PUBLIC_QUERIES) assert.ok(names.includes(name), name);
@@ -842,9 +875,8 @@ describe('the public-page specs', () => {
     }
   });
 
-  describe('the changed files of earlier public-page PRs', () => {
-    // Frozen from the first public league page and the public season page restyle.
-    const earlier = {
+  describe('a change across the public league, season, and organization pages', () => {
+    const changes = {
       'the public league page': [
         'convex/leagues.ts',
         'convex/leaguesPublic.test.ts',
@@ -895,10 +927,10 @@ describe('the public-page specs', () => {
         'src/app/organizations/public-season/testing/season-data.ts',
       ],
     };
-    for (const [name, files] of Object.entries(earlier)) {
-      it(`includes every spec the finder found for ${name}`, () => {
+    for (const [name, files] of Object.entries(changes)) {
+      it(`selects affected specs that include every spec the finder found for ${name}`, () => {
         const specs = realSpecs(files);
-        if (specs.includes(FULL)) return;
+        assert.ok(!specs.includes(FULL), 'the change runs the full suite');
         for (const spec of findPublicPageSpecs(repoRoot)) {
           assert.ok(specs.includes(spec), spec);
         }

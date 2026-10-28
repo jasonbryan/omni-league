@@ -114,7 +114,7 @@ export function deriveSessionSpecs(root) {
 const SIGN_IN_OR_UP_PAGE = /goto\([^)]*\/sign-(?:in|up)\b/;
 const CUSTOM_LEVELS_API = /\bapi\.customLevels\b/;
 
-// The public Convex queries; every `search:` function is public too.
+// Every `search:` function is public too.
 export const PUBLIC_QUERIES = [
   'organizations:getPublicPage',
   'organizations:listPublicLocations',
@@ -142,7 +142,6 @@ export function readsPublicPage(text) {
 }
 
 /**
- * The specs that open a public organization, league, or season path or call a public query.
  * @param {string} root
  * @returns {string[]}
  */
@@ -229,7 +228,6 @@ function resolveSpecifier(files, from, specifier) {
 }
 
 /**
- * Which files import which, over every `.ts`, `.mts`, and `.mjs` file that is not a not-importer.
  * @param {string} root
  * @returns {ImportGraph}
  */
@@ -276,14 +274,12 @@ export function buildImportGraph(root) {
 }
 
 /**
- * `full` runs the whole suite. `derive` adds the specs found in the repo (`specs`) and the files
- * whose own selection is added (`files`).
  * @typedef {{
  *   name: string,
  *   test: (file: string) => boolean,
  *   specs: string[],
  *   full?: boolean,
- *   derive?: (graph: ImportGraph, root: string) => { specs?: string[], files?: string[] },
+ *   derive?: (graph: ImportGraph, root: string) => { extraSpecs?: string[], filesToSelect?: string[] },
  * }} Rule
  */
 
@@ -528,7 +524,7 @@ export const AREAS = [
     name: 'convex public read helpers',
     test: named('convex/lib/', ['publicPage', 'publicLeague', 'publicSeason', 'publicList']),
     specs: [...PUBLIC_PAGE, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW, ...FIND_PAGE],
-    derive: (_graph, root) => ({ specs: findPublicPageSpecs(root) }),
+    derive: (_graph, root) => ({ extraSpecs: findPublicPageSpecs(root) }),
   },
   {
     // The create-league form lists the levels through api.customLevels, so every file that
@@ -541,7 +537,7 @@ export const AREAS = [
       ...LEAGUE_MANAGEMENT,
     ],
     derive: (graph) => ({
-      files: [...graph.text]
+      filesToSelect: [...graph.text]
         .filter(([file, text]) => file.startsWith('src/') && CUSTOM_LEVELS_API.test(text))
         .map(([file]) => file),
     }),
@@ -607,7 +603,6 @@ function filtersFor(rule, file, sessionSpecs) {
   });
 }
 
-/** Thrown inside the selection to run the full suite, with the reason for stderr. */
 class FullSuite extends Error {}
 
 /**
@@ -619,7 +614,6 @@ class FullSuite extends Error {}
  */
 
 /**
- * Selects the specs for one file: its rule's, or, with no rule, those of the files that import it.
  * @param {string} file
  * @param {Set<string>} selected
  * @param {SelectContext & { graph: () => ImportGraph }} context
@@ -658,8 +652,8 @@ function addRuleSpecs(rule, file, selected, context, visiting) {
   if (context.root === undefined)
     throw new FullSuite(`${file} needs the repo root to derive specs`);
   const derived = rule.derive(context.graph(), context.root);
-  for (const filter of derived.specs ?? []) selected.add(filter);
-  for (const derivedFile of derived.files ?? []) {
+  for (const filter of derived.extraSpecs ?? []) selected.add(filter);
+  for (const derivedFile of derived.filesToSelect ?? []) {
     if (visiting.has(derivedFile)) continue;
     visiting.add(derivedFile);
     addFileSpecs(derivedFile, selected, context, visiting);
@@ -675,7 +669,7 @@ const CONVEX_MODULE = /^convex\/[^/]+\.ts$/;
  * @param {SelectContext & { graph: () => ImportGraph }} context
  * @param {Set<string>} visiting
  * @param {Set<string>} seen
- * @returns {number} how many files with a rule the importers reach
+ * @returns {number}
  */
 function traceImporters(file, graph, selected, context, visiting, seen) {
   if (seen.has(file)) return 0;
