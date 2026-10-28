@@ -26,5 +26,14 @@ describe('NotFoundPage', () => {
       'Find a league',
       'Sign in',
     ]);
+    expect(
+      [...(main?.querySelectorAll('a') ?? [])].map((a) => [
+        a.textContent.trim(),
+        a.getAttribute('href'),
+      ]),
+    ).toEqual([
+      ['Find a league', '/leagues'],
+      ['Go to the home page', '/'],
+    ]);
   });
 });

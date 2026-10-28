@@ -7,7 +7,7 @@ import { NotFoundView } from './not-found-view';
   imports: [NotFoundView, PublicLayout],
   template: `
     <app-public-layout>
-      <app-not-found-view />
+      <app-not-found-view [findLeague]="true" />
     </app-public-layout>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

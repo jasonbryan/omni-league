@@ -53,7 +53,7 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
           [canManage]="viewerIsOrgAdmin.value() === true"
         />
       } @else if (state() === 'not-found') {
-        <app-not-found-view />
+        <app-not-found-view [findLeague]="true" />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="path()" />
       } @else if (state() === 'not-saved') {

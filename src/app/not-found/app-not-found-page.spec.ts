@@ -23,5 +23,8 @@ describe('AppNotFoundPage', () => {
       'Omni League',
       'Sign in',
     ]);
+    expect([...(main?.querySelectorAll('a') ?? [])].map((a) => a.getAttribute('href'))).toEqual([
+      '/',
+    ]);
   });
 });

@@ -3,9 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { buttonVariants } from '../ui/button';
+import { hlm } from '../ui/utils';
 import { NotFoundView } from './not-found-view';
 
-async function render(responseInit?: ResponseInit): Promise<HTMLElement> {
+async function render(responseInit?: ResponseInit, findLeague = false): Promise<HTMLElement> {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -13,6 +14,7 @@ async function render(responseInit?: ResponseInit): Promise<HTMLElement> {
     ],
   });
   const fixture = TestBed.createComponent(NotFoundView);
+  fixture.componentRef.setInput('findLeague', findLeague);
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }
@@ -37,27 +39,26 @@ describe('NotFoundView', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Page not found | Omni League');
   });
 
-  it('renders one h1, one sentence, and two links: "Find a league" to /leagues, then "Go to the home page" to /', async () => {
+  it('renders one h1, one sentence, and one link to / reading "Go to the home page"', async () => {
     const host = await render();
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     expect(host.querySelector('h1')?.textContent.trim()).toBe('Page not found');
     expect(host.querySelector('p')?.textContent.trim()).toBe(
-      'Check the address for typos, or find the league you are looking for.',
+      'Check the address for typos, or start again from the home page.',
     );
-    const links = [...host.querySelectorAll('a')];
-    expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
-      ['Find a league', '/leagues'],
-      ['Go to the home page', '/'],
-    ]);
+    const links = host.querySelectorAll('a');
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('/');
+    expect(links[0].textContent.trim()).toBe('Go to the home page');
   });
 
-  it('hides the icons from assistive technology', async () => {
+  it('hides both icons from assistive technology', async () => {
     const host = await render();
     const icons = host.querySelectorAll('ng-icon');
     expect(icons).toHaveLength(2);
     for (const icon of icons) expect(icon.getAttribute('aria-hidden')).toBe('true');
     expect(icons[0].querySelector('svg circle')).not.toBeNull();
-    expect(icons[1].closest('a')?.getAttribute('href')).toBe('/leagues');
+    expect(icons[1].closest('a')).not.toBeNull();
     expect(icons[1].getAttribute('data-icon')).toBe('inline-start');
   });
 
@@ -105,17 +106,49 @@ describe('NotFoundView', () => {
     );
   });
 
-  it('styles "Find a league" as the large primary button and the home link as the large outline button, in a row with mt-8', async () => {
+  it('styles the home link as hlmBtn size="md" with mt-8', async () => {
     const host = await render();
-    const [find, home] = [...host.querySelectorAll('a')];
-    expect(classList(find)).toEqual(buttonVariants({ size: 'lg' }).split(/\s+/).sort());
-    expect(classList(home)).toEqual(
-      buttonVariants({ variant: 'outline', size: 'lg' }).split(/\s+/).sort(),
-    );
-    expect(find?.getAttribute('data-slot')).toBe('button');
-    expect(home?.getAttribute('data-slot')).toBe('button');
-    expect(classList(find?.parentElement)).toEqual(
-      ['mt-8', 'flex', 'flex-wrap', 'justify-center', 'gap-3'].sort(),
-    );
+    const link = host.querySelector('a');
+    const expected = hlm(buttonVariants({ size: 'md' }), 'mt-8');
+    expect(classList(link)).toEqual(expected.split(/\s+/).sort());
+    expect(link?.getAttribute('data-slot')).toBe('button');
+  });
+
+  describe('with the way on to the search', () => {
+    it('renders one h1, one sentence, and two links: "Find a league" to /leagues, then "Go to the home page" to /', async () => {
+      const host = await render(undefined, true);
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
+      expect(host.querySelector('p')?.textContent.trim()).toBe(
+        'Check the address for typos, or find the league you are looking for.',
+      );
+      const links = [...host.querySelectorAll('a')];
+      expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
+        ['Find a league', '/leagues'],
+        ['Go to the home page', '/'],
+      ]);
+    });
+
+    it('hides the icons from assistive technology', async () => {
+      const host = await render(undefined, true);
+      const icons = host.querySelectorAll('ng-icon');
+      expect(icons).toHaveLength(2);
+      for (const icon of icons) expect(icon.getAttribute('aria-hidden')).toBe('true');
+      expect(icons[1].closest('a')?.getAttribute('href')).toBe('/leagues');
+      expect(icons[1].getAttribute('data-icon')).toBe('inline-start');
+    });
+
+    it('styles "Find a league" as the large primary button and the home link as the large outline button, in a row with mt-8', async () => {
+      const host = await render(undefined, true);
+      const [find, home] = [...host.querySelectorAll('a')];
+      expect(classList(find)).toEqual(buttonVariants({ size: 'lg' }).split(/\s+/).sort());
+      expect(classList(home)).toEqual(
+        buttonVariants({ variant: 'outline', size: 'lg' }).split(/\s+/).sort(),
+      );
+      expect(find?.getAttribute('data-slot')).toBe('button');
+      expect(home?.getAttribute('data-slot')).toBe('button');
+      expect(classList(find?.parentElement)).toEqual(
+        ['mt-8', 'flex', 'flex-wrap', 'justify-center', 'gap-3'].sort(),
+      );
+    });
   });
 });

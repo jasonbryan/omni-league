@@ -1,16 +1,20 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCompass, lucideSearch } from '@ng-icons/lucide';
+import { lucideCompass, lucideHouse, lucideSearch } from '@ng-icons/lucide';
 import { setNotFoundStatus } from '../core/not-found-status';
-import { OUTLINE_BUTTON_LARGE, PRIMARY_BUTTON_LARGE } from '../ui/button/button-classes';
+import {
+  OUTLINE_BUTTON_LARGE,
+  PRIMARY_BUTTON,
+  PRIMARY_BUTTON_LARGE,
+} from '../ui/button/button-classes';
 
 /** It reads no data and nothing per visitor, so the server and the browser render the same DOM. */
 @Component({
   selector: 'app-not-found-view',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideCompass, lucideSearch })],
+  providers: [provideIcons({ lucideCompass, lucideHouse, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16' },
   template: `
@@ -25,22 +29,36 @@ import { OUTLINE_BUTTON_LARGE, PRIMARY_BUTTON_LARGE } from '../ui/button/button-
       <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
         Page not found
       </h1>
-      <p class="mt-3 text-balance text-muted-foreground">
-        Check the address for typos, or find the league you are looking for.
-      </p>
-      <div class="mt-8 flex flex-wrap justify-center gap-3">
-        <a routerLink="/leagues" data-slot="button" [class]="findClasses">
-          <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
-          Find a league
+      @if (findLeague()) {
+        <p class="mt-3 text-balance text-muted-foreground">
+          Check the address for typos, or find the league you are looking for.
+        </p>
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <a routerLink="/leagues" data-slot="button" [class]="findClasses">
+            <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
+            Find a league
+          </a>
+          <a routerLink="/" data-slot="button" [class]="homeClasses">Go to the home page</a>
+        </div>
+      } @else {
+        <p class="mt-3 text-balance text-muted-foreground">
+          Check the address for typos, or start again from the home page.
+        </p>
+        <a routerLink="/" data-slot="button" [class]="homeOnlyClasses">
+          <ng-icon name="lucideHouse" data-icon="inline-start" aria-hidden="true" />
+          Go to the home page
         </a>
-        <a routerLink="/" data-slot="button" [class]="homeClasses">Go to the home page</a>
-      </div>
+      }
     </div>
   `,
 })
 export class NotFoundView {
+  /** Public pages offer the way on to the search; the signed-in area keeps the home link alone. */
+  readonly findLeague = input(false);
+
   protected readonly findClasses = PRIMARY_BUTTON_LARGE;
   protected readonly homeClasses = OUTLINE_BUTTON_LARGE;
+  protected readonly homeOnlyClasses = `${PRIMARY_BUTTON} mt-8`;
 
   constructor() {
     setNotFoundStatus();

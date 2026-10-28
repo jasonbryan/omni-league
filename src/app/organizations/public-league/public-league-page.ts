@@ -44,7 +44,7 @@ import {
           [savedAt]="savedAt()"
         />
       } @else if (state() === 'not-found') {
-        <app-not-found-view />
+        <app-not-found-view [findLeague]="true" />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="retryHref()" />
       } @else if (state() === 'not-saved') {

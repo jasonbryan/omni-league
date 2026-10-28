@@ -53,7 +53,7 @@ const FOOTER_LINK_CLASSES =
             <app-top-bar-find />
           }
           <div
-            class="flex shrink-0 items-center pointer-coarse:[&_a]:min-h-11 [&_a[href^='/sign-in']]:px-3 pointer-coarse:[&_a[href^='/sign-in']]:px-4"
+            class="flex min-w-0 items-center [&_a[href='/app']]:shrink pointer-coarse:[&_a]:min-h-11 [&_a[href^='/sign-in']]:px-3 pointer-coarse:[&_a[href^='/sign-in']]:px-4"
             [class.ms-auto]="!showFind()"
           >
             <app-top-bar-account />

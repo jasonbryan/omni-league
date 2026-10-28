@@ -333,6 +333,8 @@ test.describe('not-found page', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
     const home = page.getByRole('main').getByRole('link', { name: 'Go to the home page' });
     await expect(home).toBeVisible();
+    const find = page.getByRole('main').getByRole('link', { name: 'Find a league' });
+    await expect(find).toBeVisible();
     await expect(page).toHaveTitle(/Page not found/);
     if (!remoteBaseUrl) {
       await expect
@@ -350,6 +352,8 @@ test.describe('not-found page', () => {
     await expect(page.locator('main#main')).toBeFocused();
     expect(new URL(page.url()).pathname).toBe(UNKNOWN);
 
+    await page.keyboard.press(tab);
+    await expect(find).toBeFocused();
     // Polled, because the button's `transition-all` animates the width from the unfocused `medium`
     // (3px) over 150ms.
     await page.keyboard.press(tab);
@@ -387,6 +391,8 @@ test.describe('not-found page', () => {
     await expect(skipLink).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.locator('main#main')).toBeFocused();
+    await page.keyboard.press(tab);
+    await expect(find).toBeFocused();
     await page.keyboard.press(tab);
     await expect(home).toBeFocused();
     await page.keyboard.press('Enter');

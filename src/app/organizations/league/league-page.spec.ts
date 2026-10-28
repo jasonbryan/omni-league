@@ -320,7 +320,7 @@ describe('LeaguePage', () => {
       o.subscription(GET_ORGANIZER_CONTEXT)!.emit(null);
       await o.flush();
       expect(text(page.querySelector('h1'))).toBe('Page not found');
-      expect(text(page.querySelector('main a[href="/"]'))).toBe('Go to the home page');
+      expect(text(page.querySelector('main a'))).toBe('Go to the home page');
       expect(page.querySelector('nav')).toBeNull();
       expect(o.convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ORGANIZER_CONTEXT, ME]);
     });

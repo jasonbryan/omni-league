@@ -190,6 +190,15 @@ describe('PublicLayout', () => {
       });
     });
 
+    it('lets the account side shrink, so a long name is cut short before the bar scrolls sideways', async () => {
+      const page = await open();
+
+      const side = page.querySelector('app-top-bar-account')?.parentElement;
+      expect(side?.classList.contains('min-w-0')).toBe(true);
+      expect(side?.classList.contains('shrink-0')).toBe(false);
+      expect(side?.className).toContain("[&_a[href='/app']]:shrink");
+    });
+
     it('has no menu button, no sidebar, and no dialog', async () => {
       const page = await open();
 
