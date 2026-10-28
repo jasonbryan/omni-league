@@ -138,16 +138,29 @@ export function formatLabel(playersPerSide: number): string {
   return `${playersPerSide}v${playersPerSide}`;
 }
 
-export function divisionLabel(division: {
+export interface DivisionLabelInput {
   gender: Gender;
   playersPerSide: number;
   levelLabel: string;
   ageGroup?: AgeGroup;
-}): string {
+}
+
+/** The parts of the label a result row shows, which a league's search text also holds. */
+export function divisionLabelParts(division: DivisionLabelInput): string[] {
   const { gender, playersPerSide, ageGroup } = division;
   const parts = [genderLabel(gender, ageGroup), formatLabel(playersPerSide), division.levelLabel];
   if (ageGroup !== undefined && ageGroup !== 'adult') parts.push(ageGroupLabel(ageGroup));
-  return parts.join(' · ');
+  return parts;
+}
+
+export function divisionLabel(division: DivisionLabelInput): string {
+  return divisionLabelParts(division).join(' · ');
+}
+
+/** "Men's" and "Women's" split at the apostrophe when searched, so a search typed without it needs this word. */
+export function genderWithoutApostrophe(gender: Gender, ageGroup?: AgeGroup): string | undefined {
+  if (gender === 'coed' || (ageGroup !== undefined && isYouth(ageGroup))) return undefined;
+  return gender;
 }
 
 export function customLevelLabel(name: string, standardLevel: StandardLevel, sport: Sport): string {

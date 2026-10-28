@@ -15,6 +15,7 @@ import {
   type StandardLevel,
 } from './divisions';
 import { LEAGUE_MESSAGES, type LeagueInputError } from './leagueInput';
+import { leagueDivisionSearchWords, type LeagueDivisionFields } from './leagueDivision';
 import { leagueStatusValidator, type LeagueStatus } from './leagueStatus';
 import { joinSearchText } from './searchQuery';
 import type { SeasonStatus } from './seasonStatus';
@@ -62,18 +63,26 @@ export function sortName(name: string): string {
 
 export const MAX_LEAGUES_SEARCH_UPDATED = 200;
 
-// Every writer of a league's name or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
+type LeagueSearchFields = LeagueDivisionFields & Pick<Doc<'leagues'>, 'name' | 'locationIds'>;
+
+// Every writer of a league's name, sport, division, or locations, of a location's name, or of an organization's name or City, state keeps `searchText` current through these, so a new writer must too.
 async function leagueSearchText(
   ctx: Pick<MutationCtx, 'db'>,
   organization: Doc<'organizations'>,
-  league: { name: string; locationIds: readonly Id<'locations'>[] },
+  league: LeagueSearchFields,
 ): Promise<string> {
   const locationNames: string[] = [];
   for (const id of league.locationIds) {
     const location = await ctx.db.get('locations', id);
     if (location?.organizationId === organization._id) locationNames.push(location.name);
   }
-  return joinSearchText([league.name, organization.name, ...locationNames, organization.cityState]);
+  return joinSearchText([
+    league.name,
+    ...(await leagueDivisionSearchWords(ctx, league)),
+    organization.name,
+    ...locationNames,
+    organization.cityState,
+  ]);
 }
 
 async function organizationOf(
@@ -469,8 +478,9 @@ export async function updateLeague(
     name: change.name,
     sortName: sortName(change.name),
     searchText: await leagueSearchText(ctx, await organizationOf(ctx, league.organizationId), {
+      ...league,
       name: change.name,
-      locationIds: league.locationIds,
+      ...change.division,
     }),
     ...leagueDivisionPatch(change.division),
   });
@@ -501,8 +511,13 @@ export async function restoreLeague(
     name: values.name,
     sortName: sortName(values.name),
     searchText: await leagueSearchText(ctx, await organizationOf(ctx, league.organizationId), {
+      ...league,
       name: values.name,
-      locationIds: league.locationIds,
+      gender: values.gender,
+      playersPerSide: values.playersPerSide,
+      level: values.level,
+      customLevelId: values.customLevelId,
+      ageGroup: values.ageGroup,
     }),
     gender: values.gender,
     playersPerSide: values.playersPerSide,
@@ -606,8 +621,15 @@ async function insertLeagueRow(
 ): Promise<Id<'leagues'>> {
   if (league.division) assertDivision(league.sport, league.division);
   const searchText = await leagueSearchText(ctx, await organizationOf(ctx, organizationId), {
+    organizationId,
     name: league.name,
+    sport: league.sport,
     locationIds: league.locationIds,
+    gender: league.division?.gender,
+    playersPerSide: league.division?.playersPerSide,
+    level: league.division?.level,
+    customLevelId: league.division?.customLevelId,
+    ageGroup: league.division?.ageGroup,
   });
   const leagueId = await ctx.db.insert('leagues', {
     organizationId,
@@ -747,6 +769,7 @@ export const backfilledValidator = v.object({
   leagues: v.number(),
 });
 
+// Runs after `backfillDivisionFields`, so each league's text holds its division.
 export async function backfillTenantFields(
   ctx: MutationCtx,
 ): Promise<Infer<typeof backfilledValidator>> {
@@ -759,25 +782,26 @@ export async function backfillTenantFields(
   // Runs before the organization pass, whose recount reads each league's status.
   const organizations = new Map<Id<'organizations'>, Doc<'organizations'>>();
   for (const league of await ctx.db.query('leagues').take(BACKFILL_SCAN_LIMIT)) {
-    if (
-      league.sortName !== undefined &&
-      league.status !== undefined &&
-      league.publishedSeasonCount !== undefined &&
-      league.searchText !== undefined
-    ) {
-      continue;
-    }
     let organization = organizations.get(league.organizationId);
     if (!organization) {
       organization = await organizationOf(ctx, league.organizationId);
       organizations.set(league.organizationId, organization);
+    }
+    const searchText = await leagueSearchText(ctx, organization, league);
+    if (
+      league.sortName !== undefined &&
+      league.status !== undefined &&
+      league.publishedSeasonCount !== undefined &&
+      league.searchText === searchText
+    ) {
+      continue;
     }
     await ctx.db.patch('leagues', league._id, {
       sortName: league.sortName ?? sortName(league.name),
       status: league.status ?? 'published',
       publishedSeasonCount:
         league.publishedSeasonCount ?? (await recountPublishedSeasons(ctx, league._id)),
-      searchText: league.searchText ?? (await leagueSearchText(ctx, organization, league)),
+      searchText,
     });
     backfilled.leagues++;
   }

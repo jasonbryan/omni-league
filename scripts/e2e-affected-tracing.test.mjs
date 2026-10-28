@@ -949,6 +949,7 @@ describe('convex/lib', () => {
     'inviteInput.ts': 'imported by convex/testing.ts',
     'inviteStatus.ts': 'imported by convex/schema.ts',
     'inviteToken.ts': 'imported by convex/testing.ts',
+    'leagueDivision.ts': 'imported by convex/lib/tenantWrites.ts',
     'leagueInput.ts': 'imported by a lazily loaded page',
     'leagueStatus.ts': 'imported by convex/testing.ts',
     'memberships.ts': 'imported by convex/testing.ts',

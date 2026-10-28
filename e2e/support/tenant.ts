@@ -14,7 +14,7 @@ export interface DivisionSeed {
   gender: 'coed' | 'mens' | 'womens';
   playersPerSide: number;
   level: 'rec' | 'b' | 'bb' | 'a' | 'aa' | 'open' | 'intermediate' | 'competitive';
-  ageGroup: 'adult' | 'over30' | 'over35' | 'over40' | 'over50' | 'over55' | 'over60';
+  ageGroup: 'adult' | 'over30' | 'over35' | 'over40' | 'over50' | 'over55' | 'over60' | 'u10';
   minimumRosterSize?: number;
 }
 
