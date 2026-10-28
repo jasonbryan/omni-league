@@ -481,6 +481,7 @@ export async function updateLeague(
       ...league,
       name: change.name,
       ...change.division,
+      customLevelId: change.division.customLevelId,
     }),
     ...leagueDivisionPatch(change.division),
   });
