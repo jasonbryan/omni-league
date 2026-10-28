@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { tabWalk } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
@@ -174,5 +175,122 @@ test.describe('a hard load of a public page', () => {
     await expect(page.getByRole('heading', { level: 1, name: /Alpha League/ })).toBeVisible();
     await expect(page.getByTestId('league-skeleton')).toHaveCount(0);
     await expect(page.getByRole('contentinfo')).toBeVisible();
+  });
+
+  // A skeleton that never leaves would hide the footer for good, so each state that replaces it must show the footer.
+  async function failQueries(page: Page, udfPaths: readonly string[]): Promise<void> {
+    await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+      const server = ws.connectToServer();
+      const failing = new Set<number>();
+      ws.onMessage((message) => {
+        const sent = JSON.parse(String(message)) as {
+          modifications?: { type: string; queryId: number; udfPath?: string }[];
+        };
+        for (const change of sent.modifications ?? []) {
+          if (change.type === 'Add' && change.udfPath && udfPaths.includes(change.udfPath)) {
+            failing.add(change.queryId);
+          }
+        }
+        server.send(message);
+      });
+      server.onMessage((message) => {
+        const received = JSON.parse(String(message)) as {
+          modifications?: { type: string; queryId: number }[];
+        };
+        for (const change of received.modifications ?? []) {
+          if (change.type === 'QueryUpdated' && failing.has(change.queryId)) {
+            Object.assign(change, {
+              type: 'QueryFailed',
+              errorMessage: 'forced failure',
+              logLines: [],
+            });
+          }
+        }
+        ws.send(JSON.stringify(received));
+      });
+    });
+  }
+
+  const footer = (page: Page) => page.getByRole('contentinfo');
+
+  test('answered with the client shell shows the footer with the not-found view', async ({
+    page,
+  }) => {
+    const path = '/organizations/e2e-no-such-organization';
+    await answerWithClientShell(page, path);
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+    await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+  });
+
+  test.describe('when a query fails', () => {
+    test('answered with the client shell shows the footer with the server-error view', async ({
+      page,
+    }) => {
+      const tenant = await seedTenant({ name: 'E2E Failing' });
+      await failQueries(page, ['organizations:getPublicPage']);
+      await answerWithClientShell(page, tenant.path);
+      await page.goto(tenant.path);
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' }),
+      ).toBeVisible();
+      await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+      await expect(footer(page)).toBeVisible();
+    });
+  });
+
+  test('answered with the client shell while offline with no saved copy shows the footer with the not-saved view', async ({
+    page,
+  }) => {
+    const tenant = await seedTenant({ name: 'E2E Not Saved' });
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, 'onLine', { get: () => false });
+    });
+    await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => void ws.close());
+    await answerWithClientShell(page, tenant.path);
+    await page.goto(tenant.path);
+    await expect(page.locator('app-not-saved-view')).toBeVisible();
+    await expect(page.locator('[data-page-loading]')).toHaveCount(0);
+    await expect(footer(page)).toBeVisible();
+  });
+
+  test('a page with no skeleton shows the footer on a hard load', async ({ page }) => {
+    await page.goto('/leagues');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(footer(page)).toBeVisible();
+  });
+
+  test('answered with the client shell leaves the footer out of the accessibility tree while loading and reachable by keyboard once loaded', async ({
+    page,
+  }) => {
+    const tenant = await seedTenant({ name: 'E2E Keyboard' });
+    const held = await holdQueries(page, ['organizations:getPublicPage']);
+    await answerWithClientShell(page, tenant.path);
+    await page.goto(tenant.path);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(footer(page)).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Footer' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+
+    held.release();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(footer(page)).toBeVisible();
+    const footerLinks = page.getByRole('navigation', { name: 'Footer' }).getByRole('link');
+    await expect(footerLinks).toHaveText([
+      'Find a league',
+      'Your account',
+      'Create an organization',
+      'Sign in to manage',
+    ]);
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([]);
+    for (const name of ['Find a league', 'Your account', 'Create an organization']) {
+      expect(
+        walk.order.some((step) => step.includes(`"${name}"`)),
+        name,
+      ).toBe(true);
+    }
+    expect(walk.order.some((step) => step.includes('"Sign in to manage"'))).toBe(true);
   });
 });
