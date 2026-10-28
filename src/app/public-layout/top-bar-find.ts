@@ -21,7 +21,7 @@ const FIND_PATH = '/leagues';
       aria-label="Find a league"
       [action]="action"
       method="get"
-      class="hidden w-full max-w-sm md:mx-auto md:block"
+      class="hidden w-full md:col-start-2 md:block"
       (submit)="submit($event, field.value)"
     >
       <label for="top-find" class="sr-only">Find a league</label>
@@ -44,7 +44,7 @@ const FIND_PATH = '/leagues';
     </form>
     <a
       routerLink="/leagues"
-      class="ms-auto flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
+      class="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-muted md:hidden"
     >
       <ng-icon name="lucideSearch" class="text-xl" aria-hidden="true" />
       <span class="sr-only">Find a league</span>

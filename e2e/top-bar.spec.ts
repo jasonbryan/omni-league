@@ -184,6 +184,44 @@ test.describe('top bar', () => {
       await screenshot(page, testInfo, '63-top-bar-long-name');
     });
 
+    test('the search control does not move while the account link replaces "Sign in" on a hard load', async ({
+      page,
+      consoleGuard,
+    }) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      const user = newUser();
+      await seedUser(user);
+      const tenant = await seedTenant();
+      await signInAs(page, user);
+      await page.addInitScript(() => {
+        const positions = new Set<string>();
+        (window as Window & { searchPositions?: Set<string> }).searchPositions = positions;
+        const sample = () => {
+          const control = [
+            ...document.querySelectorAll(
+              'header form[role="search"] input, header a[href="/leagues"]',
+            ),
+          ].find((el) => el.getBoundingClientRect().width > 0);
+          if (control) {
+            const box = control.getBoundingClientRect();
+            positions.add(`${Math.round(box.x * 10) / 10},${Math.round(box.width * 10) / 10}`);
+          }
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await expect(accountLink(page)).toBeVisible();
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      const positions = await page.evaluate(() => [
+        ...((window as Window & { searchPositions?: Set<string> }).searchPositions ?? []),
+      ]);
+      expect(positions).toHaveLength(1);
+    });
+
     test('at 320px a long name shrinks beside the 44px search link and the bar does not scroll sideways', async ({
       page,
       consoleGuard,

@@ -9,6 +9,7 @@ import {
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../shell/testing/test-pages';
+import { buttonVariants } from '../ui/button';
 import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
 import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
@@ -407,6 +408,9 @@ describe('OrganizationPage', () => {
       expect(find).toHaveLength(1);
       expect(find[0].getAttribute('href')).toBe('/leagues');
       expect(find[0].previousElementSibling?.tagName).toBe('P');
+      expect([...find[0].classList].sort()).toEqual(
+        `${buttonVariants({ variant: 'outline', size: 'lg' })} mt-6`.split(' ').sort(),
+      );
       expect(find[0].querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
     });
 

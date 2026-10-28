@@ -42,10 +42,13 @@ const FOOTER_LINK_CLASSES =
       <header
         class="sticky top-0 z-30 border-b border-border bg-card [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
       >
-        <div class="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 md:gap-6 md:px-8">
+        <!-- The field sits in the middle column and the account side in the last, so neither moves when the account link replaces "Sign in". -->
+        <div
+          class="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,24rem)_minmax(0,1fr)] md:gap-6 md:px-8"
+        >
           <a
             routerLink="/"
-            class="flex min-h-11 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
+            class="flex min-h-11 shrink-0 items-center gap-2 rounded-md text-base font-semibold md:justify-self-start"
           >
             <ng-container [ngTemplateOutlet]="brand" />
           </a>
@@ -53,8 +56,7 @@ const FOOTER_LINK_CLASSES =
             <app-top-bar-find />
           }
           <div
-            class="flex min-w-0 items-center [&_a[href='/app']]:shrink pointer-coarse:[&_a]:min-h-11 [&_a[href^='/sign-in']]:px-3 pointer-coarse:[&_a[href^='/sign-in']]:px-4"
-            [class.ms-auto]="!showFind()"
+            class="ms-auto flex min-w-0 items-center md:col-start-3 md:justify-self-end [&_a[href='/app']]:shrink pointer-coarse:[&_a]:min-h-11 [&_a[href^='/sign-in']]:px-3 pointer-coarse:[&_a[href^='/sign-in']]:px-4"
           >
             <app-top-bar-account />
           </div>

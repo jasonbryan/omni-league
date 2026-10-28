@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
@@ -16,20 +16,18 @@ import {
   imports: [NgIcon, RouterLink],
   providers: [provideIcons({ lucideCompass, lucideHouse, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16' },
+  host: { class: 'block mx-auto w-full max-w-5xl px-4 md:px-8', '[class]': 'spacing()' },
   template: `
-    <div
-      class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
-    >
-      <span
-        class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
-      >
-        <ng-icon name="lucideCompass" class="text-2xl" aria-hidden="true" />
-      </span>
-      <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-        Page not found
-      </h1>
-      @if (findLeague()) {
+    @if (findLeague()) {
+      <div class="mx-auto flex max-w-lg flex-col items-center text-center">
+        <span
+          class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
+        >
+          <ng-icon name="lucideSearch" class="text-2xl" aria-hidden="true" />
+        </span>
+        <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+          Page not found
+        </h1>
         <p class="mt-3 text-balance text-muted-foreground">
           Check the address for typos, or find the league you are looking for.
         </p>
@@ -40,7 +38,19 @@ import {
           </a>
           <a routerLink="/" data-slot="button" [class]="homeClasses">Go to the home page</a>
         </div>
-      } @else {
+      </div>
+    } @else {
+      <div
+        class="mx-auto flex max-w-lg flex-col items-center px-6 py-10 text-center md:py-12 rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+      >
+        <span
+          class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
+        >
+          <ng-icon name="lucideCompass" class="text-2xl" aria-hidden="true" />
+        </span>
+        <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+          Page not found
+        </h1>
         <p class="mt-3 text-balance text-muted-foreground">
           Check the address for typos, or start again from the home page.
         </p>
@@ -48,13 +58,17 @@ import {
           <ng-icon name="lucideHouse" data-icon="inline-start" aria-hidden="true" />
           Go to the home page
         </a>
-      }
-    </div>
+      </div>
+    }
   `,
 })
 export class NotFoundView {
-  /** Public pages offer the way on to the search; the signed-in area keeps the home link alone. */
+  /** Public pages follow the public-site mockup: a way on to the search, no card. The signed-in area keeps the card and the home link alone. */
   readonly findLeague = input(false);
+
+  protected readonly spacing = computed(() =>
+    this.findLeague() ? 'py-16 md:py-24' : 'py-6 md:py-16',
+  );
 
   protected readonly findClasses = PRIMARY_BUTTON_LARGE;
   protected readonly homeClasses = OUTLINE_BUTTON_LARGE;

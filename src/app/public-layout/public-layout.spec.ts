@@ -162,6 +162,18 @@ describe('PublicLayout', () => {
         },
       );
 
+      it('anchors the controls so the account link replacing "Sign in" moves none of them', async () => {
+        const page = await open();
+
+        const bar = page.querySelector('header > div')!;
+        expect(bar.classList.contains('md:grid')).toBe(true);
+        expect(search(page)?.classList.contains('md:col-start-2')).toBe(true);
+        expect(phoneLink(page)?.classList.contains('ms-auto')).toBe(false);
+        const side = page.querySelector('app-top-bar-account')?.parentElement;
+        expect(side?.classList.contains('ms-auto')).toBe(true);
+        expect(side?.classList.contains('md:col-start-3')).toBe(true);
+      });
+
       it('keeps the field on a path that only starts with /leagues', async () => {
         const page = await open('/leagues/x');
 

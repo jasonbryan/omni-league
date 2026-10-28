@@ -128,6 +128,19 @@ describe('NotFoundView', () => {
       ]);
     });
 
+    it('has no card, a magnifier in the icon square, and the roomier public spacing', async () => {
+      const host = await render(undefined, true);
+      expect(host.querySelector('.ring-1, .rounded-xl.bg-card, .shadow-xs')).toBeNull();
+      expect(classList(host)).toEqual(
+        ['block', 'mx-auto', 'w-full', 'max-w-5xl', 'px-4', 'md:px-8', 'py-16', 'md:py-24'].sort(),
+      );
+      const icons = host.querySelectorAll('ng-icon');
+      expect(icons[0].innerHTML).toBe(icons[1].innerHTML);
+      expect(classList(host.querySelector(':scope > div'))).toEqual(
+        ['mx-auto', 'flex', 'max-w-lg', 'flex-col', 'items-center', 'text-center'].sort(),
+      );
+    });
+
     it('hides the icons from assistive technology', async () => {
       const host = await render(undefined, true);
       const icons = host.querySelectorAll('ng-icon');
