@@ -17,6 +17,7 @@ test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex bac
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
 const VIEWER_IS_ORG_ADMIN = 'organizations:viewerIsOrgAdmin';
+const OPEN_SEASONS = 'seasons:listOpenForOrganization';
 
 async function tenantWithoutOpenSeason(): Promise<Tenant> {
   return seedTenant({
@@ -156,6 +157,54 @@ test.describe('organization page: Manage', () => {
       expect(after?.y).toBe(before?.y);
     });
   }
+
+  test('switching sport view as an org admin does not move the sport chips while the open seasons load', async ({
+    page,
+  }) => {
+    const tenant = await seedTenant({
+      name: 'E2E Hero',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        { name: 'Alpha League', sport: 'soccer', locations: ['Alpha Field'] },
+        { name: 'Beta League', sport: 'softball', locations: ['Alpha Field'] },
+      ],
+    });
+    for (const league of ['alpha-league', 'beta-league']) {
+      await seedSeasons(tenant, league, [
+        {
+          name: 'Open Season',
+          slug: 'open-season',
+          startDate: dateFromToday(30),
+          endDate: dateFromToday(90),
+          registrationDeadline: dateFromToday(10),
+        },
+      ]);
+    }
+    await signedInAs(page, 'orgAdmin', tenant);
+    const held = await holdQueries(page, [OPEN_SEASONS], { armed: false });
+    await page.goto(`${tenant.path}/sports/soccer`);
+    await expect(manage(page)).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('link', { name: 'Register for a season' }),
+    ).toBeVisible();
+    held.arm();
+    const chips = page.getByRole('navigation', { name: 'Sports' });
+    const before = await chips.boundingBox();
+
+    await chips.getByRole('link', { name: /^Softball/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}/sports/softball`);
+    await expect(page.locator('[data-hero-actions] > span[aria-hidden="true"]')).toBeVisible();
+    await expect(manage(page)).toBeVisible();
+    const during = await chips.boundingBox();
+    expect(during?.y).toBe(before?.y);
+
+    held.release();
+    await expect(
+      page.getByRole('main').getByRole('link', { name: 'Register for a season' }),
+    ).toBeVisible();
+    const after = await chips.boundingBox();
+    expect(after?.y).toBe(before?.y);
+  });
 
   test('matches the mockup for an org admin and passes the accessibility check', async ({
     page,

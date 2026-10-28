@@ -109,7 +109,7 @@ export class OrganizationPage {
   private readonly openSeasonRows = injectQuery(api.seasons.listOpenForOrganization, () =>
     this.unknownSport() ? skipToken : { orgSlug: this.slug(), ...this.listArgs() },
   );
-  // Asked only once Convex has accepted a token, so an anonymous view opens no extra subscription and the server render stays anonymous.
+  // Signed-out views and the server render skip it, so public pages cost no extra function call.
   protected readonly viewerIsOrgAdmin = injectQuery(api.organizations.viewerIsOrgAdmin, () =>
     this.auth.convexAuthenticated() ? { slug: this.slug() } : skipToken,
   );

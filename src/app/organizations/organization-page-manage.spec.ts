@@ -102,7 +102,7 @@ describe('OrganizationPage Manage', () => {
     await emit(harness, queryResults(GULF_COAST));
     await signIn(harness);
     expect(manage(harness)).toBeUndefined();
-    expect(actionRow(harness)?.classList).toContain('min-h-11');
+    expect(actionRow(harness)).not.toBeNull();
   });
 
   it('shows Manage to an org admin, linking to the admin area of the organization', async () => {
@@ -150,16 +150,6 @@ describe('OrganizationPage Manage', () => {
       await emit(harness, queryResults(page));
       const row = actionRow(harness);
       expect(row).not.toBeNull();
-      expect(row?.classList).toContain('min-h-11');
-    });
-
-    it('does not move the section under the hero when Manage appears', async () => {
-      const harness = await open();
-      await emit(harness, queryResults(NO_OPEN));
-      await signIn(harness);
-      const before = actionRow(harness)?.getBoundingClientRect().height;
-      await emit(harness, { [VIEWER_IS_ORG_ADMIN]: true });
-      expect(actionRow(harness)?.getBoundingClientRect().height).toBe(before);
     });
   });
 });

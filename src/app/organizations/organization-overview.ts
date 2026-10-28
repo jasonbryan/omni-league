@@ -104,7 +104,7 @@ function plural(count: number, noun: string): string {
             @if (openCards() === undefined) {
               <span
                 aria-hidden="true"
-                class="block h-11 w-56 rounded-md bg-muted motion-safe:animate-pulse"
+                class="block h-11 w-48 rounded-md bg-muted motion-safe:animate-pulse"
               ></span>
             } @else if (openCards()?.length) {
               <a

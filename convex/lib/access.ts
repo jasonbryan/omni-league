@@ -50,7 +50,10 @@ export async function requireOrgAdminOrForbidden(
   return { user, membership };
 }
 
-export async function isOrgAdmin(ctx: Ctx, organizationId: Id<'organizations'>): Promise<boolean> {
+export async function hasOrgAdminRole(
+  ctx: Ctx,
+  organizationId: Id<'organizations'>,
+): Promise<boolean> {
   const user = await getCurrentUser(ctx);
   if (!user) return false;
   const membership = await membershipOf(ctx, user._id, organizationId);
