@@ -193,10 +193,15 @@ Slices are listed on #323. Leagues stay unaffected throughout.
 
 1. **Leagues first:** the public-site milestone (#240 to #262) and season registration (#129 to #145, #288).
 2. **The program record** above leagues, with no visible change (#333, then #334).
-3. **Tournaments:** create, publish, and list (#335 to #337), staff and copying (#338, #339), registration (#340, #341), then the bracket only (#342 to #345), then pools and a bracket (#346 to #348). Double elimination comes later (#349).
-4. **Find a program** (#350, #351).
-5. **Camps** (#352 to #358).
-6. **Training** (#359 to #365, #368), then registrations in `/app` (#367) and billing for camps and training (#366).
+3. **Tournaments:**
+   - create, publish, and list (#335 to #337); staff (#338); copying (#339); editing details (#369)
+   - registration (#340, #370, #341)
+   - the bracket only (#342 to #345)
+   - pools and a bracket (#346, #347, #371, #348)
+   - double elimination later (#349, #376)
+4. **Find a program:** search text (#374), the search (#350), links from every page (#351), and the old league search removed after 14 days (#375).
+5. **Camps:** #352 to #354, the organization page (#372), search (#373), then registration (#355 to #358).
+6. **Training:** #359 to #365 and #368, then registrations in `/app` (#367) and billing for camps and training (#366).
 
 ## Future (out of scope)
 
@@ -227,7 +232,7 @@ Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted
 
 Questions still open for the owner. The planner records them as `status:blocked` issues or in the PR that raises them, rather than inventing requirements.
 
-1. **Standings:** confirm or change the proposed defaults per sport.
+1. **Standings:** confirm or change the proposed defaults per sport, including forfeit scores; the recommendation is to ship them as configuration (#347).
 2. **Fee percentage:** the percentage of each registration payment.
 3. **Per-player floor:** the minimum fee per roster entry, in dollars.
 4. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
