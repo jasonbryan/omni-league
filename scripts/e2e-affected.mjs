@@ -46,15 +46,16 @@ const PUBLIC_PAGE = [
   'top-bar',
   'auth-session',
   'public-layout',
+  'public-page-layout-shift',
   'navigation-focus',
 ];
 
 // cache-key samples the sport view's `?page=N` parameter. The league page's breadcrumb links to the sport view.
 const SPORT_VIEW = ['sport-view', 'cache-key'];
 // cache-key samples the league page's `?page=N` parameter.
-const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'cache-key'];
+const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the season route.
-const SEASON_PAGE = ['season-page', 'cache-key'];
+const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
 const FIND_PAGE = ['find-a-league', 'cache-key'];
 const LEAGUE_MANAGEMENT = [

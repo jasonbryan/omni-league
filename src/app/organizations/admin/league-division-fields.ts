@@ -31,6 +31,7 @@ import { injectQuery, skipToken } from '../../core/data/convex';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CustomLevelPanel, type AddedCustomLevel } from './custom-level-panel';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';
+import { FieldNoteText } from './field-note';
 import { LeagueDivision } from './league-division';
 
 const CUSTOM_KEY_PREFIX = 'custom:';
@@ -53,7 +54,7 @@ export interface OwnCustomLevel {
 // Only an org admin may list or add custom levels, so a league organizer's form passes `canAddCustomLevel` false and the league's own level in `ownCustomLevel`.
 @Component({
   selector: 'app-league-division-fields',
-  imports: [ChipRadioGroup, CustomLevelPanel, NgIcon],
+  imports: [ChipRadioGroup, CustomLevelPanel, FieldNoteText, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'flex flex-col gap-6' },
@@ -63,6 +64,7 @@ export interface OwnCustomLevel {
       legend="Gender"
       [options]="genders"
       [value]="division().gender()"
+      [note]="division().notes.gender()"
       description="Shown as Boys and Girls for youth age groups."
       (chosen)="chooseGender($event)"
     />
@@ -74,6 +76,7 @@ export interface OwnCustomLevel {
         [options]="formatOptions()"
         [value]="chosenFormat()"
         [description]="formatDescription()"
+        [note]="division().notes.format()"
         [error]="errors().format()"
         (chosen)="chooseFormat($event)"
       />
@@ -99,9 +102,11 @@ export interface OwnCustomLevel {
             (input)="minimumTyped($event)"
             (blur)="minimumLeft.emit()"
             [attr.aria-describedby]="
-              errors().minimumRosterSize()
-                ? ids().minimum + '-description ' + ids().minimum + '-error'
-                : ids().minimum + '-description'
+              describedBy(
+                ids().minimum,
+                division().notes.minimumRosterSize(),
+                errors().minimumRosterSize()
+              )
             "
             [attr.aria-invalid]="errors().minimumRosterSize() ? 'true' : null"
             [attr.data-invalid]="errors().minimumRosterSize() ? 'true' : null"
@@ -115,6 +120,9 @@ export interface OwnCustomLevel {
           >
             Leave it blank to use the format’s own. Up to {{ rosterSizeMax }}.
           </p>
+          @if (division().notes.minimumRosterSize(); as note) {
+            <app-field-note [id]="ids().minimum + '-note'" [note]="note" />
+          }
           @if (errors().minimumRosterSize(); as error) {
             <div
               role="alert"
@@ -150,6 +158,7 @@ export interface OwnCustomLevel {
         [options]="levelOptions()"
         [value]="chosenLevel()"
         [description]="levelDescription()"
+        [note]="division().notes.level()"
         [error]="errors().level()"
         (chosen)="chooseLevel($event)"
       />
@@ -179,9 +188,7 @@ export interface OwnCustomLevel {
         data-slot="input"
         (change)="ageGroupChosen($event)"
         [attr.aria-describedby]="
-          errors().ageGroup()
-            ? ids().ageGroup + '-description ' + ids().ageGroup + '-error'
-            : ids().ageGroup + '-description'
+          describedBy(ids().ageGroup, division().notes.ageGroup(), errors().ageGroup())
         "
         [attr.aria-invalid]="errors().ageGroup() ? 'true' : null"
         [attr.data-matches-spartan-invalid]="errors().ageGroup() ? 'true' : null"
@@ -204,6 +211,9 @@ export interface OwnCustomLevel {
       >
         Adult unless the league is for an age bracket, such as 40+, or a youth group, such as U10.
       </p>
+      @if (division().notes.ageGroup(); as note) {
+        <app-field-note [id]="ids().ageGroup + '-note'" [note]="note" />
+      }
       @if (errors().ageGroup(); as error) {
         <div
           role="alert"
@@ -313,6 +323,12 @@ export class LeagueDivisionFields {
   protected readonly minimumShown = computed(
     () => this.minimumOpened() || this.division().minimumText() !== '',
   );
+
+  protected describedBy(id: string, note: unknown, error: string | null): string {
+    return [`${id}-description`, note ? `${id}-note` : null, error ? `${id}-error` : null]
+      .filter((part) => part !== null)
+      .join(' ');
+  }
 
   protected chooseGender(key: string): void {
     const gender = GENDERS.find((candidate) => candidate === key);

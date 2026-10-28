@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -215,6 +215,117 @@ test.describe('League management: league details', () => {
         await expect(
           page.getByRole('heading', { level: 1, name: 'Sunday Sand Coed 4s' }),
         ).toBeVisible();
+      } finally {
+        await adminPage.context().close();
+      }
+    });
+  });
+
+  test.describe('another organizer’s save, shown live', () => {
+    const RENAME_NOTE = 'Someone else changed this to "6v6". The name you typed did not change it.';
+    const notes = (page: Page) => details(page).locator('[data-slot="field-note"]');
+
+    async function openWithAdmin(page: Page, browser: Browser) {
+      const admin = newUser('Admin');
+      const adminPage = await otherUser(browser, admin);
+      const { tenant, path } = await openDetails(page, 'leagueOrganizer');
+      await convexRun('testing:addMembership', {
+        organizationSlug: tenant.slug,
+        email: admin.email,
+        role: 'orgAdmin',
+      });
+      await adminPage.goto(path);
+      await expect(
+        adminPage.getByRole('heading', { level: 1, name: 'Sunday Reverse Coed 4s' }),
+      ).toBeVisible();
+      return adminPage;
+    }
+
+    async function adminSavesSixes(adminPage: Page) {
+      await chip(adminPage, 'format', '6v6').check({ force: true });
+      await save(adminPage).click();
+      await expect(status(adminPage)).toContainText('League details saved.');
+    }
+
+    test('a form with no edits shows the admin’s 6v6 without a reload, and saves with no refusal', async ({
+      page,
+      browser,
+    }, testInfo) => {
+      const adminPage = await openWithAdmin(page, browser);
+      try {
+        await expect(chip(page, 'format', '4v4')).toBeChecked();
+        await adminSavesSixes(adminPage);
+
+        await expect(chip(page, 'format', '6v6')).toBeChecked();
+        await expect(notes(page)).toHaveCount(0);
+        await expect(details(page).locator('[data-slot="alert"]')).toHaveCount(0);
+        await expect(status(page)).toHaveText('');
+        await screenshot(page, testInfo, '393-league-details-live');
+
+        await save(page).click();
+        await expect(status(page)).toContainText('League details saved.');
+        await expect(details(page).locator('[data-slot="alert"]')).toHaveCount(0);
+      } finally {
+        await adminPage.context().close();
+      }
+    });
+
+    test('an organizer who edited only Name keeps it, sees 6v6, and a save writes both', async ({
+      page,
+      browser,
+    }) => {
+      const adminPage = await openWithAdmin(page, browser);
+      try {
+        await details(page).getByLabel('Name').fill('Sunday Sand');
+        await adminSavesSixes(adminPage);
+
+        await expect(chip(page, 'format', '6v6')).toBeChecked();
+        await expect(details(page).getByLabel('Name')).toHaveValue('Sunday Sand');
+        await expect(notes(page)).toHaveCount(0);
+
+        await save(page).click();
+        await expect(status(page)).toContainText('League details saved.');
+        await expect(details(page).locator('[data-slot="alert"]')).toHaveCount(0);
+
+        await adminPage.reload();
+        await expect(details(adminPage).getByLabel('Name')).toHaveValue('Sunday Sand');
+        await expect(chip(adminPage, 'format', '6v6')).toBeChecked();
+      } finally {
+        await adminPage.context().close();
+      }
+    });
+
+    test('a rename that states 4s leaves the admin’s 6v6 with a note under Format, and a save writes both', async ({
+      page,
+      browser,
+    }, testInfo) => {
+      const adminPage = await openWithAdmin(page, browser);
+      try {
+        await adminSavesSixes(adminPage);
+        await expect(chip(page, 'format', '6v6')).toBeChecked();
+
+        await details(page).getByLabel('Name').fill('Sunday Sand Coed 4s');
+        await details(page).getByLabel('Name').blur();
+
+        await expect(chip(page, 'format', '6v6')).toBeChecked();
+        await expect(page.locator('#details-format-note')).toHaveText(RENAME_NOTE);
+        await expect(page.locator('#details-format')).toHaveAttribute(
+          'aria-describedby',
+          /details-format-note/,
+        );
+        await expect(details(page).locator('[data-slot="note-announcement"]')).toHaveText(
+          RENAME_NOTE,
+        );
+        await screenshot(page, testInfo, '393-league-details-note');
+        await expectAccessible(page);
+
+        await save(page).click();
+        await expect(status(page)).toContainText('League details saved.');
+        await expect(notes(page)).toHaveCount(0);
+        await expect(
+          page.getByRole('heading', { level: 1, name: 'Sunday Sand Coed 4s' }),
+        ).toBeVisible();
+        await expect(page.locator('[data-slot="league-division"]')).toHaveText('Coed · 6v6 · BB');
       } finally {
         await adminPage.context().close();
       }

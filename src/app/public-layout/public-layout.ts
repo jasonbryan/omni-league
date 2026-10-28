@@ -36,7 +36,10 @@ const FOOTER_LINK_CLASSES =
       class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
       >Skip to main content</a
     >
-    <div class="flex min-h-dvh flex-col bg-card [--top-bar-h:calc(4rem+1px)]">
+    <!-- A page skeleton is taller than a short page, so the footer would jump up when the content arrives; it is left out until then. -->
+    <div
+      class="flex min-h-dvh flex-col bg-card [--top-bar-h:calc(4rem+1px)] [&:has([data-page-loading])>footer]:hidden"
+    >
       <!-- The header is always in view, so focusing one of its controls must not scroll the page. -->
       <header
         class="sticky top-0 z-30 border-b border-border bg-card [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
