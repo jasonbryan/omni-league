@@ -3,7 +3,12 @@ import { Component, DOCUMENT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
+import { makeFunctionReference } from 'convex/server';
+import { AuthService } from '../auth/auth.service';
+import { FakeAuthClient, provideFakeAuthClient } from '../auth/testing/fake-auth-client';
 import { ChangesInFlight } from '../changes-in-flight';
+import { CONVEX_CLIENT, injectMutation } from '../data/convex';
+import { FakeConvexClient } from '../data/convex/testing/fake-convex-client';
 import {
   ACTIVATE_TIMEOUT_MS,
   AUTO_APPLY_WINDOW_MS,
@@ -568,6 +573,67 @@ describe('AppUpdates', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(reload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('real requests in flight (criterion 5)', () => {
+    const credentials = { email: 'maya.okafor@example.com', password: 'sandbar sunset spike 2026' };
+
+    it('holds an early reload while a sign-in request is unanswered, then reloads', async () => {
+      const auth = new FakeAuthClient();
+      auth.holdSignIn = true;
+      TestBed.configureTestingModule({ providers: [provideFakeAuthClient(auth)] });
+      await startOn();
+      const signIn = TestBed.inject(AuthService).signIn(credentials);
+      await vi.advanceTimersByTimeAsync(0);
+
+      sw.versionReady('a', 'b');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reload).not.toHaveBeenCalled();
+
+      auth.releaseSignIn();
+      await signIn;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds a reload at a path change while a mutation is unanswered, then reloads', async () => {
+      const convex = new FakeConvexClient();
+      TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: convex }] });
+      await startOn();
+      const createTeam = TestBed.runInInjectionContext(() =>
+        injectMutation(makeFunctionReference<'mutation', { name: string }, string>('teams:create')),
+      );
+      touch();
+      sw.versionReady('a', 'b');
+      const saved = createTeam.run({ name: 'Sharks' });
+
+      await navigate('/next');
+      expect(reload).not.toHaveBeenCalled();
+
+      convex.calls[0].resolve('team1');
+      await saved;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('reloads once a sign-in that failed has settled', async () => {
+      const auth = new FakeAuthClient();
+      auth.holdSignIn = true;
+      auth.signInThrows = new Error('network');
+      TestBed.configureTestingModule({ providers: [provideFakeAuthClient(auth)] });
+      await startOn();
+      const signIn = TestBed.inject(AuthService).signIn(credentials);
+      await vi.advanceTimersByTimeAsync(0);
+      sw.versionReady('a', 'b');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reload).not.toHaveBeenCalled();
+
+      auth.releaseSignIn();
+      await signIn;
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(reload).toHaveBeenCalledTimes(1);
     });
   });
 

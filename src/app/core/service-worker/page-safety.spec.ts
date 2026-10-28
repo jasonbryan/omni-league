@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
+import { Checkbox } from '../../ui/checkbox/checkbox';
 import { ChangesInFlight } from '../changes-in-flight';
 import { PageSafety } from './page-safety';
 
@@ -80,6 +81,23 @@ describe('PageSafety', () => {
 
     icon.click();
 
+    expect(safety.hasUnsavedField()).toBe(true);
+  });
+
+  it('counts a click on the real checkbox control, which fires no input event', () => {
+    const fixture = TestBed.createComponent(Checkbox);
+    fixture.componentRef.setInput('controlId', 'agree');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    document.body.append(host);
+    added.push(host);
+    const onInput = vi.fn();
+    document.addEventListener('input', onInput);
+
+    host.querySelector<HTMLElement>('[role=checkbox]')?.click();
+    document.removeEventListener('input', onInput);
+
+    expect(onInput).not.toHaveBeenCalled();
     expect(safety.hasUnsavedField()).toBe(true);
   });
 
