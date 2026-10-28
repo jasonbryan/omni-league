@@ -9,6 +9,7 @@ import {
   AREAS,
   SESSION,
   deriveSessionSpecs,
+  findUnmappedMockupReads,
   formatOutputs,
   selectSpecs,
 } from './e2e-affected.mjs';
@@ -421,11 +422,15 @@ describe('selectSpecs: mapped areas', () => {
     assert.ok(!specs.includes('FULL'));
   });
 
-  it('maps the leagues mockup to its spec, and every other design file to nothing', () => {
-    assert.deepEqual(
-      specsFor(['design/mockups/66-69-organization-leagues.html']),
-      want('e2e/organization-leagues-mockup.spec.ts'),
-    );
+  it('maps each mockup that a spec reads to that spec, and every other design file to nothing', () => {
+    const mockups = {
+      '66-69-organization-leagues.html': 'organization-leagues-mockup',
+      '125-126-seasons.html': 'league-management-mockup',
+      '141-app-leagues.html': 'app-leagues',
+    };
+    for (const [file, spec] of Object.entries(mockups)) {
+      assert.deepEqual(specsFor([`design/mockups/${file}`]), want(`e2e/${spec}.spec.ts`), file);
+    }
     assert.deepEqual(
       specsFor(['design/mockups/80-app-icon.html', 'design/mockup-kit/x.css']),
       want(),
@@ -909,5 +914,93 @@ describe('the specs that sign a user up or in', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('findUnmappedMockupReads', () => {
+  function inFixtureRepo(files, check) {
+    const root = mkdtempSync(join(tmpdir(), 'mockup-reads-'));
+    try {
+      for (const [path, text] of Object.entries(files)) {
+        mkdirSync(join(root, path, '..'), { recursive: true });
+        writeFileSync(join(root, path), text);
+      }
+      check(root);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+  const mockupFiles = {
+    'design/mockups/999-new.html': '<html></html>\n',
+    'design/mockups/66-69-organization-leagues.html': '<html></html>\n',
+  };
+  const readsMockup = (name) =>
+    `readFileSync(join(process.cwd(), 'design', 'mockups', '${name}'), 'utf8');\n`;
+
+  it('finds no unmapped read in the repo', () => {
+    assert.deepEqual(findUnmappedMockupReads(repoRoot), []);
+  });
+
+  it('reports a spec that reads a mockup no rule maps', () => {
+    inFixtureRepo(
+      { ...mockupFiles, 'e2e/new-mockup.spec.ts': readsMockup('999-new.html') },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), ['new-mockup: 999-new.html']);
+      },
+    );
+  });
+
+  it('reports a harness spec by its path relative to e2e, which the harness filter does not cover', () => {
+    inFixtureRepo(
+      { ...mockupFiles, 'e2e/harness/new-mockup.spec.ts': readsMockup('999-new.html') },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), ['harness/new-mockup: 999-new.html']);
+      },
+    );
+  });
+
+  it('reports a spec that builds its mockup path from a template with no file name', () => {
+    inFixtureRepo(
+      {
+        ...mockupFiles,
+        'e2e/built-path.spec.ts': 'const path = `design/mockups/${name}`;\n',
+      },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), ['built-path']);
+      },
+    );
+  });
+
+  it('reports a file under e2e that is not a spec and names a mockup or the word', () => {
+    inFixtureRepo(
+      {
+        ...mockupFiles,
+        'e2e/support/mockup-text.ts': "export const file = '66-69-organization-leagues.html';\n",
+        'e2e/support/word.ts': "export const dir = 'mockups';\n",
+        'e2e/global-setup.ts': readsMockup('999-new.html'),
+        'e2e/harness/probes/p.ts': 'const dir = `design/mockups/${x}`;\n',
+        'e2e/support/clean.ts': 'export const x = 1;\n',
+      },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), [
+          'global-setup.ts',
+          'harness/probes/p.ts',
+          'support/mockup-text.ts',
+          'support/word.ts',
+        ]);
+      },
+    );
+  });
+
+  it('reports nothing for a spec that reads a mockup a rule maps', () => {
+    inFixtureRepo(
+      {
+        ...mockupFiles,
+        'e2e/organization-leagues-mockup.spec.ts': readsMockup('66-69-organization-leagues.html'),
+      },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), []);
+      },
+    );
   });
 });
