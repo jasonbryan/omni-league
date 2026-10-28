@@ -2,14 +2,15 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCompass, lucideHouse } from '@ng-icons/lucide';
+import { lucideCompass, lucideSearch } from '@ng-icons/lucide';
 import { setNotFoundStatus } from '../core/not-found-status';
+import { OUTLINE_BUTTON_LARGE, PRIMARY_BUTTON_LARGE } from '../ui/button/button-classes';
 
 /** It reads no data and nothing per visitor, so the server and the browser render the same DOM. */
 @Component({
   selector: 'app-not-found-view',
   imports: [NgIcon, RouterLink],
-  providers: [provideIcons({ lucideCompass, lucideHouse })],
+  providers: [provideIcons({ lucideCompass, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-16' },
   template: `
@@ -25,21 +26,22 @@ import { setNotFoundStatus } from '../core/not-found-status';
         Page not found
       </h1>
       <p class="mt-3 text-balance text-muted-foreground">
-        Check the address for typos, or start again from the home page.
+        Check the address for typos, or find the league you are looking for.
       </p>
-      <!-- The classes are those of hlmBtn size="md" plus mt-8, so the view needs none of the helm button code. -->
-      <a
-        routerLink="/"
-        data-slot="button"
-        class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 bg-primary text-primary-foreground [a]:hover:bg-primary/90 h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 mt-8"
-      >
-        <ng-icon name="lucideHouse" data-icon="inline-start" aria-hidden="true" />
-        Go to the home page
-      </a>
+      <div class="mt-8 flex flex-wrap justify-center gap-3">
+        <a routerLink="/leagues" data-slot="button" [class]="findClasses">
+          <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
+          Find a league
+        </a>
+        <a routerLink="/" data-slot="button" [class]="homeClasses">Go to the home page</a>
+      </div>
     </div>
   `,
 })
 export class NotFoundView {
+  protected readonly findClasses = PRIMARY_BUTTON_LARGE;
+  protected readonly homeClasses = OUTLINE_BUTTON_LARGE;
+
   constructor() {
     setNotFoundStatus();
     inject(Title).setTitle('Page not found | Omni League');

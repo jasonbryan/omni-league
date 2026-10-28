@@ -23,6 +23,7 @@ describe('NotFoundPage', () => {
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     expect([...host.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
       'Omni League',
+      'Find a league',
       'Sign in',
     ]);
   });

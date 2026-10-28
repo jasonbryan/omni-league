@@ -397,6 +397,25 @@ describe('OrganizationPage', () => {
       expect(main?.querySelectorAll('li')).toHaveLength(0);
       expect(main?.textContent).not.toContain('Locations');
     });
+
+    it('links "Find another league" to /leagues as the way on', async () => {
+      const harness = await open(`/organizations/${PORT_ARANSAS.slug}`);
+      emit(PORT_ARANSAS);
+      await settle(harness);
+      const links = [...host(harness).querySelectorAll('main a')];
+      const find = links.filter((a) => text(a) === 'Find another league');
+      expect(find).toHaveLength(1);
+      expect(find[0].getAttribute('href')).toBe('/leagues');
+      expect(find[0].previousElementSibling?.tagName).toBe('P');
+      expect(find[0].querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('has no "Find another league" link once the organization has a league', async () => {
+      const harness = await open();
+      emit(GULF_COAST);
+      await settle(harness);
+      expect(host(harness).textContent).not.toContain('Find another league');
+    });
   });
 
   describe('an organization with locations and no league', () => {

@@ -8,7 +8,7 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { PRIMARY_OUTLET, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideTrophy } from '@ng-icons/lucide';
 import { injectCurrentUrl } from '../shell/current-url';
@@ -16,6 +16,7 @@ import { OfflineNote } from '../shell/offline-note';
 import { skipLinkHref } from '../shell/shell';
 import { injectSignInReturnTo } from '../shell/sign-in-return-to';
 import { TopBarAccount } from '../shell/top-bar-account';
+import { TopBarFind } from './top-bar-find';
 
 const FOOTER_LINK_CLASSES =
   'inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0';
@@ -26,7 +27,7 @@ const FOOTER_LINK_CLASSES =
  */
 @Component({
   selector: 'app-public-layout',
-  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink, TopBarAccount],
+  imports: [NgIcon, NgTemplateOutlet, OfflineNote, RouterLink, TopBarAccount, TopBarFind],
   providers: [provideIcons({ lucideTrophy })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -48,8 +49,12 @@ const FOOTER_LINK_CLASSES =
           >
             <ng-container [ngTemplateOutlet]="brand" />
           </a>
+          @if (showFind()) {
+            <app-top-bar-find />
+          }
           <div
-            class="ms-auto flex shrink-0 items-center [&_a]:min-h-11 md:[&_a]:min-h-0 [&_a[href^='/sign-in']]:px-4 md:[&_a[href^='/sign-in']]:px-3"
+            class="flex shrink-0 items-center pointer-coarse:[&_a]:min-h-11 [&_a[href^='/sign-in']]:px-3 pointer-coarse:[&_a[href^='/sign-in']]:px-4"
+            [class.ms-auto]="!showFind()"
           >
             <app-top-bar-account />
           </div>
@@ -131,6 +136,11 @@ export class PublicLayout {
 
   protected readonly signIn = injectSignInReturnTo();
   protected readonly footerLink = FOOTER_LINK_CLASSES;
+  // The search page has a larger field of its own.
+  protected readonly showFind = computed(() => {
+    const segments = this.router.parseUrl(this.url()).root.children[PRIMARY_OUTLET]?.segments ?? [];
+    return !(segments.length === 1 && segments[0]?.path === 'leagues');
+  });
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),
   );

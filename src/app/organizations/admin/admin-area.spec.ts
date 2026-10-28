@@ -131,7 +131,7 @@ describe('AdminArea', () => {
       subscription(GET_ADMIN_CONTEXT)!.emit(null);
       await flush();
       expect(text(page.querySelector('h1'))).toBe('Page not found');
-      expect(text(page.querySelector('main a'))).toBe('Go to the home page');
+      expect(text(page.querySelector('main a[href="/"]'))).toBe('Go to the home page');
       expect(page.querySelector('nav')).toBeNull();
       expect(page.querySelector('#child')).toBeNull();
       expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ADMIN_CONTEXT, ME]);

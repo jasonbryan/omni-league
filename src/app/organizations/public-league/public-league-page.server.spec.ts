@@ -189,7 +189,11 @@ describe('PublicLeaguePage server render', () => {
     expect(frame.navs.at(-1)).toBe('Footer');
     expect(frame.navs).not.toContain('Gulf Coast Sport & Social');
     expect(body.querySelector('a')?.getAttribute('href')).toBe(`${LEAGUE_PATH}#main`);
-    expect([...body.querySelectorAll('header a')].map(text)).toEqual(['Omni League', 'Sign in']);
+    expect([...body.querySelectorAll('header a')].map(text)).toEqual([
+      'Omni League',
+      'Find a league',
+      'Sign in',
+    ]);
 
     // Neither the token nor any other query parameter reaches the cacheable HTML.
     expect(html).not.toContain('SECRET');

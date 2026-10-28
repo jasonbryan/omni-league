@@ -19,6 +19,7 @@ import {
   lucideChevronRight,
   lucideMapPin,
   lucidePencil,
+  lucideSearch,
   lucideTrophy,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -70,6 +71,7 @@ function plural(count: number, noun: string): string {
       lucideChevronRight,
       lucideMapPin,
       lucidePencil,
+      lucideSearch,
       lucideTrophy,
       lucideUsers,
     }),
@@ -141,6 +143,10 @@ function plural(count: number, noun: string): string {
               Leagues this organization runs will be listed here, with their seasons and how to
               register.
             </p>
+            <a routerLink="/leagues" data-slot="button" [class]="registerButtonLarge" class="mt-6">
+              <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
+              Find another league
+            </a>
           </div>
         </div>
       </div>
