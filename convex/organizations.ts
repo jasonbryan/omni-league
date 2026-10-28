@@ -1,7 +1,12 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import {
+  hasOrgAdminRole,
+  requireOrgAdmin,
+  requireOrgAdminOrForbidden,
+  requireUser,
+} from './lib/access';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { leagueRowSeasons } from './lib/publicLeague';
 import { insertOrgAdminMembership } from './lib/memberships';
@@ -226,6 +231,16 @@ export const getAdminContext = query({
       slug: organization.slug,
       ...(organization.cityState !== undefined && { cityState: organization.cityState }),
     };
+  },
+});
+
+export const viewerIsOrgAdmin = query({
+  args: { slug: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { slug }) => {
+    const organization = await findOrganizationBySlug(ctx, slug);
+    if (!organization) return false;
+    return await hasOrgAdminRole(ctx, organization._id);
   },
 });
 
