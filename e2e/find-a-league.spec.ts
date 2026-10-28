@@ -423,12 +423,14 @@ test.describe('find a league: in the browser', () => {
     await fewer.getByRole('link').click();
     await expect(page).toHaveURL(`${baseURL}${url(`coed 4s ${id}`)}`);
     await expect(rowNames(page)).toHaveText([SUNDAY]);
+    await expect(results(page).getByRole('status')).toBeFocused();
     await submit(page, 'pickleball');
     await expect(results(page)).toContainText('No leagues match “pickleball”');
     await results(page).getByRole('link', { name: 'Clear the search' }).click();
     await expect(page).toHaveURL(`${baseURL}/leagues`);
     await expect(results(page)).toHaveCount(0);
     await expect(field(page)).toHaveValue('');
+    await expect(field(page)).toBeFocused();
   });
 
   async function failTheSearch(page: Page): Promise<() => void> {

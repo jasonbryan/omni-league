@@ -14,10 +14,8 @@ export function parseSearchQuery(values: readonly string[]): string {
   return Array.from(words.join(' ')).slice(0, SEARCH_QUERY_MAX_LENGTH).join('').trimEnd();
 }
 
-/** Most searches offered when a search of several words finds nothing. */
 export const SEARCH_SUGGESTION_LIMIT = 3;
 
-/** Lowercased, accents removed, split on anything that is not a letter or a digit. */
 export function searchWords(text: string): string[] {
   return text
     .normalize('NFD')
@@ -27,11 +25,8 @@ export function searchWords(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Convex text search takes any word, so this keeps what it found only if every word of `q` is a word of the text; the last may be the start of one, as Convex matches it. */
-export function matchesEveryWord(searchText: string, q: string): boolean {
-  const wanted = searchWords(q);
+function holdsEveryWord(held: readonly string[], wanted: readonly string[]): boolean {
   if (wanted.length === 0) return false;
-  const held = searchWords(searchText);
   const whole = new Set(held);
   const last = wanted[wanted.length - 1];
   return (
@@ -40,21 +35,31 @@ export function matchesEveryWord(searchText: string, q: string): boolean {
   );
 }
 
-/** Up to three searches, each dropping one space-separated word of `q` as typed, that match at least one of the texts: most texts first, and the later dropped word first on a tie. */
+/** Convex text search takes any word, so this keeps what it found only if every word of `q` is a word of the text; the last may be the start of one, as Convex matches it. */
+export function matchesEveryWord(searchText: string, q: string): boolean {
+  return holdsEveryWord(searchWords(searchText), searchWords(q));
+}
+
 export function suggestFewerWords(searchTexts: readonly string[], q: string): string[] {
   const words = q.split(' ').filter(Boolean);
   if (words.length < 2) return [];
-  const candidates = new Set<string>();
+  const heldWords = searchTexts.map(searchWords);
+  const candidates = new Map<string, number>();
   for (let dropped = words.length - 1; dropped >= 0; dropped--) {
-    candidates.add(words.filter((_, index) => index !== dropped).join(' '));
+    const candidate = words.filter((_, index) => index !== dropped).join(' ');
+    if (!candidates.has(candidate)) candidates.set(candidate, dropped);
   }
   return [...candidates]
-    .map((candidate) => ({
-      candidate,
-      matches: searchTexts.filter((text) => matchesEveryWord(text, candidate)).length,
-    }))
+    .map(([candidate, dropped]) => {
+      const wanted = searchWords(candidate);
+      return {
+        candidate,
+        dropped,
+        matches: heldWords.filter((held) => holdsEveryWord(held, wanted)).length,
+      };
+    })
     .filter(({ matches }) => matches > 0)
-    .sort((a, b) => b.matches - a.matches)
+    .sort((a, b) => b.matches - a.matches || b.dropped - a.dropped)
     .slice(0, SEARCH_SUGGESTION_LIMIT)
     .map(({ candidate }) => candidate);
 }

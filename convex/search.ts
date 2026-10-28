@@ -9,7 +9,6 @@ import { sportName } from './lib/sports';
 
 export const SEARCH_RESULT_LIMIT = 50;
 
-/** The most search results read, ranked by relevance, before the leagues that miss a word are dropped. */
 export const SEARCH_SCAN_LIMIT = 200;
 
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous search that reads no identity and returns only published fields, with no ids.

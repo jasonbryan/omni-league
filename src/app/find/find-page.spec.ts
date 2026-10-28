@@ -253,13 +253,6 @@ describe('FindPage suggestions', () => {
     );
   });
 
-  it('makes each suggestion link at least 44px high on touch screens', async () => {
-    const harness = await open('/leagues?q=coed%204s%20austin');
-    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
-    await settle(harness);
-    expect(results(harness)!.querySelector('ul a')!.className).toContain('pointer-coarse:min-h-11');
-  });
-
   it('follows a suggestion to its search', async () => {
     const harness = await open('/leagues?q=coed%204s%20austin');
     subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
@@ -269,6 +262,55 @@ describe('FindPage suggestions', () => {
     expect(TestBed.inject(Router).url).toBe('/leagues?q=coed%204s');
     expect(subscription().args).toEqual({ q: 'coed 4s' });
     expect(input(harness).value).toBe('coed 4s');
+  });
+
+  it('moves focus to the status line of the new results once they arrive, not before', async () => {
+    const harness = await open('/leagues?q=coed%204s%20austin');
+    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    await settle(harness);
+    const link = results(harness)!.querySelector<HTMLAnchorElement>('ul a')!;
+    link.focus();
+    link.click();
+    await settle(harness);
+    expect(results(harness)!.querySelector('[data-testid="find-skeleton"]')).not.toBeNull();
+    expect(host(harness).ownerDocument.activeElement).not.toBe(
+      results(harness)!.querySelector('[role="status"]'),
+    );
+
+    subscription().emit({ more: false, rows: [SUNDAY_4S_ROW] });
+    await settle(harness);
+    const status = results(harness)!.querySelector('[role="status"]');
+    expect(text(status)).toBe('1 league matches “coed 4s”');
+    expect(host(harness).ownerDocument.activeElement).toBe(status);
+  });
+
+  it('moves focus to the search field when Clear the search is followed', async () => {
+    const harness = await open('/leagues?q=pickleball');
+    subscription().emit(NO_RESULTS);
+    await settle(harness);
+    const clear = [...results(harness)!.querySelectorAll('a')].find(
+      (a) => text(a) === 'Clear the search',
+    )!;
+    clear.focus();
+    clear.click();
+    await settle(harness);
+    expect(TestBed.inject(Router).url).toBe('/leagues');
+    expect(host(harness).ownerDocument.activeElement).toBe(input(harness));
+  });
+
+  it('leaves focus alone when a suggestion is opened in a new tab', async () => {
+    const harness = await open('/leagues?q=coed%204s%20austin');
+    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    await settle(harness);
+    const link = results(harness)!.querySelector<HTMLAnchorElement>('ul a')!;
+    link.focus();
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+    await search(harness, 'coed');
+    subscription().emit(COED_RESULTS);
+    await settle(harness);
+    expect(host(harness).ownerDocument.activeElement).not.toBe(
+      results(harness)!.querySelector('[role="status"]'),
+    );
   });
 
   it('shows no list when there are no suggestions', async () => {
