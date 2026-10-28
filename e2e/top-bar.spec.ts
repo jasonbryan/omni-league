@@ -183,5 +183,38 @@ test.describe('top bar', () => {
       );
       await screenshot(page, testInfo, '63-top-bar-long-name');
     });
+
+    test('at 320px a long name shrinks beside the 44px search link and the bar does not scroll sideways', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      test.skip(
+        testInfo.project.name !== 'chromium-mobile',
+        'sets its own width on a touch screen',
+      );
+      const user = { ...newUser(), name: 'Alejandra Castellanos-Whitfield' };
+      await seedUser(user);
+      const tenant = await seedTenant();
+      await signInAs(page, user);
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+
+      await expect(accountLink(page)).toBeVisible();
+      const find = page.getByRole('banner').getByRole('link', { name: 'Find a league' });
+      const [findBox, accountBox] = [
+        await find.boundingBox(),
+        await accountLink(page).boundingBox(),
+      ];
+      expect(findBox?.width).toBeGreaterThanOrEqual(44);
+      expect(findBox?.height).toBeGreaterThanOrEqual(44);
+      expect(accountBox?.height).toBeGreaterThanOrEqual(44);
+      expect((findBox?.x ?? 0) + (findBox?.width ?? 0)).toBeLessThanOrEqual(accountBox?.x ?? 0);
+      expect((accountBox?.x ?? 0) + (accountBox?.width ?? 0)).toBeLessThanOrEqual(320);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        320,
+      );
+    });
   });
 });
