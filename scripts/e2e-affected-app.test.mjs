@@ -447,6 +447,23 @@ describe('the route tables', () => {
     }
   });
 
+  it('maps sign-in and sign-up each to its own spec and the session spec', () => {
+    for (const path of ['sign-in', 'sign-up']) {
+      for (const name of [path, 'auth-session']) {
+        assert.ok(ROUTE_SPECS[path].includes(name), `${path}: ${name}`);
+      }
+    }
+  });
+
+  it('maps every path behind requireSignedIn to the after-sign-in spec, and invites/accept to the accept-invite spec', () => {
+    const signedIn = routes.filter((route) => route.guards.includes('requireSignedIn'));
+    assert.ok(signedIn.length >= 3, signedIn.map((route) => route.path).join(', '));
+    for (const route of signedIn) {
+      assert.ok(ROUTE_SPECS[route.path].includes('after-sign-in'), route.path);
+    }
+    assert.ok(ROUTE_SPECS['invites/accept'].includes('accept-invite'));
+  });
+
   it('names only specs that exist', () => {
     for (const [path, names] of Object.entries(ROUTE_SPECS)) {
       for (const name of names) assert.ok(specNames.includes(specFile(name)), `${path}: ${name}`);
@@ -628,6 +645,18 @@ describe('the files under src/app that run the full suite', () => {
     ]) {
       assert.deepEqual(specsFor([file]), [FULL], file);
     }
+  });
+
+  it('keeps the guards in the full suite when the only importer is a file with a rule', () => {
+    withRepo(
+      {
+        'src/app/core/auth/guards.ts': 'export const guard = 1;\n',
+        'src/app/invites/page.ts': "import { guard } from '../core/auth/guards';\n",
+      },
+      (root) => {
+        assert.deepEqual(specsFor(['src/app/core/auth/guards.ts'], root), [FULL]);
+      },
+    );
   });
 
   it('keeps the guards in the full suite even when a file with a rule imports them', () => {
