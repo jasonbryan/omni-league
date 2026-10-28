@@ -199,6 +199,21 @@ E2E_KILL_SWITCH=1 E2E_BASE_URL=http://localhost:4100 npx playwright test e2e/pwa
 
 It starts and stops its own SSR server, and leaves the kill-switch build in `dist/`; run `npm run build` again before the production-build run below.
 
+**Updates.** A new version loads by itself when nothing on the page can be lost (`AppUpdates`, `src/app/core/service-worker/app-updates.ts`; [ADR 0013](../decisions/0013-pwa-stack.md), 2026-10-27 amendment):
+
+- It reloads within 10 s of the page loading when the user has not touched it, on a router navigation that changes the path, and when a page open for more than 7 days comes back to the front. It never reloads because the page became hidden.
+- Unsaved input in a field still on screen, or a change in flight, holds it. The new-version prompt then shows, and Reload loads the version at once.
+- A tab reloads automatically at most once per version hash, kept in `sessionStorage`. With no usable `sessionStorage` it never reloads by itself and the prompt shows.
+- The unrecoverable state reloads once per tab while the page is safe and online. Otherwise the message shows.
+
+**Update rehearsal.** `e2e/pwa-update.spec.ts` builds two versions with the same Convex URL, installs the first, and checks that the second loads without the prompt, and that typed input keeps the prompt and the value. It needs two production builds and its own SSR server, so `ci` and `npm run e2e` skip it. Run it with no Convex URL (as below) and a free port:
+
+```sh
+E2E_PWA_UPDATE=1 E2E_BASE_URL=http://localhost:4101 npx playwright test e2e/pwa-update.spec.ts --project=chromium-mobile
+```
+
+The tester runs it, and the release check lists it next to `e2e/pwa.spec.ts`.
+
 **Netlify Drawer.** The Drawer script changes `index.csr.html` after the build, so ngsw's hash check fails where it is injected, and the worker falls back to the network there: the app works, but not offline. The owner turns the Drawer off for Deploy Previews and Branch deploys (Netlify UI; owner, 2026-10-09). With it off, offline and update evidence from a preview counts as well as from a local production build.
 
 **Local production-build run.** `npm run e2e` cannot test the worker: it rebuilds `dist/` in development mode. Run `e2e/pwa.spec.ts` against a production build instead:
@@ -225,7 +240,7 @@ E2E_BASE_URL=http://localhost:4000 npx playwright test e2e/pwa.spec.ts --project
 
 `seed-demo` sets `PREVIEW_ORIGIN_PATTERN` on the local backend because `seed:demo` refuses to write anywhere else (Demo data, Production guard); on that backend the pattern only admits this project's preview origins. Stop `serve:ssr` and the backend afterwards ([dev cycle, Local processes](dev-cycle.md#local-processes)). A preview seeded by `seed:demo` may replace the backend, the seed, and the build once the Drawer is off.
 
-**Release check.** No `ci` job proves offline behaviour, because `e2e/pwa.spec.ts` needs a production build. Every release request (`gate:production`) records a run of the sequence with data above on the release commit, with the output in its Evidence block; the saved-copy tests must pass, not be skipped.
+**Release check.** No `ci` job proves offline behaviour, because `e2e/pwa.spec.ts` needs a production build. Every release request (`gate:production`) records a run of the sequence with data above on the release commit, with the output in its Evidence block; the saved-copy tests must pass, not be skipped. It also records a run of `e2e/pwa-update.spec.ts` ([Updates](#service-worker) above), which must pass, not be skipped.
 
 ## Cleanup
 

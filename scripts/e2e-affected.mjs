@@ -312,7 +312,7 @@ export const AREAS = [
   {
     name: 'placeholder home',
     test: inDir('src/app/placeholder/'),
-    specs: ['install', 'pwa', 'pwa-kill-switch', SESSION],
+    specs: ['install', 'pwa', 'pwa-kill-switch', 'pwa-update', SESSION],
   },
 
   {
