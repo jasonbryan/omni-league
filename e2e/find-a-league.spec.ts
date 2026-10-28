@@ -384,6 +384,85 @@ test.describe('find a league: in the browser', () => {
     await expect(results(page)).toHaveCount(0);
     await expect(field(page)).toHaveValue('');
   });
+
+  async function failTheSearch(page: Page): Promise<() => void> {
+    let failing = true;
+    const searchIds = new Set<number>();
+    await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((message) => {
+        const { modifications = [] } = JSON.parse(String(message)) as {
+          modifications?: { type: string; queryId: number; udfPath?: string }[];
+        };
+        for (const { type, queryId, udfPath } of modifications) {
+          if (type === 'Add' && udfPath === 'search:leagues') searchIds.add(queryId);
+        }
+        server.send(message);
+      });
+      server.onMessage((message) => {
+        const frame = JSON.parse(String(message)) as {
+          type: string;
+          modifications?: { type: string; queryId: number }[];
+        };
+        const fails =
+          failing &&
+          frame.modifications?.some(
+            ({ type, queryId }) => type === 'QueryUpdated' && searchIds.has(queryId),
+          );
+        if (!fails) {
+          ws.send(message);
+          return;
+        }
+        const failed = frame.modifications?.map((change) =>
+          searchIds.has(change.queryId)
+            ? { type: 'QueryFailed', queryId: change.queryId, errorMessage: 'down', logLines: [] }
+            : change,
+        );
+        ws.send(JSON.stringify({ ...frame, modifications: failed }));
+      });
+    });
+    return () => {
+      failing = false;
+    };
+  }
+
+  async function heights(page: Page): Promise<{ coarse: boolean; clear: number; retry: number }> {
+    const { id } = await seed();
+    const recover = await failTheSearch(page);
+    await page.goto(url(id));
+    const retry = page.getByRole('alert').getByRole('link', { name: 'Try again' });
+    await expect(retry).toBeVisible();
+    const retryBox = await retry.boundingBox();
+    recover();
+    await page.goto(url('pickleball'));
+    const clear = page.getByRole('link', { name: 'Clear the search' });
+    await expect(clear).toBeVisible();
+    const clearBox = await clear.boundingBox();
+    const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    return { coarse, clear: clearBox?.height ?? 0, retry: retryBox?.height ?? 0 };
+  }
+
+  test.describe('on a wide touch screen', () => {
+    test.use({ viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true });
+
+    test('Try again and Clear the search are at least 44px tall', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'one project covers the wide screen');
+      const measured = await heights(page);
+      expect(measured.coarse).toBe(true);
+      expect(measured.retry).toBeGreaterThanOrEqual(44);
+      expect(measured.clear).toBeGreaterThanOrEqual(44);
+    });
+  });
+
+  test('Try again and Clear the search keep their line height with a mouse', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'only the desktop project has a mouse');
+    const measured = await heights(page);
+    expect(measured.coarse).toBe(false);
+    expect(measured.retry).toBeLessThan(44);
+    expect(measured.clear).toBeLessThan(44);
+  });
 });
 
 test.describe('find a league: offline', () => {
