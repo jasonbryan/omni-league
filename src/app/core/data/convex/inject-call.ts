@@ -65,7 +65,7 @@ function createCallRef<Args, R>(
       try {
         if (!connection.canSend()) {
           await connection.waitUntilCanSend(CALL_CONNECTION_WAIT_MS);
-          if (!connection.canSend()) throw new ConvexOfflineError();
+          if (!connection.canSend()) throw new ConvexOfflineError(connection.cause());
         }
         const result = await call(client, args);
         error.set(undefined);

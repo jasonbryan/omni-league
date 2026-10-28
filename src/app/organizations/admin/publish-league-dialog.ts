@@ -48,7 +48,6 @@ export const PUBLISH_ALERTS = {
     description: 'Check your connection and try again.',
   },
   offline: {
-    title: "You're offline. Nothing was sent.",
     description: "The league is still a draft. Try again when you're connected.",
   },
 } as const;
@@ -106,7 +105,7 @@ type PublishAlert = keyof typeof PUBLISH_ALERTS;
                 #alertBox
                 class="mt-3"
                 [kind]="kind === 'offline' ? 'offline' : 'error'"
-                [title]="alerts[kind].title"
+                [title]="kind === 'failed' ? alerts.failed.title : undefined"
                 [description]="alerts[kind].description"
               />
             }

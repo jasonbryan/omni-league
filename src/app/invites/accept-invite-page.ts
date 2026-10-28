@@ -70,7 +70,6 @@ const REFUSALS = {
     description: 'Check your connection and try again.',
   },
   offline: {
-    title: "You're offline. Nothing was sent.",
     description: "The invite is still waiting. Try again when you're connected.",
   },
 } as const;
@@ -499,10 +498,9 @@ export class AcceptInvitePage {
     return role === 'orgAdmin' ? 'Org admin' : 'League organizer';
   }
 
-  protected refusalTitle(refusal: Refusal, organizationName: string): string {
-    return refusal === 'alreadyMember'
-      ? `You’re already on the staff of ${organizationName}.`
-      : REFUSALS[refusal].title;
+  protected refusalTitle(refusal: Refusal, organizationName: string): string | undefined {
+    if (refusal === 'alreadyMember') return `You’re already on the staff of ${organizationName}.`;
+    return refusal === 'offline' ? undefined : REFUSALS[refusal].title;
   }
 
   protected refusalDescription(refusal: Refusal): string {

@@ -243,7 +243,6 @@ const ROLE_LABEL: Record<Role, string> = {
                     <app-admin-alert
                       #noticeAlert
                       kind="offline"
-                      title="You're offline. Nothing was sent."
                       description="The invite is still revoked. Try again when you're connected."
                     >
                       <ng-container [ngTemplateOutlet]="undoAction" />
@@ -253,7 +252,6 @@ const ROLE_LABEL: Record<Role, string> = {
                     <app-admin-alert
                       #noticeAlert
                       kind="offline"
-                      title="You're offline. Nothing was sent."
                       description="The invite is unchanged. Try again when you're connected."
                     />
                   }

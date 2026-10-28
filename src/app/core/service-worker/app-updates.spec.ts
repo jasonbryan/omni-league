@@ -7,11 +7,13 @@ import { makeFunctionReference } from 'convex/server';
 import { AuthService } from '../auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../auth/testing/fake-auth-client';
 import { ChangesInFlight } from '../changes-in-flight';
-import { CONVEX_CLIENT, injectMutation } from '../data/convex';
+import { CONVEX_CLIENT, ConvexConnection, injectMutation } from '../data/convex';
 import { FakeConvexClient } from '../data/convex/testing/fake-convex-client';
 import {
   AUTO_APPLY_WINDOW_MS,
   AppUpdates,
+  EARLY_CHECK_DELAY_MS,
+  EARLY_CHECK_INTERVAL_MS,
   PAGE_LOADED_AT,
   RELOAD_PAGE,
   STALE_PAGE_AGE_MS,
@@ -27,6 +29,8 @@ const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const START = new Date('2026-10-09T12:00:00Z').getTime();
 const LEGACY_FIRST_RUN_KEY = 'omni-league:sw-version-first-run';
+/** The note waits this long after the socket went down once a newer version is detected. */
+const NOTE_HELD_UNTIL_MS = 15 * SECOND;
 
 describe('AppUpdates', () => {
   let sw: FakeSwUpdate;
@@ -882,6 +886,423 @@ describe('AppUpdates', () => {
 
       expect(activate).not.toHaveBeenCalled();
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('a Convex deployment that does not answer', () => {
+    let convex: FakeConvexClient;
+    let connection: ConvexConnection;
+
+    /** `neverConnected` is the moved-deployment case: the old bundle's socket has not connected since the page loaded. */
+    async function startWithSocketDown(
+      options: { neverConnected?: boolean; loadedAgo?: number } = {},
+    ): Promise<AppUpdates> {
+      convex = new FakeConvexClient();
+      if (options.neverConnected) convex.setConnected(false, { neverConnected: true });
+      TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: convex }] });
+      const updates = await startOn('/home', options.loadedAgo ?? 0);
+      connection = TestBed.inject(ConvexConnection);
+      TestBed.tick();
+      return updates;
+    }
+
+    async function startConnected(): Promise<AppUpdates> {
+      return startWithSocketDown();
+    }
+
+    function stubBrowserOnline(value: boolean): void {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(value);
+      window.dispatchEvent(new Event(value ? 'online' : 'offline'));
+    }
+
+    describe('the early update check', () => {
+      it('runs 1 s after the socket went down while the browser is online', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startConnected();
+
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS - 1);
+        expect(check).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(check).toHaveBeenCalledTimes(1);
+      });
+
+      it('runs 1 s after the start when the socket has not connected', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startWithSocketDown({ neverConnected: true });
+
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+
+        expect(check).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not run when the socket reconnects within 1 s', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startConnected();
+
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(900);
+        convex.setConnected(true);
+        await vi.advanceTimersByTimeAsync(10 * SECOND);
+
+        expect(check).not.toHaveBeenCalled();
+      });
+
+      it('runs again a minute later while the socket stays down, never more often', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startConnected();
+
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_INTERVAL_MS - 1);
+        expect(check).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(check).toHaveBeenCalledTimes(2);
+      });
+
+      it('waits out the minute when the socket drops again soon after a check', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startConnected();
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+        convex.setConnected(true);
+        await vi.advanceTimersByTimeAsync(10 * SECOND);
+
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+        expect(check).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_INTERVAL_MS);
+        expect(check).toHaveBeenCalledTimes(2);
+      });
+
+      it('does not run while the browser is offline', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startConnected();
+
+        stubBrowserOnline(false);
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(10 * SECOND);
+
+        expect(check).not.toHaveBeenCalled();
+      });
+
+      it('runs 1 s after the browser comes back online with the socket still down', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startWithSocketDown({ neverConnected: true });
+        stubBrowserOnline(false);
+        await vi.advanceTimersByTimeAsync(10 * SECOND);
+        expect(check).not.toHaveBeenCalled();
+
+        stubBrowserOnline(true);
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+
+        expect(check).toHaveBeenCalledTimes(1);
+      });
+
+      it('swallows a check that rejects', async () => {
+        const check = vi
+          .spyOn(sw, 'checkForUpdate')
+          .mockImplementation(() => Promise.reject(new Error('network')));
+        await startWithSocketDown({ neverConnected: true });
+
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+
+        expect(check).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not run with the worker off', async () => {
+        sw.isEnabled = false;
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        convex = new FakeConvexClient();
+        convex.setConnected(false, { neverConnected: true });
+        TestBed.configureTestingModule({
+          providers: [{ provide: CONVEX_CLIENT, useValue: convex }],
+        });
+        setUp().start();
+
+        await vi.advanceTimersByTimeAsync(10 * SECOND);
+
+        expect(check).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('which cause the connection reports', () => {
+      it('is unreachable once the site answered with no newer version, while the socket is down', async () => {
+        await startWithSocketDown({ neverConnected: true });
+
+        sw.noNewVersion('a');
+
+        expect(connection.cause()).toBe('unreachable');
+      });
+
+      it('is unreachable once a newer version was detected', async () => {
+        await startWithSocketDown({ neverConnected: true });
+
+        sw.versionDetected('b');
+
+        expect(connection.cause()).toBe('unreachable');
+      });
+
+      it('is unreachable once a newer version is ready', async () => {
+        await startWithSocketDown({ neverConnected: true });
+        typeInto();
+
+        sw.versionReady('a', 'b');
+
+        expect(connection.cause()).toBe('unreachable');
+      });
+
+      it('stays offline when the check resolves false with no worker event (a 504 or a captive portal)', async () => {
+        vi.spyOn(sw, 'checkForUpdate').mockResolvedValue(false);
+        await startWithSocketDown({ neverConnected: true });
+
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS + 100);
+
+        expect(connection.cause()).toBe('offline');
+      });
+
+      it('stays offline when the check rejects', async () => {
+        vi.spyOn(sw, 'checkForUpdate').mockImplementation(() =>
+          Promise.reject(new Error('network')),
+        );
+        await startWithSocketDown({ neverConnected: true });
+
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS + 100);
+
+        expect(connection.cause()).toBe('offline');
+      });
+
+      it('stays offline while the check has not settled', async () => {
+        vi.spyOn(sw, 'checkForUpdate').mockReturnValue(new Promise(() => undefined));
+        await startWithSocketDown({ neverConnected: true });
+
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS + 100);
+
+        expect(connection.cause()).toBe('offline');
+      });
+
+      it('stays offline when no worker controls the page', () => {
+        sw.isEnabled = false;
+        convex = new FakeConvexClient();
+        convex.setConnected(false, { neverConnected: true });
+        TestBed.configureTestingModule({
+          providers: [{ provide: CONVEX_CLIENT, useValue: convex }],
+        });
+        setUp().start();
+        connection = TestBed.inject(ConvexConnection);
+
+        sw.noNewVersion('a');
+
+        expect(connection.cause()).toBe('offline');
+      });
+
+      it('ignores installation failures', async () => {
+        await startWithSocketDown({ neverConnected: true });
+
+        sw.versionUpdates.next({
+          type: 'VERSION_INSTALLATION_FAILED',
+          version: { hash: 'b' },
+          error: 'x',
+        });
+
+        expect(connection.cause()).toBe('offline');
+      });
+    });
+
+    describe('when the note shows', () => {
+      it('shows at 5 s when no newer version was detected, with ngsw.json hanging', async () => {
+        vi.spyOn(sw, 'checkForUpdate').mockReturnValue(new Promise(() => undefined));
+        await startWithSocketDown({ neverConnected: true });
+
+        await vi.advanceTimersByTimeAsync(4_900);
+        expect(connection.online()).toBe(true);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(connection.online()).toBe(false);
+        expect(connection.cause()).toBe('offline');
+      });
+
+      it('waits until 15 s after the start once a newer version was detected, then shows the unreachable note', async () => {
+        const updates = await startWithSocketDown({ neverConnected: true });
+        typeInto();
+
+        await vi.advanceTimersByTimeAsync(1_200);
+        sw.versionDetected('b');
+        await vi.advanceTimersByTimeAsync(3_800);
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(9_900);
+        expect(connection.online()).toBe(true);
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(connection.online()).toBe(false);
+        expect(connection.cause()).toBe('unreachable');
+        expect(updates.card()).toBe('ready');
+      });
+
+      it('shows at once while the browser is offline, with no check', async () => {
+        const check = vi.spyOn(sw, 'checkForUpdate');
+        await startConnected();
+        sw.versionDetected('b');
+
+        stubBrowserOnline(false);
+
+        expect(connection.online()).toBe(false);
+        expect(connection.cause()).toBe('offline');
+        expect(check).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('the moved deployment: the socket has not connected since the page loaded', () => {
+      it('reloads at once for a ready version on a touched page after the load window, with no prompt and no note', async () => {
+        const updates = await startWithSocketDown({ neverConnected: true });
+        touch();
+        passTime(AUTO_APPLY_WINDOW_MS + 1);
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(updates.card()).toBe('none');
+        expect(connection.online()).toBe(true);
+      });
+
+      it('does not reload while an unsaved field is on screen: the prompt and the unreachable note show, and the input stays', async () => {
+        const updates = await startWithSocketDown({ neverConnected: true });
+        const input = typeInto();
+        input.value = 'maya.okafor@example.com';
+
+        await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
+        sw.versionDetected('b');
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(NOTE_HELD_UNTIL_MS);
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.card()).toBe('ready');
+        expect(connection.online()).toBe(false);
+        expect(connection.cause()).toBe('unreachable');
+        expect(input.value).toBe('maya.okafor@example.com');
+      });
+
+      it('checks safety when the reload is about to happen: a change in flight holds it until it settles', async () => {
+        await startWithSocketDown({ neverConnected: true });
+        const mutation = TestBed.runInInjectionContext(() =>
+          injectMutation(makeFunctionReference<'mutation', { name: string }, string>('t:create')),
+        );
+        const saved = mutation.run({ name: 'Sharks' }).catch(() => undefined);
+        touch();
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(reload).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(4 * SECOND);
+        await saved;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not reload for a hash it already reloaded for: the prompt shows', async () => {
+        const updates = await startWithSocketDown({ neverConnected: true });
+        sessionStorage.setItem('omni-league:sw-reloaded-for', JSON.stringify(['b']));
+        touch();
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.card()).toBe('ready');
+      });
+
+      it('does not reload when session storage cannot be read: the prompt shows', async () => {
+        const updates = await startWithSocketDown({ neverConnected: true });
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new Error('SecurityError');
+        });
+        touch();
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.card()).toBe('ready');
+      });
+
+      it('does not apply once the socket has connected: a touched page waits for a path change', async () => {
+        const updates = await startWithSocketDown({ neverConnected: true });
+        touch();
+        passTime(AUTO_APPLY_WINDOW_MS + 1);
+        convex.setConnected(true);
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.card()).toBe('none');
+        await navigate('/next');
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+
+      it('never calls activateUpdate()', async () => {
+        const activate = vi.spyOn(sw, 'activateUpdate');
+        await startWithSocketDown({ neverConnected: true });
+        touch();
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(activate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('a socket that connected and then dropped', () => {
+      it('gets no instant reload on a touched page after the load window, and no prompt', async () => {
+        const updates = await startConnected();
+        touch();
+        passTime(AUTO_APPLY_WINDOW_MS + 1);
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(2 * SECOND);
+
+        sw.versionReady('a', 'b');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(updates.card()).toBe('none');
+      });
+
+      it('applies at the next safe path change, as for any ready version', async () => {
+        await startConnected();
+        touch();
+        passTime(AUTO_APPLY_WINDOW_MS + 1);
+        convex.setConnected(false);
+        sw.versionReady('a', 'b');
+
+        await navigate('/next');
+
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('a brief drop', () => {
+      it('shows no note, no prompt and no reload when the socket is back before the check finds anything', async () => {
+        let finishCheck: (found: boolean) => void = () => undefined;
+        vi.spyOn(sw, 'checkForUpdate').mockReturnValue(
+          new Promise<boolean>((resolve) => (finishCheck = resolve)),
+        );
+        const updates = await startConnected();
+        touch();
+        passTime(AUTO_APPLY_WINDOW_MS + 1);
+
+        convex.setConnected(false);
+        await vi.advanceTimersByTimeAsync(2 * SECOND);
+        convex.setConnected(true);
+        sw.noNewVersion('a');
+        finishCheck(false);
+        await vi.advanceTimersByTimeAsync(20 * SECOND);
+
+        expect(connection.online()).toBe(true);
+        expect(updates.card()).toBe('none');
+        expect(reload).not.toHaveBeenCalled();
+      });
     });
   });
 

@@ -187,7 +187,7 @@ const TEXTAREA =
               <app-admin-alert
                 #failureAlert
                 [kind]="kind === 'offline' ? 'offline' : 'error'"
-                [title]="alerts[kind].title"
+                [title]="kind === 'failed' ? alerts.failed.title : undefined"
                 [description]="alerts[kind].description"
                 class="mb-5"
               />

@@ -4,7 +4,10 @@ import {
   CONVEX_CLIENT,
   CONVEX_CLIENT_FACTORY,
   CONVEX_URL,
+  ConvexConnection,
+  injectOfflineTitle,
   injectOnline,
+  offlineTitle,
   provideConvex,
 } from './index';
 import { FakeConvexClient } from './testing/fake-convex-client';
@@ -171,5 +174,240 @@ describe('online signal', () => {
       expect(online()).toBe(true);
       expect(client.connectionStateListeners).toBe(0);
     });
+  });
+});
+
+describe('why the connection is down', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function connect(client: FakeConvexClient): {
+    connection: ConvexConnection;
+    online: Signal<boolean>;
+  } {
+    const online = start({ client });
+    return { connection: TestBed.inject(ConvexConnection), online };
+  }
+
+  describe('cause', () => {
+    it('is offline while nothing shows the site answered', async () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+
+      client.setConnected(false);
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      expect(connection.cause()).toBe('offline');
+    });
+
+    it('is unreachable when the site answered while the socket is down and the browser is online', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+
+      client.setConnected(false);
+      connection.markSiteReached();
+
+      expect(connection.cause()).toBe('unreachable');
+    });
+
+    it('is offline when the browser is offline, even after the site answered', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+      client.setConnected(false);
+      connection.markSiteReached();
+
+      goOffline();
+
+      expect(connection.cause()).toBe('offline');
+    });
+
+    it('ignores an answer from the site that came while the socket was up', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+
+      connection.markSiteReached();
+      client.setConnected(false);
+
+      expect(connection.cause()).toBe('offline');
+    });
+
+    it('forgets the answer once the socket reconnects', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+      client.setConnected(false);
+      connection.markSiteReached();
+
+      client.setConnected(true);
+      client.setConnected(false);
+
+      expect(connection.cause()).toBe('offline');
+    });
+
+    it('counts an answer that came before the socket first connected', () => {
+      const client = new FakeConvexClient();
+      client.setConnected(false, { neverConnected: true });
+      const { connection } = connect(client);
+
+      connection.markSiteReached();
+
+      expect(connection.cause()).toBe('unreachable');
+    });
+  });
+
+  describe('holding the note while a newer version downloads', () => {
+    it('shows the note at 5 s when no newer version was detected', async () => {
+      const client = new FakeConvexClient();
+      client.setConnected(false, { neverConnected: true });
+      const { online } = connect(client);
+
+      await vi.advanceTimersByTimeAsync(4_900);
+      expect(online()).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(online()).toBe(false);
+    });
+
+    it('holds the note until 15 s after page start when a newer version was detected before 5 s', async () => {
+      const client = new FakeConvexClient();
+      client.setConnected(false, { neverConnected: true });
+      const { connection, online } = connect(client);
+
+      await vi.advanceTimersByTimeAsync(1_200);
+      connection.markNewerVersionDetected();
+      await vi.advanceTimersByTimeAsync(13_700);
+      expect(online()).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(online()).toBe(false);
+    });
+
+    it('counts the 15 s from the time the socket went down', async () => {
+      const client = new FakeConvexClient();
+      const { connection, online } = connect(client);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      client.setConnected(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      connection.markNewerVersionDetected();
+      await vi.advanceTimersByTimeAsync(12_900);
+      expect(online()).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(online()).toBe(false);
+    });
+
+    it('keeps the note when the version is detected after the note showed', async () => {
+      const client = new FakeConvexClient();
+      client.setConnected(false, { neverConnected: true });
+      const { connection, online } = connect(client);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      connection.markNewerVersionDetected();
+
+      expect(online()).toBe(false);
+    });
+
+    it('shows no note when the socket connects during the hold', async () => {
+      const client = new FakeConvexClient();
+      client.setConnected(false, { neverConnected: true });
+      const { connection, online } = connect(client);
+
+      connection.markNewerVersionDetected();
+      await vi.advanceTimersByTimeAsync(9_000);
+      client.setConnected(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(online()).toBe(true);
+    });
+
+    it('shows the note at once while the browser is offline, with no hold', () => {
+      const client = new FakeConvexClient();
+      const { connection, online } = connect(client);
+      connection.markNewerVersionDetected();
+
+      goOffline();
+
+      expect(online()).toBe(false);
+    });
+  });
+
+  describe('socket facts for the update check', () => {
+    it('tells whether the socket has ever connected', () => {
+      const client = new FakeConvexClient();
+      client.setConnected(false, { neverConnected: true });
+      const { connection } = connect(client);
+      expect(connection.hasEverConnected()).toBe(false);
+
+      client.setConnected(true);
+      expect(connection.hasEverConnected()).toBe(true);
+    });
+
+    it('is down at once, long before the note shows', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+      expect(connection.socketDown()).toBe(false);
+
+      client.setConnected(false);
+
+      expect(connection.socketDown()).toBe(true);
+    });
+
+    it('reports when the socket is down while the browser is online, and when that stops', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+      const seen: boolean[] = [];
+      connection.disconnectedWhileOnline.subscribe((value) => seen.push(value));
+
+      client.setConnected(false);
+      client.setConnected(false);
+      goOffline();
+      goOnline();
+      client.setConnected(true);
+
+      expect(seen).toEqual([false, true, false, true, false]);
+    });
+  });
+});
+
+describe('the offline title of a form alert', () => {
+  it('names the cause: offline, or unreachable', () => {
+    expect(offlineTitle('offline')).toBe("You're offline. Nothing was sent.");
+    expect(offlineTitle('unreachable')).toBe(
+      "Can't reach Omni League right now. Nothing was sent.",
+    );
+  });
+
+  it('says what was not done for the other actions', () => {
+    expect(offlineTitle('offline', 'removed')).toBe("You're offline. Nothing was removed.");
+    expect(offlineTitle('unreachable', 'undone')).toBe(
+      "Can't reach Omni League right now. Nothing was undone.",
+    );
+  });
+
+  it('follows the connection cause as a signal', () => {
+    vi.useFakeTimers();
+    try {
+      const client = new FakeConvexClient();
+      TestBed.configureTestingModule({
+        providers: [
+          provideConvex(),
+          { provide: PLATFORM_ID, useValue: 'browser' },
+          { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+          { provide: CONVEX_CLIENT_FACTORY, useValue: () => client },
+        ],
+      });
+      const title = TestBed.runInInjectionContext(() => injectOfflineTitle());
+      const connection = TestBed.inject(ConvexConnection);
+      client.setConnected(false);
+      expect(title()).toBe("You're offline. Nothing was sent.");
+
+      connection.markSiteReached();
+      expect(title()).toBe("Can't reach Omni League right now. Nothing was sent.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
