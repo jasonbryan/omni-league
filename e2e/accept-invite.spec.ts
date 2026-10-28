@@ -258,6 +258,7 @@ test.describe('Accept invite: while the invite is checked', () => {
     await expect(skeleton.getByRole('status')).toHaveClass(/sr-only/);
     await expect(main(page).locator('[class*="animate-spin"]')).toHaveCount(0);
     await expect(main(page).getByRole('heading')).toHaveCount(0);
+    await expect(page.getByRole('contentinfo')).toBeHidden();
     await screenshot(page, testInfo, '212-checking');
     await expectAccessible(page);
     const before = await skeleton.boundingBox();
@@ -265,6 +266,7 @@ test.describe('Accept invite: while the invite is checked', () => {
     release();
     await expect(main(page).getByRole('heading', { level: 1 })).toHaveText(`Join ${tenant.name}`);
     await expect(skeleton).toHaveCount(0);
+    await expect(page.getByRole('contentinfo')).toBeVisible();
 
     // Only the height can change: the lead line may wrap and the sign-in prompt is longer.
     const card = main(page).locator('.ring-1').first();
