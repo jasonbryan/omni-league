@@ -107,7 +107,7 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
-- Run e2e with `npm run e2e:affected`, which runs only the specs the branch's changed files map to.
+- Run e2e with `npm run e2e:affected`, which runs only the specs the branch's changed files map to. A new route, or a new source directory under `src/app/` whose files would run the full suite, adds its rule in `scripts/e2e-affected.mjs` in the same PR, and `npm run test:scripts` fails until it does ([CI, Affected e2e specs](ci.md#affected-e2e-specs-and-the-nightly-run)).
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 - Stop local processes as in [Local processes](#local-processes).
 

@@ -44,16 +44,20 @@ describe('e2eArgs', () => {
   });
 
   it('runs the full suite, with the extra arguments only, for a shared file', () => {
-    const { args, specs } = e2eArgs(['src/app/shell/shell.ts'], ['--project=chromium-desktop'], {
-      sessionSpecs,
-    });
+    const { args, specs } = e2eArgs(
+      ['src/app/shell/shell-sheet.ts'],
+      ['--project=chromium-desktop'],
+      {
+        sessionSpecs,
+      },
+    );
     assert.deepEqual(args, ['--project=chromium-desktop']);
     assert.equal(specs, undefined);
   });
 
   it('keeps every spec in a full run that also names a spec', () => {
     const { args, specs } = e2eArgs(
-      ['src/app/shell/shell.ts'],
+      ['src/app/shell/shell-sheet.ts'],
       ['e2e/season-page.spec.ts', '--project=chromium-desktop'],
       { sessionSpecs },
     );
@@ -63,7 +67,7 @@ describe('e2eArgs', () => {
 
   it('keeps every spec in a full run when a filter has no directory or ends in a line number', () => {
     for (const filter of ['season-page', 'season-page.spec.ts:42']) {
-      const { args } = e2eArgs(['src/app/shell/shell.ts'], [filter], { sessionSpecs });
+      const { args } = e2eArgs(['src/app/shell/shell-sheet.ts'], [filter], { sessionSpecs });
       assert.deepEqual(args, ['e2e/', filter]);
     }
   });

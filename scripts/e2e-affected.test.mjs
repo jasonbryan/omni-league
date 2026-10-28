@@ -63,10 +63,14 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the publish dialog to the three league specs, not the staff or mockup specs', () => {
+  it('maps the publish dialog to the three league specs and the specs of the leagues page that opens it, not the staff specs', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/publish-league-dialog.ts']),
       want(
+        'e2e/organization-leagues-custom-level.spec.ts',
+        'e2e/organization-leagues-division.spec.ts',
+        'e2e/organization-leagues-mockup.spec.ts',
+        'e2e/validate-on-blur.spec.ts',
         'e2e/organization-leagues-publish-states.spec.ts',
         'e2e/organization-leagues-publish.spec.ts',
         'e2e/organization-leagues.spec.ts',
@@ -74,12 +78,14 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the leagues page and forms to the league specs and the mockup spec', () => {
+  it('maps the leagues page and its create form to the league specs and the mockup spec', () => {
     // organization-leagues-mockup compares the real page text with the approved mockup.
-    for (const file of ['admin-leagues', 'league-create-form', 'league-form']) {
+    for (const file of ['admin-leagues', 'league-create-form']) {
       assert.deepEqual(
         specsFor([`src/app/organizations/admin/${file}.ts`]),
         want(
+          'e2e/organization-leagues-custom-level.spec.ts',
+          'e2e/organization-leagues-division.spec.ts',
           'e2e/organization-leagues-mockup.spec.ts',
           'e2e/organization-leagues-publish-states.spec.ts',
           'e2e/organization-leagues-publish.spec.ts',
@@ -91,20 +97,21 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the shared sticky form footer to the league specs and the organizer league page specs', () => {
-    assert.deepEqual(
-      specsFor(['src/app/organizations/admin/sticky-footer.ts']),
-      want(
-        'e2e/league-management-details.spec.ts',
-        'e2e/league-management-mockup.spec.ts',
-        'e2e/league-management-publish.spec.ts',
-        'e2e/league-management.spec.ts',
-        'e2e/organization-leagues-mockup.spec.ts',
-        'e2e/organization-leagues-publish-states.spec.ts',
-        'e2e/organization-leagues-publish.spec.ts',
-        'e2e/organization-leagues.spec.ts',
-      ),
-    );
+  it('maps the shared sticky form footer to the league specs and the organizer league page specs, and to its importers', () => {
+    const specs = specsFor(['src/app/organizations/admin/sticky-footer.ts']);
+    assert.ok(!specs.includes('FULL'));
+    for (const name of [
+      'league-management-details',
+      'league-management-mockup',
+      'league-management-publish',
+      'league-management',
+      'organization-leagues-mockup',
+      'organization-leagues-publish-states',
+      'organization-leagues-publish',
+      'organization-leagues',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
   });
 
   it('maps an admin staff file to the staff and accept-invite specs', () => {
@@ -153,11 +160,13 @@ describe('selectSpecs: mapped areas', () => {
       'src/app/account/account-page.ts',
       'src/app/account/account-settings-page.ts',
       'src/app/account/your-organizations.ts',
-      'src/app/shell/account-link.ts',
       'convex/users.ts',
     ]) {
       assert.deepEqual(specsFor([file]), expected, file);
     }
+    const accountLink = specsFor(['src/app/shell/account-link.ts']);
+    assert.ok(!accountLink.includes('FULL'));
+    for (const spec of expected) assert.ok(accountLink.includes(spec), spec);
     for (const name of [
       'sign-in',
       'sign-in-admin',
@@ -207,7 +216,6 @@ describe('selectSpecs: mapped areas', () => {
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
-      'src/app/organizations/public-league/public-league-path.ts',
     ]) {
       assert.deepEqual(
         specsFor([file]),
@@ -223,18 +231,13 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the numbered control and the page helper to the league page and sport view specs only', () => {
+  it('maps the numbered control and the page helper to the league page and sport view specs, and to their importers', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
-      assert.deepEqual(
-        specsFor([file]),
-        want(
-          'e2e/cache-key.spec.ts',
-          'e2e/league-page-offline.spec.ts',
-          'e2e/league-page.spec.ts',
-          'e2e/sport-view.spec.ts',
-        ),
-        file,
-      );
+      const specs = specsFor([file]);
+      assert.ok(!specs.includes('FULL'), file);
+      for (const name of ['cache-key', 'league-page-offline', 'league-page', 'sport-view']) {
+        assert.ok(specs.includes(`e2e/${name}.spec.ts`), `${file}: ${name}`);
+      }
     }
   });
 
@@ -430,10 +433,9 @@ describe('selectSpecs: mapped areas', () => {
   });
 
   it('maps the chip classes and the mockup whose kit block the chip spec reads to that spec', () => {
-    assert.deepEqual(
-      specsFor(['src/app/ui/chip/chip-classes.ts']),
-      want('e2e/chip-classes.spec.ts'),
-    );
+    const chipClasses = specsFor(['src/app/ui/chip/chip-classes.ts']);
+    assert.ok(chipClasses.includes('e2e/chip-classes.spec.ts'));
+    assert.ok(!chipClasses.includes('FULL'));
     assert.deepEqual(
       specsFor(['design/mockups/300-public-site-league-form.html']),
       want('e2e/chip-classes.spec.ts'),
@@ -552,14 +554,13 @@ describe('selectSpecs: files that cannot change an e2e result', () => {
 
 describe('selectSpecs: the full suite', () => {
   const shared = [
-    'src/app/shell/shell.ts',
+    'src/app/shell/shell-sheet.ts',
     'src/app/core/auth/auth.service.ts',
     'src/app/core/data/convex/inject-query.ts',
     'src/app/core/service-worker/app-updates.ts',
     'src/app/core/url-serializer.ts',
     'src/app/ui/button/button.ts',
-    'src/app/app.routes.ts',
-    'src/app/app.routes.server.ts',
+    'src/app/core/auth/guards.ts',
     'src/app/app.config.ts',
     'src/server.ts',
     'src/main.ts',
@@ -595,7 +596,7 @@ describe('selectSpecs: the full suite', () => {
 
   it('is full when one shared file is among mapped ones', () => {
     assert.deepEqual(
-      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell.ts']),
+      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell-sheet.ts']),
       ['FULL'],
     );
   });
@@ -772,7 +773,7 @@ describe('the command line', () => {
   });
 
   it('prints the full scope for a shared file', () => {
-    assert.equal(run('src/app/shell/shell.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
+    assert.equal(run('src/app/shell/shell-sheet.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
   });
 });
 
@@ -830,7 +831,7 @@ describe('the specs that sign a user up or in', () => {
     'src/app/placeholder/placeholder.ts',
   ]) {
     it(`selects every one of them for ${area}`, () => {
-      const selection = selectSpecs([area], { ...pr, sessionSpecs });
+      const selection = selectSpecs([area], { ...pr, root: repoRoot, sessionSpecs });
       assert.equal(selection.scope, 'affected');
       for (const file of importsSessionHelper) {
         assert.ok(
