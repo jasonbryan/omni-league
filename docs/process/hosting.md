@@ -206,7 +206,7 @@ It starts and stops its own SSR server, and leaves the kill-switch build in `dis
 - A tab reloads automatically at most once per version hash, kept in `sessionStorage`. With no usable `sessionStorage` it never reloads by itself and the prompt shows.
 - The unrecoverable state reloads once per tab while the page is safe and online. Otherwise the message shows.
 
-**Update rehearsal.** `e2e/pwa-update.spec.ts` builds two versions with the same Convex URL, installs the first, and checks that the second loads without the prompt, and that typed input keeps the prompt and the value. It needs two production builds and its own SSR server, so `ci` and `npm run e2e` skip it. Run it with no Convex URL (as below) and a free port:
+**Update rehearsal.** `e2e/pwa-update.spec.ts` builds two versions with the same Convex URL, installs the first, and checks that the second loads without the prompt, and that typed input keeps the prompt and the value. It needs two production builds and its own SSR server, so `ci` and `npm run e2e` skip it. Run it on a free port:
 
 ```sh
 E2E_PWA_UPDATE=1 E2E_BASE_URL=http://localhost:4101 npx playwright test e2e/pwa-update.spec.ts --project=chromium-mobile

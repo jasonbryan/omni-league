@@ -144,7 +144,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('a new version early in the page load (criterion 1)', () => {
+  describe('a new version early in the page load', () => {
     it('reloads at once on an untouched, safe page, with no prompt', async () => {
       const updates = await startOn();
       passTime(5 * SECOND);
@@ -217,7 +217,7 @@ describe('AppUpdates', () => {
     );
   });
 
-  describe('a path-changing navigation (criterion 2)', () => {
+  describe('a path-changing navigation', () => {
     async function readyOnTouchedPage() {
       const updates = await startOn();
       touch();
@@ -286,7 +286,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('a long-open page that comes back to the front (criterion 2a)', () => {
+  describe('a long-open page that comes back to the front', () => {
     it('reloads a ready update when the page becomes visible and is older than 7 days', async () => {
       const updates = await startOn('/home', STALE_PAGE_AGE_MS + MINUTE);
       passTime(MINUTE);
@@ -367,7 +367,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('unsaved input (criterion 3)', () => {
+  describe('unsaved input', () => {
     it('shows the prompt and reloads nothing when the version is ready while a field is unsaved', async () => {
       const updates = await startOn();
       const input = typeInto();
@@ -448,7 +448,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('new-version prompt actions (criterion 4)', () => {
+  describe('new-version prompt actions', () => {
     async function promptShowing() {
       const updates = await startOn();
       typeInto();
@@ -503,7 +503,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('a change in flight (criterion 5)', () => {
+  describe('a change in flight', () => {
     it('holds an early reload until the change settles, then reloads', async () => {
       const updates = await startOn();
       const end = TestBed.inject(ChangesInFlight).begin();
@@ -560,7 +560,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('real requests in flight (criterion 5)', () => {
+  describe('real requests in flight', () => {
     const credentials = { email: 'maya.okafor@example.com', password: 'sandbar sunset spike 2026' };
 
     it('holds an early reload while a sign-in request is unanswered, then reloads', async () => {
@@ -621,7 +621,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('unrecoverable state (criterion 7)', () => {
+  describe('unrecoverable state', () => {
     function online(value: boolean): void {
       vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(value);
     }
@@ -744,7 +744,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('no reload loop (criterion 8)', () => {
+  describe('no reload loop', () => {
     it('shows the prompt, not a second reload, for a version this tab already reloaded for', async () => {
       await startOn();
       sw.versionReady('a', 'b');
@@ -827,8 +827,7 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('the automatic path leaves the worker alone (criterion 9)', () => {
-    // activateUpdate() would switch this page to the new version while it still runs the old bundle, whose lazy chunks the worker no longer serves.
+  describe('the automatic path leaves the worker alone', () => {
     it('does not call activateUpdate() for a version that loads early in the page load', async () => {
       const activate = vi.spyOn(sw, 'activateUpdate');
       await startOn();

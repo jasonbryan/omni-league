@@ -6,10 +6,6 @@ const INTERACTION_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as 
 /** `app-checkbox` is a `<button role="checkbox">`, which fires no `input` or `change` event. */
 const TOGGLE_ROLES = '[role=checkbox], [role=radio], [role=switch]';
 
-/**
- * What a reload could throw away: a field the user changed and that is still on screen, and a change that has been sent but not answered.
- * A field counts until it leaves the DOM, and a save does not clear it, so a form that stays on screen after saving holds the page until the user leaves it.
- */
 @Injectable({ providedIn: 'root' })
 export class PageSafety {
   private readonly document = inject(DOCUMENT);
@@ -21,10 +17,8 @@ export class PageSafety {
   private touched = false;
   private readonly fieldMarkedSubject = new Subject<void>();
 
-  /** Emits when a field starts to count. */
   readonly fieldMarked = this.fieldMarkedSubject.asObservable();
 
-  /** Adds the document listeners, once. */
   watch(): void {
     if (this.watching) return;
     this.watching = true;
@@ -37,7 +31,6 @@ export class PageSafety {
     for (const type of INTERACTION_EVENTS) this.listen(type, () => (this.touched = true));
   }
 
-  /** A pointer, key, wheel, or touch event since the page loaded. */
   interacted(): boolean {
     return this.touched;
   }

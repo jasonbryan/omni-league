@@ -58,6 +58,7 @@ async function mainBundle(): Promise<string> {
 }
 
 let startedSsrServer: ChildProcess | undefined;
+let originalAppSource: string | undefined;
 
 async function startServer(onPort: number): Promise<void> {
   const child = spawn(process.execPath, [join(ROOT, 'scripts', 'serve-ssr.mjs')], {
@@ -89,7 +90,7 @@ async function stopServer(): Promise<void> {
   await exited;
 }
 
-/** Records in `sessionStorage`, which a reload keeps, that the new-version prompt or the unrecoverable message was ever in the page. */
+// sessionStorage survives the reload, so a prompt shown before it still counts.
 async function recordPrompt(context: BrowserContext): Promise<void> {
   await context.addInitScript((key) => {
     const seen = () => {
@@ -124,7 +125,6 @@ async function installWorker(page: Page, path: string): Promise<void> {
   await page.reload();
 }
 
-/** The `main-*.js` the page runs, or undefined while it is loading. */
 async function runningBundle(page: Page): Promise<string | undefined> {
   try {
     return await page.evaluate(() => {
@@ -150,6 +150,8 @@ test.describe('a new version of the app (local production builds)', () => {
 
   test.afterAll(async () => {
     await stopServer();
+    // A timeout abandons the test body before its `finally` runs.
+    if (originalAppSource !== undefined) await writeFile(APP_SOURCE, originalAppSource);
   });
 
   test('loads by itself with no prompt, and waits with the prompt while input is unsaved', async ({
@@ -173,6 +175,7 @@ test.describe('a new version of the app (local production builds)', () => {
     await stopServer();
 
     const original = await readFile(APP_SOURCE, 'utf8');
+    originalAppSource = original;
     const template = "template: '<router-outlet />',";
     expect(original).toContain(template);
     try {

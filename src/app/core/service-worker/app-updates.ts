@@ -16,12 +16,11 @@ import { PageSafety } from './page-safety';
 import {
   mayReloadForUnrecoverable,
   mayReloadForVersion,
-  recordReloadForUnrecoverable,
-  recordReloadForVersion,
+  tryRecordReloadForUnrecoverable,
+  tryRecordReloadForVersion,
 } from './reload-guard';
 
 export const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
-/** How long after the page loaded, or after a long-open page came back to the front, a ready version loads without waiting for a navigation. */
 export const AUTO_APPLY_WINDOW_MS = 10_000;
 /** Half of the 14 days public functions keep accepting the previous release, so a tab that stays on one path still updates inside that window. */
 export const STALE_PAGE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -38,7 +37,6 @@ export const RELOAD_PAGE = new InjectionToken<() => void>('RELOAD_PAGE', {
   },
 });
 
-/** Milliseconds since the epoch at which this page began to load. */
 export const PAGE_LOADED_AT = new InjectionToken<number>('PAGE_LOADED_AT', {
   factory: () => performance.timeOrigin,
 });
@@ -52,9 +50,7 @@ function pathOf(url: string): string {
 }
 
 /**
- * A downloaded version loads by itself when a reload cannot lose anything, at one of three moments:
- * early in the page load, on a navigation that changes the path, and when a page open for more than 7 days comes back to the front.
- * Unsaved input or a change in flight holds it, and the new-version prompt then offers Reload. The page is never reloaded because it became hidden, which would drop an Undo offer or a success status.
+ * The page is never reloaded because it became hidden: that would drop an Undo offer or a success status.
  * The visibility check runs at most every 30 minutes, for installed apps left open (ngsw itself checks whenever the app opens).
  */
 @Injectable({ providedIn: 'root' })
@@ -73,10 +69,8 @@ export class AppUpdates {
 
   private started = false;
   private dismissed = false;
-  /** The hash of the newest version that is downloaded and not yet running. */
-  private readyHash: string | undefined;
-  /** False once this tab reloaded for the hash before, or cannot keep that record. */
-  private mayApply = true;
+  private downloadedVersionHash: string | undefined;
+  private autoReloadAllowed = true;
   private applying = false;
   private deferredTrigger: Trigger | undefined;
   private lastPath: string | undefined;
@@ -104,7 +98,7 @@ export class AppUpdates {
       )
       .subscribe((event) => this.onNavigationEnd(event));
     this.safety.fieldMarked.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      if (this.readyHash !== undefined) this.showPrompt();
+      if (this.downloadedVersionHash !== undefined) this.showPrompt();
     });
     this.changes.settled.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       const trigger = this.deferredTrigger;
@@ -123,7 +117,6 @@ export class AppUpdates {
     this.reloadPage();
   }
 
-  /** Hides the prompt for the rest of the page session. The version still loads at the next safe trigger. */
   later(): void {
     this.dismissed = true;
     if (this.state() === 'ready') this.state.set('none');
@@ -132,9 +125,9 @@ export class AppUpdates {
   private onVersionEvent(event: VersionEvent): void {
     if (event.type !== 'VERSION_READY') return;
     const hash = event.latestVersion.hash;
-    this.readyHash = hash;
-    this.mayApply = mayReloadForVersion(hash);
-    if (!this.mayApply) {
+    this.downloadedVersionHash = hash;
+    this.autoReloadAllowed = mayReloadForVersion(hash);
+    if (!this.autoReloadAllowed) {
       this.showPrompt();
       return;
     }
@@ -145,7 +138,7 @@ export class AppUpdates {
 
   private onUnrecoverable(): void {
     const mayReload = this.safety.isSafe() && navigator.onLine && mayReloadForUnrecoverable();
-    if (mayReload && recordReloadForUnrecoverable()) {
+    if (mayReload && tryRecordReloadForUnrecoverable()) {
       this.reloadPage();
       return;
     }
@@ -202,7 +195,8 @@ export class AppUpdates {
 
   /** Safety is checked here, when the reload would happen, and never only when the version became ready. */
   private tryApply(trigger: Trigger): void {
-    if (this.readyHash === undefined || !this.mayApply || this.applying) return;
+    if (this.downloadedVersionHash === undefined || !this.autoReloadAllowed || this.applying)
+      return;
     if (this.safety.hasUnsavedField()) {
       this.showPrompt();
       return;
@@ -211,7 +205,7 @@ export class AppUpdates {
       this.deferredTrigger = trigger;
       return;
     }
-    this.apply(this.readyHash);
+    this.apply(this.downloadedVersionHash);
   }
 
   /**
@@ -219,8 +213,8 @@ export class AppUpdates {
    * Activating first would switch this page to the new version while it still runs the old bundle, whose lazy chunks the worker no longer serves.
    */
   private apply(hash: string): void {
-    if (!recordReloadForVersion(hash)) {
-      this.mayApply = false;
+    if (!tryRecordReloadForVersion(hash)) {
+      this.autoReloadAllowed = false;
       this.showPrompt();
       return;
     }

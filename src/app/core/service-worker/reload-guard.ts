@@ -3,7 +3,6 @@ const RELOADED_FOR_KEY = 'omni-league:sw-reloaded-for';
 const UNRECOVERABLE_KEY = 'omni-league:sw-unrecoverable-reloaded';
 const MAX_HASHES = 10;
 
-/** `null` when the storage cannot be read. A stored value that is not a list of hashes is an empty record. */
 function readHashes(): string[] | null {
   let stored: string | null;
   try {
@@ -26,8 +25,7 @@ export function mayReloadForVersion(hash: string): boolean {
   return hashes !== null && !hashes.includes(hash);
 }
 
-/** Returns false when the mark could not be kept; the caller must then not reload. */
-export function recordReloadForVersion(hash: string): boolean {
+export function tryRecordReloadForVersion(hash: string): boolean {
   const hashes = readHashes();
   if (hashes === null) return false;
   try {
@@ -46,8 +44,7 @@ export function mayReloadForUnrecoverable(): boolean {
   }
 }
 
-/** Returns false when the mark could not be kept; the caller must then not reload. */
-export function recordReloadForUnrecoverable(): boolean {
+export function tryRecordReloadForUnrecoverable(): boolean {
   try {
     sessionStorage.setItem(UNRECOVERABLE_KEY, '1');
     return true;
