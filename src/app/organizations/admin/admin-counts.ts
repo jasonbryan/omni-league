@@ -4,9 +4,6 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { AuthService } from '../../core/auth/auth.service';
 import { injectQuery, skipToken } from '../../core/data/convex';
 
-/**
- * The queries wait until Convex has accepted the token, so the first answer is the caller's own.
- */
 function leagueCount(
   published: number | undefined,
   rows: readonly { status: string }[] | undefined,
@@ -15,6 +12,7 @@ function leagueCount(
   return published + rows.filter((row) => row.status !== 'published').length;
 }
 
+/** The queries wait until Convex has accepted the token, so the first answer is the caller's own. */
 export function injectAdminCounts(organizationId: () => Id<'organizations'>) {
   const auth = inject(AuthService);
   const args = () =>
