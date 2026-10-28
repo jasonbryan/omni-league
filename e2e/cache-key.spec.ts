@@ -13,6 +13,7 @@ const EDGE_PATHS = [
   '/this-page-does-not-exist',
   '/app/x',
   '/app',
+  '/leagues',
   '/organizations/cache-key-sample',
   '/organizations/cache-key-sample/sports/soccer',
   '/organizations/cache-key-sample/leagues/cache-key-sample',
@@ -35,7 +36,9 @@ test.describe('query strings and the CDN', () => {
     async () => {
       for (const path of [...EDGE_PATHS, ...STATIC_PATHS]) {
         const token = canary();
-        const response = await rawGet(`${path}?ott=${token}&q=${token}x`);
+        // `q` is the find page's search, so its HTML holds the parsed value; every other parameter stays out.
+        const param = path === '/leagues' ? 'r' : 'q';
+        const response = await rawGet(`${path}?ott=${token}&${param}=${token}x`);
         expect(response.status, path).toBeLessThan(500);
         expect(response.body, path).not.toContain(token);
         expect(response.headers.location ?? '', path).not.toContain(token);
@@ -57,6 +60,7 @@ test.describe('query strings and the CDN', () => {
       const [a, b] = [canary(), canary()];
       for (const path of [
         unique,
+        '/leagues',
         `/app${unique}`,
         `/organizations${unique}`,
         `/organizations${unique}/sports/soccer`,
@@ -94,6 +98,29 @@ test.describe('query strings and the CDN', () => {
         expect(response.headers['cache-control'], query).toBe('no-store');
         expect(response.location, query).toBe(`${unique}/${query}`);
       }
+    },
+  );
+
+  // The find page reads `?q=`, whose parsed value its HTML holds, so each search is stored on its own and no other parameter reaches it.
+  test(
+    'the find page: each ?q gets its own HTML, and another parameter never reaches the response',
+    RAW_HTTP,
+    async () => {
+      const [a, b, other] = [canary(), canary(), canary()];
+      const first = await rawGet(`/leagues?q=${a}&utm_source=${other}`);
+      expect(first.status).toBe(200);
+      expect(sharedCacheable(first.headers['cache-control'])).toBe(true);
+      expect(first.body).toContain(a);
+      expect(first.body).not.toContain(other);
+      await rawGet(`/leagues?q=${a}&utm_source=${other}`);
+      for (const query of [`?q=${b}`, '']) {
+        const later = await rawGet(`/leagues${query}`);
+        expect(later.status, query).toBe(200);
+        expect(later.body, query).not.toContain(a);
+        expect(later.body, query).not.toContain(other);
+      }
+      const second = await rawGet(`/leagues?q=${b}`);
+      expect(second.body).toContain(b);
     },
   );
 

@@ -10,6 +10,10 @@ export const routes: Routes = [
     loadComponent: () => import('./placeholder/placeholder').then((m) => m.Placeholder),
   },
   {
+    path: 'leagues',
+    loadComponent: () => import('./find/find-page').then((m) => m.FindPage),
+  },
+  {
     path: 'organizations/:orgSlug',
     loadComponent: () =>
       import('./organizations/organization-page').then((m) => m.OrganizationPage),

@@ -314,6 +314,7 @@ test.describe('sign-up', () => {
         'header a[href="/app"]',
         'main button',
         'main a[href="/app/organizations/new"]',
+        'main a[href="/leagues"]',
       ],
     });
 

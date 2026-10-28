@@ -78,6 +78,9 @@ const FOOTER_LINK_CLASSES =
                 <h2 class="font-medium">Players</h2>
                 <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
                   <li>
+                    <a routerLink="/leagues" [class]="footerLink">Find a league</a>
+                  </li>
+                  <li>
                     <a routerLink="/app" [class]="footerLink">Your account</a>
                   </li>
                 </ul>
