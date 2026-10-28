@@ -106,6 +106,7 @@ test.describe('chip classes in the mockup kit', () => {
     const coarse = await page.evaluate((query) => matchMedia(query).matches, COARSE_POINTER);
     const level = chipOf(page.getByRole('radio', { name: 'B', exact: true }));
     const box = await level.boundingBox();
+    expect(box).not.toBeNull();
     if (coarse) {
       expect(Math.round(box?.width ?? 0)).toBeGreaterThanOrEqual(COARSE_POINTER_WIDTH);
       expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(COARSE_POINTER_HEIGHT);
