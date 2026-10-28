@@ -80,9 +80,9 @@ Owner answers, 2026-10-09 (chat):
 
 - Organizers build and publish the schedule.
 - Captains report scores. Organizers can confirm or correct them.
-- Standings rules per sport are not specified by the owner. The defaults below are a **proposal for the owner to confirm**; they are not decided.
+- **Standings defaults** (owner decision, 2026-10-28, chat, "1A", on #347): the per-sport defaults below, forfeit scores included, ship as configuration. The owner may change them later without restructuring.
 
-| Sport            | Ranking (proposed)                              | Tiebreakers, in order (proposed)                                         | Forfeit (proposed) |
+| Sport            | Ranking                                         | Tiebreakers, in order                                                    | Forfeit            |
 | ---------------- | ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
 | Beach volleyball | Match win percentage                            | Head-to-head, set win percentage, point differential                     | Straight-sets loss |
 | Soccer           | Points: 3 for a win, 1 for a draw, 0 for a loss | Goal difference, goals scored, head-to-head                              | 3–0 loss           |
@@ -160,6 +160,9 @@ An organization offers **programs** of four **program types**: league, tournamen
   - Brackets are single elimination first. Double elimination becomes an option later.
 - **Camps and training, minors** (question 4): guardians register minors from the start. Only the child's display name is stored, with the guardian's confirmation that the child fits the age range. No birth date is stored. Adults register themselves where the ages allow.
 - **Training** (question 5): classes only at first. People register for a weekly series, or for a single class where the organizer allows it. There are no bookable private lessons.
+- **Grand final** (owner, 2026-10-28, "Organizer chooses either", on #349): in a double-elimination bracket, the organizer chooses per tournament between a deciding second game if the losers' bracket team wins the first, and a single game.
+- **Waitlists** (owner, 2026-10-28, "A" to the waitlist question on #323): full camp sessions and training classes take a waitlist, as full seasons do.
+- **Staff** (owner, 2026-10-28, "A" to the staff question on #323): an org admin can assign league organizers to tournaments, camps, and training, with the same rights as for a league, including publish.
 - **Search** (question 6): one "Find a program" search with type chips. `/leagues` keeps working as the league view. "Program" appears only in the admin area and the search; elsewhere the type names are used.
 - **Application fee** (question 7): the same rule as seasons. Each tournament roster entry, and each camp or training registrant, counts as one roster entry. Free and offline registrations go on the platform bill (#366).
 
@@ -180,9 +183,9 @@ An organization offers **programs** of four **program types**: league, tournamen
 
 Every type shares:
 
-- the organization, its staff, and its access boundary. **Proposal, waiting for the owner (Open 13):** a league organizer can be assigned any program, with the same rights as for a league (#338);
+- the organization, its staff, and its access boundary. A league organizer can be assigned any program, with the same rights as for a league, including publish (#338);
 - locations, draft then publish, and a public page that leads with what's open now;
-- registration: an account, a deadline, and a capacity. Tournaments take a waitlist when full, as seasons do. **Proposal, waiting for the owner (Open 12):** camps and training also take a waitlist (#358, #365, #368);
+- registration: an account, a deadline, a capacity, and a waitlist when full (#341, #358, #365, #368);
 - payments through Stripe Connect, with the application fee. Prices and checkout for each type follow the league checkout slices;
 - public listing on the organization page and in Find a program;
 - offline saved copies of public pages, and demo data for each type.
@@ -230,9 +233,8 @@ Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted
 
 ## Open
 
-Questions still open for the owner. The planner records them as `status:blocked` issues or in the PR that raises them, rather than inventing requirements.
+Questions still open for the owner. The planner records them as `status:blocked` issues or in the PR that raises them, rather than inventing requirements. Answered items are removed and the rest keep their numbers, so references to them stay valid.
 
-1. **Standings:** confirm or change the proposed defaults per sport, including forfeit scores; the recommendation is to ship them as configuration (#347).
 2. **Fee percentage:** the percentage of each registration payment.
 3. **Per-player floor:** the minimum fee per roster entry, in dollars.
 4. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
@@ -242,8 +244,5 @@ Questions still open for the owner. The planner records them as `status:blocked`
 8. **Free agents:** what a free agent tells the organizer (position, skill, availability), and whether free agents and waitlisted teams can withdraw (#133, #145).
 9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
 10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
-11. **Double elimination (#349):** whether the grand final gets a deciding second game when the losers' bracket team wins the first.
-12. **Camp and training waitlists (#358, #365, #368):** whether a full camp session or training class takes a waitlist, as a full season does.
-13. **Staff for other programs (#338):** whether a league organizer can be assigned tournaments, camps, and training, with the same rights as for a league.
 
 Features beyond the above are not yet specified.

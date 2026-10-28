@@ -105,7 +105,7 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **Sport chips:** the row of links under the hero of the public organization page and the sport view (All sports, then each sport with its league count) that filters the page by sport; each chip opens the sport view's URL, and an organization with one sport shows none. Drawn in `design/mockups/300-public-site-organization.html`.
 - **Sport location row (`sportLocations`):** one row per organization, sport, and location, holding how many leagues of that sport are held at that location (#101). The rows of a sport are its distinct locations, so `sportLocationCounts[sport]` stays correct when a league later leaves a location. Kept by the tenant writers.
 - **Sport-specific rules (sport configuration):** the rules that differ by sport, such as scoring, team size, minimum roster size, and standings, configurable per sport so new sports need no restructuring. Configured in `convex/lib/sports.ts`. Source: [requirements, Sports](product/requirements.md#sports-initial).
-- **Standings:** the ranking of teams in a season, calculated by the sport's standings rules. The per-sport defaults are a proposal for the owner to confirm. Source: [requirements, Schedule, scores, and standings](product/requirements.md#schedule-scores-and-standings).
+- **Standings:** the ranking of teams in a season, calculated by the sport's standings rules. The per-sport defaults ship as configuration the owner can change later (owner, 2026-10-28). Source: [requirements, Schedule, scores, and standings](product/requirements.md#schedule-scores-and-standings).
 - **Stat line:** one player's recorded statistics for one game. Results keep stat lines per player, not only team scores. Source: [requirements, Schedule, scores, and standings](product/requirements.md#schedule-scores-and-standings).
 - **Team:** a group of players in one season, with a captain; it is confirmed once its roster meets the minimum roster size and its fees are paid. A person is on at most one team in a season. Source: [requirements, Registration](product/requirements.md#registration), [Payments](product/requirements.md#payments).
 - **Tournament:** a program type: a one-time event of one or more days where teams play a bracket, optionally after pools. Running it again means copying it (owner, 2026-10-28). Source: [requirements, Program types](product/requirements.md#program-types).
@@ -113,7 +113,7 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 - **Undo window:** the 10 minutes after an org admin revokes a staff invite in which Undo on the Staff screen sets it back to pending, with the same link and expiry. The server enforces it (`invites.restore`); a refused Undo says why. Source: [#211](https://github.com/jasonbryan/omni-league/issues/211), `design/mockups/67-organization-staff.html` (decision 7).
 - **User:** a person with an account. Every adult player and every organizer is a user; in the backend the app's `users` record is keyed on the auth provider's user id. Source: [requirements, Accounts](product/requirements.md#accounts-players-and-guardians), [ADR 0008](decisions/0008-auth-provider.md).
 - **Visitor:** anyone viewing a public page. A visitor goes from a public registration page to sign-in and back. Source: [requirements](product/requirements.md#organizations-and-public-registration), [ADR 0008](decisions/0008-auth-provider.md).
-- **Waitlist:** the queue of teams that registered after a season or tournament was full. A waitlisted team is not yet a team and has no roster entries; an organizer promotes it, which creates the team. A waitlist for camp sessions and training classes is a proposal waiting for the owner (requirements, Open 12). Source: [requirements, Seasons](product/requirements.md#seasons).
+- **Waitlist:** the queue of teams that registered after a season or tournament was full. A waitlisted team is not yet a team and has no roster entries; an organizer promotes it, which creates the team. Full camp sessions and training classes take a waitlist of registrants in the same way (owner, 2026-10-28). Source: [requirements, Seasons](product/requirements.md#seasons).
 
 ## Process terms
 
@@ -248,7 +248,6 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 
 The owner answered the earlier questions on 2026-10-09 and 2026-10-10; the answers are in [docs/product/requirements.md](product/requirements.md). These remain open, and the list there is the source:
 
-1. **Standings:** confirm or change the proposed defaults per sport.
 2. **Fee percentage:** the percentage of each registration payment.
 3. **Per-player floor:** the minimum fee per roster entry.
 4. **Fee shown to the payer:** a separate line for the payer, or absorbed by the organization.
@@ -258,6 +257,3 @@ The owner answered the earlier questions on 2026-10-09 and 2026-10-10; the answe
 8. **Free agents:** what they tell the organizer, and whether free agents and waitlisted teams can withdraw.
 9. **Payments before registration ships:** whether the first release with registration must include the payment slices.
 10. **Registration deadline scope:** whether it also stops accepting invites and organizer placement.
-11. **Double elimination:** whether the grand final gets a deciding second game (#349).
-12. **Camp and training waitlists:** whether full camp sessions and training classes take a waitlist (#358, #365, #368).
-13. **Staff for other programs:** whether a league organizer can be assigned tournaments, camps, and training (#338).
