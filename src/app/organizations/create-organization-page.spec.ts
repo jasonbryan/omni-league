@@ -71,7 +71,7 @@ describe('CreateOrganizationPage', () => {
     beforeEach(() => open());
 
     it('has the back link, the heading, and a labelled form', () => {
-      const back = page.querySelector<HTMLAnchorElement>('a[href="/app"]');
+      const back = page.querySelector<HTMLAnchorElement>('main a[href="/app"]');
       expect(back?.textContent?.trim()).toBe('Your organizations');
       expect(page.querySelectorAll('h1')).toHaveLength(1);
       expect(page.querySelector('h1')?.textContent?.trim()).toBe('Create an organization');

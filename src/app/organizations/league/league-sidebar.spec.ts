@@ -1,3 +1,4 @@
+import { SIDEBAR_ROW, SIDEBAR_ROW_CURRENT } from '../../shell/sidebar-classes';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -11,10 +12,8 @@ import {
   MINE_AS_ORGANIZER,
 } from './testing/league-harness';
 
-const CURRENT_CLASS =
-  'flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground';
-const OTHER_CLASS =
-  'flex min-h-8 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted';
+const CURRENT_CLASS = SIDEBAR_ROW_CURRENT;
+const OTHER_CLASS = SIDEBAR_ROW;
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -101,19 +100,48 @@ describe('LeagueSidebar', () => {
     expect(page.querySelector('nav')!.textContent).not.toContain('Tuesday Slowpitch');
   });
 
-  it('keeps the organization, the role, Public page, and Your organizations around the list', async () => {
+  it('starts with the organization link to /app: the mark, the name, and "League organizer"', async () => {
     await open(COED_AS_ORGANIZER);
     await answer(MINE_AS_ORGANIZER);
     const nav = page.querySelector('nav')!;
-    expect(text(nav.querySelector('p.font-semibold'))).toBe(GULF.name);
-    expect(text(nav.querySelector('p.text-xs'))).toBe('League organizer');
+    expect(nav.getAttribute('aria-label')).toBe(`${GULF.name} leagues`);
+    const head = nav.querySelector('a')!;
+    expect(head.getAttribute('href')).toBe('/app');
+    expect(text(head.querySelector('.truncate'))).toBe(GULF.name);
+    expect(text(head.querySelector('span.block.text-xs'))).toBe('League organizer');
+    expect(text(head.querySelector('[aria-hidden="true"]'))).toBe('GC');
+  });
+
+  it('follows the list with Public page, and has no admin section, count, or "View public page"', async () => {
+    await open(COED_AS_ORGANIZER);
+    await answer(MINE_AS_ORGANIZER);
+    const nav = page.querySelector('nav')!;
     const lists = [...nav.querySelectorAll('ul')];
+    expect(lists).toHaveLength(2);
     expect(
       [...lists[1].querySelectorAll('a')].map((a) => [text(a), a.getAttribute('href')]),
-    ).toEqual([
-      ['Public page', `/organizations/${GULF.slug}`],
-      ['Your organizations', '/app'],
-    ]);
+    ).toEqual([['Public page', `/organizations/${GULF.slug}`]]);
+    const labels = [...nav.querySelectorAll('a')].map((a) => text(a));
+    for (const absent of ['Overview', 'Locations', 'Staff', 'Details', 'View public page']) {
+      expect(
+        labels.some((label) => label?.includes(absent)),
+        absent,
+      ).toBe(false);
+    }
+    expect(nav.querySelector('.tabular-nums')).toBeNull();
+    expect(nav.textContent).not.toContain('Your organizations');
+  });
+
+  it('asks for no admin count', async () => {
+    await open(COED_AS_ORGANIZER);
+    const names = o.convex.activeSubscriptions.map((s) => s.name);
+    for (const admin of [
+      'leagues:publishedCount',
+      'locations:listForAdmin',
+      'memberships:listForOrganization',
+    ]) {
+      expect(names).not.toContain(admin);
+    }
   });
 
   it('shows only the current league until the answer comes, and after a failed one', async () => {

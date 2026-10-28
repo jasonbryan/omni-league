@@ -13,9 +13,9 @@ import {
   COASTAL_LOCATIONS,
   GET_ADMIN_CONTEXT,
   LIST_FOR_ADMIN,
-  ME,
   openAdmin,
   text,
+  expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
@@ -118,9 +118,8 @@ describe('AdminLeagues', () => {
   describe('the page (states 1 to 3)', () => {
     it('asks leagues.listForAdmin and locations.listForAdmin with the organization id, only after the context says ready', async () => {
       await open();
-      expect(o.convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
+      expectPageAndShellSubscriptions(o.convex, [
         [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
-        [ME, {}],
         [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
         [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
       ]);
