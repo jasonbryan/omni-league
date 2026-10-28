@@ -6,7 +6,7 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
 @Component({
   selector: 'app-public-season-skeleton',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block', 'data-testid': 'season-skeleton' },
+  host: { class: 'block', 'data-testid': 'season-skeleton', 'data-page-loading': '' },
   template: `
     <p role="status" class="sr-only">Loading the season.</p>
     <div class="mx-auto w-full max-w-6xl px-4 pt-4 pb-6 md:px-8 md:pt-8 md:pb-10">

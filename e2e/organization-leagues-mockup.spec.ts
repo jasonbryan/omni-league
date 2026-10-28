@@ -103,7 +103,7 @@ const submit = (page: Page) =>
   page.locator('#create-league form').getByRole('button', { name: /^Create draft league/ });
 
 // This mockup predates the division: the Division group, the Sport hint, and each row's division
-// label. 300-public-site-league-form.html draws them, and organization-leagues-division.spec.ts
+// label. The public site league form mockup draws them, and organization-leagues-division.spec.ts
 // covers them.
 const AFTER_THIS_MOCKUP = [
   '#create-league form fieldset:has(> legend:text-is("Division"))',

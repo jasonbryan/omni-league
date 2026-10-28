@@ -1,5 +1,6 @@
 import { RenderMode } from '@angular/ssr';
 import { AccountPage } from './account/account-page';
+import { AccountSettingsPage } from './account/account-settings-page';
 import { FindPage } from './find/find-page';
 import { AcceptInvitePage } from './invites/accept-invite-page';
 import { captureInviteToken } from './invites/capture-invite-token';
@@ -213,13 +214,17 @@ describe('Route tables', () => {
     expect(headers.get('Referrer-Policy')).toBe('no-referrer');
   });
 
-  it('app has the guarded account page, the guarded create-organization page, the guarded league management page, the guarded admin area, and its own not-found route', async () => {
+  it('app has the guarded home page, the guarded account settings page, the guarded create-organization page, the guarded league management page, the guarded admin area, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
     expect(app?.canActivate).toBeUndefined();
-    const [account, create, league, admin, notFound, ...rest] = app?.children ?? [];
+    const [account, settings, create, league, admin, notFound, ...rest] = app?.children ?? [];
     expect(rest).toEqual([]);
+    expect(settings?.path).toBe('account');
+    expect(settings?.title).toBe('Account settings | Omni League');
+    expect(settings?.canActivate).toEqual([requireSignedIn]);
+    expect(await settings?.loadComponent?.()).toBe(AccountSettingsPage);
     expect(create?.path).toBe('organizations/new');
     expect(create?.title).toBe('Create an organization | Omni League');
     expect(create?.canActivate).toEqual([requireSignedIn]);
@@ -244,7 +249,7 @@ describe('Route tables', () => {
     expect(await admin?.children?.[3]?.loadComponent?.()).toBe(AdminStaff);
     expect(await admin?.children?.[4]?.loadComponent?.()).toBe(AdminDetails);
     expect(account?.path).toBe('');
-    expect(account?.title).toBe('Your account | Omni League');
+    expect(account?.title).toBe('Home | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);
     expect(await account?.loadComponent?.()).toBe(AccountPage);
     expect(notFound?.path).toBe('**');

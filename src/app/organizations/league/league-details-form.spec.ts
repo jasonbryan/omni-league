@@ -1,4 +1,4 @@
-import { ConvexError } from 'convex/values';
+import { ConvexError, type Value } from 'convex/values';
 import { LEAGUE_MESSAGES } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
@@ -59,6 +59,11 @@ const SAVED_DIVISION = {
   playersPerSide: 4,
   level: 'bb',
   ageGroup: 'adult',
+};
+
+const BASELINES = {
+  name: 'Sunday Reverse Coed 4s',
+  ...SAVED_DIVISION,
 };
 
 const EARLIER = {
@@ -279,6 +284,7 @@ describe('LeagueDetailsForm', () => {
             playersPerSide: 6,
             level: 'bb',
             ageGroup: 'adult',
+            expected: BASELINES,
           },
         ],
       ]);
@@ -309,7 +315,60 @@ describe('LeagueDetailsForm', () => {
         customLevelId: 'cl_gold',
         ageGroup: 'adult',
         minimumRosterSize: 6,
+        expected: {
+          name: 'Sunday Reverse Coed 4s',
+          gender: 'coed',
+          playersPerSide: 4,
+          level: 'a',
+          customLevelId: 'cl_gold',
+          ageGroup: 'adult',
+          minimumRosterSize: 6,
+        },
       });
+    });
+
+    it('sends the values it saved as the baselines of the next save', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      await typeName('Sunday Sand 2');
+      await submit();
+      expect(o.convex.calls[1].args).toMatchObject({
+        name: 'Sunday Sand 2',
+        expected: { name: 'Sunday Sand', playersPerSide: 6 },
+      });
+    });
+
+    it('sends the values Undo restored as the baselines of the next save', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      undoButton()!.click();
+      await o.flush();
+      o.convex.calls[1].resolve(null);
+      await o.flush();
+      await typeName('Sunday Sand 2');
+      await submit();
+      expect(o.convex.calls[2].args).toMatchObject({
+        expected: { name: 'Sunday Reverse Coed 4s', playersPerSide: 4 },
+      });
+    });
+
+    it('sends only the league name as the baseline for a league without a division', async () => {
+      await open({ ...SUNDAY, division: undefined });
+      await typeName('Sunday Sand');
+      await choose('format', '6');
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({
+        expected: { name: 'Sunday Reverse Coed 4s' },
+      });
+      expect(o.convex.calls[0].args).not.toHaveProperty('expected.playersPerSide');
     });
 
     it('says League details saved. with Undo, and keeps the values in the form', async () => {
@@ -463,6 +522,590 @@ describe('LeagueDetailsForm', () => {
       await typeName('Sunday Sand 2');
       await submit();
       expect(undoButton()).toBeUndefined();
+    });
+  });
+
+  describe('a save from out-of-date details', () => {
+    const SIX = {
+      name: 'Sunday Reverse Coed 4s',
+      division: { ...SUNDAY.division, playersPerSide: 6, label: 'Coed · 6v6 · BB' },
+    };
+
+    const changedSince = (current: Value = SIX) =>
+      new ConvexError({
+        field: 'name',
+        code: 'changedSince',
+        message: LEAGUE_MESSAGES.changedWhileEditing,
+        current,
+      });
+
+    const alertBox = () => page.querySelector<HTMLElement>('[data-slot="alert"]');
+
+    async function renameAndGetRefused(name = 'Sunday Sand') {
+      await open();
+      await typeName(name);
+      await leaveName();
+      await submit();
+      o.convex.calls[0].reject(changedSince());
+      await o.flush();
+    }
+
+    it('shows the alert and takes focus, with the typed name kept and no message under Name', async () => {
+      await renameAndGetRefused();
+      expect(alertBox()!.getAttribute('role')).toBe('alert');
+      expect(text(alertBox())).toBe(LEAGUE_MESSAGES.changedWhileEditing);
+      expect(document.activeElement).toBe(alertBox());
+      expect(page.querySelector('#league-name-error')).toBeNull();
+      expect(nameInput().value).toBe('Sunday Sand');
+    });
+
+    it('shows the newer format in a field the organizer did not edit', async () => {
+      await renameAndGetRefused();
+      expect(chip('format', '6').checked).toBe(true);
+    });
+
+    it('saves the typed name and the newer format on the next save, sending the newer values as the baselines', async () => {
+      await renameAndGetRefused();
+      await submit();
+      expect(o.convex.calls).toHaveLength(2);
+      expect(o.convex.calls[1].args).toEqual({
+        leagueId: 'lg_coed',
+        name: 'Sunday Sand',
+        gender: 'coed',
+        playersPerSide: 6,
+        level: 'bb',
+        ageGroup: 'adult',
+        expected: { ...BASELINES, playersPerSide: 6 },
+      });
+      expect(alertBox()).toBeNull();
+    });
+
+    it('keeps the newer format when the new name states a format', async () => {
+      await open();
+      await typeName('Sunday Coed 4s');
+      await leaveName();
+      await submit();
+      o.convex.calls[0].reject(changedSince());
+      await o.flush();
+      expect(chip('format', '6').checked).toBe(true);
+      await submit();
+      expect(o.convex.calls[1].args).toMatchObject({ name: 'Sunday Coed 4s', playersPerSide: 6 });
+      expect(text(section().querySelector('fieldset [role="status"]'))).toBe('');
+    });
+
+    it('keeps a field the organizer edited, and sends the newer value as its baseline', async () => {
+      await open();
+      await choose('format', '2');
+      await submit();
+      o.convex.calls[0].reject(changedSince());
+      await o.flush();
+      expect(chip('format', '2').checked).toBe(true);
+      await submit();
+      expect(o.convex.calls[1].args).toMatchObject({
+        playersPerSide: 2,
+        expected: { playersPerSide: 6 },
+      });
+    });
+
+    it('loads every detail the other organizer changed, including a custom level and a minimum', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].reject(
+        changedSince({
+          name: 'Sunday Gold',
+          division: {
+            gender: 'mens',
+            playersPerSide: 6,
+            level: 'a',
+            customLevel: { customLevelId: 'cl_gold', name: 'Gold' },
+            ageGroup: 'over40',
+            minimumRosterSize: 8,
+            label: "Men's · 6v6 · Gold (A)",
+          },
+        }),
+      );
+      await o.flush();
+      expect(nameInput().value).toBe('Sunday Sand');
+      expect(chip('gender', 'mens').checked).toBe(true);
+      expect(chip('format', '6').checked).toBe(true);
+      expect(chip('level', 'custom:cl_gold').checked).toBe(true);
+      expect(page.querySelector<HTMLSelectElement>('#details-age-group')!.value).toBe('over40');
+      expect(page.querySelector<HTMLInputElement>('#details-minimum-roster-size')!.value).toBe('8');
+      await submit();
+      expect(o.convex.calls[1].args).toEqual({
+        leagueId: 'lg_coed',
+        name: 'Sunday Sand',
+        gender: 'mens',
+        playersPerSide: 6,
+        level: 'a',
+        customLevelId: 'cl_gold',
+        ageGroup: 'over40',
+        minimumRosterSize: 8,
+        expected: {
+          name: 'Sunday Gold',
+          gender: 'mens',
+          playersPerSide: 6,
+          level: 'a',
+          customLevelId: 'cl_gold',
+          ageGroup: 'over40',
+          minimumRosterSize: 8,
+        },
+      });
+    });
+
+    it('loads the newer name when the organizer did not edit it', async () => {
+      await open();
+      await choose('format', '2');
+      await submit();
+      o.convex.calls[0].reject(changedSince({ ...SIX, name: 'Sunday Renamed' }));
+      await o.flush();
+      expect(nameInput().value).toBe('Sunday Renamed');
+    });
+
+    it('shows no alert on a save nobody else changed, and still fills the format from the name', async () => {
+      await open();
+      await typeName('Sunday Coed 6s');
+      await leaveName();
+      expect(chip('format', '6').checked).toBe(true);
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({ playersPerSide: 6, expected: BASELINES });
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      expect(alertBox()).toBeNull();
+    });
+
+    it('shows the alert and keeps the form when the refusal lacks the current values', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'changedSince',
+          message: LEAGUE_MESSAGES.changedWhileEditing,
+        }),
+      );
+      await o.flush();
+      expect(text(alertBox())).toContain('Someone else changed this league');
+      expect(nameInput().value).toBe('Sunday Sand');
+    });
+  });
+
+  describe('a save by another organizer, shown live', () => {
+    const noteText = (value: string) =>
+      `Someone else changed this to "${value}". Saving keeps yours.`;
+    const RENAME_NOTE = 'Someone else changed this to "6v6". The name you typed did not change it.';
+
+    async function live(change: Record<string, unknown> = {}, name = SUNDAY.name) {
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit({
+        ...SUNDAY,
+        name,
+        division: { ...SUNDAY.division, ...change },
+      });
+      await o.flush();
+    }
+
+    const noteOf = (id: string) => page.querySelector<HTMLElement>(`#${id}`);
+    const notes = () => [...page.querySelectorAll('[data-slot="field-note"]')];
+    const announcement = () => page.querySelector<HTMLElement>('[data-slot="note-announcement"]')!;
+    const announced = () => [...announcement().querySelectorAll('p')].map((p) => text(p));
+    const describedBy = (selector: string) =>
+      page.querySelector(selector)!.getAttribute('aria-describedby')!.split(' ');
+
+    async function chooseAgeGroup(key: string) {
+      const select = page.querySelector<HTMLSelectElement>('#details-age-group')!;
+      select.value = key;
+      select.dispatchEvent(new Event('change'));
+      await o.harness.fixture.whenStable();
+    }
+
+    async function typeMinimum(value: string) {
+      if (!page.querySelector('#details-minimum-roster-size')) {
+        form().querySelector<HTMLButtonElement>('button[type="button"]')!.click();
+        await o.flush();
+      }
+      const minimum = page.querySelector<HTMLInputElement>('#details-minimum-roster-size')!;
+      minimum.value = value;
+      minimum.dispatchEvent(new Event('input'));
+      await o.flush();
+    }
+
+    describe('a field that is not edited', () => {
+      it('shows the other organizer’s value, with no note, alert, or status message', async () => {
+        await open();
+        await live({ playersPerSide: 6, label: 'Coed · 6v6 · BB' });
+        expect(chip('format', '6').checked).toBe(true);
+        expect(notes()).toEqual([]);
+        expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+        expect(status()!.textContent.trim()).toBe('');
+        expect(announced()).toEqual([]);
+        await submit();
+        expect(o.convex.calls[0].args).toMatchObject({
+          playersPerSide: 6,
+          expected: { playersPerSide: 6 },
+        });
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+      });
+
+      it('takes every detail', async () => {
+        await open();
+        await live(
+          {
+            gender: 'mens',
+            playersPerSide: 6,
+            level: 'a',
+            ageGroup: 'over40',
+            minimumRosterSize: 8,
+          },
+          'Sunday Gold',
+        );
+        expect(nameInput().value).toBe('Sunday Gold');
+        expect(chip('gender', 'mens').checked).toBe(true);
+        expect(chip('format', '6').checked).toBe(true);
+        expect(chip('level', 'a').checked).toBe(true);
+        expect(page.querySelector<HTMLSelectElement>('#details-age-group')!.value).toBe('over40');
+        expect(page.querySelector<HTMLInputElement>('#details-minimum-roster-size')!.value).toBe(
+          '8',
+        );
+        expect(notes()).toEqual([]);
+        await submit();
+        expect(o.convex.calls[0].args).toMatchObject({
+          name: 'Sunday Gold',
+          expected: { name: 'Sunday Gold', playersPerSide: 6, minimumRosterSize: 8 },
+        });
+      });
+
+      it('does not count as an edit, so the saved status stays', async () => {
+        await open();
+        await typeName('Sunday Sand');
+        await submit();
+        o.convex.calls[0].resolve({ ...EARLIER, draftSeasons: [] });
+        await o.flush();
+        await live({ ageGroup: 'over40' }, 'Sunday Sand');
+        expect(page.querySelector<HTMLSelectElement>('#details-age-group')!.value).toBe('over40');
+        expect(text(status())).toContain('League details saved.');
+      });
+    });
+
+    it('keeps the typed name and shows the newer format when only Name is edited', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await leaveName();
+      await live({ playersPerSide: 6 });
+      expect(nameInput().value).toBe('Sunday Sand');
+      expect(chip('format', '6').checked).toBe(true);
+      expect(notes()).toEqual([]);
+      expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({
+        name: 'Sunday Sand',
+        playersPerSide: 6,
+        expected: { name: 'Sunday Reverse Coed 4s', playersPerSide: 6 },
+      });
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+    });
+
+    describe('an edited field', () => {
+      const FIELDS = [
+        {
+          field: 'Name',
+          id: 'league-name',
+          owner: '#league-name',
+          edit: () => typeName('Sunday Sand'),
+          change: () => live({}, 'Sunday Gold'),
+          value: 'Sunday Gold',
+          editAgain: () => typeName('Sunday Sand again'),
+        },
+        {
+          field: 'Gender',
+          id: 'details-gender',
+          owner: 'fieldset#details-gender',
+          edit: () => choose('gender', 'mens'),
+          change: () => live({ gender: 'womens' }),
+          value: "Women's",
+          editAgain: () => choose('gender', 'coed'),
+        },
+        {
+          field: 'Format',
+          id: 'details-format',
+          owner: 'fieldset#details-format',
+          edit: () => choose('format', '2'),
+          change: () => live({ playersPerSide: 6 }),
+          value: '6v6',
+          editAgain: () => choose('format', '3'),
+        },
+        {
+          field: 'Minimum roster size',
+          id: 'details-minimum-roster-size',
+          owner: '#details-minimum-roster-size',
+          edit: () => typeMinimum('5'),
+          change: () => live({ minimumRosterSize: 8 }),
+          value: '8',
+          editAgain: () => typeMinimum('9'),
+        },
+        {
+          field: 'Level',
+          id: 'details-level',
+          owner: 'fieldset#details-level',
+          edit: () => choose('level', 'a'),
+          change: () => live({ level: 'aa' }),
+          value: 'AA',
+          editAgain: () => choose('level', 'bb'),
+        },
+        {
+          field: 'Age group',
+          id: 'details-age-group',
+          owner: '#details-age-group',
+          edit: () => chooseAgeGroup('over40'),
+          change: () => live({ ageGroup: 'u10' }),
+          value: 'U10',
+          editAgain: () => chooseAgeGroup('over50'),
+        },
+      ];
+
+      it.each(FIELDS)(
+        '$field keeps its value and shows a note with the value as labelled, linked by aria-describedby',
+        async ({ id, owner, edit, change, value }) => {
+          await open();
+          await edit();
+          await change();
+          expect(text(noteOf(`${id}-note`))).toBe(noteText(value));
+          expect(describedBy(owner)).toContain(`${id}-note`);
+          expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+        },
+      );
+
+      it.each(FIELDS)('$field note clears when the field is changed', async (field) => {
+        await open();
+        await field.edit();
+        await field.change();
+        expect(noteOf(`${field.id}-note`)).not.toBeNull();
+        await field.editAgain();
+        expect(noteOf(`${field.id}-note`)).toBeNull();
+        expect(describedBy(field.owner)).not.toContain(`${field.id}-note`);
+      });
+
+      it('keeps the typed values, and the next save writes them with no refusal', async () => {
+        await open();
+        await choose('format', '2');
+        await live({ playersPerSide: 6 });
+        await submit();
+        expect(o.convex.calls[0].args).toMatchObject({
+          playersPerSide: 2,
+          expected: { playersPerSide: 6 },
+        });
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+      });
+
+      it('clears every note when the save lands', async () => {
+        await open();
+        await choose('format', '2');
+        await typeName('Sunday Sand');
+        await live({ playersPerSide: 6 }, 'Sunday Gold');
+        expect(notes()).toHaveLength(2);
+        await submit();
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        expect(notes()).toEqual([]);
+        expect(announced()).toEqual([]);
+      });
+
+      it('shows a newer custom level by its name', async () => {
+        await open();
+        await choose('level', 'a');
+        await live({ level: 'b', customLevel: { customLevelId: 'cl_gold', name: 'Gold' } });
+        expect(text(noteOf('details-level-note'))).toBe(noteText('Gold'));
+      });
+
+      it('says a minimum was cleared when the newer save has none', async () => {
+        await open({ ...SUNDAY, division: { ...SUNDAY.division, minimumRosterSize: 6 } });
+        await typeMinimum('7');
+        await live();
+        expect(text(noteOf('details-minimum-roster-size-note'))).toBe(
+          'Someone else cleared this. Saving keeps yours.',
+        );
+      });
+
+      it('shows the note when the server refuses a save as out of date', async () => {
+        await open();
+        await choose('format', '2');
+        await submit();
+        o.convex.calls[0].reject(
+          new ConvexError({
+            field: 'name',
+            code: 'changedSince',
+            message: LEAGUE_MESSAGES.changedWhileEditing,
+            current: {
+              name: SUNDAY.name,
+              division: { ...SUNDAY.division, playersPerSide: 6, label: 'Coed · 6v6 · BB' },
+            },
+          }),
+        );
+        await o.flush();
+        expect(text(noteOf('details-format-note'))).toBe(noteText('6v6'));
+      });
+    });
+
+    describe('the rename note', () => {
+      it('says the name did not change a format another organizer saved, and clears on save', async () => {
+        await open();
+        await live({ playersPerSide: 6 });
+        await typeName('Sunday Coed 4s');
+        await leaveName();
+        expect(chip('format', '6').checked).toBe(true);
+        expect(text(noteOf('details-format-note'))).toBe(RENAME_NOTE);
+        expect(describedBy('fieldset#details-format')).toContain('details-format-note');
+        await submit();
+        expect(o.convex.calls[0].args).toMatchObject({ name: 'Sunday Coed 4s', playersPerSide: 6 });
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        expect(notes()).toEqual([]);
+      });
+
+      it('goes when the name states the format again', async () => {
+        await open();
+        await live({ playersPerSide: 6 });
+        await typeName('Sunday Coed 4s');
+        await leaveName();
+        await typeName('Sunday Coed 6s');
+        await leaveName();
+        expect(noteOf('details-format-note')).toBeNull();
+      });
+    });
+
+    describe('the announcement', () => {
+      it('is an sr-only live region of its own, apart from the save status', async () => {
+        await open();
+        const region = announcement();
+        expect(region.getAttribute('role')).toBe('status');
+        expect(region.classList.contains('sr-only')).toBe(true);
+        expect(status()!.contains(region)).toBe(false);
+        expect(region.textContent.trim()).toBe('');
+      });
+
+      it('puts a new note’s text in the region once, and not again on a later render', async () => {
+        await open();
+        await choose('format', '2');
+        await live({ playersPerSide: 6 });
+        expect(announced()).toEqual([noteText('6v6')]);
+        const first = announcement().querySelector('p');
+        o.subscription(LIST_FOR_ORGANIZER)!.emit(SEASONS);
+        await o.flush();
+        await typeName('Sunday Sand');
+        expect(announced()).toEqual([noteText('6v6')]);
+        expect(announcement().querySelector('p')).toBe(first);
+      });
+
+      it('announces each note when one update brings notes on two fields', async () => {
+        await open();
+        await choose('format', '2');
+        await choose('gender', 'mens');
+        await live({ playersPerSide: 6, gender: 'womens' });
+        expect(announced()).toEqual([noteText("Women's"), noteText('6v6')]);
+      });
+
+      it('announces only the note that is new when another follows', async () => {
+        await open();
+        await choose('format', '2');
+        await choose('gender', 'mens');
+        await live({ playersPerSide: 6 });
+        await live({ playersPerSide: 6, gender: 'womens' });
+        expect(announced()).toEqual([noteText("Women's")]);
+      });
+
+      it('announces the rename note', async () => {
+        await open();
+        await live({ playersPerSide: 6 });
+        await typeName('Sunday Coed 4s');
+        await leaveName();
+        expect(announced()).toEqual([RENAME_NOTE]);
+      });
+
+      it('announces nothing for a silent update of a field that is not edited', async () => {
+        await open();
+        await typeName('Sunday Sand');
+        await live({ playersPerSide: 6 });
+        expect(announced()).toEqual([]);
+      });
+
+      it('empties when the note clears', async () => {
+        await open();
+        await choose('format', '2');
+        await live({ playersPerSide: 6 });
+        await choose('format', '3');
+        expect(announced()).toEqual([]);
+      });
+    });
+
+    describe('the user’s own save and Undo', () => {
+      it('shows no note when the league’s live value follows the save, before or after it resolves', async () => {
+        await open();
+        await typeName('Sunday Sand');
+        await choose('format', '6');
+        await submit();
+        await live({ playersPerSide: 6 }, 'Sunday Sand');
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        await live({ playersPerSide: 6 }, 'Sunday Sand');
+        expect(notes()).toEqual([]);
+        expect(announced()).toEqual([]);
+        expect(text(status())).toContain('League details saved.');
+      });
+
+      it('shows no note when the live value follows Undo', async () => {
+        await open();
+        await typeName('Sunday Sand');
+        await choose('format', '6');
+        await submit();
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        await live({ playersPerSide: 6 }, 'Sunday Sand');
+        undoButton()!.click();
+        await o.flush();
+        await live();
+        o.convex.calls[1].resolve(null);
+        await o.flush();
+        expect(notes()).toEqual([]);
+        expect(announced()).toEqual([]);
+        expect(nameInput().value).toBe('Sunday Reverse Coed 4s');
+        expect(chip('format', '4').checked).toBe(true);
+      });
+
+      it('takes a change that arrived while Undo was pending when Undo fails', async () => {
+        await open();
+        await typeName('Sunday Sand');
+        await submit();
+        o.convex.calls[0].resolve(EARLIER);
+        await o.flush();
+        undoButton()!.click();
+        await o.flush();
+        await live({ ageGroup: 'over40' }, 'Sunday Sand');
+        o.convex.calls[1].reject(new Error('Server Error: secret'));
+        await o.flush();
+        expect(page.querySelector<HTMLSelectElement>('#details-age-group')!.value).toBe('over40');
+      });
+    });
+
+    it('loads another league as it is, with no note', async () => {
+      await open();
+      await choose('format', '2');
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit({
+        ...SUNDAY,
+        leagueId: 'lg_other',
+        name: 'Other League',
+        division: { ...SUNDAY.division, playersPerSide: 6 },
+      });
+      await o.flush();
+      expect(nameInput().value).toBe('Other League');
+      expect(chip('format', '6').checked).toBe(true);
+      expect(notes()).toEqual([]);
     });
   });
 

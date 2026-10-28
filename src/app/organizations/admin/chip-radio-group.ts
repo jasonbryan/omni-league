@@ -15,6 +15,7 @@ import {
   CHIP_CHOICE_WRAPPER_CLASSES,
 } from '../../ui/chip/chip-classes';
 import { FIELD_ERROR } from './field-classes';
+import { FieldNoteText, type FieldNote } from './field-note';
 
 export interface ChipOption {
   key: string;
@@ -23,7 +24,7 @@ export interface ChipOption {
 
 @Component({
   selector: 'app-chip-radio-group',
-  imports: [NgIcon],
+  imports: [FieldNoteText, NgIcon],
   providers: [provideIcons({ lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -56,6 +57,9 @@ export interface ChipOption {
       @if (description(); as text) {
         <p [id]="name() + '-description'" [class]="descriptionClass">{{ text }}</p>
       }
+      @if (note(); as shownNote) {
+        <app-field-note [id]="name() + '-note'" [note]="shownNote" class="mt-2" />
+      }
       @if (error(); as message) {
         <div role="alert" [id]="name() + '-error'" [class]="errorClass + ' mt-2'">
           <ng-icon name="lucideCircleAlert" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
@@ -71,6 +75,7 @@ export class ChipRadioGroup {
   readonly options = input.required<readonly ChipOption[]>();
   readonly value = input.required<string | null>();
   readonly description = input<string | null>(null);
+  readonly note = input<FieldNote | null>(null);
   readonly error = input<string | null>(null);
 
   readonly chosen = output<string>();
@@ -87,6 +92,7 @@ export class ChipRadioGroup {
   protected readonly describedBy = computed(() => {
     const ids = [
       this.description() ? `${this.name()}-description` : null,
+      this.note() ? `${this.name()}-note` : null,
       this.error() ? `${this.name()}-error` : null,
     ].filter((id) => id !== null);
     return ids.length > 0 ? ids.join(' ') : null;

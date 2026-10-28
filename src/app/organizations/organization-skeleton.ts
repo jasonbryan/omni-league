@@ -59,7 +59,7 @@ export class OpenSeasonsSkeleton {
   selector: 'app-organization-skeleton',
   imports: [OpenSeasonsSkeleton, OrganizationRowsSkeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { 'data-testid': 'organization-skeleton' },
+  host: { 'data-testid': 'organization-skeleton', 'data-page-loading': '' },
   template: `
     <p role="status" class="sr-only">Loading the organization.</p>
     <div class="mx-auto w-full max-w-6xl px-4 pt-6 pb-6 md:px-8 md:pt-12 md:pb-10">
