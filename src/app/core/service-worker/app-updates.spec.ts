@@ -10,7 +10,6 @@ import { ChangesInFlight } from '../changes-in-flight';
 import { CONVEX_CLIENT, injectMutation } from '../data/convex';
 import { FakeConvexClient } from '../data/convex/testing/fake-convex-client';
 import {
-  ACTIVATE_TIMEOUT_MS,
   AUTO_APPLY_WINDOW_MS,
   AppUpdates,
   PAGE_LOADED_AT,
@@ -146,8 +145,7 @@ describe('AppUpdates', () => {
   });
 
   describe('a new version early in the page load (criterion 1)', () => {
-    it('activates it and reloads at once on an untouched, safe page, with no prompt', async () => {
-      const activate = vi.spyOn(sw, 'activateUpdate');
+    it('reloads at once on an untouched, safe page, with no prompt', async () => {
       const updates = await startOn();
       passTime(5 * SECOND);
 
@@ -155,11 +153,7 @@ describe('AppUpdates', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(updates.card()).toBe('none');
-      expect(activate).toHaveBeenCalledTimes(1);
       expect(reload).toHaveBeenCalledTimes(1);
-      expect(activate.mock.invocationCallOrder[0]).toBeLessThan(
-        reload.mock.invocationCallOrder[0] ?? 0,
-      );
     });
 
     it('reloads the page as it is when the reload happens, at the same URL', async () => {
@@ -225,31 +219,25 @@ describe('AppUpdates', () => {
 
   describe('a path-changing navigation (criterion 2)', () => {
     async function readyOnTouchedPage() {
-      const activate = vi.spyOn(sw, 'activateUpdate');
       const updates = await startOn();
       touch();
       passTime(MINUTE);
       sw.versionReady('a', 'b');
-      return { updates, activate };
+      return { updates };
     }
 
-    it('activates the update and reloads once, with no prompt', async () => {
-      const { updates, activate } = await readyOnTouchedPage();
+    it('reloads once, with no prompt', async () => {
+      const { updates } = await readyOnTouchedPage();
 
       await navigate('/next');
 
       expect(updates.card()).toBe('none');
-      expect(activate).toHaveBeenCalledTimes(1);
       expect(reload).toHaveBeenCalledTimes(1);
-      expect(activate.mock.invocationCallOrder[0]).toBeLessThan(
-        reload.mock.invocationCallOrder[0] ?? 0,
-      );
 
       await navigate('/again');
       setVisibility('hidden');
       setVisibility('visible');
       await vi.advanceTimersByTimeAsync(0);
-      expect(activate).toHaveBeenCalledTimes(1);
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
@@ -299,8 +287,7 @@ describe('AppUpdates', () => {
   });
 
   describe('a long-open page that comes back to the front (criterion 2a)', () => {
-    it('activates a ready update and reloads when the page becomes visible and is older than 7 days', async () => {
-      const activate = vi.spyOn(sw, 'activateUpdate');
+    it('reloads a ready update when the page becomes visible and is older than 7 days', async () => {
       const updates = await startOn('/home', STALE_PAGE_AGE_MS + MINUTE);
       passTime(MINUTE);
       sw.versionReady('a', 'b');
@@ -313,7 +300,6 @@ describe('AppUpdates', () => {
       setVisibility('visible');
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(activate).toHaveBeenCalledTimes(1);
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
@@ -340,13 +326,11 @@ describe('AppUpdates', () => {
     });
 
     it('does nothing when no update is ready', async () => {
-      const activate = vi.spyOn(sw, 'activateUpdate');
       await startOn('/home', 8 * DAY);
 
       setVisibility('visible');
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(activate).not.toHaveBeenCalled();
       expect(reload).not.toHaveBeenCalled();
     });
 
@@ -843,95 +827,61 @@ describe('AppUpdates', () => {
     });
   });
 
-  describe('safety is checked again after the activation wait (criterion 3)', () => {
-    function holdActivation(): { finish: () => void } {
-      let finish: (value: boolean) => void = () => undefined;
-      vi.spyOn(sw, 'activateUpdate').mockImplementationOnce(
-        () => new Promise<boolean>((resolve) => (finish = resolve)),
-      );
-      return { finish: () => finish(true) };
-    }
-
-    it('does not reload when the user types while activateUpdate() is pending, and shows the prompt', async () => {
-      const { finish } = holdActivation();
-      const updates = await startOn();
-      sw.versionReady('a', 'b');
-      await vi.advanceTimersByTimeAsync(0);
-
-      typeInto();
-      finish();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(reload).not.toHaveBeenCalled();
-      expect(updates.card()).toBe('ready');
-    });
-
-    it('does not reload when a change starts while activateUpdate() is pending, and reloads once it settles', async () => {
-      const { finish } = holdActivation();
+  describe('the automatic path leaves the worker alone (criterion 9)', () => {
+    // activateUpdate() would switch this page to the new version while it still runs the old bundle, whose lazy chunks the worker no longer serves.
+    it('does not call activateUpdate() for a version that loads early in the page load', async () => {
+      const activate = vi.spyOn(sw, 'activateUpdate');
       await startOn();
+
       sw.versionReady('a', 'b');
       await vi.advanceTimersByTimeAsync(0);
 
-      const end = TestBed.inject(ChangesInFlight).begin();
-      finish();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(reload).not.toHaveBeenCalled();
-
-      end();
-      await vi.advanceTimersByTimeAsync(0);
       expect(reload).toHaveBeenCalledTimes(1);
+      expect(activate).not.toHaveBeenCalled();
     });
 
-    it('does not reload when the activation wait times out after the user typed', async () => {
-      vi.spyOn(sw, 'activateUpdate').mockReturnValueOnce(new Promise<boolean>(() => undefined));
-      const updates = await startOn();
-      sw.versionReady('a', 'b');
-      await vi.advanceTimersByTimeAsync(0);
-
-      typeInto();
-      await vi.advanceTimersByTimeAsync(ACTIVATE_TIMEOUT_MS);
-
-      expect(reload).not.toHaveBeenCalled();
-      expect(updates.card()).toBe('ready');
-    });
-
-    it('still applies at a later safe navigation once the held field has gone', async () => {
-      const { finish } = holdActivation();
+    it('does not call activateUpdate() for a version that loads at a navigation', async () => {
+      const activate = vi.spyOn(sw, 'activateUpdate');
       await startOn();
+      touch();
       sw.versionReady('a', 'b');
-      await vi.advanceTimersByTimeAsync(0);
-      const input = typeInto();
-      finish();
-      await vi.advanceTimersByTimeAsync(0);
 
-      input.remove();
       await navigate('/next');
 
       expect(reload).toHaveBeenCalledTimes(1);
+      expect(activate).not.toHaveBeenCalled();
     });
-  });
 
-  describe('activation failure (criterion 9)', () => {
-    it('reloads when activateUpdate() fails', async () => {
-      vi.spyOn(sw, 'activateUpdate').mockImplementationOnce(() =>
-        Promise.reject(new Error('no worker')),
-      );
+    it('does not call activateUpdate() for a version that loads when a long-open page returns', async () => {
+      const activate = vi.spyOn(sw, 'activateUpdate');
+      await startOn('/home', STALE_PAGE_AGE_MS + MINUTE);
+      passTime(MINUTE);
+      sw.versionReady('a', 'b');
+
+      setVisibility('visible');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(activate).not.toHaveBeenCalled();
+    });
+
+    it('reloads in the same task as the trigger, with nothing left to wait for', async () => {
       await startOn();
 
       sw.versionReady('a', 'b');
-      await vi.advanceTimersByTimeAsync(0);
 
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    it('reloads after a short wait when activateUpdate() never settles', async () => {
-      vi.spyOn(sw, 'activateUpdate').mockReturnValueOnce(new Promise<boolean>(() => undefined));
-      await startOn();
+    it('does not call activateUpdate() when Reload is pressed either', async () => {
+      const activate = vi.spyOn(sw, 'activateUpdate');
+      const updates = await startOn();
+      typeInto();
       sw.versionReady('a', 'b');
 
-      await vi.advanceTimersByTimeAsync(ACTIVATE_TIMEOUT_MS - 1);
-      expect(reload).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(1);
+      updates.reload();
+
+      expect(activate).not.toHaveBeenCalled();
       expect(reload).toHaveBeenCalledTimes(1);
     });
   });

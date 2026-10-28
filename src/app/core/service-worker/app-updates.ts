@@ -21,7 +21,6 @@ import {
 } from './reload-guard';
 
 export const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
-export const ACTIVATE_TIMEOUT_MS = 3_000;
 /** How long after the page loaded, or after a long-open page came back to the front, a ready version loads without waiting for a navigation. */
 export const AUTO_APPLY_WINDOW_MS = 10_000;
 /** Half of the 14 days public functions keep accepting the previous release, so a tab that stays on one path still updates inside that window. */
@@ -212,34 +211,20 @@ export class AppUpdates {
       this.deferredTrigger = trigger;
       return;
     }
-    void this.apply(this.readyHash, trigger);
+    this.apply(this.readyHash);
   }
 
-  private async apply(hash: string, trigger: Trigger): Promise<void> {
-    this.applying = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, ACTIVATE_TIMEOUT_MS);
-    });
-    await Promise.race([this.swUpdate.activateUpdate().catch(() => false), timeout]);
-    clearTimeout(timer);
-    // The user may have typed, or a change may have started, during the wait.
-    if (this.safety.hasUnsavedField()) {
-      this.applying = false;
-      this.showPrompt();
-      return;
-    }
-    if (this.changes.active()) {
-      this.applying = false;
-      this.deferredTrigger = trigger;
-      return;
-    }
+  /**
+   * The page reloads without `activateUpdate()`: a navigation then gets the new version from the worker, as it does after Reload.
+   * Activating first would switch this page to the new version while it still runs the old bundle, whose lazy chunks the worker no longer serves.
+   */
+  private apply(hash: string): void {
     if (!recordReloadForVersion(hash)) {
-      this.applying = false;
       this.mayApply = false;
       this.showPrompt();
       return;
     }
+    this.applying = true;
     this.reloadPage();
   }
 
