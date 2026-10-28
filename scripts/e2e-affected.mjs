@@ -7,7 +7,8 @@ import { pathToFileURL } from 'node:url';
 const spec = (name) => `e2e/${name}.spec.ts`;
 
 // convex-backend needs no page: it checks IS_TEST and the backend URL the bundle was built with.
-export const ALWAYS = [spec('smoke'), spec('convex-backend'), 'e2e/harness/'];
+const HARNESS = 'e2e/harness/';
+export const ALWAYS = [spec('smoke'), spec('convex-backend'), HARNESS];
 
 const LEAGUE_ADMIN = [
   'organization-leagues',
@@ -445,6 +446,16 @@ export const AREAS = [
     name: 'leagues mockup',
     test: (file) => file === 'design/mockups/66-69-organization-leagues.html',
     specs: ['organization-leagues-mockup'],
+  },
+  {
+    name: 'seasons mockup',
+    test: (file) => file === 'design/mockups/125-126-seasons.html',
+    specs: ['league-management-mockup'],
+  },
+  {
+    name: 'app leagues mockup',
+    test: (file) => file === 'design/mockups/141-app-leagues.html',
+    specs: ['app-leagues'],
   },
   {
     // chip-classes.spec.ts takes the kit CSS from this mockup's inlined block.
@@ -933,6 +944,57 @@ export function selectSpecs(files, { event, base, root, sessionSpecs, warn } = {
 }
 
 const defaultWarn = (reason) => process.stderr.write(`e2e-affected: full suite: ${reason}\n`);
+
+const MOCKUPS_WORD = /\bmockups\b/;
+const SPEC_FILE = /\.spec\.ts$/;
+const specName = (relative) => relative.replace(SPEC_FILE, '');
+const unmappedRead = (spec, mockup) => `${spec}: ${mockup}`;
+
+/**
+ * @param {string} root
+ * @param {string} mockup
+ * @returns {string[]} the Playwright filters a change to the mockup selects, apart from the harness directory every run includes
+ */
+function ruleFilters(root, mockup) {
+  const selection = selectSpecs([`design/mockups/${mockup}`], {
+    event: 'pull_request',
+    base: 'main',
+    root,
+    warn: () => {},
+  });
+  if (selection.scope !== 'affected') return [];
+  return selection.specs.filter((filter) => filter !== HARNESS);
+}
+
+/**
+ * A spec opens a mockup by path, which the import graph cannot see, so a mockup edit selects that spec only through a rule.
+ * @param {string} root
+ * @returns {string[]}
+ */
+export function findUnmappedMockupReads(root) {
+  const mockups = readdirSync(join(root, 'design', 'mockups'));
+  const files = new Set();
+  listFiles(root, 'e2e', files);
+  const problems = [];
+  for (const file of [...files].sort()) {
+    const text = readFileSync(join(root, file), 'utf8');
+    const relative = file.slice('e2e/'.length);
+    const named = mockups.filter((mockup) => text.includes(mockup));
+    if (!SPEC_FILE.test(file)) {
+      if (named.length > 0 || MOCKUPS_WORD.test(text)) problems.push(relative);
+      continue;
+    }
+    if (named.length === 0) {
+      if (MOCKUPS_WORD.test(text)) problems.push(specName(relative));
+      continue;
+    }
+    for (const mockup of named) {
+      const covered = ruleFilters(root, mockup).some((filter) => new RegExp(filter).test(file));
+      if (!covered) problems.push(unmappedRead(specName(relative), mockup));
+    }
+  }
+  return problems.sort();
+}
 
 export function formatOutputs(selection) {
   return selection.scope === 'full'
