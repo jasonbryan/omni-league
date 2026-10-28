@@ -73,7 +73,7 @@ describe('PublicLayout server render', () => {
       [...body.querySelectorAll('footer nav[aria-label="Footer"] a')].map((a) =>
         a.textContent.trim(),
       ),
-    ).toEqual(['Your account', 'Create an organization', 'Sign in to manage']);
+    ).toEqual(['Find a league', 'Your account', 'Create an organization', 'Sign in to manage']);
 
     expect(html).not.toContain('Open navigation');
     expect(body.querySelector('aside, button, [role="dialog"]')).toBeNull();
