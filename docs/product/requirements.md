@@ -41,8 +41,8 @@ Owner answers, 2026-10-09 (chat), as corrected the same day: "I would like a cor
 - **Invites need no account.** A captain or organizer can invite anyone by email, whether or not that person has an account.
 - **Joining needs an account.** To accept an invite, join a team, or register, the person signs up for an account (or signs in). Adult rostered players therefore always have accounts.
 - **A pending invite is not a roster entry.** The invited person is on the roster only after accepting.
-- **Minors** are always roster entries under a guardian, with no account.
-- **Guardian** (owner, chat, 2026-10-10: "As proposed", answering [#139](https://github.com/jasonbryan/omni-league/issues/139#issuecomment-6098208263)): an adult account holder who adds and manages a minor's roster entry and may also play.
+- **Minors** are always roster entries, or camp and training registrants, under a guardian, with no account.
+- **Guardian** (owner, chat, 2026-10-10: "As proposed", answering [#139](https://github.com/jasonbryan/omni-league/issues/139#issuecomment-6098208263)): an adult account holder who adds and manages a minor's roster entry, or registers a minor for a camp or training (see Program types), and may also play.
   - A captain invites the guardian's email; on accepting, the guardian joins the roster, adds a minor, or both.
   - Only the minor's display name is stored.
   - Opponents see a minor's first name and last initial.
@@ -57,6 +57,12 @@ Owner answers, 2026-10-10 (chat):
 - **Limits:** a season can have a maximum number of teams and a maximum roster size, which is at or above the sport format's minimum roster size.
 - **Waitlist:** when a season is full, new teams go on its waitlist, and an organizer promotes teams from it.
 - **One team per season** ("No" to playing on two teams): a person is on at most one team in a season, and a rostered player cannot also be a free agent in that season.
+
+Owner decision, 2026-10-27 (chat, "Sounds good", accepting option A of leagues vs seasons):
+
+- **League → Season stays,** as in TeamSnap. The league is the lasting thing players know by name, such as Sunday Coed 4s. A season is **one run of the league**, such as Fall 2027, with its own dates, registration, teams, schedule, and standings. The wording on every screen says so (#324).
+- **Public pages lead with what's open now:** the season with registration open and the way to register come first, as in "Sunday Coed 4s · Fall 2027 · Registration open · Register" (#245, #246, #325).
+- **Registration stays part of each season:** team registration, joining a team, and free agent registration (see Registration), at the season's team and player prices (#288).
 
 ## Registration
 
@@ -74,9 +80,9 @@ Owner answers, 2026-10-09 (chat):
 
 - Organizers build and publish the schedule.
 - Captains report scores. Organizers can confirm or correct them.
-- Standings rules per sport are not specified by the owner. The defaults below are a **proposal for the owner to confirm**; they are not decided.
+- **Standings defaults** (owner decision, 2026-10-28, chat, quoted exactly: "1A 2Organizer chooses either 3A 4A"; "1A" answers #347): the per-sport defaults below, forfeit scores included, ship as configuration. The owner may change them later without restructuring.
 
-| Sport            | Ranking (proposed)                              | Tiebreakers, in order (proposed)                                         | Forfeit (proposed) |
+| Sport            | Ranking                                         | Tiebreakers, in order                                                    | Forfeit            |
 | ---------------- | ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
 | Beach volleyball | Match win percentage                            | Head-to-head, set win percentage, point differential                     | Straight-sets loss |
 | Soccer           | Points: 3 for a win, 1 for a draw, 0 for a loss | Goal difference, goals scored, head-to-head                              | 3–0 loss           |
@@ -139,6 +145,67 @@ The web app is also a progressive web app (**PWA**), so no separate mobile app i
 
 Who receives each notification, when reminders are sent, and whether users choose per kind are open (#85). The technology is decided in the `gate:technology` proposal for #79.
 
+## Program types
+
+Owner's words, 2026-10-27 (chat): "Sounds good but I also want to be able to support types of programs, like leagues, tournements, camps, and training".
+
+An organization offers **programs** of four **program types**: league, tournament, camp, and training. The owner answered the seven questions on #323 on 2026-10-28 (chat), quoted exactly: "1. A 2. B but make pools optional and allow bracket only. Double elimination in the bracket will need to be an option at some point as well. 3. B a tournament is a one time thing 4. B 5. A", then "6. a 7. a", and on question 3, "One time event". The first "3. B" was clarified by "One time event", so question 3 is resolved as option A: each tournament stands alone.
+
+### Decided (owner, 2026-10-28)
+
+- **Order:** tournaments ship after leagues (question 1).
+- **Tournaments** (questions 2 and 3):
+  - A tournament is a one-time event with its own page. Running it again means copying it into a new tournament.
+  - Its structure is either a bracket only, or pools and then a bracket.
+  - Brackets are single elimination first. Double elimination becomes an option later.
+- **Camps and training, minors** (question 4): guardians register minors from the start. Only the child's display name is stored, with the guardian's confirmation that the child fits the age range. No birth date is stored. Adults register themselves where the ages allow.
+- **Training** (question 5): classes only at first. People register for a weekly series, or for a single class where the organizer allows it. There are no bookable private lessons.
+- **Grand final** (owner, 2026-10-28, "2Organizer chooses either" in "1A 2Organizer chooses either 3A 4A", on #349): in a double-elimination bracket, the organizer chooses per tournament between a deciding second game if the losers' bracket team wins the first, and a single game.
+- **Waitlists** (owner, 2026-10-28, "3A" in the same answer, on #323): full camp sessions and training classes take a waitlist, as full seasons do.
+- **Staff** (owner, 2026-10-28, "4A" in the same answer, on #323): an org admin can assign league organizers to tournaments, camps, and training, with the same rights as for a league, including publish.
+- **Search** (question 6): one "Find a program" search with type chips. `/leagues` keeps working as the league view. "Program" appears only in the admin area and the search; elsewhere the type names are used.
+- **Application fee** (question 7): the same rule as seasons. Each tournament roster entry, and each camp or training registrant, counts as one roster entry. Free and offline registrations go on the platform bill (#366).
+
+### Model
+
+- A program has a name, a slug unique within the organization across all types, a sport, a division where the type uses one, its locations, and draft or published status.
+- **Today's league is the league type.** A program record sits above each league, one to one. Leagues keep their slugs, URLs (`/organizations/<org>/leagues/<league>`), seasons, and data, so nothing built so far changes.
+- Each type adds its own part: a league's seasons, a tournament's teams and games, a camp's sessions, or a training program's classes.
+- Comparable products split this up in different ways. TeamSnap nests program, season, division, and team, with registration per season ([TeamSnap](https://info.teamsnap.com/youth-sports-registration-software.html)). LeagueApps lists camps, clubs, leagues, and tournaments as program types ([LeagueApps](https://leagueapps.com/)). Playpass sells leagues, tournaments, and clubs, plus bookings with a capacity per slot ([Playpass](https://playpass.com/)).
+- **Rejected alternative:** adding a `type` field to the `leagues` table. A camp has no format, minimum roster size, or standings, so the league fields would sit empty. A camp would also be called a "league" in code, the glossary, and URLs.
+
+| Type       | People register for                                  | Who registers                                       | Structure                                                           | Results                            |
+| ---------- | ---------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
+| League     | A season, one run of the league                      | Teams (captain), people joining a team, free agents | Repeating seasons; teams; a schedule of games                       | Standings                          |
+| Tournament | The tournament, a one-time event of one or more days | Teams (captain) and people joining a team           | A bracket, optionally after pools; maximum teams                    | Pool standings and bracket results |
+| Camp       | A session with dates, for example June 8 to 12       | Adults where the ages allow; guardians for minors   | Sessions, each with places and a deadline; an age range on the camp | None                               |
+| Training   | The weekly series, or one class where allowed        | Adults where the ages allow; guardians for minors   | Classes from a weekly pattern, each with places; a coach            | None at first                      |
+
+Every type shares:
+
+- the organization, its staff, and its access boundary. A league organizer can be assigned any program, with the same rights as for a league, including publish (#338);
+- locations, draft then publish, and a public page that leads with what's open now;
+- registration: an account, a deadline, a capacity, and a waitlist when full (#341, #358, #365, #368);
+- payments through Stripe Connect, with the application fee. Prices and checkout for each type follow the league checkout slices;
+- public listing on the organization page and in Find a program;
+- offline saved copies of public pages, and demo data for each type.
+
+### Sequence
+
+Slices are listed on #323. Leagues stay unaffected throughout.
+
+1. **Leagues first:** the public-site milestone (#240 to #262) and season registration (#129 to #145, #288).
+2. **The program record** above leagues, with no visible change (#333, then #334).
+3. **Tournaments:**
+   - create, publish, and list (#335 to #337); staff (#338, then #381); copying (#339)
+   - registration (#340, #370), editing details (#369), and the waitlist (#341)
+   - the bracket only (#342 to #345)
+   - pools and a bracket (#346, #347, #371, #348)
+   - double elimination later (#349, #376)
+4. **Find a program:** search text (#374), the search (#350), links from every page (#351), and the old league search retired in two later releases (#375, then #383).
+5. **Camps:** #352 to #354, the organization page (#372), search (#373), registration (#355 to #357), places (#382), and the waitlist (#358).
+6. **Training:** #359 to #364, the waitlists (#365, #368), registrations in `/app` (#367), and billing for camps and training (#366, which waits for the platform bill slice, Open 14).
+
 ## Future (out of scope)
 
 - **Player Pro:** a planned paid subscription for players to track their personal stats across leagues (owner direction, 2026-10-07). Out of scope until the owner raises it; it is why results keep per-player stat lines.
@@ -157,7 +224,7 @@ Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted
 
 - **Sign-in (#7):** email + password, plus Google, at launch. Email one-time codes are dropped for now. Email verification and password-reset emails are added before the first production release ([owner decision, relayed on #7](https://github.com/jasonbryan/omni-league/issues/7#issuecomment-6049577799)).
 - **Auth budget (#7):** the auth provider's free tier at launch.
-- **Accounts (#7):** adults only at launch. Minors appear as roster entries managed by a guardian or organizer. Adults need an account to join a team or register (see Accounts, players, and guardians).
+- **Accounts (#7):** adults only at launch. Minors appear as roster entries managed by a guardian or organizer, or as camp and training registrants under a guardian. Adults need an account to join a team or register (see Accounts, players, and guardians).
 - **Hosting budget (#9):** up to about $25/month for hosting and Convex combined; the terms of both the host and the Convex plan must allow commercial use.
 - **Previews (#9):** every PR gets a preview deployment with its own Convex backend.
 - **Domain (#9):** the host's default domain until the first production release.
@@ -166,9 +233,8 @@ Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted
 
 ## Open
 
-Questions still open for the owner. The planner records them as `status:blocked` issues or in the PR that raises them, rather than inventing requirements.
+Questions still open for the owner. The planner records them as `status:blocked` issues or in the PR that raises them, rather than inventing requirements. Answered items are removed and the rest keep their numbers, so references to them stay valid.
 
-1. **Standings:** confirm or change the proposed defaults per sport.
 2. **Fee percentage:** the percentage of each registration payment.
 3. **Per-player floor:** the minimum fee per roster entry, in dollars.
 4. **Fee shown to the payer:** whether the fee is a separate line for the payer or absorbed by the organization.
@@ -178,5 +244,9 @@ Questions still open for the owner. The planner records them as `status:blocked`
 8. **Free agents:** what a free agent tells the organizer (position, skill, availability), and whether free agents and waitlisted teams can withdraw (#133, #145).
 9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
 10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
+
+<!-- A new list after a gap, so Markdown and Prettier keep the item's number. -->
+
+14. **Platform bill slice (#323, #366):** no issue yet builds ADR 0012's platform bill (pending invoice items on the connected account and their webhooks). It needs planning before camp and training registration can reach production.
 
 Features beyond the above are not yet specified.
