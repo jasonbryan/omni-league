@@ -2,10 +2,17 @@ import { type Type } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { CONVEX_CLIENT } from '../core/data/convex';
+import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
 async function render(page: Type<unknown>): Promise<HTMLElement> {
-  TestBed.configureTestingModule({ providers: [provideRouter([{ path: '**', component: page }])] });
+  TestBed.configureTestingModule({
+    providers: [
+      { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+      provideRouter([{ path: '**', component: page }]),
+    ],
+  });
   const harness = await RouterTestingHarness.create();
   await harness.navigateByUrl('/');
   return harness.fixture.nativeElement as HTMLElement;
@@ -24,14 +31,14 @@ describe('Shell offline note', () => {
     vi.restoreAllMocks();
   });
 
-  it('puts the status region directly below the top bar, before the sidebar and main', async () => {
+  it('puts the status region directly below the slim bar, before main', async () => {
     const host = await render(SidebarTestPage);
     const header = host.querySelector('header');
     const region = header?.nextElementSibling;
 
     expect(region?.tagName).toBe('APP-OFFLINE-NOTE');
     expect(region?.getAttribute('role')).toBe('status');
-    expect(region?.nextElementSibling?.contains(host.querySelector('main'))).toBe(true);
+    expect(region?.nextElementSibling).toBe(host.querySelector('main'));
   });
 
   it('shows the note on a page without a sidebar too', async () => {
@@ -41,21 +48,15 @@ describe('Shell offline note', () => {
     expect(host.querySelector('header + [role="status"] [data-offline-note]')).not.toBeNull();
   });
 
-  it('offsets the header scroll margin and the sidebar column by the note height variable', async () => {
+  it('offsets the slim bar scroll margin by the note height variable, and sticks the note to the page top from 1024px, where there is no bar', async () => {
     const host = await render(SidebarTestPage);
     const header = host.querySelector('header');
-    const sidebarColumn = host.querySelector('main')?.previousElementSibling?.firstElementChild;
+    const root = host.querySelector('main')?.parentElement?.parentElement;
     const expectOffsets = () => {
       expect(classes(header)).toContain(
         '[&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]',
       );
-      expect(classes(sidebarColumn)).toEqual(
-        expect.arrayContaining([
-          'sticky',
-          'top-[calc(3.5rem+var(--offline-note-h,0px))]',
-          'max-h-[calc(100dvh-3.5rem-var(--offline-note-h,0px))]',
-        ]),
-      );
+      expect(classes(root)).toContain('lg:[--top-bar-h:0px]');
     };
 
     expectOffsets();

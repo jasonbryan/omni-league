@@ -6,10 +6,12 @@ import {
   OnInit,
   afterNextRender,
   computed,
+  effect,
   inject,
   input,
   linkedSignal,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
@@ -29,6 +31,7 @@ import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/dat
 import { AdminAlert } from '../admin/admin-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from '../admin/field-classes';
+import { FieldNoteText } from '../admin/field-note';
 import {
   LeagueDivisionFields,
   type DivisionField,
@@ -39,6 +42,7 @@ import type { OrganizerLeague } from './league-context';
 import {
   DETAILS_ALERTS,
   LeagueDetails,
+  savedDetails,
   type DetailsField,
   type SavedDetails,
 } from './league-details-state';
@@ -50,20 +54,6 @@ type Status = { kind: 'saved'; earlier: Earlier } | { kind: 'restored' };
 
 const UNDO_OFFLINE = "You're offline. Nothing was undone. Try again when you're connected.";
 const UNDO_FAILED = 'The earlier details could not be restored. Try again.';
-
-function savedDetails(name: string, division: OrganizerLeague['division']): SavedDetails {
-  return {
-    name,
-    division: division && {
-      gender: division.gender,
-      playersPerSide: division.playersPerSide,
-      level: division.level,
-      customLevelId: division.customLevel?.customLevelId,
-      ageGroup: division.ageGroup,
-      minimumRosterSize: division.minimumRosterSize,
-    },
-  };
-}
 
 function savedFromEarlier({ league }: Earlier): SavedDetails {
   const { gender, playersPerSide, level, ageGroup } = league;
@@ -89,7 +79,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
 
 @Component({
   selector: 'app-league-details-form',
-  imports: [AdminAlert, FormField, LeagueDivisionFields, NgIcon],
+  imports: [AdminAlert, FieldNoteText, FormField, LeagueDivisionFields, NgIcon],
   providers: [
     provideIcons({
       lucideCheck,
@@ -135,11 +125,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
             autocomplete="off"
             [formField]="details.fields.name"
             (blur)="details.left('name')"
-            [attr.aria-describedby]="
-              details.errors.name()
-                ? 'league-name-description league-name-error'
-                : 'league-name-description'
-            "
+            [attr.aria-describedby]="nameDescribedBy()"
             [attr.aria-invalid]="details.errors.name() ? 'true' : null"
             [attr.data-invalid]="details.errors.name() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="details.errors.name() ? 'true' : null"
@@ -148,6 +134,9 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
           <p data-slot="field-description" id="league-name-description" [class]="descriptionClass">
             The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.
           </p>
+          @if (details.notes.name(); as note) {
+            <app-field-note id="league-name-note" [note]="note" />
+          }
           @if (details.errors.name(); as error) {
             <div role="alert" data-slot="field-error" id="league-name-error" [class]="errorClass">
               <ng-icon
@@ -248,6 +237,11 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
       <p role="status" class="sr-only">
         {{ details.submitting() ? 'Saving the league details.' : '' }}
       </p>
+      <div role="status" class="sr-only" data-slot="note-announcement">
+        @for (text of details.announcement(); track text) {
+          <p>{{ text }}</p>
+        }
+      </div>
     </form>
   `,
 })
@@ -302,6 +296,15 @@ export class LeagueDetailsForm implements OnInit {
     return hasDivision && (this.leagueHolds(written) || this.leagueHolds(league));
   });
 
+  protected readonly nameDescribedBy = computed(() =>
+    [
+      'league-name-description',
+      this.details.notes.name() ? 'league-name-note' : null,
+      this.details.errors.name() ? 'league-name-error' : null,
+    ]
+      .filter((id) => id !== null)
+      .join(' '),
+  );
   protected readonly formatDescription = computed(() =>
     formatHint(publishedSeasonsEarliestFirst(this.seasons())),
   );
@@ -313,6 +316,15 @@ export class LeagueDetailsForm implements OnInit {
   private readonly divisionFields = viewChild.required(LeagueDivisionFields);
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
+
+  private loadedLeagueId = '';
+
+  constructor() {
+    effect(() => {
+      const league = this.league();
+      untracked(() => this.follow(league));
+    });
+  }
 
   private leagueHolds(values: {
     name: string;
@@ -336,8 +348,21 @@ export class LeagueDetailsForm implements OnInit {
   }
 
   ngOnInit(): void {
-    const { name, division } = this.league();
+    this.loadLeague(this.league());
+  }
+
+  private loadLeague({ leagueId, name, division }: OrganizerLeague): void {
+    this.loadedLeagueId = leagueId;
     this.details.load(savedDetails(name, division));
+  }
+
+  private follow(league: OrganizerLeague): void {
+    if (league.leagueId !== this.loadedLeagueId) {
+      this.loadLeague(league);
+      this.status.set(null);
+      return;
+    }
+    this.details.takeNewerLeague(savedDetails(league.name, league.division));
   }
 
   protected async submit(event: Event): Promise<void> {
@@ -346,8 +371,8 @@ export class LeagueDetailsForm implements OnInit {
     this.status.set(null);
     this.undoNote.set(null);
     const leagueId = this.league().leagueId;
-    const outcome = await this.details.submit(this.online(), (values) =>
-      this.updateCall.run({ leagueId, ...values }),
+    const outcome = await this.details.submit(this.online(), (values, expected) =>
+      this.updateCall.run({ leagueId, ...values, expected }),
     );
     if (outcome.sent) {
       this.details.load({ name: outcome.values.name, division: outcome.values });
@@ -355,6 +380,9 @@ export class LeagueDetailsForm implements OnInit {
     } else if ('focus' in outcome) {
       this.focusAfterRender(() => this.focusField(outcome.focus));
     } else {
+      const { customLevel, level } = outcome.current?.division ?? {};
+      // The newer level may be a custom level this form has not shown yet.
+      if (customLevel && level) this.ownCustomLevel.set({ ...customLevel, standardLevel: level });
       this.focusAfterRender(() => this.failureAlert()?.focus());
     }
   }

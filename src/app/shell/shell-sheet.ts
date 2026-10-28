@@ -43,12 +43,7 @@ import { SheetLinks } from './sheet-links';
         [showCloseButton]="false"
         class="gap-0 bg-sidebar text-base text-sidebar-foreground shadow-xl data-[side=left]:w-72 data-[side=left]:max-w-[calc(100%-3rem)] data-[side=left]:border-r-0"
       >
-        <div
-          class="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-sidebar-border px-3"
-        >
-          <span class="flex items-center gap-2 rounded-md text-base font-semibold">
-            <ng-container [ngTemplateOutlet]="brand()" />
-          </span>
+        <div class="flex shrink-0 justify-end px-3 pt-3">
           <button
             hlmBtn
             hlmSheetClose
@@ -62,7 +57,7 @@ import { SheetLinks } from './sheet-links';
         </div>
         <div
           appSheetLinks
-          class="flex-1 overflow-y-auto px-3 py-5"
+          class="mt-1 flex min-h-0 flex-1 flex-col px-3 pb-3"
           (linkActivated)="closeForLink($event)"
         >
           <ng-container [ngTemplateOutlet]="sidebar()" />
@@ -75,7 +70,6 @@ export class ShellSheet {
   private readonly followLink = inject(FollowLink);
 
   readonly sidebar = input.required<TemplateRef<unknown>>();
-  readonly brand = input.required<TemplateRef<unknown>>();
   readonly returnFocus = input.required<HTMLElement>();
 
   private readonly sheet = viewChild.required(HlmSheet);
