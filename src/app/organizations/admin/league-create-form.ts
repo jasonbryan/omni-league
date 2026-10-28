@@ -86,7 +86,7 @@ export interface LeagueLocationChoice {
         <app-admin-alert
           #failureAlert
           [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="kind === 'failed' ? alerts.failed.title : undefined"
+          [title]="kind === 'offline' ? undefined : alerts[kind].title"
           [description]="alerts[kind].description"
           class="mb-5"
         />

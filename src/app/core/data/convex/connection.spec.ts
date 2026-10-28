@@ -338,6 +338,17 @@ describe('why the connection is down', () => {
       expect(online()).toBe(false);
     });
 
+    it('does not hold a later drop for a version detected while the socket was up', async () => {
+      const client = new FakeConvexClient();
+      const { connection, online } = connect(client);
+      connection.markNewerVersionDetected();
+
+      client.setConnected(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(online()).toBe(false);
+    });
+
     it('shows no note when the socket connects during the hold', async () => {
       const client = new FakeConvexClient();
       client.setConnected(false, { neverConnected: true });

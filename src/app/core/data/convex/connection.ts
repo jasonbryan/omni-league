@@ -93,7 +93,7 @@ export class ConvexConnection {
   }
 
   markNewerVersionDetected(): void {
-    this.newerVersionDetected = true;
+    if (this.down()) this.newerVersionDetected = true;
   }
 
   canSend(): boolean {
