@@ -7,7 +7,6 @@ import { injectCurrentUrl } from './current-url';
 import { initialsOf } from './initials';
 
 /**
- * Inside the app it opens Account settings; on a public page it opens `/app`, the user's home.
  * It exists only in the browser for a signed-in visitor, so a page without one makes no `users.me` query and a server render never reaches it.
  * Nothing shows until `users.me` answers, so a signed-in visitor is not shown "Sign in" in between.
  */

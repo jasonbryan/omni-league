@@ -111,7 +111,7 @@ describe('AccountSettingsPage', () => {
     expect(convex.subscriptions).toEqual([]);
   });
 
-  it('shows an alert with Try again when users.me fails, which asks again, and keeps Sign out', async () => {
+  it('shows an alert with Try again as a plain link to this page when users.me fails, and keeps Sign out', async () => {
     const page = await open();
     accepted();
     meSubscriptions()[0]?.fail(new Error('down'));
@@ -122,18 +122,24 @@ describe('AccountSettingsPage', () => {
     );
     expect(signOutButton(page)?.textContent?.trim()).toBe('Sign out');
 
-    const tryAgain = [...page.querySelectorAll('button')].find(
-      (b) => b.textContent?.trim() === 'Try again',
+    const tryAgain = [...page.querySelectorAll('main a')].find(
+      (a) => a.textContent?.trim() === 'Try again',
     );
-    tryAgain!.click();
-    await settle();
-    expect(convex.subscriptions.filter((s) => s.name === 'users:me')).toHaveLength(3);
-    expect(meSubscriptions()).toHaveLength(2);
-    expect(page.querySelector('[role="alert"]')).toBeNull();
+    expect(tryAgain?.getAttribute('href')).toBe('/app/account');
+    expect(tryAgain?.hasAttribute('routerLink')).toBe(false);
+  });
 
-    emitMe({ name: 'Maya Okafor', email: 'maya@example.test' });
+  it('shows the same alert when the signed-in user has no record', async () => {
+    const page = await open();
+    accepted();
+    for (const sub of meSubscriptions()) sub.emit(null);
     await harness.fixture.whenStable();
-    expect(page.textContent).toContain('maya@example.test');
+
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+      'Your account details could not be loaded.',
+    );
+    expect(page.querySelector('main [role="status"]')).toBeNull();
+    expect(signOutButton(page)?.textContent?.trim()).toBe('Sign out');
   });
 
   it('Sign out is an outline button that signs out and goes to /', async () => {
