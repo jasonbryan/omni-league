@@ -1,5 +1,7 @@
 import { computed, linkedSignal, signal, type Signal, type WritableSignal } from '@angular/core';
 import { form, required, type FieldTree } from '@angular/forms/signals';
+import type { FunctionArgs } from 'convex/server';
+import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/divisions';
 import {
@@ -13,8 +15,10 @@ import {
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid, changedSince } from '../../core/forms/shown-errors';
+import { ConvexError } from 'convex/values';
 import { LeagueDivision, type SavedDivision } from '../admin/league-division';
 import { inputErrorOf } from '../admin/league-form';
+import type { OrganizerLeague } from './league-context';
 
 export type DetailsField = Extract<
   LeagueField,
@@ -45,7 +49,51 @@ export interface SavedDetails {
   division?: SavedDivision | undefined;
 }
 
-export type DetailsAlertKind = 'offline' | 'failed';
+export type ExpectedDetails = NonNullable<FunctionArgs<typeof api.leagues.update>['expected']>;
+
+export type DetailsAlertKind = 'offline' | 'failed' | 'changed';
+
+export interface CurrentLeague {
+  name: string;
+  division: OrganizerLeague['division'];
+}
+
+export function savedDetails(name: string, division: OrganizerLeague['division']): SavedDetails {
+  return {
+    name,
+    division: division && {
+      gender: division.gender,
+      playersPerSide: division.playersPerSide,
+      level: division.level,
+      customLevelId: division.customLevel?.customLevelId,
+      ageGroup: division.ageGroup,
+      minimumRosterSize: division.minimumRosterSize,
+    },
+  };
+}
+
+function expectedOf(name: string, division: SavedDivision | undefined): ExpectedDetails {
+  if (!division) return { name };
+  const { customLevelId, minimumRosterSize } = division;
+  return {
+    name,
+    gender: division.gender,
+    playersPerSide: division.playersPerSide,
+    level: division.level,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ageGroup: division.ageGroup,
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
+}
+
+// The refusal's data is the server's own, so only its outline is checked.
+function currentLeagueOf(failure: unknown): CurrentLeague | null {
+  if (!(failure instanceof ConvexError)) return null;
+  const current = (failure.data as Record<string, unknown>)['current'] as
+    { name?: unknown; division?: OrganizerLeague['division'] } | undefined;
+  if (typeof current?.name !== 'string') return null;
+  return { name: current.name, division: current.division };
+}
 
 export const DETAILS_ALERTS = {
   failed: {
@@ -56,12 +104,16 @@ export const DETAILS_ALERTS = {
     title: "You're offline. Nothing was sent.",
     description: "Your changes are still here. Try again when you're connected.",
   },
+  changed: {
+    title: 'Someone else changed this league while you were editing.',
+    description: 'Check the details and save again.',
+  },
 } as const;
 
 export type DetailsSubmitOutcome<Result> =
   | { sent: true; values: DetailsValues; result: Result }
   | { sent: false; focus: DetailsField }
-  | { sent: false; alert: DetailsAlertKind };
+  | { sent: false; alert: DetailsAlertKind; current?: CurrentLeague };
 
 export class LeagueDetails {
   readonly model: WritableSignal<{ name: string }> = signal({ name: '' });
@@ -71,7 +123,7 @@ export class LeagueDetails {
   readonly alert = signal<DetailsAlertKind | null>(null);
   readonly errors: Record<DetailsField, Signal<string | null>>;
 
-  private savedName = '';
+  private baselineName = '';
   private readonly loadedKey = signal('');
   private readonly currentKey = computed(() =>
     [
@@ -147,7 +199,7 @@ export class LeagueDetails {
   }
 
   load(saved: SavedDetails): void {
-    this.savedName = saved.name;
+    this.baselineName = saved.name;
     this.model.set({ name: saved.name });
     if (saved.division) this.division.load(saved.division);
     else this.division.clear();
@@ -164,7 +216,7 @@ export class LeagueDetails {
 
   async submit<Result>(
     online: boolean,
-    send: (values: DetailsValues) => Promise<Result>,
+    send: (values: DetailsValues, expected: ExpectedDetails) => Promise<Result>,
   ): Promise<DetailsSubmitOutcome<Result>> {
     this.alert.set(null);
     // Enter in Name submits before Name is left.
@@ -190,7 +242,7 @@ export class LeagueDetails {
     };
     this.submitting.set(true);
     try {
-      const result = await send(values);
+      const result = await send(values, expectedOf(this.baselineName, this.division.baseline));
       return { sent: true, values, result };
     } catch (failure) {
       return this.failed(failure);
@@ -202,19 +254,34 @@ export class LeagueDetails {
   // Only a rename can state a division, so a form saved without touching the name keeps its choices.
   private fillDivisionFromName(): void {
     const name = this.model().name;
-    if (name.trim() === this.savedName.trim()) return;
+    if (name.trim() === this.baselineName.trim()) return;
     this.division.fillFromName(name, this.sport());
   }
 
   private failed(failure: unknown): DetailsSubmitOutcome<never> {
     if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
     const refusal = inputErrorOf(failure);
+    if (refusal?.code === 'changedSince') {
+      const current = currentLeagueOf(failure);
+      if (current) this.takeNewerLeague(savedDetails(current.name, current.division));
+      this.alert.set('changed');
+      return { sent: false, alert: 'changed', ...(current && { current }) };
+    }
     if (refusal && (DETAILS_FIELDS as readonly string[]).includes(refusal.field)) {
       const field = refusal.field as DetailsField;
       this.serverErrors[field].set(refusal.message);
       return { sent: false, focus: field };
     }
     return this.showAlert('failed');
+  }
+
+  private takeNewerLeague(newer: SavedDetails): void {
+    if (this.model().name.trim() === this.baselineName.trim()) {
+      this.model.set({ name: newer.name });
+      this.fields().reset();
+    }
+    this.baselineName = newer.name;
+    if (newer.division) this.division.takeSavedByOthers(newer.division);
   }
 
   private showAlert(alert: DetailsAlertKind): DetailsSubmitOutcome<never> {

@@ -1,4 +1,4 @@
-import { ConvexError } from 'convex/values';
+import { ConvexError, type Value } from 'convex/values';
 import { LEAGUE_MESSAGES } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
@@ -59,6 +59,11 @@ const SAVED_DIVISION = {
   playersPerSide: 4,
   level: 'bb',
   ageGroup: 'adult',
+};
+
+const BASELINES = {
+  name: 'Sunday Reverse Coed 4s',
+  ...SAVED_DIVISION,
 };
 
 const EARLIER = {
@@ -279,6 +284,7 @@ describe('LeagueDetailsForm', () => {
             playersPerSide: 6,
             level: 'bb',
             ageGroup: 'adult',
+            expected: BASELINES,
           },
         ],
       ]);
@@ -309,7 +315,60 @@ describe('LeagueDetailsForm', () => {
         customLevelId: 'cl_gold',
         ageGroup: 'adult',
         minimumRosterSize: 6,
+        expected: {
+          name: 'Sunday Reverse Coed 4s',
+          gender: 'coed',
+          playersPerSide: 4,
+          level: 'a',
+          customLevelId: 'cl_gold',
+          ageGroup: 'adult',
+          minimumRosterSize: 6,
+        },
       });
+    });
+
+    it('sends the values it saved as the baselines of the next save', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      await typeName('Sunday Sand 2');
+      await submit();
+      expect(o.convex.calls[1].args).toMatchObject({
+        name: 'Sunday Sand 2',
+        expected: { name: 'Sunday Sand', playersPerSide: 6 },
+      });
+    });
+
+    it('sends the values Undo restored as the baselines of the next save', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      undoButton()!.click();
+      await o.flush();
+      o.convex.calls[1].resolve(null);
+      await o.flush();
+      await typeName('Sunday Sand 2');
+      await submit();
+      expect(o.convex.calls[2].args).toMatchObject({
+        expected: { name: 'Sunday Reverse Coed 4s', playersPerSide: 4 },
+      });
+    });
+
+    it('sends only the league name as the baseline for a league without a division', async () => {
+      await open({ ...SUNDAY, division: undefined });
+      await typeName('Sunday Sand');
+      await choose('format', '6');
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({
+        expected: { name: 'Sunday Reverse Coed 4s' },
+      });
+      expect(o.convex.calls[0].args).not.toHaveProperty('expected.playersPerSide');
     });
 
     it('says League details saved. with Undo, and keeps the values in the form', async () => {
@@ -463,6 +522,173 @@ describe('LeagueDetailsForm', () => {
       await typeName('Sunday Sand 2');
       await submit();
       expect(undoButton()).toBeUndefined();
+    });
+  });
+
+  describe('a save from out-of-date details', () => {
+    const SIX = {
+      name: 'Sunday Reverse Coed 4s',
+      division: { ...SUNDAY.division, playersPerSide: 6, label: 'Coed · 6v6 · BB' },
+    };
+
+    const changedSince = (current: Value = SIX) =>
+      new ConvexError({
+        field: 'name',
+        code: 'changedSince',
+        message: LEAGUE_MESSAGES.changedWhileEditing,
+        current,
+      });
+
+    const alertBox = () => page.querySelector<HTMLElement>('[data-slot="alert"]');
+
+    async function renameAndGetRefused(name = 'Sunday Sand') {
+      await open();
+      await typeName(name);
+      await leaveName();
+      await submit();
+      o.convex.calls[0].reject(changedSince());
+      await o.flush();
+    }
+
+    it('shows the alert and takes focus, with the typed name kept and no message under Name', async () => {
+      await renameAndGetRefused();
+      expect(alertBox()!.getAttribute('role')).toBe('alert');
+      expect(text(alertBox())).toBe(LEAGUE_MESSAGES.changedWhileEditing);
+      expect(document.activeElement).toBe(alertBox());
+      expect(page.querySelector('#league-name-error')).toBeNull();
+      expect(nameInput().value).toBe('Sunday Sand');
+    });
+
+    it('shows the newer format in a field the organizer did not edit', async () => {
+      await renameAndGetRefused();
+      expect(chip('format', '6').checked).toBe(true);
+    });
+
+    it('saves the typed name and the newer format on the next save, sending the newer values as the baselines', async () => {
+      await renameAndGetRefused();
+      await submit();
+      expect(o.convex.calls).toHaveLength(2);
+      expect(o.convex.calls[1].args).toEqual({
+        leagueId: 'lg_coed',
+        name: 'Sunday Sand',
+        gender: 'coed',
+        playersPerSide: 6,
+        level: 'bb',
+        ageGroup: 'adult',
+        expected: { ...BASELINES, playersPerSide: 6 },
+      });
+      expect(alertBox()).toBeNull();
+    });
+
+    it('keeps the newer format when the new name states a format', async () => {
+      await open();
+      await typeName('Sunday Coed 4s');
+      await leaveName();
+      await submit();
+      o.convex.calls[0].reject(changedSince());
+      await o.flush();
+      expect(chip('format', '6').checked).toBe(true);
+      await submit();
+      expect(o.convex.calls[1].args).toMatchObject({ name: 'Sunday Coed 4s', playersPerSide: 6 });
+      expect(text(section().querySelector('fieldset [role="status"]'))).toBe('');
+    });
+
+    it('keeps a field the organizer edited, and sends the newer value as its baseline', async () => {
+      await open();
+      await choose('format', '2');
+      await submit();
+      o.convex.calls[0].reject(changedSince());
+      await o.flush();
+      expect(chip('format', '2').checked).toBe(true);
+      await submit();
+      expect(o.convex.calls[1].args).toMatchObject({
+        playersPerSide: 2,
+        expected: { playersPerSide: 6 },
+      });
+    });
+
+    it('loads every detail the other organizer changed, including a custom level and a minimum', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].reject(
+        changedSince({
+          name: 'Sunday Gold',
+          division: {
+            gender: 'mens',
+            playersPerSide: 6,
+            level: 'a',
+            customLevel: { customLevelId: 'cl_gold', name: 'Gold' },
+            ageGroup: 'over40',
+            minimumRosterSize: 8,
+            label: "Men's · 6v6 · Gold (A)",
+          },
+        }),
+      );
+      await o.flush();
+      expect(nameInput().value).toBe('Sunday Sand');
+      expect(chip('gender', 'mens').checked).toBe(true);
+      expect(chip('format', '6').checked).toBe(true);
+      expect(chip('level', 'custom:cl_gold').checked).toBe(true);
+      expect(page.querySelector<HTMLSelectElement>('#details-age-group')!.value).toBe('over40');
+      expect(page.querySelector<HTMLInputElement>('#details-minimum-roster-size')!.value).toBe('8');
+      await submit();
+      expect(o.convex.calls[1].args).toEqual({
+        leagueId: 'lg_coed',
+        name: 'Sunday Sand',
+        gender: 'mens',
+        playersPerSide: 6,
+        level: 'a',
+        customLevelId: 'cl_gold',
+        ageGroup: 'over40',
+        minimumRosterSize: 8,
+        expected: {
+          name: 'Sunday Gold',
+          gender: 'mens',
+          playersPerSide: 6,
+          level: 'a',
+          customLevelId: 'cl_gold',
+          ageGroup: 'over40',
+          minimumRosterSize: 8,
+        },
+      });
+    });
+
+    it('loads the newer name when the organizer did not edit it', async () => {
+      await open();
+      await choose('format', '2');
+      await submit();
+      o.convex.calls[0].reject(changedSince({ ...SIX, name: 'Sunday Renamed' }));
+      await o.flush();
+      expect(nameInput().value).toBe('Sunday Renamed');
+    });
+
+    it('shows no alert on a save nobody else changed, and still fills the format from the name', async () => {
+      await open();
+      await typeName('Sunday Coed 6s');
+      await leaveName();
+      expect(chip('format', '6').checked).toBe(true);
+      await submit();
+      expect(o.convex.calls[0].args).toMatchObject({ playersPerSide: 6, expected: BASELINES });
+      o.convex.calls[0].resolve(EARLIER);
+      await o.flush();
+      expect(alertBox()).toBeNull();
+    });
+
+    it('shows the alert and keeps the form when the refusal lacks the current values', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'name',
+          code: 'changedSince',
+          message: LEAGUE_MESSAGES.changedWhileEditing,
+        }),
+      );
+      await o.flush();
+      expect(text(alertBox())).toContain('Someone else changed this league');
+      expect(nameInput().value).toBe('Sunday Sand');
     });
   });
 

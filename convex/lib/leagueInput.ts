@@ -57,6 +57,8 @@ export const LEAGUE_MESSAGES = {
   draftSeasonsTooMany:
     'This league has too many draft seasons to update. Publish or remove some first.',
   changedSince: 'The league details changed since this save, so it cannot be undone.',
+  changedWhileEditing:
+    'Someone else changed this league while you were editing. Check the details and save again.',
   locationsEmpty: 'Choose at least one location.',
 } as const;
 

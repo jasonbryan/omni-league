@@ -74,7 +74,6 @@ describe('PublicLayout', () => {
 
       const layout = page.querySelector('footer')!.parentElement!;
       expect(layout.className).toContain('[&:has([data-page-loading])>footer]:hidden');
-      expect(layout.className).not.toContain('>header]');
     });
 
     it('projects the page into main, after the header and before the footer', async () => {

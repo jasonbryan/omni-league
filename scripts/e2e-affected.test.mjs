@@ -9,6 +9,7 @@ import {
   AREAS,
   SESSION,
   deriveSessionSpecs,
+  findUnmappedMockupReads,
   formatOutputs,
   selectSpecs,
 } from './e2e-affected.mjs';
@@ -38,11 +39,16 @@ function filesSelectedBy(filter, files) {
 
 /** @param {string[]} files @returns {string[]} */
 function specsFor(files, context = pr) {
-  const selection = selectSpecs(files, { sessionSpecs, ...context });
+  const selection = selectSpecs(files, {
+    sessionSpecs,
+    root: repoRoot,
+    warn: () => {},
+    ...context,
+  });
   return selection.scope === 'full' ? ['FULL'] : selection.specs;
 }
 
-const smokeAndHarness = ['e2e/harness/', 'e2e/smoke.spec.ts'];
+const smokeAndHarness = ['e2e/convex-backend.spec.ts', 'e2e/harness/', 'e2e/smoke.spec.ts'];
 
 const want = (...filters) => [...new Set([...filters, ...smokeAndHarness])].sort();
 
@@ -58,10 +64,14 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the publish dialog to the three league specs, not the staff or mockup specs', () => {
+  it('maps the publish dialog to the three league specs and the specs of the leagues page that opens it, not the staff specs', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/publish-league-dialog.ts']),
       want(
+        'e2e/organization-leagues-custom-level.spec.ts',
+        'e2e/organization-leagues-division.spec.ts',
+        'e2e/organization-leagues-mockup.spec.ts',
+        'e2e/validate-on-blur.spec.ts',
         'e2e/organization-leagues-publish-states.spec.ts',
         'e2e/organization-leagues-publish.spec.ts',
         'e2e/organization-leagues.spec.ts',
@@ -69,12 +79,14 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the leagues page and forms to the league specs and the mockup spec', () => {
+  it('maps the leagues page and its create form to the league specs and the mockup spec', () => {
     // organization-leagues-mockup compares the real page text with the approved mockup.
-    for (const file of ['admin-leagues', 'league-create-form', 'league-form']) {
+    for (const file of ['admin-leagues', 'league-create-form']) {
       assert.deepEqual(
         specsFor([`src/app/organizations/admin/${file}.ts`]),
         want(
+          'e2e/organization-leagues-custom-level.spec.ts',
+          'e2e/organization-leagues-division.spec.ts',
           'e2e/organization-leagues-mockup.spec.ts',
           'e2e/organization-leagues-publish-states.spec.ts',
           'e2e/organization-leagues-publish.spec.ts',
@@ -86,20 +98,21 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the shared sticky form footer to the league specs and the organizer league page specs', () => {
-    assert.deepEqual(
-      specsFor(['src/app/organizations/admin/sticky-footer.ts']),
-      want(
-        'e2e/league-management-details.spec.ts',
-        'e2e/league-management-mockup.spec.ts',
-        'e2e/league-management-publish.spec.ts',
-        'e2e/league-management.spec.ts',
-        'e2e/organization-leagues-mockup.spec.ts',
-        'e2e/organization-leagues-publish-states.spec.ts',
-        'e2e/organization-leagues-publish.spec.ts',
-        'e2e/organization-leagues.spec.ts',
-      ),
-    );
+  it('maps the shared sticky form footer to the league specs and the organizer league page specs, and to its importers', () => {
+    const specs = specsFor(['src/app/organizations/admin/sticky-footer.ts']);
+    assert.ok(!specs.includes('FULL'));
+    for (const name of [
+      'league-management-details',
+      'league-management-mockup',
+      'league-management-publish',
+      'league-management',
+      'organization-leagues-mockup',
+      'organization-leagues-publish-states',
+      'organization-leagues-publish',
+      'organization-leagues',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
   });
 
   it('maps an admin staff file to the staff and accept-invite specs', () => {
@@ -146,12 +159,23 @@ describe('selectSpecs: mapped areas', () => {
       'src/app/sign-in/sign-in-page.ts',
       'src/app/sign-up/sign-up-page.ts',
       'src/app/account/account-page.ts',
+      'src/app/account/account-settings-page.ts',
       'src/app/account/your-organizations.ts',
       'convex/users.ts',
     ]) {
       assert.deepEqual(specsFor([file]), expected, file);
     }
-    for (const name of ['sign-in', 'sign-in-admin', 'sign-up', 'auth-session', 'top-bar']) {
+    const accountLink = specsFor(['src/app/shell/account-link.ts']);
+    assert.ok(!accountLink.includes('FULL'));
+    for (const spec of expected) assert.ok(accountLink.includes(spec), spec);
+    for (const name of [
+      'sign-in',
+      'sign-in-admin',
+      'sign-up',
+      'auth-session',
+      'top-bar',
+      'account-settings',
+    ]) {
       assert.ok(sessionSpecs.includes(`e2e/${name}.spec.ts`), name);
     }
   });
@@ -193,7 +217,6 @@ describe('selectSpecs: mapped areas', () => {
     for (const file of [
       'src/app/organizations/public-league/public-league-page.ts',
       'src/app/organizations/public-league/public-league-content.ts',
-      'src/app/organizations/public-league/public-league-path.ts',
     ]) {
       assert.deepEqual(
         specsFor([file]),
@@ -210,19 +233,19 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the numbered control and the page helper to the league page and sport view specs only', () => {
+  it('maps the numbered control and the page helper to the league page and sport view specs, and to their importers', () => {
     for (const file of ['src/app/organizations/page-control.ts', 'src/app/core/list-page.ts']) {
-      assert.deepEqual(
-        specsFor([file]),
-        want(
-          'e2e/cache-key.spec.ts',
-          'e2e/league-page-offline.spec.ts',
-          'e2e/league-page.spec.ts',
-          'e2e/public-page-layout-shift.spec.ts',
-          'e2e/sport-view.spec.ts',
-        ),
-        file,
-      );
+      const specs = specsFor([file]);
+      assert.ok(!specs.includes('FULL'), file);
+      for (const name of [
+        'cache-key',
+        'league-page-offline',
+        'league-page',
+        'public-page-layout-shift',
+        'sport-view',
+      ]) {
+        assert.ok(specs.includes(`e2e/${name}.spec.ts`), `${file}: ${name}`);
+      }
     }
   });
 
@@ -421,11 +444,15 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the leagues mockup to its spec, and every other design file to nothing', () => {
-    assert.deepEqual(
-      specsFor(['design/mockups/66-69-organization-leagues.html']),
-      want('e2e/organization-leagues-mockup.spec.ts'),
-    );
+  it('maps each mockup that a spec reads to that spec, and every other design file to nothing', () => {
+    const mockups = {
+      '66-69-organization-leagues.html': 'organization-leagues-mockup',
+      '125-126-seasons.html': 'league-management-mockup',
+      '141-app-leagues.html': 'app-leagues',
+    };
+    for (const [file, spec] of Object.entries(mockups)) {
+      assert.deepEqual(specsFor([`design/mockups/${file}`]), want(`e2e/${spec}.spec.ts`), file);
+    }
     assert.deepEqual(
       specsFor(['design/mockups/80-app-icon.html', 'design/mockup-kit/x.css']),
       want(),
@@ -433,10 +460,9 @@ describe('selectSpecs: mapped areas', () => {
   });
 
   it('maps the chip classes and the mockup whose kit block the chip spec reads to that spec', () => {
-    assert.deepEqual(
-      specsFor(['src/app/ui/chip/chip-classes.ts']),
-      want('e2e/chip-classes.spec.ts'),
-    );
+    const chipClasses = specsFor(['src/app/ui/chip/chip-classes.ts']);
+    assert.ok(chipClasses.includes('e2e/chip-classes.spec.ts'));
+    assert.ok(!chipClasses.includes('FULL'));
     assert.deepEqual(
       specsFor(['design/mockups/300-public-site-league-form.html']),
       want('e2e/chip-classes.spec.ts'),
@@ -555,14 +581,13 @@ describe('selectSpecs: files that cannot change an e2e result', () => {
 
 describe('selectSpecs: the full suite', () => {
   const shared = [
-    'src/app/shell/shell.ts',
+    'src/app/shell/shell-sheet.ts',
     'src/app/core/auth/auth.service.ts',
     'src/app/core/data/convex/inject-query.ts',
     'src/app/core/service-worker/app-updates.ts',
     'src/app/core/url-serializer.ts',
     'src/app/ui/button/button.ts',
-    'src/app/app.routes.ts',
-    'src/app/app.routes.server.ts',
+    'src/app/core/auth/guards.ts',
     'src/app/app.config.ts',
     'src/server.ts',
     'src/main.ts',
@@ -571,15 +596,12 @@ describe('selectSpecs: the full suite', () => {
     'src/styles/tokens.css',
     'public/manifest.webmanifest',
     'convex/schema.ts',
-    'convex/lib/access.ts',
     'convex/lib/slugs.ts',
     'convex/auth.ts',
     'convex/http.ts',
     'convex/testing.ts',
     'convex/signInThrottle.ts',
-    'convex/_generated/api.d.ts',
     'convex/convex.config.ts',
-    'e2e/support/fixtures.ts',
     'e2e/support/convex.ts',
     'e2e/global-setup.ts',
     'playwright.config.ts',
@@ -590,7 +612,6 @@ describe('selectSpecs: the full suite', () => {
     'tsconfig.json',
     '.github/workflows/ci.yml',
     'scripts/ci-scope.mjs',
-    'scripts/e2e-affected.mjs',
     'scripts/e2e.mjs',
     'scripts/serve-ssr.mjs',
   ];
@@ -602,7 +623,7 @@ describe('selectSpecs: the full suite', () => {
 
   it('is full when one shared file is among mapped ones', () => {
     assert.deepEqual(
-      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell.ts']),
+      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell-sheet.ts']),
       ['FULL'],
     );
   });
@@ -706,7 +727,7 @@ describe('the mapping', () => {
   // whenever a shared file changes. A new spec fails here until it is mapped or added on purpose.
   // cache-key.spec.ts is mapped to the public league page and the season page, which have their own
   // samples in it.
-  const FULL_SUITE_ONLY = ['e2e/convex-backend.spec.ts', 'e2e/screenshot.spec.ts'];
+  const FULL_SUITE_ONLY = ['e2e/screenshot.spec.ts'];
 
   it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
     const mapped = new Set();
@@ -757,7 +778,7 @@ describe('the command line', () => {
     assert.equal(result.status, 0);
     assert.equal(
       result.stdout,
-      'e2e_scope=affected\ne2e_specs=e2e/accept-invite.spec.ts e2e/harness/ e2e/smoke.spec.ts\n',
+      'e2e_scope=affected\ne2e_specs=e2e/accept-invite.spec.ts e2e/convex-backend.spec.ts e2e/harness/ e2e/smoke.spec.ts\n',
     );
   });
 
@@ -779,7 +800,7 @@ describe('the command line', () => {
   });
 
   it('prints the full scope for a shared file', () => {
-    assert.equal(run('src/app/shell/shell.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
+    assert.equal(run('src/app/shell/shell-sheet.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
   });
 });
 
@@ -837,7 +858,7 @@ describe('the specs that sign a user up or in', () => {
     'src/app/placeholder/placeholder.ts',
   ]) {
     it(`selects every one of them for ${area}`, () => {
-      const selection = selectSpecs([area], { ...pr, sessionSpecs });
+      const selection = selectSpecs([area], { ...pr, root: repoRoot, sessionSpecs });
       assert.equal(selection.scope, 'affected');
       for (const file of importsSessionHelper) {
         assert.ok(
@@ -915,5 +936,93 @@ describe('the specs that sign a user up or in', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('findUnmappedMockupReads', () => {
+  function inFixtureRepo(files, check) {
+    const root = mkdtempSync(join(tmpdir(), 'mockup-reads-'));
+    try {
+      for (const [path, text] of Object.entries(files)) {
+        mkdirSync(join(root, path, '..'), { recursive: true });
+        writeFileSync(join(root, path), text);
+      }
+      check(root);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+  const mockupFiles = {
+    'design/mockups/999-new.html': '<html></html>\n',
+    'design/mockups/66-69-organization-leagues.html': '<html></html>\n',
+  };
+  const readsMockup = (name) =>
+    `readFileSync(join(process.cwd(), 'design', 'mockups', '${name}'), 'utf8');\n`;
+
+  it('finds no unmapped read in the repo', () => {
+    assert.deepEqual(findUnmappedMockupReads(repoRoot), []);
+  });
+
+  it('reports a spec that reads a mockup no rule maps', () => {
+    inFixtureRepo(
+      { ...mockupFiles, 'e2e/new-mockup.spec.ts': readsMockup('999-new.html') },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), ['new-mockup: 999-new.html']);
+      },
+    );
+  });
+
+  it('reports a harness spec by its path relative to e2e, which the harness filter does not cover', () => {
+    inFixtureRepo(
+      { ...mockupFiles, 'e2e/harness/new-mockup.spec.ts': readsMockup('999-new.html') },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), ['harness/new-mockup: 999-new.html']);
+      },
+    );
+  });
+
+  it('reports a spec that builds its mockup path from a template with no file name', () => {
+    inFixtureRepo(
+      {
+        ...mockupFiles,
+        'e2e/built-path.spec.ts': 'const path = `design/mockups/${name}`;\n',
+      },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), ['built-path']);
+      },
+    );
+  });
+
+  it('reports a file under e2e that is not a spec and names a mockup or the word', () => {
+    inFixtureRepo(
+      {
+        ...mockupFiles,
+        'e2e/support/mockup-text.ts': "export const file = '66-69-organization-leagues.html';\n",
+        'e2e/support/word.ts': "export const dir = 'mockups';\n",
+        'e2e/global-setup.ts': readsMockup('999-new.html'),
+        'e2e/harness/probes/p.ts': 'const dir = `design/mockups/${x}`;\n',
+        'e2e/support/clean.ts': 'export const x = 1;\n',
+      },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), [
+          'global-setup.ts',
+          'harness/probes/p.ts',
+          'support/mockup-text.ts',
+          'support/word.ts',
+        ]);
+      },
+    );
+  });
+
+  it('reports nothing for a spec that reads a mockup a rule maps', () => {
+    inFixtureRepo(
+      {
+        ...mockupFiles,
+        'e2e/organization-leagues-mockup.spec.ts': readsMockup('66-69-organization-leagues.html'),
+      },
+      (root) => {
+        assert.deepEqual(findUnmappedMockupReads(root), []);
+      },
+    );
   });
 });
