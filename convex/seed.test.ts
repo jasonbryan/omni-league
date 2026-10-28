@@ -3,10 +3,13 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
+import { leagueDivisionLabel } from './lib/leagueDivision';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { registrationIsOpen, seasonPhase } from './lib/registration';
+import { searchWords } from './lib/searchQuery';
 import { checkSeasonFields } from './lib/seasonInput';
 import { DEMO_ORGANIZATION_SLUGS, isReservedSlug, isSlug } from './lib/slugs';
+import { sportName } from './lib/sports';
 import { insertLeague, insertLocation, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import * as seed from './seed';
@@ -600,7 +603,7 @@ describe('seed:demo', () => {
       customLevels: ROWS.customLevels,
       leagues: ROWS.leagues - 4,
       seasons: ROWS.seasons,
-      backfilled: { ...NONE, leagueDivisions: 4 },
+      backfilled: { ...NONE, leagues: 4, leagueDivisions: 4 },
       updated: { organizations: 1 },
     });
 
@@ -726,7 +729,7 @@ describe('seed:demo', () => {
 
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
-      backfilled: { ...NONE, leagueDivisions: 1 },
+      backfilled: { ...NONE, leagues: 1, leagueDivisions: 1 },
       updated: { organizations: 0 },
     });
 
@@ -735,6 +738,7 @@ describe('seed:demo', () => {
     expect(after.locations[0]).toEqual(before.locations[0]);
     expect(after.leagues[0]).toEqual({
       ...before.leagues[0],
+      searchText: 'Coed 7v7 Rec Soccer Coed 7v7 Rec Existing Club Bayside Athletic Complex',
       gender: 'coed',
       playersPerSide: 7,
       level: 'rec',
@@ -967,6 +971,32 @@ describe('seed:demo', () => {
       const markers = fn as Partial<Record<'isInternal' | 'isPublic', boolean>>;
       expect({ name, isInternal: markers.isInternal }).toEqual({ name, isInternal: true });
       expect({ name, isPublic: markers.isPublic }).toEqual({ name, isPublic: undefined });
+    }
+  });
+});
+
+describe('seed:demo league search text', () => {
+  test('every demo league holds its sport name and every word of the division label its row shows', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const held = await t.run(async (ctx) => {
+      const leagues = await ctx.db.query('leagues').collect();
+      return Promise.all(
+        leagues.map(async (league) => ({
+          name: league.name,
+          words: searchWords(league.searchText ?? ''),
+          sport: searchWords(sportName(league.sport)),
+          label: searchWords((await leagueDivisionLabel(ctx, league)) ?? ''),
+        })),
+      );
+    });
+    expect(held).toHaveLength(ROWS.leagues);
+    for (const { name, words, sport, label } of held) {
+      expect(label.length, name).toBeGreaterThan(0);
+      expect(
+        [...sport, ...label].filter((word) => !words.includes(word)),
+        name,
+      ).toEqual([]);
     }
   });
 });

@@ -415,6 +415,196 @@ describe('LeagueDivision: values saved by someone else', () => {
   });
 });
 
+describe('LeagueDivision: notes on a field another organizer changed', () => {
+  const SAVED = {
+    gender: 'coed' as const,
+    playersPerSide: 4,
+    level: 'bb' as const,
+    ageGroup: 'adult' as const,
+  };
+
+  function loaded() {
+    const division = new LeagueDivision();
+    division.load(SAVED);
+    return division;
+  }
+
+  const shown = (division: LeagueDivision) =>
+    Object.fromEntries(
+      Object.entries(division.notes)
+        .map(([detail, note]) => [detail, note()] as const)
+        .filter(([, note]) => note !== null),
+    );
+
+  it('gives a choice that is not edited the newer value and no note', () => {
+    const division = loaded();
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6, minimumRosterSize: 8 });
+    expect(shown(division)).toEqual({});
+  });
+
+  it('notes an edited choice with the newer value as the field labels it', () => {
+    const division = loaded();
+    division.chooseGender('mens');
+    division.chooseFormat(2);
+    division.chooseLevel('a');
+    division.setAgeGroup('over40');
+    division.setMinimumText('5');
+    division.takeSavedByOthers({
+      gender: 'womens',
+      playersPerSide: 6,
+      level: 'aa',
+      ageGroup: 'u10',
+      minimumRosterSize: 8,
+    });
+    expect(shown(division)).toEqual({
+      gender: { kind: 'changed', value: "Women's" },
+      format: { kind: 'changed', value: '6v6' },
+      level: { kind: 'changed', value: 'AA' },
+      ageGroup: { kind: 'changed', value: 'U10' },
+      minimumRosterSize: { kind: 'changed', value: '8' },
+    });
+  });
+
+  it('labels a newer custom level by its name', () => {
+    const division = loaded();
+    division.chooseLevel('a');
+    division.takeSavedByOthers({
+      ...SAVED,
+      level: 'a',
+      customLevelId: GOLD.customLevelId,
+      customLevelName: 'Gold',
+    });
+    expect(division.notes.level()).toEqual({ kind: 'changed', value: 'Gold' });
+  });
+
+  it('says a minimum was cleared when the newer save has none', () => {
+    const division = new LeagueDivision();
+    division.load({ ...SAVED, minimumRosterSize: 6 });
+    division.setMinimumText('7');
+    division.takeSavedByOthers(SAVED);
+    expect(division.notes.minimumRosterSize()).toEqual({ kind: 'changed', value: null });
+  });
+
+  it('shows no note when the edited value is the newer value', () => {
+    const division = loaded();
+    division.chooseFormat(6);
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    expect(shown(division)).toEqual({});
+    expect(division.edited().size).toBe(0);
+  });
+
+  it('replaces a note with the next newer value, and drops it when the newer value is the edit', () => {
+    const division = loaded();
+    division.chooseFormat(2);
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 8 });
+    expect(division.notes.format()).toEqual({ kind: 'changed', value: '8v8' });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 2 });
+    expect(division.notes.format()).toBeNull();
+  });
+
+  it('clears a note when its field is changed', () => {
+    const division = loaded();
+    division.chooseGender('mens');
+    division.chooseFormat(2);
+    division.chooseLevel('a');
+    division.setAgeGroup('over40');
+    division.setMinimumText('5');
+    division.takeSavedByOthers({
+      gender: 'womens',
+      playersPerSide: 6,
+      level: 'aa',
+      ageGroup: 'u10',
+      minimumRosterSize: 8,
+    });
+    division.chooseGender('coed');
+    division.chooseFormat(3);
+    division.chooseCustomLevel(GOLD);
+    division.setAgeGroup('over50');
+    division.setMinimumText('9');
+    expect(shown(division)).toEqual({});
+  });
+
+  it('keeps the notes of fields that are not changed', () => {
+    const division = loaded();
+    division.chooseGender('mens');
+    division.chooseFormat(2);
+    division.takeSavedByOthers({ ...SAVED, gender: 'womens', playersPerSide: 6 });
+    division.chooseFormat(3);
+    expect(Object.keys(shown(division))).toEqual(['gender']);
+  });
+
+  it('clears every note when the form loads its own save', () => {
+    const division = loaded();
+    division.chooseFormat(2);
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.load({ ...SAVED, playersPerSide: 2 });
+    expect(shown(division)).toEqual({});
+  });
+
+  it('clears every note when the league has no division', () => {
+    const division = loaded();
+    division.chooseFormat(2);
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.clear();
+    expect(shown(division)).toEqual({});
+  });
+
+  describe('a name that states a different value', () => {
+    function afterOthersSaved6() {
+      const division = loaded();
+      division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+      return division;
+    }
+
+    it('keeps the other value and notes that the name did not change it', () => {
+      const division = afterOthersSaved6();
+      division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
+      expect(division.playersPerSide()).toBe(6);
+      expect(division.notes.format()).toEqual({ kind: 'rename', value: '6v6' });
+    });
+
+    it('clears the note when the name stops stating a different value', () => {
+      const division = afterOthersSaved6();
+      division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
+      division.fillFromName('Sunday Coed 6s', 'beachVolleyball');
+      expect(division.notes.format()).toBeNull();
+      division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
+      division.fillFromName('Sunday Sand', 'beachVolleyball');
+      expect(division.notes.format()).toBeNull();
+    });
+
+    it('clears the note when the format is chosen', () => {
+      const division = afterOthersSaved6();
+      division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
+      division.chooseFormat(4);
+      expect(division.notes.format()).toBeNull();
+    });
+
+    it('keeps the changed note on a format the name filled before the other save', () => {
+      const division = loaded();
+      division.fillFromName('Sunday Coed 6s', 'beachVolleyball');
+      division.takeSavedByOthers({ ...SAVED, playersPerSide: 8 });
+      division.fillFromName('Sunday Coed 3s', 'beachVolleyball');
+      expect(division.playersPerSide()).toBe(6);
+      expect(division.notes.format()).toEqual({ kind: 'changed', value: '8v8' });
+    });
+
+    it('notes only the choices the other save changed, and still fills the others', () => {
+      const division = afterOthersSaved6();
+      division.fillFromName("Sunday Women's 4s", 'beachVolleyball');
+      expect(division.gender()).toBe('womens');
+      expect(shown(division)).toEqual({ format: { kind: 'rename', value: '6v6' } });
+    });
+
+    it('notes nothing when the name states what the loaded league already is', () => {
+      const division = loaded();
+      division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
+      expect(shown(division)).toEqual({});
+    });
+  });
+});
+
 describe('filledFromNameMessage', () => {
   it('names what was filled, as the mockup words it for all three', () => {
     expect(filledFromNameMessage(['gender', 'format', 'level'])).toBe(
