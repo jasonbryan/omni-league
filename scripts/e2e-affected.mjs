@@ -595,10 +595,12 @@ export const AREAS = [
     specs: [SESSION],
   },
   {
-    // The shell wraps every signed-in page, so the specs that sign a user in run with it.
+    // The shell wraps every signed-in page, so the specs that sign a user in run with it. The sheet is
+    // loaded with import(), so no importer shows what uses it.
     name: 'app shell',
     test: named('src/app/shell/', [
       'shell',
+      'shell-sheet',
       'shell-sidebar',
       'account-row',
       'home-sidebar',

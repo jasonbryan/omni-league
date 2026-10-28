@@ -600,7 +600,6 @@ describe('Markdown under src/', () => {
 
 describe('the files under src/app that run the full suite', () => {
   const MAIN_SERVER = 'reaches src/main.server.ts, which no file imports';
-  const SHEET = 'reaches shell-sheet.ts, which a dynamic import() loads';
   const SRC_FULL = {
     'src/app/app.config.server.ts': MAIN_SERVER,
     'src/app/app.config.ts': MAIN_SERVER,
@@ -630,26 +629,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/service-worker/reload-guard.ts': MAIN_SERVER,
     'src/app/core/service-worker/service-worker-build.ts': MAIN_SERVER,
     'src/app/core/url-serializer.ts': MAIN_SERVER,
-    'src/app/shell/follow-link.ts': SHEET,
-    'src/app/shell/sheet-links.ts': SHEET,
-    'src/app/shell/shell-sheet.ts': 'loaded with a dynamic import()',
     'src/app/shell/update-prompt.ts': MAIN_SERVER,
-    'src/app/ui/button/hlm-button.token.ts': SHEET,
-    'src/app/ui/button/hlm-button.ts': SHEET,
-    'src/app/ui/button/index.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-close.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-content.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-description.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-footer.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-header.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-overlay.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-portal.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-title.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet-trigger.ts': SHEET,
-    'src/app/ui/sheet/hlm-sheet.ts': SHEET,
-    'src/app/ui/sheet/index.ts': SHEET,
-    'src/app/ui/utils/hlm.ts': SHEET,
-    'src/app/ui/utils/index.ts': SHEET,
     'src/app/ui/utils/provide-spartan-hlm.ts': MAIN_SERVER,
   };
 

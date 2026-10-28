@@ -559,7 +559,6 @@ describe('selectSpecs: files that cannot change an e2e result', () => {
 
 describe('selectSpecs: the full suite', () => {
   const shared = [
-    'src/app/shell/shell-sheet.ts',
     'src/app/core/auth/auth.service.ts',
     'src/app/core/data/convex/inject-query.ts',
     'src/app/core/service-worker/app-updates.ts',
@@ -601,7 +600,7 @@ describe('selectSpecs: the full suite', () => {
 
   it('is full when one shared file is among mapped ones', () => {
     assert.deepEqual(
-      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/shell/shell-sheet.ts']),
+      specsFor(['src/app/invites/accept-invite-page.ts', 'src/app/core/auth/auth.service.ts']),
       ['FULL'],
     );
   });
@@ -778,7 +777,7 @@ describe('the command line', () => {
   });
 
   it('prints the full scope for a shared file', () => {
-    assert.equal(run('src/app/shell/shell-sheet.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
+    assert.equal(run('src/app/core/auth/auth.service.ts\n').stdout, 'e2e_scope=full\ne2e_specs=\n');
   });
 });
 
