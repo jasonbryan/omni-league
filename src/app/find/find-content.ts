@@ -14,6 +14,7 @@ import { SavedCopyNote } from '../offline/saved-copy-note';
 import { initials } from '../organizations/initials';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
 import { leagueSeasonStatus, MUTED_BADGE, OPEN_BADGE } from '../organizations/season-status';
+import { SEARCH_BUTTON } from '../ui/button/button-classes';
 import { FIND_PATH, findPath, type FindResults } from './find-path';
 import { FindSkeleton } from './find-skeleton';
 
@@ -24,10 +25,6 @@ const RESULT_NOUN = { one: 'league', many: 'leagues' } as const;
 
 const LINK_CLASSES =
   'rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring';
-
-// The approved mockup's classes for the pill-shaped search button, written as a static string.
-const SEARCH_BUTTON =
-  'group/button inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent bg-primary bg-clip-padding px-5 text-sm font-medium whitespace-nowrap text-primary-foreground transition-all select-none hover:bg-primary/90 active:translate-y-px [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0';
 
 @Component({
   selector: 'app-find-content',
@@ -99,7 +96,7 @@ const SEARCH_BUTTON =
                 </div>
                 <a
                   [href]="retryHref()"
-                  class="col-start-2 mt-1 inline-flex min-h-11 w-fit items-center rounded-md font-medium text-foreground underline underline-offset-4 md:min-h-0"
+                  class="col-start-2 mt-1 inline-flex w-fit items-center rounded-md font-medium text-foreground underline underline-offset-4 pointer-coarse:min-h-11"
                   >Try again</a
                 >
               </div>
@@ -155,7 +152,7 @@ const SEARCH_BUTTON =
                   </p>
                   <a
                     [routerLink]="action"
-                    class="mt-4 inline-flex min-h-11 items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 md:min-h-0"
+                    class="mt-4 inline-flex items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
                     >Clear the search</a
                   >
                 </div>

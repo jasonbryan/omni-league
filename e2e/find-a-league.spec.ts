@@ -87,7 +87,6 @@ function plainText(html: string): string {
     .trim();
 }
 
-/** The league names in the results, in the order shown. */
 function resultNames(html: string): string[] {
   return [...resultsSection(html).matchAll(/<h3\b[^>]*>\s*<a\b[^>]*>([^<]*)<\/a>/g)].map(
     ([, name]) => name.trim(),

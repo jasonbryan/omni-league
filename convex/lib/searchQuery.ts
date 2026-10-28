@@ -7,11 +7,7 @@ export function joinSearchText(parts: readonly (string | undefined)[]): string {
   return parts.filter((part): part is string => part !== undefined && part !== '').join(' ');
 }
 
-/**
- * Reads every value of the `q` parameter and uses the first, so a repeated parameter cannot change the query. The result is trimmed,
- * holds at most 16 words with single spaces between them, and is cut to 100 characters. The server render and the browser both use it,
- * so both ask the same query.
- */
+/** Uses the first `q` only, so a repeated parameter cannot change the query; the server and the browser share it. */
 export function parseSearchQuery(values: readonly string[]): string {
   const [first = ''] = values;
   const words = first.split(/\s+/).filter(Boolean).slice(0, SEARCH_QUERY_MAX_WORDS);

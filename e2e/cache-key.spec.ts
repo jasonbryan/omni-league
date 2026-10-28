@@ -101,7 +101,6 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
-  // The find page reads `?q=`, whose parsed value its HTML holds, so each search is stored on its own and no other parameter reaches it.
   test(
     'the find page: each ?q gets its own HTML, and another parameter never reaches the response',
     RAW_HTTP,

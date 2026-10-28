@@ -16,10 +16,6 @@ import { FIND_PATH, findPath } from './find-path';
 
 const TITLE = 'Find a league | Omni League';
 
-/**
- * The search is `?q=`, read with `parseSearchQuery` from every value of the parameter, so the server and the browser ask the same query
- * and the server HTML holds only the parsed search, never another parameter. A view with a search is not indexed and has the canonical `/leagues`.
- */
 @Component({
   selector: 'app-find-page',
   imports: [FindContent, NotSavedView, PublicLayout, ServerErrorView],

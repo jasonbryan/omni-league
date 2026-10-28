@@ -11,4 +11,7 @@ export const PRIMARY_BUTTON = `${BUTTON_BASE} bg-primary text-primary-foreground
 
 export const PRIMARY_BUTTON_LARGE = `${BUTTON_BASE} bg-primary text-primary-foreground [a]:hover:bg-primary/90 h-11 gap-2 px-5 has-data-[icon=inline-end]:pe-4 has-data-[icon=inline-start]:ps-4`;
 
+export const SEARCH_BUTTON =
+  'group/button inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full border border-transparent bg-primary bg-clip-padding px-5 text-sm font-medium whitespace-nowrap text-primary-foreground transition-all select-none hover:bg-primary/90 active:translate-y-px [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0';
+
 export const DESTRUCTIVE_BUTTON = `${BUTTON_BASE} bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30 ${SIZE}`;
