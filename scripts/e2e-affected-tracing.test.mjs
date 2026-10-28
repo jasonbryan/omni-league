@@ -419,16 +419,43 @@ describe('tracing a file with no rule to the files that import it', () => {
       withRepo(
         {
           'src/app/util/a.ts': 'export const a = 1;\n',
+          ...page("import { a } from '../util/a';\n"),
           'node_modules/pkg/x.ts': "import '../../src/app/util/a';\n",
           '.claude/worktrees/w/src/app/invites/page.ts':
             "import '../../../../../src/app/util/a';\n",
           'dist/x.mjs': "import '../src/app/util/a';\n",
         },
         (root) => {
-          assert.deepEqual(select(root, ['src/app/util/a.ts']).specs, [FULL]);
+          assert.deepEqual(select(root, ['src/app/util/a.ts']).specs, withAlways(accept));
         },
       );
     });
+
+    for (const directory of [
+      'node_modules',
+      '.angular',
+      '.convex-e2e',
+      'dist',
+      'out-tsc',
+      'coverage',
+      'tmp',
+      'test-results',
+      'playwright-report',
+      'blob-report',
+    ]) {
+      it(`does not read the unresolved specifiers of ${directory}`, () => {
+        withRepo(
+          {
+            'src/app/util/a.ts': 'export const a = 1;\n',
+            ...page("import { a } from '../util/a';\n"),
+            [`${directory}/x.ts`]: "import './missing';\n",
+          },
+          (root) => {
+            assert.deepEqual(select(root, ['src/app/util/a.ts']).specs, withAlways(accept));
+          },
+        );
+      });
+    }
   });
 
   describe('roots', () => {
