@@ -8,7 +8,7 @@ import {
   type FakeSubscription,
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PAGE_STALLED_ANNOUNCEMENT } from '../../public-layout/page-load-status';
-import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicLeaguePage } from './public-league-page';
 import { at, leagueQueryResults, OPEN_DAY } from './testing/league-data';

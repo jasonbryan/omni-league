@@ -1,6 +1,7 @@
 import { PLATFORM_ID, signal, type Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { PAGE_LOAD_WAIT_MS, injectPageLoadWait } from './page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from './page-load-wait-ms';
+import { injectPageLoadWait } from './page-load-wait';
 
 const waiting = signal(false);
 const key = signal('a');

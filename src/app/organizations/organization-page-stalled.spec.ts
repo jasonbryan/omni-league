@@ -7,7 +7,7 @@ import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
-import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { PAGE_STALLED_ANNOUNCEMENT } from '../public-layout/page-load-status';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
@@ -151,11 +151,19 @@ describe('OrganizationPage when no query answers', () => {
     );
   });
 
-  it('starts the wait over for the sport view of the same organization', async () => {
+  it('starts the wait over when the visitor moves to another sport view of the same organization', async () => {
     const harness = await open(`${PATH}/sports/soccer`);
-    await elapse(harness, PAGE_LOAD_WAIT_MS);
+    await elapse(harness, PAGE_LOAD_WAIT_MS - 1_000);
+    await harness.navigateByUrl(`${PATH}/sports/softball`);
+    await settle(harness);
+
+    await elapse(harness, PAGE_LOAD_WAIT_MS - 1);
+    expect(skeleton(harness)).not.toBeNull();
+    expect(errorView(harness)).toBeNull();
+
+    await elapse(harness, 1);
     expect(errorView(harness)?.querySelector('a')?.getAttribute('href')).toBe(
-      `${PATH}/sports/soccer`,
+      `${PATH}/sports/softball`,
     );
   });
 

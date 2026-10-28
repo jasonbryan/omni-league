@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { tabWalk } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -10,8 +11,6 @@ import { newUser } from './support/users';
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const GOOD_CLS = 0.1;
-// Equals PAGE_LOAD_WAIT_MS in src/app/public-layout/page-load-wait.ts, which imports Angular, and the e2e runner does not load it.
-const PAGE_LOAD_WAIT_MS = 10_000;
 const SETTLE_AFTER_IDLE_MS = 1_000;
 const SKELETONS = ['organization-skeleton', 'league-skeleton', 'season-skeleton'];
 

@@ -9,20 +9,18 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
+import { PAGE_LOAD_WAIT_MS } from './page-load-wait-ms';
 
-/** Twice the server render's query timeout and the offline signal delay (both 5 s), so a slow first answer on a phone network arrives first. */
-export const PAGE_LOAD_WAIT_MS = 10_000;
-
-/**
- * True once `waiting` has held for `PAGE_LOAD_WAIT_MS` with the same `key`. A new key, or `waiting` going false and true again, starts the wait over.
- * The server render has its own query timeout and holds no browser timer.
- */
-export function injectPageLoadWait(waiting: () => boolean, key: () => unknown): Signal<boolean> {
+export function injectPageLoadWait(
+  waiting: () => boolean,
+  restartOn: () => unknown,
+): Signal<boolean> {
   assertInInjectionContext(injectPageLoadWait);
+  // The server render has its own query timeout, and a browser timer there would never fire.
   if (isPlatformServer(inject(PLATFORM_ID))) return signal(false).asReadonly();
 
-  const spell = computed(() => ({ waiting: waiting(), key: key() }), {
-    equal: (a, b) => a.waiting === b.waiting && a.key === b.key,
+  const spell = computed(() => ({ waiting: waiting(), restartOn: restartOn() }), {
+    equal: (a, b) => a.waiting === b.waiting && a.restartOn === b.restartOn,
   });
   const stalled = linkedSignal({ source: spell, computation: () => false });
 

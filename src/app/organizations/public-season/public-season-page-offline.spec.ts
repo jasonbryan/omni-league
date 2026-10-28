@@ -14,7 +14,7 @@ import {
 import { plantSavedCopy } from '../../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../../offline/saved-time';
 import { PlainTestPage } from '../../shell/testing/test-pages';
-import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PublicSeasonPage } from './public-season-page';
 import { seasonQueryResults, SUMMER_2027, without } from './testing/season-data';
 

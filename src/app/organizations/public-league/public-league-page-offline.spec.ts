@@ -14,7 +14,7 @@ import {
 import { plantSavedCopy } from '../../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../../offline/saved-time';
 import { PlainTestPage } from '../../shell/testing/test-pages';
-import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PublicLeaguePage } from './public-league-page';
 import type { PublicLeagueSeasons } from './public-league-path';
 import { leagueQueryResults, NO_SEASONS, SUNDAY_4S, without } from './testing/league-data';

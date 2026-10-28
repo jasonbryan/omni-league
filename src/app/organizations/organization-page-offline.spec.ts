@@ -13,7 +13,7 @@ import {
 import { plantSavedCopy } from '../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../offline/saved-time';
 import { PlainTestPage } from '../shell/testing/test-pages';
-import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
 import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';

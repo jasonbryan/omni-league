@@ -7,7 +7,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { PAGE_STALLED_ANNOUNCEMENT } from '../public-layout/page-load-status';
-import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait';
+import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { AcceptInvitePage } from './accept-invite-page';
 import { captureInviteToken } from './capture-invite-token';
 import { INVITE_TOKEN_KEY } from './invite-token-store';
