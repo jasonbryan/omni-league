@@ -222,6 +222,28 @@ test.describe('top bar', () => {
       expect(positions).toHaveLength(1);
     });
 
+    test('at 768px a long name shrinks inside the bar and the page does not scroll sideways', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own width');
+      const user = { ...newUser(), name: 'Alejandra Castellanos-Whitfield' };
+      await seedUser(user);
+      const tenant = await seedTenant();
+      await signInAs(page, user);
+      await page.setViewportSize({ width: 768, height: 800 });
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+
+      await expect(accountLink(page)).toBeVisible();
+      const box = await accountLink(page).boundingBox();
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(768);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        768,
+      );
+    });
+
     test('at 320px a long name shrinks beside the 44px search link and the bar does not scroll sideways', async ({
       page,
       consoleGuard,
