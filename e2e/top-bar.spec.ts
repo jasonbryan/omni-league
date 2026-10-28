@@ -121,6 +121,21 @@ test.describe('top bar', () => {
     );
   });
 
+  test('at 768px the brand stays on one line beside the field', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!!remoteBaseUrl, LOCAL_ONLY);
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own width');
+    const tenant = await seedTenant();
+    await page.setViewportSize({ width: 768, height: 800 });
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+
+    const box = await page.locator('header a[href="/"]').boundingBox();
+    expect(box?.height).toBeLessThanOrEqual(44);
+  });
+
   test.describe('signed in', () => {
     test('a public page renders "Sign in", then the account link replaces it after hydration', async ({
       page,
