@@ -843,6 +843,74 @@ describe('AppUpdates', () => {
     });
   });
 
+  describe('safety is checked again after the activation wait (criterion 3)', () => {
+    function holdActivation(): { finish: () => void } {
+      let finish: (value: boolean) => void = () => undefined;
+      vi.spyOn(sw, 'activateUpdate').mockImplementationOnce(
+        () => new Promise<boolean>((resolve) => (finish = resolve)),
+      );
+      return { finish: () => finish(true) };
+    }
+
+    it('does not reload when the user types while activateUpdate() is pending, and shows the prompt', async () => {
+      const { finish } = holdActivation();
+      const updates = await startOn();
+      sw.versionReady('a', 'b');
+      await vi.advanceTimersByTimeAsync(0);
+
+      typeInto();
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(updates.card()).toBe('ready');
+    });
+
+    it('does not reload when a change starts while activateUpdate() is pending, and reloads once it settles', async () => {
+      const { finish } = holdActivation();
+      await startOn();
+      sw.versionReady('a', 'b');
+      await vi.advanceTimersByTimeAsync(0);
+
+      const end = TestBed.inject(ChangesInFlight).begin();
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reload).not.toHaveBeenCalled();
+
+      end();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not reload when the activation wait times out after the user typed', async () => {
+      vi.spyOn(sw, 'activateUpdate').mockReturnValueOnce(new Promise<boolean>(() => undefined));
+      const updates = await startOn();
+      sw.versionReady('a', 'b');
+      await vi.advanceTimersByTimeAsync(0);
+
+      typeInto();
+      await vi.advanceTimersByTimeAsync(ACTIVATE_TIMEOUT_MS);
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(updates.card()).toBe('ready');
+    });
+
+    it('still applies at a later safe navigation once the held field has gone', async () => {
+      const { finish } = holdActivation();
+      await startOn();
+      sw.versionReady('a', 'b');
+      await vi.advanceTimersByTimeAsync(0);
+      const input = typeInto();
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+
+      input.remove();
+      await navigate('/next');
+
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('activation failure (criterion 9)', () => {
     it('reloads when activateUpdate() fails', async () => {
       vi.spyOn(sw, 'activateUpdate').mockImplementationOnce(() =>

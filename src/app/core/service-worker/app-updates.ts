@@ -212,15 +212,10 @@ export class AppUpdates {
       this.deferredTrigger = trigger;
       return;
     }
-    void this.apply(this.readyHash);
+    void this.apply(this.readyHash, trigger);
   }
 
-  private async apply(hash: string): Promise<void> {
-    if (!recordReloadForVersion(hash)) {
-      this.mayApply = false;
-      this.showPrompt();
-      return;
-    }
+  private async apply(hash: string, trigger: Trigger): Promise<void> {
     this.applying = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
@@ -228,6 +223,23 @@ export class AppUpdates {
     });
     await Promise.race([this.swUpdate.activateUpdate().catch(() => false), timeout]);
     clearTimeout(timer);
+    // The user may have typed, or a change may have started, during the wait.
+    if (this.safety.hasUnsavedField()) {
+      this.applying = false;
+      this.showPrompt();
+      return;
+    }
+    if (this.changes.active()) {
+      this.applying = false;
+      this.deferredTrigger = trigger;
+      return;
+    }
+    if (!recordReloadForVersion(hash)) {
+      this.applying = false;
+      this.mayApply = false;
+      this.showPrompt();
+      return;
+    }
     this.reloadPage();
   }
 
