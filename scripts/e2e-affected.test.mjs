@@ -67,6 +67,8 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(
       specsFor(['src/app/organizations/admin/publish-league-dialog.ts']),
       want(
+        'e2e/organization-leagues-custom-level.spec.ts',
+        'e2e/organization-leagues-division.spec.ts',
         'e2e/organization-leagues-mockup.spec.ts',
         'e2e/validate-on-blur.spec.ts',
         'e2e/organization-leagues-publish-states.spec.ts',
@@ -82,6 +84,8 @@ describe('selectSpecs: mapped areas', () => {
       assert.deepEqual(
         specsFor([`src/app/organizations/admin/${file}.ts`]),
         want(
+          'e2e/organization-leagues-custom-level.spec.ts',
+          'e2e/organization-leagues-division.spec.ts',
           'e2e/organization-leagues-mockup.spec.ts',
           'e2e/organization-leagues-publish-states.spec.ts',
           'e2e/organization-leagues-publish.spec.ts',

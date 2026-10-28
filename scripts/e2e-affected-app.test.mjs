@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import {
   ALWAYS,
   AREAS,
-  OFFLINE_QUERY_GROUPS,
+  OFFLINE_QUERY_GROUP_SPECS,
   ROUTE_SPECS,
   deriveSessionSpecs,
   findLeagueManagementPageSpecs,
@@ -70,7 +70,6 @@ const specNames = ['e2e', 'e2e/harness'].flatMap((dir) =>
 describe('the league management page specs', () => {
   const found = findLeagueManagementPageSpecs(repoRoot);
 
-  // The specs that open the page, by a path built from variables, a literal path, or a link. The finder may select more.
   const OPEN_THE_PAGE = [
     'after-sign-in',
     'accept-invite',
@@ -179,9 +178,8 @@ describe('the specs of the importers outside a hand rule', () => {
   });
 
   describe('every hand rule in src/app', () => {
-    // A file that selects fewer specs than a ruled importer does, with the reason. Empty today.
     /** @type {Record<string, string>} */
-    const EXCEPTIONS = {};
+    const IMPORTER_EXCEPTIONS = {};
 
     const importerEdge = /(?:\bfrom\s*|\bimport\s*\(?\s*)(['"`])(\.{1,2}\/[^'"`\n$]*)\1/g;
     const candidates = (base) => [`${base}.ts`, `${base}/index.ts`, base];
@@ -225,8 +223,8 @@ describe('the specs of the importers outside a hand rule', () => {
           const key = `${file} <- ${importer}`;
           const own = specsFor([file]);
           const theirs = specsFor([importer]);
-          if (key in EXCEPTIONS) {
-            assert.ok(EXCEPTIONS[key].length > 0, key);
+          if (key in IMPORTER_EXCEPTIONS) {
+            assert.ok(IMPORTER_EXCEPTIONS[key].length > 0, key);
             continue;
           }
           if (theirs.includes(FULL)) {
@@ -249,7 +247,7 @@ describe('the specs of the importers outside a hand rule', () => {
     });
 
     it('lists no exception today, and each one it lists carries a reason', () => {
-      assert.deepEqual(Object.keys(EXCEPTIONS), []);
+      assert.deepEqual(Object.keys(IMPORTER_EXCEPTIONS), []);
     });
 
     it('opts out of the importer specs only for the route tables and the saved query list, which a full-suite file imports', () => {
@@ -352,6 +350,37 @@ describe('the specs of the importers outside a hand rule', () => {
         },
       );
     });
+  });
+});
+
+describe('the admin area specs', () => {
+  const details = [
+    'organization-details',
+    'organization-leagues-division',
+    'organization-leagues-custom-level',
+  ];
+
+  it('runs the details page and the create-league form specs for every admin area file', () => {
+    for (const file of [
+      'admin/admin-area.ts',
+      'admin/admin-details.ts',
+      'admin/admin-sidebar.ts',
+      'admin/league-division-fields.ts',
+      'admin/custom-level-panel.ts',
+      'league/season-dates.ts',
+    ]) {
+      const specs = specsFor([`src/app/organizations/${file}`]);
+      for (const name of details) assert.ok(specs.includes(specFile(name)), `${file}: ${name}`);
+    }
+  });
+
+  it('runs the division and custom level specs for the leagues page and its forms', () => {
+    for (const file of ['admin-leagues', 'league-create-form', 'league-form']) {
+      const specs = specsFor([`src/app/organizations/admin/${file}.ts`]);
+      for (const name of ['organization-leagues-division', 'organization-leagues-custom-level']) {
+        assert.ok(specs.includes(specFile(name)), `${file}: ${name}`);
+      }
+    }
   });
 });
 
@@ -527,11 +556,11 @@ describe('the offline saved query list', () => {
   it('maps every page group to a spec, and lists no group the file lacks', () => {
     for (const group of groups) {
       assert.ok(
-        OFFLINE_QUERY_GROUPS[group]?.length > 0,
-        `${group} has no spec in OFFLINE_QUERY_GROUPS`,
+        OFFLINE_QUERY_GROUP_SPECS[group]?.length > 0,
+        `${group} has no spec in OFFLINE_QUERY_GROUP_SPECS`,
       );
     }
-    assert.deepEqual(Object.keys(OFFLINE_QUERY_GROUPS).sort(), [...groups].sort());
+    assert.deepEqual(Object.keys(OFFLINE_QUERY_GROUP_SPECS).sort(), [...groups].sort());
   });
 
   it('runs the offline, PWA, and cache-key specs, and the spec of every group, not the full suite', () => {
@@ -548,14 +577,14 @@ describe('the offline saved query list', () => {
       'league-page',
       'season-page',
       'find-a-league',
-      ...Object.values(OFFLINE_QUERY_GROUPS).flat(),
+      ...Object.values(OFFLINE_QUERY_GROUP_SPECS).flat(),
     ]) {
       assert.ok(specs.includes(specFile(name)), name);
     }
   });
 
   it('names only specs that exist', () => {
-    for (const [group, names] of Object.entries(OFFLINE_QUERY_GROUPS)) {
+    for (const [group, names] of Object.entries(OFFLINE_QUERY_GROUP_SPECS)) {
       for (const name of names) assert.ok(specNames.includes(specFile(name)), `${group}: ${name}`);
     }
   });
@@ -677,8 +706,7 @@ describe('the files under src/app that run the full suite', () => {
 describe('earlier pull requests', () => {
   const league = findLeagueManagementPageSpecs(repoRoot);
 
-  // The changed files of each pull request, frozen.
-  const LEAGUE_FORM_PR = [
+  const LEAGUE_FORM_PR_FILES = [
     'design/mockups/125-126-seasons.html',
     'design/mockups/300-public-site-league-form.html',
     'design/mockups/66-69-organization-leagues.html',
@@ -694,7 +722,7 @@ describe('earlier pull requests', () => {
     'src/app/organizations/league/season-create-form.spec.ts',
     'src/app/organizations/league/season-create-form.ts',
   ];
-  const ROUTES_PR = [
+  const ROUTES_PR_FILES = [
     'convex/organizations.test.ts',
     'convex/organizations.ts',
     'docs/glossary.md',
@@ -722,7 +750,7 @@ describe('earlier pull requests', () => {
     'src/app/organizations/sport-chips.ts',
     'src/app/organizations/testing/pages.ts',
   ];
-  const FORM_ERRORS_PR = [
+  const FORM_ERRORS_PR_FILES = [
     'e2e/create-organization.spec.ts',
     'e2e/sign-up.spec.ts',
     'e2e/validate-on-blur.spec.ts',
@@ -757,19 +785,19 @@ describe('earlier pull requests', () => {
   );
 
   it('runs the league management specs for the league form change', () => {
-    const specs = specsFor(LEAGUE_FORM_PR);
+    const specs = specsFor(LEAGUE_FORM_PR_FILES);
     assert.ok(!specs.includes(FULL));
     for (const spec of league) assert.ok(specs.includes(spec), spec);
   });
 
   it('runs the route table specs for the change that added the sport route', () => {
-    const specs = specsFor(ROUTES_PR);
+    const specs = specsFor(ROUTES_PR_FILES);
     assert.ok(!specs.includes(FULL));
     for (const spec of routeSet) assert.ok(specs.includes(spec), spec);
   });
 
   it('runs the league management specs for the form errors change', () => {
-    const specs = specsFor(FORM_ERRORS_PR);
+    const specs = specsFor(FORM_ERRORS_PR_FILES);
     assert.ok(!specs.includes(FULL));
     for (const spec of league) assert.ok(specs.includes(spec), spec);
   });

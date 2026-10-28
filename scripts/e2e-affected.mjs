@@ -25,6 +25,9 @@ const ADMIN = [
     'sign-in-admin',
     'accept-invite',
     'create-organization',
+    'organization-details',
+    'organization-leagues-custom-level',
+    'organization-leagues-division',
     'organization-leagues-mockup',
     'shell-sheet',
     'navigation-focus',
@@ -368,9 +371,8 @@ function specsImporting(graph, targets) {
   return [...seen].filter((file) => /^e2e\/(?:harness\/)?[\w-]+\.spec\.ts$/.test(file)).sort();
 }
 
-// The saved-query groups of offline-saved-queries.ts, with the specs of the pages that run each group's queries. The sport route
-// renders the organization page with the organization queries.
-export const OFFLINE_QUERY_GROUPS = {
+// The sport route renders the organization page with the organization queries.
+export const OFFLINE_QUERY_GROUP_SPECS = {
   ORGANIZATION_PAGE_QUERIES: ['organization-page', 'sport-view'],
   LEAGUE_PAGE_QUERIES: ['league-page'],
   SEASON_PAGE_QUERIES: ['season-page'],
@@ -484,7 +486,13 @@ export const AREAS = [
       'league-create-form',
       'league-form',
     ]),
-    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup', 'validate-on-blur'],
+    specs: [
+      ...LEAGUE_ADMIN,
+      'organization-leagues-custom-level',
+      'organization-leagues-division',
+      'organization-leagues-mockup',
+      'validate-on-blur',
+    ],
   },
   {
     name: 'sticky form footer',
@@ -642,7 +650,7 @@ export const AREAS = [
       'league-page-offline',
       'pwa',
       'cache-key',
-      ...Object.values(OFFLINE_QUERY_GROUPS).flat(),
+      ...Object.values(OFFLINE_QUERY_GROUP_SPECS).flat(),
     ],
     widen: false,
   },
