@@ -38,11 +38,16 @@ function filesSelectedBy(filter, files) {
 
 /** @param {string[]} files @returns {string[]} */
 function specsFor(files, context = pr) {
-  const selection = selectSpecs(files, { sessionSpecs, ...context });
+  const selection = selectSpecs(files, {
+    sessionSpecs,
+    root: repoRoot,
+    warn: () => {},
+    ...context,
+  });
   return selection.scope === 'full' ? ['FULL'] : selection.specs;
 }
 
-const smokeAndHarness = ['e2e/harness/', 'e2e/smoke.spec.ts'];
+const smokeAndHarness = ['e2e/convex-backend.spec.ts', 'e2e/harness/', 'e2e/smoke.spec.ts'];
 
 const want = (...filters) => [...new Set([...filters, ...smokeAndHarness])].sort();
 
@@ -554,15 +559,12 @@ describe('selectSpecs: the full suite', () => {
     'src/styles/tokens.css',
     'public/manifest.webmanifest',
     'convex/schema.ts',
-    'convex/lib/access.ts',
     'convex/lib/slugs.ts',
     'convex/auth.ts',
     'convex/http.ts',
     'convex/testing.ts',
     'convex/signInThrottle.ts',
-    'convex/_generated/api.d.ts',
     'convex/convex.config.ts',
-    'e2e/support/fixtures.ts',
     'e2e/support/convex.ts',
     'e2e/global-setup.ts',
     'playwright.config.ts',
@@ -573,7 +575,6 @@ describe('selectSpecs: the full suite', () => {
     'tsconfig.json',
     '.github/workflows/ci.yml',
     'scripts/ci-scope.mjs',
-    'scripts/e2e-affected.mjs',
     'scripts/e2e.mjs',
     'scripts/serve-ssr.mjs',
   ];
@@ -689,7 +690,7 @@ describe('the mapping', () => {
   // whenever a shared file changes. A new spec fails here until it is mapped or added on purpose.
   // cache-key.spec.ts is mapped to the public league page and the season page, which have their own
   // samples in it.
-  const FULL_SUITE_ONLY = ['e2e/convex-backend.spec.ts', 'e2e/screenshot.spec.ts'];
+  const FULL_SUITE_ONLY = ['e2e/screenshot.spec.ts'];
 
   it('maps every other spec to at least one source area, or lists it as full-suite only', () => {
     const mapped = new Set();
@@ -740,7 +741,7 @@ describe('the command line', () => {
     assert.equal(result.status, 0);
     assert.equal(
       result.stdout,
-      'e2e_scope=affected\ne2e_specs=e2e/accept-invite.spec.ts e2e/harness/ e2e/smoke.spec.ts\n',
+      'e2e_scope=affected\ne2e_specs=e2e/accept-invite.spec.ts e2e/convex-backend.spec.ts e2e/harness/ e2e/smoke.spec.ts\n',
     );
   });
 
