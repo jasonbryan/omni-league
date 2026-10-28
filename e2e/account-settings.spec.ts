@@ -206,11 +206,9 @@ test.describe('account settings', () => {
     await page.locator('#email').fill(bob.email);
     await page.locator('#password').fill(bob.password);
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL(`${baseURL}/`);
+    await expect(page).toHaveURL(`${baseURL}/app`);
     await tokens;
 
-    await page.locator('header a[href="/app"]').click();
-    await expect(page).toHaveURL(`${baseURL}/app`);
     await topBarLink(page).click();
     await expect(page).toHaveURL(`${baseURL}${ACCOUNT_PATH}`);
     await expect(details(page)).toContainText(bob.name);
