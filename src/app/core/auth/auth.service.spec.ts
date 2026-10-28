@@ -1,5 +1,6 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ChangesInFlight } from '../changes-in-flight';
 import { AUTH_BASE_URL, AUTH_CLIENT } from './auth-client';
 import { AuthService, type SignInResult, type SignUpFailure } from './auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from './testing/fake-auth-client';
@@ -796,6 +797,45 @@ describe('AuthService', () => {
       await auth.signOut();
       expect(client.signOuts).toBe(1);
       expect(auth.signedIn()).toBe(false);
+    });
+  });
+
+  describe('changes in flight', () => {
+    it('counts sign-up, sign-in, and sign-out as in flight until each settles', async () => {
+      const auth = configure();
+      const changes = TestBed.inject(ChangesInFlight);
+      client.emitSession(null);
+
+      client.holdSignUp = true;
+      const signUp = auth.signUp(INPUT);
+      await loaded();
+      expect(changes.active()).toBe(true);
+      client.releaseSignUp();
+      await signUp;
+      expect(changes.active()).toBe(false);
+
+      client.holdSignIn = true;
+      const signIn = auth.signIn({ email: INPUT.email, password: INPUT.password });
+      await loaded();
+      expect(changes.active()).toBe(true);
+      client.releaseSignIn();
+      await signIn;
+      expect(changes.active()).toBe(false);
+
+      const signOut = auth.signOut();
+      expect(changes.active()).toBe(true);
+      await signOut;
+      expect(changes.active()).toBe(false);
+    });
+
+    it('stops counting when the request throws', async () => {
+      const auth = configure();
+      const changes = TestBed.inject(ChangesInFlight);
+      client.signInThrows = new Error('network');
+
+      await auth.signIn({ email: INPUT.email, password: INPUT.password });
+
+      expect(changes.active()).toBe(false);
     });
   });
 });

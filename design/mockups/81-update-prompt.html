@@ -65,7 +65,7 @@
             </li>
             <li>
               <a class="text-primary underline underline-offset-4" href="#forced"
-                >4. Past 14 days (no UI)</a
+                >4. Nothing to lose: no UI</a
               >
             </li>
             <li><a class="text-primary underline underline-offset-4" href="#copy">Messages</a></li>
@@ -76,9 +76,9 @@
         <h2 id="prompt-label" class="text-lg font-semibold">1. New version ready</h2>
         <div class="mt-1 max-w-3xl space-y-2 text-sm/relaxed text-muted-foreground">
           <p>
-            Reload (default button) and Later (ghost). The update was already downloaded, so Reload
-            works offline too. Later is per page session: the card returns the next time the app
-            opens, if the update is still waiting (decision 7).
+            Shown only while unsaved input on the page keeps the new version from loading by itself.
+            Reload (default button) loads it at once, and Later (ghost) hides the card for the page
+            session; the version still loads at the next navigation to another path that is safe.
           </p>
         </div>
         <div
@@ -184,12 +184,14 @@
       </section>
       <section id="forced" aria-labelledby="forced-label" class="mt-12">
         <h2 id="forced-label" class="text-lg font-semibold">
-          4. Running version older than 14 days: no UI
+          4. Nothing on the page can be lost: no UI
         </h2>
         <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
-          The app shows nothing and reloads into the new version at the next router navigation or
-          the next time the page becomes visible, so input in a form is never dropped mid-edit. The
-          user sees an ordinary page change.
+          The app loads the new version by itself: within 10 seconds of the page loading when the
+          user has not touched it, on a navigation to another path, and when a page open for more
+          than 7 days comes back to the front. It never reloads while a field the user changed is on
+          screen or a change is being sent, and never because the page became hidden. The user sees
+          an ordinary page change.
         </p>
       </section>
       <section id="copy" aria-labelledby="copy-heading" class="mt-16">
@@ -215,26 +217,27 @@
             <tbody class="divide-y divide-border">
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
-                  <code>VERSION_READY</code>, running version first run 14 days ago or less
+                  <code>VERSION_READY</code> while unsaved input is on screen
                 </th>
                 <td class="px-4 py-2 align-top">
-                  "A new version of Omni League is ready" / "Reload to start using it. Finish
-                  anything you&apos;re typing first."
+                  "A new version of Omni League is ready" / "It loads by itself when you leave this
+                  page, so you can finish what you&apos;re typing."
                 </td>
                 <td class="px-4 py-2 align-top">
-                  Reload: <code>document.location.reload()</code>. Later: hides the card until the
-                  app is next opened.
+                  Reload: <code>document.location.reload()</code>. Later: hides the card for the
+                  page session; the version still loads at the next safe navigation to another path.
                 </td>
                 <td class="px-4 py-2 align-top">Polite status, once; focus stays where it is</td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
-                  <code>VERSION_READY</code>, running version first run more than 14 days ago
+                  <code>VERSION_READY</code> with nothing on the page to lose
                 </th>
                 <td class="px-4 py-2 align-top">Nothing shown</td>
                 <td class="px-4 py-2 align-top">
-                  <code>activateUpdate()</code> and a reload at the next router navigation or the
-                  next return to the page
+                  A reload (no <code>activateUpdate()</code>) within 10 seconds of the page loading,
+                  at the next navigation to another path, or on return to a page open for more than
+                  7 days
                 </td>
                 <td class="px-4 py-2 align-top">None</td>
               </tr>
@@ -246,7 +249,10 @@
                   "Omni League needs to reload" / "Part of the app could not be loaded after an
                   update. Reload to keep going."
                 </td>
-                <td class="px-4 py-2 align-top">Reload only; no Later</td>
+                <td class="px-4 py-2 align-top">
+                  Reload only; no Later. A safe page that is online reloads once per tab by itself
+                  and shows nothing
+                </td>
                 <td class="px-4 py-2 align-top">
                   Assertive (<code>role="alert"</code>); focus stays where it is
                 </td>
@@ -896,7 +902,8 @@
               A new version of Omni League is ready
             </h2>
             <p class="mt-1 text-sm text-muted-foreground">
-              Reload to start using it. Finish anything you&apos;re typing first.
+              It loads by itself when you leave this page, so you can finish what you&apos;re
+              typing.
             </p>
             <div class="mt-3 flex flex-wrap gap-2">
               <button
@@ -1593,7 +1600,8 @@
               A new version of Omni League is ready
             </h2>
             <p class="mt-1 text-sm text-muted-foreground">
-              Reload to start using it. Finish anything you&apos;re typing first.
+              It loads by itself when you leave this page, so you can finish what you&apos;re
+              typing.
             </p>
             <div class="mt-3 flex flex-wrap gap-2">
               <button

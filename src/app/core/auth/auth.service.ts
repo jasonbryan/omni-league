@@ -1,4 +1,5 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { ChangesInFlight } from '../changes-in-flight';
 import type { ConvexAuthSource } from '../data/convex';
 import { AUTH_CLIENT, type AuthClientLike } from './auth-client';
 
@@ -70,6 +71,7 @@ export class AuthService implements ConvexAuthSource {
   readonly convexAuthenticated = this.convexAuth.asReadonly();
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly changes = inject(ChangesInFlight);
   private cachedToken: string | null = null;
   private pendingToken: Promise<string | null> | null = null;
   private tokenGeneration = 0;
@@ -158,7 +160,19 @@ export class AuthService implements ConvexAuthSource {
     this.convexAuth.set(isAuthenticated);
   };
 
-  async signUp({ name, email, password }: SignUpInput): Promise<SignUpResult> {
+  signUp(input: SignUpInput): Promise<SignUpResult> {
+    return this.changes.track(() => this.requestSignUp(input));
+  }
+
+  signIn(input: SignInInput): Promise<SignInResult> {
+    return this.changes.track(() => this.requestSignIn(input));
+  }
+
+  signOut(): Promise<void> {
+    return this.changes.track(() => this.requestSignOut());
+  }
+
+  private async requestSignUp({ name, email, password }: SignUpInput): Promise<SignUpResult> {
     const client = await this.client;
     if (!client) return { ok: false, error: 'unexpected' };
     let error: AuthError | null;
@@ -177,7 +191,7 @@ export class AuthService implements ConvexAuthSource {
     return { ok: true };
   }
 
-  async signIn({ email, password }: SignInInput): Promise<SignInResult> {
+  private async requestSignIn({ email, password }: SignInInput): Promise<SignInResult> {
     const client = await this.client;
     if (!client) return { ok: false, error: 'unexpected' };
     let error: AuthError | null;
@@ -193,7 +207,7 @@ export class AuthService implements ConvexAuthSource {
     return { ok: true };
   }
 
-  async signOut(): Promise<void> {
+  private async requestSignOut(): Promise<void> {
     this.forgetToken();
     try {
       await (await this.client)?.signOut();
