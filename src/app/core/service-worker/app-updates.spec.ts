@@ -8,6 +8,7 @@ import { AuthService } from '../auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../auth/testing/fake-auth-client';
 import { ChangesInFlight } from '../changes-in-flight';
 import { CONVEX_CLIENT, ConvexConnection, injectMutation } from '../data/convex';
+import { NEWER_VERSION_HOLD_MS } from '../data/convex/connection';
 import { FakeConvexClient } from '../data/convex/testing/fake-convex-client';
 import {
   AUTO_APPLY_WINDOW_MS,
@@ -29,8 +30,6 @@ const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const START = new Date('2026-10-09T12:00:00Z').getTime();
 const LEGACY_FIRST_RUN_KEY = 'omni-league:sw-version-first-run';
-/** The note waits this long after the socket went down once a newer version is detected. */
-const NOTE_HELD_UNTIL_MS = 15 * SECOND;
 
 describe('AppUpdates', () => {
   let sw: FakeSwUpdate;
@@ -893,7 +892,6 @@ describe('AppUpdates', () => {
     let convex: FakeConvexClient;
     let connection: ConvexConnection;
 
-    /** `neverConnected` is the moved-deployment case: the old bundle's socket has not connected since the page loaded. */
     async function startWithSocketDown(
       options: { neverConnected?: boolean; loadedAgo?: number } = {},
     ): Promise<AppUpdates> {
@@ -1173,7 +1171,7 @@ describe('AppUpdates', () => {
         await vi.advanceTimersByTimeAsync(EARLY_CHECK_DELAY_MS);
         sw.versionDetected('b');
         sw.versionReady('a', 'b');
-        await vi.advanceTimersByTimeAsync(NOTE_HELD_UNTIL_MS);
+        await vi.advanceTimersByTimeAsync(NEWER_VERSION_HOLD_MS);
 
         expect(reload).not.toHaveBeenCalled();
         expect(updates.card()).toBe('ready');

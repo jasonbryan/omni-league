@@ -237,13 +237,27 @@ describe('why the connection is down', () => {
       expect(connection.cause()).toBe('offline');
     });
 
-    it('forgets the answer once the socket reconnects', () => {
+    it('keeps the answer through a reconnect, so an alert still on screen keeps its title', () => {
       const client = new FakeConvexClient();
       const { connection } = connect(client);
       client.setConnected(false);
       connection.markSiteReached();
 
       client.setConnected(true);
+
+      expect(connection.cause()).toBe('unreachable');
+      expect(offlineTitle(connection.cause())).toBe(
+        "Can't reach Omni League right now. Nothing was sent.",
+      );
+    });
+
+    it('forgets the answer when the socket next goes down', () => {
+      const client = new FakeConvexClient();
+      const { connection } = connect(client);
+      client.setConnected(false);
+      connection.markSiteReached();
+      client.setConnected(true);
+
       client.setConnected(false);
 
       expect(connection.cause()).toBe('offline');
@@ -306,6 +320,20 @@ describe('why the connection is down', () => {
 
       await vi.advanceTimersByTimeAsync(5_000);
       connection.markNewerVersionDetected();
+
+      expect(online()).toBe(false);
+    });
+
+    it('does not hold a later drop for a version detected before the socket reconnected', async () => {
+      const client = new FakeConvexClient();
+      const { connection, online } = connect(client);
+      client.setConnected(false);
+      connection.markNewerVersionDetected();
+      client.setConnected(true);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      client.setConnected(false);
+      await vi.advanceTimersByTimeAsync(5_000);
 
       expect(online()).toBe(false);
     });

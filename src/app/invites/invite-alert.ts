@@ -3,13 +3,12 @@ import {
   Component,
   ElementRef,
   computed,
-  inject,
   input,
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideInfo, lucideWifiOff } from '@ng-icons/lucide';
-import { ConvexConnection, offlineTitle } from '../core/data/convex';
+import { injectOfflineCause, offlineTitle } from '../core/data/convex';
 import { ALERT_DESTRUCTIVE, ALERT_NEUTRAL } from '../organizations/admin/admin-alert';
 
 export type InviteAlertKind = 'error' | 'offline' | 'info';
@@ -45,7 +44,7 @@ export class InviteAlert {
   readonly description = input.required<string>();
 
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
-  private readonly cause = inject(ConvexConnection).cause;
+  private readonly cause = injectOfflineCause();
 
   protected readonly heading = computed(() =>
     this.kind() === 'offline' ? offlineTitle(this.cause()) : (this.title() ?? ''),

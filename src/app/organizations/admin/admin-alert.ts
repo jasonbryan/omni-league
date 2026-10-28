@@ -3,7 +3,6 @@ import {
   Component,
   ElementRef,
   computed,
-  inject,
   input,
   viewChild,
 } from '@angular/core';
@@ -15,7 +14,7 @@ import {
   lucideInfo,
   lucideWifiOff,
 } from '@ng-icons/lucide';
-import { ConvexConnection, offlineTitle } from '../../core/data/convex';
+import { injectOfflineCause, offlineTitle } from '../../core/data/convex';
 
 const BASE =
   "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
@@ -62,7 +61,7 @@ export class AdminAlert {
   readonly description = input<string>();
 
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
-  private readonly cause = inject(ConvexConnection).cause;
+  private readonly cause = injectOfflineCause();
 
   protected readonly heading = computed(() =>
     this.kind() === 'offline' ? offlineTitle(this.cause()) : (this.title() ?? ''),

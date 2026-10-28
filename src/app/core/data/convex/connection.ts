@@ -42,9 +42,8 @@ export class ConvexConnection {
   readonly cause: Signal<OfflineCause> = computed(() =>
     this.browserOnline() && this.siteReached() ? 'unreachable' : 'offline',
   );
-  /** Down at once, where `online` waits for the delay. */
   readonly socketDown: Signal<boolean> = this.down.asReadonly();
-  /** The socket is down while the browser reports a connection, which is when asking the site for a newer version can help. */
+  /** Asking the site for a newer version can help only while the browser reports a connection. */
   readonly disconnectedWhileOnline: Observable<boolean> =
     this.disconnectedOnline.pipe(distinctUntilChanged());
 
@@ -89,7 +88,6 @@ export class ConvexConnection {
     return this.client?.connectionState().hasEverConnected ?? false;
   }
 
-  /** The service worker got an answer from the site (`NO_NEW_VERSION_DETECTED`, `VERSION_DETECTED`, `VERSION_READY`). Only an answer while the socket is down counts. */
   markSiteReached(): void {
     if (this.down()) this.siteReached.set(true);
   }
@@ -132,7 +130,7 @@ export class ConvexConnection {
       this.socketTimer = undefined;
       this.socketLost.set(false);
       this.down.set(false);
-      this.siteReached.set(false);
+      this.newerVersionDetected = false;
     } else if (!this.down()) {
       this.down.set(true);
       this.downSince = Date.now();
