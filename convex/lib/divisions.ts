@@ -145,7 +145,6 @@ export interface DivisionLabelInput {
   ageGroup?: AgeGroup;
 }
 
-/** The parts of the label a result row shows, which a league's search text also holds. */
 export function divisionLabelParts(division: DivisionLabelInput): string[] {
   const { gender, playersPerSide, ageGroup } = division;
   const parts = [genderLabel(gender, ageGroup), formatLabel(playersPerSide), division.levelLabel];

@@ -49,7 +49,6 @@ export async function leagueDivisionLabel(
   return input && divisionLabel(input);
 }
 
-/** The words of a league's search text that name its sport and division, from the same parts as the label a result row shows. */
 export async function leagueDivisionSearchWords(
   ctx: Pick<QueryCtx, 'db'>,
   league: LeagueDivisionFields,
