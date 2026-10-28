@@ -148,7 +148,7 @@ test.describe('find a league: raw server HTML', () => {
       expect(resultNames(html)).not.toContain(DRAFT);
 
       const section = plainText(resultsSection(html));
-      expect(section).toMatch(/\d+ leagues? match(es)? “coed /);
+      expect(section).toMatch(/^Results (?:\d+ leagues? match|Showing the first 50)/);
       const sunday = plainText(
         resultsSection(html)
           .split('</li>')
@@ -168,6 +168,8 @@ test.describe('find a league: raw server HTML', () => {
       expect(html).toContain(`href="${tenant.path}/leagues/sunday-reverse-coed-4s"`);
 
       expect(html).toMatch(/<meta\b[^>]*name="robots"[^>]*content="noindex"/);
+      const exact = await raw(request, url(id));
+      expect(plainText(resultsSection(exact.html))).toContain(`2 leagues match “${id}”`);
       const canonicals = [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/g)].map(
         ([tag]) => /\bhref="([^"]*)"/.exec(tag)?.[1] ?? '',
       );

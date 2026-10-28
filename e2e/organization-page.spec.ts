@@ -286,6 +286,7 @@ test.describe('organization page in the browser', () => {
             `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
         ),
         'footer a[href="/"]',
+        'footer a[href="/leagues"]',
         'footer a[href="/app"]',
         'footer a[href="/app/organizations/new"]',
         'footer a[href^="/sign-in"]',
