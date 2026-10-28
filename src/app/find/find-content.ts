@@ -112,12 +112,7 @@ const TEXT_LINK_CLASSES =
             }
             @default {
               @if (rows().length > 0) {
-                <p
-                  #resultStatus
-                  role="status"
-                  tabindex="-1"
-                  class="text-sm text-muted-foreground focus:outline-none"
-                >
+                <p #resultStatus role="status" tabindex="-1" class="text-sm text-muted-foreground">
                   {{ countLine() }}
                 </p>
                 <ul role="list" class="mt-2 max-w-3xl divide-y divide-border">
@@ -161,12 +156,7 @@ const TEXT_LINK_CLASSES =
                 </ul>
               } @else {
                 <div class="flex max-w-md flex-col items-start">
-                  <p
-                    #resultStatus
-                    role="status"
-                    tabindex="-1"
-                    class="font-medium focus:outline-none"
-                  >
+                  <p #resultStatus role="status" tabindex="-1" class="font-medium">
                     No {{ noun.many }} match “{{ query() }}”
                   </p>
                   <p class="mt-1 text-sm text-muted-foreground">
