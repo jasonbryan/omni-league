@@ -201,6 +201,7 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/cache-key.spec.ts',
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
+          'e2e/public-page-layout-shift.spec.ts',
           'e2e/season-page.spec.ts',
           'e2e/sport-view.spec.ts',
         ),
@@ -217,6 +218,7 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/cache-key.spec.ts',
           'e2e/league-page-offline.spec.ts',
           'e2e/league-page.spec.ts',
+          'e2e/public-page-layout-shift.spec.ts',
           'e2e/sport-view.spec.ts',
         ),
         file,
@@ -290,7 +292,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public season page, its content, and its paths to the season page and cache-key specs', () => {
+  it('maps the public season page, its content, and its paths to the season page, layout shift, and cache-key specs', () => {
     for (const file of [
       'src/app/organizations/public-season/public-season-page.ts',
       'src/app/organizations/public-season/public-season-content.ts',
@@ -298,7 +300,11 @@ describe('selectSpecs: mapped areas', () => {
     ]) {
       assert.deepEqual(
         specsFor([file]),
-        want('e2e/cache-key.spec.ts', 'e2e/season-page.spec.ts'),
+        want(
+          'e2e/cache-key.spec.ts',
+          'e2e/public-page-layout-shift.spec.ts',
+          'e2e/season-page.spec.ts',
+        ),
         file,
       );
     }
@@ -402,6 +408,17 @@ describe('selectSpecs: mapped areas', () => {
       assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
     }
     assert.ok(!specs.includes('FULL'));
+  });
+
+  it('maps the public layout and the page skeletons to the layout shift spec', () => {
+    for (const file of [
+      'src/app/public-layout/public-layout.ts',
+      'src/app/organizations/organization-skeleton.ts',
+      'src/app/organizations/public-league/public-league-skeleton.ts',
+      'src/app/organizations/public-season/public-season-skeleton.ts',
+    ]) {
+      assert.ok(specsFor([file]).includes('e2e/public-page-layout-shift.spec.ts'), file);
+    }
   });
 
   it('maps the leagues mockup to its spec, and every other design file to nothing', () => {
