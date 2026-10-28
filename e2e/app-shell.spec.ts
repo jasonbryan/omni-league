@@ -250,6 +250,24 @@ test.describe('the app shell', () => {
       await expect(dialogOf(page)).toHaveCount(0);
       await expect(menuButton(page)).toBeFocused();
     });
+
+    test('Tab and Shift+Tab never leave the open sheet for the page behind', async ({ page }) => {
+      const { base } = await member(page, 'orgAdmin');
+      await page.goto(base);
+      await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+
+      await tap(page, menuButton(page));
+      await expect(dialogOf(page).getByRole('button', { name: 'Close navigation' })).toBeFocused();
+
+      const focusInsideDialog = () =>
+        page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+      for (const key of ['Tab', 'Shift+Tab']) {
+        for (let press = 0; press < 14; press++) {
+          await page.keyboard.press(key);
+          expect(await focusInsideDialog(), `${key} press ${String(press + 1)}`).toBe(true);
+        }
+      }
+    });
   });
 
   test.describe('on every /app page', () => {
