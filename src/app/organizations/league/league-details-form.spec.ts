@@ -126,12 +126,20 @@ describe('LeagueDetailsForm', () => {
       expect(form().getAttribute('aria-labelledby')).toBe('details-heading');
       expect(form().hasAttribute('novalidate')).toBe(true);
       expect(text(page.querySelector('label[for="league-name"]'))).toBe('Name');
-      expect(text(page.querySelector('#league-name-description'))).toBe('Up to 100 characters.');
+      expect(text(page.querySelector('#league-name-description'))).toBe(
+        'The name players know it by every season, such as Sunday Coed 4s. Up to 100 characters.',
+      );
       expect(text(section().querySelector('fieldset legend'))).toBe('Division');
       expect(text(save())).toBe('Save changes');
       expect(save().className.split(' ')).toEqual(
         expect.arrayContaining(PRIMARY_BUTTON.split(' ')),
       );
+    });
+
+    it('points the name field at its description while the name is valid', async () => {
+      await open();
+      expect(nameInput().getAttribute('aria-describedby')).toBe('league-name-description');
+      expect(page.querySelector('#league-name-description')).not.toBeNull();
     });
 
     it('is filled with the league’s own name and division', async () => {

@@ -11,11 +11,14 @@ import {
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicLeaguePage } from './public-league-page';
 import {
+  at,
   leagueQueryResults,
   NO_SEASONS,
+  OPEN_DAY,
   SEASONS,
   seasonsPage,
   SUNDAY_4S,
+  without,
 } from './testing/league-data';
 
 const ORG = 'organizations:getPublicPage';
@@ -69,9 +72,12 @@ const canonical = () => head().querySelector('link[rel="canonical"]')?.getAttrib
 // Each live result is saved to localStorage; a saved copy from one test must not seed the next one, nor a later spec file (spec files share one global).
 beforeEach(() => {
   localStorage.clear();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  vi.setSystemTime(at(OPEN_DAY));
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   localStorage.clear();
   for (const el of head().querySelectorAll('meta[property^="og:"], link[rel="canonical"]')) {
     el.remove();
@@ -115,7 +121,7 @@ describe('PublicLeaguePage queries', () => {
     expect(subscription(SEASONS_QUERY).args).toMatchObject({ page });
   });
 
-  it('shows nothing but the layout until all three results have arrived', async () => {
+  it('shows the skeleton in the layout until all three results have arrived, then the page in its place', async () => {
     const harness = await open();
     const results = leagueQueryResults();
     subscription(ORG).emit(results[ORG]);
@@ -123,9 +129,16 @@ describe('PublicLeaguePage queries', () => {
     await settle(harness);
     expect(host(harness).querySelector('main h1')).toBeNull();
     expect(host(harness).querySelector('main nav')).toBeNull();
+    const skeleton = host(harness).querySelector('main [data-testid="league-skeleton"]');
+    expect(skeleton).not.toBeNull();
+    const status = skeleton?.querySelector('[role="status"]');
+    expect(text(status)).toBe('Loading the league.');
+    expect(status?.className).toContain('sr-only');
+    expect(skeleton?.querySelector('h1, h2, h3, a')).toBeNull();
     subscription(SEASONS_QUERY).emit(results[SEASONS_QUERY]);
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
+    expect(host(harness).querySelector('[data-testid="league-skeleton"]')).toBeNull();
   });
 });
 
@@ -137,53 +150,141 @@ describe('PublicLeaguePage populated', () => {
     await settle(harness);
   });
 
-  it('renders the breadcrumb organization, sport, league, and the league as the only h1', () => {
+  it('renders the breadcrumb organization and sport, and the league as the only h1', () => {
     const main = host(harness).querySelector('main');
-    const crumbs = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] li') ?? [])];
-    const links = crumbs.filter((li) => li.querySelector('a')).map((li) => li.querySelector('a'));
-    expect(links.map(text)).toEqual([
-      'Gulf Coast Sport & Social',
-      'Beach volleyball',
-      'Sunday Reverse Coed 4s',
-    ]);
-    expect(links.map((a) => a?.getAttribute('href'))).toEqual([
+    const links = [...(main?.querySelectorAll('nav[aria-label="Breadcrumb"] a') ?? [])];
+    expect(links.map(text)).toEqual(['Gulf Coast Sport & Social', 'Beach volleyball']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
       '/organizations/gulf-coast-sport-social',
       '/organizations/gulf-coast-sport-social/sports/beach-volleyball',
-      PATH,
     ]);
-    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
-    expect(crumbs.filter((li) => li.getAttribute('aria-hidden') === 'true')).toHaveLength(2);
     expect(main?.querySelectorAll('h1')).toHaveLength(1);
     expect(text(main?.querySelector('h1'))).toBe('Sunday Reverse Coed 4s');
   });
 
-  it('shows the sport badge and the locations, the location read after "Location:"', () => {
-    const main = host(harness).querySelector('main');
-    const h1 = main?.querySelector('h1');
-    const row = h1?.nextElementSibling;
-    expect(text(row?.querySelector('[data-slot="badge"]'))).toBe('Beach volleyball');
-    expect(text(row?.querySelector('p'))).toBe('Location: North Beach Sand Courts');
+  it('shows the division label and the sport with its locations under the h1', () => {
+    const lines = [...host(harness).querySelectorAll('main h1 ~ p')].map(text);
+    expect(lines).toEqual(['Coed · 4v4 · BB', 'Beach volleyball · North Beach Sand Courts']);
   });
 
-  it('labels several locations as "Locations:" and lists them in order', async () => {
+  it('leaves out the division line for a league with no division, and lists several locations in order', async () => {
     emit(
       leagueQueryResults({
         league: {
-          ...SUNDAY_4S,
+          ...without(SUNDAY_4S, 'divisionLabel'),
           locationNames: ['Bayside Athletic Complex', 'North Beach Sand Courts'],
         },
       }),
     );
     await settle(harness);
-    expect(
-      text(host(harness).querySelector('main h1')?.nextElementSibling?.querySelector('p')),
-    ).toBe('Locations: Bayside Athletic Complex, North Beach Sand Courts');
+    expect([...host(harness).querySelectorAll('main h1 ~ p')].map(text)).toEqual([
+      'Beach volleyball · Bayside Athletic Complex, North Beach Sand Courts',
+    ]);
   });
 
-  it('lists the seasons newest first, each name a link to its season page, with dates and format', () => {
+  describe('the open season card', () => {
+    const card = () => host(harness).querySelector('section#registration-open');
+
+    it('comes first, with the season, dates, division and team size, deadline, and a Register link', () => {
+      expect(text(card()?.querySelector('h2'))).toBe('Registration open');
+      expect(text(card()?.querySelector('h3'))).toBe('Summer 2027');
+      expect([...(card()?.querySelectorAll('ul li') ?? [])].map(text)).toEqual([
+        'Jun 6 – Aug 29, 2027',
+        'Coed · 4v4 · BB, teams of at least 4',
+        'Closes May 23, 2027',
+      ]);
+      const register = card()?.querySelector<HTMLAnchorElement>('a[data-slot="button"]');
+      expect(text(register)).toBe('Register for Summer 2027');
+      expect(register?.getAttribute('href')).toBe(`${PATH}/seasons/summer-2027#registration`);
+      expect(register?.className).toContain('h-11');
+      const sections = [...host(harness).querySelectorAll('main section')].map((el) => el.id);
+      expect(sections.slice(0, 2)).toEqual(['registration-open', 'seasons']);
+    });
+
+    it('says only that teams need a minimum when the league has no division label', async () => {
+      emit(leagueQueryResults({ league: without(SUNDAY_4S, 'divisionLabel') }));
+      await settle(harness);
+      expect(text(card()?.querySelectorAll('ul li')[1])).toBe('Teams of at least 4');
+    });
+
+    it('still shows on page 2 of the seasons, from the league’s own seasons', async () => {
+      await TestBed.inject(Router).navigateByUrl(`${PATH}?page=2#seasons`);
+      await settle(harness);
+      subscription(SEASONS_QUERY).emit(seasonsPage(2));
+      await settle(harness);
+      expect([...host(harness).querySelectorAll('section#seasons > ul > li h3')].map(text)).toEqual(
+        ['Fall 2025', 'Summer 2025'],
+      );
+      expect(text(card()?.querySelector('h3'))).toBe('Summer 2027');
+    });
+
+    it('shows the open season whatever the others’ status, and the other row reads In progress', () => {
+      expect(text(card()?.querySelector('h3'))).toBe('Summer 2027');
+      const rows = [...host(harness).querySelectorAll('section#seasons > ul > li')];
+      expect(text(rows[1].querySelector('[data-slot="badge"]'))).toBe('In progress');
+    });
+
+    it('shows the one with the soonest deadline when two are open', async () => {
+      emit(
+        leagueQueryResults({
+          league: {
+            ...SUNDAY_4S,
+            seasons: [
+              {
+                name: 'Fall 2027',
+                slug: 'fall-2027',
+                startDate: '2027-09-12',
+                endDate: '2027-11-14',
+                registrationDeadline: '2027-08-29',
+                minimumRosterSize: 4,
+              },
+              ...(SUNDAY_4S.seasons ?? []),
+            ],
+          },
+        }),
+      );
+      await settle(harness);
+      expect(text(card()?.querySelector('h3'))).toBe('Summer 2027');
+    });
+
+    it('shows the open season that starts first when two share a deadline, then the lower slug', async () => {
+      const tied = (name: string, slug: string, startDate: string) => ({
+        name,
+        slug,
+        startDate,
+        endDate: '2027-11-14',
+        registrationDeadline: '2027-08-29',
+        minimumRosterSize: 4,
+      });
+      const withTied = (...seasons: ReturnType<typeof tied>[]) =>
+        leagueQueryResults({ league: { ...SUNDAY_4S, seasons } });
+      emit(withTied(tied('Later', 'a', '2027-09-20'), tied('Earlier', 'c', '2027-09-12')));
+      await settle(harness);
+      expect(text(card()?.querySelector('h3'))).toBe('Earlier');
+      emit(
+        withTied(
+          tied('Later', 'a', '2027-09-20'),
+          tied('Earlier', 'c', '2027-09-12'),
+          tied('Same start', 'b', '2027-09-12'),
+        ),
+      );
+      await settle(harness);
+      expect(text(card()?.querySelector('h3'))).toBe('Same start');
+    });
+
+    it('is not shown for a copy of the league saved before it held its seasons', async () => {
+      emit(leagueQueryResults({ league: without(SUNDAY_4S, 'seasons') }));
+      await settle(harness);
+      expect(card()).toBeNull();
+      expect(host(harness).querySelectorAll('section#seasons > ul > li')).toHaveLength(5);
+    });
+  });
+
+  it('lists the seasons newest first, each name a link to its season page, with dates and status', () => {
     const panel = host(harness).querySelector('section#seasons');
     expect(panel?.getAttribute('aria-labelledby')).toBe('seasons-heading');
     expect(text(panel?.querySelector('h2'))).toBe('Seasons');
+    expect(text(panel?.querySelector('h2 + p'))).toBe('7 seasons');
     const rows = [...(panel?.querySelectorAll(':scope > ul > li') ?? [])];
     expect(rows).toHaveLength(5);
     expect(rows.map((row) => text(row.querySelector('h3')))).toEqual(
@@ -194,7 +295,63 @@ describe('PublicLeaguePage populated', () => {
     );
     expect(text(rows[0].querySelector('p'))).toBe('Dates: Jun 6 – Aug 29, 2027');
     expect(text(rows[2].querySelector('p'))).toBe('Dates: Sep 13 – Nov 15, 2026');
-    expect(text(rows[0].querySelector('[data-slot="badge"]'))).toBe('4v4');
+    const statuses = rows.map((row) =>
+      [...(row.querySelector('p:last-of-type')?.children ?? [])].map(text),
+    );
+    expect(statuses).toEqual([
+      ['Registration open', 'closes May 23, 2027'],
+      ['In progress', 'registration closed'],
+      ['Ended'],
+      ['Ended'],
+      ['Ended'],
+    ]);
+  });
+
+  it('marks the open status apart from the others, and the row has no format badge', () => {
+    const badges = [...host(harness).querySelectorAll('section#seasons [data-slot="badge"]')];
+    expect(badges[0].className).toContain('bg-secondary');
+    expect(badges[1].className).toContain('bg-muted');
+    expect(host(harness).querySelector('section#seasons')?.textContent).not.toContain('4v4');
+  });
+
+  it('says "1 season" for one, and shows no status for a row from a copy saved before rows held their deadline', async () => {
+    emit(
+      leagueQueryResults({
+        seasons: {
+          rows: [{ ...SEASONS[0], registrationDeadline: undefined }],
+          page: 1,
+          pageCount: 1,
+          total: 1,
+        },
+      }),
+    );
+    await settle(harness);
+    expect(text(host(harness).querySelector('section#seasons h2 + p'))).toBe('1 season');
+    expect(host(harness).querySelector('section#seasons li [data-slot="badge"]')).toBeNull();
+  });
+
+  describe('where it is played and who runs it', () => {
+    const where = () => host(harness).querySelector('section#where');
+
+    it('lists each location with its address, then who runs the league, linking to the organization', () => {
+      expect(text(where()?.querySelector('h2'))).toBe('Where it’s played');
+      const place = where()?.querySelector('li');
+      expect(text(place?.querySelector('h3'))).toBe('North Beach Sand Courts');
+      expect(text(place?.querySelector('p'))).toBe('3500 Surfside Blvd, Corpus Christi, TX 78402');
+      const runBy = where()?.querySelector(':scope > p');
+      expect(text(runBy)).toBe('Run by Gulf Coast Sport & Social');
+      expect(runBy?.querySelector('a')?.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social',
+      );
+    });
+
+    it('lists the names alone for a copy saved before the page held addresses', async () => {
+      emit(leagueQueryResults({ league: without(SUNDAY_4S, 'locations') }));
+      await settle(harness);
+      expect([...(where()?.querySelectorAll('li') ?? [])].map(text)).toEqual([
+        'North Beach Sand Courts',
+      ]);
+    });
   });
 
   it('shows the range and the numbered control of page 1 of 2', () => {
@@ -244,19 +401,36 @@ describe('PublicLeaguePage populated', () => {
   });
 });
 
+describe('PublicLeaguePage after every registration deadline has passed', () => {
+  it('shows no card, and the closed season’s row reads Registration closed', async () => {
+    vi.setSystemTime(at('2027-05-30'));
+    const harness = await open();
+    emit();
+    await settle(harness);
+    expect(host(harness).querySelector('section#registration-open')).toBeNull();
+    const rows = [...host(harness).querySelectorAll('section#seasons > ul > li')];
+    expect(text(rows[0].querySelector('[data-slot="badge"]'))).toBe('Registration closed');
+    expect(text(rows[1].querySelector('[data-slot="badge"]'))).toBe('Ended');
+  });
+});
+
 describe('PublicLeaguePage with no published season', () => {
   it('shows the empty state in the Seasons panel and no control', async () => {
     const harness = await open();
-    emit(leagueQueryResults({ seasons: NO_SEASONS }));
+    emit(leagueQueryResults({ league: { ...SUNDAY_4S, seasons: [] }, seasons: NO_SEASONS }));
     await settle(harness);
     const panel = host(harness).querySelector('section#seasons');
     expect(text(panel?.querySelector('h2'))).toBe('Seasons');
     expect(text(panel)).toContain('No seasons yet');
     expect(text(panel)).toContain(
-      'Seasons of this league will be listed here once they’re published.',
+      'When Gulf Coast Sport & Social publishes a season, its dates and registration appear here.',
     );
+    const link = panel?.querySelector('a');
+    expect(text(link)).toBe('See their other leagues');
+    expect(link?.getAttribute('href')).toBe('/organizations/gulf-coast-sport-social');
     expect(panel?.querySelectorAll('li')).toHaveLength(0);
     expect(host(harness).querySelector('nav[aria-label="Seasons pages"]')).toBeNull();
+    expect(host(harness).querySelector('section#registration-open')).toBeNull();
   });
 
   it('shows no control for 5 seasons and one for 6', async () => {
@@ -466,5 +640,38 @@ describe('PublicLeaguePage page changes', () => {
       'This page is temporarily unavailable',
     );
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=2`);
+  });
+});
+
+describe('PublicLeaguePage open season first and the seasons intro', () => {
+  const INTRO =
+    'Each season is one run of Sunday Reverse Coed 4s, with its own dates, registration, teams, and schedule.';
+
+  it('starts the open season card with "Registration open" and puts it before the Seasons heading', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const card = host(harness).querySelector('section#registration-open');
+    const seasons = host(harness).querySelector('section#seasons');
+    expect(text(card)).toMatch(/^Registration open /);
+    expect(card!.compareDocumentPosition(seasons!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('names the league in a line under the Seasons heading', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const panel = host(harness).querySelector('section#seasons');
+    const heading = panel?.querySelector('h2');
+    expect(text(heading?.parentElement?.nextElementSibling)).toBe(INTRO);
+  });
+
+  it('shows the same line above "No seasons yet" when the league has no season', async () => {
+    const harness = await open();
+    emit(leagueQueryResults({ league: { ...SUNDAY_4S, seasons: [] }, seasons: NO_SEASONS }));
+    await settle(harness);
+    const panelText = text(host(harness).querySelector('section#seasons'));
+    expect(panelText).toContain(INTRO);
+    expect(panelText.indexOf(INTRO)).toBeLessThan(panelText.indexOf('No seasons yet'));
   });
 });

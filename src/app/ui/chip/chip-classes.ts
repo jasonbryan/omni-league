@@ -8,7 +8,7 @@ const FORCED_COLORS_CHECKED_FILL =
 const FORCED_COLORS_CHOICE_FOCUS = 'peer-focus-visible:forced-colors:outline-[CanvasText]';
 
 const CHIP =
-  'inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap pointer-coarse:h-11';
+  'inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:justify-center';
 
 export function chipLinkClasses(current: boolean): string {
   return current

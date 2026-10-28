@@ -1,18 +1,10 @@
 // Imports only `convex/lib` files that import nothing from the server, so the app can import it.
 import { LEAGUE_MESSAGES } from './leagueInput';
 import { isChoosableSlug } from './slugs';
-import { ROSTER_SIZE_INPUT_MAX, SPORT_FORMATS, type Sport, type SportFormat } from './sports';
 
 export const MAX_SEASON_NAME_LENGTH = 100;
 
-export type SeasonField =
-  | 'name'
-  | 'slug'
-  | 'startDate'
-  | 'endDate'
-  | 'registrationDeadline'
-  | 'format'
-  | 'minimumRosterSize';
+export type SeasonField = 'name' | 'slug' | 'startDate' | 'endDate' | 'registrationDeadline';
 
 export const SEASON_FIELDS: readonly SeasonField[] = [
   'name',
@@ -20,8 +12,6 @@ export const SEASON_FIELDS: readonly SeasonField[] = [
   'startDate',
   'endDate',
   'registrationDeadline',
-  'format',
-  'minimumRosterSize',
 ];
 
 export type SeasonDateField = 'startDate' | 'endDate' | 'registrationDeadline';
@@ -35,15 +25,16 @@ export type SeasonInputCode =
   | 'dateEmpty'
   | 'dateInvalid'
   | 'endBeforeStart'
-  | 'deadlineNotBeforeStart'
-  | 'formatInvalid'
-  | 'minimumEmpty'
-  | 'minimumBelowFormat'
-  | 'minimumOutOfRange';
+  | 'deadlineNotBeforeStart';
 
 export interface SeasonInputError {
   field: SeasonField;
   code: SeasonInputCode;
+  message: string;
+}
+
+export interface LeagueFormatMissingError {
+  code: 'leagueFormatMissing';
   message: string;
 }
 
@@ -68,12 +59,7 @@ export const SEASON_MESSAGES = {
   endBeforeStart: 'The end date must be on or after the start date.',
   deadlineNotBeforeStart: (startDate: string) =>
     `The registration deadline must be before the start date, ${formatCalendarDate(startDate)}.`,
-  formatInvalid: 'Choose a format.',
-  minimumEmpty: 'Enter the minimum roster size.',
-  minimumBelowFormat: (formatName: string, minimum: number) =>
-    `${formatName} needs at least ${minimum} players. Enter ${minimum} or more.`,
-  minimumOutOfRange: (minimum: number) =>
-    `Enter a whole number from ${minimum} to ${ROSTER_SIZE_INPUT_MAX}.`,
+  leagueFormatMissing: 'Set this league’s format in its details first.',
 } as const;
 
 function daysInMonth(year: number, month: number): number {
@@ -94,12 +80,6 @@ export function isCalendarDate(value: string): boolean {
 export function formatCalendarDate(value: string): string {
   const [year, month, day] = value.split('-').map(Number) as [number, number, number];
   return `${MONTHS[month - 1]} ${day}, ${year}`;
-}
-
-export function parseWholeNumber(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed === '') return null;
-  return /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN;
 }
 
 export function checkSeasonName(
@@ -178,55 +158,12 @@ export function checkSeasonDates(
   return errors;
 }
 
-function formatOf(sport: Sport, key: string | null): SportFormat | undefined {
-  return SPORT_FORMATS[sport].find((candidate) => candidate.key === key);
-}
-
-export function checkSeasonFormat(sport: Sport, format: string | null): SeasonInputError | null {
-  return formatOf(sport, format)
-    ? null
-    : { field: 'format', code: 'formatInvalid', message: SEASON_MESSAGES.formatInvalid };
-}
-
-export function checkMinimumRosterSize(
-  sport: Sport,
-  format: string | null,
-  value: number | null,
-): SeasonInputError | null {
-  const field = 'minimumRosterSize';
-  if (value === null) {
-    return { field, code: 'minimumEmpty', message: SEASON_MESSAGES.minimumEmpty };
-  }
-  const chosen = formatOf(sport, format);
-  const minimum = chosen?.minimumRosterSize ?? 1;
-  if (!Number.isInteger(value) || value > ROSTER_SIZE_INPUT_MAX) {
-    return {
-      field,
-      code: 'minimumOutOfRange',
-      message: SEASON_MESSAGES.minimumOutOfRange(minimum),
-    };
-  }
-  if (value < minimum) {
-    return chosen
-      ? {
-          field,
-          code: 'minimumBelowFormat',
-          message: SEASON_MESSAGES.minimumBelowFormat(chosen.name, minimum),
-        }
-      : { field, code: 'minimumOutOfRange', message: SEASON_MESSAGES.minimumOutOfRange(minimum) };
-  }
-  return null;
-}
-
 export interface SeasonValues extends SeasonDates {
   name: string;
   slug: string;
-  format: string | null;
-  minimumRosterSize: number | null;
 }
 
 export function checkSeasonFields(
-  sport: Sport,
   values: SeasonValues,
 ): Partial<Record<SeasonField, SeasonInputError>> {
   const errors: Partial<Record<SeasonField, SeasonInputError>> = {};
@@ -235,10 +172,6 @@ export function checkSeasonFields(
   const slug = checkSeasonSlug(values.slug);
   if (slug) errors.slug = slug;
   Object.assign(errors, checkSeasonDates(values));
-  const format = checkSeasonFormat(sport, values.format);
-  if (format) errors.format = format;
-  const minimum = checkMinimumRosterSize(sport, values.format, values.minimumRosterSize);
-  if (minimum) errors.minimumRosterSize = minimum;
   return errors;
 }
 

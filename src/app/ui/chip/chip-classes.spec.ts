@@ -11,6 +11,8 @@ const names = (classes: string): string[] => classes.split(/\s+/);
 
 const FINE_POINTER_HEIGHT = 'h-9';
 const COARSE_POINTER_HEIGHT = 'pointer-coarse:h-11';
+const COARSE_POINTER_WIDTH = 'pointer-coarse:min-w-11';
+const COARSE_POINTER_CENTRED = 'pointer-coarse:justify-center';
 const FORCED_COLORS_FILL = ['forced-color-adjust-none', 'bg-[Highlight]', 'text-[HighlightText]'];
 
 describe('chipLinkClasses', () => {
@@ -21,6 +23,14 @@ describe('chipLinkClasses', () => {
       expect(classes).toContain(COARSE_POINTER_HEIGHT);
       expect(classes).not.toContain('h-11');
       expect(classes).toEqual(expect.arrayContaining(['rounded-full', 'border']));
+    });
+
+    it(`${current ? 'current' : 'other'} chip: at least 44px wide on touch screens only, label centred`, () => {
+      const classes = names(chipLinkClasses(current));
+      expect(classes).toContain(COARSE_POINTER_WIDTH);
+      expect(classes).toContain(COARSE_POINTER_CENTRED);
+      expect(classes).not.toContain('min-w-11');
+      expect(classes).not.toContain('justify-center');
     });
   }
 
@@ -62,6 +72,13 @@ describe('choice chip classes', () => {
     expect(label).toContain(COARSE_POINTER_HEIGHT);
     expect(label).not.toContain('h-11');
     expect(label).toEqual(expect.arrayContaining(['rounded-full', 'border', 'border-input']));
+  });
+
+  it('is at least 44px wide on touch screens only, with the label centred', () => {
+    expect(label).toContain(COARSE_POINTER_WIDTH);
+    expect(label).toContain(COARSE_POINTER_CENTRED);
+    expect(label).not.toContain('min-w-11');
+    expect(label).not.toContain('justify-center');
   });
 
   it('hovers only an unchecked chip, so a checked chip keeps its fill', () => {

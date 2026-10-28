@@ -9,6 +9,7 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOpenSeasonRows, PublicOrganizationPage } from './organization-path';
+import { MUTED_BADGE, OPEN_BADGE } from './season-status';
 import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
 
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
@@ -65,6 +66,8 @@ const section = (harness: RouterTestingHarness) =>
   host(harness).querySelector('#registration-open');
 const heroLink = (harness: RouterTestingHarness) =>
   host(harness).querySelector<HTMLAnchorElement>('main a[href$="#registration-open"]');
+const classes = (value: Element | string) =>
+  (typeof value === 'string' ? value : value.className).split(' ').sort();
 const rowStatus = (harness: RouterTestingHarness, n: number) =>
   [...(host(harness).querySelector(`#league-${n} p:last-of-type`)?.children ?? [])].map(text);
 const COED_7V7 = {
@@ -197,12 +200,12 @@ describe('the Registration open section', () => {
       );
     });
 
-    it('links the title and a Register button to the season page, named for the league and season', () => {
+    it('links the title to the season page and a Register button to its registration card, named for the league and season', () => {
       const card = section(harness)?.querySelector(':scope > ul > li');
       const href =
         '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/summer-2027';
       const links = [...(card?.querySelectorAll('a') ?? [])];
-      expect(links.map((a) => a.getAttribute('href'))).toEqual([href, href]);
+      expect(links.map((a) => a.getAttribute('href'))).toEqual([href, `${href}#registration`]);
       expect(text(links[1])).toBe('Register for Coed 7v7 Rec, Summer 2027');
       expect(links[1].getAttribute('data-slot')).toBe('button');
     });
@@ -224,9 +227,17 @@ describe('the Registration open section', () => {
     it('reads Registration open, Registration closed, In progress, or No upcoming season', async () => {
       const harness = await open();
       await emit(harness, queryResults(withSeasons(OPEN.slice(0, 2))));
-      expect(rowStatus(harness, 1)).toEqual(['Registration open', 'Summer 2027 · closes May 19']);
+      expect(rowStatus(harness, 1)).toEqual([
+        'Registration open',
+        'Summer 2027 · closes May 19',
+        'Register for Coed 7v7 Rec, Summer 2027',
+      ]);
       expect(rowStatus(harness, 2)).toEqual(['No upcoming season']);
-      expect(rowStatus(harness, 3)).toEqual(['Registration open', 'Summer 2027 · closes May 23']);
+      expect(rowStatus(harness, 3)).toEqual([
+        'Registration open',
+        'Summer 2027 · closes May 23',
+        'Register for Sunday Reverse Coed 4s, Summer 2027',
+      ]);
       expect(rowStatus(harness, 4)).toEqual(['In progress', 'Spring 2027']);
       expect(rowStatus(harness, 5)).toEqual(['Registration closed', 'Summer 2027']);
     });
@@ -241,8 +252,58 @@ describe('the Registration open section', () => {
         'In progress',
         'Registration closed',
       ]);
-      expect(badges[0].className).toContain('bg-secondary');
-      expect(badges[2].className).toContain('border-border');
+      expect(classes(badges[0])).toEqual(classes(OPEN_BADGE));
+      expect(classes(badges[2])).toEqual(classes(MUTED_BADGE));
+      expect(classes(badges[3])).toEqual(classes(MUTED_BADGE));
+    });
+
+    it('leads with the season open for registration when another is in progress, and links to its registration card', async () => {
+      const page = withSeasons([]);
+      page.leagues[2].seasons = [
+        {
+          name: 'Spring 2027',
+          slug: 'spring-2027',
+          startDate: '2027-03-01',
+          endDate: '2027-05-30',
+          registrationDeadline: '2027-02-15',
+        },
+        SUMMER_4S,
+      ];
+      const harness = await open();
+      await emit(harness, queryResults(page));
+      expect(rowStatus(harness, 3).slice(0, 2)).toEqual([
+        'Registration open',
+        'Summer 2027 · closes May 23',
+      ]);
+      const register = host(harness).querySelector<HTMLAnchorElement>(
+        '#league-3 a[href$="#registration"]',
+      );
+      expect(register?.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s/seasons/summer-2027#registration',
+      );
+      expect(text(register)).toBe('Register for Sunday Reverse Coed 4s, Summer 2027');
+      expect(register?.className).toContain('pointer-coarse:min-h-11');
+    });
+
+    it('shows the open season that starts first when two share a deadline', async () => {
+      const page = withSeasons([]);
+      page.leagues[2].seasons = [
+        { ...SUMMER_4S, name: 'Later', slug: 'a-later', startDate: '2027-07-01' },
+        { ...SUMMER_4S, name: 'Earlier', slug: 'b-earlier', startDate: '2027-06-06' },
+      ];
+      const harness = await open();
+      await emit(harness, queryResults(page));
+      expect(rowStatus(harness, 3)[1]).toBe('Earlier · closes May 23');
+      expect(
+        host(harness).querySelector('#league-3 a[href$="#registration"]')?.getAttribute('href'),
+      ).toContain('/seasons/b-earlier#');
+    });
+
+    it('has no Register link on a row whose season is not open', async () => {
+      const harness = await open();
+      await emit(harness, queryResults(withSeasons([])));
+      expect(host(harness).querySelector('#league-4 a[href$="#registration"]')).toBeNull();
+      expect(host(harness).querySelector('#league-5 a[href$="#registration"]')).toBeNull();
     });
 
     it('says nothing for a league row with no seasons field (a copy saved earlier)', async () => {
@@ -312,7 +373,10 @@ describe('the Registration open section', () => {
         [...(section(harness)?.querySelectorAll(':scope > ul > li h3') ?? [])].map(text),
       ).toEqual(['Sunday Reverse Coed 4s']);
       expect(rowStatus(harness, 1)).toEqual(['Registration closed', 'Summer 2027']);
-      expect(rowStatus(harness, 3)).toEqual(['Registration open', 'Summer 2027 · closes May 23']);
+      expect(rowStatus(harness, 3).slice(0, 2)).toEqual([
+        'Registration open',
+        'Summer 2027 · closes May 23',
+      ]);
     });
 
     it('shows the empty text and removes the hero button when the last open season closes', async () => {

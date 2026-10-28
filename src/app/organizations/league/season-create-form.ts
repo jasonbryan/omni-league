@@ -3,11 +3,11 @@ import {
   Component,
   ElementRef,
   Injector,
-  type OnInit,
   afterNextRender,
   computed,
   inject,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -16,28 +16,17 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import type { Sport } from '../../../../convex/lib/sports';
+import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
+import { formatLabel } from '../../../../convex/lib/divisions';
 import { injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
-import {
-  DESCRIPTION,
-  FIELD,
-  FIELD_CONTENT,
-  FIELD_ERROR,
-  FIELD_GROUP,
-  FIELD_HORIZONTAL,
-  FIELD_SET,
-  INPUT,
-  LABEL,
-  LEGEND,
-  RADIO_EDGE,
-  RADIO_EDGE_INVALID,
-  RADIO_INDICATOR,
-  RADIO_INPUT,
-  RADIO_ITEM,
-} from '../admin/field-classes';
+import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
+import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
+
+const NOT_SET = 'Not set yet';
 
 const DATE_FIELDS = [
   {
@@ -67,8 +56,6 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
   startDate: '#start-date',
   endDate: '#end-date',
   registrationDeadline: '#registration-deadline',
-  format: '#format input[type="radio"]',
-  minimumRosterSize: '#minimum-roster-size',
 };
 
 @Component({
@@ -103,9 +90,10 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         />
       }
       <p id="create-season-note" class="mb-5 text-sm text-muted-foreground">
-        New seasons start as drafts, which only your staff see.
+        A season is one run of {{ leagueName() }}, with its own dates, registration, teams, and
+        schedule. It starts as a draft, which only your staff see.
       </p>
-      <div data-slot="field-group" [class]="fieldGroupClass">
+      <div data-slot="field-group" [class]="fieldGroupClass + ' ' + clearanceClass">
         <div
           role="group"
           data-slot="field"
@@ -130,7 +118,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             [class]="inputClass"
           />
           <p data-slot="field-description" id="name-description" [class]="descriptionClass">
-            Up to 100 characters, for example Spring 2028.
+            Up to 100 characters, for example Fall 2027. Players see it with the league’s name.
           </p>
           @if (form.errors.name(); as error) {
             <div role="alert" data-slot="field-error" id="name-error" [class]="errorClass">
@@ -195,247 +183,176 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             </div>
           }
         </div>
-        @for (date of dateFields; track date.field) {
-          <div
-            role="group"
-            data-slot="field"
-            data-orientation="vertical"
-            [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
-            [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
-            [class]="fieldClass"
-          >
-            <label [for]="date.id" data-slot="field-label" [class]="labelClass">{{
-              date.label
-            }}</label>
-            <input
-              [id]="date.id"
-              type="date"
-              data-slot="input"
-              autocomplete="off"
-              [formField]="form.fields[date.field]"
-              (blur)="form.left(date.field)"
-              [attr.aria-describedby]="
-                describedBy(date.field, date.description ? date.id + '-description' : null, date.id)
-              "
-              [attr.aria-invalid]="form.errors[date.field]() ? 'true' : null"
-              [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
-              [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
-              [class]="inputClass"
-            />
-            @if (date.description) {
-              <p
-                data-slot="field-description"
-                [id]="date.id + '-description'"
-                [class]="descriptionClass"
-              >
-                {{ date.description }}
-              </p>
-            }
-            @if (form.errors[date.field](); as error) {
-              <div
-                role="alert"
-                data-slot="field-error"
-                [id]="date.id + '-error'"
-                [class]="errorClass"
-              >
-                <ng-icon
-                  name="lucideCircleAlert"
-                  class="mt-0.5 shrink-0 text-base"
-                  aria-hidden="true"
-                />
-                <span>{{ error }}</span>
-              </div>
-            }
-          </div>
-        }
-        <fieldset
-          id="format"
-          data-slot="field-set"
-          [attr.aria-describedby]="form.errors.format() ? 'format-error' : null"
-          [attr.data-invalid]="form.errors.format() ? 'true' : null"
-          [class]="fieldSetClass"
-        >
-          <legend
-            data-slot="field-legend"
-            data-variant="label"
-            [class]="legendClass + (form.errors.format() ? ' text-destructive' : '')"
-          >
-            Format
-          </legend>
-          <div data-slot="radio-group" class="grid gap-3">
-            @for (option of form.formats(); track option.key) {
-              <div
-                role="group"
-                data-slot="field"
-                data-orientation="horizontal"
-                [attr.data-matches-spartan-invalid]="form.errors.format() ? 'true' : null"
-                [class]="fieldHorizontalClass"
-              >
-                <span
-                  data-slot="radio-group-item"
-                  [attr.data-checked]="form.format() === option.key ? 'true' : null"
-                  [class]="radioClass()"
-                  ><input
-                    type="radio"
-                    [id]="'format-' + option.key"
-                    name="format"
-                    [value]="option.key"
-                    [checked]="form.format() === option.key"
-                    [attr.aria-invalid]="form.errors.format() ? 'true' : null"
-                    [attr.aria-describedby]="'format-' + option.key + '-description'"
-                    (change)="form.chooseFormat(option.key)"
-                    [class]="radioInputClass" /><span
-                    aria-hidden="true"
-                    [class]="radioIndicatorClass"
-                  ></span
-                ></span>
-                <div data-slot="field-content" [class]="contentClass">
-                  <label
-                    [attr.for]="'format-' + option.key"
-                    data-slot="field-label"
-                    [class]="labelClass"
-                    >{{ option.name }}</label
-                  >
-                  <p
-                    data-slot="field-description"
-                    [id]="'format-' + option.key + '-description'"
-                    [class]="descriptionClass"
-                  >
-                    At least {{ option.minimumRosterSize }} players
-                  </p>
-                </div>
-              </div>
-            }
-          </div>
-          @if (form.errors.format(); as error) {
-            <div role="alert" data-slot="field-error" id="format-error" [class]="errorClass">
-              <ng-icon
-                name="lucideCircleAlert"
-                class="mt-0.5 shrink-0 text-base"
-                aria-hidden="true"
-              />
-              <span>{{ error }}</span>
-            </div>
-          }
-        </fieldset>
-        <div
-          role="group"
-          data-slot="field"
-          data-orientation="vertical"
-          [attr.data-matches-spartan-invalid]="form.errors.minimumRosterSize() ? 'true' : null"
-          [attr.data-invalid]="form.errors.minimumRosterSize() ? 'true' : null"
-          [class]="fieldClass"
-        >
-          <label for="minimum-roster-size" data-slot="field-label" [class]="labelClass"
-            >Minimum roster size</label
-          >
-          <input
-            id="minimum-roster-size"
-            type="text"
-            inputmode="numeric"
-            data-slot="input"
-            autocomplete="off"
-            [formField]="form.fields.minimumRosterSize"
-            (blur)="form.left('minimumRosterSize')"
-            [attr.aria-describedby]="
-              describedBy(
-                'minimumRosterSize',
-                'minimum-roster-size-description',
-                'minimum-roster-size'
-              )
-            "
-            [attr.aria-invalid]="form.errors.minimumRosterSize() ? 'true' : null"
-            [attr.data-invalid]="form.errors.minimumRosterSize() ? 'true' : null"
-            [attr.data-matches-spartan-invalid]="form.errors.minimumRosterSize() ? 'true' : null"
-            [class]="inputClass"
-          />
-          <p
-            data-slot="field-description"
-            id="minimum-roster-size-description"
-            [class]="descriptionClass"
-          >
-            {{ form.minimumHint() }}
-          </p>
-          @if (form.errors.minimumRosterSize(); as error) {
+        <div class="grid gap-6 sm:max-lg:grid-cols-2">
+          @for (date of dateFields; track date.field) {
             <div
-              role="alert"
-              data-slot="field-error"
-              id="minimum-roster-size-error"
-              [class]="errorClass"
+              role="group"
+              data-slot="field"
+              data-orientation="vertical"
+              [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
+              [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
+              [class]="
+                date.field === 'registrationDeadline'
+                  ? fieldClass + ' sm:max-lg:col-span-2'
+                  : fieldClass
+              "
             >
-              <ng-icon
-                name="lucideCircleAlert"
-                class="mt-0.5 shrink-0 text-base"
-                aria-hidden="true"
+              <label [for]="date.id" data-slot="field-label" [class]="labelClass">{{
+                date.label
+              }}</label>
+              <input
+                [id]="date.id"
+                type="date"
+                data-slot="input"
+                autocomplete="off"
+                [formField]="form.fields[date.field]"
+                (blur)="form.left(date.field)"
+                [attr.aria-describedby]="
+                  describedBy(
+                    date.field,
+                    date.description ? date.id + '-description' : null,
+                    date.id
+                  )
+                "
+                [attr.aria-invalid]="form.errors[date.field]() ? 'true' : null"
+                [attr.data-invalid]="form.errors[date.field]() ? 'true' : null"
+                [attr.data-matches-spartan-invalid]="form.errors[date.field]() ? 'true' : null"
+                [class]="inputClass"
               />
-              <span>{{ error }}</span>
+              @if (date.description) {
+                <p
+                  data-slot="field-description"
+                  [id]="date.id + '-description'"
+                  [class]="descriptionClass"
+                >
+                  {{ date.description }}
+                </p>
+              }
+              @if (form.errors[date.field](); as error) {
+                <div
+                  role="alert"
+                  data-slot="field-error"
+                  [id]="date.id + '-error'"
+                  [class]="errorClass"
+                >
+                  <ng-icon
+                    name="lucideCircleAlert"
+                    class="mt-0.5 shrink-0 text-base"
+                    aria-hidden="true"
+                  />
+                  <span>{{ error }}</span>
+                </div>
+              }
             </div>
           }
         </div>
+        <section aria-labelledby="from-league-heading" class="rounded-lg bg-muted p-4">
+          <h3 id="from-league-heading" class="text-sm font-medium">From the league</h3>
+          <dl class="mt-3 grid gap-3 text-sm sm:max-lg:grid-cols-2">
+            <div>
+              <dt class="text-muted-foreground">Division</dt>
+              <dd class="mt-0.5 font-medium" data-slot="season-division">
+                {{ fromLeague().division }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted-foreground">Minimum roster size</dt>
+              <dd class="mt-0.5 font-medium" data-slot="season-minimum">
+                {{ fromLeague().minimum }}
+              </dd>
+            </div>
+          </dl>
+          <p class="mt-3 text-sm text-muted-foreground">
+            To change them,
+            <a
+              [href]="detailsHref()"
+              class="font-medium text-foreground underline underline-offset-4"
+              (click)="detailsOpened.emit($event)"
+              >edit the league details</a
+            >. Seasons already published keep theirs.
+          </p>
+        </section>
       </div>
-      <button
-        #submitButton
-        type="submit"
-        data-slot="button"
-        [class]="buttonClass"
-        [class.opacity-50]="!online() && !form.submitting()"
-        [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
-      >
-        @if (form.submitting()) {
-          <ng-icon
-            name="lucideLoaderCircle"
-            class="motion-safe:animate-spin"
-            data-icon="inline-start"
-            aria-hidden="true"
-          />Creating season…
-        } @else {
-          <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
-          season
-        }
-      </button>
+      @if (divisionMissing()) {
+        <app-admin-alert
+          #leagueAlert
+          kind="error"
+          [title]="leagueFormatMissingMessage"
+          class="mt-5"
+        />
+      }
+      <div data-slot="form-footer" [class]="footerClass">
+        <button
+          #submitButton
+          type="submit"
+          data-slot="button"
+          [class]="buttonClass"
+          [class.opacity-50]="!online() && !form.submitting()"
+          [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
+        >
+          @if (form.submitting()) {
+            <ng-icon
+              name="lucideLoaderCircle"
+              class="motion-safe:animate-spin"
+              data-icon="inline-start"
+              aria-hidden="true"
+            />Creating season…
+          } @else {
+            <ng-icon name="lucidePlus" data-icon="inline-start" aria-hidden="true" />Create draft
+            season
+          }
+        </button>
+      </div>
       <p role="status" class="sr-only">{{ form.submitting() ? 'Creating the season.' : '' }}</p>
     </form>
   `,
 })
-export class SeasonCreateForm implements OnInit {
+export class SeasonCreateForm {
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly create = injectMutation(api.seasons.create);
 
   readonly leagueId = input.required<Id<'leagues'>>();
   readonly leagueName = input.required<string>();
-  readonly sport = input.required<Sport>();
+  readonly division = input<OrganizerLeague['division']>();
+  readonly detailsHref = input.required<string>();
+  readonly detailsOpened = output<MouseEvent>();
 
   protected readonly online = injectOnline();
-  protected readonly form = new SeasonForm(() => this.sport());
+  protected readonly form = new SeasonForm();
   protected readonly alerts = SEASON_FORM_ALERTS;
   protected readonly dateFields = DATE_FIELDS;
+  protected readonly leagueFormatMissingMessage = SEASON_MESSAGES.leagueFormatMissing;
 
-  ngOnInit(): void {
-    this.form.chooseOnlyFormat();
-  }
+  protected readonly fromLeague = computed(() => {
+    const division = this.division();
+    if (!division) return { division: NOT_SET, minimum: NOT_SET };
+    const { playersPerSide, minimumRosterSize } = division;
+    const raised = minimumRosterSize !== undefined && minimumRosterSize > playersPerSide;
+    return {
+      division: division.label,
+      minimum: raised
+        ? `${minimumRosterSize} players, raised for this league`
+        : `${playersPerSide} players, set by the ${formatLabel(playersPerSide)} format`,
+    };
+  });
+
+  protected readonly divisionMissing = computed(() => !this.division());
 
   protected readonly fieldGroupClass = FIELD_GROUP;
+  protected readonly footerClass = STICKY_FOOTER;
+  protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
   protected readonly fieldClass = FIELD;
-  protected readonly fieldHorizontalClass = FIELD_HORIZONTAL;
-  protected readonly fieldSetClass = FIELD_SET;
-  protected readonly legendClass = LEGEND;
   protected readonly labelClass = LABEL;
   protected readonly inputClass = INPUT;
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
-  protected readonly contentClass = FIELD_CONTENT;
-  protected readonly radioInputClass = RADIO_INPUT;
-  protected readonly radioIndicatorClass = RADIO_INDICATOR;
-  protected readonly buttonClass = `${PRIMARY_BUTTON} mt-6 w-full`;
-
-  protected readonly radioClass = computed(
-    () => `${RADIO_ITEM} ${this.form.errors.format() ? RADIO_EDGE_INVALID : RADIO_EDGE}`,
-  );
+  protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
 
   protected readonly created = signal<string | null>(null);
 
   private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly leagueAlert = viewChild<AdminAlert>('leagueAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
   protected describedBy(
@@ -467,6 +384,8 @@ export class SeasonCreateForm implements OnInit {
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {
       this.focusAfterRender(() => this.focusField(outcome.focus));
+    } else if ('leagueFormatMissing' in outcome) {
+      this.focusAfterRender(() => this.leagueAlert()?.focus());
     } else {
       this.focusAfterRender(() => this.failureAlert()?.focus());
     }

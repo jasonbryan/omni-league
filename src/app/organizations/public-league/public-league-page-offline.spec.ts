@@ -15,7 +15,8 @@ import { plantSavedCopy } from '../../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../../offline/saved-time';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicLeaguePage } from './public-league-page';
-import { leagueQueryResults, NO_SEASONS, SUNDAY_4S } from './testing/league-data';
+import type { PublicLeagueSeasons } from './public-league-path';
+import { leagueQueryResults, NO_SEASONS, SUNDAY_4S, without } from './testing/league-data';
 
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
@@ -136,12 +137,15 @@ describe('PublicLeaguePage offline', () => {
       );
     });
 
-    it('shows the saved-copy note right under the h1, with the saved time', () => {
+    it('shows the saved-copy note under the heading block, with the saved time', () => {
       const expected = formatSavedTime(SAVED_AT, NOW);
       const h1 = host(harness).querySelector('main h1');
       const shown = note(harness);
-      expect(h1?.nextElementSibling?.tagName).toBe('APP-SAVED-COPY-NOTE');
-      expect(h1?.nextElementSibling?.firstElementChild).toBe(shown);
+      const wrapper = shown?.parentElement;
+      expect(wrapper?.tagName).toBe('APP-SAVED-COPY-NOTE');
+      expect(wrapper?.parentElement).toBe(h1?.parentElement);
+      expect(wrapper?.previousElementSibling?.tagName).toBe('P');
+      expect(h1!.compareDocumentPosition(wrapper!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(text(shown)).toBe(`Saved copy from ${expected.text}. It may have changed since.`);
     });
 
@@ -167,6 +171,24 @@ describe('PublicLeaguePage offline', () => {
       });
       expect(JSON.parse(savedEntry(SEASONS) ?? 'null')).toMatchObject({ savedAt: NOW });
     });
+  });
+
+  it('shows copies saved before the page held the division, addresses, seasons, and deadlines, without a card or statuses', async () => {
+    const league = without(SUNDAY_4S, 'divisionLabel', 'locations', 'seasons');
+    const rows = leagueQueryResults()[SEASONS] as PublicLeagueSeasons;
+    const earlier = {
+      ...rows,
+      rows: rows.rows.map((row) => without(row, 'registrationDeadline')),
+    };
+    plant({ ...leagueQueryResults(), [LEAGUE]: league, [SEASONS]: earlier });
+    stubOnLine(false);
+    const harness = await open(PATH, { socket: 'down' });
+    const main = host(harness).querySelector('main');
+    expect(text(main?.querySelector('h1'))).toBe(SUNDAY_4S.name);
+    expect(main?.querySelector('section#registration-open')).toBeNull();
+    expect(main?.querySelector('section#seasons [data-slot="badge"]')).toBeNull();
+    expect(main?.querySelectorAll('section#seasons > ul > li')).toHaveLength(5);
+    expect(note(harness)).not.toBeNull();
   });
 
   it('dates the note by the oldest saved copy on screen', async () => {

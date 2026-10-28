@@ -17,6 +17,20 @@ const identity = (authUserId: string) => ({
   sessionId: 's1',
 });
 
+const SOCCER_7V7 = {
+  gender: 'coed',
+  playersPerSide: 7,
+  level: 'rec',
+  ageGroup: 'adult',
+} as const;
+const SAND_4V4 = { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' } as const;
+const SOFTBALL_10V10 = {
+  gender: 'coed',
+  playersPerSide: 10,
+  level: 'rec',
+  ageGroup: 'adult',
+} as const;
+
 async function setup() {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
@@ -24,15 +38,28 @@ async function setup() {
       organization: { name: 'Org A', slug: 'org-a' },
       locations: [{ name: 'Alpha Field', address: '1 Alpha St' }],
       leagues: [
-        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'] },
-        { name: 'Sand 2s', sport: 'beachVolleyball', locations: ['Alpha Field'] },
-        { name: 'Draft Softball', sport: 'softball', locations: ['Alpha Field'], status: 'draft' },
+        { name: 'Coed 7v7', sport: 'soccer', locations: ['Alpha Field'], division: SOCCER_7V7 },
+        {
+          name: 'Sand 2s',
+          sport: 'beachVolleyball',
+          locations: ['Alpha Field'],
+          division: SAND_4V4,
+        },
+        {
+          name: 'Draft Softball',
+          sport: 'softball',
+          locations: ['Alpha Field'],
+          status: 'draft',
+          division: SOFTBALL_10V10,
+        },
       ],
     });
     const organizationB = await insertTenant(ctx, {
       organization: { name: 'Org B', slug: 'org-b' },
       locations: [{ name: 'B Field', address: '9 B St' }],
-      leagues: [{ name: 'Coed 7v7', sport: 'soccer', locations: ['B Field'] }],
+      leagues: [
+        { name: 'Coed 7v7', sport: 'soccer', locations: ['B Field'], division: SOCCER_7V7 },
+      ],
     });
     const league = async (organizationId: Id<'organizations'>, slug: string) =>
       (await ctx.db
@@ -86,8 +113,6 @@ const fall2026 = (s: Setup) => ({
   startDate: '2026-09-01',
   endDate: '2026-11-15',
   registrationDeadline: '2026-08-25',
-  format: '7v7' as const,
-  minimumRosterSize: 7,
 });
 
 const seasons = (t: Setup['t']) => t.run((ctx) => ctx.db.query('seasons').collect());
@@ -165,8 +190,6 @@ describe('seasons.create', () => {
       s.organizerL.mutation(api.seasons.create, {
         ...fall2026(s),
         leagueId: s.leagueM,
-        format: '4v4',
-        minimumRosterSize: 4,
       }),
     ).rejects.toThrow('Not allowed');
     expect(await seasons(s.t)).toEqual([]);
@@ -200,30 +223,119 @@ describe('seasons.create', () => {
     const { seasonId } = await s.adminA.mutation(api.seasons.create, {
       ...fall2026(s),
       leagueId: s.leagueD,
-      format: '10v10',
-      minimumRosterSize: 10,
     });
     expect(await s.t.run((ctx) => ctx.db.get('seasons', seasonId))).toMatchObject({
       leagueId: s.leagueD,
+      playersPerSide: 10,
+      minimumRosterSize: 10,
       status: 'draft',
     });
   });
 
-  describe('refused values', () => {
-    test('a format of another sport, and a format outside formatValidator', async () => {
+  describe('the division comes from the league', () => {
+    const created = async (s: Setup, leagueId: Id<'leagues'>, slug: string) => {
+      const { seasonId } = await s.adminA.mutation(api.seasons.create, {
+        ...fall2026(s),
+        leagueId,
+        slug,
+      });
+      return s.t.run((ctx) => ctx.db.get('seasons', seasonId));
+    };
+
+    test('a 4v4 league with no raised minimum stores 4 and 4', async () => {
       const s = await setup();
-      expect(
-        await refusal(s.adminA.mutation(api.seasons.create, { ...fall2026(s), format: '4v4' })),
-      ).toEqual({ field: 'format', code: 'formatInvalid', message: 'Choose a format.' });
-      await expect(
-        s.adminA.mutation(api.seasons.create, {
-          ...fall2026(s),
-          format: '3v3' as unknown as '7v7',
-        }),
-      ).rejects.toThrow();
+      expect(await created(s, s.leagueM, 'fall-2026')).toMatchObject({
+        playersPerSide: 4,
+        minimumRosterSize: 4,
+      });
+    });
+
+    test('a 6v6 league with a minimum of 8 stores 6 and 8', async () => {
+      const s = await setup();
+      await s.t.run((ctx) =>
+        ctx.db.patch('leagues', s.leagueM, { playersPerSide: 6, minimumRosterSize: 8 }),
+      );
+      expect(await created(s, s.leagueM, 'fall-2026')).toMatchObject({
+        playersPerSide: 6,
+        minimumRosterSize: 8,
+      });
+    });
+
+    test('a season already created keeps its values when the league changes later', async () => {
+      const s = await setup();
+      await created(s, s.leagueL, 'fall-2026');
+      await s.t.run((ctx) =>
+        ctx.db.patch('leagues', s.leagueL, { playersPerSide: 5, minimumRosterSize: 6 }),
+      );
+      const [season] = await seasons(s.t);
+      expect(season).toMatchObject({ playersPerSide: 7, minimumRosterSize: 7 });
+    });
+
+    test('a league with no players per side is refused with the message, and nothing is written', async () => {
+      const s = await setup();
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { playersPerSide: undefined }));
+      expect(await refusal(s.adminA.mutation(api.seasons.create, fall2026(s)))).toEqual({
+        code: 'leagueFormatMissing',
+        message: 'Set this league’s format in its details first.',
+      });
       expect(await seasons(s.t)).toEqual([]);
     });
 
+    test('a league without a format is refused before the season’s own fields are checked', async () => {
+      const s = await setup();
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { playersPerSide: undefined }));
+      expect(
+        await refusal(s.adminA.mutation(api.seasons.create, { ...fall2026(s), name: '   ' })),
+      ).toMatchObject({ code: 'leagueFormatMissing' });
+    });
+
+    test.each([0, 1, 2, 3, 4])(
+      'refuses caller %# of a league with no players per side as not allowed, not with the format message',
+      async (index) => {
+        const s = await setup();
+        await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { playersPerSide: undefined }));
+        const [, caller, message] = refusedCallers(s)[index];
+        const call = caller.mutation(api.seasons.create, fall2026(s));
+        await expect(call).rejects.toThrow(message);
+        await expect(call).rejects.not.toThrow('format');
+        expect(await seasons(s.t)).toEqual([]);
+      },
+    );
+
+    test('a league organizer of the league is refused the same way, and nothing is written', async () => {
+      const s = await setup();
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { playersPerSide: undefined }));
+      expect(await refusal(s.organizerL.mutation(api.seasons.create, fall2026(s)))).toMatchObject({
+        code: 'leagueFormatMissing',
+      });
+      expect(await seasons(s.t)).toEqual([]);
+    });
+
+    test('a league given its format afterwards takes seasons again', async () => {
+      const s = await setup();
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { playersPerSide: undefined }));
+      await refusal(s.adminA.mutation(api.seasons.create, fall2026(s)));
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { playersPerSide: 5 }));
+      const { seasonId } = await s.adminA.mutation(api.seasons.create, fall2026(s));
+      expect(await s.t.run((ctx) => ctx.db.get('seasons', seasonId))).toMatchObject({
+        playersPerSide: 5,
+        minimumRosterSize: 5,
+      });
+    });
+
+    test('refuses the format and minimum arguments it no longer takes', async () => {
+      const s = await setup();
+      await expect(
+        s.adminA.mutation(api.seasons.create, { ...fall2026(s), format: '7v7' } as never),
+      ).rejects.toThrow();
+      await expect(
+        s.adminA.mutation(api.seasons.create, { ...fall2026(s), minimumRosterSize: 7 } as never),
+      ).rejects.toThrow();
+      expect(await seasons(s.t)).toEqual([]);
+    });
+  });
+
+  describe('refused values', () => {
     test('a start after the end', async () => {
       const s = await setup();
       expect(
@@ -305,8 +417,6 @@ describe('seasons.create', () => {
         s.adminA.mutation(api.seasons.create, {
           ...fall2026(s),
           leagueId: s.leagueM,
-          format: '4v4',
-          minimumRosterSize: 4,
         }),
       ).resolves.toBeDefined();
       await expect(
@@ -328,49 +438,6 @@ describe('seasons.create', () => {
       expect(await seasons(s.t)).toEqual([]);
       await expect(
         s.adminA.mutation(api.seasons.create, { ...fall2026(s), name: 'x'.repeat(100) }),
-      ).resolves.toBeDefined();
-    });
-
-    test('a minimum of 100, and a non-integer minimum', async () => {
-      const s = await setup();
-      for (const minimumRosterSize of [100, 7.5, Number.NaN]) {
-        expect(
-          await refusal(
-            s.adminA.mutation(api.seasons.create, { ...fall2026(s), minimumRosterSize }),
-          ),
-        ).toEqual({
-          field: 'minimumRosterSize',
-          code: 'minimumOutOfRange',
-          message: 'Enter a whole number from 7 to 99.',
-        });
-      }
-      expect(await seasons(s.t)).toEqual([]);
-    });
-
-    test('a minimum below the format’s names the format’s minimum; raising it is allowed', async () => {
-      const s = await setup();
-      expect(
-        await refusal(
-          s.adminA.mutation(api.seasons.create, { ...fall2026(s), minimumRosterSize: 6 }),
-        ),
-      ).toEqual({
-        field: 'minimumRosterSize',
-        code: 'minimumBelowFormat',
-        message: '7v7 needs at least 7 players. Enter 7 or more.',
-      });
-      expect(await seasons(s.t)).toEqual([]);
-
-      const { seasonId } = await s.adminA.mutation(api.seasons.create, {
-        ...fall2026(s),
-        minimumRosterSize: 9,
-      });
-      expect((await s.t.run((ctx) => ctx.db.get('seasons', seasonId)))?.minimumRosterSize).toBe(9);
-      await expect(
-        s.adminA.mutation(api.seasons.create, {
-          ...fall2026(s),
-          slug: 'max',
-          minimumRosterSize: 99,
-        }),
       ).resolves.toBeDefined();
     });
   });
@@ -421,7 +488,8 @@ describe('seasons.listForOrganizer', () => {
 
   test('returns each season’s fields with the format’s display name', async () => {
     const s = await setup();
-    await s.adminA.mutation(api.seasons.create, { ...fall2026(s), minimumRosterSize: 9 });
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.leagueL, { minimumRosterSize: 9 }));
+    await s.adminA.mutation(api.seasons.create, fall2026(s));
     const rows = await s.adminA.query(api.seasons.listForOrganizer, { leagueId: s.leagueL });
     expect(rows).toEqual([
       {

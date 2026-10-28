@@ -3,7 +3,6 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
-import { formatLabel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { registrationIsOpen, seasonPhase } from './lib/registration';
 import { checkSeasonFields } from './lib/seasonInput';
@@ -170,7 +169,10 @@ describe('seed:demo', () => {
           organization: organization.slug,
           league: league.slug,
           season,
-          sport: league.sport,
+          leagueDivision: {
+            playersPerSide: league.playersPerSide,
+            minimumRosterSize: league.minimumRosterSize ?? league.playersPerSide,
+          },
         });
       }
       return result;
@@ -262,18 +264,20 @@ describe('seed:demo', () => {
         status: 'published',
       },
     ]);
-    for (const { sport, season } of rows) {
+    for (const { leagueDivision, season } of rows) {
       expect(
-        checkSeasonFields(sport, {
+        checkSeasonFields({
           name: season.name,
           slug: season.slug,
           startDate: season.startDate,
           endDate: season.endDate,
           registrationDeadline: season.registrationDeadline,
-          format: formatLabel(season.playersPerSide!),
-          minimumRosterSize: season.minimumRosterSize,
         }),
       ).toEqual({});
+      expect({
+        playersPerSide: season.playersPerSide,
+        minimumRosterSize: season.minimumRosterSize,
+      }).toEqual(leagueDivision);
     }
   });
 
@@ -1200,6 +1204,53 @@ describe('seed:demo seasons dated from the run', () => {
       ['sunday-reverse-coed-4s', 'summer-2027'],
       ['coed-7v7-rec', 'summer-2027'],
     ]);
+  });
+
+  test('gives the closed demo season a later open season of its league to link to, and the open one its address and division', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const slugs = { orgSlug: 'gulf-coast-sport-social', leagueSlug: 'coed-7v7-rec' };
+    const closed = await t.query(api.seasons.getPublicPage, {
+      ...slugs,
+      seasonSlug: 'next-season',
+    });
+    const upcoming = closed?.league.upcomingSeasons ?? [];
+    expect(upcoming.map((season) => season.slug)).toContain('summer-2027');
+    const next = upcoming.find(
+      (season) => season.slug !== 'next-season' && registrationIsOpen(season, RUN),
+    );
+    expect(next?.slug).toBe('summer-2027');
+    const open = await t.query(api.seasons.getPublicPage, { ...slugs, seasonSlug: 'summer-2027' });
+    expect(open?.league.locations?.[0]?.address).toMatch(/Corpus Christi/);
+    expect(open?.league.divisionLabel).toBe('Coed · 7v7 · Rec');
+  });
+
+  test('shows the public league pages their card, statuses, and empty state', async () => {
+    const t = setup();
+    await t.mutation(internal.seed.insertDemoData, {});
+    const orgSlug = 'gulf-coast-sport-social';
+    const sunday = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'sunday-reverse-coed-4s',
+    });
+    const phases = (sunday?.seasons ?? []).map((season) => [season.slug, seasonPhase(season, RUN)]);
+    expect(phases).toEqual([
+      ['summer-2027', 'registrationOpen'],
+      ['current-season', 'inProgress'],
+    ]);
+    const coed = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'coed-7v7-rec',
+    });
+    expect(coed?.seasons?.map((season) => [season.slug, seasonPhase(season, RUN)])).toEqual([
+      ['summer-2027', 'registrationOpen'],
+      ['next-season', 'registrationClosed'],
+    ]);
+    const overThirty = await t.query(api.leagues.getPublicPage, {
+      orgSlug,
+      leagueSlug: 'men-s-over-30-11v11',
+    });
+    expect(overThirty?.seasons).toEqual([]);
   });
 
   test('is insert-only: a later run changes no date, so staging keeps the phases of its first run', async () => {

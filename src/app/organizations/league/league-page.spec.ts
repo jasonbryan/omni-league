@@ -197,9 +197,32 @@ describe('LeaguePage', () => {
       expect(text(panel.querySelector('h2'))).toBe('Seasons');
       expect(text(panel.querySelector('p.font-medium'))).toBe('No seasons yet');
       expect(text(panel)).toContain(
-        'Seasons you create appear here as drafts until you publish them.',
+        'Each run of Coed 7v7 Rec is a season, with its own dates, registration, teams, and schedule. Seasons you create appear here as drafts until you publish them.',
       );
       expect(panel.querySelector('ul')).toBeNull();
+    });
+
+    it('none yet: the empty state’s "Create a season" link jumps to the form and moves focus to it', async () => {
+      await open(COED, []);
+      const link = page.querySelector<HTMLAnchorElement>(
+        'section[aria-labelledby="seasons-heading"] a',
+      )!;
+      expect(text(link)).toBe('Create a season');
+      expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#create-season`);
+      const section = page.querySelector<HTMLElement>('#create-season')!;
+      const scrolled = vi.fn();
+      section.scrollIntoView = scrolled;
+      link.click();
+      await o.flush();
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(page.querySelector('#name'));
+    });
+
+    it('populated: the list carries no "Create a season" link', async () => {
+      await open(COED, SEASONS);
+      expect(
+        page.querySelector('section[aria-labelledby="seasons-heading"] a[href$="#create-season"]'),
+      ).toBeNull();
     });
 
     it('populated (state 3): a row per season, in the order given, with status, dates, deadline, and format', async () => {
