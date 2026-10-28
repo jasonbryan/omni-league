@@ -80,6 +80,42 @@ test.describe('organization page: Manage', () => {
     expect(html).toContain('data-hero-actions');
   });
 
+  test(
+    'the raw HTML and its caching headers are the same for a signed-in org admin as for an anonymous request',
+    RAW_HTTP,
+    async ({ page, request }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'raw HTML does not depend on the viewport',
+      );
+      const tenant = await tenantWithOpenSeason();
+      await signedInAs(page, 'orgAdmin', tenant);
+      const anonymous = await fetchRawHtml(request, tenant.path);
+      const signedIn = await fetchRawHtml(page.context().request, tenant.path);
+      expect(await page.context().cookies()).not.toHaveLength(0);
+      expect(signedIn.status).toBe(200);
+      expect(signedIn.html).not.toMatch(/>\s*Manage\s*</);
+      expect(signedIn.html).not.toContain(`/app/organizations/${tenant.slug}`);
+      expect(signedIn.headers['cache-control']).toBe(anonymous.headers['cache-control']);
+      expect(signedIn.headers['netlify-vary']).toBe(anonymous.headers['netlify-vary']);
+      expect(signedIn.headers['set-cookie']).toBeUndefined();
+    },
+  );
+
+  test('an org admin of another organization sees no Manage', async ({ page }) => {
+    const own = await tenantWithoutOpenSeason();
+    const other = await tenantWithoutOpenSeason();
+    await signedInAs(page, 'orgAdmin', own);
+    await page.goto(own.path);
+    await expect(manage(page)).toBeVisible();
+    const held = await holdQueries(page, [VIEWER_IS_ORG_ADMIN]);
+    await page.goto(other.path);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    held.release();
+    await expect(page.getByRole('link', { name: /^Account:/ })).toBeVisible();
+    await expect(manage(page)).toHaveCount(0);
+  });
+
   test.describe('a signed-in visitor who is not an org admin', () => {
     for (const [label, role] of [
       ['a non-member', null],
