@@ -19,7 +19,7 @@ const CITY_STATE_MESSAGE = 'Use 2 to 60 characters, such as Corpus Christi, TX.'
 const FORM_ORDER = [
   'a[href$="#main"]',
   'header a[href="/"]',
-  'header a[href="/app"]',
+  'header a[href="/app/account"]',
   'main a[href="/app"]',
   '#name',
   '#cityState',
@@ -58,8 +58,7 @@ test.describe('create an organization', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
-        'header a[href="/app"]',
-        'main button',
+        'header a[href="/app/account"]',
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
       ],

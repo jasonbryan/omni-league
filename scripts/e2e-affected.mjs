@@ -474,6 +474,12 @@ export const AREAS = [
     specs: [SESSION],
   },
   {
+    // The account link shows on every page of a signed-in visitor, and the specs that sign a user in read it.
+    name: 'account link',
+    test: named('src/app/shell/', ['account-link']),
+    specs: [SESSION],
+  },
+  {
     name: 'not-found view',
     test: inDir('src/app/not-found/'),
     // league-page.spec.ts and season-page.spec.ts assert the league and season pages' 404.

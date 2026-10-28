@@ -192,8 +192,9 @@ test.describe('focus on page loads, redirects, and other route changes', () => {
 
   test('Sign out ends on / with focus on main', async ({ page }) => {
     await signUp(page, newUser('Out'));
-    const panel = page.getByRole('region', { name: 'Signed-in account' });
-    await panel.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('link', { name: /^Account settings: / }).click();
+    await expect(page).toHaveURL(`${baseURL}/app/account`);
+    await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
     await expect(page.locator('main#main')).toBeFocused();

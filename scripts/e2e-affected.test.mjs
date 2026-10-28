@@ -151,12 +151,21 @@ describe('selectSpecs: mapped areas', () => {
       'src/app/sign-in/sign-in-page.ts',
       'src/app/sign-up/sign-up-page.ts',
       'src/app/account/account-page.ts',
+      'src/app/account/account-settings-page.ts',
       'src/app/account/your-organizations.ts',
+      'src/app/shell/account-link.ts',
       'convex/users.ts',
     ]) {
       assert.deepEqual(specsFor([file]), expected, file);
     }
-    for (const name of ['sign-in', 'sign-in-admin', 'sign-up', 'auth-session', 'top-bar']) {
+    for (const name of [
+      'sign-in',
+      'sign-in-admin',
+      'sign-up',
+      'auth-session',
+      'top-bar',
+      'account-settings',
+    ]) {
       assert.ok(sessionSpecs.includes(`e2e/${name}.spec.ts`), name);
     }
   });
