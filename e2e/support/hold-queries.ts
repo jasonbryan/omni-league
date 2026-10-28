@@ -21,7 +21,7 @@ export interface HeldQueries {
   isHolding: () => boolean;
   release: () => void;
   watchNewSubscriptions: () => void;
-  hold: () => void;
+  holdNextAnswer: () => void;
 }
 
 // Frames after a held answer are kept too, because Convex applies transitions in order.
