@@ -86,6 +86,16 @@ describe('leagueSeasonStatus', () => {
     expect(leagueSeasonStatus([closed, open], noon('2027-05-25'))?.season?.slug).toBe('open');
   });
 
+  it('shows the open season that starts first when two share a deadline, then the lower slug', () => {
+    const later = season('a', '2027-07-01', '2027-08-29', '2027-05-23');
+    const earlier = season('c', '2027-06-06', '2027-08-29', '2027-05-23');
+    const sameStart = season('b', '2027-06-06', '2027-08-29', '2027-05-23');
+    expect(leagueSeasonStatus([later, earlier], noon('2027-04-01'))?.season?.slug).toBe('c');
+    expect(leagueSeasonStatus([earlier, sameStart, later], noon('2027-04-01'))?.season?.slug).toBe(
+      'b',
+    );
+  });
+
   it('shows the next season when none is open', () => {
     const underway = season('underway', '2027-03-01', '2027-07-01', '2027-02-01');
     expect(leagueSeasonStatus([NEXT, underway], noon('2027-05-25'))).toMatchObject({
