@@ -16,8 +16,10 @@ const KIT_CSS = KIT_BLOCK.exec(readFileSync(MOCKUP, 'utf8'))?.[1] ?? '';
 const COARSE_POINTER = '(pointer: coarse)';
 const FINE_POINTER_HEIGHT = 36;
 const COARSE_POINTER_HEIGHT = 44;
+const COARSE_POINTER_WIDTH = 44;
 
 const SPORTS = ['Beach volleyball', 'Soccer', 'Softball'];
+const LEVELS = ['B', 'AA'];
 
 const choice = (type: 'radio' | 'checkbox', name: string, label: string): string =>
   `<label class="${CHIP_CHOICE_WRAPPER_CLASSES}"><input type="${type}" name="${name}" class="${CHIP_CHOICE_INPUT_CLASSES}" /><span class="${CHIP_CHOICE_LABEL_CLASSES}">${label}</span></label>`;
@@ -32,6 +34,10 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><titl
     <a href="#all" aria-current="page" class="${chipLinkClasses(true)}">All sports</a>
     <a href="#soccer" class="${chipLinkClasses(false)}">Soccer</a>
   </nav>
+  <fieldset class="mt-4">
+    <legend class="mb-1.5 text-sm font-medium">Level</legend>
+    <div class="flex flex-wrap gap-2">${LEVELS.map((level) => choice('radio', 'level', level)).join('')}</div>
+  </fieldset>
   <div id="foreground-probe" class="bg-foreground"></div>
 </body></html>`;
 
@@ -88,9 +94,32 @@ test.describe('chip classes in the mockup kit', () => {
   test('every chip is 36px on fine pointers and 44px on touch screens', async ({ page }) => {
     const height = await expectedHeight(page);
     const chips = page.locator('span.rounded-full, a.rounded-full');
-    await expect(chips).toHaveCount(SPORTS.length + 3);
+    await expect(chips).toHaveCount(SPORTS.length + LEVELS.length + 3);
     for (const chip of await chips.all()) {
       expect(Math.round((await chip.boundingBox())?.height ?? 0)).toBe(height);
+    }
+  });
+
+  test('a one-letter chip is at least 44px wide on touch screens and keeps its natural width on fine pointers', async ({
+    page,
+  }) => {
+    const coarse = await page.evaluate((query) => matchMedia(query).matches, COARSE_POINTER);
+    const level = chipOf(page.getByRole('radio', { name: 'B', exact: true }));
+    const box = await level.boundingBox();
+    expect(box).not.toBeNull();
+    if (coarse) {
+      expect(Math.round(box?.width ?? 0)).toBeGreaterThanOrEqual(COARSE_POINTER_WIDTH);
+      expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(COARSE_POINTER_HEIGHT);
+      const offsets = await level.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const text = range.getBoundingClientRect();
+        const chip = element.getBoundingClientRect();
+        return { left: text.left - chip.left, right: chip.right - text.right };
+      });
+      expect(Math.abs(offsets.left - offsets.right)).toBeLessThan(1);
+    } else {
+      expect(box?.width ?? 0).toBeLessThan(COARSE_POINTER_WIDTH);
     }
   });
 
