@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
-import { ConvexError } from 'convex/values';
+import { ConvexError, type Value } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
@@ -164,7 +164,14 @@ async function refusal(call: Promise<unknown>) {
     (e: unknown) => e,
   );
   expect(error).toBeInstanceOf(ConvexError);
-  return (error as ConvexError<{ field: string; code: string; message: string }>).data;
+  return (
+    error as ConvexError<{
+      field: string;
+      code: string;
+      message: string;
+      current?: { name: string; division?: Record<string, Value> };
+    }>
+  ).data;
 }
 
 function refusedCallers(s: Setup) {
@@ -612,4 +619,203 @@ describe('leagues.update edge cases', () => {
     ).rejects.toThrow('Not allowed');
     expect((await stored(s)).league).toMatchObject({ name: 'First', playersPerSide: 4 });
   });
+});
+
+const sundayExpected = {
+  name: 'Sunday Reverse Coed 4s',
+  gender: 'coed' as const,
+  playersPerSide: 4,
+  level: 'bb' as const,
+  ageGroup: 'adult' as const,
+};
+
+const CHANGED_SINCE_MESSAGE =
+  'Someone else changed this league while you were editing. Check the details and save again.';
+
+describe('leagues.update with expected values', () => {
+  test('writes when the league still holds the expected values', async () => {
+    const s = await setup();
+    await s.organizer.mutation(api.leagues.update, {
+      ...sundayArgs(s),
+      name: 'Renamed',
+      expected: sundayExpected,
+    });
+    expect((await stored(s)).league!.name).toBe('Renamed');
+  });
+
+  test('writes when no expected values are sent', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { playersPerSide: 6 }));
+    await s.organizer.mutation(api.leagues.update, { ...sundayArgs(s), name: 'Renamed' });
+    expect((await stored(s)).league).toMatchObject({ name: 'Renamed', playersPerSide: 4 });
+  });
+
+  test.each([
+    ['name', { name: 'Renamed by admin' }],
+    ['gender', { gender: 'mens' as const }],
+    ['format', { playersPerSide: 6 }],
+    ['level', { level: 'a' as const }],
+    ['age group', { ageGroup: 'over40' as const }],
+    ['minimum roster size', { minimumRosterSize: 9 }],
+  ])(
+    'refuses a save when another organizer changed the %s, with the current values, changing nothing',
+    async (_title, change) => {
+      const s = await setup();
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, change));
+      const before = await stored(s);
+      const data = await refusal(
+        s.organizer.mutation(api.leagues.update, {
+          ...sundayArgs(s),
+          name: 'Typed by organizer',
+          expected: sundayExpected,
+        }),
+      );
+      expect(data).toMatchObject({
+        field: 'name',
+        code: 'changedSince',
+        message: CHANGED_SINCE_MESSAGE,
+        current: {
+          name: before.league!.name,
+          division: {
+            gender: before.league!.gender,
+            playersPerSide: before.league!.playersPerSide,
+            level: before.league!.level,
+            ageGroup: before.league!.ageGroup,
+            ...(before.league!.minimumRosterSize !== undefined && {
+              minimumRosterSize: before.league!.minimumRosterSize,
+            }),
+          },
+        },
+      });
+      expect(await stored(s)).toEqual(before);
+    },
+  );
+
+  test('refuses when another organizer chose a custom level, naming it in the current values', async () => {
+    const s = await setup();
+    await s.t.run((ctx) =>
+      ctx.db.patch('leagues', s.sundayId, { level: 'a', customLevelId: s.goldA }),
+    );
+    const before = await stored(s);
+    const data = await refusal(
+      s.organizer.mutation(api.leagues.update, {
+        ...sundayArgs(s),
+        name: 'Typed by organizer',
+        expected: sundayExpected,
+      }),
+    );
+    expect(data).toMatchObject({
+      code: 'changedSince',
+      current: {
+        division: { level: 'a', customLevel: { customLevelId: s.goldA, name: 'Gold' } },
+      },
+    });
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('refuses when another organizer removed the custom level the form expected', async () => {
+    const s = await setup();
+    const before = await stored(s);
+    const data = await refusal(
+      s.organizer.mutation(api.leagues.update, {
+        ...sundayArgs(s),
+        expected: { ...sundayExpected, level: 'a', customLevelId: s.goldA },
+      }),
+    );
+    expect(data).toMatchObject({ code: 'changedSince', current: { division: { level: 'bb' } } });
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('a league holding a custom level of another organization refuses with values that name no custom level', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { customLevelId: s.goldB }));
+    const before = await stored(s);
+    const data = await refusal(
+      s.organizer.mutation(api.leagues.update, {
+        ...sundayArgs(s),
+        name: 'Typed by organizer',
+        expected: { ...sundayExpected, name: 'Stale name' },
+      }),
+    );
+    expect(data).toMatchObject({ code: 'changedSince', current: { division: { level: 'bb' } } });
+    expect(data.current?.division).not.toHaveProperty('customLevel');
+    expect(JSON.stringify(data)).not.toContain(s.goldB);
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('a league holding a custom level of another organization accepts the values the form was shown', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { customLevelId: s.goldB }));
+    await s.organizer.mutation(api.leagues.update, {
+      ...sundayArgs(s),
+      name: 'Renamed',
+      expected: sundayExpected,
+    });
+    const league = (await stored(s)).league!;
+    expect(league.name).toBe('Renamed');
+    expect(league.customLevelId).toBeUndefined();
+  });
+
+  test('a league without a division holds expected values that name only the league', async () => {
+    const s = await setup();
+    const legacyId = await s.t.run(async (ctx) => {
+      await insertTenant(ctx, {
+        organization: { name: 'Org C', slug: 'org-c' },
+        locations: [{ name: 'Court', address: '1 Court Rd' }],
+        leagues: [{ name: 'Legacy', sport: 'beachVolleyball', locations: ['Court'] }],
+      });
+      const league = (await ctx.db.query('leagues').collect()).find((l) => l.name === 'Legacy')!;
+      const userId = await ctx.db.insert('users', {
+        authUserId: 'admin-c',
+        name: 'admin-c',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId,
+        organizationId: league.organizationId,
+        role: 'orgAdmin',
+        leagueIds: [],
+      });
+      return league._id;
+    });
+    const adminC = s.t.withIdentity(identity('admin-c'));
+    const args = {
+      leagueId: legacyId,
+      name: 'Legacy Sand',
+      gender: 'coed' as const,
+      playersPerSide: 2,
+      level: 'b' as const,
+      ageGroup: 'adult',
+    };
+    const data = await refusal(
+      adminC.mutation(api.leagues.update, { ...args, expected: { name: 'Older name' } }),
+    );
+    expect(data).toMatchObject({ code: 'changedSince', current: { name: 'Legacy' } });
+    expect(data.current).not.toHaveProperty('division');
+    await adminC.mutation(api.leagues.update, { ...args, expected: { name: 'Legacy' } });
+    expect((await s.t.run((ctx) => ctx.db.get('leagues', legacyId)))!.name).toBe('Legacy Sand');
+  });
+
+  test.each([0, 1, 2, 3, 4])(
+    'refuses caller %#, matching or stale expected, with the permission error and no league values',
+    async (index) => {
+      const s = await setup();
+      await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { playersPerSide: 6 }));
+      const before = await stored(s);
+      const [, caller, message] = refusedCallers(s)[index];
+      for (const expected of [{ ...sundayExpected, playersPerSide: 6 }, sundayExpected]) {
+        const error = await caller
+          .mutation(api.leagues.update, { ...sundayArgs(s), name: 'Hijacked', expected })
+          .then(
+            () => null,
+            (e: unknown) => e,
+          );
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(ConvexError);
+        expect((error as Error).message).toContain(message);
+        expect((error as Error).message).not.toContain('Sunday Reverse Coed 4s');
+      }
+      expect(await stored(s)).toEqual(before);
+    },
+  );
 });

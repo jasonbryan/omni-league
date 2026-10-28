@@ -290,7 +290,7 @@ test.describe('sign-up', () => {
     await expectAccessible(page, { expectedOrder: signUpOrder(page) });
   });
 
-  test('signs up, lands on /app showing "Signed in as <name>", and Sign out goes to /', async ({
+  test('signs up, lands on /app, and Sign out on Account settings goes to /', async ({
     page,
   }, testInfo) => {
     // The mockup's name, so the screenshot compares with the mockup; the email is unique.
@@ -299,11 +299,9 @@ test.describe('sign-up', () => {
     await signUp(page, user);
 
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(page).toHaveTitle('Your account | Omni League');
-    await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
-    const panel = page.getByRole('region', { name: 'Signed-in account' });
-    await expect(panel).toContainText('Signed in as');
-    await expect(panel).toContainText(user.name);
+    await expect(page).toHaveTitle('Home | Omni League');
+    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+    await expect(page.getByRole('link', { name: `Account settings: ${user.name}` })).toBeVisible();
     if (!remoteBaseUrl) {
       const account = await accountByEmail(user.email);
       expect(account).toMatchObject({ name: user.name, sessions: 1 });
@@ -314,8 +312,7 @@ test.describe('sign-up', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
-        'header a[href="/app"]',
-        'main button',
+        'header a[href="/app/account"]',
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
       ],
@@ -323,9 +320,14 @@ test.describe('sign-up', () => {
 
     await page.goto('/sign-up');
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(panel).toContainText(user.name);
 
-    await panel.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('link', { name: `Account settings: ${user.name}` }).click();
+    const panel = page.getByRole('region', { name: 'Your details' });
+    await expect(page).toHaveURL(`${baseURL}/app/account`);
+    await expect(panel).toContainText(user.name);
+    await expect(panel).toContainText(user.email);
+
+    await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);
     await expect(page.getByRole('heading', { level: 1, name: 'Omni League' })).toBeVisible();
     if (!remoteBaseUrl)
@@ -338,7 +340,7 @@ test.describe('sign-up', () => {
   test('returnTo=//evil.example/x lands on /app', VIEWPORT_AGNOSTIC, async ({ page }) => {
     await signUp(page, newUser('Return'), '/sign-up?returnTo=%2F%2Fevil.example%2Fx');
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   });
 
   for (const raw of [
@@ -357,12 +359,12 @@ test.describe('sign-up', () => {
         const tokens = tokensSettled(page);
         await signUp(page, newUser('Variant'), `/sign-up${query}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
         await tokens;
 
         await page.goto(`/sign-up${query}`);
         await expect(page).toHaveURL(`${baseURL}/app`);
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
       },
     );
   }

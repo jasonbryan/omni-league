@@ -147,7 +147,13 @@ test.describe('top bar', () => {
 
       await link.click();
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(accountLink(page)).toHaveAttribute('aria-current', 'page');
+      const settingsLink = page.locator('header a[href="/app/account"]');
+      await expect(settingsLink).toHaveAccessibleName(`Account settings: ${user.name}`);
+      await expect(settingsLink).not.toHaveAttribute('aria-current');
+
+      await settingsLink.click();
+      await expect(page).toHaveURL(`${baseURL}/app/account`);
+      await expect(settingsLink).toHaveAttribute('aria-current', 'page');
     });
 
     test('a long name ends in an ellipsis past 144px on a phone and 256px from 768px', async ({

@@ -12,9 +12,24 @@ import type { Sport } from '../../../../convex/lib/sports';
 
 export type DivisionChoice = 'gender' | 'format' | 'level';
 
+export type DivisionDetail = 'gender' | 'format' | 'level' | 'ageGroup' | 'minimumRosterSize';
+
 const CHOICES: readonly DivisionChoice[] = ['gender', 'format', 'level'];
+const DETAILS: readonly DivisionDetail[] = [
+  'gender',
+  'format',
+  'level',
+  'ageGroup',
+  'minimumRosterSize',
+];
+const DETAIL_CHOICE: Partial<Record<DivisionDetail, DivisionChoice>> = {
+  gender: 'gender',
+  format: 'format',
+  level: 'level',
+};
 const DEFAULT_GENDER: Gender = 'coed';
 const DEFAULT_LEVEL: StandardLevel = 'rec';
+const DEFAULT_AGE_GROUP: AgeGroup = 'adult';
 
 export interface SavedDivision {
   gender: Gender;
@@ -28,6 +43,41 @@ export interface SavedDivision {
 export interface ChosenCustomLevel {
   customLevelId: Id<'customLevels'>;
   standardLevel: StandardLevel;
+}
+
+interface DivisionValues {
+  gender: Gender;
+  playersPerSide: number | null;
+  level: StandardLevel;
+  customLevelId: Id<'customLevels'> | null;
+  ageGroup: AgeGroup;
+  minimumText: string;
+}
+
+function valuesOf(saved: SavedDivision | undefined): DivisionValues {
+  return {
+    gender: saved?.gender ?? DEFAULT_GENDER,
+    playersPerSide: saved?.playersPerSide ?? null,
+    level: saved?.level ?? DEFAULT_LEVEL,
+    customLevelId: saved?.customLevelId ?? null,
+    ageGroup: saved?.ageGroup ?? DEFAULT_AGE_GROUP,
+    minimumText: saved?.minimumRosterSize === undefined ? '' : String(saved.minimumRosterSize),
+  };
+}
+
+function differs(a: DivisionValues, b: DivisionValues, detail: DivisionDetail): boolean {
+  switch (detail) {
+    case 'gender':
+      return a.gender !== b.gender;
+    case 'format':
+      return a.playersPerSide !== b.playersPerSide;
+    case 'level':
+      return a.level !== b.level || a.customLevelId !== b.customLevelId;
+    case 'ageGroup':
+      return a.ageGroup !== b.ageGroup;
+    case 'minimumRosterSize':
+      return a.minimumText !== b.minimumText;
+  }
 }
 
 interface LevelChoice {
@@ -50,6 +100,9 @@ export class LeagueDivision {
   private levelBeforeCustom: LevelChoice | null = null;
   // A saved division is not news when the name states it again.
   private loaded = false;
+  private savedBaseline: SavedDivision | undefined;
+  private baselineValues = valuesOf(undefined);
+  private readonly savedByOthers = new Set<DivisionChoice>();
 
   readonly filledFromName: Signal<readonly DivisionChoice[]> = computed(() =>
     CHOICES.filter((choice) => this.filled().has(choice)),
@@ -60,6 +113,15 @@ export class LeagueDivision {
     const text = this.minimumText().trim();
     return text === '' ? undefined : Number(text);
   });
+
+  get baseline(): SavedDivision | undefined {
+    return this.savedBaseline;
+  }
+
+  edited(): ReadonlySet<DivisionDetail> {
+    const current = this.values();
+    return new Set(DETAILS.filter((detail) => differs(current, this.baselineValues, detail)));
+  }
 
   chooseGender(gender: Gender): void {
     this.gender.set(gender);
@@ -136,6 +198,22 @@ export class LeagueDivision {
     this.chosenByHand.set(new Set(saved.customLevelId === undefined ? [] : ['level']));
     this.filled.set(new Set());
     this.loaded = true;
+    this.savedByOthers.clear();
+    this.savedBaseline = saved;
+    this.baselineValues = valuesOf(saved);
+  }
+
+  takeSavedByOthers(saved: SavedDivision): void {
+    const next = valuesOf(saved);
+    const edited = this.edited();
+    for (const detail of DETAILS) {
+      if (!differs(next, this.baselineValues, detail)) continue;
+      const choice = DETAIL_CHOICE[detail];
+      if (choice) this.savedByOthers.add(choice);
+      if (!edited.has(detail)) this.take(detail, next);
+    }
+    this.savedBaseline = saved;
+    this.baselineValues = next;
   }
 
   fillFromName(name: string, sport: Sport | null): void {
@@ -156,11 +234,49 @@ export class LeagueDivision {
     this.level.set(DEFAULT_LEVEL);
     this.customLevelId.set(null);
     this.levelBeforeCustom = null;
-    this.ageGroup.set('adult');
+    this.ageGroup.set(DEFAULT_AGE_GROUP);
     this.minimumText.set('');
     this.chosenByHand.set(new Set());
     this.filled.set(new Set());
     this.loaded = false;
+    this.savedByOthers.clear();
+    this.savedBaseline = undefined;
+    this.baselineValues = valuesOf(undefined);
+  }
+
+  private values(): DivisionValues {
+    return {
+      gender: this.gender(),
+      playersPerSide: this.playersPerSide(),
+      level: this.level(),
+      customLevelId: this.customLevelId(),
+      ageGroup: this.ageGroup(),
+      minimumText: this.minimumText(),
+    };
+  }
+
+  private take(detail: DivisionDetail, next: DivisionValues): void {
+    switch (detail) {
+      case 'gender':
+        this.gender.set(next.gender);
+        break;
+      case 'format':
+        this.playersPerSide.set(next.playersPerSide);
+        break;
+      case 'level':
+        this.level.set(next.level);
+        this.customLevelId.set(next.customLevelId);
+        this.levelBeforeCustom = null;
+        break;
+      case 'ageGroup':
+        this.ageGroup.set(next.ageGroup);
+        break;
+      case 'minimumRosterSize':
+        this.minimumText.set(next.minimumText);
+        break;
+    }
+    const choice = DETAIL_CHOICE[detail];
+    if (choice) this.forget(choice);
   }
 
   // A value the name once stated and now does not goes back to its default, so the status line stays true.
@@ -171,7 +287,7 @@ export class LeagueDivision {
     fallback: T,
     set: (value: T) => void,
   ): void {
-    if (this.chosenByHand().has(choice)) return;
+    if (this.chosenByHand().has(choice) || this.savedByOthers.has(choice)) return;
     if (this.loaded && stated === current) return;
     if (stated !== undefined) {
       set(stated);

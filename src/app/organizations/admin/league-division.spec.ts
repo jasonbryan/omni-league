@@ -314,6 +314,107 @@ describe('LeagueDivision: a custom level', () => {
   });
 });
 
+describe('LeagueDivision: values saved by someone else', () => {
+  const SAVED = {
+    gender: 'coed' as const,
+    playersPerSide: 4,
+    level: 'bb' as const,
+    ageGroup: 'adult' as const,
+  };
+
+  function loaded() {
+    const division = new LeagueDivision();
+    division.load(SAVED);
+    return division;
+  }
+
+  it('lists the choices that differ from the loaded values as edited', () => {
+    const division = loaded();
+    expect(division.edited()).toEqual(new Set());
+    division.chooseFormat(6);
+    division.setAgeGroup('over40');
+    division.setMinimumText('8');
+    expect(division.edited()).toEqual(new Set(['format', 'ageGroup', 'minimumRosterSize']));
+    division.chooseFormat(4);
+    expect(division.edited()).toEqual(new Set(['ageGroup', 'minimumRosterSize']));
+  });
+
+  it('counts a custom level and a level the name filled as edited', () => {
+    const division = loaded();
+    division.chooseCustomLevel(GOLD);
+    expect(division.edited()).toEqual(new Set(['level']));
+    division.load(SAVED);
+    division.fillFromName("Women's 6s A", 'beachVolleyball');
+    expect(division.edited()).toEqual(new Set(['gender', 'format', 'level']));
+  });
+
+  it('measures a league with no division against the defaults', () => {
+    const division = new LeagueDivision();
+    division.clear();
+    expect(division.edited()).toEqual(new Set());
+    division.chooseGender('mens');
+    expect(division.edited()).toEqual(new Set(['gender']));
+    expect(division.baseline).toBeUndefined();
+  });
+
+  it('takes the newer value into a choice that is not edited, and makes it the baseline', () => {
+    const division = loaded();
+    const newer = { ...SAVED, playersPerSide: 6, minimumRosterSize: 8 };
+    division.takeSavedByOthers(newer);
+    expect([division.playersPerSide(), division.minimumText()]).toEqual([6, '8']);
+    expect(division.baseline).toEqual(newer);
+    expect(division.edited()).toEqual(new Set());
+  });
+
+  it('keeps an edited choice as typed, and the newer value becomes its baseline', () => {
+    const division = loaded();
+    division.chooseFormat(2);
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    expect(division.playersPerSide()).toBe(2);
+    expect(division.baseline?.playersPerSide).toBe(6);
+    expect(division.edited()).toEqual(new Set(['format']));
+  });
+
+  it('takes a newer custom level, and drops a level the name filled before', () => {
+    const division = loaded();
+    division.takeSavedByOthers({ ...SAVED, level: 'a', customLevelId: GOLD.customLevelId });
+    expect([division.level(), division.customLevelId()]).toEqual(['a', GOLD.customLevelId]);
+    expect(division.edited()).toEqual(new Set());
+  });
+
+  it('stops the name from changing a choice whose baseline came from someone else', () => {
+    const division = loaded();
+    division.fillFromName('Coed 4s', 'beachVolleyball');
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
+    expect(division.playersPerSide()).toBe(6);
+    expect(division.filledFromName()).toEqual([]);
+  });
+
+  it('stops the name from changing an edited choice whose baseline came from someone else', () => {
+    const division = loaded();
+    division.fillFromName("Women's 2s", 'beachVolleyball');
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.fillFromName("Women's 3s", 'beachVolleyball');
+    expect(division.playersPerSide()).toBe(2);
+  });
+
+  it('still fills a choice the other save did not change', () => {
+    const division = loaded();
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.fillFromName("Women's 4s", 'beachVolleyball');
+    expect([division.gender(), division.playersPerSide()]).toEqual(['womens', 6]);
+  });
+
+  it('fills from the name again after the form loads its own save', () => {
+    const division = loaded();
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
+    division.load({ ...SAVED, playersPerSide: 6 });
+    division.fillFromName('Coed 4s', 'beachVolleyball');
+    expect(division.playersPerSide()).toBe(4);
+  });
+});
+
 describe('filledFromNameMessage', () => {
   it('names what was filled, as the mockup words it for all three', () => {
     expect(filledFromNameMessage(['gender', 'format', 'level'])).toBe(

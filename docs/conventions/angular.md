@@ -75,7 +75,7 @@ ADR 0013 sections 1 and 4 (#81):
 
 - **No manual registration.** The worker is registered only by `provideServiceWorker()` in `app.config.ts`, with `serviceWorkerRegistration(SERVICE_WORKER_BUILD, isDevMode())`, never by `navigator.serviceWorker.register()` or a second provider. Development builds, the e2e build, and a build without `angular.json`'s `serviceWorker` option (the kill switch) register none ([hosting, Service worker](../process/hosting.md#service-worker)).
 - **No data groups** in `ngsw-config.json`, and no `resources.urls` in an asset group: the worker keeps only same-origin build files. Convex data, auth requests, and signed-in data never pass through it. `npm run build` fails otherwise (`scripts/sw-config-check.mjs`; [hosting, Service worker](../process/hosting.md#service-worker)). Offline page data comes from saved copies kept by the app (#82).
-- **Updates go through `AppUpdates`** (`src/app/core/service-worker/app-updates.ts`): the new-version prompt, the unrecoverable message, the visibility check, and the forced reload past 14 days. Components do not subscribe to `SwUpdate` themselves.
+- **Updates go through `AppUpdates`** (`src/app/core/service-worker/app-updates.ts`): the automatic reload into a new version, the new-version prompt (shown only while unsaved input holds that reload), the unrecoverable message, and the visibility check. Components do not subscribe to `SwUpdate` themselves.
 
 ## Accessibility
 
