@@ -6,10 +6,11 @@ import { expect, test } from './support/fixtures';
 import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
+import { seedTenant } from './support/tenant';
 import { newUser, seedUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
-const LOCAL_ONLY = 'seeds a user on the local Convex backend';
+const LOCAL_ONLY = 'seeds a tenant or a user on the local Convex backend';
 const ACCOUNT_PATH = '/app/account';
 const SIGN_OUT_PATH = '/api/auth/sign-out';
 const TOUCH_TARGET = 44;
@@ -66,7 +67,9 @@ test.describe('account settings', () => {
   test('the top bar link inside the app opens it, and on a public page it still opens /app', async ({
     page,
   }) => {
+    test.skip(!!remoteBaseUrl, LOCAL_ONLY);
     const user = newUser('Link');
+    const tenant = await seedTenant();
     await signUp(page, user);
     await expect(page).toHaveURL(`${baseURL}/app`);
     await expect(topBarLink(page)).toHaveAccessibleName(`Account settings: ${user.name}`);
@@ -77,7 +80,7 @@ test.describe('account settings', () => {
     await expect(page).toHaveTitle('Account settings | Omni League');
     await expect(topBarLink(page)).toHaveAttribute('aria-current', 'page');
 
-    await page.goto('/no/such/public/page');
+    await page.goto(tenant.path);
     await expect(page.locator('header a[href="/app"]')).toHaveAccessibleName(
       `Account: ${user.name}`,
     );
@@ -141,20 +144,33 @@ test.describe('account settings', () => {
       await expect(page).toHaveURL(`${baseURL}/`);
     });
 
-    test('still signs this browser out and goes to / when the request fails', async ({ page }) => {
-      const user = newUser('Failing');
-      await signUp(page, user);
-      await openAccountSettings(page, user.name);
+    test.describe('when the request is refused', () => {
+      test.use({ expectedFailedRequests: [{ status: 500, path: SIGN_OUT_PATH }] });
 
-      await page.route(
-        (url) => url.pathname === SIGN_OUT_PATH,
-        (route) => route.abort('failed'),
-      );
-      await signOutButton(page).click();
-      await expect(page).toHaveURL(`${baseURL}/`);
+      test('still signs this browser out and goes to /', async ({ page }) => {
+        const user = newUser('Failing');
+        await signUp(page, user);
+        await openAccountSettings(page, user.name);
 
-      await page.goto('/app');
-      await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
+        await page.route(
+          (url) => url.pathname === SIGN_OUT_PATH,
+          (route) =>
+            route.fulfill({
+              status: 500,
+              headers: {
+                'access-control-allow-origin': new URL(baseURL).origin,
+                'access-control-allow-credentials': 'true',
+                'content-type': 'application/json',
+              },
+              body: '{"message":"boom"}',
+            }),
+        );
+        await signOutButton(page).click();
+        await expect(page).toHaveURL(`${baseURL}/`);
+
+        await page.goto('/app');
+        await expect(page).toHaveURL(`${baseURL}/sign-in?returnTo=%2Fapp`);
+      });
     });
   });
 
