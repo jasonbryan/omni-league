@@ -51,9 +51,16 @@ export const routes: Routes = [
     children: [
       {
         path: '',
-        title: 'Your account | Omni League',
+        title: 'Home | Omni League',
         canActivate: [requireSignedIn],
         loadComponent: () => import('./account/account-page').then((m) => m.AccountPage),
+      },
+      {
+        path: 'account',
+        title: 'Account settings | Omni League',
+        canActivate: [requireSignedIn],
+        loadComponent: () =>
+          import('./account/account-settings-page').then((m) => m.AccountSettingsPage),
       },
       {
         // Ahead of the admin area's `organizations/:slug`; the reserved slug `new` keeps the two apart.

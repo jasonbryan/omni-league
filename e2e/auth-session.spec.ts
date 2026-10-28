@@ -30,8 +30,10 @@ async function storesSessionToken(page: Page): Promise<boolean> {
   );
 }
 
+const ACCOUNT_PATH = '/app/account';
+
 async function signUp(page: Page, user: TestUser): Promise<void> {
-  await page.goto('/sign-up');
+  await page.goto(`/sign-up?returnTo=${encodeURIComponent(ACCOUNT_PATH)}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
   await page.locator('#name').fill(user.name);
   await page.locator('#email').fill(user.email);
@@ -40,7 +42,7 @@ async function signUp(page: Page, user: TestUser): Promise<void> {
   await page.getByRole('button', { name: /Create account/ }).click();
 }
 
-const panel = (page: Page) => page.getByRole('region', { name: 'Signed-in account' });
+const panel = (page: Page) => page.getByRole('region', { name: 'Your details' });
 
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle');
@@ -80,7 +82,7 @@ test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
     const user = newUser('Reload');
     const firstTokens = tokensSettled(page);
     await signUp(page, user);
-    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(page).toHaveURL(`${baseURL}${ACCOUNT_PATH}`);
     await expect(panel(page)).toContainText(user.name);
     await firstTokens;
 
@@ -94,7 +96,7 @@ test.describe('auth session store', VIEWPORT_AGNOSTIC, () => {
     // confirms it.
     expect(count(seen, TOKEN)).toBe(2);
 
-    await panel(page).getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);
     expect(await storesSessionToken(page)).toBe(false);
     // The sign-out response stores an empty session token; the session store's refetch removes it.
@@ -198,7 +200,7 @@ base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
 
         const firstTokens = tokensSettled(page);
         await signUp(page, user);
-        await expect(page).toHaveURL(`${baseURL}/app`);
+        await expect(page).toHaveURL(`${baseURL}${ACCOUNT_PATH}`);
         await expect(panel(page)).toContainText(user.name);
         await firstTokens;
         meAnswers.length = 0;
@@ -225,11 +227,13 @@ base.describe('auth token failures', VIEWPORT_AGNOSTIC, () => {
         );
 
         await page.reload();
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(
+          page.getByRole('heading', { level: 1, name: 'Account settings' }),
+        ).toBeVisible();
         await expect.poll(() => tokenRequests).toBeGreaterThanOrEqual(1);
         // Give the Convex client time to authenticate if it were going to.
         await page.waitForTimeout(3_000);
-        await expect(panel(page)).toHaveCount(0);
+        await expect(page.getByRole('main')).not.toContainText(user.name);
         expect(meAnswers).toEqual([]);
         expect(pageErrors).toEqual([]);
         const unexpected = consoleErrors.filter(
@@ -320,9 +324,9 @@ test.describe('auth session store: edge cases', VIEWPORT_AGNOSTIC, () => {
     for (const load of [
       () => page.reload(),
       () => page.goto('/'),
-      () => page.goto('/app'),
+      () => page.goto(ACCOUNT_PATH),
       () => page.reload(),
-      () => page.goto(`/sign-up?returnTo=${encodeURIComponent('/app')}`),
+      () => page.goto(`/sign-up?returnTo=${encodeURIComponent(ACCOUNT_PATH)}`),
     ]) {
       events.length = 0;
       await load();
@@ -346,7 +350,7 @@ test.describe('auth session store: edge cases', VIEWPORT_AGNOSTIC, () => {
 
     const tabs = await Promise.all(Array.from({ length: 4 }, () => context.newPage()));
     const perTab = tabs.map((tab) => ({ tab, seen: authRequests(tab) }));
-    await Promise.all(perTab.map(({ tab }) => tab.goto('/app')));
+    await Promise.all(perTab.map(({ tab }) => tab.goto(ACCOUNT_PATH)));
     await Promise.all(perTab.map(({ tab }) => expect(panel(tab)).toContainText(user.name)));
     for (const { seen } of perTab) {
       await expect.poll(() => count(seen, TOKEN), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
@@ -410,12 +414,12 @@ test.describe('auth session store: edge cases', VIEWPORT_AGNOSTIC, () => {
     expect(heldToken).not.toBe('');
 
     afterSignOut = true;
-    await panel(page).getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);
 
     // Client-side navigation keeps this document, so the held request stays in flight.
     await page.evaluate(() => {
-      history.pushState(null, '', '/sign-up');
+      history.pushState(null, '', '/sign-up?returnTo=%2Fapp%2Faccount');
       dispatchEvent(new PopStateEvent('popstate', { state: null }));
     });
     await expect(
@@ -426,7 +430,7 @@ test.describe('auth session store: edge cases', VIEWPORT_AGNOSTIC, () => {
     await page.locator('#password').fill(bob.password);
     await page.getByRole('checkbox', { name: 'I am 18 or older' }).click();
     await page.getByRole('button', { name: /Create account/ }).click();
-    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(page).toHaveURL(`${baseURL}${ACCOUNT_PATH}`);
     await expect(panel(page)).toContainText(bob.name);
     expect(intercepted).toBeGreaterThanOrEqual(3);
 
@@ -479,9 +483,11 @@ base.describe('auth token failures: a slow token request', VIEWPORT_AGNOSTIC, ()
           },
         );
         await page.reload();
-        await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+        await expect(
+          page.getByRole('heading', { level: 1, name: 'Account settings' }),
+        ).toBeVisible();
         await page.waitForTimeout(5_000);
-        await expect(panel(page)).toHaveCount(0);
+        await expect(page.getByRole('main')).not.toContainText(user.name);
         // Both setAuth calls share the first (slow) request; the forced refetch after a null token
         // is the second. Unshared, the first two would start together.
         expect(starts).toHaveLength(2);

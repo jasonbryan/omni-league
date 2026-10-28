@@ -11,7 +11,8 @@ Entries marked **Working definition — not yet specified by the owner** or **Wo
 ## Product (domain) terms
 
 - **Account:** the sign-in identity of a user. Only adults hold accounts at launch, and they sign in with email + password or Google. An invite needs no account, but accepting one, joining a team, or registering does. Source: [requirements, Constraints](product/requirements.md#constraints), [requirements, Accounts](product/requirements.md#accounts-players-and-guardians), [ADR 0008](decisions/0008-auth-provider.md).
-- **Account link:** the top bar's link to `/app` that replaces "Sign in" once the browser knows the user is signed in: initials and the user's name. Approved in `design/mockups/63-sign-in.html` (#63).
+- **Account link:** the top bar's link, to `/app` on a public page and to the Account settings page in the app, that replaces "Sign in" once the browser knows the user is signed in: initials and the user's name. Approved in `design/mockups/63-sign-in.html` (#63).
+- **Account settings page:** `/app/account`, the signed-in user's name and email, and where Sign out lives.
 - **Admin area:** the signed-in pages at `/app/organizations/<slug>` where an organization's org admins manage it: Overview, Locations, Leagues, and Staff, in the app shell with an admin sidebar. Anyone else gets the no-access view. Proposed in `design/mockups/65-organization-admin-locations.html` (#65, #66, #67).
 - **Adult confirmation:** the required "I am 18 or older" box on sign-up. The server refuses a sign-up without it and records it as `users.adultConfirmedAt`. Source: [ADR 0008](decisions/0008-auth-provider.md), #62.
 - **Age group (division):** the last part of a **Division**: Adult (the default), an optional adult bracket (30+, 35+, 40+, 50+, 55+, 60+), or a youth group U6 to U19. A youth group reads gender as Boys or Girls. Keys such as `over40` and `u10` in `convex/lib/divisions.ts`.
