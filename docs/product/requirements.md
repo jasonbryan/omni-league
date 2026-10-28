@@ -204,7 +204,7 @@ Slices are listed on #323. Leagues stay unaffected throughout.
    - double elimination later (#349, #376)
 4. **Find a program:** search text (#374), the search (#350), links from every page (#351), and the old league search retired in two later releases (#375, then #383).
 5. **Camps:** #352 to #354, the organization page (#372), search (#373), registration (#355 to #357), places (#382), and the waitlist (#358).
-6. **Training:** #359 to #364, the waitlists (#365, #368), registrations in `/app` (#367), and billing for camps and training (#366, which waits for the platform bill slice, Open 11).
+6. **Training:** #359 to #364, the waitlists (#365, #368), registrations in `/app` (#367), and billing for camps and training (#366, which waits for the platform bill slice, Open 14).
 
 ## Future (out of scope)
 
@@ -244,6 +244,9 @@ Questions still open for the owner. The planner records them as `status:blocked`
 8. **Free agents:** what a free agent tells the organizer (position, skill, availability), and whether free agents and waitlisted teams can withdraw (#133, #145).
 9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
 10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
-11. **Platform bill slice (#323, #366):** no issue yet builds ADR 0012's platform bill (pending invoice items on the connected account and their webhooks). It needs planning before camp and training registration can reach production.
+
+<!-- A new list after a gap, so Markdown and Prettier keep the item's number. -->
+
+14. **Platform bill slice (#323, #366):** no issue yet builds ADR 0012's platform bill (pending invoice items on the connected account and their webhooks). It needs planning before camp and training registration can reach production.
 
 Features beyond the above are not yet specified.
