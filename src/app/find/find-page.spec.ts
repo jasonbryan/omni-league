@@ -229,6 +229,64 @@ describe('FindPage with no results', () => {
   });
 });
 
+describe('FindPage suggestions', () => {
+  it('lists each suggested search as a link, in order, in a list labelled by "Try fewer words:", before "Clear the search"', async () => {
+    const harness = await open('/leagues?q=coed%204s%20austin');
+    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s', 'coed austin'] });
+    await settle(harness);
+    const section = results(harness)!;
+    const label = [...section.querySelectorAll('p')].find((p) => text(p) === 'Try fewer words:')!;
+    expect(label).toBeDefined();
+    const list = section.querySelector('ul')!;
+    expect(list.getAttribute('aria-labelledby')).toBe(label.id);
+    expect(
+      [...list.querySelectorAll('li a')].map((a) => [text(a), a.getAttribute('href')]),
+    ).toEqual([
+      ['coed 4s', '/leagues?q=coed%204s'],
+      ['coed austin', '/leagues?q=coed%20austin'],
+    ]);
+    const clear = [...section.querySelectorAll('a')].find((a) => text(a) === 'Clear the search')!;
+    expect(list.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(label.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(text(section.querySelector('[role="status"]'))).toBe(
+      'No leagues match “coed 4s austin”',
+    );
+  });
+
+  it('makes each suggestion link at least 44px high on touch screens', async () => {
+    const harness = await open('/leagues?q=coed%204s%20austin');
+    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    await settle(harness);
+    expect(results(harness)!.querySelector('ul a')!.className).toContain('pointer-coarse:min-h-11');
+  });
+
+  it('follows a suggestion to its search', async () => {
+    const harness = await open('/leagues?q=coed%204s%20austin');
+    subscription().emit({ more: false, rows: [], suggestions: ['coed 4s'] });
+    await settle(harness);
+    results(harness)!.querySelector<HTMLAnchorElement>('ul a')!.click();
+    await settle(harness);
+    expect(TestBed.inject(Router).url).toBe('/leagues?q=coed%204s');
+    expect(subscription().args).toEqual({ q: 'coed 4s' });
+    expect(input(harness).value).toBe('coed 4s');
+  });
+
+  it('shows no list when there are no suggestions', async () => {
+    const harness = await open('/leagues?q=pickleball');
+    subscription().emit(NO_RESULTS);
+    await settle(harness);
+    expect(text(results(harness))).not.toContain('Try fewer words');
+    expect(results(harness)!.querySelector('ul')).toBeNull();
+  });
+
+  it('shows no list when there are results', async () => {
+    const harness = await open('/leagues?q=coed');
+    subscription().emit(COED_RESULTS);
+    await settle(harness);
+    expect(text(results(harness))).not.toContain('Try fewer words');
+  });
+});
+
 describe('FindPage searching', () => {
   it('shows skeleton rows with a Searching status until the results arrive', async () => {
     const harness = await open('/leagues?q=coed');

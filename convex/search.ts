@@ -4,10 +4,13 @@ import { query } from './_generated/server';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { leagueLocationNames, leagueRowSeasons } from './lib/publicLeague';
 import { searchLeaguesValidator, type SearchLeagues } from './lib/publicPage';
-import { parseSearchQuery } from './lib/searchQuery';
+import { matchesEveryWord, parseSearchQuery, suggestFewerWords } from './lib/searchQuery';
 import { sportName } from './lib/sports';
 
 export const SEARCH_RESULT_LIMIT = 50;
+
+/** The most search results read, ranked by relevance, before the leagues that miss a word are dropped. */
+export const SEARCH_SCAN_LIMIT = 200;
 
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous search that reads no identity and returns only published fields, with no ids.
 export const leagues = query({
@@ -17,16 +20,17 @@ export const leagues = query({
     // The browser sends it already parsed; a caller that does not is held to the same limits.
     const q = parseSearchQuery([args.q]);
     if (q === '') return { rows: [], more: false };
-    const found = await ctx.db
+    const scanned = await ctx.db
       .query('leagues')
       .withSearchIndex('search_searchText', (search) =>
         search.search('searchText', q).eq('status', 'published'),
       )
-      .take(SEARCH_RESULT_LIMIT + 1);
+      .take(SEARCH_SCAN_LIMIT);
+    const kept = scanned.filter((league) => matchesEveryWord(league.searchText ?? '', q));
 
     const organizations = new Map<Id<'organizations'>, Doc<'organizations'> | null>();
     const rows: SearchLeagues['rows'] = [];
-    for (const league of found.slice(0, SEARCH_RESULT_LIMIT)) {
+    for (const league of kept.slice(0, SEARCH_RESULT_LIMIT)) {
       if (!organizations.has(league.organizationId)) {
         organizations.set(
           league.organizationId,
@@ -46,6 +50,12 @@ export const leagues = query({
         seasons: await leagueRowSeasons(ctx, league),
       });
     }
-    return { rows, more: found.length > SEARCH_RESULT_LIMIT };
+    const more = kept.length > SEARCH_RESULT_LIMIT;
+    if (kept.length > 0) return { rows, more };
+    const suggestions = suggestFewerWords(
+      scanned.map((league) => league.searchText ?? ''),
+      q,
+    );
+    return suggestions.length === 0 ? { rows, more } : { rows, more, suggestions };
   },
 });

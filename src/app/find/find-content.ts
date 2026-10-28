@@ -26,6 +26,9 @@ const RESULT_NOUN = { one: 'league', many: 'leagues' } as const;
 const LINK_CLASSES =
   'rounded-md group-hover:underline focus-visible:outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:outline-2 focus-visible:after:outline-ring';
 
+const TEXT_LINK_CLASSES =
+  'inline-flex items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11';
+
 @Component({
   selector: 'app-find-content',
   imports: [FindSkeleton, NgIcon, RouterLink, SavedCopyNote],
@@ -150,11 +153,24 @@ const LINK_CLASSES =
                     Omni League has beach volleyball, soccer, and softball leagues. Try a league
                     name, an organization, or a location such as “North Beach”.
                   </p>
-                  <a
-                    [routerLink]="action"
-                    class="mt-4 inline-flex items-center rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
-                    >Clear the search</a
-                  >
+                  @if (suggestions().length > 0) {
+                    <p id="suggestions-heading" class="mt-4 text-sm font-medium">
+                      Try fewer words:
+                    </p>
+                    <ul role="list" aria-labelledby="suggestions-heading" class="mt-1">
+                      @for (suggestion of suggestions(); track suggestion) {
+                        <li>
+                          <a
+                            [routerLink]="action"
+                            [queryParams]="{ q: suggestion }"
+                            [class]="suggestionClasses"
+                            >{{ suggestion }}</a
+                          >
+                        </li>
+                      }
+                    </ul>
+                  }
+                  <a [routerLink]="action" [class]="clearClasses">Clear the search</a>
                 </div>
               }
             }
@@ -177,6 +193,8 @@ export class FindContent {
   protected readonly noun = RESULT_NOUN;
   protected readonly searchButton = SEARCH_BUTTON;
   protected readonly linkClasses = LINK_CLASSES;
+  protected readonly suggestionClasses = TEXT_LINK_CLASSES;
+  protected readonly clearClasses = `mt-4 ${TEXT_LINK_CLASSES}`;
   protected readonly openBadge = OPEN_BADGE;
   protected readonly mutedBadge = MUTED_BADGE;
 
@@ -195,6 +213,8 @@ export class FindContent {
       status: leagueSeasonStatus(league.seasons, this.now()),
     })),
   );
+
+  protected readonly suggestions = computed(() => this.results()?.suggestions ?? []);
 
   protected readonly countLine = computed(() => {
     const count = this.rows().length;

@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { api } from './_generated/api';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
-import { SEARCH_RESULT_LIMIT } from './search';
+import { SEARCH_RESULT_LIMIT, SEARCH_SCAN_LIMIT } from './search';
 import { modules } from './test.setup';
 
 const season = (name: string, slug: string, startDate: string): NewSeason => ({
@@ -55,6 +55,27 @@ async function setup() {
     });
   });
   return t;
+}
+
+async function insertBulk(t: Awaited<ReturnType<typeof setup>>, count: number, words: string) {
+  await t.run(async (ctx) => {
+    const organization = (await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', 'lakeshore'))
+      .unique())!;
+    const start = (await ctx.db.query('leagues').collect()).length;
+    for (let i = start; i < start + count; i++) {
+      await ctx.db.insert('leagues', {
+        organizationId: organization._id,
+        name: `Bulk ${i} ${words}`,
+        slug: `bulk-${i}`,
+        sport: 'softball',
+        locationIds: [],
+        status: 'published',
+        searchText: `Bulk ${i} ${words}`,
+      });
+    }
+  });
 }
 
 const search = (t: Awaited<ReturnType<typeof setup>>, q: string) =>
@@ -206,10 +227,88 @@ describe('search.leagues', () => {
 
   test('holds a query to the same word and length limits as the page', async () => {
     const t = await setup();
-    const words = ['sunday', ...Array.from({ length: 30 }, (_, i) => `zzz${i}`)].join(' ');
-    expect((await search(t, words)).rows.map((row) => row.name)).toContain(
-      'Sunday Reverse Coed 4s',
-    );
+    const held = Array.from({ length: 16 }, (_, i) => `held${i}`);
+    await insertBulk(t, 1, held.join(' '));
+    const words = [...held, ...Array.from({ length: 10 }, (_, i) => `cut${i}`)].join(' ');
+    expect((await search(t, words)).rows).toHaveLength(1);
     await expect(search(t, 'x'.repeat(5000))).resolves.toEqual({ rows: [], more: false });
+  });
+});
+
+describe('search.leagues with several words', () => {
+  test('lists only the leagues that hold every word, and counts only those', async () => {
+    const t = await setup();
+    expect((await search(t, 'coed 4s corpus')).rows.map((row) => row.name)).toEqual([
+      'Sunday Reverse Coed 4s',
+    ]);
+    expect((await search(t, 'coed corp')).rows.map((row) => row.name)).toEqual([
+      'Sunday Reverse Coed 4s',
+    ]);
+    expect((await search(t, 'coed 4s austin')).rows).toEqual([]);
+  });
+
+  test('returns 50 rows holding both words, with more, from 120 that hold both among 140 that hold one', async () => {
+    const t = await setup();
+    await insertBulk(t, 140, 'alpha');
+    await insertBulk(t, 120, 'alpha beta');
+    const result = await search(t, 'alpha beta');
+    expect(result.rows).toHaveLength(SEARCH_RESULT_LIMIT);
+    expect(result.more).toBe(true);
+    expect(result.rows.every((row) => row.name.endsWith('alpha beta'))).toBe(true);
+  });
+
+  test('returns every league holding both words, with no more, from 30 that hold both among 10 that hold one', async () => {
+    const t = await setup();
+    await insertBulk(t, 10, 'alpha');
+    await insertBulk(t, 30, 'alpha beta');
+    const result = await search(t, 'alpha beta');
+    expect(result.rows).toHaveLength(30);
+    expect(result.more).toBe(false);
+  });
+
+  test('never returns a draft league that holds every word', async () => {
+    const t = await setup();
+    const names = (await search(t, 'coed draft')).rows.map((row) => row.name);
+    expect(names).toEqual([]);
+  });
+
+  test('reads no further than the scan limit', async () => {
+    const t = await setup();
+    await insertBulk(t, SEARCH_SCAN_LIMIT, 'alpha');
+    await insertBulk(t, 5, 'alpha beta');
+    const result = await search(t, 'alpha beta');
+    expect(result.rows).toEqual([]);
+    expect(result.more).toBe(false);
+  });
+});
+
+describe('search.leagues suggestions', () => {
+  test('are left out when there are rows, for one word, and when no shorter search matches', async () => {
+    const t = await setup();
+    expect(await search(t, 'coed')).not.toHaveProperty('suggestions');
+    expect(await search(t, 'pickleball')).not.toHaveProperty('suggestions');
+    expect(await search(t, 'pickleball austin')).not.toHaveProperty('suggestions');
+    expect(await search(t, 'coed 4s corpus')).not.toHaveProperty('suggestions');
+  });
+
+  test('offer the search that drops the word no league holds, as typed', async () => {
+    const t = await setup();
+    const result = await search(t, 'Coed 4s Austin');
+    expect(result.rows).toEqual([]);
+    expect(result.suggestions).toEqual(['Coed 4s']);
+  });
+
+  test('are at most 3, most leagues first, the later dropped word first on a tie', async () => {
+    const t = await setup();
+    await insertBulk(t, 3, 'alpha beta gamma');
+    await insertBulk(t, 2, 'alpha beta delta');
+    await insertBulk(t, 1, 'alpha gamma delta');
+    await insertBulk(t, 1, 'beta gamma delta');
+    const result = await search(t, 'alpha beta gamma delta zeta');
+    expect(result.rows).toEqual([]);
+    expect(result.suggestions).toBeUndefined();
+    const four = await search(t, 'alpha beta gamma delta');
+    expect(four.rows).toEqual([]);
+    expect(four.suggestions).toEqual(['alpha beta gamma', 'alpha beta delta', 'alpha gamma delta']);
   });
 });

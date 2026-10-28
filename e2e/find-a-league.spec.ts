@@ -200,8 +200,43 @@ test.describe('find a league: raw server HTML', () => {
     async ({ request }) => {
       const { id } = await seed();
       const harbor = await raw(request, url(`harbor ${id}`));
-      expect(resultNames(harbor.html)[0]).toBe(THURSDAY);
-      expect(resultNames(harbor.html)).not.toContain(DRAFT);
+      expect(resultNames(harbor.html)).toEqual([THURSDAY]);
+    },
+  );
+
+  test(
+    'a search lists only the leagues that hold every word, the last word as the start of a word',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seed();
+      const all = await raw(request, url(`coed 4s corpus ${id}`));
+      expect(resultNames(all.html)).toEqual([SUNDAY]);
+      expect(plainText(resultsSection(all.html))).toContain(
+        `1 league matches “coed 4s corpus ${id}”`,
+      );
+      const prefix = await raw(request, url(`coed ${id} corp`));
+      expect(resultNames(prefix.html).sort()).toEqual([SUNDAY, THURSDAY]);
+    },
+  );
+
+  test(
+    'a search with a word no league holds lists nothing and links the search without that word',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { id } = await seed();
+      const { html } = await raw(request, url(`coed 4s ${id} austin`));
+      const section = resultsSection(html);
+      expect(plainText(section)).toContain(`No leagues match “coed 4s ${id} austin”`);
+      expect(plainText(section)).toContain('Try fewer words:');
+      expect(resultNames(html)).toEqual([]);
+      const links = [
+        ...section.matchAll(/<li\b[^>]*>\s*<a\b[^>]*\bhref="([^"]*)"[^>]*>([^<]*)<\/a>/g),
+      ];
+      expect(links.map(([, href, name]) => [href, name])).toEqual([
+        [`/leagues?q=${encodeURIComponent(`coed 4s ${id}`)}`, `coed 4s ${id}`],
+      ]);
+      expect(section.indexOf('Try fewer words:')).toBeLessThan(section.indexOf('Clear the search'));
+      expect(section).toMatch(/<ul\b[^>]*aria-labelledby="suggestions-heading"/);
     },
   );
 
@@ -266,7 +301,7 @@ test.describe('find a league: in the browser', () => {
 
     await submit(page, `harbor ${id}`);
     await expect(page).toHaveURL(`${baseURL}${url(`harbor ${id}`)}`);
-    await expect(rowNames(page).first()).toHaveText(THURSDAY);
+    await expect(rowNames(page)).toHaveText([THURSDAY]);
 
     await page.goBack();
     await expect(page).toHaveURL(`${baseURL}${url(id)}`);
@@ -275,7 +310,7 @@ test.describe('find a league: in the browser', () => {
 
     await page.goForward();
     await expect(page).toHaveURL(`${baseURL}${url(`harbor ${id}`)}`);
-    await expect(rowNames(page).first()).toHaveText(THURSDAY);
+    await expect(rowNames(page)).toHaveText([THURSDAY]);
   });
 
   test(
@@ -355,8 +390,8 @@ test.describe('find a league: in the browser', () => {
       await hydrated(consoleGuard);
       await expect(rowNames(page)).toHaveText([THURSDAY]);
       await page.goto(url(`harbor ${id}`));
-      await expect(rowNames(page).first()).toHaveText(SUNDAY);
-      await expect(results(page)).not.toContainText(`${HARBOR},`);
+      await expect(results(page)).toContainText(`No leagues match “harbor ${id}”`);
+      await expect(rowNames(page)).toHaveCount(0);
     },
   );
 
@@ -379,6 +414,17 @@ test.describe('find a league: in the browser', () => {
     await expect(results(page)).toContainText('No leagues match “pickleball”');
     await screenshot(page, testInfo, '300-find-none');
     await expectAccessible(page);
+
+    await submit(page, `coed 4s ${id} austin`);
+    const fewer = results(page).getByRole('list', { name: 'Try fewer words:' });
+    await expect(fewer.getByRole('link')).toHaveText([`coed 4s ${id}`]);
+    await screenshot(page, testInfo, '300-find-fewer-words');
+    await expectAccessible(page);
+    await fewer.getByRole('link').click();
+    await expect(page).toHaveURL(`${baseURL}${url(`coed 4s ${id}`)}`);
+    await expect(rowNames(page)).toHaveText([SUNDAY]);
+    await submit(page, 'pickleball');
+    await expect(results(page)).toContainText('No leagues match “pickleball”');
     await results(page).getByRole('link', { name: 'Clear the search' }).click();
     await expect(page).toHaveURL(`${baseURL}/leagues`);
     await expect(results(page)).toHaveCount(0);
@@ -454,6 +500,38 @@ test.describe('find a league: in the browser', () => {
     });
   });
 
+  test.describe('on a wide touch screen with suggestions', () => {
+    test.use({ viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true });
+
+    test('each suggestion link is at least 44px tall', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'one project covers the wide screen');
+      const { id } = await seed();
+      await page.goto(url(`coed 4s ${id} austin`));
+      const link = results(page).getByRole('list', { name: 'Try fewer words:' }).getByRole('link');
+      await expect(link).toBeVisible();
+      expect((await link.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    });
+  });
+
+  test.describe('at 320px', () => {
+    test.use({ viewport: { width: 320, height: 700 } });
+
+    test('the no-results state with suggestions does not scroll sideways', async ({
+      page,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'one project covers the narrow screen',
+      );
+      const { id } = await seed();
+      await page.goto(url(`coed 4s ${id} austin`));
+      await expect(results(page).getByRole('link', { name: `coed 4s ${id}` })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        320,
+      );
+    });
+  });
+
   test('Try again and Clear the search keep their line height with a mouse', async ({
     page,
   }, testInfo) => {
@@ -477,7 +555,7 @@ test.describe('find a league: offline', () => {
     await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
     await hydrated(consoleGuard);
     await submit(page, `harbor ${id}`);
-    await expect(rowNames(page).first()).toHaveText(THURSDAY);
+    await expect(rowNames(page)).toHaveText([THURSDAY]);
 
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
