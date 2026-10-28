@@ -21,7 +21,6 @@ export interface HeldQueries {
   isHolding: () => boolean;
   release: () => void;
   watchNewSubscriptions: () => void;
-  /** Holds the next answer to a watched query, for a call made with `holdFromStart` false. */
   hold: () => void;
 }
 
@@ -76,7 +75,7 @@ export async function holdQueries(
     watchNewSubscriptions: () => {
       watching = true;
     },
-    hold: () => {
+    holdNextAnswer: () => {
       armed = true;
     },
   };

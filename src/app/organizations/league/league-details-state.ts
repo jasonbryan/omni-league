@@ -1,5 +1,7 @@
 import { computed, linkedSignal, signal, type Signal, type WritableSignal } from '@angular/core';
 import { form, required, type FieldTree } from '@angular/forms/signals';
+import type { FunctionArgs } from 'convex/server';
+import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/divisions';
 import {
@@ -47,16 +49,7 @@ export interface SavedDetails {
   division?: SavedDivision | undefined;
 }
 
-/** The detail values a save was made from, in the shape `leagues.update` takes as `expected`. */
-export interface ExpectedDetails {
-  name: string;
-  gender?: Gender;
-  playersPerSide?: number;
-  level?: StandardLevel;
-  customLevelId?: Id<'customLevels'>;
-  ageGroup?: AgeGroup;
-  minimumRosterSize?: number;
-}
+export type ExpectedDetails = NonNullable<FunctionArgs<typeof api.leagues.update>['expected']>;
 
 export type DetailsAlertKind = 'offline' | 'failed' | 'changed';
 
@@ -270,7 +263,7 @@ export class LeagueDetails {
     const refusal = inputErrorOf(failure);
     if (refusal?.code === 'changedSince') {
       const current = currentLeagueOf(failure);
-      if (current) this.adopt(savedDetails(current.name, current.division));
+      if (current) this.takeNewerLeague(savedDetails(current.name, current.division));
       this.alert.set('changed');
       return { sent: false, alert: 'changed', ...(current && { current }) };
     }
@@ -282,14 +275,13 @@ export class LeagueDetails {
     return this.showAlert('failed');
   }
 
-  // The name and details the organizer did not edit take the newer values; the rest stay as typed.
-  private adopt(newer: SavedDetails): void {
+  private takeNewerLeague(newer: SavedDetails): void {
     if (this.model().name.trim() === this.baselineName.trim()) {
       this.model.set({ name: newer.name });
       this.fields().reset();
     }
     this.baselineName = newer.name;
-    if (newer.division) this.division.adopt(newer.division);
+    if (newer.division) this.division.takeSavedByOthers(newer.division);
   }
 
   private showAlert(alert: DetailsAlertKind): DetailsSubmitOutcome<never> {

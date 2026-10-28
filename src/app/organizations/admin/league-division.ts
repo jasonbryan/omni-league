@@ -102,8 +102,7 @@ export class LeagueDivision {
   private loaded = false;
   private savedBaseline: SavedDivision | undefined;
   private baselineValues = valuesOf(undefined);
-  // Choices whose baseline another organizer saved: the name never changes them.
-  private readonly keptFromName = new Set<DivisionChoice>();
+  private readonly savedByOthers = new Set<DivisionChoice>();
 
   readonly filledFromName: Signal<readonly DivisionChoice[]> = computed(() =>
     CHOICES.filter((choice) => this.filled().has(choice)),
@@ -115,12 +114,10 @@ export class LeagueDivision {
     return text === '' ? undefined : Number(text);
   });
 
-  /** The values the division last loaded, undefined for a league without one. */
   get baseline(): SavedDivision | undefined {
     return this.savedBaseline;
   }
 
-  /** The details whose value differs from the baseline, however it got there. */
   edited(): ReadonlySet<DivisionDetail> {
     const current = this.values();
     return new Set(DETAILS.filter((detail) => differs(current, this.baselineValues, detail)));
@@ -201,19 +198,18 @@ export class LeagueDivision {
     this.chosenByHand.set(new Set(saved.customLevelId === undefined ? [] : ['level']));
     this.filled.set(new Set());
     this.loaded = true;
-    this.keptFromName.clear();
+    this.savedByOthers.clear();
     this.savedBaseline = saved;
     this.baselineValues = valuesOf(saved);
   }
 
-  /** Takes another organizer's saved values into the details not edited, keeps the others as typed, and sets the baseline. */
-  adopt(saved: SavedDivision): void {
+  takeSavedByOthers(saved: SavedDivision): void {
     const next = valuesOf(saved);
     const edited = this.edited();
     for (const detail of DETAILS) {
       if (!differs(next, this.baselineValues, detail)) continue;
       const choice = DETAIL_CHOICE[detail];
-      if (choice) this.keptFromName.add(choice);
+      if (choice) this.savedByOthers.add(choice);
       if (!edited.has(detail)) this.take(detail, next);
     }
     this.savedBaseline = saved;
@@ -243,7 +239,7 @@ export class LeagueDivision {
     this.chosenByHand.set(new Set());
     this.filled.set(new Set());
     this.loaded = false;
-    this.keptFromName.clear();
+    this.savedByOthers.clear();
     this.savedBaseline = undefined;
     this.baselineValues = valuesOf(undefined);
   }
@@ -291,7 +287,7 @@ export class LeagueDivision {
     fallback: T,
     set: (value: T) => void,
   ): void {
-    if (this.chosenByHand().has(choice) || this.keptFromName.has(choice)) return;
+    if (this.chosenByHand().has(choice) || this.savedByOthers.has(choice)) return;
     if (this.loaded && stated === current) return;
     if (stated !== undefined) {
       set(stated);

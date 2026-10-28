@@ -360,7 +360,7 @@ describe('LeagueDivision: values saved by someone else', () => {
   it('takes the newer value into a choice that is not edited, and makes it the baseline', () => {
     const division = loaded();
     const newer = { ...SAVED, playersPerSide: 6, minimumRosterSize: 8 };
-    division.adopt(newer);
+    division.takeSavedByOthers(newer);
     expect([division.playersPerSide(), division.minimumText()]).toEqual([6, '8']);
     expect(division.baseline).toEqual(newer);
     expect(division.edited()).toEqual(new Set());
@@ -369,7 +369,7 @@ describe('LeagueDivision: values saved by someone else', () => {
   it('keeps an edited choice as typed, and the newer value becomes its baseline', () => {
     const division = loaded();
     division.chooseFormat(2);
-    division.adopt({ ...SAVED, playersPerSide: 6 });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
     expect(division.playersPerSide()).toBe(2);
     expect(division.baseline?.playersPerSide).toBe(6);
     expect(division.edited()).toEqual(new Set(['format']));
@@ -377,7 +377,7 @@ describe('LeagueDivision: values saved by someone else', () => {
 
   it('takes a newer custom level, and drops a level the name filled before', () => {
     const division = loaded();
-    division.adopt({ ...SAVED, level: 'a', customLevelId: GOLD.customLevelId });
+    division.takeSavedByOthers({ ...SAVED, level: 'a', customLevelId: GOLD.customLevelId });
     expect([division.level(), division.customLevelId()]).toEqual(['a', GOLD.customLevelId]);
     expect(division.edited()).toEqual(new Set());
   });
@@ -385,7 +385,7 @@ describe('LeagueDivision: values saved by someone else', () => {
   it('stops the name from changing a choice whose baseline came from someone else', () => {
     const division = loaded();
     division.fillFromName('Coed 4s', 'beachVolleyball');
-    division.adopt({ ...SAVED, playersPerSide: 6 });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
     division.fillFromName('Sunday Coed 4s', 'beachVolleyball');
     expect(division.playersPerSide()).toBe(6);
     expect(division.filledFromName()).toEqual([]);
@@ -394,21 +394,21 @@ describe('LeagueDivision: values saved by someone else', () => {
   it('stops the name from changing an edited choice whose baseline came from someone else', () => {
     const division = loaded();
     division.fillFromName("Women's 2s", 'beachVolleyball');
-    division.adopt({ ...SAVED, playersPerSide: 6 });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
     division.fillFromName("Women's 3s", 'beachVolleyball');
     expect(division.playersPerSide()).toBe(2);
   });
 
   it('still fills a choice the other save did not change', () => {
     const division = loaded();
-    division.adopt({ ...SAVED, playersPerSide: 6 });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
     division.fillFromName("Women's 4s", 'beachVolleyball');
     expect([division.gender(), division.playersPerSide()]).toEqual(['womens', 6]);
   });
 
   it('fills from the name again after the form loads its own save', () => {
     const division = loaded();
-    division.adopt({ ...SAVED, playersPerSide: 6 });
+    division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
     division.load({ ...SAVED, playersPerSide: 6 });
     division.fillFromName('Coed 4s', 'beachVolleyball');
     expect(division.playersPerSide()).toBe(4);

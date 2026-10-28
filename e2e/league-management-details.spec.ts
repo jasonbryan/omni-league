@@ -177,7 +177,7 @@ test.describe('League management: league details', () => {
         const held = await holdQueries(page, [ORGANIZER_CONTEXT], { holdFromStart: false });
         await page.reload();
         await expect(details(page).getByLabel('Name')).toHaveValue('Sunday Reverse Coed 4s');
-        held.hold();
+        held.holdNextAnswer();
 
         await adminPage.goto(path);
         await chip(adminPage, 'format', '6v6').check({ force: true });
