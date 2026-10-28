@@ -458,4 +458,38 @@ describe('searchText sport and division words', () => {
       'Tuesday Dees Soccer Coed 7v7 Rec Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     );
   });
+
+  test('changing a league from a standard level to a custom level adds the custom level words, and undoing it removes them', async () => {
+    const { t, organizationId } = await setup();
+    const customLevelId = await t.run(async (ctx) => {
+      await insertCustomLevel(ctx, organizationId, {
+        sport: 'soccer',
+        name: 'D',
+        standardLevel: 'rec',
+      });
+      return (await ctx.db.query('customLevels').first())!._id;
+    });
+    const league = await leagueSlugged(t, organizationId, 'soccer-draft');
+    const earlier = await t.run((ctx) =>
+      updateLeague(ctx, league, {
+        name: league.name,
+        division: {
+          gender: 'coed',
+          playersPerSide: 7,
+          level: 'rec',
+          customLevelId,
+          ageGroup: 'adult',
+        },
+      }),
+    );
+    expect((await searchTexts(t, organizationId))['soccer-draft']).toBe(
+      'Soccer Draft Soccer Coed 7v7 D (Rec) Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+    );
+
+    const changed = await leagueSlugged(t, organizationId, 'soccer-draft');
+    await t.run((ctx) => restoreLeague(ctx, changed, earlier));
+    expect((await searchTexts(t, organizationId))['soccer-draft']).toBe(
+      'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
+    );
+  });
 });
