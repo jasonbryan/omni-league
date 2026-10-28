@@ -1,6 +1,6 @@
-import { registrationIsOpen, seasonPhase } from '../../../../convex/lib/registration';
+import { seasonPhase } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
-import { BADGE_TEXT, compare } from '../season-status';
+import { BADGE_TEXT } from '../season-status';
 import type { PublicLeagueHeader } from './public-league-path';
 
 export type LeaguePageSeason = NonNullable<PublicLeagueHeader['seasons']>[number];
@@ -9,20 +9,6 @@ export interface SeasonStatus {
   badge: string;
   open: boolean;
   note: string | undefined;
-}
-
-export function soonestClosingOpenSeason(
-  seasons: readonly LeaguePageSeason[] | undefined,
-  nowMs: number,
-): LeaguePageSeason | undefined {
-  return (seasons ?? [])
-    .filter((season) => registrationIsOpen(season, nowMs))
-    .sort(
-      (a, b) =>
-        compare(a.registrationDeadline, b.registrationDeadline) ||
-        compare(a.startDate, b.startDate) ||
-        compare(a.slug, b.slug),
-    )[0];
 }
 
 /** Undefined for a row from a saved copy made before rows held their deadline: it cannot say which phase the season is in. */

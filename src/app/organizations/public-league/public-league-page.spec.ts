@@ -247,6 +247,31 @@ describe('PublicLeaguePage populated', () => {
       expect(text(card()?.querySelector('h3'))).toBe('Summer 2027');
     });
 
+    it('shows the open season that starts first when two share a deadline, then the lower slug', async () => {
+      const tied = (name: string, slug: string, startDate: string) => ({
+        name,
+        slug,
+        startDate,
+        endDate: '2027-11-14',
+        registrationDeadline: '2027-08-29',
+        minimumRosterSize: 4,
+      });
+      const withTied = (...seasons: ReturnType<typeof tied>[]) =>
+        leagueQueryResults({ league: { ...SUNDAY_4S, seasons } });
+      emit(withTied(tied('Later', 'a', '2027-09-20'), tied('Earlier', 'c', '2027-09-12')));
+      await settle(harness);
+      expect(text(card()?.querySelector('h3'))).toBe('Earlier');
+      emit(
+        withTied(
+          tied('Later', 'a', '2027-09-20'),
+          tied('Earlier', 'c', '2027-09-12'),
+          tied('Same start', 'b', '2027-09-12'),
+        ),
+      );
+      await settle(harness);
+      expect(text(card()?.querySelector('h3'))).toBe('Same start');
+    });
+
     it('is not shown for a copy of the league saved before it held its seasons', async () => {
       emit(leagueQueryResults({ league: without(SUNDAY_4S, 'seasons') }));
       await settle(harness);

@@ -744,7 +744,6 @@ const sectionOf = (html: string): string => {
   return html.slice(html.lastIndexOf('<section', at), html.indexOf('</section>', at));
 };
 
-/** Two open seasons (deadlines in 5 and 15 days), one closed 3 days ago, and a softball league with none. */
 async function openSeasonsTenant(): Promise<Tenant> {
   const tenant = await seedTenant({
     name: 'E2E Open Seasons',
@@ -783,6 +782,13 @@ async function openSeasonsTenant(): Promise<Tenant> {
       startDate: dateFromToday(10),
       endDate: dateFromToday(70),
       registrationDeadline: dateFromToday(-3),
+    },
+    {
+      name: 'Current Season',
+      slug: 'current-season',
+      startDate: dateFromToday(-20),
+      endDate: dateFromToday(40),
+      registrationDeadline: dateFromToday(-40),
     },
   ]);
   return tenant;
@@ -826,7 +832,7 @@ test.describe('organization page: Registration open', () => {
   );
 
   test(
-    'raw: each league row names its next season: closed, or none',
+    'raw: a league row leads with the season open for registration, with a Register link to its registration card; a league with no season says none',
     RAW_HTTP,
     async ({ request }, testInfo) => {
       test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
@@ -838,7 +844,14 @@ test.describe('organization page: Registration open', () => {
           rows.slice(rows.indexOf(`id="league-${n}"`), rows.indexOf(`id="league-${n + 1}"`)),
         );
       expect(row(1)).toContain('Softball · Beta Diamond No upcoming season');
-      expect(row(2)).toContain('Soccer · Alpha Field Registration closed Closed Season');
+      expect(row(2)).toMatch(
+        /Soccer · Alpha Field Registration open Sooner Season · closes [A-Z][a-z]{2} \d{1,2} Register for Open League, Sooner Season/,
+      );
+      expect(rows).toMatch(
+        new RegExp(
+          `<a\\b[^>]*href="${tenant.path}/leagues/open-league/seasons/sooner-season#registration"[^>]*>Register<span class="sr-only">`,
+        ),
+      );
     },
   );
 
@@ -892,11 +905,42 @@ test.describe('organization page: Registration open', () => {
     const tenant = await openSeasonsTenant();
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
-    await page.getByRole('link', { name: 'Register for Open League, Sooner Season' }).click();
+    await page
+      .locator('#registration-open')
+      .getByRole('link', { name: 'Register for Open League, Sooner Season' })
+      .click();
     await expect(page).toHaveURL(
       `${tenant.path}/leagues/open-league/seasons/sooner-season#registration`,
     );
     await expect(page.getByRole('heading', { level: 1, name: 'Sooner Season' })).toBeVisible();
+    await expect(page.locator('#registration')).toBeVisible();
+  });
+
+  test('browser: the Register link in a league row opens the season page at its registration card, and the page passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await openSeasonsTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    const register = page
+      .locator('#leagues')
+      .getByRole('link', { name: 'Register for Open League, Sooner Season' });
+    await expect(register).toHaveCount(1);
+    await expectAccessible(page);
+    if (testInfo.project.name.includes('mobile')) {
+      expect((await register.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    } else {
+      expect((await register.boundingBox())?.height).toBeGreaterThanOrEqual(24);
+    }
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    await register.click();
+    await expect(page).toHaveURL(
+      `${tenant.path}/leagues/open-league/seasons/sooner-season#registration`,
+    );
     await expect(page.locator('#registration')).toBeVisible();
   });
 });

@@ -16,12 +16,12 @@ export interface SeasonStatusLine {
   badge: string | null;
   open: boolean;
   text: string;
+  season: { name: string; slug: string } | null;
 }
 
 const BADGE =
   'inline-flex w-fit shrink-0 items-center gap-1 rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap';
 export const OPEN_BADGE = `${BADGE} border-transparent bg-secondary text-secondary-foreground`;
-export const OUTLINE_BADGE = `${BADGE} border-border text-foreground`;
 export const MUTED_BADGE = `${BADGE} border-transparent bg-muted text-muted-foreground`;
 
 export const BADGE_TEXT: Record<SeasonPhase, string> = {
@@ -36,6 +36,19 @@ export const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 /** "May 19" from a stored calendar date, read as text so the server and a browser in any time zone agree. */
 export function closesText(registrationDeadline: string): string {
   return formatCalendarDate(registrationDeadline).replace(/, \d+$/, '');
+}
+
+export function soonestClosingOpenSeason<
+  T extends Pick<LeagueRowSeason, 'slug' | 'startDate' | 'registrationDeadline'>,
+>(seasons: readonly T[] | undefined, nowMs: number): T | undefined {
+  return (seasons ?? [])
+    .filter((season) => registrationIsOpen(season, nowMs))
+    .sort(
+      (a, b) =>
+        compare(a.registrationDeadline, b.registrationDeadline) ||
+        compare(a.startDate, b.startDate) ||
+        compare(a.slug, b.slug),
+    )[0];
 }
 
 export function nextSeason(
@@ -56,14 +69,17 @@ export function leagueSeasonStatus(
   nowMs: number,
 ): SeasonStatusLine | undefined {
   if (seasons === undefined) return undefined;
-  const next = nextSeason(seasons, nowMs);
-  if (next === undefined) return { badge: null, open: false, text: 'No upcoming season' };
+  const next = soonestClosingOpenSeason(seasons, nowMs) ?? nextSeason(seasons, nowMs);
+  if (next === undefined) {
+    return { badge: null, open: false, text: 'No upcoming season', season: null };
+  }
   const phase = seasonPhase(next, nowMs);
   const open = phase === 'registrationOpen';
   return {
     badge: BADGE_TEXT[phase],
     open,
     text: open ? `${next.name} · closes ${closesText(next.registrationDeadline)}` : next.name,
+    season: { name: next.name, slug: next.slug },
   };
 }
 

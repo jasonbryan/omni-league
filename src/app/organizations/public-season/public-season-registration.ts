@@ -1,10 +1,6 @@
-import {
-  registrationIsOpen,
-  seasonPhase,
-  type SeasonPhase,
-} from '../../../../convex/lib/registration';
+import { seasonPhase, type SeasonPhase } from '../../../../convex/lib/registration';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
-import { compare } from '../season-status';
+import { soonestClosingOpenSeason } from '../season-status';
 import type { PublicSeasonData } from './public-season-view';
 
 export interface NextOpenSeason {
@@ -23,10 +19,11 @@ export type RegistrationCard =
     };
 
 function nextOpenSeason(season: PublicSeasonData, nowMs: number): NextOpenSeason | undefined {
-  const open = (season.league.upcomingSeasons ?? [])
-    .filter((other) => other.slug !== season.slug && registrationIsOpen(other, nowMs))
-    .sort((a, b) => compare(a.registrationDeadline, b.registrationDeadline));
-  return open[0] && { name: open[0].name, slug: open[0].slug };
+  const others = (season.league.upcomingSeasons ?? []).filter(
+    (other) => other.slug !== season.slug,
+  );
+  const open = soonestClosingOpenSeason(others, nowMs);
+  return open && { name: open.name, slug: open.slug };
 }
 
 /** Undefined for a saved copy made before the query held the deadline: it cannot say whether registration is open. */

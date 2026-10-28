@@ -1,4 +1,4 @@
-import { soonestClosingOpenSeason, seasonStatus, type LeaguePageSeason } from './league-seasons';
+import { seasonStatus, type LeaguePageSeason } from './league-seasons';
 
 // 18:00 UTC is 06:00 on that date at UTC-12.
 const at = (date: string) => Date.parse(`${date}T18:00:00Z`);
@@ -11,55 +11,6 @@ const season = (overrides: Partial<LeaguePageSeason> = {}): LeaguePageSeason => 
   registrationDeadline: '2027-05-23',
   minimumRosterSize: 4,
   ...overrides,
-});
-
-describe('soonestClosingOpenSeason', () => {
-  it('is the season whose registration is open', () => {
-    expect(soonestClosingOpenSeason([season()], at('2027-04-01'))?.slug).toBe('summer-2027');
-  });
-
-  it('is the one with the soonest deadline when several are open', () => {
-    const later = season({ slug: 'fall-2027', registrationDeadline: '2027-08-29' });
-    const sooner = season({ slug: 'summer-2027', registrationDeadline: '2027-05-23' });
-    expect(soonestClosingOpenSeason([later, sooner], at('2027-04-01'))?.slug).toBe('summer-2027');
-  });
-
-  it('breaks a tie of deadlines by the earlier start date', () => {
-    const later = season({ slug: 'later', startDate: '2027-07-01' });
-    const earlier = season({ slug: 'earlier', startDate: '2027-06-06' });
-    expect(soonestClosingOpenSeason([later, earlier], at('2027-04-01'))?.slug).toBe('earlier');
-  });
-
-  it('shows the open season whatever the status of the others', () => {
-    const inProgress = season({
-      slug: 'current',
-      startDate: '2027-03-01',
-      endDate: '2027-05-30',
-      registrationDeadline: '2027-02-15',
-    });
-    expect(soonestClosingOpenSeason([inProgress, season()], at('2027-04-01'))?.slug).toBe(
-      'summer-2027',
-    );
-  });
-
-  it('is none when every deadline has passed', () => {
-    expect(soonestClosingOpenSeason([season()], at('2027-05-24'))).toBeUndefined();
-  });
-
-  it('keeps registration open through the deadline date and closes it the day after', () => {
-    expect(soonestClosingOpenSeason([season()], at('2027-05-23'))).toBeDefined();
-    expect(soonestClosingOpenSeason([season()], at('2027-05-24'))).toBeUndefined();
-  });
-
-  it('is none for a season that has started, whatever its deadline', () => {
-    const started = season({ registrationDeadline: '2027-07-01' });
-    expect(soonestClosingOpenSeason([started], at('2027-06-06'))).toBeUndefined();
-  });
-
-  it('is none without seasons, and for a copy saved before the page held them', () => {
-    expect(soonestClosingOpenSeason([], at('2027-04-01'))).toBeUndefined();
-    expect(soonestClosingOpenSeason(undefined, at('2027-04-01'))).toBeUndefined();
-  });
 });
 
 describe('seasonStatus', () => {
