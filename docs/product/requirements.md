@@ -80,7 +80,7 @@ Owner answers, 2026-10-09 (chat):
 
 - Organizers build and publish the schedule.
 - Captains report scores. Organizers can confirm or correct them.
-- **Standings defaults** (owner decision, 2026-10-28, chat, "1A", on #347): the per-sport defaults below, forfeit scores included, ship as configuration. The owner may change them later without restructuring.
+- **Standings defaults** (owner decision, 2026-10-28, chat, quoted exactly: "1A 2Organizer chooses either 3A 4A"; "1A" answers #347): the per-sport defaults below, forfeit scores included, ship as configuration. The owner may change them later without restructuring.
 
 | Sport            | Ranking                                         | Tiebreakers, in order                                                    | Forfeit            |
 | ---------------- | ----------------------------------------------- | ------------------------------------------------------------------------ | ------------------ |
@@ -160,9 +160,9 @@ An organization offers **programs** of four **program types**: league, tournamen
   - Brackets are single elimination first. Double elimination becomes an option later.
 - **Camps and training, minors** (question 4): guardians register minors from the start. Only the child's display name is stored, with the guardian's confirmation that the child fits the age range. No birth date is stored. Adults register themselves where the ages allow.
 - **Training** (question 5): classes only at first. People register for a weekly series, or for a single class where the organizer allows it. There are no bookable private lessons.
-- **Grand final** (owner, 2026-10-28, "Organizer chooses either", on #349): in a double-elimination bracket, the organizer chooses per tournament between a deciding second game if the losers' bracket team wins the first, and a single game.
-- **Waitlists** (owner, 2026-10-28, "A" to the waitlist question on #323): full camp sessions and training classes take a waitlist, as full seasons do.
-- **Staff** (owner, 2026-10-28, "A" to the staff question on #323): an org admin can assign league organizers to tournaments, camps, and training, with the same rights as for a league, including publish.
+- **Grand final** (owner, 2026-10-28, "2Organizer chooses either" in "1A 2Organizer chooses either 3A 4A", on #349): in a double-elimination bracket, the organizer chooses per tournament between a deciding second game if the losers' bracket team wins the first, and a single game.
+- **Waitlists** (owner, 2026-10-28, "3A" in the same answer, on #323): full camp sessions and training classes take a waitlist, as full seasons do.
+- **Staff** (owner, 2026-10-28, "4A" in the same answer, on #323): an org admin can assign league organizers to tournaments, camps, and training, with the same rights as for a league, including publish.
 - **Search** (question 6): one "Find a program" search with type chips. `/leagues` keeps working as the league view. "Program" appears only in the admin area and the search; elsewhere the type names are used.
 - **Application fee** (question 7): the same rule as seasons. Each tournament roster entry, and each camp or training registrant, counts as one roster entry. Free and offline registrations go on the platform bill (#366).
 
@@ -197,14 +197,14 @@ Slices are listed on #323. Leagues stay unaffected throughout.
 1. **Leagues first:** the public-site milestone (#240 to #262) and season registration (#129 to #145, #288).
 2. **The program record** above leagues, with no visible change (#333, then #334).
 3. **Tournaments:**
-   - create, publish, and list (#335 to #337); staff (#338); copying (#339); editing details (#369)
-   - registration (#340, #370, #341)
+   - create, publish, and list (#335 to #337); staff (#338, then #381); copying (#339)
+   - registration (#340, #370), editing details (#369), and the waitlist (#341)
    - the bracket only (#342 to #345)
    - pools and a bracket (#346, #347, #371, #348)
    - double elimination later (#349, #376)
-4. **Find a program:** search text (#374), the search (#350), links from every page (#351), and the old league search removed after 14 days (#375).
-5. **Camps:** #352 to #354, the organization page (#372), search (#373), then registration (#355 to #358).
-6. **Training:** #359 to #365 and #368, then registrations in `/app` (#367) and billing for camps and training (#366).
+4. **Find a program:** search text (#374), the search (#350), links from every page (#351), and the old league search retired in two later releases (#375, then #383).
+5. **Camps:** #352 to #354, the organization page (#372), search (#373), registration (#355 to #357), places (#382), and the waitlist (#358).
+6. **Training:** #359 to #364, the waitlists (#365, #368), registrations in `/app` (#367), and billing for camps and training (#366, which waits for the platform bill slice, Open 11).
 
 ## Future (out of scope)
 
@@ -244,5 +244,6 @@ Questions still open for the owner. The planner records them as `status:blocked`
 8. **Free agents:** what a free agent tells the organizer (position, skill, availability), and whether free agents and waitlisted teams can withdraw (#133, #145).
 9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
 10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
+11. **Platform bill slice (#323, #366):** no issue yet builds ADR 0012's platform bill (pending invoice items on the connected account and their webhooks). It needs planning before camp and training registration can reach production.
 
 Features beyond the above are not yet specified.
