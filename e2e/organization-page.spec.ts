@@ -744,7 +744,6 @@ const sectionOf = (html: string): string => {
   return html.slice(html.lastIndexOf('<section', at), html.indexOf('</section>', at));
 };
 
-/** Two open seasons (deadlines in 5 and 15 days), one closed 3 days ago, one in progress, and a softball league with none. */
 async function openSeasonsTenant(): Promise<Tenant> {
   const tenant = await seedTenant({
     name: 'E2E Open Seasons',
@@ -931,6 +930,8 @@ test.describe('organization page: Registration open', () => {
     await expectAccessible(page);
     if (testInfo.project.name.includes('mobile')) {
       expect((await register.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    } else {
+      expect((await register.boundingBox())?.height).toBeGreaterThanOrEqual(24);
     }
     await page.setViewportSize({ width: 320, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(

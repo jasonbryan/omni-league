@@ -288,15 +288,15 @@ describe('the Registration open section', () => {
     it('shows the open season that starts first when two share a deadline', async () => {
       const page = withSeasons([]);
       page.leagues[2].seasons = [
-        { ...SUMMER_4S, name: 'Later', slug: 'later', startDate: '2027-07-01' },
-        { ...SUMMER_4S, name: 'Earlier', slug: 'earlier', startDate: '2027-06-06' },
+        { ...SUMMER_4S, name: 'Later', slug: 'a-later', startDate: '2027-07-01' },
+        { ...SUMMER_4S, name: 'Earlier', slug: 'b-earlier', startDate: '2027-06-06' },
       ];
       const harness = await open();
       await emit(harness, queryResults(page));
       expect(rowStatus(harness, 3)[1]).toBe('Earlier · closes May 23');
       expect(
         host(harness).querySelector('#league-3 a[href$="#registration"]')?.getAttribute('href'),
-      ).toContain('/seasons/earlier#');
+      ).toContain('/seasons/b-earlier#');
     });
 
     it('has no Register link on a row whose season is not open', async () => {

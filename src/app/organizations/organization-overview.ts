@@ -278,7 +278,7 @@ function plural(count: number, noun: string): string {
                                 <a
                                   [routerLink]="register.href"
                                   fragment="registration"
-                                  class="relative z-10 rounded-md text-xs font-medium text-primary underline underline-offset-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+                                  class="relative z-10 rounded-md text-xs font-medium text-primary underline underline-offset-4 pointer-fine:-my-1 pointer-fine:py-1 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                                   >Register<span class="sr-only">
                                     for {{ league.name }}, {{ register.seasonName }}</span
                                   ></a
