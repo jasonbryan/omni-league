@@ -160,11 +160,13 @@ describe('selectSpecs: mapped areas', () => {
       'src/app/account/account-page.ts',
       'src/app/account/account-settings-page.ts',
       'src/app/account/your-organizations.ts',
-      'src/app/shell/account-link.ts',
       'convex/users.ts',
     ]) {
       assert.deepEqual(specsFor([file]), expected, file);
     }
+    const accountLink = specsFor(['src/app/shell/account-link.ts']);
+    assert.ok(!accountLink.includes('FULL'));
+    for (const spec of expected) assert.ok(accountLink.includes(spec), spec);
     for (const name of [
       'sign-in',
       'sign-in-admin',

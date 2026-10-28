@@ -79,6 +79,7 @@ export const ROUTE_SPECS = {
   'invites/accept': ['accept-invite'],
   app: ['auth-session'],
   'app/': ['after-sign-in', 'auth-session', 'app-leagues'],
+  'app/account': ['account-settings', 'after-sign-in'],
   'app/organizations/new': ['create-organization', 'after-sign-in'],
   'app/organizations/:orgSlug/leagues/:leagueSlug': [
     'league-management',
