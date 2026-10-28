@@ -10,6 +10,7 @@ import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
+import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -81,24 +82,22 @@ test.describe('organization page: Manage', () => {
   });
 
   test(
-    'the raw HTML and its caching headers are the same for a signed-in org admin as for an anonymous request',
-    RAW_HTTP,
-    async ({ page, request }, testInfo) => {
-      test.skip(
-        testInfo.project.name !== 'chromium-desktop',
-        'raw HTML does not depend on the viewport',
-      );
+    'the document a signed-in org admin loads holds no Manage and has the anonymous caching headers',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, request }) => {
       const tenant = await tenantWithOpenSeason();
       await signedInAs(page, 'orgAdmin', tenant);
       const anonymous = await fetchRawHtml(request, tenant.path);
-      const signedIn = await fetchRawHtml(page.context().request, tenant.path);
-      expect(await page.context().cookies()).not.toHaveLength(0);
-      expect(signedIn.status).toBe(200);
-      expect(signedIn.html).not.toMatch(/>\s*Manage\s*</);
-      expect(signedIn.html).not.toContain(`/app/organizations/${tenant.slug}`);
-      expect(signedIn.headers['cache-control']).toBe(anonymous.headers['cache-control']);
-      expect(signedIn.headers['netlify-vary']).toBe(anonymous.headers['netlify-vary']);
-      expect(signedIn.headers['set-cookie']).toBeUndefined();
+      const response = await page.goto(tenant.path);
+      await expect(manage(page)).toBeVisible();
+      expect(response?.status()).toBe(200);
+      const html = (await response?.text()) ?? '';
+      expect(html).not.toMatch(/>\s*Manage\s*</);
+      expect(html).not.toContain(`/app/organizations/${tenant.slug}`);
+      const headers = response?.headers() ?? {};
+      expect(headers['cache-control']).toBe(anonymous.headers['cache-control']);
+      expect(headers['netlify-vary']).toBe(anonymous.headers['netlify-vary']);
+      expect(headers['set-cookie']).toBeUndefined();
     },
   );
 
