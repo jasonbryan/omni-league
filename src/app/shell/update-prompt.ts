@@ -45,7 +45,7 @@ import { AppUpdates } from '../core/service-worker/app-updates';
                 A new version of Omni League is ready
               </h2>
               <p class="mt-1 text-sm text-muted-foreground">
-                Reload to start using it. Finish anything you're typing first.
+                It loads by itself when you leave this page, so you can finish what you're typing.
               </p>
               <div class="mt-3 flex flex-wrap gap-2">
                 <button

@@ -1,12 +1,13 @@
-// Node built-ins only: the `e2e specs` step runs before setup-node, on the Node the runner image ships.
+// Node built-ins only, so it runs without an install.
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Spec names are Playwright file filters: regular expressions matched against the test file path.
 const spec = (name) => `e2e/${name}.spec.ts`;
 
-export const ALWAYS = [spec('smoke'), 'e2e/harness/'];
+// convex-backend needs no page: it checks IS_TEST and the backend URL the bundle was built with.
+export const ALWAYS = [spec('smoke'), spec('convex-backend'), 'e2e/harness/'];
 
 const LEAGUE_ADMIN = [
   'organization-leagues',
@@ -111,8 +112,176 @@ export function deriveSessionSpecs(root) {
   return found.sort();
 }
 const SIGN_IN_OR_UP_PAGE = /goto\([^)]*\/sign-(?:in|up)\b/;
+const CUSTOM_LEVELS_API = /\bapi\.customLevels\b/;
 
-/** @typedef {{ name: string, test: (file: string) => boolean, specs: string[] }} Rule */
+// Every `search:` function is public too.
+export const PUBLIC_QUERIES = [
+  'organizations:getPublicPage',
+  'organizations:listPublicLocations',
+  'organizations:listPublicLeagues',
+  'leagues:getPublicPage',
+  'seasons:listPublic',
+  'seasons:getPublicPage',
+  'seasons:listOpenForOrganization',
+];
+const PUBLIC_PATH_LITERAL = /[`'"]\/organizations\//;
+const SEED_TENANT_PATH = /\.path\b|\{[^}]*\bpath\b[^}]*\}\s*=\s*(?:await\s+)?seedTenant\b/;
+const SEARCH_QUERY = /[`'"]search:\w/;
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function readsPublicPage(text) {
+  return (
+    PUBLIC_PATH_LITERAL.test(text) ||
+    (text.includes('seedTenant') && SEED_TENANT_PATH.test(text)) ||
+    PUBLIC_QUERIES.some((name) => text.includes(name)) ||
+    SEARCH_QUERY.test(text)
+  );
+}
+
+/**
+ * @param {string} root
+ * @returns {string[]}
+ */
+export function findPublicPageSpecs(root) {
+  const found = [];
+  for (const dir of ['e2e', 'e2e/harness']) {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.spec.ts')) continue;
+      if (readsPublicPage(readFileSync(join(root, dir, entry.name), 'utf8'))) {
+        found.push(`${dir}/${entry.name}`);
+      }
+    }
+  }
+  return found.sort();
+}
+
+const SKIPPED_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'out-tsc',
+  'coverage',
+  'tmp',
+  'test-results',
+  'playwright-report',
+  'blob-report',
+]);
+const CODE_FILE = /\.(?:ts|mts|mjs)$/;
+// Unit tests, their doubles and setup, and the generated types never carry a page's behaviour.
+const NON_IMPORTER = [
+  /^(?:src|convex)\/.+\.(?:spec|test)\.ts$/,
+  /^scripts\/[^/]+\.test\.mjs$/,
+  /(?:^|\/)testing\//,
+  /^convex\/test\.setup\.ts$/,
+  /^convex\/_generated\//,
+];
+const isNonImporter = (file) => NON_IMPORTER.some((pattern) => pattern.test(file));
+// `import type`, `export … from`, `export * from`, and multi-line named imports all end in `from '…'`.
+const FROM_SPECIFIER = /\bfrom\s*(['"])([^'"\n]+)\1/g;
+const SIDE_EFFECT_IMPORT = /\bimport\s*(['"])([^'"\n]+)\1/g;
+// Also matches `typeof import('…')`. The literal ends at its closing quote or at a `${`.
+const DYNAMIC_IMPORT = /\bimport\s*\(\s*(['"`])([^\n]*?)(\1|\$\{)/g;
+
+/**
+ * @typedef {{
+ *   files: Set<string>,
+ *   text: Map<string, string>,
+ *   importers: Map<string, Set<string>>,
+ *   dynamicTargets: Set<string>,
+ *   unresolved: string[],
+ * }} ImportGraph
+ */
+
+/**
+ * @param {string} root
+ * @param {string} dir
+ * @param {Set<string>} into
+ */
+function listFiles(root, dir, into) {
+  for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+    if (entry.name.startsWith('.') || SKIPPED_DIRS.has(entry.name)) continue;
+    const path = dir === '' ? entry.name : `${dir}/${entry.name}`;
+    if (entry.isDirectory()) listFiles(root, path, into);
+    else into.add(path);
+  }
+}
+
+/**
+ * @param {Set<string>} files
+ * @param {string} from
+ * @param {string} specifier
+ * @returns {string | undefined}
+ */
+function resolveSpecifier(files, from, specifier) {
+  const path = specifier.replace(/[?#].*$/, '');
+  const base = posix.normalize(posix.join(posix.dirname(from), path));
+  const candidates = [base];
+  for (const extension of ['.ts', '.mts', '.d.ts', '.js', '.mjs'])
+    candidates.push(base + extension);
+  for (const index of ['index.ts', 'index.mts', 'index.js']) candidates.push(`${base}/${index}`);
+  // A `.js` or `.mjs` specifier may name the `.ts` or `.mts` file, as `convex/_generated/api.d.ts` writes them.
+  const stem = base.replace(/\.m?js$/, '');
+  if (stem !== base) candidates.push(`${stem}.ts`, `${stem}.mts`);
+  return candidates.find((candidate) => files.has(candidate));
+}
+
+/**
+ * @param {string} root
+ * @returns {ImportGraph}
+ */
+export function buildImportGraph(root) {
+  const files = new Set();
+  listFiles(root, '', files);
+  /** @type {ImportGraph} */
+  const graph = {
+    files,
+    text: new Map(),
+    importers: new Map(),
+    dynamicTargets: new Set(),
+    unresolved: [],
+  };
+  for (const file of files) {
+    if (!CODE_FILE.test(file) || isNonImporter(file)) continue;
+    const text = readFileSync(join(root, file), 'utf8');
+    graph.text.set(file, text);
+    const edge = (specifier, dynamic) => {
+      if (!specifier.startsWith('.')) return;
+      const target = resolveSpecifier(files, file, specifier);
+      if (target === undefined) {
+        graph.unresolved.push(`${file} imports '${specifier}', which resolves to no file`);
+        return;
+      }
+      if (dynamic) graph.dynamicTargets.add(target);
+      if (target === file) return;
+      const set = graph.importers.get(target) ?? new Set();
+      set.add(file);
+      graph.importers.set(target, set);
+    };
+    for (const pattern of [FROM_SPECIFIER, SIDE_EFFECT_IMPORT]) {
+      for (const match of text.matchAll(pattern)) edge(match[2], false);
+    }
+    for (const match of text.matchAll(DYNAMIC_IMPORT)) {
+      if (match[3] === '${' && match[2].startsWith('.')) {
+        graph.unresolved.push(`${file} imports a computed path starting '${match[2]}'`);
+      } else {
+        edge(match[2], true);
+      }
+    }
+  }
+  return graph;
+}
+
+/**
+ * @typedef {{
+ *   name: string,
+ *   test: (file: string) => boolean,
+ *   specs: string[],
+ *   full?: boolean,
+ *   derive?: (graph: ImportGraph, root: string) => { extraSpecs?: string[], filesToSelect?: string[] },
+ * }} Rule
+ */
 
 const inDir =
   (...dirs) =>
@@ -146,6 +315,32 @@ export const AREAS = [
       ].includes(file),
     specs: [],
   },
+
+  {
+    // They run the e2e command, not the app, so smoke and the harness are enough.
+    name: 'e2e run tooling',
+    test: (file) =>
+      [
+        'scripts/e2e-lock.mjs',
+        'scripts/e2e-affected.mjs',
+        'scripts/e2e-affected-local.mjs',
+      ].includes(file),
+    specs: [],
+  },
+  {
+    // They set CONVEX_URL, IS_TEST, SITE_URL, and BETTER_AUTH_SECRET for every spec.
+    name: 'e2e backend and build setup',
+    test: (file) => ['scripts/e2e.mjs', 'scripts/e2e-convex.mjs'].includes(file),
+    specs: [],
+    full: true,
+  },
+  {
+    // The type files only describe the modules; `typecheck` covers them.
+    name: 'generated Convex types',
+    test: matching(/^convex\/_generated\/(?:api|dataModel|server)\.d\.ts$/),
+    specs: [],
+  },
+  { name: 'generated Convex code', test: inDir('convex/_generated/'), specs: [], full: true },
 
   // The design files an e2e spec opens; every other file under design/ is read by no spec.
   {
@@ -320,9 +515,33 @@ export const AREAS = [
   {
     name: 'placeholder home',
     test: inDir('src/app/placeholder/'),
-    specs: ['install', 'pwa', 'pwa-kill-switch', SESSION],
+    specs: ['install', 'pwa', 'pwa-kill-switch', 'pwa-update', SESSION],
   },
 
+  {
+    // Specs read what these helpers return through the public pages and queries, so the specs
+    // found in the repo run with the page groups.
+    name: 'convex public read helpers',
+    test: named('convex/lib/', ['publicPage', 'publicLeague', 'publicSeason', 'publicList']),
+    specs: [...PUBLIC_PAGE, ...LEAGUE_PAGE, ...SEASON_PAGE, ...SPORT_VIEW, ...FIND_PAGE],
+    derive: (_graph, root) => ({ extraSpecs: findPublicPageSpecs(root) }),
+  },
+  {
+    // The create-league form lists the levels through api.customLevels, so every file that
+    // references it brings its own specs.
+    name: 'convex custom levels',
+    test: named('convex/', ['customLevels']),
+    specs: [
+      'organization-leagues-custom-level',
+      'organization-leagues-division',
+      ...LEAGUE_MANAGEMENT,
+    ],
+    derive: (graph) => ({
+      filesToSelect: [...graph.text]
+        .filter(([file, text]) => file.startsWith('src/') && CUSTOM_LEVELS_API.test(text))
+        .map(([file]) => file),
+    }),
+  },
   {
     name: 'convex organizations',
     test: named('convex/', ['organizations']),
@@ -384,29 +603,142 @@ function filtersFor(rule, file, sessionSpecs) {
   });
 }
 
+class FullSuite extends Error {}
+
+/**
+ * @typedef {{
+ *   root?: string,
+ *   sessionSpecs?: string[] | (() => string[]),
+ *   warn?: (reason: string) => void,
+ * }} SelectContext
+ */
+
+/**
+ * @param {string} file
+ * @param {Set<string>} selected
+ * @param {SelectContext & { graph: () => ImportGraph }} context
+ * @param {Set<string>} visiting
+ */
+function addFileSpecs(file, selected, context, visiting) {
+  const rule = AREAS.find((area) => area.test(file));
+  if (rule) {
+    addRuleSpecs(rule, file, selected, context, visiting);
+    return;
+  }
+  const graph = context.graph();
+  if (graph.unresolved.length > 0) throw new FullSuite(graph.unresolved.join('; '));
+  if (traceImporters(file, graph, selected, context, visiting, new Set()) === 0) {
+    throw new FullSuite(`${file} has no rule, and its importers form a cycle that no rule reaches`);
+  }
+}
+
+/**
+ * @param {Rule} rule
+ * @param {string} file
+ * @param {Set<string>} selected
+ * @param {SelectContext & { graph: () => ImportGraph }} context
+ * @param {Set<string>} visiting
+ */
+function addRuleSpecs(rule, file, selected, context, visiting) {
+  if (rule.full) throw new FullSuite(`${file} is covered by the full-suite rule "${rule.name}"`);
+  let session = [];
+  if (rule.specs.includes(SESSION)) {
+    const { sessionSpecs } = context;
+    session = (typeof sessionSpecs === 'function' ? sessionSpecs() : sessionSpecs) ?? [];
+    if (session.length === 0) throw new FullSuite('the session specs are not known');
+  }
+  for (const filter of filtersFor(rule, file, session)) selected.add(filter);
+  if (!rule.derive) return;
+  if (context.root === undefined)
+    throw new FullSuite(`${file} needs the repo root to derive specs`);
+  const derived = rule.derive(context.graph(), context.root);
+  for (const filter of derived.extraSpecs ?? []) selected.add(filter);
+  for (const derivedFile of derived.filesToSelect ?? []) {
+    if (visiting.has(derivedFile)) continue;
+    visiting.add(derivedFile);
+    addFileSpecs(derivedFile, selected, context, visiting);
+  }
+}
+
+const CONVEX_MODULE = /^convex\/[^/]+\.ts$/;
+
+/**
+ * @param {string} file a file no rule names
+ * @param {ImportGraph} graph
+ * @param {Set<string>} selected
+ * @param {SelectContext & { graph: () => ImportGraph }} context
+ * @param {Set<string>} visiting
+ * @param {Set<string>} seen
+ * @returns {number}
+ */
+function traceImporters(file, graph, selected, context, visiting, seen) {
+  if (seen.has(file)) return 0;
+  seen.add(file);
+  if (!CODE_FILE.test(file)) throw new FullSuite(`${file} has no rule and is not a code file`);
+  if (!graph.files.has(file)) throw new FullSuite(`${file} has no rule and is not on disk`);
+  // Convex loads these by file name, so no importer shows what uses them.
+  if (CONVEX_MODULE.test(file)) throw new FullSuite(`${file} is a Convex module with no rule`);
+  if (graph.dynamicTargets.has(file)) {
+    throw new FullSuite(`${file} has no rule and is loaded with a dynamic import()`);
+  }
+  const importers = graph.importers.get(file);
+  if (importers === undefined || importers.size === 0) {
+    throw new FullSuite(`${file} has no rule and no file imports it`);
+  }
+  let reached = 0;
+  for (const importer of importers) {
+    const rule = AREAS.find((area) => area.test(importer));
+    if (rule) {
+      addRuleSpecs(rule, importer, selected, context, visiting);
+      reached += 1;
+    } else {
+      reached += traceImporters(importer, graph, selected, context, visiting, seen);
+    }
+  }
+  return reached;
+}
+
 /**
  * @param {string[] | undefined} files
- * @param {{ event?: string, base?: string, sessionSpecs?: string[] | (() => string[]) }} [context]
+ * @param {{ event?: string, base?: string } & SelectContext} [context]
  * @returns {{ scope: 'full' } | { scope: 'affected', specs: string[] }}
  */
-export function selectSpecs(files, { event, base, sessionSpecs } = {}) {
+export function selectSpecs(files, { event, base, root, sessionSpecs, warn } = {}) {
   const full = { scope: /** @type {const} */ ('full') };
   if (event !== 'pull_request' || base === 'production') return full;
   if (!Array.isArray(files) || files.length === 0) return full;
+  /** @type {ImportGraph | undefined} */
+  let graph;
+  const context = {
+    root,
+    sessionSpecs,
+    graph: () => {
+      if (root === undefined) throw new FullSuite('no repo root to read the import graph from');
+      try {
+        graph ??= buildImportGraph(root);
+      } catch (error) {
+        throw new FullSuite(
+          `the import graph cannot be read: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+      return graph;
+    },
+  };
   const selected = new Set(ALWAYS);
   for (const file of files) {
     if (typeof file !== 'string' || !isPlainPath(file)) return full;
-    const rule = AREAS.find((area) => area.test(file));
-    if (!rule) return full;
-    let session = [];
-    if (rule.specs.includes(SESSION)) {
-      session = (typeof sessionSpecs === 'function' ? sessionSpecs() : sessionSpecs) ?? [];
-      if (session.length === 0) return full;
+    try {
+      addFileSpecs(file, selected, context, new Set([file]));
+    } catch (error) {
+      if (!(error instanceof FullSuite)) throw error;
+      (warn ?? defaultWarn)(error.message);
+      return full;
     }
-    for (const filter of filtersFor(rule, file, session)) selected.add(filter);
   }
   return { scope: 'affected', specs: [...selected].sort() };
 }
+
+const defaultWarn = (reason) => process.stderr.write(`e2e-affected: full suite: ${reason}\n`);
 
 export function formatOutputs(selection) {
   return selection.scope === 'full'
@@ -419,9 +751,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   let selection;
   try {
     const files = readFileSync(0, 'utf8').split('\n').filter(Boolean);
+    const root = join(import.meta.dirname, '..');
     selection = selectSpecs(files, {
       ...context,
-      sessionSpecs: () => deriveSessionSpecs(join(import.meta.dirname, '..')),
+      root,
+      sessionSpecs: () => deriveSessionSpecs(root),
     });
   } catch (error) {
     process.stderr.write(`e2e-affected: ${error instanceof Error ? error.message : error}\n`);

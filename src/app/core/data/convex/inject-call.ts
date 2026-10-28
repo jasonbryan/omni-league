@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { isPlatformServer } from '@angular/common';
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server';
+import { ChangesInFlight } from '../../changes-in-flight';
 import { CALL_CONNECTION_WAIT_MS, ConvexConnection } from './connection';
 import { CONVEX_CLIENT, type ConvexClientLike } from './client-token';
 import { ConvexNotConfiguredError, ConvexOfflineError, ConvexServerCallError } from './errors';
@@ -48,6 +49,7 @@ function createCallRef<Args, R>(
     const client = inject(CONVEX_CLIENT);
     const onServer = isPlatformServer(inject(PLATFORM_ID));
     const connection = inject(ConvexConnection);
+    const changes = inject(ChangesInFlight);
     const inFlight = signal(0);
     const error = signal<Error | undefined>(undefined);
 
@@ -59,6 +61,7 @@ function createCallRef<Args, R>(
       }
 
       inFlight.update((n) => n + 1);
+      const endChange = changes.begin();
       try {
         if (!connection.canSend()) {
           await connection.waitUntilCanSend(CALL_CONNECTION_WAIT_MS);
@@ -73,6 +76,7 @@ function createCallRef<Args, R>(
         throw failure;
       } finally {
         inFlight.update((n) => n - 1);
+        endChange();
       }
     }
 
