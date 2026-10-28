@@ -4,13 +4,15 @@ import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
-import { signUp } from './support/session';
+import { holdQueries } from './support/hold-queries';
+import { otherUser, signUp } from './support/session';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const SUNDAY = 'sunday-reverse-coed-4s';
+const ORGANIZER_CONTEXT = 'leagues:getOrganizerContext';
 
 async function openDetails(page: Page, role: 'orgAdmin' | 'leagueOrganizer' = 'orgAdmin') {
   const user = newUser('Admin');
@@ -154,6 +156,69 @@ test.describe('League management: league details', () => {
     await save(page).click();
     await expect(status(page)).toContainText('League details saved.');
     await expect(page.getByRole('heading', { level: 1, name: 'Sunday Sand' })).toBeVisible();
+  });
+
+  test.describe('a save from out-of-date details', () => {
+    test.use({ expectedConvexErrors: ['leagues:update'] });
+
+    test('an organizer whose form is out of date is refused after an org admin saves 6v6, and a second save keeps the admin’s 6v6', async ({
+      page,
+      browser,
+    }, testInfo) => {
+      const admin = newUser('Admin');
+      const adminPage = await otherUser(browser, admin);
+      try {
+        const { tenant, path } = await openDetails(page, 'leagueOrganizer');
+        await convexRun('testing:addMembership', {
+          organizationSlug: tenant.slug,
+          email: admin.email,
+          role: 'orgAdmin',
+        });
+        const held = await holdQueries(page, [ORGANIZER_CONTEXT], { holdFromStart: false });
+        await page.reload();
+        await expect(details(page).getByLabel('Name')).toHaveValue('Sunday Reverse Coed 4s');
+        held.hold();
+
+        await adminPage.goto(path);
+        await chip(adminPage, 'format', '6v6').check({ force: true });
+        await save(adminPage).click();
+        await expect(status(adminPage)).toContainText('League details saved.');
+        await expect.poll(() => held.isHolding()).toBe(true);
+        await expect(chip(page, 'format', '4v4')).toBeChecked();
+
+        await details(page).getByLabel('Name').fill('Sunday Sand Coed 4s');
+        await details(page).getByLabel('Name').blur();
+        await save(page).click();
+
+        const alert = details(page).locator('[data-slot="alert"]');
+        await expect(alert).toContainText(
+          'Someone else changed this league while you were editing.',
+        );
+        await expect(alert).toContainText('Check the details and save again.');
+        await expect(alert).toHaveAttribute('role', 'alert');
+        await expect(alert).toBeFocused();
+        await expect(details(page).getByLabel('Name')).toHaveValue('Sunday Sand Coed 4s');
+        await expect(chip(page, 'format', '6v6')).toBeChecked();
+        await expect(page.locator('#league-name-error')).toHaveCount(0);
+        await screenshot(page, testInfo, '322-league-details-changed');
+        await expectAccessible(page);
+
+        // A save resolves only once the held league query catches up.
+        held.release();
+        await save(page).click();
+        await expect(status(page)).toContainText('League details saved.');
+        await expect(alert).toHaveCount(0);
+
+        await adminPage.reload();
+        await expect(details(adminPage).getByLabel('Name')).toHaveValue('Sunday Sand Coed 4s');
+        await expect(chip(adminPage, 'format', '6v6')).toBeChecked();
+        await expect(
+          page.getByRole('heading', { level: 1, name: 'Sunday Sand Coed 4s' }),
+        ).toBeVisible();
+      } finally {
+        await adminPage.context().close();
+      }
+    });
   });
 
   test('keeps Save in view on a phone while the form is taller than the screen', async ({

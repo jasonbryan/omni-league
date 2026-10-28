@@ -39,6 +39,7 @@ import type { OrganizerLeague } from './league-context';
 import {
   DETAILS_ALERTS,
   LeagueDetails,
+  savedDetails,
   type DetailsField,
   type SavedDetails,
 } from './league-details-state';
@@ -50,20 +51,6 @@ type Status = { kind: 'saved'; earlier: Earlier } | { kind: 'restored' };
 
 const UNDO_OFFLINE = "You're offline. Nothing was undone. Try again when you're connected.";
 const UNDO_FAILED = 'The earlier details could not be restored. Try again.';
-
-function savedDetails(name: string, division: OrganizerLeague['division']): SavedDetails {
-  return {
-    name,
-    division: division && {
-      gender: division.gender,
-      playersPerSide: division.playersPerSide,
-      level: division.level,
-      customLevelId: division.customLevel?.customLevelId,
-      ageGroup: division.ageGroup,
-      minimumRosterSize: division.minimumRosterSize,
-    },
-  };
-}
 
 function savedFromEarlier({ league }: Earlier): SavedDetails {
   const { gender, playersPerSide, level, ageGroup } = league;
@@ -346,8 +333,8 @@ export class LeagueDetailsForm implements OnInit {
     this.status.set(null);
     this.undoNote.set(null);
     const leagueId = this.league().leagueId;
-    const outcome = await this.details.submit(this.online(), (values) =>
-      this.updateCall.run({ leagueId, ...values }),
+    const outcome = await this.details.submit(this.online(), (values, expected) =>
+      this.updateCall.run({ leagueId, ...values, expected }),
     );
     if (outcome.sent) {
       this.details.load({ name: outcome.values.name, division: outcome.values });
@@ -355,6 +342,9 @@ export class LeagueDetailsForm implements OnInit {
     } else if ('focus' in outcome) {
       this.focusAfterRender(() => this.focusField(outcome.focus));
     } else {
+      const { customLevel, level } = outcome.current?.division ?? {};
+      // The newer level may be a custom level this form has not shown yet.
+      if (customLevel && level) this.ownCustomLevel.set({ ...customLevel, standardLevel: level });
       this.focusAfterRender(() => this.failureAlert()?.focus());
     }
   }

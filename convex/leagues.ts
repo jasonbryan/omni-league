@@ -40,6 +40,7 @@ import {
   leagueSlugTaken,
   leagueUpdateEarlierValidator,
   leagueWrittenValidator,
+  type LeagueEarlier,
   MAX_DRAFT_SEASONS_UPDATED,
   publishLeague,
   restoreLeague,
@@ -213,10 +214,23 @@ export const update = mutation({
     // A string, not the age group validator, so an unknown value is refused with the field's error.
     ageGroup: v.string(),
     minimumRosterSize: v.optional(v.number()),
+    // What the form last showed, so a save made from out-of-date details is refused. A previous release's tab sends none.
+    expected: v.optional(leagueEarlierValidator),
   },
   returns: leagueUpdateEarlierValidator,
-  handler: async (ctx, { leagueId, name: typedName, ...input }) => {
+  handler: async (ctx, { leagueId, name: typedName, expected, ...input }) => {
     const { league } = await requireLeagueOrganizer(ctx, leagueId);
+    if (expected) {
+      const division = await organizerDivision(ctx, league);
+      if (!organizerShows(expected, league.name, division)) {
+        throw new ConvexError({
+          field: 'name',
+          code: 'changedSince',
+          message: LEAGUE_MESSAGES.changedWhileEditing,
+          current: { name: league.name, ...(division && { division }) },
+        });
+      }
+    }
     const name = checkLeagueName(typedName);
     if (!name.ok) refuse(name.error);
     const division = await checkedDivision(ctx, league.organizationId, league.sport, input);
@@ -337,6 +351,23 @@ async function organizerDivision(ctx: QueryCtx, league: Doc<'leagues'>) {
     ...(league.minimumRosterSize !== undefined && { minimumRosterSize: league.minimumRosterSize }),
     label,
   };
+}
+
+// Compares what the organizer's page shows, so a custom level the page never shows cannot lock a save out.
+function organizerShows(
+  expected: LeagueEarlier,
+  name: string,
+  division: Awaited<ReturnType<typeof organizerDivision>>,
+): boolean {
+  return (
+    expected.name === name &&
+    expected.gender === division?.gender &&
+    expected.playersPerSide === division?.playersPerSide &&
+    expected.level === division?.level &&
+    expected.customLevelId === division?.customLevel?.customLevelId &&
+    expected.ageGroup === division?.ageGroup &&
+    expected.minimumRosterSize === division?.minimumRosterSize
+  );
 }
 
 export const getOrganizerContext = query({
