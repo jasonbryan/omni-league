@@ -447,6 +447,16 @@ export const AREAS = [
     specs: ['organization-leagues-mockup'],
   },
   {
+    name: 'seasons mockup',
+    test: (file) => file === 'design/mockups/125-126-seasons.html',
+    specs: ['league-management-mockup'],
+  },
+  {
+    name: 'app leagues mockup',
+    test: (file) => file === 'design/mockups/141-app-leagues.html',
+    specs: ['app-leagues'],
+  },
+  {
     // chip-classes.spec.ts takes the kit CSS from this mockup's inlined block.
     name: 'chip mockup',
     test: (file) => file === 'design/mockups/300-public-site-league-form.html',
@@ -933,6 +943,49 @@ export function selectSpecs(files, { event, base, root, sessionSpecs, warn } = {
 }
 
 const defaultWarn = (reason) => process.stderr.write(`e2e-affected: full suite: ${reason}\n`);
+
+const MOCKUPS_WORD = /\bmockups\b/;
+const SPEC_FILE = /\.spec\.ts$/;
+
+/**
+ * A spec opens a mockup by path, which the import graph cannot see, so a mockup edit selects that spec only through a rule.
+ * The harness filter in ALWAYS is left out, so a harness spec needs its own rule too.
+ * @param {string} root
+ * @returns {string[]} a spec and mockup with no rule as `<spec>: <mockup>`, a spec that matches the word `mockups` but names no mockup file as `<spec>`, and a non-spec file under `e2e/` that names or matches one as its path; each path is relative to `e2e/`, and a spec has no `.spec.ts`
+ */
+export function findUnmappedMockupReads(root) {
+  const mockups = readdirSync(join(root, 'design', 'mockups'));
+  const files = new Set();
+  listFiles(root, 'e2e', files);
+  const problems = [];
+  for (const file of [...files].sort()) {
+    const text = readFileSync(join(root, file), 'utf8');
+    const relative = file.slice('e2e/'.length);
+    const named = mockups.filter((mockup) => text.includes(mockup));
+    if (!SPEC_FILE.test(file)) {
+      if (named.length > 0 || MOCKUPS_WORD.test(text)) problems.push(relative);
+      continue;
+    }
+    if (named.length === 0) {
+      if (MOCKUPS_WORD.test(text)) problems.push(relative.replace(SPEC_FILE, ''));
+      continue;
+    }
+    for (const mockup of named) {
+      const selection = selectSpecs([`design/mockups/${mockup}`], {
+        event: 'pull_request',
+        base: 'main',
+        root,
+        warn: () => {},
+      });
+      const filters = selection.scope === 'affected' ? selection.specs : [];
+      const covered = filters
+        .filter((filter) => filter !== 'e2e/harness/')
+        .some((filter) => new RegExp(filter).test(file));
+      if (!covered) problems.push(`${relative.replace(SPEC_FILE, '')}: ${mockup}`);
+    }
+  }
+  return problems.sort();
+}
 
 export function formatOutputs(selection) {
   return selection.scope === 'full'
