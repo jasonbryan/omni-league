@@ -260,7 +260,7 @@ describe('tracing a file with no rule to the files that import it', () => {
     );
   });
 
-  it('keeps the rule of an imported file that has one', () => {
+  it('keeps the rule of an imported file that has one, and adds the specs of its importer', () => {
     withRepo(
       {
         'src/app/find/find-page.ts': 'export const a = 1;\n',
@@ -269,7 +269,7 @@ describe('tracing a file with no rule to the files that import it', () => {
       (root) => {
         assert.deepEqual(
           select(root, ['src/app/find/find-page.ts']).specs,
-          withAlways('e2e/cache-key.spec.ts', findPage),
+          withAlways(accept, 'e2e/cache-key.spec.ts', findPage),
         );
       },
     );
@@ -531,11 +531,14 @@ describe('tracing a file with no rule to the files that import it', () => {
     });
 
     it('does not read the graph for files that have a rule', () => {
-      const selection = selectSpecs(['src/app/invites/page.ts'], {
+      const selection = selectSpecs(['convex/search.ts'], {
         ...pr,
         root: join(tmpdir(), 'e2e-affected-missing-root'),
       });
-      assert.deepEqual(selection, { scope: 'affected', specs: withAlways(accept) });
+      assert.deepEqual(selection, {
+        scope: 'affected',
+        specs: withAlways('e2e/cache-key.spec.ts', findPage),
+      });
     });
   });
 });
@@ -944,23 +947,21 @@ describe('convex/lib', () => {
   // out of this list changes how much a pull request tests, so the list changes with it.
   const CONVEX_LIB_FULL = {
     'authOrigins.ts': 'imported by convex/auth.ts',
-    'divisions.ts': 'imported by a lazily loaded page',
-    'forbidden.ts': 'imported by a lazily loaded page',
+    'divisions.ts': 'reached from convex/testing.ts',
     'inviteInput.ts': 'imported by convex/testing.ts',
     'inviteStatus.ts': 'imported by convex/schema.ts',
     'inviteToken.ts': 'imported by convex/testing.ts',
-    'leagueInput.ts': 'imported by a lazily loaded page',
+    'leagueInput.ts': 'reached from convex/testing.ts',
     'leagueStatus.ts': 'imported by convex/testing.ts',
     'memberships.ts': 'imported by convex/testing.ts',
-    'organizationInput.ts': 'imported by a lazily loaded page',
+    'organizationInput.ts': 'reached from convex/testing.ts',
     'password.ts': 'imported by convex/auth.ts',
     'previewOrigin.ts': 'loaded with import() by scripts/e2e-convex.mjs',
     'roles.ts': 'imported by convex/testing.ts',
-    'seasonInput.ts': 'imported by a lazily loaded page',
     'seasonStatus.ts': 'imported by convex/testing.ts',
     'signInThrottle.ts': 'imported by convex/auth.ts',
-    'slugs.ts': 'imported by a lazily loaded page',
-    'sports.ts': 'imported by a lazily loaded page',
+    'slugs.ts': 'reached from convex/testing.ts',
+    'sports.ts': 'reached from convex/testing.ts',
     'tenantWrites.ts': 'imported by convex/testing.ts',
     'testOnly.ts': 'imported by convex/testing.ts',
     'users.ts': 'imported by convex/auth.ts',
