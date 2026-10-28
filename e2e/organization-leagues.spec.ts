@@ -307,7 +307,9 @@ test.describe('Leagues: defaults and the next step', () => {
     await screenshot(page, testInfo, '209-leagues-created-next-step');
     await expectAccessible(page);
 
-    const next = status.getByRole('link', { name: 'Add seasons to Sunday Reverse Coed 4s' });
+    const next = status.getByRole('link', {
+      name: 'Add the first season to Sunday Reverse Coed 4s',
+    });
     await expect(next).toHaveAttribute('href', `${base}/leagues/sunday-reverse-coed-4s`);
     await next.click();
     await expect(page).toHaveURL(`${base}/leagues/sunday-reverse-coed-4s`);
