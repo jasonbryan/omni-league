@@ -41,8 +41,8 @@ Owner answers, 2026-10-09 (chat), as corrected the same day: "I would like a cor
 - **Invites need no account.** A captain or organizer can invite anyone by email, whether or not that person has an account.
 - **Joining needs an account.** To accept an invite, join a team, or register, the person signs up for an account (or signs in). Adult rostered players therefore always have accounts.
 - **A pending invite is not a roster entry.** The invited person is on the roster only after accepting.
-- **Minors** are always roster entries under a guardian, with no account.
-- **Guardian** (owner, chat, 2026-10-10: "As proposed", answering [#139](https://github.com/jasonbryan/omni-league/issues/139#issuecomment-6098208263)): an adult account holder who adds and manages a minor's roster entry and may also play.
+- **Minors** are always roster entries, or camp and training registrants, under a guardian, with no account.
+- **Guardian** (owner, chat, 2026-10-10: "As proposed", answering [#139](https://github.com/jasonbryan/omni-league/issues/139#issuecomment-6098208263)): an adult account holder who adds and manages a minor's roster entry, or registers a minor for a camp or training (see Program types), and may also play.
   - A captain invites the guardian's email; on accepting, the guardian joins the roster, adds a minor, or both.
   - Only the minor's display name is stored.
   - Opponents see a minor's first name and last initial.
@@ -149,7 +149,7 @@ Who receives each notification, when reminders are sent, and whether users choos
 
 Owner's words, 2026-10-27 (chat): "Sounds good but I also want to be able to support types of programs, like leagues, tournements, camps, and training".
 
-An organization offers **programs** of four **program types**: league, tournament, camp, and training. The owner answered the seven questions on #323 on 2026-10-28 (chat), quoted exactly: "1. A 2. B but make pools optional and allow bracket only. Double elimination in the bracket will need to be an option at some point as well. 3. B a tournament is a one time thing 4. B 5. A", then "6. a 7. a", and on question 3, "One time event".
+An organization offers **programs** of four **program types**: league, tournament, camp, and training. The owner answered the seven questions on #323 on 2026-10-28 (chat), quoted exactly: "1. A 2. B but make pools optional and allow bracket only. Double elimination in the bracket will need to be an option at some point as well. 3. B a tournament is a one time thing 4. B 5. A", then "6. a 7. a", and on question 3, "One time event". The first "3. B" was clarified by "One time event", so question 3 is resolved as option A: each tournament stands alone.
 
 ### Decided (owner, 2026-10-28)
 
@@ -161,7 +161,7 @@ An organization offers **programs** of four **program types**: league, tournamen
 - **Camps and training, minors** (question 4): guardians register minors from the start. Only the child's display name is stored, with the guardian's confirmation that the child fits the age range. No birth date is stored. Adults register themselves where the ages allow.
 - **Training** (question 5): classes only at first. People register for a weekly series, or for a single class where the organizer allows it. There are no bookable private lessons.
 - **Search** (question 6): one "Find a program" search with type chips. `/leagues` keeps working as the league view. "Program" appears only in the admin area and the search; elsewhere the type names are used.
-- **Application fee** (question 7): the same rule as seasons. Each tournament roster entry, and each camp or training registrant, counts as one roster entry.
+- **Application fee** (question 7): the same rule as seasons. Each tournament roster entry, and each camp or training registrant, counts as one roster entry. Free and offline registrations go on the platform bill (#366).
 
 ### Model
 
@@ -180,9 +180,9 @@ An organization offers **programs** of four **program types**: league, tournamen
 
 Every type shares:
 
-- the organization, its staff, and its access boundary (a league organizer can be assigned any program);
+- the organization, its staff, and its access boundary. **Proposal, waiting for the owner (Open 13):** a league organizer can be assigned any program, with the same rights as for a league (#338);
 - locations, draft then publish, and a public page that leads with what's open now;
-- registration: an account, a deadline, a capacity, and a waitlist when full;
+- registration: an account, a deadline, and a capacity. Tournaments take a waitlist when full, as seasons do. **Proposal, waiting for the owner (Open 12):** camps and training also take a waitlist (#358, #365, #368);
 - payments through Stripe Connect, with the application fee. Prices and checkout for each type follow the league checkout slices;
 - public listing on the organization page and in Find a program;
 - offline saved copies of public pages, and demo data for each type.
@@ -196,7 +196,7 @@ Slices are listed on #323. Leagues stay unaffected throughout.
 3. **Tournaments:** create, publish, and list (#335 to #337), staff and copying (#338, #339), registration (#340, #341), then the bracket only (#342 to #345), then pools and a bracket (#346 to #348). Double elimination comes later (#349).
 4. **Find a program** (#350, #351).
 5. **Camps** (#352 to #358).
-6. **Training** (#359 to #365).
+6. **Training** (#359 to #365, #368), then registrations in `/app` (#367) and billing for camps and training (#366).
 
 ## Future (out of scope)
 
@@ -216,7 +216,7 @@ Owner answers. ADRs that apply them go through `gate:technology`; only `Accepted
 
 - **Sign-in (#7):** email + password, plus Google, at launch. Email one-time codes are dropped for now. Email verification and password-reset emails are added before the first production release ([owner decision, relayed on #7](https://github.com/jasonbryan/omni-league/issues/7#issuecomment-6049577799)).
 - **Auth budget (#7):** the auth provider's free tier at launch.
-- **Accounts (#7):** adults only at launch. Minors appear as roster entries managed by a guardian or organizer. Adults need an account to join a team or register (see Accounts, players, and guardians).
+- **Accounts (#7):** adults only at launch. Minors appear as roster entries managed by a guardian or organizer, or as camp and training registrants under a guardian. Adults need an account to join a team or register (see Accounts, players, and guardians).
 - **Hosting budget (#9):** up to about $25/month for hosting and Convex combined; the terms of both the host and the Convex plan must allow commercial use.
 - **Previews (#9):** every PR gets a preview deployment with its own Convex backend.
 - **Domain (#9):** the host's default domain until the first production release.
@@ -238,5 +238,7 @@ Questions still open for the owner. The planner records them as `status:blocked`
 9. **Payments before registration ships:** whether the first production release that offers registration must include the payment slices, or ships registration behind them (#126).
 10. **Registration deadline scope:** whether the deadline also stops accepting invites and organizer placement, or only new teams and free agents (#132, #135).
 11. **Double elimination (#349):** whether the grand final gets a deciding second game when the losers' bracket team wins the first.
+12. **Camp and training waitlists (#358, #365, #368):** whether a full camp session or training class takes a waitlist, as a full season does.
+13. **Staff for other programs (#338):** whether a league organizer can be assigned tournaments, camps, and training, with the same rights as for a league.
 
 Features beyond the above are not yet specified.
