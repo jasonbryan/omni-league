@@ -510,13 +510,13 @@ test.describe('Overview: the Leagues tile and the checklist', () => {
       await expect(
         page.getByRole('navigation', { name: `${tenant.name} admin` }).getByRole('link'),
       ).toHaveText([
+        /Switch organization/,
         'Overview',
-        'Locations',
-        'Leagues',
-        'Staff',
+        /^Leagues\d*$/,
+        /^Locations\d*$/,
+        /^Staff\d*$/,
         'Details',
-        'Public page',
-        'Your organizations',
+        'View public page',
       ]);
     }
     await setup.getByRole('link', { name: 'Create a league' }).click();

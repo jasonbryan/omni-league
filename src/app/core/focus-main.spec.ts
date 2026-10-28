@@ -2,6 +2,8 @@ import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { CONVEX_CLIENT } from './data/convex';
+import { FakeConvexClient } from './data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { provideFocusMainAfterNavigation } from './focus-main';
 
@@ -19,6 +21,7 @@ function configure(platform: 'browser' | 'server' = 'browser'): void {
   TestBed.configureTestingModule({
     providers: [
       { provide: PLATFORM_ID, useValue: platform },
+      { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
       provideRouter([
         { path: 'old', redirectTo: 'new' },
         { path: 'items/:id', component: PlainTestPage },

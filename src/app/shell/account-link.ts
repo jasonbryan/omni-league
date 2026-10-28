@@ -1,9 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
 import { injectQuery, skipToken } from '../core/data/convex';
-import { injectCurrentUrl } from './current-url';
 import { initialsOf } from './initials';
 
 /**
@@ -18,9 +17,8 @@ import { initialsOf } from './initials';
   template: `
     @if (name() !== undefined) {
       <a
-        [routerLink]="href()"
+        routerLink="/app"
         data-slot="button"
-        [attr.aria-current]="onSettingsPage() ? 'page' : null"
         class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 ms-auto min-w-0 max-w-36 ps-1 md:max-w-64"
       >
         @if (name(); as name) {
@@ -28,8 +26,7 @@ import { initialsOf } from './initials';
             aria-hidden="true"
             class="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground"
             >{{ initials() }}</span
-          ><span class="sr-only">{{ label() }}</span
-          ><span class="truncate">{{ name }}</span>
+          ><span class="sr-only">Account: </span><span class="truncate">{{ name }}</span>
         } @else {
           Account
         }
@@ -39,9 +36,6 @@ import { initialsOf } from './initials';
 })
 export class AccountLink {
   private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly url = injectCurrentUrl();
-
   // Asked only once Convex has accepted the token, so the first answer is the caller's own row.
   private readonly me = injectQuery(api.users.me, () =>
     this.auth.convexAuthenticated() ? {} : skipToken,
@@ -53,14 +47,4 @@ export class AccountLink {
     return me?.name ?? null;
   });
   protected readonly initials = computed(() => initialsOf(this.name() ?? ''));
-  private readonly segments = computed(() =>
-    (this.router.parseUrl(this.url()).root.children['primary']?.segments ?? []).map((s) => s.path),
-  );
-  private readonly inApp = computed(() => this.segments()[0] === 'app');
-  protected readonly href = computed(() => (this.inApp() ? '/app/account' : '/app'));
-  protected readonly label = computed(() => (this.inApp() ? 'Account settings: ' : 'Account: '));
-  protected readonly onSettingsPage = computed(() => {
-    const [app, account, ...rest] = this.segments();
-    return app === 'app' && account === 'account' && rest.length === 0;
-  });
 }

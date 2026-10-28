@@ -26,13 +26,19 @@ import { LeagueSidebar } from './league-sidebar';
   providers: [LeagueContext],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-shell [sidebarPending]="context.state() === 'loading'">
       @switch (context.state()) {
         @case ('ready') {
           @if (context.league(); as league) {
-            <ng-template appShellSidebar>
+            <ng-template appShellSidebar [appShellOrganizationName]="league.organization.name">
               @if (league.role === 'orgAdmin') {
-                <app-admin-sidebar [organization]="league.organization" />
+                <app-admin-sidebar
+                  [organization]="{
+                    organizationId: league.organizationId,
+                    name: league.organization.name,
+                    slug: league.organization.slug,
+                  }"
+                />
               } @else {
                 <app-league-sidebar [league]="league" />
               }

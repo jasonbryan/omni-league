@@ -7,6 +7,7 @@ import {
   COASTAL,
   forbiddenError,
   GET_ADMIN_CONTEXT,
+  LIST_FOR_ADMIN,
   ME,
   openAdmin,
   text,
@@ -20,6 +21,9 @@ const ROUTES = adminRoutes(AdminArea, [
   { path: 'locations', component: Child },
 ]);
 const OVERVIEW = `/app/organizations/${COASTAL.slug}`;
+const LIST_MINE = 'organizations:listMine';
+// The account row and the slim bar's initials each ask for it.
+const ACCOUNT = [ME, ME];
 
 describe('AdminArea', () => {
   describe('loading (state 4)', () => {
@@ -31,19 +35,21 @@ describe('AdminArea', () => {
       expect(page.querySelector('#child')).toBeNull();
     });
 
-    it('asks organizations.getAdminContext with the slug, and nothing else but the top bar’s users.me, once the token is accepted', async () => {
+    it('asks organizations.getAdminContext with the slug, and nothing else but the account row’s users.me, once the token is accepted', async () => {
       const { convex, acceptToken } = await openAdmin(ROUTES, OVERVIEW);
       acceptToken();
       expect(convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
         [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
         [ME, {}],
+        [ME, {}],
       ]);
     });
 
-    it('draws the sidebar placeholder and the panel placeholders, with no menu button', async () => {
+    it('draws the sidebar and panel placeholders, with the menu button and no navigation until the sidebar is known', async () => {
       const { page } = await openAdmin(ROUTES, OVERVIEW);
-      expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+      expect(page.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
       expect(page.querySelector('nav')).toBeNull();
+      expect(text(page.querySelector('aside [role="status"], [role="status"]'))).toBeTruthy();
       expect(
         page.querySelectorAll('[aria-hidden="true"].motion-safe\\:animate-pulse').length,
       ).toBeGreaterThan(5);
@@ -68,9 +74,22 @@ describe('AdminArea', () => {
       expect(nav.getAttribute('aria-label')).toBe('Coastal Bend Rec Club admin');
     });
 
-    it('requests nothing besides getAdminContext and the top bar’s users.me (the child asks for its own data)', async () => {
+    it('requests nothing besides getAdminContext, the account row’s users.me, and the sidebar’s four counts (the child asks for its own data)', async () => {
       const { convex } = await ready();
-      expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ADMIN_CONTEXT, ME]);
+      expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([
+        GET_ADMIN_CONTEXT,
+        ...ACCOUNT,
+        'leagues:publishedCount',
+        'leagues:listForAdmin',
+        LIST_FOR_ADMIN,
+        'memberships:listForOrganization',
+      ]);
+    });
+
+    it('names the slim bar after the organization, and has no top bar from 1024px', async () => {
+      const { page } = await ready();
+      expect(text(page.querySelector('header p'))).toBe('Coastal Bend Rec Club');
+      expect(page.querySelector('header')?.classList).toContain('lg:hidden');
     });
 
     it('serves the locations path through the same shell', async () => {
@@ -91,7 +110,7 @@ describe('AdminArea', () => {
       return opened;
     }
 
-    it('shows the heading, the sentence, and the link to /app, with no sidebar and no child', async () => {
+    it('shows the heading, the sentence, and the link to /app, with the home sidebar and no child', async () => {
       const { page, convex } = await forbidden();
       expect(text(page.querySelector('h1'))).toBe('You can’t manage this organization');
       expect(text(page.querySelector('main p'))).toBe(
@@ -100,11 +119,14 @@ describe('AdminArea', () => {
       const link = page.querySelector<HTMLAnchorElement>('main a');
       expect(link?.getAttribute('href')).toBe('/app');
       expect(text(link)).toBe('Go to your organizations');
-      expect(page.querySelector('nav')).toBeNull();
-      expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+      expect(page.querySelector('nav')?.getAttribute('aria-label')).toBe('Your account');
       expect(page.querySelector('#child')).toBeNull();
       expect(page.querySelectorAll('h1')).toHaveLength(1);
-      expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ADMIN_CONTEXT, ME]);
+      expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([
+        GET_ADMIN_CONTEXT,
+        ...ACCOUNT,
+        LIST_MINE,
+      ]);
     });
 
     it('serves the same view for the locations path', async () => {
@@ -121,7 +143,7 @@ describe('AdminArea', () => {
   });
 
   describe('unknown slug (state 6)', () => {
-    it('shows the not-found view, with no sidebar and no other query besides the top bar’s', async () => {
+    it('shows the not-found view, with the home sidebar and no other query besides the account row’s and the sidebar’s', async () => {
       const { page, convex, acceptToken, subscription, flush } = await openAdmin(
         ROUTES,
         '/app/organizations/does-not-exist/locations',
@@ -132,9 +154,13 @@ describe('AdminArea', () => {
       await flush();
       expect(text(page.querySelector('h1'))).toBe('Page not found');
       expect(text(page.querySelector('main a'))).toBe('Go to the home page');
-      expect(page.querySelector('nav')).toBeNull();
+      expect(page.querySelector('nav')?.getAttribute('aria-label')).toBe('Your account');
       expect(page.querySelector('#child')).toBeNull();
-      expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ADMIN_CONTEXT, ME]);
+      expect(convex.activeSubscriptions.map((s) => s.name)).toEqual([
+        GET_ADMIN_CONTEXT,
+        ...ACCOUNT,
+        LIST_MINE,
+      ]);
     });
   });
 
