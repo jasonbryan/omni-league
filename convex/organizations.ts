@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
+import { isOrgAdmin, requireOrgAdmin, requireOrgAdminOrForbidden, requireUser } from './lib/access';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { leagueRowSeasons } from './lib/publicLeague';
 import { insertOrgAdminMembership } from './lib/memberships';
@@ -226,6 +226,16 @@ export const getAdminContext = query({
       slug: organization.slug,
       ...(organization.cityState !== undefined && { cityState: organization.cityState }),
     };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- answers only whether the caller (found from ctx.auth) is an org admin of the organization; an anonymous caller or any other member gets false.
+export const viewerIsOrgAdmin = query({
+  args: { slug: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { slug }) => {
+    const organization = await findOrganizationBySlug(ctx, slug);
+    return organization ? await isOrgAdmin(ctx, organization._id) : false;
   },
 });
 

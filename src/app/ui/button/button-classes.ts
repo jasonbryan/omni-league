@@ -11,4 +11,6 @@ export const PRIMARY_BUTTON = `${BUTTON_BASE} bg-primary text-primary-foreground
 
 export const PRIMARY_BUTTON_LARGE = `${BUTTON_BASE} bg-primary text-primary-foreground [a]:hover:bg-primary/90 h-11 gap-2 px-5 has-data-[icon=inline-end]:pe-4 has-data-[icon=inline-start]:ps-4`;
 
+export const OUTLINE_BUTTON_LARGE = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-11 gap-2 px-5 has-data-[icon=inline-end]:pe-4 has-data-[icon=inline-start]:ps-4`;
+
 export const DESTRUCTIVE_BUTTON = `${BUTTON_BASE} bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30 ${SIZE}`;

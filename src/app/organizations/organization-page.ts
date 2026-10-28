@@ -5,6 +5,7 @@ import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
 import { sportFromSegment } from '../../../convex/lib/sports';
+import { AuthService } from '../core/auth/auth.service';
 import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
 import { parseListPage } from '../core/list-page';
 import { injectNow } from '../core/now';
@@ -49,6 +50,7 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
           [savedAt]="savedAt()"
           [openSeasons]="openSeasons()"
           [now]="now()"
+          [canManage]="viewerIsOrgAdmin.value() === true"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view />
@@ -63,6 +65,7 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
   `,
 })
 export class OrganizationPage {
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly slug = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('orgSlug') ?? '')),
@@ -105,6 +108,10 @@ export class OrganizationPage {
   );
   private readonly openSeasonRows = injectQuery(api.seasons.listOpenForOrganization, () =>
     this.unknownSport() ? skipToken : { orgSlug: this.slug(), ...this.listArgs() },
+  );
+  // Asked only once Convex has accepted a token, so an anonymous view opens no extra subscription and the server render stays anonymous.
+  protected readonly viewerIsOrgAdmin = injectQuery(api.organizations.viewerIsOrgAdmin, () =>
+    this.auth.convexAuthenticated() ? { slug: this.slug() } : skipToken,
   );
   private readonly online = injectOnline();
   protected readonly now = injectNow();
