@@ -16,7 +16,7 @@ export function injectPageLoadWait(
   restartOn: () => unknown,
 ): Signal<boolean> {
   assertInInjectionContext(injectPageLoadWait);
-  // The server render has its own query timeout, and a browser timer there would never fire.
+  // The server render has its own query timeout, and a browser timer there would outlive the render.
   if (isPlatformServer(inject(PLATFORM_ID))) return signal(false).asReadonly();
 
   const spell = computed(() => ({ waiting: waiting(), restartOn: restartOn() }), {
