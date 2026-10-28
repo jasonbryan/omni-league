@@ -50,6 +50,7 @@ export function e2eArgs(files, extraArgs, { sessionSpecs } = {}) {
     selection = selectSpecs(list, {
       event: 'pull_request',
       base: 'main',
+      root: ROOT,
       sessionSpecs: sessionSpecs ?? (() => deriveSessionSpecs(ROOT)),
     });
   } catch (error) {

@@ -30,14 +30,28 @@ describe('users.me', () => {
     await expect(t.query(api.users.me, {})).resolves.toBeNull();
   });
 
-  test("returns each caller's own name, and only the name", async () => {
+  test("returns each caller's own name and email, and nothing else", async () => {
     const t = await seedUsers();
     await expect(
       t.withIdentity(asUser('auth-a', 'Token Name A')).query(api.users.me, {}),
-    ).resolves.toEqual({ name: 'Alice A' });
+    ).resolves.toEqual({ name: 'Alice A', email: 'auth-a@example.test' });
     await expect(
       t.withIdentity(asUser('auth-b', 'Token Name B')).query(api.users.me, {}),
-    ).resolves.toEqual({ name: 'Bob B' });
+    ).resolves.toEqual({ name: 'Bob B', email: 'auth-b@example.test' });
+  });
+
+  test('returns the name alone, without throwing, for an identity with no email claim', async () => {
+    const t = await seedUsers();
+    const withoutEmail = {
+      subject: 'auth-a',
+      issuer: 'http://127.0.0.1:3211',
+      emailVerified: false,
+      name: 'Token Name A',
+      sessionId: 's1',
+    };
+    const me = await t.withIdentity(withoutEmail).query(api.users.me, {});
+    expect(me).toEqual({ name: 'Alice A' });
+    expect(me).not.toHaveProperty('email');
   });
 
   test('returns null for an identity with no users row', async () => {

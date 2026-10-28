@@ -11,19 +11,30 @@ interface Change {
 const changes = (message: string | Buffer): Change[] =>
   (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
 
+// A refused mutation changes no query result, so it is not part of the transitions that wait.
+const isRefusedMutation = (message: string | Buffer): boolean => {
+  const { type, success } = JSON.parse(String(message)) as { type?: string; success?: boolean };
+  return type === 'MutationResponse' && success === false;
+};
+
 export interface HeldQueries {
   isHolding: () => boolean;
   release: () => void;
   watchNewSubscriptions: () => void;
+  holdNextAnswer: () => void;
 }
 
 // Frames after a held answer are kept too, because Convex applies transitions in order.
 export async function holdQueries(
   page: Page,
   udfPaths: readonly string[],
-  { watchFromStart = true }: { watchFromStart?: boolean } = {},
+  {
+    watchFromStart = true,
+    holdFromStart = true,
+  }: { watchFromStart?: boolean; holdFromStart?: boolean } = {},
 ): Promise<HeldQueries> {
   let watching = watchFromStart;
+  let armed = holdFromStart;
   const queryIds = new Set<number>();
   const kept: (string | Buffer)[] = [];
   let holding = false;
@@ -53,8 +64,8 @@ export async function holdQueries(
       const answersHeldQuery = changes(message).some(
         (change) => change.type === 'QueryUpdated' && queryIds.has(change.queryId),
       );
-      if (answersHeldQuery && !released) holding = true;
-      if (holding) kept.push(message);
+      if (answersHeldQuery && armed && !released) holding = true;
+      if (holding && !isRefusedMutation(message)) kept.push(message);
       else ws.send(message);
     });
   });
@@ -63,6 +74,9 @@ export async function holdQueries(
     release: () => release(),
     watchNewSubscriptions: () => {
       watching = true;
+    },
+    holdNextAnswer: () => {
+      armed = true;
     },
   };
 }

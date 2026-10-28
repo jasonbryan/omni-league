@@ -35,6 +35,9 @@ export class FakeAuthClient {
   private releaseHeldSignIn: (() => void) | null = null;
   readonly signIns: Record<string, unknown>[] = [];
   signOuts = 0;
+  signOutRejects = false;
+  holdSignOut = false;
+  private releaseHeldSignOut: (() => void) | null = null;
   storedCookie = 'better-auth.session_token=stored';
   getCookieThrows: Error | null = null;
   holdTokens = false;
@@ -125,12 +128,19 @@ export class FakeAuthClient {
     this.release = null;
   }
 
-  readonly signOut = () => {
+  readonly signOut = async () => {
     this.signOuts++;
+    if (this.holdSignOut) await new Promise<void>((resolve) => (this.releaseHeldSignOut = resolve));
+    if (this.signOutRejects) throw new Error('network');
     this.storedCookie = '';
     this.emitSession(null);
-    return Promise.resolve({ data: { success: true }, error: null });
+    return { data: { success: true }, error: null };
   };
+
+  releaseSignOut(): void {
+    this.releaseHeldSignOut?.();
+    this.releaseHeldSignOut = null;
+  }
 
   private set(value: SessionValue): void {
     this.value = value;

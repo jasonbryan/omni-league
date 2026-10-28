@@ -244,7 +244,8 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     });
     const base = `/app/organizations/${tenant.slug}`;
     const routes: [string, string | RegExp][] = [
-      ['/app', 'Your account'],
+      ['/app', 'Home'],
+      ['/app/account', 'Account settings'],
       [`/app/organizations/${empty.slug}`, 'Overview'],
       ['/app/organizations/new', /Create an organization/],
       [base, 'Overview'],
@@ -340,7 +341,7 @@ test.describe('desktop: controls keep their sizes', () => {
     expect(
       await heightOf(page.locator('app-page-control').getByRole('link', { name: 'Page 2' })),
     ).toBe(32);
-    await visit(page, '/app', 'Your account');
+    await visit(page, '/app', 'Home');
     expect(await heightOf(page.getByRole('link', { name: `Manage ${tenant.name}` }))).toBeLessThan(
       TARGET,
     );

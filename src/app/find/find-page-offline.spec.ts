@@ -93,6 +93,27 @@ describe('FindPage offline', () => {
     expect(host(harness).querySelector('main form')).toBeNull();
   });
 
+  it('opens a saved no-results search with its saved suggestions, and a suggestion that was not viewed shows the not-saved view', async () => {
+    plantSavedCopy(
+      api.search.leagues,
+      { q: 'coed 4s austin' },
+      { rows: [], more: false, suggestions: ['coed 4s'] },
+      SAVED_AT,
+    );
+    stubOnLine(false);
+    const harness = await open('/leagues?q=coed%204s%20austin');
+    const main = host(harness).querySelector('main')!;
+    expect(text(main)).toContain('Try fewer words:');
+    const link = main.querySelector<HTMLAnchorElement>('ul a')!;
+    expect(link.getAttribute('href')).toBe('/leagues?q=coed%204s');
+    link.click();
+    for (let i = 0; i < 3; i++) {
+      TestBed.tick();
+      await harness.fixture.whenStable();
+    }
+    expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+  });
+
   it('shows the form with no note when no search is open', async () => {
     stubOnLine(false);
     const harness = await open('/leagues');

@@ -136,7 +136,7 @@ test.describe('after sign-in', () => {
       const { tokens } = await signInFrom(page, user, '/', 'top-bar');
 
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
       await tokens;
     });
 
@@ -180,9 +180,9 @@ test.describe('after sign-in', () => {
       await page.locator('#password').fill(user.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
       await expect(page).toHaveURL(`${baseURL}/app`);
-      await expect(page.getByRole('region', { name: 'Signed-in account' })).toContainText(
-        user.name,
-      );
+      await expect(
+        page.getByRole('link', { name: `Account settings: ${user.name}` }),
+      ).toBeVisible();
       await tokens;
     }
 

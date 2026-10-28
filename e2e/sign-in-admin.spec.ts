@@ -10,7 +10,7 @@ import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
 const accountLink = (page: import('@playwright/test').Page) =>
-  page.locator('header a[href="/app"]');
+  page.locator('header a[href="/app/account"]');
 const signInLink = (page: import('@playwright/test').Page) =>
   page.locator('header a[href^="/sign-in"]');
 
@@ -36,12 +36,12 @@ test.describe('sign-in and the admin area together', VIEWPORT_AGNOSTIC, () => {
       await expect(
         page.getByRole('main').getByRole('heading', { level: 1, name: heading }),
       ).toBeVisible();
-      await expect(accountLink(page)).toHaveAccessibleName(`Account: ${user.name}`);
+      await expect(accountLink(page)).toHaveAccessibleName(`Account settings: ${user.name}`);
       await expect(signInLink(page)).toHaveCount(0);
     }
 
     await accountLink(page).click();
-    await expect(page).toHaveURL(`${baseURL}/app`);
+    await expect(page).toHaveURL(`${baseURL}/app/account`);
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(`${baseURL}/`);
     await expect(signInLink(page)).toBeVisible();
@@ -59,7 +59,7 @@ test.describe('sign-in and the admin area together', VIEWPORT_AGNOSTIC, () => {
     await expect(
       page.getByRole('main').getByRole('heading', { level: 1, name: 'Locations' }),
     ).toBeVisible();
-    await expect(accountLink(page)).toHaveAccessibleName(`Account: ${user.name}`);
+    await expect(accountLink(page)).toHaveAccessibleName(`Account settings: ${user.name}`);
     await tokens;
   });
 
@@ -70,7 +70,7 @@ test.describe('sign-in and the admin area together', VIEWPORT_AGNOSTIC, () => {
     await signUp(page, user);
     const tenant = await seedTenant({ name: 'E2E SignIn NoAdmin' });
     await page.goto(`/app/organizations/${tenant.slug}`);
-    await expect(accountLink(page)).toHaveAccessibleName(`Account: ${user.name}`);
+    await expect(accountLink(page)).toHaveAccessibleName(`Account settings: ${user.name}`);
     await expect(page.getByRole('main').getByRole('heading', { level: 1 })).not.toHaveText(
       'Overview',
     );
