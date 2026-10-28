@@ -354,7 +354,7 @@ describe('the specs of the importers outside a hand rule', () => {
 });
 
 describe('the admin area specs', () => {
-  const details = [
+  const ADMIN_FORM_SPECS = [
     'organization-details',
     'organization-leagues-division',
     'organization-leagues-custom-level',
@@ -370,7 +370,8 @@ describe('the admin area specs', () => {
       'league/season-dates.ts',
     ]) {
       const specs = specsFor([`src/app/organizations/${file}`]);
-      for (const name of details) assert.ok(specs.includes(specFile(name)), `${file}: ${name}`);
+      for (const name of ADMIN_FORM_SPECS)
+        assert.ok(specs.includes(specFile(name)), `${file}: ${name}`);
     }
   });
 
