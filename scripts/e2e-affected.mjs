@@ -350,6 +350,7 @@ export function buildImportGraph(root) {
  *   test: (file: string) => boolean,
  *   specs: string[],
  *   full?: boolean,
+ *   directOnly?: boolean,
  *   widen?: boolean,
  *   derive?: (graph: ImportGraph, root: string) => { extraSpecs?: string[], filesToSelect?: string[] },
  * }} Rule
@@ -595,12 +596,10 @@ export const AREAS = [
     specs: [SESSION],
   },
   {
-    // The shell wraps every signed-in page, so the specs that sign a user in run with it. The sheet is
-    // loaded with import(), so no importer shows what uses it.
+    // The shell wraps every signed-in page, so the specs that sign a user in run with it.
     name: 'app shell',
     test: named('src/app/shell/', [
       'shell',
-      'shell-sheet',
       'shell-sidebar',
       'account-row',
       'home-sidebar',
@@ -608,6 +607,14 @@ export const AREAS = [
       'url-path',
     ]),
     specs: ['app-shell', 'shell-sheet', SESSION],
+  },
+  {
+    // import() loads the sheet, so no importer shows what uses it: a file only it imports (the button, the
+    // sheet parts, the helpers) cannot be traced to its specs and stays in the full suite.
+    name: 'app shell sheet',
+    test: named('src/app/shell/', ['shell-sheet']),
+    specs: ['app-shell', 'shell-sheet', SESSION],
+    directOnly: true,
   },
   {
     name: 'not-found view',
@@ -907,6 +914,9 @@ function traceImporters(file, graph, selected, context, visiting, seen) {
   let reached = 0;
   for (const importer of importers) {
     const rule = AREAS.find((area) => area.test(importer));
+    if (rule?.directOnly) {
+      throw new FullSuite(`${file} is reached through ${importer}, which a dynamic import() loads`);
+    }
     if (rule) {
       addRuleSpecs(rule, importer, selected, context, visiting);
       reached += 1;

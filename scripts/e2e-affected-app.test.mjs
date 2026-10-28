@@ -600,6 +600,7 @@ describe('Markdown under src/', () => {
 
 describe('the files under src/app that run the full suite', () => {
   const MAIN_SERVER = 'reaches src/main.server.ts, which no file imports';
+  const SHEET = 'reaches shell-sheet.ts, which a dynamic import() loads';
   const SRC_FULL = {
     'src/app/app.config.server.ts': MAIN_SERVER,
     'src/app/app.config.ts': MAIN_SERVER,
@@ -629,7 +630,25 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/service-worker/reload-guard.ts': MAIN_SERVER,
     'src/app/core/service-worker/service-worker-build.ts': MAIN_SERVER,
     'src/app/core/url-serializer.ts': MAIN_SERVER,
+    'src/app/shell/follow-link.ts': SHEET,
+    'src/app/shell/sheet-links.ts': SHEET,
     'src/app/shell/update-prompt.ts': MAIN_SERVER,
+    'src/app/ui/button/hlm-button.token.ts': SHEET,
+    'src/app/ui/button/hlm-button.ts': SHEET,
+    'src/app/ui/button/index.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-close.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-content.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-description.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-footer.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-header.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-overlay.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-portal.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-title.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet-trigger.ts': SHEET,
+    'src/app/ui/sheet/hlm-sheet.ts': SHEET,
+    'src/app/ui/sheet/index.ts': SHEET,
+    'src/app/ui/utils/hlm.ts': SHEET,
+    'src/app/ui/utils/index.ts': SHEET,
     'src/app/ui/utils/provide-spartan-hlm.ts': MAIN_SERVER,
   };
 
@@ -637,6 +656,27 @@ describe('the files under src/app that run the full suite', () => {
     const full = appSources.filter((file) => specsFor([file]).includes(FULL));
     assert.deepEqual(full, Object.keys(SRC_FULL).sort());
     for (const [file, reason] of Object.entries(SRC_FULL)) assert.ok(reason.length > 0, file);
+  });
+
+  it('keeps the button, the sheet parts, and the helpers the phone sheet imports in the full suite', () => {
+    for (const file of [
+      'src/app/ui/button/hlm-button.ts',
+      'src/app/ui/button/index.ts',
+      'src/app/ui/sheet/hlm-sheet.ts',
+      'src/app/ui/utils/hlm.ts',
+      'src/app/shell/follow-link.ts',
+      'src/app/shell/sheet-links.ts',
+    ]) {
+      assert.deepEqual(specsFor([file]), [FULL], file);
+    }
+  });
+
+  it('maps the phone sheet itself to the shell specs', () => {
+    const specs = specsFor(['src/app/shell/shell-sheet.ts']);
+    assert.ok(!specs.includes(FULL));
+    for (const spec of ['e2e/app-shell.spec.ts', 'e2e/shell-sheet.spec.ts']) {
+      assert.ok(specs.includes(spec), spec);
+    }
   });
 
   it('lists only files that exist', () => {
