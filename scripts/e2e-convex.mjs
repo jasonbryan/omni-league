@@ -14,8 +14,6 @@ export const BACKEND = Object.freeze(
   JSON.parse(readFileSync(join(ROOT, 'e2e', 'support', 'convex-backend.json'), 'utf8')),
 );
 export const LOCAL_CONVEX_URL = `http://127.0.0.1:${BACKEND.cloudPort}`;
-// `callTimeoutMs` bounds one CLI call from a test, `setupTimeoutMs` one from `setup` or `seed-demo`.
-// `convexRun` waits `callTimeoutMs + outerGraceMs`, so the timeout in this script always fires first.
 export const TIMEOUTS = Object.freeze(
   JSON.parse(readFileSync(join(ROOT, 'e2e', 'support', 'convex-timeouts.json'), 'utf8')),
 );
@@ -307,7 +305,7 @@ export async function runConvex(
     instanceName = fetchInstanceName,
     spawnCli = captureCli,
     env = process.env,
-    timeoutMs = TIMEOUTS.callTimeoutMs,
+    timeoutMs = TIMEOUTS.testCallTimeoutMs,
   } = {},
 ) {
   if (!((args[0] === 'env' && args[1] === 'set') || args[0] === 'run')) {
@@ -339,7 +337,9 @@ export async function runConvex(
     );
   }
   if (result.signalled) {
-    throw new Error(`e2e-convex: convex ${call} stopped by ${result.signalled}`);
+    throw Object.assign(permanent(`e2e-convex: convex ${call} stopped by ${result.signalled}`), {
+      exitCode: 128 + constants.signals[result.signalled],
+    });
   }
   if (result.code !== 0) {
     const detail = result.stderr.split(target.adminKey).join('<admin key>').trim();
@@ -394,7 +394,7 @@ export async function main(
   } = {},
 ) {
   const target = { env, spawnCli, projectDir, expectedProjectDir: projectDir, instanceName };
-  const outsideTest = { ...target, timeoutMs: TIMEOUTS.setupTimeoutMs };
+  const outsideTest = { ...target, timeoutMs: TIMEOUTS.setupCallTimeoutMs };
   const [command, ...rest] = argv;
   if (remoteBaseUrl(env) !== undefined) {
     error(
@@ -477,7 +477,7 @@ export async function main(
     }
   } catch (failure) {
     error(failure instanceof Error ? failure.message : String(failure));
-    return 1;
+    return failure?.exitCode ?? 1;
   }
 }
 

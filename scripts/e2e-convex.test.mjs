@@ -899,8 +899,7 @@ describe('e2ePlan (npm run e2e)', () => {
 });
 
 describe('timeouts on Convex CLI calls', () => {
-  // A CLI that never answers, with a child of its own, like a call to a stalled backend.
-  const FAKE_CLI = `
+  const STALLED_CLI_WITH_CHILD = `
     import { spawn } from 'node:child_process';
     import { writeFileSync } from 'node:fs';
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
@@ -912,7 +911,7 @@ describe('timeouts on Convex CLI calls', () => {
     const dir = mkdtempSync(join(tmpdir(), 'e2e-convex-fake-cli-'));
     temps.push(dir);
     const cli = join(dir, 'cli.mjs');
-    writeFileSync(cli, FAKE_CLI);
+    writeFileSync(cli, STALLED_CLI_WITH_CHILD);
     return { cli, pidFile: join(dir, 'pids.json') };
   }
 
@@ -979,7 +978,7 @@ describe('timeouts on Convex CLI calls', () => {
         });
       } catch (failure) {
         console.error(failure.message);
-        process.exitCode = 1;
+        process.exitCode = failure.exitCode ?? 1;
       }
       `,
     );
@@ -987,26 +986,61 @@ describe('timeouts on Convex CLI calls', () => {
     let stderr = '';
     script.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
     const exited = new Promise((resolve) => script.on('close', (code) => resolve(code)));
-    await until(() => existsSync(pidFile), 'the fake CLI to start');
-    assert.equal(targetFiles(dir).length, 1, 'the target file exists while the CLI runs');
-    script.kill('SIGTERM');
-    assert.equal(await exited, 1);
-    assert.match(stderr, /stopped by SIGTERM/);
-    const pids = JSON.parse(readFileSync(pidFile, 'utf8'));
-    await until(() => !alive(pids.cli) && !alive(pids.child), 'the CLI and its child to exit');
-    assert.deepEqual(targetFiles(dir), []);
+    try {
+      await until(() => existsSync(pidFile), 'the fake CLI to start');
+      assert.equal(targetFiles(dir).length, 1, 'the target file exists while the CLI runs');
+      script.kill('SIGTERM');
+      assert.equal(await exited, 143);
+      assert.match(stderr, /stopped by SIGTERM/);
+      const pids = JSON.parse(readFileSync(pidFile, 'utf8'));
+      await until(() => !alive(pids.cli) && !alive(pids.child), 'the CLI and its child to exit');
+      assert.deepEqual(targetFiles(dir), []);
+    } finally {
+      script.kill('SIGKILL');
+      if (existsSync(pidFile)) {
+        const pids = JSON.parse(readFileSync(pidFile, 'utf8'));
+        for (const pid of [pids.cli, pids.child]) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            // Already gone.
+          }
+        }
+      }
+    }
+  });
+
+  it('stops setup at once when a signal ends a CLI call, with the signal exit code', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const calls = [];
+    const errors = [];
+    const code = await main(['setup'], {
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      spawnCli: async (args) => {
+        calls.push(args.slice(0, 2).join(' '));
+        return { code: null, stdout: '', stderr: '', timedOut: false, signalled: 'SIGINT' };
+      },
+      env: {},
+      log: () => {},
+      error: (line) => errors.push(line),
+      wait: { sleep: async () => {} },
+    });
+    assert.equal(code, 130);
+    assert.deepEqual(calls, ['env set']);
+    assert.match(errors.join('\n'), /stopped by SIGINT/);
   });
 
   it('times out a call from a test before convexRun gives up on the script', () => {
     const source = readFileSync(join(ROOT, 'e2e', 'support', 'convex.ts'), 'utf8');
-    assert.match(source, /timeouts\.callTimeoutMs \+ timeouts\.outerGraceMs/);
+    assert.match(source, /timeouts\.testCallTimeoutMs \+ timeouts\.backstopGraceMs/);
     assert.match(source, /timeout: CONVEX_RUN_TIMEOUT_MS/);
-    assert.ok(TIMEOUTS.outerGraceMs > 0);
+    assert.ok(TIMEOUTS.backstopGraceMs > 0);
   });
 
   it('keeps a stalled call inside the 90 s bound, and setup calls above a test call', () => {
-    assert.ok(TIMEOUTS.callTimeoutMs + TIMEOUTS.outerGraceMs <= 45_000);
-    assert.ok(TIMEOUTS.setupTimeoutMs > TIMEOUTS.callTimeoutMs);
+    assert.ok(TIMEOUTS.testCallTimeoutMs + TIMEOUTS.backstopGraceMs <= 45_000);
+    assert.ok(TIMEOUTS.setupCallTimeoutMs > TIMEOUTS.testCallTimeoutMs);
   });
 
   it('gives run the call timeout, and setup and seed-demo the setup timeout', async () => {
@@ -1029,10 +1063,10 @@ describe('timeouts on Convex CLI calls', () => {
     assert.equal(await main(['setup'], options), 0);
     assert.equal(await main(['seed-demo'], options), 0);
     const byCall = new Set(timeouts.map((t) => `${t.call}=${t.timeoutMs}`));
-    assert.ok(byCall.has(`run testing:ping=${TIMEOUTS.callTimeoutMs}`));
-    assert.ok(byCall.has(`run testing:reset=${TIMEOUTS.setupTimeoutMs}`));
-    assert.ok(byCall.has(`env set=${TIMEOUTS.setupTimeoutMs}`));
-    assert.ok(byCall.has(`run seed:demo=${TIMEOUTS.setupTimeoutMs}`));
-    assert.equal(timeouts.filter((t) => t.timeoutMs === TIMEOUTS.callTimeoutMs).length, 1);
+    assert.ok(byCall.has(`run testing:ping=${TIMEOUTS.testCallTimeoutMs}`));
+    assert.ok(byCall.has(`run testing:reset=${TIMEOUTS.setupCallTimeoutMs}`));
+    assert.ok(byCall.has(`env set=${TIMEOUTS.setupCallTimeoutMs}`));
+    assert.ok(byCall.has(`run seed:demo=${TIMEOUTS.setupCallTimeoutMs}`));
+    assert.equal(timeouts.filter((t) => t.timeoutMs === TIMEOUTS.testCallTimeoutMs).length, 1);
   });
 });

@@ -7,8 +7,8 @@ import timeouts from './convex-timeouts.json';
 /** Playwright runs from the repository root. */
 export const E2E_CONVEX_SCRIPT = join(process.cwd(), 'scripts', 'e2e-convex.mjs');
 
-/** The script's own timeout (`callTimeoutMs`) fires first and cleans up; this one is the backstop. */
-export const CONVEX_RUN_TIMEOUT_MS = timeouts.callTimeoutMs + timeouts.outerGraceMs;
+/** The script's own timeout (`testCallTimeoutMs`) fires first and cleans up; this one is the backstop. */
+export const CONVEX_RUN_TIMEOUT_MS = timeouts.testCallTimeoutMs + timeouts.backstopGraceMs;
 
 /**
  * The call goes through `scripts/e2e-convex.mjs run`, which refuses any target other than the
