@@ -106,8 +106,16 @@ function expectedPages(width: number, page: number, pageCount: number): number[]
   return [...new Set([1, page, pageCount])].sort((a, b) => a - b);
 }
 
-const overflowsSideways = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+/** Empty when the page does not scroll sideways, and otherwise the elements that reach past the right edge. */
+const overflowing = (page: Page) =>
+  page.evaluate(() => {
+    const edge = document.documentElement.clientWidth;
+    if (document.documentElement.scrollWidth <= edge) return [];
+    return [...document.body.querySelectorAll('*')]
+      .filter((element) => element.getBoundingClientRect().right > edge + 0.5)
+      .slice(0, 5)
+      .map((element) => `${element.tagName.toLowerCase()} ${element.textContent?.slice(0, 30)}`);
+  });
 
 async function open(page: Page, consoleGuard: { hydrated: boolean }, path: string, width: number) {
   await page.setViewportSize({ width, height: 800 });
@@ -145,7 +153,7 @@ test.describe('the page control at each width', () => {
           await open(page, consoleGuard, `${path}?page=${current}`, width);
           const nav = page.getByRole('navigation', { name: label });
           await expect(nav, where).toBeVisible();
-          expect(await overflowsSideways(page), where).toBe(false);
+          expect(await overflowing(page), where).toEqual([]);
           const box = await nav.locator('ul').boundingBox();
           expect(box!.x + box!.width, where).toBeLessThanOrEqual(width);
           expect(await visiblePages(nav), where).toEqual(expectedPages(width, current, pageCount));
@@ -180,7 +188,7 @@ test.describe('the page control at each width', () => {
           'aria-current',
           'page',
         );
-        expect(await overflowsSideways(page), `${width}px`).toBe(false);
+        expect(await overflowing(page), `${width}px`).toEqual([]);
       }
     });
   }
@@ -194,7 +202,7 @@ test.describe('the page control at each width', () => {
       await open(page, consoleGuard, findPath, width);
       const nav = page.getByRole('navigation', { name: 'Organizations pages' });
       await expect(nav).toBeVisible();
-      expect(await overflowsSideways(page)).toBe(false);
+      expect(await overflowing(page)).toEqual([]);
       const box = await nav.locator('ul').boundingBox();
       expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       for (const link of await nav.getByRole('link').all()) {
