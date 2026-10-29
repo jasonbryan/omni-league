@@ -18,7 +18,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 md:px-8', '[class]': 'spacing()' },
   template: `
-    @if (findLeague()) {
+    @if (publicSite()) {
       <div class="mx-auto flex max-w-lg flex-col items-center text-center">
         <span
           class="flex size-12 items-center justify-center rounded-xl bg-accent text-accent-foreground"
@@ -63,11 +63,10 @@ import {
   `,
 })
 export class NotFoundView {
-  /** Public pages follow the public-site mockup: a way on to the search, no card. The signed-in area keeps the card and the home link alone. */
-  readonly findLeague = input(false);
+  readonly publicSite = input(false);
 
   protected readonly spacing = computed(() =>
-    this.findLeague() ? 'py-16 md:py-24' : 'py-6 md:py-16',
+    this.publicSite() ? 'py-16 md:py-24' : 'py-6 md:py-16',
   );
 
   protected readonly findClasses = PRIMARY_BUTTON_LARGE;

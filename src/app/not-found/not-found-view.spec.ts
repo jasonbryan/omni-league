@@ -6,7 +6,7 @@ import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
 import { NotFoundView } from './not-found-view';
 
-async function render(responseInit?: ResponseInit, findLeague = false): Promise<HTMLElement> {
+async function render(responseInit?: ResponseInit, publicSite = false): Promise<HTMLElement> {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -14,7 +14,7 @@ async function render(responseInit?: ResponseInit, findLeague = false): Promise<
     ],
   });
   const fixture = TestBed.createComponent(NotFoundView);
-  fixture.componentRef.setInput('findLeague', findLeague);
+  fixture.componentRef.setInput('publicSite', publicSite);
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }

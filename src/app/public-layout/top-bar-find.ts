@@ -5,10 +5,7 @@ import { lucideSearch } from '@ng-icons/lucide';
 
 const FIND_PATH = '/leagues';
 
-/**
- * A field from 768px and a link to the search page below it. The form is a plain GET form, so a search works before hydration;
- * after it, the router carries the words to the search page, which parses them.
- */
+/** A plain GET form, so a search works before hydration. */
 @Component({
   selector: 'app-top-bar-find',
   imports: [NgIcon, RouterLink],

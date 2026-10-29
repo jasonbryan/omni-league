@@ -11,9 +11,9 @@ const UNKNOWN = '/this-page-does-not-exist';
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const NOT_FOUND_H1 = /<h1\b[^>]*>\s*Page not found\s*<\/h1>/g;
 const HOME_H1 = /<h1\b[^>]*>\s*Omni League\s*<\/h1>/;
-// The home link's text is "Go to the home page"; Angular may leave comment nodes beside it.
-const FIND_LINK =
+const FIND_LINK_BEFORE_HOME =
   /<main\b[\s\S]*<a\b[^>]*\bhref="\/leagues"[^>]*>(?:(?!<\/a>)[\s\S])*Find a league\s*<\/a>[\s\S]*Go to the home page/;
+// The home link's text is "Go to the home page"; Angular may leave comment nodes beside it.
 const HOME_LINK = /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*Go to the home page\s*<\/a>/;
 
 test.describe('not-found page', () => {
@@ -35,8 +35,7 @@ test.describe('not-found page', () => {
         expect(html.match(NOT_FOUND_H1), path).toHaveLength(1);
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(HOME_LINK);
-        // The main way on, above the link to the home page.
-        expect(html, path).toMatch(FIND_LINK);
+        expect(html, path).toMatch(FIND_LINK_BEFORE_HOME);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
         expect(html, path).not.toContain('aria-label="Open navigation"');
         expect(html.match(/<nav\b/g), path).toHaveLength(1);
