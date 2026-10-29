@@ -232,3 +232,53 @@ test.describe('find a league: the organizations list screens', () => {
     await context.setOffline(false);
   });
 });
+
+test.describe('find a league: the top bar search beside the organizations list', () => {
+  const bar = (page: Page) => page.getByRole('banner');
+
+  async function seedFindable() {
+    const tenant = await seedTenant({
+      locations: [COURTS],
+      leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
+    });
+    return { tenant, id: tenant.slug.replace(/^e2e-/, '') };
+  }
+
+  test('the organizations list shows with no search in the bar, and a search from an organization page leaves the list for the results', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== LIST_PROJECT, 'the bar field shows from 768px');
+    const { tenant, id } = await seedFindable();
+    await page.goto('/leagues');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows(page).first()).toBeVisible();
+    await expect(bar(page).getByRole('searchbox')).toHaveCount(0);
+    await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+    await expect(page.getByRole('search')).toHaveCount(1);
+
+    await page.goto(tenant.path);
+    const field = bar(page).getByRole('searchbox', { name: 'Find a league' });
+    await expect(field).toBeVisible();
+    await field.fill(id);
+    await field.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/leagues?q=${id}`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
+    await expect(page.getByRole('search')).toHaveCount(1);
+  });
+
+  test('on a phone the bar link from an organization page opens /leagues with the organizations list', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'the link shows below 768px');
+    const { tenant } = await seedFindable();
+    await page.goto(tenant.path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await bar(page).getByRole('link', { name: 'Find a league' }).click();
+    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(rows(page).first()).toBeVisible();
+    await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+  });
+});

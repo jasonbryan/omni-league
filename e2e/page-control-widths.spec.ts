@@ -192,6 +192,21 @@ test.describe('the page control at each width', () => {
     });
   }
 
+  test('a gap is 16px wide at 639px and 32px at 640px', async ({ page, consoleGuard }) => {
+    const { path } = targets[1];
+    const visibleGapWidths = async () => {
+      const widths: number[] = [];
+      for (const gap of await page.locator('app-page-control li[aria-hidden="true"] span').all()) {
+        if (await gap.isVisible()) widths.push((await gap.boundingBox())!.width);
+      }
+      return widths;
+    };
+    await open(page, consoleGuard, `${path}?page=3`, 639);
+    expect(await visibleGapWidths()).toEqual([16, 16]);
+    await open(page, consoleGuard, `${path}?page=3`, 640);
+    expect(await visibleGapWidths()).toEqual([32]);
+  });
+
   for (const width of WIDTHS) {
     test(`the organizations list of the Find a league page fits and keeps 44px targets at ${width}px`, async ({
       page,
