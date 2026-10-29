@@ -527,6 +527,21 @@ describe('SeasonCreateForm', () => {
       expect(text(submitButton())).toBe('Create draft season');
     });
 
+    it('titles the failure alert with its heading above its description', async () => {
+      await open();
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      const alert = form().querySelector<HTMLElement>('[data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The season could not be created.',
+      );
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check your connection and try again.',
+      );
+    });
+
     it('a refusal from the adapter at call time (offline) shows the offline alert', async () => {
       await open();
       await fill();

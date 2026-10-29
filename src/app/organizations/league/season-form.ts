@@ -10,6 +10,7 @@ import {
 import { slugify } from '../../../../convex/lib/slugs';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
+import type { AlertTexts } from '../admin/alert-text';
 
 export { SEASON_FIELDS };
 export type { SeasonField };
@@ -40,7 +41,7 @@ export const SEASON_FORM_ALERTS = {
   offline: {
     description: "Your season details are still here. Try again when you're connected.",
   },
-} as const;
+} as const satisfies AlertTexts<SeasonFormAlertKind>;
 
 export type SeasonSubmitOutcome =
   | { sent: true; values: SeasonValues }

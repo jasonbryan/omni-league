@@ -731,6 +731,21 @@ describe('AdminLeagues', () => {
       expect(text(submitButton())).toBe('Create draft league');
     });
 
+    it('titles the failure alert with its heading above its description', async () => {
+      await open([]);
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      const alert = form().querySelector<HTMLElement>('[data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The league could not be created.',
+      );
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check your connection and try again.',
+      );
+    });
+
     describe('offline', () => {
       afterEach(() => vi.restoreAllMocks());
 

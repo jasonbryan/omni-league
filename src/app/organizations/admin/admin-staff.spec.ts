@@ -937,6 +937,21 @@ describe('AdminStaff', () => {
       expect(text(submitButton())).toBe('Create invite link');
     });
 
+    it('titles the failure alert with its heading above its description', async () => {
+      await openFull();
+      await fill();
+      await submit();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      const alert = form().querySelector<HTMLElement>('[data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The invite could not be created.',
+      );
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check your connection and try again.',
+      );
+    });
+
     describe('offline', () => {
       async function goOffline() {
         vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);

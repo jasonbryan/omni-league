@@ -11,6 +11,7 @@ import {
 import type { Role } from '../../../../convex/lib/roles';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import type { AlertTexts } from './alert-text';
 
 export type { InviteField };
 export const INVITE_FIELDS: readonly InviteField[] = ['email', 'leagues'];
@@ -35,7 +36,7 @@ export const INVITE_FORM_ALERTS = {
   offline: {
     description: "Your details are still here. Try again when you're connected.",
   },
-} as const;
+} as const satisfies AlertTexts<InviteFormAlertKind>;
 
 export type InviteSubmitOutcome<R> =
   | { sent: true; values: InviteValues; result: R }

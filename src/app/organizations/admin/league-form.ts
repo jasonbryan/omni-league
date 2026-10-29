@@ -19,6 +19,7 @@ import { slugify } from '../../../../convex/lib/slugs';
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { changedSince, focusLeftGroup, ShownUntilValid } from '../../core/forms/shown-errors';
+import type { AlertTexts } from './alert-text';
 import { LeagueDivision } from './league-division';
 
 export type { LeagueField };
@@ -62,7 +63,7 @@ export const LEAGUE_FORM_ALERTS = {
   offline: {
     description: "Your details are still here. Try again when you're connected.",
   },
-} as const;
+} as const satisfies AlertTexts<LeagueFormAlertKind>;
 
 export type LeagueSubmitOutcome =
   | { sent: true; values: LeagueValues }

@@ -266,6 +266,22 @@ describe('AdminLeagues: publishing', () => {
       expect(notice()).toBeNull();
     });
 
+    it('titles the failure alert with its heading above its description', async () => {
+      await open();
+      await pressPublish(1);
+      dialogButton('Publish league').click();
+      await o.flush();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      const alert = dialog()!.querySelector<HTMLElement>('[data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The league could not be published.',
+      );
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check your connection and try again.',
+      );
+    });
+
     it('Publish league tries again; a second success finishes as usual', async () => {
       await open();
       await pressPublish(1);

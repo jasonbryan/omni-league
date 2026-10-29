@@ -35,6 +35,7 @@ import {
 import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON } from './button-classes';
@@ -83,7 +84,7 @@ const ROLE_LABEL: Record<Role, string> = {
  */
 @Component({
   selector: 'app-admin-staff',
-  imports: [AdminAlert, NgIcon, NgTemplateOutlet, StaffInvitePanel],
+  imports: [AdminAlert, AdminOfflineAlert, NgIcon, NgTemplateOutlet, StaffInvitePanel],
   providers: [
     provideIcons({
       lucideBan,
@@ -240,18 +241,16 @@ const ROLE_LABEL: Record<Role, string> = {
                     </app-admin-alert>
                   }
                   @case ('restoreOffline') {
-                    <app-admin-alert
+                    <app-admin-offline-alert
                       #noticeAlert
-                      kind="offline"
                       description="The invite is still revoked. Try again when you're connected."
                     >
                       <ng-container [ngTemplateOutlet]="undoAction" />
-                    </app-admin-alert>
+                    </app-admin-offline-alert>
                   }
                   @case ('offline') {
-                    <app-admin-alert
+                    <app-admin-offline-alert
                       #noticeAlert
-                      kind="offline"
                       description="The invite is unchanged. Try again when you're connected."
                     />
                   }
@@ -466,7 +465,7 @@ export class AdminStaff {
   });
 
   private readonly panel = viewChild(StaffInvitePanel);
-  private readonly noticeAlert = viewChild<AdminAlert>('noticeAlert');
+  private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
 
   constructor() {
     bindAdminTitle('Staff');

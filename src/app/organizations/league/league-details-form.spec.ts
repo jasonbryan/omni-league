@@ -559,6 +559,16 @@ describe('LeagueDetailsForm', () => {
       expect(nameInput().value).toBe('Sunday Sand');
     });
 
+    it('titles the changed alert with its heading above its description', async () => {
+      await renameAndGetRefused();
+      expect(text(alertBox()!.querySelector('[data-slot="alert-title"]'))).toBe(
+        'Someone else changed this league while you were editing.',
+      );
+      expect(text(alertBox()!.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check the details and save again.',
+      );
+    });
+
     it('shows the newer format in a field the organizer did not edit', async () => {
       await renameAndGetRefused();
       expect(chip('format', '6').checked).toBe(true);
@@ -1139,6 +1149,21 @@ describe('LeagueDetailsForm', () => {
       expect(text(alert)).toContain('The league details could not be saved.');
       expect(text(alert)).not.toContain('secret');
       expect(nameInput().value).toBe('Sunday Sand');
+    });
+
+    it('titles the failure alert with its heading above its description', async () => {
+      await open();
+      await typeName('Sunday Sand');
+      await submit();
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      const alert = page.querySelector('[data-slot="alert"]')!;
+      expect(text(alert.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The league details could not be saved.',
+      );
+      expect(text(alert.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check your connection and try again.',
+      );
     });
 
     it('shows the offline note when the connection drops, with what is unchanged', async () => {

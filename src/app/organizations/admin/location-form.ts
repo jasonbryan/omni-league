@@ -8,6 +8,7 @@ import {
 } from '../../../../convex/lib/locationInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
+import type { AlertTexts } from './alert-text';
 
 export type LocationField = 'name' | 'address';
 const FIELDS: readonly LocationField[] = ['name', 'address'];
@@ -27,7 +28,7 @@ export const FORM_ALERTS = {
   offline: {
     description: "Your details are still here. Try again when you're connected.",
   },
-} as const;
+} as const satisfies AlertTexts<FormAlertKind>;
 
 function inputErrorOf(failure: unknown): LocationInputError | null {
   if (!(failure instanceof ConvexError)) return null;

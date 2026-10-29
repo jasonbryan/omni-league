@@ -21,6 +21,7 @@ import { checkCityState, CITY_STATE_HINT } from '../../../../convex/lib/organiza
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from './field-classes';
@@ -48,7 +49,7 @@ function cityStateRefusal(failure: unknown): string | null {
  */
 @Component({
   selector: 'app-admin-details',
-  imports: [AdminAlert, FormField, NgIcon, NgTemplateOutlet],
+  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, NgTemplateOutlet],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
@@ -100,22 +101,20 @@ function cityStateRefusal(failure: unknown): string | null {
                 />
               }
               @case ('offline') {
-                <app-admin-alert
+                <app-admin-offline-alert
                   #noticeAlert
-                  kind="offline"
                   description="Your details are still here. Try again when you're connected."
                   class="mb-5"
                 />
               }
               @case ('undoOffline') {
-                <app-admin-alert
+                <app-admin-offline-alert
                   #noticeAlert
-                  kind="offline"
                   description="The details are still saved. Try again when you're connected."
                   class="mb-5"
                 >
                   <ng-container [ngTemplateOutlet]="undoAction" />
-                </app-admin-alert>
+                </app-admin-offline-alert>
               }
               @case ('undoFailed') {
                 <app-admin-alert
@@ -301,7 +300,7 @@ export class AdminDetails {
   );
 
   private readonly cityStateInput = viewChild<ElementRef<HTMLInputElement>>('cityStateInput');
-  private readonly noticeAlert = viewChild<AdminAlert>('noticeAlert');
+  private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
 
   constructor() {
     bindAdminTitle('Details');
