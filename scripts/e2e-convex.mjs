@@ -14,6 +14,9 @@ export const BACKEND = Object.freeze(
   JSON.parse(readFileSync(join(ROOT, 'e2e', 'support', 'convex-backend.json'), 'utf8')),
 );
 export const LOCAL_CONVEX_URL = `http://127.0.0.1:${BACKEND.cloudPort}`;
+export const TIMEOUTS = Object.freeze(
+  JSON.parse(readFileSync(join(ROOT, 'e2e', 'support', 'convex-timeouts.json'), 'utf8')),
+);
 // Must equal LOCAL_BASE_URL in e2e/support/env.ts.
 export const E2E_SITE_URL = 'http://localhost:4000';
 
@@ -223,19 +226,51 @@ export async function resolveTarget({
   return deployment;
 }
 
-function captureCli(args, { cwd, env }) {
+// The CLI runs in its own process group, so a timeout or a signal to this script ends it and every
+// process it started.
+export function captureCli(args, { cwd, env, timeoutMs, cli = CLI }) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, [CLI, ...args], {
+    const child = spawn(process.execPath, [cli, ...args], {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let signalled = null;
+    const killGroup = () => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // The group is already gone.
+      }
+    };
+    const onSignal = (signal) => {
+      signalled ??= signal;
+      killGroup();
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup();
+    }, timeoutMs);
+    const signals = ['SIGINT', 'SIGTERM'];
+    for (const signal of signals) process.on(signal, onSignal);
+    const finish = () => {
+      clearTimeout(timer);
+      for (const signal of signals) process.off(signal, onSignal);
+    };
     child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
     child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
-    child.on('error', reject);
-    child.on('close', (code) => resolvePromise({ code, stdout, stderr }));
+    child.on('error', (failure) => {
+      finish();
+      reject(failure);
+    });
+    child.on('close', (code) => {
+      finish();
+      resolvePromise({ code, stdout, stderr, timedOut, signalled });
+    });
   });
 }
 
@@ -270,6 +305,7 @@ export async function runConvex(
     instanceName = fetchInstanceName,
     spawnCli = captureCli,
     env = process.env,
+    timeoutMs = TIMEOUTS.testCallTimeoutMs,
   } = {},
 ) {
   if (!((args[0] === 'env' && args[1] === 'set') || args[0] === 'run')) {
@@ -288,13 +324,26 @@ export async function runConvex(
     result = await spawnCli([...args, '--env-file', targetFile], {
       cwd: projectDir,
       env: convexCliEnv(env),
+      timeoutMs,
     });
   } finally {
     rmSync(join(projectDir, targetFile), { force: true });
   }
+  const call = args.slice(0, 2).join(' ');
+  if (result.timedOut) {
+    throw new Error(
+      `e2e-convex: convex ${call} got no answer within ${Math.round(timeoutMs / 1000)} s: the ` +
+        `local backend at ${target.url} (convex-local-backend) may be stalled`,
+    );
+  }
+  if (result.signalled) {
+    throw Object.assign(permanent(`e2e-convex: convex ${call} stopped by ${result.signalled}`), {
+      exitCode: 128 + constants.signals[result.signalled],
+    });
+  }
   if (result.code !== 0) {
     const detail = result.stderr.split(target.adminKey).join('<admin key>').trim();
-    throw new Error(`e2e-convex: convex ${args.slice(0, 2).join(' ')} failed:\n${detail}`);
+    throw new Error(`e2e-convex: convex ${call} failed:\n${detail}`);
   }
   return result.stdout;
 }
@@ -345,6 +394,7 @@ export async function main(
   } = {},
 ) {
   const target = { env, spawnCli, projectDir, expectedProjectDir: projectDir, instanceName };
+  const outsideTest = { ...target, timeoutMs: TIMEOUTS.setupCallTimeoutMs };
   const [command, ...rest] = argv;
   if (remoteBaseUrl(env) !== undefined) {
     error(
@@ -372,7 +422,7 @@ export async function main(
         // The webServer is up once `/version` answers, but the backend can still refuse admin
         // requests for a moment, so each `env set` retries until it accepts one.
         const setEnv = (name, value, { redact = '' } = {}) =>
-          retryUntilReady(() => runConvex(['env', 'set', name, value], target), {
+          retryUntilReady(() => runConvex(['env', 'set', name, value], outsideTest), {
             ...wait,
             label: `convex env set ${name}`,
             redact,
@@ -386,7 +436,7 @@ export async function main(
         // secret encrypted.
         const secret = random(32).toString('hex');
         await setEnv('BETTER_AUTH_SECRET', secret, { redact: secret });
-        const reset = await runConvex(['run', 'testing:reset'], target);
+        const reset = await runConvex(['run', 'testing:reset'], outsideTest);
         log(
           `e2e-convex: IS_TEST=true, SITE_URL=${E2E_SITE_URL}, and a new BETTER_AUTH_SECRET on ` +
             `${LOCAL_CONVEX_URL}; testing:reset deleted ${JSON.stringify(JSON.parse(reset))}`,
@@ -398,7 +448,7 @@ export async function main(
         const password = env['DEMO_ACCOUNT_PASSWORD'] ?? '';
         try {
           for (const args of seedDemoCalls(await previewOriginPattern(), password)) {
-            inserted = await runConvex(args, target);
+            inserted = await runConvex(args, outsideTest);
           }
         } catch (failure) {
           // Only the redacted text may reach the output; no `cause`.
@@ -427,7 +477,7 @@ export async function main(
     }
   } catch (failure) {
     error(failure instanceof Error ? failure.message : String(failure));
-    return 1;
+    return failure?.exitCode ?? 1;
   }
 }
 

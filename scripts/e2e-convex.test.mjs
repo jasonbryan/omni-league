@@ -9,16 +9,17 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import {
   assertLocalTarget,
   assertNoSharedState,
   assertPortsFree,
   BACKEND,
+  captureCli,
   convexCliEnv,
   DEPLOYMENT_NAME,
   devArgs,
@@ -34,6 +35,7 @@ import {
   runConvex,
   seedDemoCalls,
   SHARED_STATE_DIRNAME,
+  TIMEOUTS,
 } from './e2e-convex.mjs';
 import { e2ePlan } from './e2e.mjs';
 
@@ -893,5 +895,178 @@ describe('e2ePlan (npm run e2e)', () => {
     );
     for (const s of plan) assert.ok(!s.args.some((arg) => arg.includes('e2e-convex')));
     assert.deepEqual(step(plan, 'build').env, env);
+  });
+});
+
+describe('timeouts on Convex CLI calls', () => {
+  const STALLED_CLI_WITH_CHILD = `
+    import { spawn } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync(process.env.FAKE_PID_FILE, JSON.stringify({ cli: process.pid, child: child.pid }));
+    setInterval(() => {}, 1000);
+  `;
+
+  function fakeCli() {
+    const dir = mkdtempSync(join(tmpdir(), 'e2e-convex-fake-cli-'));
+    temps.push(dir);
+    const cli = join(dir, 'cli.mjs');
+    writeFileSync(cli, STALLED_CLI_WITH_CHILD);
+    return { cli, pidFile: join(dir, 'pids.json') };
+  }
+
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  async function until(condition, what) {
+    const deadline = Date.now() + 10_000;
+    while (!condition()) {
+      assert.ok(Date.now() < deadline, `timed out waiting for ${what}`);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  const targetFiles = (dir) => readdirSync(dir).filter((name) => name.startsWith('target-'));
+
+  it('stops a CLI call that never answers, with its child, and removes the target file', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const { cli, pidFile } = fakeCli();
+    const started = Date.now();
+    await assert.rejects(
+      runConvex(['run', 'testing:seedLeague'], {
+        projectDir: dir,
+        expectedProjectDir: dir,
+        instanceName: async () => 'anonymous-agent',
+        spawnCli: (args, options) => captureCli(args, { ...options, cli }),
+        env: { FAKE_PID_FILE: pidFile },
+        timeoutMs: 1_500,
+      }),
+      (failure) =>
+        failure.message.includes(LOCAL_CONVEX_URL) &&
+        failure.message.includes('convex-local-backend') &&
+        failure.message.includes('run testing:seedLeague') &&
+        !failure.message.includes(ADMIN_KEY),
+    );
+    assert.ok(Date.now() - started < 8_000, 'the call ended soon after its timeout');
+    const pids = JSON.parse(readFileSync(pidFile, 'utf8'));
+    await until(() => !alive(pids.cli) && !alive(pids.child), 'the CLI and its child to exit');
+    assert.deepEqual(targetFiles(dir), []);
+  });
+
+  it('leaves no target file and no process when the script is sent SIGTERM mid-call', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const { cli, pidFile } = fakeCli();
+    const harness = join(dirname(cli), 'harness.mjs');
+    writeFileSync(
+      harness,
+      `
+      import { captureCli, runConvex } from ${JSON.stringify(new URL('./e2e-convex.mjs', import.meta.url).href)};
+      try {
+        await runConvex(['run', 'testing:ping'], {
+          projectDir: ${JSON.stringify(dir)},
+          expectedProjectDir: ${JSON.stringify(dir)},
+          instanceName: async () => 'anonymous-agent',
+          spawnCli: (args, options) => captureCli(args, { ...options, cli: ${JSON.stringify(cli)} }),
+          env: { FAKE_PID_FILE: ${JSON.stringify(pidFile)} },
+          timeoutMs: 600_000,
+        });
+      } catch (failure) {
+        console.error(failure.message);
+        process.exitCode = failure.exitCode ?? 1;
+      }
+      `,
+    );
+    const script = spawn(process.execPath, [harness], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    script.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
+    const exited = new Promise((resolve) => script.on('close', (code) => resolve(code)));
+    try {
+      await until(() => existsSync(pidFile), 'the fake CLI to start');
+      assert.equal(targetFiles(dir).length, 1, 'the target file exists while the CLI runs');
+      script.kill('SIGTERM');
+      assert.equal(await exited, 143);
+      assert.match(stderr, /stopped by SIGTERM/);
+      const pids = JSON.parse(readFileSync(pidFile, 'utf8'));
+      await until(() => !alive(pids.cli) && !alive(pids.child), 'the CLI and its child to exit');
+      assert.deepEqual(targetFiles(dir), []);
+    } finally {
+      script.kill('SIGKILL');
+      if (existsSync(pidFile)) {
+        const pids = JSON.parse(readFileSync(pidFile, 'utf8'));
+        for (const pid of [pids.cli, pids.child]) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            // Already gone.
+          }
+        }
+      }
+    }
+  });
+
+  it('stops setup at once when a signal ends a CLI call, with the signal exit code', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const calls = [];
+    const errors = [];
+    const code = await main(['setup'], {
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      spawnCli: async (args) => {
+        calls.push(args.slice(0, 2).join(' '));
+        return { code: null, stdout: '', stderr: '', timedOut: false, signalled: 'SIGINT' };
+      },
+      env: {},
+      log: () => {},
+      error: (line) => errors.push(line),
+      wait: { sleep: async () => {} },
+    });
+    assert.equal(code, 130);
+    assert.deepEqual(calls, ['env set']);
+    assert.match(errors.join('\n'), /stopped by SIGINT/);
+  });
+
+  it('times out a call from a test before convexRun gives up on the script', () => {
+    const source = readFileSync(join(ROOT, 'e2e', 'support', 'convex.ts'), 'utf8');
+    assert.match(source, /timeouts\.testCallTimeoutMs \+ timeouts\.backstopGraceMs/);
+    assert.match(source, /timeout: CONVEX_RUN_TIMEOUT_MS/);
+    assert.ok(TIMEOUTS.backstopGraceMs > 0);
+  });
+
+  it('keeps a stalled call inside the 90 s bound, and setup calls above a test call', () => {
+    assert.ok(TIMEOUTS.testCallTimeoutMs + TIMEOUTS.backstopGraceMs <= 45_000);
+    assert.ok(TIMEOUTS.setupCallTimeoutMs > TIMEOUTS.testCallTimeoutMs);
+  });
+
+  it('gives run the call timeout, and setup and seed-demo the setup timeout', async () => {
+    const dir = projectDir({ config: LOCAL_CONFIG });
+    const timeouts = [];
+    const spawnCli = async (args, options) => {
+      timeouts.push({ call: args.slice(0, 2).join(' '), timeoutMs: options.timeoutMs });
+      return { code: 0, stdout: '{"documents":0}\n', stderr: '' };
+    };
+    const options = {
+      projectDir: dir,
+      instanceName: async () => 'anonymous-agent',
+      spawnCli,
+      env: { DEMO_ACCOUNT_PASSWORD: '' },
+      log: () => {},
+      error: () => {},
+      wait: {},
+    };
+    assert.equal(await main(['run', 'testing:ping'], options), 0);
+    assert.equal(await main(['setup'], options), 0);
+    assert.equal(await main(['seed-demo'], options), 0);
+    const byCall = new Set(timeouts.map((t) => `${t.call}=${t.timeoutMs}`));
+    assert.ok(byCall.has(`run testing:ping=${TIMEOUTS.testCallTimeoutMs}`));
+    assert.ok(byCall.has(`run testing:reset=${TIMEOUTS.setupCallTimeoutMs}`));
+    assert.ok(byCall.has(`env set=${TIMEOUTS.setupCallTimeoutMs}`));
+    assert.ok(byCall.has(`run seed:demo=${TIMEOUTS.setupCallTimeoutMs}`));
+    assert.equal(timeouts.filter((t) => t.timeoutMs === TIMEOUTS.testCallTimeoutMs).length, 1);
   });
 });
