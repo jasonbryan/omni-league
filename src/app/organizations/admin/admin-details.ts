@@ -103,7 +103,6 @@ function cityStateRefusal(failure: unknown): string | null {
                 <app-admin-alert
                   #noticeAlert
                   kind="offline"
-                  title="You're offline. Nothing was sent."
                   description="Your details are still here. Try again when you're connected."
                   class="mb-5"
                 />
@@ -112,7 +111,6 @@ function cityStateRefusal(failure: unknown): string | null {
                 <app-admin-alert
                   #noticeAlert
                   kind="offline"
-                  title="You're offline. Nothing was sent."
                   description="The details are still saved. Try again when you're connected."
                   class="mb-5"
                 >

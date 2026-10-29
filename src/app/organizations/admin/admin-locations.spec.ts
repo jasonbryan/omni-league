@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { LOCATION_MESSAGES } from '../../../../convex/lib/locationInput';
+import { ConvexConnection } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminLocations } from './admin-locations';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -457,6 +458,34 @@ describe('AdminLocations', () => {
         );
         expect(document.activeElement).toBe(box);
         expect(input('name').value).toBe('Redfish Flats Fields');
+      });
+
+      it('with the site answering and the socket down, the button looks disabled, a press sends nothing, and the alert says Omni League cannot be reached', async () => {
+        await open([]);
+        await type('name', 'Redfish Flats Fields');
+        await type('address', '880 Redfish Flats Ln');
+        // Fake timers only from here: `flush` waits on a real timer.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        try {
+          o.convex.setConnected(false);
+          TestBed.inject(ConvexConnection).markSiteReached();
+          await vi.advanceTimersByTimeAsync(5_000);
+          TestBed.tick();
+          expect(addSubmit().getAttribute('aria-disabled')).toBe('true');
+
+          addSubmit().click();
+          await vi.advanceTimersByTimeAsync(0);
+          TestBed.tick();
+
+          expect(o.convex.calls).toEqual([]);
+          const box = addForm().querySelector<HTMLElement>('[data-slot="alert"]')!;
+          expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+            "Can't reach Omni League right now. Nothing was sent.",
+          );
+          expect(input('name').value).toBe('Redfish Flats Fields');
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('validation comes first: an empty form offline shows the field errors, not the alert', async () => {

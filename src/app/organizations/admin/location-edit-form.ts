@@ -44,7 +44,7 @@ export interface AdminLocation {
         <app-admin-alert
           #failureAlert
           [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="alerts[kind].title"
+          [title]="kind === 'offline' ? undefined : alerts[kind].title"
           [description]="alerts[kind].description"
           class="mt-3"
         />

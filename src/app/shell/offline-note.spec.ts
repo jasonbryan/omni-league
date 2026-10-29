@@ -1,5 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { CONVEX_CLIENT } from '../core/data/convex';
+import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { OfflineNote } from './offline-note';
 
@@ -86,6 +86,60 @@ describe('OfflineNote', () => {
     client.setConnected(true);
     TestBed.tick();
     expect(note()).toBeNull();
+  });
+
+  describe('the text for each cause', () => {
+    const text = () => note()?.textContent.replace(/\s+/g, ' ').trim();
+
+    it('says the app cannot be reached when the site answered and the socket is still down', async () => {
+      client.setConnected(false);
+      TestBed.inject(ConvexConnection).markSiteReached();
+      await vi.advanceTimersByTimeAsync(5_000);
+      TestBed.tick();
+
+      expect(text()).toBe("Can't reach Omni League right now. Changes need a connection.");
+      expect(note()?.querySelector('.font-semibold')?.textContent).toBe(
+        "Can't reach Omni League right now.",
+      );
+      expect(note()?.querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('says the user is offline while nothing shows the site answered', async () => {
+      client.setConnected(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      TestBed.tick();
+
+      expect(text()).toBe("You're offline. Changes need a connection.");
+    });
+
+    it('says the user is offline when the browser is offline, even after the site answered', () => {
+      client.setConnected(false);
+      TestBed.inject(ConvexConnection).markSiteReached();
+      setBrowserOnline(false);
+      TestBed.tick();
+
+      expect(text()).toBe("You're offline. Changes need a connection.");
+    });
+
+    it('shows the browser-offline note at once, though a newer version was detected', () => {
+      TestBed.inject(ConvexConnection).markNewerVersionDetected();
+      setBrowserOnline(false);
+      TestBed.tick();
+
+      expect(note()).not.toBeNull();
+    });
+
+    it('holds the note past 5 s while a newer version downloads, then shows it', async () => {
+      client.setConnected(false);
+      TestBed.inject(ConvexConnection).markNewerVersionDetected();
+      await vi.advanceTimersByTimeAsync(14_900);
+      TestBed.tick();
+      expect(note()).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(100);
+      TestBed.tick();
+      expect(note()).not.toBeNull();
+    });
   });
 
   it('says "Back online." to screen readers only, for 5 s after the note goes', async () => {

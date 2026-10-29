@@ -38,7 +38,6 @@ export const SEASON_FORM_ALERTS = {
     description: 'Check your connection and try again.',
   },
   offline: {
-    title: "You're offline. Nothing was sent.",
     description: "Your season details are still here. Try again when you're connected.",
   },
 } as const;

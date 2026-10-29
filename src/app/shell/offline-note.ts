@@ -5,13 +5,14 @@ import {
   DestroyRef,
   ElementRef,
   afterNextRender,
+  computed,
   effect,
   inject,
   signal,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideWifiOff } from '@ng-icons/lucide';
-import { injectOnline } from '../core/data/convex';
+import { injectOfflineCause, injectOnline, offlineLead } from '../core/data/convex';
 
 export const BACK_ONLINE_MS = 5_000;
 
@@ -35,7 +36,9 @@ export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
     @if (!online()) {
       <p data-offline-note class="flex items-start gap-2 px-3 py-2 text-sm md:px-4 lg:px-6">
         <ng-icon name="lucideWifiOff" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
-        <span><span class="font-semibold">You're offline.</span> Changes need a connection.</span>
+        <span
+          ><span class="font-semibold">{{ lead() }}</span> Changes need a connection.</span
+        >
       </p>
     } @else if (backOnline()) {
       <span class="sr-only">Back online.</span>
@@ -44,6 +47,8 @@ export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
 })
 export class OfflineNote {
   protected readonly online = injectOnline();
+  private readonly cause = injectOfflineCause();
+  protected readonly lead = computed(() => offlineLead(this.cause()));
   protected readonly backOnline = signal(false);
 
   constructor() {

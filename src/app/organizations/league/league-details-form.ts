@@ -27,7 +27,13 @@ import type { FunctionReturnType } from 'convex/server';
 import { api } from '../../../../convex/_generated/api';
 import { filledFromNameMessage } from '../admin/league-division';
 import { inputErrorOf } from '../admin/league-form';
-import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import {
+  ConvexOfflineError,
+  injectMutation,
+  injectOfflineCause,
+  injectOnline,
+  offlineTitle,
+} from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from '../admin/field-classes';
@@ -52,7 +58,6 @@ type Earlier = FunctionReturnType<typeof api.leagues.update>;
 
 type Status = { kind: 'saved'; earlier: Earlier } | { kind: 'restored' };
 
-const UNDO_OFFLINE = "You're offline. Nothing was undone. Try again when you're connected.";
 const UNDO_FAILED = 'The earlier details could not be restored. Try again.';
 
 function savedFromEarlier({ league }: Earlier): SavedDetails {
@@ -102,7 +107,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
         <app-admin-alert
           #failureAlert
           [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="alerts[kind].title"
+          [title]="kind === 'offline' ? undefined : alerts[kind].title"
           [description]="alerts[kind].description"
           class="mb-5"
         />
@@ -271,6 +276,7 @@ export class LeagueDetailsForm implements OnInit {
   protected readonly status = signal<Status | null>(null);
   protected readonly undoing = signal(false);
   protected readonly undoNote = signal<string | null>(null);
+  private readonly cause = injectOfflineCause();
 
   // Kept once seen, so Undo can choose the level again after a save replaced it with a standard one.
   protected readonly ownCustomLevel = linkedSignal<
@@ -387,11 +393,15 @@ export class LeagueDetailsForm implements OnInit {
     }
   }
 
+  private undoOfflineNote(): string {
+    return `${offlineTitle(this.cause(), 'undone')} Try again when you're connected.`;
+  }
+
   protected async undo(earlier: Earlier): Promise<void> {
     if (this.undoing()) return;
     this.undoNote.set(null);
     if (!this.online()) {
-      this.undoNote.set(UNDO_OFFLINE);
+      this.undoNote.set(this.undoOfflineNote());
       return;
     }
     this.undoing.set(true);
@@ -405,7 +415,7 @@ export class LeagueDetailsForm implements OnInit {
     } catch (failure) {
       this.undoNote.set(
         failure instanceof ConvexOfflineError
-          ? UNDO_OFFLINE
+          ? this.undoOfflineNote()
           : (inputErrorOf(failure)?.message ?? UNDO_FAILED),
       );
     } finally {
