@@ -13,6 +13,8 @@ import { bindPageMeta } from '../core/page-meta';
 import { NotFoundView } from '../not-found/not-found-view';
 import { NotSavedView } from '../offline/not-saved-view';
 import { ServerErrorView } from '../server-error/server-error-view';
+import { PageLoadStatus } from '../public-layout/page-load-status';
+import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview } from './organization-overview';
 import { OrganizationSkeleton } from './organization-skeleton';
@@ -33,6 +35,7 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
     NotSavedView,
     OrganizationOverview,
     OrganizationSkeleton,
+    PageLoadStatus,
     PublicLayout,
     ServerErrorView,
   ],
@@ -61,6 +64,7 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
       } @else {
         <app-organization-skeleton />
       }
+      <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>
   `,
 })
@@ -198,7 +202,7 @@ export class OrganizationPage {
     return times.length > 0 ? Math.min(...times) : undefined;
   });
 
-  protected readonly state = computed(() => {
+  private readonly phase = computed(() => {
     if (this.organization()) return 'page';
     if (this.unknownSport() || this.header.value() === null || this.noLeagueInSport()) {
       return 'not-found';
@@ -208,6 +212,14 @@ export class OrganizationPage {
     if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
+
+  private readonly waitedOut = injectPageLoadWait(
+    () => this.phase() === 'loading',
+    () => this.path(),
+  );
+  protected readonly stalled = computed(() => this.phase() === 'loading' && this.waitedOut());
+
+  protected readonly state = computed(() => (this.stalled() ? 'error' : this.phase()));
 
   constructor() {
     bindPageMeta(() => {

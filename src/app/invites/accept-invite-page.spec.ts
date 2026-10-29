@@ -135,7 +135,7 @@ describe('AcceptInvitePage', () => {
         expect(block.className).toContain('motion-safe:animate-pulse');
         expect(block.closest('[aria-hidden="true"]')).not.toBeNull();
       }
-      const statuses = page.querySelectorAll('main [role="status"]');
+      const statuses = card?.querySelectorAll('[role="status"]') ?? [];
       expect(statuses).toHaveLength(1);
       expect(statuses[0].className).toContain('sr-only');
       expect(page.querySelector('main .animate-spin, main [class*="animate-spin"]')).toBeNull();

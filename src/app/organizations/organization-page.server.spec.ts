@@ -68,7 +68,7 @@ const gulfCoast = (name: string) => Promise.resolve(queryResults(GULF_COAST)[nam
 async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
-  timeoutMs = 5000,
+  timeoutMs?: number,
 ): Promise<Rendered> {
   const queries: { name: string; args: unknown }[] = [];
   const client: ConvexHttpClientLike = {
@@ -98,7 +98,9 @@ async function render(
           provideSpartanHlm(),
           { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
           { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => client },
-          { provide: CONVEX_SERVER_QUERY_TIMEOUT_MS, useValue: timeoutMs },
+          ...(timeoutMs === undefined
+            ? []
+            : [{ provide: CONVEX_SERVER_QUERY_TIMEOUT_MS, useValue: timeoutMs }]),
           { provide: Meta, useFactory: metaInRenderDocument },
         ],
       },
@@ -175,7 +177,7 @@ describe('OrganizationPage server render', () => {
       '4410 Ocean Dr, Corpus Christi, TX 78412',
       'Soccer, softball',
     ]);
-    expect(body.querySelector('main [role="status"]')).toBeNull();
+    expect([...body.querySelectorAll('main [role="status"]')].map(text)).toEqual(['']);
 
     expect(publicFrame(body)).toEqual({ ...PUBLIC_FRAME, navs: ['Sports', 'Footer'] });
     const chips = [...body.querySelectorAll('nav[aria-label="Sports"] a')];
@@ -314,6 +316,18 @@ describe('OrganizationPage server render', () => {
     expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
     expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
   });
+
+  it('answers 503 at the app default server timeout of 5 seconds for a held query, with no timeout provided', async () => {
+    const started = Date.now();
+    const { body, responseInit } = await render(
+      '/organizations/gulf-coast-sport-social',
+      () => new Promise(() => undefined),
+    );
+    expect(Date.now() - started).toBeGreaterThanOrEqual(4_900);
+    expect(responseInit.status).toBe(503);
+    expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
+    expect(body.querySelector('[data-page-loading]')).toBeNull();
+  }, 15_000);
 
   for (const failing of [
     'organizations:listPublicLeagues',
