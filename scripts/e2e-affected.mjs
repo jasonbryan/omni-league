@@ -57,7 +57,7 @@ const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-s
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
-const FIND_PAGE = ['find-a-league', 'cache-key'];
+const FIND_PAGE = ['find-a-league', 'find-organizations', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
   'league-management',
   'league-management-details',
@@ -380,7 +380,7 @@ export const OFFLINE_QUERY_GROUP_SPECS = {
   ORGANIZATION_PAGE_QUERIES: ['organization-page', 'sport-view'],
   LEAGUE_PAGE_QUERIES: ['league-page'],
   SEASON_PAGE_QUERIES: ['season-page'],
-  FIND_PAGE_QUERIES: ['find-a-league'],
+  FIND_PAGE_QUERIES: ['find-a-league', 'find-organizations'],
 };
 
 const inDir =
@@ -568,12 +568,12 @@ export const AREAS = [
   {
     name: 'numbered page control',
     test: named('src/app/organizations/', ['page-control']),
-    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
     name: 'list page helper',
     test: named('src/app/core/', ['list-page']),
-    specs: [...LEAGUE_PAGE, ...SPORT_VIEW],
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
     // Every form shares this field-error rule: sign-up, sign-in, create organization, the

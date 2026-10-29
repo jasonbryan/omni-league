@@ -106,7 +106,7 @@ describe('FindPage before a search', () => {
     expect(input(harness).value).toBe('');
     expect(text(form.querySelector('button[type="submit"]'))).toBe('Search');
     expect(results(harness)).toBeNull();
-    expect(client.activeSubscriptions).toEqual([]);
+    expect(client.activeSubscriptions.filter((s) => s.name === QUERY)).toEqual([]);
   });
 
   it('sets the title, the canonical, and no robots tag', async () => {
@@ -119,7 +119,7 @@ describe('FindPage before a search', () => {
   it('treats a blank q as no search', async () => {
     const harness = await open('/leagues?q=%20%20');
     expect(results(harness)).toBeNull();
-    expect(client.activeSubscriptions).toEqual([]);
+    expect(client.activeSubscriptions.filter((s) => s.name === QUERY)).toEqual([]);
   });
 });
 
@@ -371,7 +371,7 @@ describe('FindPage searching', () => {
     expect(TestBed.inject(Router).url).toBe('/leagues');
     expect(results(harness)).toBeNull();
     expect(robots()).toBeNull();
-    expect(client.activeSubscriptions).toEqual([]);
+    expect(client.activeSubscriptions.filter((s) => s.name === QUERY)).toEqual([]);
   });
 
   it('Back shows the earlier search in the field and its results', async () => {

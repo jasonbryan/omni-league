@@ -1,0 +1,284 @@
+import type { Page } from '@playwright/test';
+import { expectAccessible } from './support/a11y';
+import { baseURL, remoteBaseUrl } from './support/env';
+import { expect, test } from './support/fixtures';
+import { freezeOrganizations } from './support/freeze-organizations';
+import { RAW_HTTP } from './support/raw-http';
+import { fetchRawHtml } from './support/raw-html';
+import { screenshot } from './support/screenshot';
+import { seedTenant, type Tenant } from './support/tenant';
+
+test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
+
+const LIST_PROJECT = 'chromium-desktop';
+const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+/** Netlify removes the spaces after the commas. */
+const noSpaces = (value: string | undefined) => value?.replace(/\s+/g, '');
+
+const COURTS = { name: 'Sand Courts', address: '1 Beach Rd, Corpus Christi, TX 78401' };
+
+/**
+ * The list is global and ordered by name, so the tests that count pages seed seven organizations whose names start with a digit,
+ * which sorts before every other name, and only the desktop project does it. The digits fall with the clock, so a retry's batch
+ * (the serial group runs again as a whole) sorts before the batch of the failed attempt.
+ */
+const BATCH = String(9_999_999_999_999 - Date.now()).padStart(13, '0');
+const PREFIX = `${BATCH} Browse`;
+const WORDS = ['echo', 'Delta', 'charlie', 'Bravo', 'alpha', 'Foxtrot', 'Golf'];
+const SORTED_WORDS = ['alpha', 'Bravo', 'charlie', 'Delta', 'echo', 'Foxtrot', 'Golf'];
+
+const SPORTS_BY_WORD: Record<string, 'beachVolleyball' | 'soccer' | 'softball'> = {
+  alpha: 'softball',
+};
+
+interface Seeded {
+  byWord: Map<string, Tenant>;
+  draftsOnly: Tenant;
+  noLeagues: Tenant;
+}
+
+let seeded: Seeded;
+
+async function seedSeven(): Promise<Seeded> {
+  const byWord = new Map<string, Tenant>();
+  for (const word of WORDS) {
+    byWord.set(
+      word,
+      await seedTenant({
+        name: `${PREFIX} ${word}`,
+        ...(word === 'alpha' && { cityState: 'Austin, TX' }),
+        locations: [COURTS],
+        leagues: [
+          {
+            name: 'Coed League',
+            sport: SPORTS_BY_WORD[word] ?? 'soccer',
+            locations: [COURTS.name],
+          },
+        ],
+      }),
+    );
+  }
+  const draftsOnly = await seedTenant({
+    name: `${PREFIX} Drafts`,
+    locations: [COURTS],
+    leagues: [{ name: 'Draft League', sport: 'soccer', locations: [COURTS.name], status: 'draft' }],
+  });
+  const noLeagues = await seedTenant({ name: `${PREFIX} Empty` });
+  return { byWord, draftsOnly, noLeagues };
+}
+
+const nameOf = (word: string) => seeded.byWord.get(word)!.name;
+
+function organizationsSection(html: string): string {
+  return (
+    /<section\b[^>]*aria-labelledby="organizations-heading"[^>]*>([\s\S]*?)<\/section>/.exec(
+      html,
+    )?.[1] ?? ''
+  );
+}
+
+function plainText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function listedNames(html: string): string[] {
+  return [...organizationsSection(html).matchAll(/<h3\b[^>]*>\s*<a\b[^>]*>([^<]*)<\/a>/g)].map(
+    ([, name]) => name.trim(),
+  );
+}
+
+function canonicals(html: string): string[] {
+  return [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/g)].map(
+    ([tag]) => /\bhref="([^"]*)"/.exec(tag)?.[1] ?? '',
+  );
+}
+
+const rows = (page: Page) =>
+  page.locator('section[aria-labelledby="organizations-heading"] ul > li h3');
+
+test.describe('find a league: the organizations list', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
+    if (test.info().project.name === LIST_PROJECT) seeded = await seedSeven();
+  });
+
+  test(
+    '/leagues without JavaScript lists the organizations with a published league by name ignoring case, with their sports and City, state',
+    RAW_HTTP,
+    async ({ request }) => {
+      const response = await fetchRawHtml(request, '/leagues');
+      expect(response.status).toBe(200);
+      expect(noSpaces(response.headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
+      expect(response.headers['location']).toBeUndefined();
+      expect(listedNames(response.html)).toEqual(SORTED_WORDS.slice(0, 5).map(nameOf));
+      expect(response.html).toMatch(
+        /<h2\b[^>]*id="organizations-heading"[^>]*>\s*Organizations\s*<\/h2>/,
+      );
+
+      const section = organizationsSection(response.html);
+      const alpha = plainText(section.split('</li>').find((row) => row.includes(nameOf('alpha')))!);
+      expect(alpha).toContain('Softball · Austin, TX');
+      const bravo = plainText(section.split('</li>').find((row) => row.includes(nameOf('Bravo')))!);
+      expect(bravo).toContain('Soccer');
+      expect(bravo).not.toContain('·');
+      expect(response.html).toContain(`href="${seeded.byWord.get('alpha')!.path}"`);
+      expect(response.html).not.toContain(seeded.draftsOnly.name);
+      expect(response.html).not.toContain(seeded.noLeagues.name);
+      expect(canonicals(response.html)).toHaveLength(1);
+      expect(canonicals(response.html)[0].endsWith('/leagues')).toBe(true);
+    },
+  );
+
+  test(
+    '?page=2 holds the 6th and 7th organization with the canonical /leagues?page=2, and no organization with only drafts or none',
+    RAW_HTTP,
+    async ({ request }) => {
+      const response = await fetchRawHtml(request, '/leagues?page=2');
+      expect(response.status).toBe(200);
+      // Organizations other specs seed follow the seven, so the page holds more than the 6th and 7th.
+      expect(listedNames(response.html).slice(0, 2)).toEqual(['Foxtrot', 'Golf'].map(nameOf));
+      expect(canonicals(response.html)).toHaveLength(1);
+      expect(canonicals(response.html)[0].endsWith('/leagues?page=2')).toBe(true);
+      expect(plainText(organizationsSection(response.html))).toMatch(/6–\d+ of \d+ organizations/);
+      expect(response.html).not.toContain(seeded.draftsOnly.name);
+      expect(response.html).not.toContain(seeded.noLeagues.name);
+    },
+  );
+
+  for (const query of ['?page=0', '?page=abc', '?page=2&page=3']) {
+    test(`${query} renders page 1 with 200 and no Location`, RAW_HTTP, async ({ request }) => {
+      const response = await fetchRawHtml(request, `/leagues${query}`);
+      expect(response.status).toBe(200);
+      expect(response.headers['location']).toBeUndefined();
+      expect(listedNames(response.html)).toEqual(SORTED_WORDS.slice(0, 5).map(nameOf));
+      expect(canonicals(response.html)[0].endsWith('/leagues')).toBe(true);
+    });
+  }
+
+  test('Next works from the keyboard: the URL becomes ?page=2, focus is on the heading, and Back restores page 1', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== LIST_PROJECT, 'one browser project only');
+    await page.goto('/leagues');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
+
+    const next = page.getByRole('navigation', { name: 'Organizations pages' }).getByRole('link', {
+      name: 'Next page',
+    });
+    await next.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/leagues?page=2`);
+    await expect(rows(page).nth(0)).toHaveText(nameOf('Foxtrot'));
+    await expect(rows(page).nth(1)).toHaveText(nameOf('Golf'));
+    await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toBeFocused();
+
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(rows(page)).toHaveText(SORTED_WORDS.slice(0, 5).map(nameOf));
+  });
+});
+
+test.describe('find a league: the organizations list screens', () => {
+  test('the list passes the accessibility checks', async ({ page, consoleGuard }, testInfo) => {
+    await seedTenant({
+      locations: [COURTS],
+      leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
+    });
+    await freezeOrganizations(page);
+    await page.goto('/leagues');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows(page).first()).toBeVisible();
+    await screenshot(page, testInfo, '300-find-organizations');
+    await expectAccessible(page);
+  });
+
+  test('a viewed page of organizations opens offline from its saved copy with the saved-copy note', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    // Six organizations make a second page whatever else the shared backend holds.
+    for (let i = 0; i < 6; i++) {
+      await seedTenant({
+        locations: [COURTS],
+        leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
+      });
+    }
+    await page.goto('/leagues?page=2');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows(page).first()).toBeVisible();
+    const saved = await rows(page).allTextContents();
+
+    // Back is a client-side navigation, so the page opens from the app's saved copy and not from the network. The earlier visit's
+    // subscription is dropped while online, so the client holds no result for it.
+    await page.locator('main').getByRole('link', { name: saved[0] }).click();
+    await expect(page).toHaveURL(/\/organizations\/e2e-[0-9a-f]+$/);
+    await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('Find a league');
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}/leagues?page=2`);
+    await expect(page.locator('app-saved-copy-note')).toBeVisible();
+    await expect(rows(page)).toHaveText(saved);
+    await context.setOffline(false);
+  });
+});
+
+test.describe('find a league: the top bar search beside the organizations list', () => {
+  const bar = (page: Page) => page.getByRole('banner');
+
+  async function seedFindable() {
+    const tenant = await seedTenant({
+      locations: [COURTS],
+      leagues: [{ name: 'Coed League', sport: 'soccer', locations: [COURTS.name] }],
+    });
+    return { tenant, id: tenant.slug.replace(/^e2e-/, '') };
+  }
+
+  test('the organizations list shows with no search in the bar, and a search from an organization page leaves the list for the results', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== LIST_PROJECT, 'the bar field shows from 768px');
+    const { tenant, id } = await seedFindable();
+    await page.goto('/leagues');
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(rows(page).first()).toBeVisible();
+    await expect(bar(page).getByRole('searchbox')).toHaveCount(0);
+    await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+    await expect(page.getByRole('search')).toHaveCount(1);
+
+    await page.goto(tenant.path);
+    const field = bar(page).getByRole('searchbox', { name: 'Find a league' });
+    await expect(field).toBeVisible();
+    await field.fill(id);
+    await field.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}/leagues?q=${id}`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Organizations' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Coed League' })).toBeVisible();
+    await expect(page.getByRole('search')).toHaveCount(1);
+  });
+
+  test('on a phone the bar link from an organization page opens /leagues with the organizations list', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'the link shows below 768px');
+    const { tenant } = await seedFindable();
+    await page.goto(tenant.path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await bar(page).getByRole('link', { name: 'Find a league' }).click();
+    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(rows(page).first()).toBeVisible();
+    await expect(bar(page).getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+  });
+});

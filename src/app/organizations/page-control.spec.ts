@@ -53,10 +53,17 @@ describe('pageWindow', () => {
     [1, 1, '1'],
     [1, 2, '1 2'],
     [2, 3, '1 2 3'],
-    [3, 5, '1 2 3 4 5'],
-  ])('lists every page up to 5, page %i of %i: %s', (page, count, expected) => {
+    [3, 4, '1 2 3 4'],
+  ])('lists every page up to 4, page %i of %i: %s', (page, count, expected) => {
     expect(shown(page, count, 'wide')).toBe(expected);
     expect(shown(page, count, 'narrow')).toBe(expected);
+  });
+
+  it('lists all 5 pages from 640px and the first, the current, and the last below', () => {
+    expect(shown(3, 5, 'wide')).toBe('1 2 3 4 5');
+    expect(shown(1, 5, 'wide')).toBe('1 2 3 4 5');
+    expect(shown(3, 5, 'narrow')).toBe('1 … 3 … 5');
+    expect(shown(1, 5, 'narrow')).toBe('1 … 5');
   });
 
   it('page 3 of 6 is 1 2 3 4 … 6 from 640px and 1 … 3 … 6 below', () => {

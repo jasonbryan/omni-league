@@ -34,8 +34,8 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },
   },
   {
-    // `Netlify-Vary: query` from the handler (src/server-cache.ts) stores each `?q=` on its own. The HTML holds only the parsed search,
-    // never another parameter. A failed query replaces the Cache-Control with no-store (src/app/core/server-error-status.ts).
+    // `Netlify-Vary: query` from the handler (src/server-cache.ts) stores each `?q=` and `?page=N` on its own. The HTML holds only the parsed search
+    // and the page number from the query result, never another parameter. A failed query replaces the Cache-Control with no-store (src/app/core/server-error-status.ts).
     path: 'leagues',
     renderMode: RenderMode.Server,
     headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },

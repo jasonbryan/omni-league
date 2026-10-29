@@ -1,24 +1,33 @@
 import { isPlatformServer } from '@angular/common';
-import { ChangeDetectionStrategy, Component, PLATFORM_ID, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  PLATFORM_ID,
+  computed,
+  inject,
+  linkedSignal,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
+import { parseListPage } from '../core/list-page';
 import { injectNow } from '../core/now';
 import { bindPageMeta } from '../core/page-meta';
 import { NotSavedView } from '../offline/not-saved-view';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { FindContent, type FindStatus } from './find-content';
-import { FIND_PATH, findPath } from './find-path';
+import { FindOrganizationsList, type OrganizationsState } from './find-organizations';
+import { FIND_PATH, findPath, organizationsPath, type FindOrganizations } from './find-path';
 
 const TITLE = 'Find a league | Omni League';
 
 @Component({
   selector: 'app-find-page',
-  imports: [FindContent, NotSavedView, PublicLayout, ServerErrorView],
+  imports: [FindContent, FindOrganizationsList, NotSavedView, PublicLayout, ServerErrorView],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
@@ -38,6 +47,14 @@ const TITLE = 'Find a league | Omni League';
             [savedAt]="savedAt()"
             (searched)="search($event)"
           />
+          @if (query() === '') {
+            <app-find-organizations
+              [state]="organizationsState()"
+              [result]="shownOrganizations()"
+              [busy]="organizationsBusy()"
+              [retryHref]="retryHref()"
+            />
+          }
         }
       }
     </app-public-layout>
@@ -59,7 +76,37 @@ export class FindPage {
     this.query() === '' ? skipToken : { q: this.query() },
   );
 
-  protected readonly retryHref = computed(() => findPath(this.query()));
+  // Read from every value of `page`, so a repeated or malformed one is page 1; only a search ignores it.
+  private readonly requestedPage = toSignal(
+    this.route.queryParamMap.pipe(map((params) => parseListPage(params.getAll('page')))),
+    { requireSync: true },
+  );
+
+  protected readonly organizations = injectQuery(api.search.organizations, () =>
+    this.query() === '' ? { page: this.requestedPage() } : skipToken,
+  );
+
+  // Online, the previous page stays while the next one loads; offline, a page with no saved copy shows the not-saved view instead.
+  protected readonly shownOrganizations = linkedSignal<
+    { value: FindOrganizations | undefined; online: boolean },
+    FindOrganizations | undefined
+  >({
+    source: () => ({ value: this.organizations.value(), online: this.online() }),
+    computation: ({ value, online }, previous) => value ?? (online ? previous?.value : undefined),
+  });
+
+  protected readonly organizationsBusy = computed(
+    () => this.shownOrganizations() !== undefined && this.organizations.value() === undefined,
+  );
+
+  protected readonly organizationsState = computed((): OrganizationsState => {
+    if (this.organizations.error() !== undefined) return 'error';
+    return this.shownOrganizations() === undefined ? 'loading' : 'ready';
+  });
+
+  protected readonly retryHref = computed(() =>
+    this.query() === '' ? organizationsPath(this.requestedPage()) : findPath(this.query()),
+  );
 
   protected readonly status = computed((): FindStatus => {
     if (this.query() === '') return 'start';
@@ -69,12 +116,22 @@ export class FindPage {
 
   // The server renders the whole page as the error view so its status is 503; the browser keeps the form and shows an alert in place of the results.
   protected readonly view = computed(() => {
-    if (this.status() === 'error' && this.onServer) return 'server-error';
-    if (this.status() === 'searching' && !this.online()) return 'not-saved';
+    const failed = this.status() === 'error' || this.organizationsState() === 'error';
+    if (failed && this.onServer) return 'server-error';
+    const pending =
+      this.status() === 'searching' ||
+      (this.query() === '' && this.organizationsState() === 'loading');
+    if (pending && !this.online()) return 'not-saved';
     return 'page';
   });
 
-  protected readonly savedAt = computed(() => (this.online() ? undefined : this.results.savedAt()));
+  protected readonly savedAt = computed(() => {
+    if (this.online()) return undefined;
+    const times = [this.results.savedAt(), this.organizations.savedAt()].filter(
+      (time) => time !== undefined,
+    );
+    return times.length > 0 ? Math.min(...times) : undefined;
+  });
 
   constructor() {
     bindPageMeta(() => {
@@ -85,7 +142,8 @@ export class FindPage {
         ogTitle: 'Find a league',
         ogDescription: 'Find beach volleyball, soccer, and softball leagues on Omni League.',
         ogType: 'website',
-        path: FIND_PATH,
+        // The page of the query result, never the request's, so the canonical holds only an integer.
+        path: query === '' ? organizationsPath(this.organizations.value()?.page ?? 1) : FIND_PATH,
         noindex: query !== '',
       };
     });

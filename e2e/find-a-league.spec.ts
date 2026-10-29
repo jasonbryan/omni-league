@@ -4,6 +4,7 @@ import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { freezeOrganizations } from './support/freeze-organizations';
 import { holdQueries } from './support/hold-queries';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -480,6 +481,7 @@ test.describe('find a league: in the browser', () => {
     consoleGuard,
   }, testInfo) => {
     const { id } = await seed();
+    await freezeOrganizations(page);
     await page.goto('/leagues');
     await hydrated(consoleGuard);
     await screenshot(page, testInfo, '300-find-start');
