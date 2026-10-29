@@ -1,0 +1,5 @@
+{
+  "callTimeoutMs": 20000,
+  "setupTimeoutMs": 60000,
+  "outerGraceMs": 10000
+}
