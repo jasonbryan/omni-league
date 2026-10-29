@@ -119,8 +119,8 @@ test.describe('the page control at each width', () => {
   test.use({ isMobile: true, hasTouch: true });
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeEach((_fixtures, testInfo) => {
-    test.skip(testInfo.project.name !== MOBILE_PROJECT, 'one browser project only');
+  test.beforeEach(() => {
+    test.skip(test.info().project.name !== MOBILE_PROJECT, 'one browser project only');
   });
 
   test.beforeAll(async () => {
