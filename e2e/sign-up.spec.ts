@@ -9,13 +9,15 @@ import { holdServiceWorkerRegistration } from './support/no-service-worker';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 import { screenshot } from './support/screenshot';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { topBarFind } from './support/top-bar-find';
 
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
 const LOCAL_ONLY = 'reads or seeds the local Convex backend';
 
-const SIGN_UP_ORDER = [
+const signUpOrder = (page: Page) => [
   'a[href$="#main"]',
   'header a[href="/"]',
+  topBarFind(page),
   'header a[href^="/sign-in"]',
   '#name',
   '#email',
@@ -137,7 +139,7 @@ test.describe('sign-up', () => {
     await page.getByRole('button', { name: 'Hide password' }).click();
     await expect(password(page)).toHaveAttribute('type', 'password');
 
-    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+    await expectAccessible(page, { expectedOrder: signUpOrder(page) });
   });
 
   test('field errors: next to each field with aria-invalid and aria-describedby; nothing is created', async ({
@@ -166,7 +168,7 @@ test.describe('sign-up', () => {
     }
     await expect(field(page, 'name')).toBeFocused();
     await screenshot(page, testInfo, '62-sign-up-errors-required');
-    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+    await expectAccessible(page, { expectedOrder: signUpOrder(page) });
 
     await fillForm(
       page,
@@ -189,7 +191,7 @@ test.describe('sign-up', () => {
     );
     await expect(field(page, 'email')).toBeFocused();
     await screenshot(page, testInfo, '62-sign-up-errors-format');
-    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+    await expectAccessible(page, { expectedOrder: signUpOrder(page) });
 
     await field(page, 'email').fill(user.email);
     await password(page).fill(user.password);
@@ -225,7 +227,7 @@ test.describe('sign-up', () => {
     await expect(field(page, 'email')).toHaveAttribute('aria-invalid', 'true');
     await expect(field(page, 'email')).toHaveAttribute('aria-describedby', 'email-error');
     await expect(fieldError(page, 'name')).toHaveCount(0);
-    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+    await expectAccessible(page, { expectedOrder: signUpOrder(page) });
 
     await field(page, 'email').fill('maya.okafor@example.com');
     await expect(fieldError(page, 'email')).toHaveCount(0);
@@ -285,7 +287,7 @@ test.describe('sign-up', () => {
       'aria-describedby',
       /(^|\s)password-error(\s|$)/,
     );
-    await expectAccessible(page, { expectedOrder: SIGN_UP_ORDER });
+    await expectAccessible(page, { expectedOrder: signUpOrder(page) });
   });
 
   test('signs up, lands on /app, and Sign out on Account settings goes to /', async ({
@@ -487,7 +489,7 @@ test.describe('sign-up', () => {
       await expect(page).toHaveURL(`${baseURL}/sign-up`);
       expect((await accountByEmail(existing.email))?.name).toBe(existing.name);
       await screenshot(page, testInfo, '62-sign-up-exists');
-      const order = [...SIGN_UP_ORDER];
+      const order = signUpOrder(page);
       order.splice(order.indexOf('#email') + 1, 0, '#email-error a');
       await expectAccessible(page, { expectedOrder: order });
     });

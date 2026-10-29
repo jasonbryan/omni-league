@@ -12,6 +12,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { filter } from 'rxjs';
 import { ChangesInFlight } from '../changes-in-flight';
+import { ConvexConnection } from '../data/convex';
 import { PageSafety } from './page-safety';
 import {
   mayReloadForUnrecoverable,
@@ -22,6 +23,8 @@ import {
 
 export const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 export const AUTO_APPLY_WINDOW_MS = 10_000;
+export const EARLY_CHECK_DELAY_MS = 1_000;
+export const EARLY_CHECK_INTERVAL_MS = 60_000;
 /** Half of the 14 days public functions keep accepting the previous release, so a tab that stays on one path still updates inside that window. */
 export const STALE_PAGE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -43,13 +46,14 @@ export const PAGE_LOADED_AT = new InjectionToken<number>('PAGE_LOADED_AT', {
 
 export type UpdateCard = 'none' | 'ready' | 'unrecoverable';
 
-type Trigger = 'load' | 'navigation' | 'visible';
+type Trigger = 'load' | 'navigation' | 'visible' | 'socket';
 
 function pathOf(url: string): string {
   return url.split(/[?#]/, 1)[0] ?? url;
 }
 
 /**
+ * A socket that has not connected since the page loaded means the old bundle's Convex deployment is gone, so a ready version reloads the page at once.
  * The page is never reloaded because it became hidden: that would drop an Undo offer or a success status.
  * The visibility check runs at most every 30 minutes, for installed apps left open (ngsw itself checks whenever the app opens).
  */
@@ -63,6 +67,7 @@ export class AppUpdates {
   private readonly safety = inject(PageSafety);
   private readonly changes = inject(ChangesInFlight);
   private readonly loadedAt = inject(PAGE_LOADED_AT);
+  private readonly connection = inject(ConvexConnection);
 
   private readonly state = signal<UpdateCard>('none');
   readonly card: Signal<UpdateCard> = this.state.asReadonly();
@@ -76,6 +81,8 @@ export class AppUpdates {
   private lastPath: string | undefined;
   private lastVisibleAt: number | undefined;
   private lastCheck: number | undefined;
+  private earlyCheckTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastEarlyCheck: number | undefined;
 
   start(): boolean {
     if (!this.swUpdate.isEnabled) return false;
@@ -105,6 +112,12 @@ export class AppUpdates {
       this.deferredTrigger = undefined;
       if (trigger && this.holds(trigger)) this.tryApply(trigger);
     });
+    this.connection.disconnectedWhileOnline
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((disconnected) =>
+        this.scheduleEarlyCheck(disconnected ? EARLY_CHECK_DELAY_MS : undefined),
+      );
+    this.destroyRef.onDestroy(() => clearTimeout(this.earlyCheckTimer));
     const onVisibilityChange = () => this.onVisibilityChange();
     this.document.addEventListener('visibilitychange', onVisibilityChange);
     this.destroyRef.onDestroy(() =>
@@ -123,6 +136,7 @@ export class AppUpdates {
   }
 
   private onVersionEvent(event: VersionEvent): void {
+    this.noteWhatTheSiteSaid(event);
     if (event.type !== 'VERSION_READY') return;
     const hash = event.latestVersion.hash;
     this.downloadedVersionHash = hash;
@@ -134,6 +148,38 @@ export class AppUpdates {
     const trigger = this.triggerAtReady();
     if (trigger) this.tryApply(trigger);
     else if (this.safety.hasUnsavedField()) this.showPrompt();
+  }
+
+  /** Only these events show the site answered: a resolved `checkForUpdate()` does not, because a network error or a captive portal resolves it `false` too. */
+  private noteWhatTheSiteSaid(event: VersionEvent): void {
+    if (
+      event.type !== 'NO_NEW_VERSION_DETECTED' &&
+      event.type !== 'VERSION_DETECTED' &&
+      event.type !== 'VERSION_READY'
+    ) {
+      return;
+    }
+    this.connection.markSiteReached();
+    if (event.type !== 'NO_NEW_VERSION_DETECTED') this.connection.markNewerVersionDetected();
+  }
+
+  /** A moved or deleted deployment never answers, and the worker's own idle check is 5 s away. */
+  private scheduleEarlyCheck(delayMs: number | undefined): void {
+    clearTimeout(this.earlyCheckTimer);
+    if (delayMs === undefined) return;
+    this.earlyCheckTimer = setTimeout(() => this.earlyCheck(), delayMs);
+  }
+
+  private earlyCheck(): void {
+    const sinceLast =
+      this.lastEarlyCheck === undefined ? Infinity : Date.now() - this.lastEarlyCheck;
+    if (sinceLast < EARLY_CHECK_INTERVAL_MS) {
+      this.scheduleEarlyCheck(EARLY_CHECK_INTERVAL_MS - sinceLast);
+      return;
+    }
+    this.lastEarlyCheck = Date.now();
+    this.swUpdate.checkForUpdate().catch(() => undefined);
+    this.scheduleEarlyCheck(EARLY_CHECK_INTERVAL_MS);
   }
 
   private onUnrecoverable(): void {
@@ -175,11 +221,14 @@ export class AppUpdates {
         return true;
       case 'visible':
         return this.pageAge > STALE_PAGE_AGE_MS;
+      case 'socket':
+        return this.connection.socketDown() && !this.connection.hasEverConnected();
     }
   }
 
   /** A version usually becomes ready a few seconds after the page became visible, so one that does on a long-open page counts as part of its return. */
   private triggerAtReady(): Trigger | undefined {
+    if (this.holds('socket')) return 'socket';
     if (this.holds('load')) return 'load';
     const sinceVisible =
       this.lastVisibleAt === undefined ? undefined : Date.now() - this.lastVisibleAt;

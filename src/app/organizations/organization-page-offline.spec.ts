@@ -13,6 +13,7 @@ import {
 import { plantSavedCopy } from '../core/data/convex/testing/saved-copy';
 import { formatSavedTime } from '../offline/saved-time';
 import { PlainTestPage } from '../shell/testing/test-pages';
+import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
 import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
@@ -397,7 +398,7 @@ describe('OrganizationPage offline', () => {
     it('online and connected: keeps the loading view', async () => {
       stubOnLine(true);
       const harness = await open();
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(PAGE_LOAD_WAIT_MS - 1);
       await settle(harness);
       expect(host(harness).querySelector('main h1')).toBeNull();
       expect(host(harness).querySelector('main app-organization-skeleton')).not.toBeNull();

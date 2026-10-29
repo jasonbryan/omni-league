@@ -84,8 +84,10 @@ describe('SignInPage', () => {
     it('has the heading, the intro, and no reset, verification, Google, or policy UI', () => {
       expect(page.querySelector('h1')?.textContent?.trim()).toBe('Sign in');
       expect(page.querySelector('h1')?.id).toBe('sign-in-heading');
-      expect(page.querySelector('form')?.getAttribute('aria-labelledby')).toBe('sign-in-heading');
-      expect(page.querySelector('form')?.hasAttribute('novalidate')).toBe(true);
+      expect(page.querySelector('main form')?.getAttribute('aria-labelledby')).toBe(
+        'sign-in-heading',
+      );
+      expect(page.querySelector('main form')?.hasAttribute('novalidate')).toBe(true);
       expect(page.querySelector('main h1 + p')?.textContent?.trim()).toBe(
         'Pick up where you left off: register for a season, manage your team, or run your organization.',
       );

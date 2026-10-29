@@ -33,7 +33,12 @@ import {
   type OrganizationInputError,
 } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
-import { ConvexOfflineError, injectMutation, injectOnline } from '../core/data/convex';
+import {
+  ConvexOfflineError,
+  injectMutation,
+  injectOfflineTitle,
+  injectOnline,
+} from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { Shell } from '../shell';
 import { adminPath } from './admin/admin-path';
@@ -41,7 +46,6 @@ import { adminPath } from './admin/admin-path';
 export const MESSAGES = {
   failedTitle: 'The organization could not be created.',
   failedDescription: 'Check your connection and try again.',
-  offlineTitle: "You're offline. Nothing was sent.",
   offlineDescription: "Your details are still here. Try again when you're connected.",
 } as const;
 
@@ -129,7 +133,7 @@ function inputErrorOf(failure: unknown): OrganizationInputError | null {
                     data-slot="alert-title"
                     class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
                   >
-                    {{ alert === 'offline' ? messages.offlineTitle : messages.failedTitle }}
+                    {{ alert === 'offline' ? offlineTitle() : messages.failedTitle }}
                   </div>
                   <div
                     data-slot="alert-description"
@@ -357,6 +361,7 @@ export class CreateOrganizationPage {
   protected readonly messages = MESSAGES;
   protected readonly cityStateHint = CITY_STATE_HINT;
   protected readonly online = injectOnline();
+  protected readonly offlineTitle = injectOfflineTitle();
   protected readonly host = inject(DOCUMENT).location.host;
 
   private readonly model = signal<CreateModel>({ name: '', cityState: '', slug: '' });

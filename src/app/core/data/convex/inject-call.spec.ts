@@ -6,6 +6,7 @@ import {
   CONVEX_CLIENT,
   CONVEX_CLIENT_FACTORY,
   CONVEX_URL,
+  ConvexConnection,
   ConvexNotConfiguredError,
   ConvexOfflineError,
   ConvexServerCallError,
@@ -225,6 +226,22 @@ describe('mutation and action helpers while offline (call-time guard)', () => {
       await vi.advanceTimersByTimeAsync(10_000);
       expect(client.calls).toEqual([]);
       expect(client.connectionStateListeners).toBe(listenersBefore);
+    });
+
+    it(`${helper.kind} rejects with the unreachable cause when the site answered and the socket stays down`, async () => {
+      const ref = TestBed.runInInjectionContext(helper.create);
+      client.setConnected(false);
+      TestBed.inject(ConvexConnection).markSiteReached();
+
+      const result = ref.run({ name: 'Sharks' });
+      const rejected = expect(result).rejects.toMatchObject({
+        offlineCause: 'unreachable',
+        message: "Can't reach Omni League right now. Nothing was sent.",
+      });
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      await rejected;
+      expect(client.calls).toEqual([]);
     });
 
     it(`${helper.kind} rejects with ConvexOfflineError while navigator.onLine stays false for 3 s, with the socket reported connected`, async () => {

@@ -10,13 +10,15 @@ import { fetchRawHtml } from './support/raw-html';
 import { accountByEmail, newUser, seedUser, type TestUser } from './support/users';
 import { screenshot } from './support/screenshot';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { topBarFind } from './support/top-bar-find';
 
 const LOCAL_ONLY = 'seeds a user or the throttle on the local Convex backend';
 const SIGN_IN_PATH = '/api/auth/sign-in/email';
 
-const SIGN_IN_ORDER = [
+const signInOrder = (page: Page) => [
   'a[href$="#main"]',
   'header a[href="/"]',
+  topBarFind(page),
   '#email',
   '#password',
   'button[aria-controls="password"]',
@@ -111,7 +113,7 @@ test.describe('sign-in', () => {
     await page.getByRole('button', { name: 'Hide password' }).click();
     await expect(field(page, 'password')).toHaveAttribute('type', 'password');
 
-    await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+    await expectAccessible(page, { expectedOrder: signInOrder(page) });
   });
 
   test('submitted empty, and a malformed email: errors under the fields, nothing is sent', async ({
@@ -132,7 +134,7 @@ test.describe('sign-in', () => {
     }
     await expect(field(page, 'email')).toBeFocused();
     await screenshot(page, testInfo, '63-sign-in-errors-required');
-    await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+    await expectAccessible(page, { expectedOrder: signInOrder(page) });
 
     await fillForm(page, 'maya.okafor.example.com', 'x');
     await submit(page).click();
@@ -266,7 +268,7 @@ test.describe('sign-in', () => {
       expect(answers[1]).toEqual(answers[0]);
       expect(answers[0]?.text).toBe('Email or password is incorrect. Check both and try again.');
       await screenshot(page, testInfo, '63-sign-in-incorrect');
-      await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+      await expectAccessible(page, { expectedOrder: signInOrder(page) });
       expect((await accountByEmail(user.email))?.sessions).toBe(1);
     });
   });
@@ -319,7 +321,7 @@ test.describe('sign-in', () => {
       await expect(alert(page)).toBeFocused();
       expect((await accountByEmail(user.email))?.sessions).toBe(1);
       await screenshot(page, testInfo, '63-sign-in-throttled');
-      await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+      await expectAccessible(page, { expectedOrder: signInOrder(page) });
     });
   });
 
@@ -359,7 +361,7 @@ test.describe('sign-in', () => {
       await expect(alert(page)).toBeFocused();
       expect((await accountByEmail(user.email))?.sessions).toBe(1);
       await screenshot(page, testInfo, '63-sign-in-locked');
-      await expectAccessible(page, { expectedOrder: SIGN_IN_ORDER });
+      await expectAccessible(page, { expectedOrder: signInOrder(page) });
     });
   });
 

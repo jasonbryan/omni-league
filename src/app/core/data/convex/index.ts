@@ -13,7 +13,13 @@ export {
   ConvexServerCallError,
   ConvexServerQueryError,
 } from './errors';
-export { injectOnline } from './connection';
+export {
+  ConvexConnection,
+  injectOfflineCause,
+  injectOnline,
+  type OfflineCause,
+} from './connection';
+export { injectOfflineTitle, offlineLead, offlineTitle, type NotDone } from './offline-title';
 export { injectAction, injectMutation, type CallRef } from './inject-call';
 export { injectQuery, skipToken, type QueryRef, type SkipToken } from './inject-query';
 export {

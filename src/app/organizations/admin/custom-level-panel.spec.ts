@@ -260,6 +260,23 @@ describe('The custom level panel in the create form', () => {
       expect(error('custom-level-name')).toBeNull();
     });
 
+    it('shows the failed alert with its heading and keeps what was entered', async () => {
+      await withBeachVolleyball();
+      await press(toggle());
+      await type('custom-level-name', 'Gold');
+      await pick('a');
+      await press(buttonNamed('Add level'));
+      o.convex.calls[0].reject(new Error('network'));
+      await o.flush();
+      expect(text(panel()!.querySelector('[data-slot="alert-title"]'))).toBe(
+        'The custom level could not be added.',
+      );
+      expect(text(panel()!.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Check your connection and try again.',
+      );
+      expect(field<HTMLInputElement>('custom-level-name').value).toBe('Gold');
+    });
+
     it('offline shows the offline note, sends nothing, and keeps the input', async () => {
       await withBeachVolleyball();
       await press(toggle());

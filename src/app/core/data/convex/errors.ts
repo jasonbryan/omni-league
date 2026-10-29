@@ -1,3 +1,6 @@
+import type { OfflineCause } from './connection';
+import { offlineTitle } from './offline-title';
+
 export class ConvexNotConfiguredError extends Error {
   override readonly name = 'ConvexNotConfiguredError';
   constructor() {
@@ -18,7 +21,7 @@ export class ConvexServerQueryError extends Error {
 
 export class ConvexOfflineError extends Error {
   override readonly name = 'ConvexOfflineError';
-  constructor() {
-    super("You're offline. Nothing was sent.");
+  constructor(readonly offlineCause: OfflineCause = 'offline') {
+    super(offlineTitle(offlineCause));
   }
 }

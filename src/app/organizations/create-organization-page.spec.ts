@@ -6,7 +6,7 @@ import { ConvexError } from 'convex/values';
 import { CITY_STATE_HINT, ORGANIZATION_MESSAGES } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
-import { CONVEX_CLIENT } from '../core/data/convex';
+import { CONVEX_CLIENT, ConvexConnection } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
 import { CreateOrganizationPage } from './create-organization-page';
@@ -614,6 +614,24 @@ describe('CreateOrganizationPage', () => {
       );
       expect(document.activeElement).toBe(alert());
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
+    });
+
+    it('a press while the site answered and the socket is down shows the unreachable title', async () => {
+      await type('name', NAME);
+      convex.setConnected(false);
+      TestBed.inject(ConvexConnection).markSiteReached();
+      vi.useFakeTimers();
+      try {
+        submitButton().click();
+        await vi.advanceTimersByTimeAsync(3_100);
+      } finally {
+        vi.useRealTimers();
+      }
+      await flush();
+      expect(convex.calls).toEqual([]);
+      expect(alert()?.querySelector('[data-slot="alert-title"]')?.textContent?.trim()).toBe(
+        "Can't reach Omni League right now. Nothing was sent.",
+      );
     });
 
     it('validation comes first: an empty form offline shows the field errors, not the alert', async () => {

@@ -673,6 +673,119 @@ test.describe('find a league: in the browser', () => {
   });
 });
 
+test.describe('find a league: top bar', () => {
+  const searchForm = (page: Page) => page.getByRole('search', { name: 'Find a league' });
+  const phoneLink = (page: Page) =>
+    page.getByRole('banner').getByRole('link', { name: 'Find a league' });
+
+  test(
+    'the raw HTML of a public page holds a GET search form to /leagues and the link to it',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant } = await seed();
+      const { html } = await raw(request, `${tenant.path}?ott=SECRET-TOKEN`);
+      const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
+      expect(header).toMatch(/<form\b[^>]*role="search"[^>]*>/);
+      expect(header).toMatch(/<form\b[^>]*action="\/leagues"[^>]*>/);
+      expect(header).toMatch(/<form\b[^>]*method="get"[^>]*>/);
+      expect(header).toMatch(/<form\b[^>]*aria-label="Find a league"[^>]*>/);
+      expect(header).toMatch(/<input\b[^>]*name="q"[^>]*>/);
+      expect(header).toMatch(/<a\b[^>]*href="\/leagues"[^>]*>[\s\S]*Find a league[\s\S]*<\/a>/);
+      expect(html).not.toContain('SECRET-TOKEN');
+    },
+  );
+
+  test('on a wide screen the field submits the words to /leagues and shows the results', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'the field shows from 768px');
+    const { tenant, id } = await seed();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await expect(phoneLink(page)).toBeHidden();
+    const input = searchForm(page).getByRole('searchbox', { name: 'Find a league' });
+    await input.fill(id);
+    await input.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}${url(id)}`);
+    await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
+    await expect(searchForm(page)).toHaveCount(0);
+  });
+
+  test('with JavaScript disabled the field loads /leagues?q=', async ({ browser }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'the field shows from 768px');
+    const { tenant, id } = await seed();
+    const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+    const plain = await context.newPage();
+    try {
+      await plain.goto(tenant.path);
+      const input = searchForm(plain).getByRole('searchbox');
+      await input.fill(id);
+      await input.press('Enter');
+      await expect(plain).toHaveURL(`${baseURL}${url(id)}`);
+      await expect(rowNames(plain)).toHaveText([SUNDAY, THURSDAY]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('on a phone the bar holds a 44px square link to /leagues and no field', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'the link shows below 768px');
+    const { tenant } = await seed();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await expect(searchForm(page)).toBeHidden();
+    const link = phoneLink(page);
+    await expect(link).toHaveAttribute('href', '/leagues');
+    const box = await link.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    await link.click();
+    await expect(page).toHaveURL(`${baseURL}/leagues`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Find a league' })).toBeVisible();
+  });
+
+  test('on /leagues the bar has neither the field nor the link', async ({ page }) => {
+    await page.goto('/leagues');
+    await expect(page.getByRole('banner')).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Find a league' })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole('banner').getByRole('searchbox')).toHaveCount(0);
+    await expect(page.getByRole('search')).toHaveCount(1);
+  });
+
+  for (const width of [768, 1280]) {
+    test(`at ${width}px the page with the field passes axe and does not scroll at 320px`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own width');
+      const { tenant } = await seed();
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await expect(searchForm(page)).toBeVisible();
+      await expectAccessible(page);
+    });
+  }
+
+  test('at 360px the page with the link passes axe and does not scroll at 320px', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'the phone project is 360px');
+    const { tenant } = await seed();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await expect(phoneLink(page)).toBeVisible();
+    await expectAccessible(page);
+  });
+});
+
 test.describe('find a league: offline', () => {
   test('a search viewed online opens from its saved copy with the note; any other search shows the not-saved view', async ({
     page,

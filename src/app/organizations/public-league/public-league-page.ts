@@ -10,6 +10,8 @@ import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
+import { PageLoadStatus } from '../../public-layout/page-load-status';
+import { injectPageLoadWait } from '../../public-layout/page-load-wait';
 import { PublicLayout } from '../../public-layout/public-layout';
 import { PublicLeagueContent } from './public-league-content';
 import { PublicLeagueSkeleton } from './public-league-skeleton';
@@ -28,6 +30,7 @@ import {
   imports: [
     NotFoundView,
     NotSavedView,
+    PageLoadStatus,
     PublicLayout,
     PublicLeagueContent,
     PublicLeagueSkeleton,
@@ -44,7 +47,7 @@ import {
           [savedAt]="savedAt()"
         />
       } @else if (state() === 'not-found') {
-        <app-not-found-view />
+        <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="retryHref()" />
       } @else if (state() === 'not-saved') {
@@ -52,6 +55,7 @@ import {
       } @else {
         <app-public-league-skeleton />
       }
+      <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>
   `,
 })
@@ -138,7 +142,7 @@ export class PublicLeaguePage {
     return times.length > 0 ? Math.min(...times) : undefined;
   });
 
-  protected readonly state = computed(() => {
+  private readonly phase = computed(() => {
     if (this.view()) return 'page';
     if (this.league.value() === null || this.organization.value() === null) return 'not-found';
     if (this.failed()) return 'error';
@@ -146,6 +150,14 @@ export class PublicLeaguePage {
     if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
+
+  private readonly waitedOut = injectPageLoadWait(
+    () => this.phase() === 'loading',
+    () => this.retryHref(),
+  );
+  protected readonly stalled = computed(() => this.phase() === 'loading' && this.waitedOut());
+
+  protected readonly state = computed(() => (this.stalled() ? 'error' : this.phase()));
 
   constructor() {
     bindPageMeta(() => {

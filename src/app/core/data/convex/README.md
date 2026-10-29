@@ -40,9 +40,11 @@ readonly addPlayer = injectMutation(api.teams.addPlayer);
 `injectOnline()` returns the app's `online` signal, which drives the offline note in the shell and the disabled look of submit buttons:
 
 - false at once when the browser reports offline (`navigator.onLine`, the `offline` event);
-- false once the socket has been down for 5 seconds, including a client that has not connected 5 seconds after the app started (field wifi with no internet, where `navigator.onLine` stays true);
+- false once the socket has been down for 5 seconds, including a client that has not connected 5 seconds after the app started (field wifi with no internet, where `navigator.onLine` stays true). When the service worker has detected a newer version by then, the note waits until 15 seconds after the socket went down, because the app is about to reload onto it;
 - true again as soon as the socket is connected and the browser reports online;
 - always true on the server; with no Convex URL it follows `navigator.onLine` only.
+
+`injectOfflineCause()` says why: `unreachable` when the socket is down, the browser is online, and the service worker has answered since (`AppUpdates` calls `ConvexConnection.markSiteReached()` on `NO_NEW_VERSION_DETECTED`, `VERSION_DETECTED`, and `VERSION_READY`), otherwise `offline`. The note and every refused-change alert take their words from it (`offlineTitle()`, `injectOfflineTitle()`), so a screen gives one cause. `ConvexConnection` also exposes `socketDown`, `hasEverConnected()`, and `disconnectedWhileOnline` for `AppUpdates`.
 
 `run()` does not use that 5-second signal. When called, it checks that the socket is connected and that `navigator.onLine` is true. If either fails, it waits up to 3 seconds for both (`pending()` is `true` meanwhile), then rejects with `ConvexOfflineError` (also in `error()`) without calling the client, so nothing is queued and sent later. `navigator.onLine` is checked because `convex` 1.46 does not listen for the `offline` event.
 

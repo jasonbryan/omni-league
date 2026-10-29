@@ -636,6 +636,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/data/convex/inject-call.ts': MAIN_SERVER,
     'src/app/core/data/convex/inject-query.ts': MAIN_SERVER,
     'src/app/core/data/convex/matches-validator.ts': MAIN_SERVER,
+    'src/app/core/data/convex/offline-title.ts': MAIN_SERVER,
     'src/app/core/data/convex/saved-copies.ts': MAIN_SERVER,
     'src/app/core/data/convex/server-query-loader.ts': MAIN_SERVER,
     'src/app/core/data/convex/transfer.ts': MAIN_SERVER,

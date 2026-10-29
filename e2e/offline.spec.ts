@@ -67,6 +67,7 @@ test.describe('offline note', () => {
 
     await context.setOffline(true);
     await expect(note).toBeVisible({ timeout: 2_000 });
+    await expect(note).toHaveText("You're offline. Changes need a connection.");
 
     for (const width of [360, 1280]) {
       await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });

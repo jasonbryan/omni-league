@@ -9,6 +9,8 @@ import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';
 import { NotSavedView } from '../../offline/not-saved-view';
 import { ServerErrorView } from '../../server-error/server-error-view';
+import { PageLoadStatus } from '../../public-layout/page-load-status';
+import { injectPageLoadWait } from '../../public-layout/page-load-wait';
 import { PublicLayout } from '../../public-layout/public-layout';
 import { seasonDates } from '../league/season-dates';
 import { publicSeasonPath } from '../public-league/public-league-path';
@@ -22,6 +24,7 @@ import type { PublicSeasonView } from './public-season-view';
   imports: [
     NotFoundView,
     NotSavedView,
+    PageLoadStatus,
     PublicLayout,
     PublicSeasonContent,
     PublicSeasonSkeleton,
@@ -33,7 +36,7 @@ import type { PublicSeasonView } from './public-season-view';
       @if (view(); as view) {
         <app-public-season-content [view]="view" [savedAt]="savedAt()" [now]="now()" />
       } @else if (state() === 'not-found') {
-        <app-not-found-view />
+        <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="path()" />
       } @else if (state() === 'not-saved') {
@@ -41,6 +44,7 @@ import type { PublicSeasonView } from './public-season-view';
       } @else {
         <app-public-season-skeleton />
       }
+      <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>
   `,
 })
@@ -81,7 +85,7 @@ export class PublicSeasonPage {
 
   protected readonly savedAt = computed(() => (this.online() ? undefined : this.season.savedAt()));
 
-  protected readonly state = computed(() => {
+  private readonly phase = computed(() => {
     if (this.view()) return 'page';
     if (this.season.value() === null) return 'not-found';
     if (this.failed()) return 'error';
@@ -89,6 +93,14 @@ export class PublicSeasonPage {
     if (offlineWithoutSavedCopy) return 'not-saved';
     return 'loading';
   });
+
+  private readonly waitedOut = injectPageLoadWait(
+    () => this.phase() === 'loading',
+    () => this.path(),
+  );
+  protected readonly stalled = computed(() => this.phase() === 'loading' && this.waitedOut());
+
+  protected readonly state = computed(() => (this.stalled() ? 'error' : this.phase()));
 
   constructor() {
     bindPageMeta(() => {

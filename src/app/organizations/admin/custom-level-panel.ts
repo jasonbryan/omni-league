@@ -24,7 +24,12 @@ import {
 } from '../../../../convex/lib/customLevelInput';
 import { levelLabel, levelsOfSport, type StandardLevel } from '../../../../convex/lib/divisions';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
-import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import {
+  ConvexOfflineError,
+  injectMutation,
+  injectOfflineTitle,
+  injectOnline,
+} from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { AdminAlert } from './admin-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -49,7 +54,6 @@ const PANEL_ALERTS = {
     description: 'Check your connection and try again.',
   },
   offline: {
-    title: "You're offline. Nothing was sent.",
     description: "Your custom level is still here. Try again when you're connected.",
   },
 } as const;
@@ -109,7 +113,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
             </button>
             @if (undoOffline()) {
               <span class="basis-full"
-                >You're offline. Nothing was removed. Try again when you're connected.</span
+                >{{ undoOfflineTitle() }} Try again when you're connected.</span
               >
             }
           }
@@ -138,7 +142,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
           <app-admin-alert
             #failureAlert
             [kind]="kind === 'offline' ? 'offline' : 'error'"
-            [title]="alerts[kind].title"
+            [title]="kind === 'offline' ? undefined : alerts[kind].title"
             [description]="alerts[kind].description"
           />
         }
@@ -306,6 +310,7 @@ export class CustomLevelPanel {
   protected readonly submitting = signal(false);
   protected readonly undoing = signal(false);
   protected readonly undoOffline = signal(false);
+  protected readonly undoOfflineTitle = injectOfflineTitle('removed');
   protected readonly alert = signal<PanelAlert | null>(null);
   protected readonly status = signal<Status | null>(null);
 

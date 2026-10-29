@@ -25,4 +25,22 @@ describe('AppNotFoundPage', () => {
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     expect(host.querySelector('a[href^="/sign-in"]')).toBeNull();
   });
+
+  it('keeps the card and the home link alone, with no way on to the search', async () => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: CONVEX_CLIENT, useValue: new FakeConvexClient() }, provideRouter([])],
+    });
+    const fixture = TestBed.createComponent(AppNotFoundPage);
+    await fixture.whenStable();
+    const main = (fixture.nativeElement as HTMLElement).querySelector('main#main');
+
+    expect(
+      [...(main?.querySelectorAll('a') ?? [])].map((a) => [
+        a.textContent.trim(),
+        a.getAttribute('href'),
+      ]),
+    ).toEqual([['Go to the home page', '/']]);
+    expect(main?.querySelector('.ring-1')).not.toBeNull();
+    expect(main?.textContent).toContain('start again from the home page');
+  });
 });

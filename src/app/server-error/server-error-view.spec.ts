@@ -2,7 +2,8 @@ import { RESPONSE_INIT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
-import { NotFoundView } from '../not-found/not-found-view';
+import { buttonVariants } from '../ui/button';
+import { hlm } from '../ui/utils';
 import { ServerErrorView } from './server-error-view';
 
 function create(responseInit?: ResponseInit) {
@@ -40,14 +41,13 @@ describe('ServerErrorView', () => {
     expect(link?.querySelector('ng-icon[name="lucideRotateCw"]')).not.toBeNull();
   });
 
-  it("uses the not-found view's large button classes for its link", () => {
+  it('styles its link as hlmBtn size="md" with mt-8', () => {
     const link = create().querySelector('a');
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ providers: [provideRouter([])] });
-    const notFound = TestBed.createComponent(NotFoundView);
-    notFound.detectChanges();
-    const home = (notFound.nativeElement as HTMLElement).querySelector('a');
-    expect(link?.className).toBe(home?.className);
+    expect(link?.className.split(/\s+/).sort()).toEqual(
+      hlm(buttonVariants({ size: 'md' }), 'mt-8')
+        .split(/\s+/)
+        .sort(),
+    );
     expect(link?.getAttribute('data-slot')).toBe('button');
   });
 

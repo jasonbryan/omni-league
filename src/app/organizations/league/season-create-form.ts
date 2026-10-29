@@ -84,7 +84,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         <app-admin-alert
           #failureAlert
           [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="alerts[kind].title"
+          [title]="kind === 'offline' ? undefined : alerts[kind].title"
           [description]="alerts[kind].description"
           class="mb-5"
         />
