@@ -86,7 +86,6 @@ async function seedTargets(): Promise<Target[]> {
   ];
 }
 
-/** The page numbers a visitor sees: the ones the width hides are not counted. */
 async function visiblePages(nav: Locator): Promise<number[]> {
   const numbers: number[] = [];
   for (const link of await nav.getByRole('link', { name: /^Page \d+$/ }).all()) {
@@ -106,8 +105,7 @@ function expectedPages(width: number, page: number, pageCount: number): number[]
   return [...new Set([1, page, pageCount])].sort((a, b) => a - b);
 }
 
-/** Empty when the page does not scroll sideways, and otherwise the elements that reach past the right edge. */
-const overflowing = (page: Page) =>
+const elementsPastRightEdge = (page: Page) =>
   page.evaluate(() => {
     const edge = document.documentElement.clientWidth;
     if (document.documentElement.scrollWidth <= edge) return [];
@@ -156,7 +154,7 @@ test.describe('the page control at each width', () => {
           expect
             .soft(box!.x + box!.width, `${where}: the page list ends at`)
             .toBeLessThanOrEqual(width);
-          expect.soft(await overflowing(page), where).toEqual([]);
+          expect.soft(await elementsPastRightEdge(page), where).toEqual([]);
           expect(await visiblePages(nav), where).toEqual(expectedPages(width, current, pageCount));
           for (const link of await nav.getByRole('link').all()) {
             if (!(await link.isVisible())) continue;
@@ -189,7 +187,7 @@ test.describe('the page control at each width', () => {
           'aria-current',
           'page',
         );
-        expect(await overflowing(page), `${width}px`).toEqual([]);
+        expect(await elementsPastRightEdge(page), `${width}px`).toEqual([]);
       }
     });
   }
@@ -203,7 +201,7 @@ test.describe('the page control at each width', () => {
       await open(page, consoleGuard, findPath, width);
       const nav = page.getByRole('navigation', { name: 'Organizations pages' });
       await expect(nav).toBeVisible();
-      expect(await overflowing(page)).toEqual([]);
+      expect(await elementsPastRightEdge(page)).toEqual([]);
       const box = await nav.locator('ul').boundingBox();
       expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       for (const link of await nav.getByRole('link').all()) {
