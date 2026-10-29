@@ -360,7 +360,7 @@ export class SeasonCreateForm {
 
   protected readonly created = signal<string | null>(null);
 
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly leagueAlert = viewChild<AdminAlert>('leagueAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 

@@ -9,7 +9,6 @@ export interface OfflineAlertText {
   readonly description: string;
 }
 
-/** The text of each alert a form can show: every kind but `offline` needs a title. */
 export type AlertTexts<Kind extends string> = {
   readonly [K in Kind]: K extends 'offline' ? OfflineAlertText : AlertText;
 };

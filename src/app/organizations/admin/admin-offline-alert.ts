@@ -13,7 +13,7 @@ import { ALERT_DESCRIPTION, ALERT_DESTRUCTIVE, ALERT_TITLE } from './admin-alert
 
 /**
  * Takes its title from the connection's cause, so it never disagrees with the offline note.
- * The caller sets the margin with a class on the element. Content inside the element (a link) follows the description, inside it.
+ * The caller sets the margin with a class on the element.
  */
 @Component({
   selector: 'app-admin-offline-alert',

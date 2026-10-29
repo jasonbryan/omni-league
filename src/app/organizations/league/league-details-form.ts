@@ -329,7 +329,7 @@ export class LeagueDetailsForm implements OnInit {
 
   private readonly nameInput = viewChild.required<ElementRef<HTMLInputElement>>('name');
   private readonly divisionFields = viewChild.required(LeagueDivisionFields);
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
 
   private loadedLeagueId = '';

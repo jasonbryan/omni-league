@@ -181,7 +181,7 @@ export class PublishLeagueDialog {
   );
 
   private readonly dialog = viewChild.required(BrnAlertDialog);
-  private readonly alertBox = viewChild<AdminAlert>('alertBox');
+  private readonly alertBox = viewChild<AdminAlert | AdminOfflineAlert>('alertBox');
   private published = false;
 
   readonly isOpen = computed(() => this.dialog().stateComputed() === 'open');

@@ -22,7 +22,6 @@ export const ALERT_DESCRIPTION =
 export type AdminAlertKind = 'success' | 'error' | 'note' | 'info';
 
 /**
- * An offline alert is `app-admin-offline-alert`, which takes its title from the connection's cause.
  * The caller sets the margin with a class on the `app-admin-alert` element. Content inside the element (a link) follows the description, inside it, so an alert with content needs a description. */
 @Component({
   selector: 'app-admin-alert',

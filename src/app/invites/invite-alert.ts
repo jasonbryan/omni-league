@@ -17,7 +17,7 @@ import {
 
 export type InviteAlertKind = 'error' | 'info';
 
-/** An offline alert is `app-invite-offline-alert`. Takes focus through `focus()` and shows the focus ring the mockup draws, because focus moves to it from a button that has just gone. */
+/** Takes focus through `focus()` and shows the focus ring the mockup draws, because focus moves to it from a button that has just gone. */
 @Component({
   selector: 'app-invite-alert',
   imports: [NgIcon],

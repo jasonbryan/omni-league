@@ -364,7 +364,7 @@ export class CustomLevelPanel {
   private readonly nameField = viewChild<ElementRef<HTMLInputElement>>('nameInput');
   private readonly standardField = viewChild<ElementRef<HTMLSelectElement>>('standardSelect');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
 
   protected addedText(status: { level: AddedCustomLevel; sport: Sport }): string {
     const forOtherSport = status.sport !== this.sport();

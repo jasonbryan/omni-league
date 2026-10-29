@@ -115,7 +115,7 @@ export class LocationEditForm implements OnInit {
   readonly saving = this.form.submitting.asReadonly();
 
   private readonly locationFields = viewChild.required<LocationFields>('locationFields');
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
 
   /**
    * Inputs are bound after construction, so this starts from the values at the moment Edit was pressed, not in a field initializer.

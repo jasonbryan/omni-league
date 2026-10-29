@@ -108,7 +108,7 @@ export class AddLocationForm {
   protected readonly added = signal<string | null>(null);
 
   private readonly locationFields = viewChild.required<LocationFields>('locationFields');
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
   protected async submit(event: Event): Promise<void> {

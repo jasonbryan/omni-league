@@ -372,7 +372,7 @@ export class LeagueCreateForm {
   private readonly sportGroup = viewChild<ChipRadioGroup>('sportGroup');
   private readonly divisionFields = viewChild(LeagueDivisionFields);
   private readonly locationBoxes = viewChildren(Checkbox);
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
   protected readonly filledMessage = computed(() =>

@@ -491,7 +491,7 @@ export class StaffInvitePanel {
   private readonly section = viewChild<ElementRef<HTMLElement>>('section');
   private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('email');
   private readonly leagueBoxes = viewChildren(Checkbox);
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly linkHeading = viewChild<ElementRef<HTMLElement>>('linkHeading');
 
   constructor() {
