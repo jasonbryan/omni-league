@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
@@ -9,12 +10,13 @@ import {
   dateFromToday,
   numberedLocations,
   numberedSeasons,
+  type SeasonSeed,
   seedSeasons,
   seedTenant,
   type Tenant,
   type TenantSeed,
 } from './support/tenant';
-import { newUser } from './support/users';
+import { newUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -144,7 +146,53 @@ async function seedPublicTenant(): Promise<Tenant> {
   return tenant;
 }
 
+const ONE_LEAGUE_TENANT: TenantSeed = {
+  name: 'E2E Touch',
+  locations: LOCATIONS.slice(0, 1),
+  leagues: LEAGUES.slice(0, 1),
+};
+
+async function measureRoute(
+  page: Page,
+  [path, heading]: [string, string | RegExp],
+  ready?: () => Promise<void>,
+): Promise<void> {
+  await test.step(path, async () => {
+    await visit(page, path, heading);
+    await ready?.();
+    expect(await expectTargets(page)).toBeGreaterThan(0);
+    await expectAccessible(page);
+  });
+}
+
+async function measureRoutes(page: Page, routes: [string, string | RegExp][]): Promise<void> {
+  for (const route of routes) await measureRoute(page, route);
+}
+
+const addOrgAdmin = (tenant: Tenant, user: TestUser) =>
+  convexRun('testing:addMembership', {
+    organizationSlug: tenant.slug,
+    email: user.email,
+    role: 'orgAdmin',
+  });
+
+/** The sign-up runs while the organization is seeded; the membership needs both. */
+async function signUpAsOrgAdmin(
+  page: Page,
+  seasons: SeasonSeed[] = [],
+): Promise<{ tenant: Tenant; base: string }> {
+  const user = newUser('Admin');
+  const [, tenant] = await Promise.all([signUp(page, user), seedTenant(ONE_LEAGUE_TENANT)]);
+  await Promise.all([
+    addOrgAdmin(tenant, user),
+    seasons.length > 0 ? seedSeasons(tenant, FIRST_LEAGUE, seasons) : undefined,
+  ]);
+  return { tenant, base: `/app/organizations/${tenant.slug}` };
+}
+
 test.describe('touch screens: every control is at least 44 by 44 CSS px', () => {
+  test.describe.configure({ mode: 'parallel' });
+
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === DESKTOP_PROJECT, 'the touch projects measure touch sizes');
     await page.goto('/sign-in');
@@ -213,73 +261,77 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     await expectAccessible(page);
   });
 
-  test('the app: Your organizations, create organization, the admin pages, the league page, and the menu sheet', async ({
-    page,
-  }) => {
-    const user = newUser('Admin');
-    await signUp(page, user);
-    const tenant = await seedPublicTenant();
-    await convexRun('testing:addMembership', {
-      organizationSlug: tenant.slug,
-      email: user.email,
-      role: 'orgAdmin',
-    });
-    // A second organization gives /app a league organizer row with its league links, and an
-    // empty one shows the Overview's next-step links.
-    const organizing = await seedTenant({
-      name: 'E2E Touch Organizing',
-      locations: LOCATIONS,
-      leagues: LEAGUES,
-    });
-    await convexRun('testing:addLeagueOrganizer', {
-      organizationSlug: organizing.slug,
-      email: user.email,
-      leagueSlugs: [FIRST_LEAGUE],
-    });
-    const empty = await seedTenant({ name: 'E2E Touch Empty' });
-    await convexRun('testing:addMembership', {
-      organizationSlug: empty.slug,
-      email: user.email,
-      role: 'orgAdmin',
-    });
-    const base = `/app/organizations/${tenant.slug}`;
-    const routes: [string, string | RegExp][] = [
-      ['/app', 'Home'],
+  test('the account settings and create organization pages', async ({ page }) => {
+    await signUp(page, newUser('Account'));
+    await measureRoutes(page, [
       ['/app/account', 'Account settings'],
-      [`/app/organizations/${empty.slug}`, 'Overview'],
       ['/app/organizations/new', /Create an organization/],
+    ]);
+  });
+
+  test('Your organizations and the Overview of an empty organization', async ({ page }) => {
+    const user = newUser('Admin');
+    // A league organizer row with its league link, and an empty organization whose Overview shows
+    // the next-step links.
+    const [, admin, organizing, empty] = await Promise.all([
+      signUp(page, user),
+      seedTenant(ONE_LEAGUE_TENANT),
+      seedTenant({ ...ONE_LEAGUE_TENANT, name: 'E2E Touch Organizing' }),
+      seedTenant({ name: 'E2E Touch Empty' }),
+    ]);
+    await Promise.all([
+      addOrgAdmin(admin, user),
+      addOrgAdmin(empty, user),
+      convexRun('testing:addLeagueOrganizer', {
+        organizationSlug: organizing.slug,
+        email: user.email,
+        leagueSlugs: [FIRST_LEAGUE],
+      }),
+    ]);
+    await measureRoute(page, ['/app', 'Home'], async () => {
+      await expect(page.getByRole('link', { name: `Manage ${admin.name}` })).toBeVisible();
+      await expect(page.getByRole('link', { name: LEAGUE_NAMES[0] })).toBeVisible();
+    });
+    await measureRoute(page, [`/app/organizations/${empty.slug}`, 'Overview']);
+  });
+
+  test('the admin Overview, Locations, and Details pages and the menu sheet', async ({ page }) => {
+    const { base } = await signUpAsOrgAdmin(page);
+    await measureRoutes(page, [
       [base, 'Overview'],
       [`${base}/locations`, 'Locations'],
+      [`${base}/details`, 'Details'],
+    ]);
+    await visit(page, base, 'Overview');
+    const sheet = await openSheet(page);
+    expect(await expectTargets(page, sheet)).toBeGreaterThan(0);
+  });
+
+  test('the admin Leagues and Staff pages and their rows of check boxes and radio buttons', async ({
+    page,
+  }) => {
+    const { base } = await signUpAsOrgAdmin(page);
+    await measureRoutes(page, [
       [`${base}/leagues`, 'Leagues'],
       [`${base}/staff`, 'Staff'],
-      [`${base}/details`, 'Details'],
-      [`${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]],
-    ];
-    for (const [path, heading] of routes) {
-      await test.step(path, async () => {
-        await visit(page, path, heading);
-        expect(await expectTargets(page)).toBeGreaterThan(0);
-        await expectAccessible(page);
-      });
-    }
+    ]);
+    await visit(page, `${base}/leagues`, 'Leagues');
+    await expect(page.locator('#create-league form')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: LOCATIONS[0].name })).toBeVisible();
+    expect(await expectRows(page)).toBeGreaterThan(0);
+    await visit(page, `${base}/staff`, 'Staff');
+    await expect(page.getByRole('radio')).toHaveCount(2);
+    await expect(page.getByRole('checkbox', { name: LEAGUE_NAMES[0] })).toBeVisible();
+    expect(await expectRows(page)).toBe(3);
+  });
 
-    await test.step('rows of check boxes and radio buttons', async () => {
-      await visit(page, `${base}/leagues`, 'Leagues');
-      await expect(page.locator('#create-league form')).toBeVisible();
-      expect(await expectRows(page)).toBeGreaterThan(0);
-      await visit(page, `${base}/staff`, 'Staff');
-      expect(await expectRows(page)).toBeGreaterThan(0);
-    });
-
-    await test.step('the menu sheet', async () => {
-      await visit(page, base, 'Overview');
-      const sheet = await openSheet(page);
-      expect(await expectTargets(page, sheet)).toBeGreaterThan(0);
-      await page.keyboard.press('Escape');
-      await visit(page, `${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]);
-      const leagueSheet = await openSheet(page);
-      expect(await expectTargets(page, leagueSheet)).toBeGreaterThan(0);
-    });
+  test('the admin league page and its menu sheet', async ({ page }) => {
+    const { base } = await signUpAsOrgAdmin(page, SEASONS.slice(0, 2));
+    const leaguePath = `${base}/leagues/${FIRST_LEAGUE}`;
+    await measureRoutes(page, [[leaguePath, LEAGUE_NAMES[0]]]);
+    await visit(page, leaguePath, LEAGUE_NAMES[0]);
+    const sheet = await openSheet(page);
+    expect(await expectTargets(page, sheet)).toBeGreaterThan(0);
   });
 
   test('the accept-invite page', async ({ page }) => {
@@ -289,7 +341,7 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
       leagues: LEAGUES.slice(0, 1),
     });
     const user = newUser('Invitee');
-    const token = 'touch-targets-invite-token-0123456789abcdefghij';
+    const token = `touch-targets-invite-${randomBytes(16).toString('hex')}`;
     await convexRun('testing:addInvite', {
       organizationSlug: tenant.slug,
       email: user.email,
