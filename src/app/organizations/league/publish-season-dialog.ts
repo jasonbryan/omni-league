@@ -30,7 +30,9 @@ import {
   ALERT_DIALOG_MEDIA,
   ALERT_DIALOG_TITLE,
 } from '../admin/alert-dialog-classes';
+import { AlertText, OfflineAlertText } from '../admin/alert-text';
 import { AdminAlert } from '../admin/admin-alert';
+import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 
 export interface PublishSeasonTarget {
@@ -46,16 +48,13 @@ export interface PublishSeasonOutcome {
   published: boolean;
 }
 
-function alertText(
-  kind: PublishAlert,
-  name: string,
-): { title: string | undefined; description: string } {
+type PublishAlertView = ({ kind: 'offline' } & OfflineAlertText) | ({ kind: 'failed' } & AlertText);
+
+function alertText(kind: PublishAlert, name: string): PublishAlertView {
   return kind === 'offline'
-    ? {
-        title: undefined,
-        description: `${name} is still a draft. Try again when you're connected.`,
-      }
+    ? { kind, description: `${name} is still a draft. Try again when you're connected.` }
     : {
+        kind,
         title: 'The season could not be published.',
         description: 'Check your connection and try again.',
       };
@@ -71,6 +70,7 @@ type PublishAlert = 'failed' | 'offline';
   selector: 'app-publish-season-dialog',
   imports: [
     AdminAlert,
+    AdminOfflineAlert,
     BrnAlertDialog,
     BrnAlertDialogContent,
     BrnAlertDialogDescription,
@@ -113,13 +113,17 @@ type PublishAlert = 'failed' | 'offline';
               until {{ deadline() }}. Seasons can’t be unpublished yet.
             </p>
             @if (alert(); as alert) {
-              <app-admin-alert
-                #alertBox
-                class="mt-3"
-                [kind]="alert.kind === 'offline' ? 'offline' : 'error'"
-                [title]="alert.title"
-                [description]="alert.description"
-              />
+              @if (alert.kind === 'offline') {
+                <app-admin-offline-alert #alertBox class="mt-3" [description]="alert.description" />
+              } @else {
+                <app-admin-alert
+                  #alertBox
+                  class="mt-3"
+                  kind="error"
+                  [title]="alert.title"
+                  [description]="alert.description"
+                />
+              }
             }
           </div>
         </div>
@@ -179,7 +183,7 @@ export class PublishSeasonDialog {
   protected readonly alert = computed(() => {
     const kind = this.failure();
     const target = this.target();
-    return kind && target ? { kind, ...alertText(kind, target.name) } : null;
+    return kind && target ? alertText(kind, target.name) : null;
   });
   protected readonly deadline = computed(() => {
     const target = this.target();
@@ -190,7 +194,7 @@ export class PublishSeasonDialog {
   );
 
   private readonly dialog = viewChild.required(BrnAlertDialog);
-  private readonly alertBox = viewChild<AdminAlert>('alertBox');
+  private readonly alertBox = viewChild<AdminAlert | AdminOfflineAlert>('alertBox');
   private published = false;
 
   readonly isOpen = computed(() => this.dialog().stateComputed() === 'open');

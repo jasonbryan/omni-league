@@ -15,13 +15,14 @@ import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
 
 @Component({
   selector: 'app-add-location-form',
-  imports: [AdminAlert, LocationFields, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
   providers: [provideIcons({ lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -42,13 +43,21 @@ import { LocationFields } from './location-fields';
         />
       }
       @if (form.alert(); as kind) {
-        <app-admin-alert
-          #failureAlert
-          [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="kind === 'offline' ? undefined : alerts[kind].title"
-          [description]="alerts[kind].description"
-          class="mb-5"
-        />
+        @if (kind === 'offline') {
+          <app-admin-offline-alert
+            #failureAlert
+            [description]="alerts.offline.description"
+            class="mb-5"
+          />
+        } @else {
+          <app-admin-alert
+            #failureAlert
+            kind="error"
+            [title]="alerts[kind].title"
+            [description]="alerts[kind].description"
+            class="mb-5"
+          />
+        }
       }
       <app-location-fields
         #locationFields
@@ -99,7 +108,7 @@ export class AddLocationForm {
   protected readonly added = signal<string | null>(null);
 
   private readonly locationFields = viewChild.required<LocationFields>('locationFields');
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly submitButton = viewChild.required<ElementRef<HTMLButtonElement>>('submitButton');
 
   protected async submit(event: Event): Promise<void> {

@@ -1,5 +1,6 @@
 import { DETAILS_ALERTS } from '../league/league-details-state';
 import { SEASON_FORM_ALERTS } from '../league/season-form';
+import { AlertTexts } from './alert-text';
 import { INVITE_FORM_ALERTS } from './invite-form';
 import { LEAGUE_FORM_ALERTS } from './league-form';
 import { FORM_ALERTS } from './location-form';
@@ -31,6 +32,27 @@ describe('form alert texts', () => {
     it('leaves the offline heading to the connection cause', () => {
       expect(alerts['offline']?.title).toBeUndefined();
       expect(alerts['offline']?.description.trim()).toBeTruthy();
+    });
+  });
+
+  describe('the shared alert text type', () => {
+    it('requires a title for every kind except offline and none for offline', () => {
+      const complete = {
+        failed: { title: 'It failed.', description: 'Try again.' },
+        offline: { description: 'Try again when you’re connected.' },
+      } satisfies AlertTexts<'failed' | 'offline'>;
+      const untitled = {
+        // @ts-expect-error a kind other than offline needs a title
+        failed: { description: 'Try again.' },
+        offline: { description: 'Try again when you’re connected.' },
+      } satisfies AlertTexts<'failed' | 'offline'>;
+      const titledOffline = {
+        failed: { title: 'It failed.', description: 'Try again.' },
+        // @ts-expect-error an offline alert takes its heading from the connection cause
+        offline: { title: 'Ignored', description: 'Try again when you’re connected.' },
+      } satisfies AlertTexts<'failed' | 'offline'>;
+
+      expect([complete, untitled, titledOffline]).toHaveLength(3);
     });
   });
 });

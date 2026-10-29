@@ -32,6 +32,8 @@ import {
 } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
+import type { AlertTexts } from './alert-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';
 
@@ -56,7 +58,7 @@ const PANEL_ALERTS = {
   offline: {
     description: "Your custom level is still here. Try again when you're connected.",
   },
-} as const;
+} as const satisfies AlertTexts<PanelAlert>;
 
 const FIELDS: readonly CustomLevelField[] = ['name', 'standardLevel'];
 const UNCHOSEN = '';
@@ -74,7 +76,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
 /** Sits inside the create form's `<form>`, so its buttons are `type="button"`. */
 @Component({
   selector: 'app-custom-level-panel',
-  imports: [AdminAlert, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, NgIcon],
   providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -139,12 +141,16 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
     @if (open()) {
       <div id="custom-level" class="mt-3 space-y-4 rounded-lg bg-muted p-4">
         @if (alert(); as kind) {
-          <app-admin-alert
-            #failureAlert
-            [kind]="kind === 'offline' ? 'offline' : 'error'"
-            [title]="kind === 'offline' ? undefined : alerts[kind].title"
-            [description]="alerts[kind].description"
-          />
+          @if (kind === 'offline') {
+            <app-admin-offline-alert #failureAlert [description]="alerts.offline.description" />
+          } @else {
+            <app-admin-alert
+              #failureAlert
+              kind="error"
+              [title]="alerts[kind].title"
+              [description]="alerts[kind].description"
+            />
+          }
         }
         <div
           role="group"
@@ -358,7 +364,7 @@ export class CustomLevelPanel {
   private readonly nameField = viewChild<ElementRef<HTMLInputElement>>('nameInput');
   private readonly standardField = viewChild<ElementRef<HTMLSelectElement>>('standardSelect');
   private readonly statusBox = viewChild<ElementRef<HTMLElement>>('statusBox');
-  private readonly failureAlert = viewChild<AdminAlert>('failureAlert');
+  private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
 
   protected addedText(status: { level: AddedCustomLevel; sport: Sport }): string {
     const forOtherSport = status.sport !== this.sport();
