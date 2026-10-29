@@ -125,7 +125,6 @@ async function open(page: Page, consoleGuard: { hydrated: boolean }, path: strin
 
 test.describe('the page control at each width', () => {
   test.use({ isMobile: true, hasTouch: true });
-  test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(() => {
     test.skip(test.info().project.name !== MOBILE_PROJECT, 'one browser project only');
@@ -153,9 +152,9 @@ test.describe('the page control at each width', () => {
           await open(page, consoleGuard, `${path}?page=${current}`, width);
           const nav = page.getByRole('navigation', { name: label });
           await expect(nav, where).toBeVisible();
-          expect(await overflowing(page), where).toEqual([]);
           const box = await nav.locator('ul').boundingBox();
-          expect(box!.x + box!.width, where).toBeLessThanOrEqual(width);
+          expect(box!.x + box!.width, `${where}: the page list ends at`).toBeLessThanOrEqual(width);
+          expect(await overflowing(page), where).toEqual([]);
           expect(await visiblePages(nav), where).toEqual(expectedPages(width, current, pageCount));
           for (const link of await nav.getByRole('link').all()) {
             if (!(await link.isVisible())) continue;
