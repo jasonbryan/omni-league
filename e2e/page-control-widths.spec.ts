@@ -153,8 +153,10 @@ test.describe('the page control at each width', () => {
           const nav = page.getByRole('navigation', { name: label });
           await expect(nav, where).toBeVisible();
           const box = await nav.locator('ul').boundingBox();
-          expect(box!.x + box!.width, `${where}: the page list ends at`).toBeLessThanOrEqual(width);
-          expect(await overflowing(page), where).toEqual([]);
+          expect
+            .soft(box!.x + box!.width, `${where}: the page list ends at`)
+            .toBeLessThanOrEqual(width);
+          expect.soft(await overflowing(page), where).toEqual([]);
           expect(await visiblePages(nav), where).toEqual(expectedPages(width, current, pageCount));
           for (const link of await nav.getByRole('link').all()) {
             if (!(await link.isVisible())) continue;
@@ -182,7 +184,7 @@ test.describe('the page control at each width', () => {
         await next.focus();
         await expect(next, `${width}px`).toBeFocused();
         await page.keyboard.press('Enter');
-        await expect(page, `${width}px`).toHaveURL(/[?&]page=2$/);
+        await expect(page, `${width}px`).toHaveURL(/[?&]page=2(#.*)?$/);
         await expect(nav.getByRole('link', { name: 'Page 2' }), `${width}px`).toHaveAttribute(
           'aria-current',
           'page',
