@@ -22,6 +22,8 @@ import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
+import type { AlertTexts } from './alert-text';
 import {
   ALERT_DIALOG_CONTENT,
   ALERT_DIALOG_DESCRIPTION,
@@ -42,6 +44,8 @@ export interface PublishOutcome extends PublishTarget {
   published: boolean;
 }
 
+type PublishAlert = 'failed' | 'offline';
+
 export const PUBLISH_ALERTS = {
   failed: {
     title: 'The league could not be published.',
@@ -50,9 +54,7 @@ export const PUBLISH_ALERTS = {
   offline: {
     description: "The league is still a draft. Try again when you're connected.",
   },
-} as const;
-
-type PublishAlert = keyof typeof PUBLISH_ALERTS;
+} as const satisfies AlertTexts<PublishAlert>;
 
 /**
  * Its scrim is the phone-menu sheet's `bg-foreground/50` with no blur, not helm's. Escape is handled here, because the brain dialog reads `disableClose` only when it opens.
@@ -62,6 +64,7 @@ type PublishAlert = keyof typeof PUBLISH_ALERTS;
   selector: 'app-publish-league-dialog',
   imports: [
     AdminAlert,
+    AdminOfflineAlert,
     BrnAlertDialog,
     BrnAlertDialogContent,
     BrnAlertDialogDescription,
@@ -101,13 +104,21 @@ type PublishAlert = keyof typeof PUBLISH_ALERTS;
           >
             <p>It will appear on your public page. Leagues can’t be unpublished yet.</p>
             @if (alert(); as kind) {
-              <app-admin-alert
-                #alertBox
-                class="mt-3"
-                [kind]="kind === 'offline' ? 'offline' : 'error'"
-                [title]="kind === 'offline' ? undefined : alerts[kind].title"
-                [description]="alerts[kind].description"
-              />
+              @if (kind === 'offline') {
+                <app-admin-offline-alert
+                  #alertBox
+                  [description]="alerts.offline.description"
+                  class="mt-3"
+                />
+              } @else {
+                <app-admin-alert
+                  #alertBox
+                  kind="error"
+                  [title]="alerts[kind].title"
+                  [description]="alerts[kind].description"
+                  class="mt-3"
+                />
+              }
             }
           </div>
         </div>

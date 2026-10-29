@@ -35,6 +35,7 @@ import {
   offlineTitle,
 } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
+import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from '../admin/field-classes';
 import { FieldNoteText } from '../admin/field-note';
@@ -84,7 +85,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
 
 @Component({
   selector: 'app-league-details-form',
-  imports: [AdminAlert, FieldNoteText, FormField, LeagueDivisionFields, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, FieldNoteText, FormField, LeagueDivisionFields, NgIcon],
   providers: [
     provideIcons({
       lucideCheck,
@@ -104,13 +105,21 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
       (submit)="submit($event)"
     >
       @if (details.alert(); as kind) {
-        <app-admin-alert
-          #failureAlert
-          [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="kind === 'offline' ? undefined : alerts[kind].title"
-          [description]="alerts[kind].description"
-          class="mb-5"
-        />
+        @if (kind === 'offline') {
+          <app-admin-offline-alert
+            #failureAlert
+            [description]="alerts.offline.description"
+            class="mb-5"
+          />
+        } @else {
+          <app-admin-alert
+            #failureAlert
+            kind="error"
+            [title]="alerts[kind].title"
+            [description]="alerts[kind].description"
+            class="mb-5"
+          />
+        }
       }
       <div data-slot="field-group" [class]="clearanceClass + ' flex flex-col gap-6'">
         <div

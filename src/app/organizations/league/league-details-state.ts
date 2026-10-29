@@ -15,6 +15,7 @@ import {
 import type { Sport } from '../../../../convex/lib/sports';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid, changedSince } from '../../core/forms/shown-errors';
+import type { AlertTexts } from '../admin/alert-text';
 import { ConvexError } from 'convex/values';
 import { fieldNoteText, type FieldNote } from '../admin/field-note';
 import { LeagueDivision, type DivisionDetail, type SavedDivision } from '../admin/league-division';
@@ -121,7 +122,7 @@ export const DETAILS_ALERTS = {
     title: 'Someone else changed this league while you were editing.',
     description: 'Check the details and save again.',
   },
-} as const;
+} as const satisfies AlertTexts<DetailsAlertKind>;
 
 export type DetailsSubmitOutcome<Result> =
   | { sent: true; values: DetailsValues; result: Result }

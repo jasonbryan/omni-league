@@ -16,6 +16,7 @@ import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
@@ -28,7 +29,7 @@ export interface AdminLocation {
 
 @Component({
   selector: 'app-location-edit-form',
-  imports: [AdminAlert, LocationFields, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
   providers: [provideIcons({ lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -41,13 +42,21 @@ export interface AdminLocation {
     >
       <h3 id="edit-heading" class="text-sm font-semibold">Edit location</h3>
       @if (form.alert(); as kind) {
-        <app-admin-alert
-          #failureAlert
-          [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="kind === 'offline' ? undefined : alerts[kind].title"
-          [description]="alerts[kind].description"
-          class="mt-3"
-        />
+        @if (kind === 'offline') {
+          <app-admin-offline-alert
+            #failureAlert
+            [description]="alerts.offline.description"
+            class="mt-3"
+          />
+        } @else {
+          <app-admin-alert
+            #failureAlert
+            kind="error"
+            [title]="alerts[kind].title"
+            [description]="alerts[kind].description"
+            class="mt-3"
+          />
+        }
       }
       <app-location-fields
         #locationFields

@@ -43,6 +43,8 @@ import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ACCEPT_INVITE_PATH } from './capture-invite-token';
 import { InviteAlert } from './invite-alert';
+import { InviteOfflineAlert } from './invite-offline-alert';
+import type { AlertTexts } from '../organizations/admin/alert-text';
 import { InviteTokenStore } from './invite-token-store';
 
 interface InviteSummary {
@@ -74,7 +76,7 @@ const REFUSALS = {
   offline: {
     description: "The invite is still waiting. Try again when you're connected.",
   },
-} as const;
+} as const satisfies AlertTexts<Exclude<Refusal, 'alreadyMember'>>;
 
 const LIST = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
 
@@ -91,7 +93,15 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
  */
 @Component({
   selector: 'app-accept-invite-page',
-  imports: [InviteAlert, NgIcon, PageLoadStatus, RouterLink, ServerErrorView, PublicLayout],
+  imports: [
+    InviteAlert,
+    InviteOfflineAlert,
+    NgIcon,
+    PageLoadStatus,
+    RouterLink,
+    ServerErrorView,
+    PublicLayout,
+  ],
   providers: [
     provideIcons({
       lucideCheck,
@@ -274,19 +284,21 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
                       >
                     } @else {
                       @if (refusal(); as refusal) {
-                        <app-invite-alert
-                          #alert
-                          [kind]="
-                            refusal === 'alreadyMember'
-                              ? 'info'
-                              : refusal === 'offline'
-                                ? 'offline'
-                                : 'error'
-                          "
-                          [title]="refusalTitle(refusal, invite.organizationName)"
-                          [description]="refusalDescription(refusal)"
-                          class="mb-4"
-                        />
+                        @if (refusal === 'offline') {
+                          <app-invite-offline-alert
+                            #alert
+                            [description]="refusalDescription(refusal)"
+                            class="mb-4"
+                          />
+                        } @else {
+                          <app-invite-alert
+                            #alert
+                            [kind]="refusal === 'alreadyMember' ? 'info' : 'error'"
+                            [title]="refusalTitle(refusal, invite.organizationName)"
+                            [description]="refusalDescription(refusal)"
+                            class="mb-4"
+                          />
+                        }
                       }
                       @if (refusal() === 'alreadyMember') {
                         <a routerLink="/app" data-slot="button" [class]="outlineButton + ' w-full'"
@@ -484,7 +496,7 @@ export class AcceptInvitePage {
     return { label: 'Go to your organizations', link: ['/app'] };
   });
 
-  private readonly alert = viewChild(InviteAlert);
+  private readonly alert = viewChild<InviteAlert | InviteOfflineAlert>('alert');
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   constructor() {
@@ -511,9 +523,9 @@ export class AcceptInvitePage {
     return role === 'orgAdmin' ? 'Org admin' : 'League organizer';
   }
 
-  protected refusalTitle(refusal: Refusal, organizationName: string): string | undefined {
+  protected refusalTitle(refusal: Exclude<Refusal, 'offline'>, organizationName: string): string {
     if (refusal === 'alreadyMember') return `You’re already on the staff of ${organizationName}.`;
-    return refusal === 'offline' ? undefined : REFUSALS[refusal].title;
+    return REFUSALS[refusal].title;
   }
 
   protected refusalDescription(refusal: Refusal): string {

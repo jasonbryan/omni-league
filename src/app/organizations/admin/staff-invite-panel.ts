@@ -27,6 +27,7 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { injectAction, injectOnline } from '../../core/data/convex';
 import { Checkbox } from '../../ui/checkbox';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import {
   DESCRIPTION,
@@ -66,7 +67,7 @@ const TEXTAREA =
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-staff-invite-panel',
-  imports: [AdminAlert, Checkbox, FormField, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, Checkbox, FormField, NgIcon],
   providers: [
     provideIcons({
       lucideCheck,
@@ -184,13 +185,21 @@ const TEXTAREA =
             (submit)="submit($event)"
           >
             @if (form.alert(); as kind) {
-              <app-admin-alert
-                #failureAlert
-                [kind]="kind === 'offline' ? 'offline' : 'error'"
-                [title]="kind === 'offline' ? undefined : alerts[kind].title"
-                [description]="alerts[kind].description"
-                class="mb-5"
-              />
+              @if (kind === 'offline') {
+                <app-admin-offline-alert
+                  #failureAlert
+                  [description]="alerts.offline.description"
+                  class="mb-5"
+                />
+              } @else {
+                <app-admin-alert
+                  #failureAlert
+                  kind="error"
+                  [title]="alerts[kind].title"
+                  [description]="alerts[kind].description"
+                  class="mb-5"
+                />
+              }
             }
             <p id="invite-note" class="mb-5 text-sm text-muted-foreground">
               Omni League doesn’t email invites yet. You’ll get a link to send them yourself.

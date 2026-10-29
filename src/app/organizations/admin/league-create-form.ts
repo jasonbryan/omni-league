@@ -27,6 +27,7 @@ import { injectMutation, injectOnline } from '../../core/data/convex';
 import { Checkbox } from '../../ui/checkbox';
 import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';
+import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import {
@@ -55,6 +56,7 @@ export interface LeagueLocationChoice {
   selector: 'app-league-create-form',
   imports: [
     AdminAlert,
+    AdminOfflineAlert,
     Checkbox,
     ChipRadioGroup,
     FormField,
@@ -83,13 +85,21 @@ export interface LeagueLocationChoice {
         </app-admin-alert>
       }
       @if (form.alert(); as kind) {
-        <app-admin-alert
-          #failureAlert
-          [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="kind === 'offline' ? undefined : alerts[kind].title"
-          [description]="alerts[kind].description"
-          class="mb-5"
-        />
+        @if (kind === 'offline') {
+          <app-admin-offline-alert
+            #failureAlert
+            [description]="alerts.offline.description"
+            class="mb-5"
+          />
+        } @else {
+          <app-admin-alert
+            #failureAlert
+            kind="error"
+            [title]="alerts[kind].title"
+            [description]="alerts[kind].description"
+            class="mb-5"
+          />
+        }
       }
       <p id="create-league-note" class="mb-5 text-sm text-muted-foreground">
         New leagues start as drafts, which only your staff see.

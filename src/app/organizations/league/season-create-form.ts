@@ -20,6 +20,7 @@ import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
 import { injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
+import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
@@ -60,7 +61,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 
 @Component({
   selector: 'app-season-create-form',
-  imports: [AdminAlert, FormField, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -81,13 +82,21 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         />
       }
       @if (form.alert(); as kind) {
-        <app-admin-alert
-          #failureAlert
-          [kind]="kind === 'offline' ? 'offline' : 'error'"
-          [title]="kind === 'offline' ? undefined : alerts[kind].title"
-          [description]="alerts[kind].description"
-          class="mb-5"
-        />
+        @if (kind === 'offline') {
+          <app-admin-offline-alert
+            #failureAlert
+            [description]="alerts.offline.description"
+            class="mb-5"
+          />
+        } @else {
+          <app-admin-alert
+            #failureAlert
+            kind="error"
+            [title]="alerts[kind].title"
+            [description]="alerts[kind].description"
+            class="mb-5"
+          />
+        }
       }
       <p id="create-season-note" class="mb-5 text-sm text-muted-foreground">
         A season is one run of {{ leagueName() }}, with its own dates, registration, teams, and
