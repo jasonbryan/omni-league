@@ -123,6 +123,30 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
+  test(
+    'the find page without a search: ?page=<canary> and ?page=2&page=<canary> read as page 1 and never reach the response',
+    RAW_HTTP,
+    async () => {
+      const first = await rawGet('/leagues');
+      expect(first.status).toBe(200);
+      for (const sample of [(c: string) => `?page=${c}`, (c: string) => `?page=2&page=${c}`]) {
+        const token = canary();
+        const response = await rawGet(`/leagues${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(response.headers['netlify-vary'], sample(token)).toBe('query');
+        expect(sharedCacheable(response.headers['cache-control']), sample(token)).toBe(true);
+        const names = (body: string) =>
+          [...body.matchAll(/<h3\b[^>]*>\s*(?:<a\b[^>]*>)?([^<]*)/g)].map(([, name]) =>
+            name.trim(),
+          );
+        expect(names(response.body), sample(token)).toEqual(names(first.body));
+      }
+    },
+  );
+
   // The public league page reads `?page=N`, the one query parameter whose value the HTML may hold
   // (as an integer from the query result). Nothing else of the query string may: not the canary in
   // `?page=<canary>` (which reads as page 1), nor one beside a valid `page`.

@@ -11,6 +11,7 @@ import {
   publicOpenSeasonsValidator,
   publicSeasonsValidator,
   searchLeaguesValidator,
+  searchOrganizationsValidator,
 } from '../../../../../convex/lib/publicPage';
 import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import {
@@ -79,6 +80,7 @@ describe('ConvexSavedCopies', () => {
       ['seasons:listPublic', publicSeasonsValidator],
       ['seasons:getPublicPage', getSeasonPublicPageReturns],
       ['search:leagues', searchLeaguesValidator],
+      ['search:organizations', searchOrganizationsValidator],
     ]);
     for (const { returns, version } of OFFLINE_SAVED_QUERIES) {
       expect(Number.isInteger(version)).toBe(true);

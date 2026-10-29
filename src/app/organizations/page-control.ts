@@ -19,12 +19,15 @@ export type PageWindowItem =
 
 const ALL_PAGES_UP_TO = 5;
 
+// With 44px touch buttons, Previous, five pages, and Next are wider than 320px.
+const ALL_PAGES_NARROW_UP_TO = 4;
+
 /**
  * Below 640px the list keeps the first, the current, and the last page (`1 … 3 … 6`), so the control fits at 320px.
  * Each gap is placed so that, with the other view's items and gaps hidden, the list reads in order.
  */
 export function pageWindow(page: number, pageCount: number): PageWindowItem[] {
-  if (pageCount <= ALL_PAGES_UP_TO) {
+  if (pageCount <= ALL_PAGES_NARROW_UP_TO) {
     return Array.from({ length: pageCount }, (_, i) => ({
       kind: 'page' as const,
       n: i + 1,
@@ -32,9 +35,12 @@ export function pageWindow(page: number, pageCount: number): PageWindowItem[] {
     }));
   }
   const inRange = (n: number) => n >= 1 && n <= pageCount;
-  const wide = [...new Set([1, page - 1, page, page + 1, pageCount].filter(inRange))].sort(
-    (a, b) => a - b,
-  );
+  const wide =
+    pageCount <= ALL_PAGES_UP_TO
+      ? Array.from({ length: pageCount }, (_, i) => i + 1)
+      : [...new Set([1, page - 1, page, page + 1, pageCount].filter(inRange))].sort(
+          (a, b) => a - b,
+        );
   const narrow = [...new Set([1, page, pageCount])].sort((a, b) => a - b);
   const items: PageWindowItem[] = [];
   for (const n of [...new Set([...wide, ...narrow])].sort((a, b) => a - b)) {
@@ -107,7 +113,7 @@ export function rangeText(page: number, total: number): string {
           @for (item of items(); track $index) {
             @if (item.kind === 'gap') {
               <li aria-hidden="true" [class]="item.view === 'wide' ? 'max-sm:hidden' : 'sm:hidden'">
-                <span class="flex size-8 items-center justify-center text-muted-foreground"
+                <span class="flex h-8 w-4 items-center justify-center text-muted-foreground sm:w-8"
                   ><ng-icon name="lucideEllipsis" class="text-base" aria-hidden="true"
                 /></span>
               </li>
@@ -160,7 +166,7 @@ export class PageControl {
   readonly pageCount = input.required<number>();
   readonly total = input.required<number>();
   readonly path = input.required<string>();
-  readonly fragment = input.required<string>();
+  readonly fragment = input.required<string | undefined>();
   readonly queryFor = input<(page: number) => Params>(listPageQuery);
   readonly pageActivated = output<number>();
 

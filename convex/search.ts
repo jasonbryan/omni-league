@@ -3,9 +3,15 @@ import type { Doc, Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { leagueLocationNames, leagueRowSeasons } from './lib/publicLeague';
-import { searchLeaguesValidator, type SearchLeagues } from './lib/publicPage';
+import { pageOf, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import {
+  searchLeaguesValidator,
+  searchOrganizationsValidator,
+  type SearchLeagues,
+  type SearchOrganizations,
+} from './lib/publicPage';
 import { matchesEveryWord, parseSearchQuery, suggestFewerWords } from './lib/searchQuery';
-import { sportName } from './lib/sports';
+import { SPORT_NAMES, sportName, type Sport } from './lib/sports';
 
 export const SEARCH_RESULT_LIMIT = 50;
 
@@ -56,5 +62,29 @@ export const leagues = query({
       q,
     );
     return suggestions.length === 0 ? { rows, more } : { rows, more, suggestions };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous list that reads no identity and returns only published fields, with no ids.
+export const organizations = query({
+  args: { page: v.number() },
+  returns: searchOrganizationsValidator,
+  handler: async (ctx, args): Promise<SearchOrganizations> => {
+    // The index holds no counter, so the list is read whole, up to the most rows a public list reaches.
+    const listed = await ctx.db
+      .query('organizations')
+      .withIndex('by_hasPublishedLeague_and_sortName', (q) => q.eq('hasPublishedLeague', true))
+      .take(PUBLIC_LIST_MAX_ROWS);
+    const { page, pageCount } = pageOf(listed.length, args.page);
+    const start = (page - 1) * PUBLIC_LIST_PAGE_SIZE;
+    const rows = listed.slice(start, start + PUBLIC_LIST_PAGE_SIZE).map((organization) => ({
+      name: organization.name,
+      slug: organization.slug,
+      sportNames: (Object.keys(SPORT_NAMES) as Sport[])
+        .filter((sport) => (organization.sportLeagueCounts?.[sport] ?? 0) > 0)
+        .map(sportName),
+      ...(organization.cityState !== undefined && { cityState: organization.cityState }),
+    }));
+    return { rows, page, pageCount, total: listed.length };
   },
 });

@@ -81,6 +81,17 @@ export const searchLeaguesValidator = v.object({
 
 export type SearchLeagues = Infer<typeof searchLeaguesValidator>;
 
+const searchOrganizationValidator = v.object({
+  name: v.string(),
+  slug: v.string(),
+  sportNames: v.array(v.string()),
+  cityState: v.optional(v.string()),
+});
+
+export const searchOrganizationsValidator = publicListValidator(searchOrganizationValidator);
+
+export type SearchOrganizations = Infer<typeof searchOrganizationsValidator>;
+
 export const publicLocationsValidator = publicListValidator(publicLocationValidator);
 
 export const publicLeaguesValidator = publicListValidator(publicLeagueValidator);
