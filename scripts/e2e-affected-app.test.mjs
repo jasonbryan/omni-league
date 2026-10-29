@@ -632,7 +632,6 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/url-serializer.ts': MAIN_SERVER,
     'src/app/shell/follow-link.ts': SHEET,
     'src/app/shell/sheet-links.ts': SHEET,
-    'src/app/shell/shell-sheet.ts': 'loaded with a dynamic import()',
     'src/app/shell/update-prompt.ts': MAIN_SERVER,
     'src/app/ui/button/hlm-button.token.ts': SHEET,
     'src/app/ui/button/hlm-button.ts': SHEET,
@@ -657,6 +656,39 @@ describe('the files under src/app that run the full suite', () => {
     const full = appSources.filter((file) => specsFor([file]).includes(FULL));
     assert.deepEqual(full, Object.keys(SRC_FULL).sort());
     for (const [file, reason] of Object.entries(SRC_FULL)) assert.ok(reason.length > 0, file);
+  });
+
+  it('keeps the button, the sheet parts, and the helpers the phone sheet imports in the full suite', () => {
+    for (const file of [
+      'src/app/ui/button/hlm-button.ts',
+      'src/app/ui/button/index.ts',
+      'src/app/ui/sheet/hlm-sheet.ts',
+      'src/app/ui/utils/hlm.ts',
+      'src/app/shell/follow-link.ts',
+      'src/app/shell/sheet-links.ts',
+    ]) {
+      assert.deepEqual(specsFor([file]), [FULL], file);
+    }
+  });
+
+  it('keeps a file with a rule of its own in the full suite when only the phone sheet imports it', () => {
+    withRepo(
+      {
+        'src/app/shell/shell-sidebar.ts': 'export const sidebar = 1;\n',
+        'src/app/shell/shell-sheet.ts': "import { sidebar } from './shell-sidebar';\n",
+      },
+      (root) => {
+        assert.deepEqual(specsFor(['src/app/shell/shell-sidebar.ts'], root), [FULL]);
+      },
+    );
+  });
+
+  it('maps the phone sheet itself to the shell specs', () => {
+    const specs = specsFor(['src/app/shell/shell-sheet.ts']);
+    assert.ok(!specs.includes(FULL));
+    for (const spec of ['e2e/app-shell.spec.ts', 'e2e/shell-sheet.spec.ts']) {
+      assert.ok(specs.includes(spec), spec);
+    }
   });
 
   it('lists only files that exist', () => {

@@ -13,7 +13,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideTrophy } from '@ng-icons/lucide';
 import { injectCurrentUrl } from '../shell/current-url';
 import { OfflineNote } from '../shell/offline-note';
-import { skipLinkHref } from '../shell/shell';
+import { skipLinkHref } from '../shell/skip-link';
 import { injectSignInReturnTo } from '../shell/sign-in-return-to';
 import { TopBarAccount } from '../shell/top-bar-account';
 

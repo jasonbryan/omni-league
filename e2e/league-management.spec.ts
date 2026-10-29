@@ -273,7 +273,7 @@ test.describe('League management: an org admin', () => {
         .getByRole('navigation', { name: `${tenant.name} admin` })
         .last()
         .locator('[aria-current]'),
-    ).toHaveText('Leagues');
+    ).toHaveText(/^Leagues\d*$/);
   });
 
   test('creates a season in a draft league', async ({ page }) => {

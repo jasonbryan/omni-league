@@ -40,7 +40,7 @@ describe('LeaguePage', () => {
       expect(o.convex.subscriptions).toEqual([]);
       expect(text(o.page.querySelector('main [role="status"]'))).toBe('Loading the league.');
       expect(o.page.querySelector('nav')).toBeNull();
-      expect(o.page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+      expect(o.page.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
     });
 
     it('asks leagues.getOrganizerContext with both slugs, and no season data, once the token is accepted', async () => {
@@ -49,6 +49,7 @@ describe('LeaguePage', () => {
       expect(o.convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
         [GET_ORGANIZER_CONTEXT, { orgSlug: GULF.slug, leagueSlug: COED.slug }],
         [ME, {}],
+        [ME, {}],
       ]);
     });
   });
@@ -56,12 +57,27 @@ describe('LeaguePage', () => {
   describe('an org admin (states 2 and 3)', () => {
     it('asks seasons.listForOrganizer with the league id only once the context says ready', async () => {
       await open(COED);
-      expect(o.convex.activeSubscriptions.map((s) => [s.name, s.args])).toEqual([
+      const key = ([name, args]: [string, unknown]) => `${name} ${JSON.stringify(args)}`;
+      const sidebarCounts = [
+        'leagues:publishedCount',
+        'leagues:listForAdmin',
+        'locations:listForAdmin',
+        'memberships:listForOrganization',
+      ].map((name): [string, unknown] => [name, { organizationId: COED.organizationId }]);
+      const expected: [string, unknown][] = [
         [GET_ORGANIZER_CONTEXT, { orgSlug: GULF.slug, leagueSlug: COED.slug }],
+        [ME, {}],
         [ME, {}],
         [LIST_FOR_ORGANIZER, { leagueId: COED.leagueId }],
         [LIST_CUSTOM_LEVELS, { organizationId: COED.organizationId, sport: 'soccer' }],
-      ]);
+        ...sidebarCounts,
+      ];
+      expect(
+        o.convex.activeSubscriptions
+          .map((s): [string, unknown] => [s.name, s.args])
+          .map(key)
+          .sort(),
+      ).toEqual(expected.map(key).sort());
     });
 
     it('has the organization, the h1, the status and sport badges, the locations, and the title', async () => {
@@ -99,7 +115,9 @@ describe('LeaguePage', () => {
       await open(COED, []);
       const nav = page.querySelector('nav')!;
       expect(nav.getAttribute('aria-label')).toBe('Gulf Coast Sport & Social admin');
-      expect(text(nav.querySelector('p.text-xs'))).toBe('Admin area');
+      const head = nav.querySelector('a')!;
+      expect(head.getAttribute('href')).toBe('/app');
+      expect(text(head)).toContain('Switch organization');
       const current = nav.querySelector('[aria-current]')!;
       expect(text(current)).toBe('Leagues');
       expect(current.getAttribute('aria-current')).toBe('true');
@@ -148,13 +166,15 @@ describe('LeaguePage', () => {
   });
 
   describe('a league organizer (states 12 and 13)', () => {
-    it('gets the same page with the league organizer’s sidebar: the organization, "Your leagues", and two links', async () => {
+    it('gets the same page with the league organizer’s sidebar: the organization, "Your leagues", and Public page', async () => {
       await open(COED_AS_ORGANIZER, []);
       expect(text(page.querySelector('main h1'))).toBe('Coed 7v7 Rec');
       const nav = page.querySelector('nav')!;
       expect(nav.getAttribute('aria-label')).toBe('Gulf Coast Sport & Social leagues');
-      expect(text(nav.querySelector('p.font-semibold'))).toBe(GULF.name);
-      expect(text(nav.querySelector('p.text-xs'))).toBe('League organizer');
+      const head = nav.querySelector('a')!;
+      expect(head.getAttribute('href')).toBe('/app');
+      expect(text(head.querySelector('.truncate'))).toBe(GULF.name);
+      expect(text(head.querySelector('span.block.text-xs'))).toBe('League organizer');
       const lists = [...nav.querySelectorAll('ul')];
       expect(lists.map((l) => l.getAttribute('aria-label'))).toEqual(['Your leagues', null]);
       expect(
@@ -166,10 +186,7 @@ describe('LeaguePage', () => {
       ).toEqual([['Coed 7v7 Rec', LEAGUE_URL, 'page']]);
       expect(
         [...lists[1].querySelectorAll('a')].map((a) => [text(a), a.getAttribute('href')]),
-      ).toEqual([
-        ['Public page', `/organizations/${GULF.slug}`],
-        ['Your organizations', '/app'],
-      ]);
+      ).toEqual([['Public page', `/organizations/${GULF.slug}`]]);
       expect(nav.textContent).not.toContain('Overview');
       expect(nav.textContent).not.toContain('Staff');
     });
@@ -286,7 +303,7 @@ describe('LeaguePage', () => {
       await o.flush();
     }
 
-    it('shows the heading, the sentence, and the link to /app, with no sidebar and no season data requested', async () => {
+    it('shows the heading, the sentence, and the link to /app, with the home sidebar and no season data requested', async () => {
       await forbidden();
       expect(text(page.querySelector('h1'))).toBe('You can’t manage this league');
       expect(text(page.querySelector('main p'))).toBe(
@@ -295,10 +312,14 @@ describe('LeaguePage', () => {
       const link = page.querySelector<HTMLAnchorElement>('main a')!;
       expect(link.getAttribute('href')).toBe('/app');
       expect(text(link)).toBe('Go to your organizations');
-      expect(page.querySelector('nav')).toBeNull();
-      expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
+      expect(page.querySelector('nav')?.getAttribute('aria-label')).toBe('Your account');
       expect(page.querySelectorAll('h1')).toHaveLength(1);
-      expect(o.convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ORGANIZER_CONTEXT, ME]);
+      expect(o.convex.activeSubscriptions.map((s) => s.name)).toEqual([
+        GET_ORGANIZER_CONTEXT,
+        ME,
+        ME,
+        'organizations:listMine',
+      ]);
       expect(page.textContent).not.toContain('Coed 7v7 Rec');
     });
 
@@ -309,7 +330,7 @@ describe('LeaguePage', () => {
   });
 
   describe('an unknown league (state 15)', () => {
-    it('shows the not-found view, with no sidebar and no season data requested', async () => {
+    it('shows the not-found view, with the home sidebar and no season data requested', async () => {
       o = await openAdmin(LEAGUE_ROUTES, `/app/organizations/${GULF.slug}/leagues/does-not-exist`);
       page = o.page;
       o.acceptToken();
@@ -321,8 +342,13 @@ describe('LeaguePage', () => {
       await o.flush();
       expect(text(page.querySelector('h1'))).toBe('Page not found');
       expect(text(page.querySelector('main a'))).toBe('Go to the home page');
-      expect(page.querySelector('nav')).toBeNull();
-      expect(o.convex.activeSubscriptions.map((s) => s.name)).toEqual([GET_ORGANIZER_CONTEXT, ME]);
+      expect(page.querySelector('nav')?.getAttribute('aria-label')).toBe('Your account');
+      expect(o.convex.activeSubscriptions.map((s) => s.name)).toEqual([
+        GET_ORGANIZER_CONTEXT,
+        ME,
+        ME,
+        'organizations:listMine',
+      ]);
     });
   });
 

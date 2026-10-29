@@ -436,15 +436,15 @@ test.describe('Staff: members and the Overview tile', () => {
     if (isDesktop(page)) {
       const nav = page.getByRole('navigation', { name: `${tenant.name} admin` });
       await expect(nav.getByRole('link')).toHaveText([
+        /Switch organization/,
         'Overview',
-        'Locations',
-        'Leagues',
-        'Staff',
+        /^Leagues\d*$/,
+        /^Locations\d*$/,
+        /^Staff\d*$/,
         'Details',
-        'Public page',
-        'Your organizations',
+        'View public page',
       ]);
-      await expect(nav.locator('[aria-current="page"]')).toHaveText('Staff');
+      await expect(nav.locator('[aria-current="page"]')).toHaveText(/^Staff\d*$/);
     }
   });
 

@@ -42,9 +42,10 @@ describe('AccountPage', () => {
 
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
+    // The page's list and the home sidebar's.
     expect(
       convex.activeSubscriptions.filter((s) => s.name === 'organizations:listMine'),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it('has one h1, "Home", and no Sign out or signed-in account panel', async () => {

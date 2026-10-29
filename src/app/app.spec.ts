@@ -1,12 +1,19 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
+import { CONVEX_CLIENT } from './core/data/convex';
+import { FakeConvexClient } from './core/data/convex/testing/fake-convex-client';
 import { App } from './app';
 import { routes } from './app.routes';
 
 describe('App routing', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideRouter(routes)] });
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+        provideRouter(routes),
+      ],
+    });
   });
 
   async function renderAt(url: string): Promise<ComponentFixture<App>> {

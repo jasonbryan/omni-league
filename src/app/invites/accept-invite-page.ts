@@ -38,6 +38,8 @@ import {
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { ServerErrorView } from '../server-error/server-error-view';
+import { PageLoadStatus } from '../public-layout/page-load-status';
+import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ACCEPT_INVITE_PATH } from './capture-invite-token';
 import { InviteAlert } from './invite-alert';
@@ -89,7 +91,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
  */
 @Component({
   selector: 'app-accept-invite-page',
-  imports: [InviteAlert, NgIcon, RouterLink, ServerErrorView, PublicLayout],
+  imports: [InviteAlert, NgIcon, PageLoadStatus, RouterLink, ServerErrorView, PublicLayout],
   providers: [
     provideIcons({
       lucideCheck,
@@ -112,6 +114,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
             @case ('checking') {
               <div
                 data-testid="invite-skeleton"
+                data-page-loading
                 class="mx-auto w-full max-w-md overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
               >
                 <p role="status" class="sr-only">Checking your invite…</p>
@@ -349,6 +352,7 @@ function refusalCode(failure: unknown): AcceptRefusal | null {
           }
         </div>
       }
+      <app-page-load-status [stalled]="stalled()" />
     </app-public-layout>
   `,
 })
@@ -417,7 +421,7 @@ export class AcceptInvitePage {
       answer?.status === 'valid' ? answer : (previous?.value ?? null),
   });
 
-  protected readonly view = computed<View>(() => {
+  private readonly phase = computed<View>(() => {
     if (this.accepted()) return 'accepted';
     if (!this.token() || this.refusedAsInvalid()) return 'invalid';
     if (this.accepting() || this.refusal() !== null) return 'ready';
@@ -429,6 +433,15 @@ export class AcceptInvitePage {
     if (!this.auth.convexAuthenticated() || this.me.value() === undefined) return 'checking';
     return 'ready';
   });
+
+  // Offline, the offline note already explains the wait, so none runs.
+  private readonly waitedOut = injectPageLoadWait(
+    () => this.phase() === 'checking' && this.online(),
+    () => this.token(),
+  );
+  protected readonly stalled = computed(() => this.phase() === 'checking' && this.waitedOut());
+
+  protected readonly view = computed<View>(() => (this.stalled() ? 'loadFailed' : this.phase()));
 
   protected readonly lead = computed(() => {
     const invite = this.summary();

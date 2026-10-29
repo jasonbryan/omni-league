@@ -25,11 +25,11 @@ import { AdminSidebar } from './admin-sidebar';
   providers: [AdminContext],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-shell>
+    <app-shell [sidebarPending]="context.state() === 'loading'">
       @switch (context.state()) {
         @case ('ready') {
           @if (context.organization(); as organization) {
-            <ng-template appShellSidebar>
+            <ng-template appShellSidebar [appShellOrganizationName]="organization.name">
               <app-admin-sidebar [organization]="organization" />
             </ng-template>
           }

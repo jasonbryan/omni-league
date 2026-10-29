@@ -62,7 +62,8 @@ async function forceMeAnswer(page: Page): Promise<(forced: Forced) => void> {
 
 const signOutButton = (page: Page) => page.getByRole('button', { name: /^Sign out|Signing out/ });
 const details = (page: Page) => page.getByRole('region', { name: 'Your details' });
-const topBarLink = (page: Page) => page.locator('header a[href="/app/account"]');
+// The slim bar below 1024px and the sidebar's account row from it: one is hidden at either width.
+const accountLink = (page: Page) => page.getByRole('link', { name: /^Account settings: / });
 
 async function openAccountSettings(page: Page, name: string): Promise<void> {
   await page.goto(ACCOUNT_PATH);
@@ -108,7 +109,7 @@ test.describe('account settings', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
-  test('the top bar link inside the app opens it, and on a public page it still opens /app', async ({
+  test('the account link inside the app opens it, and on a public page the top bar link still opens /app', async ({
     page,
   }) => {
     test.skip(!!remoteBaseUrl, LOCAL_ONLY);
@@ -116,13 +117,15 @@ test.describe('account settings', () => {
     const tenant = await seedTenant();
     await signUp(page, user);
     await expect(page).toHaveURL(`${baseURL}/app`);
-    await expect(topBarLink(page)).toHaveAccessibleName(`Account settings: ${user.name}`);
-    await expect(topBarLink(page)).not.toHaveAttribute('aria-current');
+    await expect(accountLink(page)).toHaveAccessibleName(
+      new RegExp(`^Account settings: ${user.name}`),
+    );
+    await expect(accountLink(page)).not.toHaveAttribute('aria-current');
 
-    await topBarLink(page).click();
+    await accountLink(page).click();
     await expect(page).toHaveURL(`${baseURL}${ACCOUNT_PATH}`);
     await expect(page).toHaveTitle('Account settings | Omni League');
-    await expect(topBarLink(page)).toHaveAttribute('aria-current', 'page');
+    await expect(accountLink(page)).toHaveAttribute('aria-current', 'page');
 
     await page.goto(tenant.path);
     await expect(page.locator('header a[href="/app"]')).toHaveAccessibleName(
@@ -291,7 +294,7 @@ test.describe('account settings', () => {
     await expect(page).toHaveURL(`${baseURL}/app`);
     await tokens;
 
-    await topBarLink(page).click();
+    await accountLink(page).click();
     await expect(page).toHaveURL(`${baseURL}${ACCOUNT_PATH}`);
     await expect(details(page)).toContainText(bob.name);
     await expect(details(page)).toContainText(bob.email);
