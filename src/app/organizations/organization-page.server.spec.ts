@@ -200,7 +200,11 @@ describe('OrganizationPage server render', () => {
     expect(body.querySelector('a')?.getAttribute('href')).toBe(
       '/organizations/gulf-coast-sport-social#main',
     );
-    expect([...body.querySelectorAll('header a')].map(text)).toEqual(['Omni League', 'Sign in']);
+    expect([...body.querySelectorAll('header a')].map(text)).toEqual([
+      'Omni League',
+      'Find a league',
+      'Sign in',
+    ]);
     expect(body.querySelector('nav[aria-label="Gulf Coast Sport & Social"]')).toBeNull();
 
     expect(html).not.toContain('SECRET');

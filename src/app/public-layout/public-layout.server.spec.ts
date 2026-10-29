@@ -58,8 +58,15 @@ describe('PublicLayout server render', () => {
     expect(body.querySelector('a')?.getAttribute('href')).toBe('/organizations/test#main');
     expect([...body.querySelectorAll('header a')].map((a) => a.textContent.trim())).toEqual([
       'Omni League',
+      'Find a league',
       'Sign in',
     ]);
+    const search = body.querySelector('header form[role="search"]');
+    expect(search?.getAttribute('action')).toBe('/leagues');
+    expect(search?.getAttribute('method')).toBe('get');
+    expect(search?.querySelector('input[name="q"][type="search"]')).not.toBeNull();
+    expect(search?.querySelector('label')?.textContent.trim()).toBe('Find a league');
+    expect(body.querySelector('header a[routerlink="/leagues"]')).not.toBeNull();
     const signIn = body.querySelector('header a[routerlink="/sign-in"]');
     const href = new URL(signIn?.getAttribute('href') ?? '', 'http://localhost');
     expect(`${href.pathname}${href.search}`).toBe('/sign-in?returnTo=%2Forganizations%2Ftest');

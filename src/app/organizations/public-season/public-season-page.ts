@@ -36,7 +36,7 @@ import type { PublicSeasonView } from './public-season-view';
       @if (view(); as view) {
         <app-public-season-content [view]="view" [savedAt]="savedAt()" [now]="now()" />
       } @else if (state() === 'not-found') {
-        <app-not-found-view />
+        <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
         <app-server-error-view [retryHref]="path()" />
       } @else if (state() === 'not-saved') {

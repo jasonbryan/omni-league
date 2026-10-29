@@ -19,6 +19,7 @@ import {
 } from './support/tenant';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
+import { topBarFind } from './support/top-bar-find';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -144,6 +145,20 @@ test.describe('organization page: raw server HTML', () => {
       const plainExpected = `Leagues and locations of ${without.name} on Omni League.`;
       expect(metaContent(plain, 'og:description')).toBe(plainExpected);
       expect(metaName(plain, 'description')).toBe(plainExpected);
+    },
+  );
+
+  test(
+    'an organization with no published league links "Find another league" to /leagues',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await seedTenant();
+      const { status, html } = await fetchRawHtml(request, tenant.path);
+      expect(status).toBe(200);
+      const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+      expect(main).toMatch(
+        /<a\b[^>]*\bhref="\/leagues"[^>]*>(?:(?!<\/a>)[\s\S])*Find another league\s*<\/a>/,
+      );
     },
   );
 
@@ -277,6 +292,7 @@ test.describe('organization page in the browser', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
+        topBarFind(page),
         'header a[href^="/sign-in"]',
         'nav[aria-label="Sports"] li:nth-child(1) a',
         'nav[aria-label="Sports"] li:nth-child(2) a',

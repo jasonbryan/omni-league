@@ -88,8 +88,10 @@ describe('SignUpPage', () => {
 
     it('has the heading, the required note, and no reset, verification, or Google UI', () => {
       expect(page.querySelector('h1')?.textContent?.trim()).toBe('Create your account');
-      expect(page.querySelector('form')?.getAttribute('aria-labelledby')).toBe('sign-up-heading');
-      expect(page.querySelector('form')?.hasAttribute('novalidate')).toBe(true);
+      expect(page.querySelector('main form')?.getAttribute('aria-labelledby')).toBe(
+        'sign-up-heading',
+      );
+      expect(page.querySelector('main form')?.hasAttribute('novalidate')).toBe(true);
       expect(page.textContent).toContain('All fields are required.');
       for (const absent of ['Forgot password', 'verify', 'Google']) {
         expect(page.textContent).not.toContain(absent);

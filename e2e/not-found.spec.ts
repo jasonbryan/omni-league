@@ -5,11 +5,14 @@ import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { topBarFind } from './support/top-bar-find';
 
 const UNKNOWN = '/this-page-does-not-exist';
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const NOT_FOUND_H1 = /<h1\b[^>]*>\s*Page not found\s*<\/h1>/g;
 const HOME_H1 = /<h1\b[^>]*>\s*Omni League\s*<\/h1>/;
+const FIND_LINK_BEFORE_HOME =
+  /<main\b[\s\S]*<a\b[^>]*\bhref="\/leagues"[^>]*>(?:(?!<\/a>)[\s\S])*Find a league\s*<\/a>[\s\S]*Go to the home page/;
 // The home link's text is "Go to the home page"; Angular may leave comment nodes beside it.
 const HOME_LINK = /<a\b[^>]*\bhref="\/"[^>]*>(?:(?!<\/a>)[\s\S])*Go to the home page\s*<\/a>/;
 
@@ -32,6 +35,7 @@ test.describe('not-found page', () => {
         expect(html.match(NOT_FOUND_H1), path).toHaveLength(1);
         expect(html.match(/<h1\b/g), path).toHaveLength(1);
         expect(html, path).toMatch(HOME_LINK);
+        expect(html, path).toMatch(FIND_LINK_BEFORE_HOME);
         expect(html, path).toMatch(/<title>[^<]*Page not found[^<]*<\/title>/);
         expect(html, path).not.toContain('aria-label="Open navigation"');
         expect(html.match(/<nav\b/g), path).toHaveLength(1);
@@ -328,6 +332,8 @@ test.describe('not-found page', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
     const home = page.getByRole('main').getByRole('link', { name: 'Go to the home page' });
     await expect(home).toBeVisible();
+    const find = page.getByRole('main').getByRole('link', { name: 'Find a league' });
+    await expect(find).toBeVisible();
     await expect(page).toHaveTitle(/Page not found/);
     if (!remoteBaseUrl) {
       await expect
@@ -345,6 +351,8 @@ test.describe('not-found page', () => {
     await expect(page.locator('main#main')).toBeFocused();
     expect(new URL(page.url()).pathname).toBe(UNKNOWN);
 
+    await page.keyboard.press(tab);
+    await expect(find).toBeFocused();
     // Polled, because the button's `transition-all` animates the width from the unfocused `medium`
     // (3px) over 150ms.
     await page.keyboard.press(tab);
@@ -367,7 +375,9 @@ test.describe('not-found page', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
+        topBarFind(page),
         'header a[href^="/sign-in"]',
+        'main a[href="/leagues"]',
         'main a[href="/"]',
         'footer a[href="/"]',
         'footer a[href="/leagues"]',
@@ -380,6 +390,8 @@ test.describe('not-found page', () => {
     await expect(skipLink).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.locator('main#main')).toBeFocused();
+    await page.keyboard.press(tab);
+    await expect(find).toBeFocused();
     await page.keyboard.press(tab);
     await expect(home).toBeFocused();
     await page.keyboard.press('Enter');

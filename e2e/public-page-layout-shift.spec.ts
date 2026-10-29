@@ -308,7 +308,9 @@ test.describe('a hard load of a public page', () => {
     await expect.poll(() => held.isHolding()).toBe(true);
     await expect(footer(page)).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Footer' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Find a league' })).toHaveCount(0);
+    await expect(page.locator('footer').getByRole('link', { name: 'Find a league' })).toHaveCount(
+      0,
+    );
 
     held.release();
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

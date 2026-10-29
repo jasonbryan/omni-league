@@ -19,6 +19,7 @@ import {
   lucideChevronRight,
   lucideMapPin,
   lucidePencil,
+  lucideSearch,
   lucideTrophy,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -70,6 +71,7 @@ function plural(count: number, noun: string): string {
       lucideChevronRight,
       lucideMapPin,
       lucidePencil,
+      lucideSearch,
       lucideTrophy,
       lucideUsers,
     }),
@@ -141,6 +143,10 @@ function plural(count: number, noun: string): string {
               Leagues this organization runs will be listed here, with their seasons and how to
               register.
             </p>
+            <a routerLink="/leagues" data-slot="button" [class]="findButton" class="mt-6">
+              <ng-icon name="lucideSearch" data-icon="inline-start" aria-hidden="true" />
+              Find another league
+            </a>
           </div>
         </div>
       </div>
@@ -379,6 +385,7 @@ export class OrganizationOverview {
   protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
   protected readonly registerButton = PRIMARY_BUTTON;
   protected readonly manageButton = OUTLINE_BUTTON_LARGE;
+  protected readonly findButton = OUTLINE_BUTTON_LARGE;
   protected readonly openBadge = OPEN_BADGE;
   protected readonly mutedBadge = MUTED_BADGE;
 

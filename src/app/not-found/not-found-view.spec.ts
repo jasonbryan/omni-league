@@ -6,7 +6,7 @@ import { buttonVariants } from '../ui/button';
 import { hlm } from '../ui/utils';
 import { NotFoundView } from './not-found-view';
 
-async function render(responseInit?: ResponseInit): Promise<HTMLElement> {
+async function render(responseInit?: ResponseInit, publicSite = false): Promise<HTMLElement> {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
@@ -14,6 +14,7 @@ async function render(responseInit?: ResponseInit): Promise<HTMLElement> {
     ],
   });
   const fixture = TestBed.createComponent(NotFoundView);
+  fixture.componentRef.setInput('publicSite', publicSite);
   await fixture.whenStable();
   return fixture.nativeElement as HTMLElement;
 }
@@ -111,5 +112,56 @@ describe('NotFoundView', () => {
     const expected = hlm(buttonVariants({ size: 'md' }), 'mt-8');
     expect(classList(link)).toEqual(expected.split(/\s+/).sort());
     expect(link?.getAttribute('data-slot')).toBe('button');
+  });
+
+  describe('with the way on to the search', () => {
+    it('renders one h1, one sentence, and two links: "Find a league" to /leagues, then "Go to the home page" to /', async () => {
+      const host = await render(undefined, true);
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
+      expect(host.querySelector('p')?.textContent.trim()).toBe(
+        'Check the address for typos, or find the league you are looking for.',
+      );
+      const links = [...host.querySelectorAll('a')];
+      expect(links.map((a) => [a.textContent.trim(), a.getAttribute('href')])).toEqual([
+        ['Find a league', '/leagues'],
+        ['Go to the home page', '/'],
+      ]);
+    });
+
+    it('has no card, a magnifier in the icon square, and the roomier public spacing', async () => {
+      const host = await render(undefined, true);
+      expect(host.querySelector('.ring-1, .rounded-xl.bg-card, .shadow-xs')).toBeNull();
+      expect(classList(host)).toEqual(
+        ['block', 'mx-auto', 'w-full', 'max-w-5xl', 'px-4', 'md:px-8', 'py-16', 'md:py-24'].sort(),
+      );
+      const icons = host.querySelectorAll('ng-icon');
+      expect(icons[0].innerHTML).toBe(icons[1].innerHTML);
+      expect(classList(host.querySelector(':scope > div'))).toEqual(
+        ['mx-auto', 'flex', 'max-w-lg', 'flex-col', 'items-center', 'text-center'].sort(),
+      );
+    });
+
+    it('hides the icons from assistive technology', async () => {
+      const host = await render(undefined, true);
+      const icons = host.querySelectorAll('ng-icon');
+      expect(icons).toHaveLength(2);
+      for (const icon of icons) expect(icon.getAttribute('aria-hidden')).toBe('true');
+      expect(icons[1].closest('a')?.getAttribute('href')).toBe('/leagues');
+      expect(icons[1].getAttribute('data-icon')).toBe('inline-start');
+    });
+
+    it('styles "Find a league" as the large primary button and the home link as the large outline button, in a row with mt-8', async () => {
+      const host = await render(undefined, true);
+      const [find, home] = [...host.querySelectorAll('a')];
+      expect(classList(find)).toEqual(buttonVariants({ size: 'lg' }).split(/\s+/).sort());
+      expect(classList(home)).toEqual(
+        buttonVariants({ variant: 'outline', size: 'lg' }).split(/\s+/).sort(),
+      );
+      expect(find?.getAttribute('data-slot')).toBe('button');
+      expect(home?.getAttribute('data-slot')).toBe('button');
+      expect(classList(find?.parentElement)).toEqual(
+        ['mt-8', 'flex', 'flex-wrap', 'justify-center', 'gap-3'].sort(),
+      );
+    });
   });
 });

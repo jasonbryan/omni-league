@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
@@ -100,11 +100,122 @@ describe('PublicLayout', () => {
       expect(links[0].textContent.trim()).toBe('Skip to main content');
       expect(links[0].getAttribute('href')).toBe('/organizations/gulf-coast?ott=SECRET#main');
       const header = page.querySelector('header')!;
-      expect(labels(header.querySelectorAll('a'))).toEqual(['Omni League', 'Sign in']);
+      expect(labels(header.querySelectorAll('a'))).toEqual([
+        'Omni League',
+        'Find a league',
+        'Sign in',
+      ]);
       expect(header.querySelector('a')?.getAttribute('href')).toBe('/');
       expect(header.querySelector('a[href^="/sign-in"]')?.getAttribute('href')).toBe(
         '/sign-in?returnTo=%2Forganizations%2Fgulf-coast%3Fott%3DSECRET',
       );
+    });
+
+    describe('Find a league', () => {
+      const search = (page: HTMLElement) =>
+        page.querySelector<HTMLFormElement>('header form[role="search"]');
+      const phoneLink = (page: HTMLElement) =>
+        page.querySelector<HTMLAnchorElement>('header a[href="/leagues"]');
+
+      it('puts a search form named "Find a league" after the brand link, submitting q to /leagues by GET', async () => {
+        const page = await open();
+
+        const form = search(page);
+        expect(form?.getAttribute('aria-label')).toBe('Find a league');
+        expect(form?.getAttribute('method')).toBe('get');
+        expect(form?.getAttribute('action')).toBe('/leagues');
+        const label = form?.querySelector('label');
+        const field = form?.querySelector('input');
+        expect(label?.textContent.trim()).toBe('Find a league');
+        expect(label?.htmlFor).toBe(field?.id);
+        expect(field?.getAttribute('name')).toBe('q');
+        expect(field?.getAttribute('type')).toBe('search');
+        expect(field?.getAttribute('placeholder')).toBe('Find a league');
+        expect(form?.querySelector('button')).toBeNull();
+        expect(
+          page.querySelector('header a')!.compareDocumentPosition(form!) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      });
+
+      it('shows the field from 768px and the link below it, each hidden at the other size', async () => {
+        const page = await open();
+
+        expect(search(page)?.classList.contains('hidden')).toBe(true);
+        expect(search(page)?.classList.contains('md:block')).toBe(true);
+        expect(phoneLink(page)?.classList.contains('md:hidden')).toBe(true);
+      });
+
+      it('links to /leagues with the name "Find a league" in a target 44px square', async () => {
+        const page = await open();
+
+        const link = phoneLink(page);
+        expect(link?.textContent.trim()).toBe('Find a league');
+        expect(link?.classList.contains('size-11')).toBe(true);
+        expect(link?.querySelector('ng-icon')?.getAttribute('aria-hidden')).toBe('true');
+      });
+
+      it.each(['/leagues', '/leagues?q=coed'])(
+        'shows neither on %s, and the account side moves to the right edge',
+        async (url) => {
+          const page = await open(url);
+
+          expect(search(page)).toBeNull();
+          expect(phoneLink(page)).toBeNull();
+          expect(labels(page.querySelectorAll('header a'))).toEqual(['Omni League', 'Sign in']);
+          expect(
+            page.querySelector('app-top-bar-account')?.parentElement?.classList.contains('ms-auto'),
+          ).toBe(true);
+        },
+      );
+
+      it('anchors the controls so the account link replacing "Sign in" moves none of them', async () => {
+        const page = await open();
+
+        const bar = page.querySelector('header > div')!;
+        expect(bar.classList.contains('md:grid')).toBe(true);
+        expect(search(page)?.classList.contains('md:col-start-2')).toBe(true);
+        expect(phoneLink(page)?.classList.contains('ms-auto')).toBe(false);
+        const side = page.querySelector('app-top-bar-account')?.parentElement;
+        expect(side?.classList.contains('ms-auto')).toBe(true);
+        expect(side?.classList.contains('md:col-start-3')).toBe(true);
+      });
+
+      it('keeps the field on a path that only starts with /leagues', async () => {
+        const page = await open('/leagues/x');
+
+        expect(search(page)).not.toBeNull();
+      });
+
+      it('goes to /leagues?q= with the typed words through the router, not a page load', async () => {
+        const page = await open();
+        const field = search(page)!.querySelector('input')!;
+        field.value = '  coed ';
+        field.dispatchEvent(new Event('input'));
+        const submit = new Event('submit', { cancelable: true });
+        search(page)!.dispatchEvent(submit);
+        await harness.fixture.whenStable();
+
+        expect(submit.defaultPrevented).toBe(true);
+        expect(TestBed.inject(Router).url).toBe('/leagues?q=coed');
+      });
+
+      it('goes to /leagues without a query when the field is empty', async () => {
+        const page = await open();
+        search(page)!.dispatchEvent(new Event('submit', { cancelable: true }));
+        await harness.fixture.whenStable();
+
+        expect(TestBed.inject(Router).url).toBe('/leagues');
+      });
+    });
+
+    it('lets the account side shrink, so a long name is cut short before the bar scrolls sideways', async () => {
+      const page = await open();
+
+      const side = page.querySelector('app-top-bar-account')?.parentElement;
+      expect(side?.classList.contains('min-w-0')).toBe(true);
+      expect(side?.classList.contains('shrink-0')).toBe(false);
+      expect(side?.className).toContain("[&_a[href='/app']]:shrink");
     });
 
     it('has no menu button, no sidebar, and no dialog', async () => {

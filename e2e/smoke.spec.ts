@@ -4,6 +4,7 @@ import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
 import { RAW_HTTP } from './support/raw-http';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
+import { topBarFind } from './support/top-bar-find';
 
 const HEADING = /<h1\b[^>]*>\s*Omni League\s*<\/h1>/;
 
@@ -119,6 +120,7 @@ test.describe('smoke: placeholder home', () => {
       expectedOrder: [
         'a[href$="#main"]',
         'header a[href="/"]',
+        topBarFind(page),
         'header a[href^="/sign-in"]',
         'footer a[href="/"]',
         'footer a[href="/leagues"]',
