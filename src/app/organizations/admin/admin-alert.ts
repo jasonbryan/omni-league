@@ -14,6 +14,7 @@ import {
   lucideInfo,
   lucideWifiOff,
 } from '@ng-icons/lucide';
+import { injectOfflineCause, offlineTitle } from '../../core/data/convex';
 
 const BASE =
   "group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)]";
@@ -22,7 +23,9 @@ export const ALERT_DESTRUCTIVE = `${BASE} text-destructive bg-card *:data-[slot=
 
 export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note' | 'info';
 
-/** The caller sets the margin with a class on the `app-admin-alert` element. Content inside the element (a link) follows the description, inside it, so an alert with content needs a description. */
+/**
+ * An `offline` alert takes its title from the connection's cause, so it never disagrees with the offline note, and its `title` input is not used.
+ * The caller sets the margin with a class on the `app-admin-alert` element. Content inside the element (a link) follows the description, inside it, so an alert with content needs a description. */
 @Component({
   selector: 'app-admin-alert',
   imports: [NgIcon],
@@ -38,7 +41,7 @@ export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note' | 'info';
         data-slot="alert-title"
         class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
       >
-        {{ title() }}
+        {{ heading() }}
       </div>
       @if (description(); as description) {
         <div
@@ -54,10 +57,15 @@ export type AdminAlertKind = 'success' | 'error' | 'offline' | 'note' | 'info';
 })
 export class AdminAlert {
   readonly kind = input.required<AdminAlertKind>();
-  readonly title = input.required<string>();
+  readonly title = input<string>();
   readonly description = input<string>();
 
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
+  private readonly cause = injectOfflineCause();
+
+  protected readonly heading = computed(() =>
+    this.kind() === 'offline' ? offlineTitle(this.cause()) : (this.title() ?? ''),
+  );
 
   protected readonly role = computed(() => {
     const kind = this.kind();

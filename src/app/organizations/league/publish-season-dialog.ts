@@ -46,10 +46,13 @@ export interface PublishSeasonOutcome {
   published: boolean;
 }
 
-function alertText(kind: PublishAlert, name: string): { title: string; description: string } {
+function alertText(
+  kind: PublishAlert,
+  name: string,
+): { title: string | undefined; description: string } {
   return kind === 'offline'
     ? {
-        title: "You're offline. Nothing was sent.",
+        title: undefined,
         description: `${name} is still a draft. Try again when you're connected.`,
       }
     : {

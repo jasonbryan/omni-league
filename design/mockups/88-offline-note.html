@@ -40,10 +40,11 @@
           at 320px. Add <code>?state=&lt;id&gt;</code> to see one state alone.
         </p>
         <p class="mt-3 max-w-3xl text-sm/relaxed text-muted-foreground">
-          One message for both causes: the device is offline (<code>navigator.onLine</code> false,
-          at once) and field wifi with no internet (the socket has not connected 5 s after start, or
-          has been down 5 s). The app cannot tell a user which one it is with certainty, and the
-          advice is the same. The note never says changes "will be sent later": nothing is queued.
+          Two causes, one text each (#385 replaces the single message): "You&apos;re offline." when
+          the device is offline (<code>navigator.onLine</code> false, at once) or nothing shows the
+          site answered (field wifi with no internet), and "Can&apos;t reach Omni League right now."
+          when the site answered and the Convex socket is still down. The advice is the same. The
+          note never says changes "will be sent later": nothing is queued.
         </p>
         <p class="mt-3 max-w-3xl text-sm/relaxed text-muted-foreground">
           The note is <code>sticky</code> below the top bar (<code>top-14</code>), full width, above
@@ -271,6 +272,17 @@
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">
+                  <code>online</code> false, the site answered, and the socket is still down
+                  (unreachable)
+                </th>
+                <td class="px-4 py-2 align-top">
+                  "Can&apos;t reach Omni League right now. Changes need a connection."
+                </td>
+                <td class="px-4 py-2 align-top">Same note, same layout and icon</td>
+                <td class="px-4 py-2 align-top">Polite, once (<code>role="status"</code>)</td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-4 py-2 text-start align-top font-medium">
                   <code>online</code> true again
                 </th>
                 <td class="px-4 py-2 align-top">
@@ -286,7 +298,8 @@
                   the note shows
                 </th>
                 <td class="px-4 py-2 align-top">
-                  "You&apos;re offline. Nothing was sent." / one line saying what is unchanged, then
+                  "You&apos;re offline. Nothing was sent." (unreachable: "Can&apos;t reach Omni
+                  League right now. Nothing was sent.") / one line saying what is unchanged, then
                   "Try again when you&apos;re connected." Sign-in: "Your details are still here.";
                   notifications (#83): "Notifications are still off." or "…still on."
                 </td>

@@ -4,10 +4,12 @@
 //
 //   E2E_PWA_UPDATE=1 E2E_BASE_URL=http://localhost:4101 npx playwright test e2e/pwa-update.spec.ts --project=chromium-mobile
 //
-// Both builds use one Convex URL, as production does, and the Convex socket is mocked as open. The
-// second build differs from the first by one attribute on `<app-root>`, which `src/app/app.ts` gets
-// for that build and loses afterwards, even when the spec fails. It leaves the second build in
-// dist/ and stops the server it started.
+// The first build uses Convex URL A and the second URL B, as a staging slot or a preview does when
+// its deployment is replaced. Convex sockets are mocked: A stays open for two of the clients, as a
+// deployment that is still alive, and is closed for the third, as one that was deleted. The second
+// build differs from the first by one attribute on `<app-root>`, which `src/app/app.ts` gets for
+// that build and loses afterwards, even when the spec fails. It leaves the second build in dist/
+// and stops the server it started.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -18,9 +20,12 @@ import { expect, test } from './support/fixtures';
 const ROOT = process.cwd();
 const APP_SOURCE = join(ROOT, 'src', 'app', 'app.ts');
 const BROWSER_DIST = join(ROOT, 'dist', 'omni-league', 'browser');
-const CONVEX_URL = 'https://repro-one-111.convex.cloud';
+const FIRST_CONVEX_URL = 'https://repro-one-111.convex.cloud';
+const SECOND_CONVEX_URL = 'https://repro-two-222.convex.cloud';
 const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
 const PROMPT_SEEN_KEY = 'e2e-update-prompt-seen';
+const NOTE_SEEN_KEY = 'e2e-offline-note-seen';
+const OFFLINE_NOTE = '[data-offline-note]';
 /** registerWhenStable:30000 registers at the latest 30 s after the app starts; a little more. */
 const REGISTRATION_WINDOW_MS = 45_000;
 /** The worker checks for a new version about 5 s after the page opens, then downloads it. */
@@ -34,8 +39,8 @@ const port = (() => {
     : undefined;
 })();
 
-async function build(): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...process.env, CONVEX_URL };
+async function build(convexUrl: string): Promise<void> {
+  const env: NodeJS.ProcessEnv = { ...process.env, CONVEX_URL: convexUrl };
   delete env['CONTEXT'];
   const child = spawn(process.execPath, [join(ROOT, 'scripts', 'ng-convex.mjs'), 'build'], {
     cwd: ROOT,
@@ -90,26 +95,41 @@ async function stopServer(): Promise<void> {
   await exited;
 }
 
-// sessionStorage survives the reload, so a prompt shown before it still counts.
-async function recordPrompt(context: BrowserContext): Promise<void> {
-  await context.addInitScript((key) => {
-    const seen = () => {
-      if (document.querySelector('section[aria-labelledby="update-title"]')) {
-        sessionStorage.setItem(key, '1');
-      }
-    };
-    new MutationObserver(seen).observe(document, { childList: true, subtree: true });
-  }, PROMPT_SEEN_KEY);
+// sessionStorage survives the reload, so a prompt or note shown before it still counts.
+async function recordWhatShows(context: BrowserContext): Promise<void> {
+  await context.addInitScript(
+    ({ promptKey, noteKey, noteSelector }) => {
+      const seen = () => {
+        if (document.querySelector('section[aria-labelledby="update-title"]')) {
+          sessionStorage.setItem(promptKey, '1');
+        }
+        if (document.querySelector(noteSelector)) sessionStorage.setItem(noteKey, '1');
+      };
+      new MutationObserver(seen).observe(document, { childList: true, subtree: true });
+    },
+    { promptKey: PROMPT_SEEN_KEY, noteKey: NOTE_SEEN_KEY, noteSelector: OFFLINE_NOTE },
+  );
 }
 
-async function newClient(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+/** A deployment that is gone refuses the socket without ever opening it, as a deleted Convex deployment does. */
+type Deployments = Map<string, 'alive' | 'gone'>;
+
+async function newClient(
+  browser: Browser,
+  deployments: Deployments = new Map(),
+): Promise<{ context: BrowserContext; page: Page; deployments: Deployments }> {
   const context = await browser.newContext({
     baseURL: remoteBaseUrl,
     viewport: { width: 360, height: 800 },
   });
-  await context.routeWebSocket(CONVEX_SOCKET, () => undefined);
-  await recordPrompt(context);
-  return { context, page: await context.newPage() };
+  await context.routeWebSocket(
+    (url) => CONVEX_SOCKET.test(url.pathname),
+    (ws) => {
+      if (deployments.get(new URL(ws.url()).hostname) === 'gone') void ws.close();
+    },
+  );
+  await recordWhatShows(context);
+  return { context, page: await context.newPage(), deployments };
 }
 
 async function installWorker(page: Page, path: string): Promise<void> {
@@ -142,6 +162,10 @@ function promptSeen(page: Page): Promise<string | null> {
   return page.evaluate((key) => sessionStorage.getItem(key), PROMPT_SEEN_KEY);
 }
 
+function noteSeen(page: Page): Promise<string | null> {
+  return page.evaluate((key) => sessionStorage.getItem(key), NOTE_SEEN_KEY);
+}
+
 test.describe('a new version of the app (local production builds)', () => {
   test.skip(
     process.env['E2E_PWA_UPDATE'] !== '1' || port === undefined,
@@ -154,7 +178,7 @@ test.describe('a new version of the app (local production builds)', () => {
     if (originalAppSource !== undefined) await writeFile(APP_SOURCE, originalAppSource);
   });
 
-  test('loads by itself with no prompt, and waits with the prompt while input is unsaved', async ({
+  test('loads by itself with no prompt, waits with the prompt while input is unsaved, and replaces a version whose deployment is gone', async ({
     browser,
     consoleGuard,
   }, testInfo) => {
@@ -162,16 +186,23 @@ test.describe('a new version of the app (local production builds)', () => {
     test.setTimeout(12 * 60_000);
     if (port === undefined) throw new Error('no port');
 
-    await build();
+    await build(FIRST_CONVEX_URL);
     const first = await mainBundle();
     await startServer(port);
     const untouched = await newClient(browser);
     const typing = await newClient(browser);
+    const moved = await newClient(browser);
     consoleGuard.attach(untouched.page);
     consoleGuard.attach(typing.page);
-    await Promise.all([installWorker(untouched.page, '/'), installWorker(typing.page, '/sign-in')]);
+    consoleGuard.attach(moved.page);
+    await Promise.all([
+      installWorker(untouched.page, '/'),
+      installWorker(typing.page, '/sign-in'),
+      installWorker(moved.page, '/'),
+    ]);
     expect(await runningBundle(untouched.page)).toBe(first);
     expect(await runningBundle(typing.page)).toBe(first);
+    expect(await runningBundle(moved.page)).toBe(first);
     await stopServer();
 
     const original = await readFile(APP_SOURCE, 'utf8');
@@ -183,7 +214,7 @@ test.describe('a new version of the app (local production builds)', () => {
         APP_SOURCE,
         original.replace(template, `${template} host: { 'data-build': 'second' },`),
       );
-      await build();
+      await build(SECOND_CONVEX_URL);
     } finally {
       await writeFile(APP_SOURCE, original);
     }
@@ -217,7 +248,31 @@ test.describe('a new version of the app (local production builds)', () => {
         .toBe(second);
     });
 
+    await test.step('a page whose Convex deployment is gone ends on the new version with no offline note and no prompt', async () => {
+      moved.deployments.set(new URL(FIRST_CONVEX_URL).hostname, 'gone');
+      await moved.page.reload();
+      // A touched page, so only the rule for a socket that never connected can reload it.
+      await moved.page.keyboard.press('Shift');
+      await expect
+        .poll(() => runningBundle(moved.page), { timeout: UPDATE_WITHIN_MS })
+        .toBe(second);
+      await expect(moved.page.locator('app-root')).toHaveAttribute('data-build', 'second');
+      expect(await noteSeen(moved.page)).toBeNull();
+      expect(await promptSeen(moved.page)).toBeNull();
+    });
+
+    await test.step('a current version whose deployment cannot be reached says so, not that the user is offline', async () => {
+      moved.deployments.set(new URL(SECOND_CONVEX_URL).hostname, 'gone');
+      await moved.page.reload();
+      await expect(moved.page.locator(OFFLINE_NOTE)).toHaveText(
+        "Can't reach Omni League right now. Changes need a connection.",
+        { timeout: UPDATE_WITHIN_MS },
+      );
+      expect(await runningBundle(moved.page)).toBe(second);
+    });
+
     await untouched.context.close();
     await typing.context.close();
+    await moved.context.close();
   });
 });

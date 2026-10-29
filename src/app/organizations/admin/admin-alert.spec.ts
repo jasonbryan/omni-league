@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { lucideEyeOff, lucideInfo } from '@ng-icons/lucide';
+import { CONVEX_CLIENT, ConvexConnection } from '../../core/data/convex';
+import { FakeConvexClient } from '../../core/data/convex/testing/fake-convex-client';
 import { AdminAlert } from './admin-alert';
 
 @Component({
@@ -51,5 +53,50 @@ describe('the admin alert info kind', () => {
     const drawn = host.querySelector('ng-icon svg');
     expect(drawn).not.toBeNull();
     expect(paths(drawn)).toEqual(paths(expected));
+  });
+});
+
+@Component({
+  imports: [AdminAlert],
+  template:
+    '<app-admin-alert kind="offline" title="Ignored" description="Try again when you\'re connected." />',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class OfflineHost {}
+
+describe('the admin alert offline kind', () => {
+  const title = (host: HTMLElement) =>
+    host.querySelector('[data-slot="alert-title"]')?.textContent.trim();
+
+  it('takes its title from the connection cause, never from its title input', async () => {
+    const client = new FakeConvexClient();
+    client.setConnected(false);
+    TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: client }] });
+    const fixture = TestBed.createComponent(OfflineHost);
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(title(host)).toBe("You're offline. Nothing was sent.");
+
+    TestBed.inject(ConvexConnection).markSiteReached();
+    await fixture.whenStable();
+    expect(title(host)).toBe("Can't reach Omni League right now. Nothing was sent.");
+  });
+
+  it('keeps the unreachable title when the socket reconnects, and drops it when the socket next goes down', async () => {
+    const client = new FakeConvexClient();
+    client.setConnected(false);
+    TestBed.configureTestingModule({ providers: [{ provide: CONVEX_CLIENT, useValue: client }] });
+    const fixture = TestBed.createComponent(OfflineHost);
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    TestBed.inject(ConvexConnection).markSiteReached();
+
+    client.setConnected(true);
+    await fixture.whenStable();
+    expect(title(host)).toBe("Can't reach Omni League right now. Nothing was sent.");
+
+    client.setConnected(false);
+    await fixture.whenStable();
+    expect(title(host)).toBe("You're offline. Nothing was sent.");
   });
 });

@@ -6,6 +6,7 @@
 - **Date:** 2026-10-09 (npm registry, vendor docs, and package sources checked 2026-10-09)
 - **Amended:** 2026-10-10, by #81 (PR #119) and #80 (PR #113): registration follows the `serviceWorker` build option, and `netlify.toml` sets the manifest's `Content-Type`. See "Amendment: one kill switch and the manifest content type (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-27, by #384: a new version applies itself when nothing on the page can be lost, and the 14-day forced-reload rule is removed. See "Amendment: new versions apply themselves (2026-10-27)" at the end. Where section 4 disagrees with it, the amendment applies.
+- **Amended:** 2026-10-28, by #385: the note and form alerts name the cause, and an old version whose Convex deployment is gone checks for an update early and reloads at once. See "Amendment: an old version whose Convex deployment is gone (2026-10-28)" at the end. Where sections 3 and 4 disagree with it, the amendment applies.
 
 ## Context
 
@@ -435,3 +436,23 @@ It replaces the "Updates" and "Forced reload past the window" bullets of section
 **No `activateUpdate()`.** Activating switches the open page to the new version while it still runs the old bundle, and the worker then answers that bundle's lazy chunk requests from the new version, which has no chunk of that name. A tab that activated and then did not reload (unsaved input appeared) could not open a route it had not loaded. A reload alone gives no such state.
 
 **Why.** Production keeps one Convex URL, so after each release the old bundle ran for a few seconds and then the prompt asked for a press. A reload is harmless when nothing is unsaved, so the app does it. The moments avoid the cases that lose state: a reload while someone reads (screen readers send no pointer or key events), on `hidden` (Undo and success statuses), or between a request and its answer.
+
+## Amendment: an old version whose Convex deployment is gone (2026-10-28)
+
+Owner (chat, 2026-10-27): "When a change is made and i load main it sometimes shows an offline warning. Then shortly after is says a new version is avaliable". Cause: the worker answers a navigation from its cache, so the first load after a deploy runs the previous build, whose Convex URL is compiled in. A staging slot or preview replaces its deployment on every build, so that socket never connects. `navigator.onLine` stays true, and after 5 seconds the note said "You're offline."
+
+It amends section 3, "Adapter additions" (the `online` signal and the note), and section 4, "Updates, stale shells, rollback, and the kill switch" (the "Updates" bullet, as amended on 2026-10-27).
+
+**Section 3, Adapter additions.**
+
+- **Cause.** The adapter also reports why the connection is down. It is **unreachable** when the socket is down, `navigator.onLine` is true, and the service worker has answered since the socket went down: a `NO_NEW_VERSION_DETECTED`, `VERSION_DETECTED`, or `VERSION_READY` event. Every other case is **offline**: the browser is offline, no event has arrived, the check rejected or has not settled, no worker controls the page, or it is a development build. A resolved `checkForUpdate()` alone does not count, because the worker turns a network error into a 504 and a captive-portal page that is not JSON into `false` (`ngsw-worker.js`, `@angular/service-worker` 22.2.1).
+- **Text.** The note reads "Can't reach Omni League right now. Changes need a connection." when unreachable and "You're offline. Changes need a connection." otherwise. Refused-change alerts take their title from the same cause ("Nothing was sent.", and "removed" or "undone" for Undo), so a screen never gives two causes. `design/mockups/88-offline-note.html` is replaced for the unreachable text only.
+- **Timing.** `online` stays false at once when `navigator.onLine` is false, with no check and no hold. Otherwise it turns false 5 seconds after the socket went down (after page start if it never connected). When the worker has sent `VERSION_DETECTED` or `VERSION_READY` by then, a newer version is downloading and the app is about to reload, so the note waits until 15 seconds after the socket went down.
+
+**Section 4, Updates.**
+
+- **Early check.** While the socket has been down 1 second and `navigator.onLine` is true, the app calls `checkForUpdate()` at once and then at most once a minute while it stays down. No check runs while the browser is offline. The worker's own idle check is 5 seconds after a navigation, which is too late to replace the note.
+- **Reload when the socket never connected.** A ready version reloads a safe page at once when the socket has not connected since the page loaded (`hasEverConnected` false, the moved-deployment case), whether or not the user has touched the page and after the load window. Safety is checked at that moment, and the once-per-hash and no-storage rules of the 2026-10-27 amendment bind it. A socket that connected and then dropped never gets this rule: a short drop after a deploy does not reload a page someone is reading, and the 2026-10-27 moments apply. Like every reload in that amendment, it does not call `activateUpdate()`.
+- **Unsaved input.** A page with an unsaved field still shows the new-version prompt and keeps the input, and the unreachable note shows as well.
+
+**Rejected.** Keeping old staging deployments alive (previews and the 5-day expiry would still break old bundles). `navigationRequestStrategy: freshness` (it loses the instant shell on field wifi). Reading the Convex URL at runtime (an extra request on every load).

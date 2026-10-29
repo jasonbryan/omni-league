@@ -22,6 +22,10 @@ export class FakeSwUpdate {
     });
   }
 
+  versionDetected(hash: string): void {
+    this.versionUpdates.next({ type: 'VERSION_DETECTED', version: { hash } });
+  }
+
   noNewVersion(hash: string): void {
     this.versionUpdates.next({ type: 'NO_NEW_VERSION_DETECTED', version: { hash } });
   }
