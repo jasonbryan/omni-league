@@ -243,6 +243,7 @@ describe('selectSpecs: mapped areas', () => {
         'find-organizations',
         'league-page-offline',
         'league-page',
+        'page-control-widths',
         'public-page-layout-shift',
         'sport-view',
       ]) {

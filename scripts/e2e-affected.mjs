@@ -568,12 +568,12 @@ export const AREAS = [
   {
     name: 'numbered page control',
     test: named('src/app/organizations/', ['page-control']),
-    specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE],
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
     name: 'list page helper',
     test: named('src/app/core/', ['list-page']),
-    specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE],
+    specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
     // Every form shares this field-error rule: sign-up, sign-in, create organization, the
