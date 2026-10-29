@@ -176,7 +176,6 @@ const addOrgAdmin = (tenant: Tenant, user: TestUser) =>
     role: 'orgAdmin',
   });
 
-/** The sign-up runs while the organization is seeded; the membership needs both. */
 async function signUpAsOrgAdmin(
   page: Page,
   seasons: SeasonSeed[] = [],
