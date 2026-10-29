@@ -113,7 +113,7 @@ export function rangeText(page: number, total: number): string {
           @for (item of items(); track $index) {
             @if (item.kind === 'gap') {
               <li aria-hidden="true" [class]="item.view === 'wide' ? 'max-sm:hidden' : 'sm:hidden'">
-                <span class="flex size-8 items-center justify-center text-muted-foreground"
+                <span class="flex h-8 w-4 items-center justify-center text-muted-foreground sm:w-8"
                   ><ng-icon name="lucideEllipsis" class="text-base" aria-hidden="true"
                 /></span>
               </li>
