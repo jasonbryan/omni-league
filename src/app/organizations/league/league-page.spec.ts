@@ -43,6 +43,18 @@ describe('LeaguePage', () => {
       expect(o.page.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
     });
 
+    it('reserves the breadcrumb’s one-line height, 44px on touch, above the heading bar', async () => {
+      o = await openAdmin(LEAGUE_ROUTES, LEAGUE_URL);
+      TestBed.tick();
+      const skeleton = o.page.querySelector('app-league-loading')!;
+      const crumbRow = skeleton.querySelector<HTMLElement>('[data-slot="crumb-row"]')!;
+      expect(tokens(crumbRow.className)).toEqual(
+        expect.arrayContaining(['h-5', 'pointer-coarse:h-11']),
+      );
+      const headingBar = crumbRow.nextElementSibling as HTMLElement;
+      expect(tokens(headingBar.className)).toEqual(expect.arrayContaining(['mt-1', 'h-8']));
+    });
+
     it('asks leagues.getOrganizerContext with both slugs, and no season data, once the token is accepted', async () => {
       o = await openAdmin(LEAGUE_ROUTES, LEAGUE_URL);
       o.acceptToken();

@@ -181,13 +181,16 @@ test.describe('League management: an org admin', () => {
     await expect(page).toHaveURL(`${base}/leagues`);
   });
 
-  test('the breadcrumb wraps at 320px without a horizontal scroll, and axe finds nothing', async ({
+  test('the breadcrumb stays on one line at 320px without a horizontal scroll, and axe finds nothing', async ({
     page,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin');
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto(`${base}/leagues/${COED}`);
     await expect(breadcrumb(page)).toBeVisible();
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    const crumbsBox = await breadcrumb(page).boundingBox();
+    expect(crumbsBox!.height).toBe(touch ? 44 : 20);
     const { clientWidth, scrollWidth } = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -512,21 +515,33 @@ test.describe('League management: the create-season form on a phone', () => {
       await page.locator('#name').focus();
       const tab = tabKey(page);
 
-      const seen: { control: string; inViewport: boolean; unobscured: boolean }[] = [];
+      const seen: {
+        control: string;
+        inViewport: boolean;
+        unobscured: boolean;
+        aboveFooter: boolean;
+      }[] = [];
       // A date field takes several Tabs, one per part, so the cap leaves room for them.
       for (let step = 0; step < 40; step++) {
         seen.push(
-          await page.evaluate(() => {
+          await page.evaluate(async () => {
+            // The error for the field just left renders after the focus scroll, so the check waits for it.
+            for (let frame = 0; frame < 3; frame++) {
+              await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
             const active = document.activeElement as HTMLElement;
             const rect = active.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top + rect.height / 2;
             const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
             const hit = inViewport ? document.elementFromPoint(x, y) : null;
+            const footer = active.closest('form')!.querySelector('[data-slot="form-footer"]')!;
             return {
               control: active.id || active.tagName,
               inViewport,
               unobscured: !!hit && active.contains(hit),
+              aboveFooter:
+                footer.contains(active) || rect.bottom <= footer.getBoundingClientRect().top,
             };
           }),
         );
@@ -543,7 +558,7 @@ test.describe('League management: the create-season form on a phone', () => {
         'A',
         'BUTTON',
       ]);
-      expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
+      expect(seen.filter((s) => !s.inViewport || !s.unobscured || !s.aboveFooter)).toEqual([]);
     });
   }
 });

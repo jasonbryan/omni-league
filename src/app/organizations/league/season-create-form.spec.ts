@@ -90,6 +90,11 @@ describe('SeasonCreateForm', () => {
         expect.arrayContaining(tokens(STICKY_FOOTER_CLEARANCE)),
       );
     });
+
+    it('brings a focused field back above the footer when an error pushes it down (WCAG 2.4.11)', async () => {
+      await open();
+      expect(form().hasAttribute('appstickyfooterfocus')).toBe(true);
+    });
   });
 
   describe('the fields (states 4 and "Messages and attributes")', () => {
@@ -387,6 +392,13 @@ describe('SeasonCreateForm', () => {
       const link = block().querySelector<HTMLAnchorElement>('a')!;
       expect(text(link)).toBe('edit the league details');
       expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#details`);
+      expect(tokens(link.className)).toEqual(
+        expect.arrayContaining([
+          'pointer-coarse:inline-flex',
+          'pointer-coarse:min-h-11',
+          'pointer-coarse:items-center',
+        ]),
+      );
       expect(text(block().querySelector('p'))).toBe(
         'To change them, edit the league details. Seasons already published keep theirs.',
       );

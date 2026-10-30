@@ -7,7 +7,7 @@ import type { OrganizerLeague } from './league-context';
 import { leaguePath } from './league-path';
 
 const CRUMB_LINK =
-  'inline-flex min-h-11 items-center rounded-md font-medium hover:text-foreground hover:underline md:min-h-0';
+  'inline-flex max-w-full items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 
 interface Crumb {
@@ -15,7 +15,10 @@ interface Crumb {
   path: string;
 }
 
-/** A league organizer who is not an org admin is sent to `/app`, because the admin area shows them the no-access view. */
+/**
+ * A league organizer who is not an org admin is sent to `/app`, because the admin area shows them the no-access view.
+ * The trail stays on one line so its height is known before the league loads, which keeps the h1 where the skeleton drew it.
+ */
 @Component({
   selector: 'app-league-breadcrumb',
   imports: [NgIcon, RouterLink],
@@ -24,10 +27,13 @@ interface Crumb {
   host: { class: 'block' },
   template: `
     <nav aria-label="Breadcrumb">
-      <ol role="list" class="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
+      <ol
+        role="list"
+        class="flex flex-nowrap items-center gap-x-1.5 text-sm whitespace-nowrap text-muted-foreground"
+      >
         @for (crumb of crumbs(); track crumb.path) {
           @if (!$first) {
-            <li aria-hidden="true">
+            <li aria-hidden="true" class="shrink-0">
               <ng-icon
                 name="lucideChevronRight"
                 class="translate-y-0.5 text-sm"
@@ -35,17 +41,19 @@ interface Crumb {
               />
             </li>
           }
-          <li>
-            <a [routerLink]="crumb.path" [class]="crumbLink">{{ crumb.label }}</a>
+          <li class="flex min-w-11">
+            <a [routerLink]="crumb.path" [class]="crumbLink"
+              ><span class="truncate">{{ crumb.label }}</span></a
+            >
           </li>
         }
-        <li aria-hidden="true">
+        <li aria-hidden="true" class="shrink-0">
           <ng-icon name="lucideChevronRight" class="translate-y-0.5 text-sm" aria-hidden="true" />
         </li>
-        <li>
-          <a [routerLink]="currentPath()" aria-current="page" [class]="currentCrumbLink">{{
-            league().name
-          }}</a>
+        <li class="flex min-w-16 shrink-100">
+          <a [routerLink]="currentPath()" aria-current="page" [class]="currentCrumbLink"
+            ><span class="truncate">{{ league().name }}</span></a
+          >
         </li>
       </ol>
     </nav>

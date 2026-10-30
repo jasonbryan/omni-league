@@ -23,6 +23,7 @@ import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
 import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
@@ -61,12 +62,13 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 
 @Component({
   selector: 'app-season-create-form',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, StickyFooterFocus],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
     <form
+      appStickyFooterFocus
       novalidate
       aria-labelledby="create-season-heading"
       aria-describedby="create-season-note"
@@ -275,7 +277,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             To change them,
             <a
               [href]="detailsHref()"
-              class="inline-block font-medium text-foreground underline underline-offset-4"
+              class="inline-block font-medium text-foreground underline underline-offset-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
               (click)="detailsOpened.emit($event)"
               >edit the league details</a
             >. Seasons already published keep theirs.

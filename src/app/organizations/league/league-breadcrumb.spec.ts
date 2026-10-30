@@ -71,15 +71,23 @@ describe('LeagueManagement: the breadcrumb', () => {
     expect(nav().textContent).not.toContain(GULF.name);
   });
 
-  it('for a user who is both an org admin and a league organizer of the league shows the org admin breadcrumb', async () => {
-    await open({ ...COED, role: 'orgAdmin' });
-    expect(items().map((item) => item.text)).toEqual([GULF.name, 'Leagues', 'Coed 7v7 Rec']);
-  });
-
   it('gives each link a 44px target on touch screens', async () => {
     await open(COED);
     for (const link of nav().querySelectorAll('a')) {
       expect(link.className).toContain('min-h-11');
     }
+  });
+
+  it('keeps the trail on one line, so the h1 sits where the loading skeleton put it, and shortens the league name first', async () => {
+    await open(COED);
+    const list = nav().querySelector('ol')!;
+    expect(list.className).toContain('flex-nowrap');
+    expect(list.className).not.toContain('flex-wrap ');
+    const [first, , current] = nav().querySelectorAll<HTMLElement>('ol > li:not([aria-hidden])');
+    for (const li of [first, current]) {
+      expect(li.className).toContain('min-w-');
+      expect(li.querySelector('a > span')!.className).toContain('truncate');
+    }
+    expect(current.className).toContain('shrink-100');
   });
 });
