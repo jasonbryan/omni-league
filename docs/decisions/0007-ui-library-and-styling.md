@@ -510,6 +510,6 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
 
 Issue #202. Caveat 4 under "Server rendering and hydration" put `provideSpartanHlm()` in `app.config.ts`. Its `OVERLAY_DEFAULT_CONFIG` import pulled about 45 kB of CDK overlay code into the initial bundle, which only the lazy sheet and alert dialogs use.
 
-- `provideSpartanOverlay()` (`src/app/ui/utils/provide-spartan-overlay.ts`) replaces it. Each component that hosts a brain sheet, dialog, or alert dialog lists it in its `providers`: today `HlmSheet`, `PublishLeagueDialog`, and `PublishSeasonDialog`.
+- `provideSpartanOverlay()` (`src/app/ui/utils/provide-spartan-overlay.ts`) replaces it. Each component that hosts a brain sheet, dialog, or alert dialog lists it in its `providers`: today `HlmSheet`, `PublishLeagueDialog`, `PublishSeasonDialog`, and `RemoveLogoDialog`.
 - It provides `{ usePopover: false }` together with `Dialog` and `BrnDialogService`. The CDK reads the config from the injector of the `Dialog` that opens the overlay, and both services are root-provided, so a route-level provider alone would not reach them.
-- A new overlay host adds `provideSpartanOverlay()`, and its e2e test checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.
+- A new overlay host adds `provideSpartanOverlay()`; `scripts/overlay-hosts.test.mjs` fails for a file under `src/app` that uses `<brn-alert-dialog>`, `<brn-dialog>`, or `<brn-sheet>`, or extends their classes, without it. Its e2e test checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.
