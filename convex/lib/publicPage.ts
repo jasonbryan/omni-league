@@ -13,11 +13,12 @@ export const publicSportValidator = v.object({
   locationCount: v.number(),
 });
 
-// `cityState` is optional so a copy saved before it existed stays valid.
+// `cityState` and `logoUrl` are optional so a copy saved before they existed stays valid.
 export const publicPageValidator = v.object({
   name: v.string(),
   slug: v.string(),
   cityState: v.optional(v.string()),
+  logoUrl: v.optional(v.string()),
   leagueCount: v.number(),
   locationCount: v.number(),
   sportCount: v.number(),
@@ -61,9 +62,16 @@ function publicListValidator<Row extends Validator<unknown, 'required', string>>
   });
 }
 
+// The organization a league row or page names; `logoUrl` is optional so a copy saved before it existed stays valid.
+const publicLeagueOrganizationValidator = v.object({
+  name: v.string(),
+  slug: v.string(),
+  logoUrl: v.optional(v.string()),
+});
+
 // The rows of a text search over published leagues: each names its organization, so a result needs no second query.
 const searchLeagueValidator = v.object({
-  organization: v.object({ name: v.string(), slug: v.string() }),
+  organization: publicLeagueOrganizationValidator,
   name: v.string(),
   slug: v.string(),
   sportName: v.string(),
@@ -86,6 +94,7 @@ const searchOrganizationValidator = v.object({
   slug: v.string(),
   sportNames: v.array(v.string()),
   cityState: v.optional(v.string()),
+  logoUrl: v.optional(v.string()),
 });
 
 export const searchOrganizationsValidator = publicListValidator(searchOrganizationValidator);
@@ -110,7 +119,7 @@ const publicLeaguePageSeasonValidator = v.object({
 
 // `divisionLabel`, `locations`, and `seasons` are optional so a copy saved before they existed stays valid.
 export const publicLeaguePageValidator = v.object({
-  organization: v.object({ name: v.string(), slug: v.string() }),
+  organization: publicLeagueOrganizationValidator,
   name: v.string(),
   slug: v.string(),
   sportName: v.string(),

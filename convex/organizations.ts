@@ -1,6 +1,15 @@
 import { ConvexError, v } from 'convex/values';
+import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
-import { mutation, query, type QueryCtx } from './_generated/server';
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from './_generated/server';
 import {
   hasOrgAdminRole,
   requireOrgAdmin,
@@ -9,6 +18,18 @@ import {
 } from './lib/access';
 import { leagueDivisionLabel } from './lib/leagueDivision';
 import { leagueRowSeasons } from './lib/publicLeague';
+import {
+  detectLogoType,
+  isLogoMimeType,
+  LOGO_HEAD_BYTES,
+  LOGO_MAX_BYTES,
+  LOGO_MIME_TYPES,
+  LOGO_UPLOAD_MAX_AGE_MS,
+  logoError,
+  type LogoInputError,
+  type LogoMimeType,
+} from './lib/logoFile';
+import { logoUrlField } from './lib/organizationLogo';
 import { insertOrgAdminMembership } from './lib/memberships';
 import {
   checkCityState,
@@ -89,6 +110,7 @@ export const getPublicPage = query({
       name: organization.name,
       slug: organization.slug,
       ...(organization.cityState !== undefined && { cityState: organization.cityState }),
+      ...(await logoUrlField(ctx, organization)),
       leagueCount: organization.leagueCount ?? 0,
       locationCount: organization.locationCount ?? 0,
       sportCount: sports.length,
@@ -218,6 +240,7 @@ export const getAdminContext = query({
       name: v.string(),
       slug: v.string(),
       cityState: v.optional(v.string()),
+      logoUrl: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, { slug }) => {
@@ -230,6 +253,7 @@ export const getAdminContext = query({
       name: organization.name,
       slug: organization.slug,
       ...(organization.cityState !== undefined && { cityState: organization.cityState }),
+      ...(await logoUrlField(ctx, organization)),
     };
   },
 });
@@ -314,7 +338,7 @@ export const listMine = query({
   },
 });
 
-function refuse(error: OrganizationInputError): never {
+function refuse(error: OrganizationInputError | LogoInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...error });
 }
@@ -355,6 +379,140 @@ export const updateDetails = mutation({
     const cityState = checkCityState(args.cityState ?? '');
     if (!cityState.ok) refuse(cityState.error);
     await updateOrganizationCityState(ctx, args.organizationId, cityState.value);
+    return null;
+  },
+});
+
+export const generateLogoUploadUrl = mutation({
+  args: { organizationId: v.id('organizations') },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+const logoRefusalValidator = v.object({
+  field: v.literal('logo'),
+  code: v.union(
+    v.literal('logoType'),
+    v.literal('logoSize'),
+    v.literal('logoOld'),
+    v.literal('logoInUse'),
+    v.literal('logoMissing'),
+  ),
+  message: v.string(),
+});
+
+async function organizationHoldingFile(
+  ctx: QueryCtx,
+  storageId: Id<'_storage'>,
+): Promise<Doc<'organizations'> | null> {
+  return await ctx.db
+    .query('organizations')
+    .withIndex('by_logoStorageId', (q) => q.eq('logoStorageId', storageId))
+    .first();
+}
+
+/** `storage.delete` throws for a file that is already gone, which must not block a replace or a Remove. */
+async function deleteFileIfPresent(ctx: MutationCtx, storageId: Id<'_storage'>): Promise<void> {
+  if (await ctx.db.system.get('_storage', storageId)) await ctx.storage.delete(storageId);
+}
+
+type LogoCheck =
+  | { status: 'ok'; contentType: LogoMimeType }
+  | { status: 'refused'; error: LogoInputError; deleteFile: boolean };
+
+const logoCheckValidator = v.union(
+  v.object({
+    status: v.literal('ok'),
+    contentType: v.union(...LOGO_MIME_TYPES.map((type) => v.literal(type))),
+  }),
+  v.object({ status: v.literal('refused'), error: logoRefusalValidator, deleteFile: v.boolean() }),
+);
+
+/**
+ * Throws for anyone who is not an org admin of the organization, before the file is read, so a refused caller deletes nothing.
+ * A file some organization already holds is refused without `deleteFile`: it is not this caller's to delete.
+ * The file's URL serves the stored Content-Type with no `nosniff` or CSP, so only an image type is allowed: an HTML one would run script.
+ */
+export const checkLogoUpload = internalQuery({
+  args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },
+  returns: logoCheckValidator,
+  handler: async (ctx, args): Promise<LogoCheck> => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    if (await organizationHoldingFile(ctx, args.storageId)) {
+      return { status: 'refused', error: logoError('logoInUse'), deleteFile: false };
+    }
+    const file = await ctx.db.system.get('_storage', args.storageId);
+    if (!file) return { status: 'refused', error: logoError('logoMissing'), deleteFile: false };
+    if (Date.now() - file._creationTime > LOGO_UPLOAD_MAX_AGE_MS) {
+      return { status: 'refused', error: logoError('logoOld'), deleteFile: true };
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      return { status: 'refused', error: logoError('logoSize', file.size), deleteFile: true };
+    }
+    if (!isLogoMimeType(file.contentType)) {
+      return { status: 'refused', error: logoError('logoType'), deleteFile: true };
+    }
+    return { status: 'ok', contentType: file.contentType };
+  },
+});
+
+export const applyLogo = internalMutation({
+  args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    // Checked again here: another call may have taken or removed the file since the action's check.
+    if (await organizationHoldingFile(ctx, args.storageId)) refuse(logoError('logoInUse'));
+    if (!(await ctx.db.system.get('_storage', args.storageId))) refuse(logoError('logoMissing'));
+    const organization = await ctx.db.get('organizations', args.organizationId);
+    if (!organization) throw new Error('Not allowed');
+    await ctx.db.patch('organizations', args.organizationId, { logoStorageId: args.storageId });
+    if (organization.logoStorageId !== undefined) {
+      await deleteFileIfPresent(ctx, organization.logoStorageId);
+    }
+    return null;
+  },
+});
+
+async function logoTypeOfBytes(blob: Blob): Promise<LogoMimeType | null> {
+  const head = new Uint8Array(await blob.slice(0, LOGO_HEAD_BYTES).arrayBuffer());
+  return detectLogoType(head);
+}
+
+/** An action because it reads the file: the Content-Type stored with an upload is only what the uploader sent, so it must match the type the first bytes show. */
+// eslint-disable-next-line @convex-dev/require-access-control -- an action has no database: checkLogoUpload authorizes the caller as an org admin of the organization before the file is read or deleted, and applyLogo again inside the transaction that writes.
+export const setLogo = action({
+  args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const check = await ctx.runQuery(internal.organizations.checkLogoUpload, args);
+    if (check.status === 'refused') {
+      if (check.deleteFile) await ctx.storage.delete(args.storageId);
+      refuse(check.error);
+    }
+    const file = await ctx.storage.get(args.storageId);
+    if (!file) refuse(logoError('logoMissing'));
+    if ((await logoTypeOfBytes(file)) !== check.contentType) {
+      await ctx.storage.delete(args.storageId);
+      refuse(logoError('logoType'));
+    }
+    await ctx.runMutation(internal.organizations.applyLogo, args);
+    return null;
+  },
+});
+
+export const removeLogo = mutation({
+  args: { organizationId: v.id('organizations') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireOrgAdmin(ctx, args.organizationId);
+    const organization = await ctx.db.get('organizations', args.organizationId);
+    if (organization?.logoStorageId === undefined) return null;
+    await ctx.db.patch('organizations', args.organizationId, { logoStorageId: undefined });
+    await deleteFileIfPresent(ctx, organization.logoStorageId);
     return null;
   },
 });
