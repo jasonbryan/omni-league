@@ -70,9 +70,12 @@ const plainText = (html: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/** From the end of the tag holding `start` to `end`. */
 const between = (html: string, start: string, end: string): string => {
   const at = html.indexOf(start);
-  return at < 0 ? '' : html.slice(at, html.indexOf(end, at));
+  if (at < 0) return '';
+  const content = html.indexOf('>', at) + 1;
+  return html.slice(content, html.indexOf(end, content));
 };
 
 const leagueRows = (html: string): string[] =>
@@ -309,8 +312,8 @@ test.describe('organization filters in the browser', () => {
     await page.goto(`${tenant.path}?gender=coed&format=4v4`);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     await page.getByRole('search', { name: 'Filter leagues' }).getByText('Filters').click();
-    const groups = page.getByRole('search', { name: 'Filter leagues' }).getByRole('group');
-    await expect(groups).toHaveCount(4);
+    const fieldsets = page.getByRole('search', { name: 'Filter leagues' }).locator('fieldset');
+    await expect(fieldsets).toHaveCount(4);
     for (const name of ['Gender', 'Format', 'Level', 'Age group']) {
       await expect(page.getByRole('group', { name })).toBeVisible();
     }
@@ -331,7 +334,7 @@ test.describe('organization filters in the browser', () => {
       await form.getByText("Men's", { exact: true }).click();
       await form.getByRole('button', { name: 'Show leagues' }).click();
       await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
-      await expect(page.getByRole('main').getByRole('heading', { level: 3 })).toHaveText([
+      await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
         "Thursday Men's 4s",
       ]);
       await expect(count(page)).toHaveText('1 of 7 leagues');
