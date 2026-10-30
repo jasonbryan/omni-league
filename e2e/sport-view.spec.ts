@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
+import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { fetchRawHtml } from './support/raw-html';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
@@ -527,4 +529,97 @@ test.describe('the sport view: locations pages', () => {
       'league-10',
     ]);
   });
+});
+
+// Twelve soccer leagues at eight locations: three leagues pages and two locations pages in the soccer view.
+async function pagedSoccer(): Promise<string> {
+  const locations = numberedLocations(8);
+  const tenant = await seedTenant({
+    name: 'E2E Soccer Focus',
+    locations,
+    leagues: Array.from({ length: 12 }, (_, i) => ({
+      name: `Soccer League ${String(i + 1).padStart(2, '0')}`,
+      sport: 'soccer' as const,
+      locations: [locations[i % locations.length].name],
+    })),
+  });
+  return `${tenant.path}/sports/soccer`;
+}
+
+const CONTROLS = {
+  'Leagues pages': { query: 'organizations:listPublicLeagues', firstRow: 'league-6' },
+  'Locations pages': { query: 'organizations:listPublicLocations', firstRow: 'location-6' },
+} as const;
+
+const nextIn = (page: Page, label: string) =>
+  page.getByRole('navigation', { name: label }).getByRole('link', { name: 'Next page' });
+
+test.describe('sport view offline', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  for (const label of Object.keys(CONTROLS) as (keyof typeof CONTROLS)[]) {
+    test(`Next in ${label} pressed by keyboard to a page never viewed moves focus to the not-saved view h1`, async ({
+      page,
+      context,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-mobile',
+        'the offline flows run in chromium-mobile',
+      );
+      await page.goto(await pagedSoccer());
+      await expect(nextIn(page, label)).toBeVisible();
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+
+      await context.setOffline(true);
+      await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+      await nextIn(page, label).focus();
+      await page.keyboard.press('Enter');
+      const notSaved = page.locator('app-not-saved-view');
+      await expect(notSaved).toBeVisible({ timeout: 3_000 });
+      await expect(notSaved.getByRole('heading', { level: 1 })).toBeFocused();
+      await context.setOffline(false);
+    });
+  }
+});
+
+test.describe('sport view: a page change that never answers', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  for (const label of Object.keys(CONTROLS) as (keyof typeof CONTROLS)[]) {
+    test(`Next in ${label} pressed by keyboard moves focus to the server-error view h1 after the wait, then to main when the page arrives`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'browser flows run in chromium-desktop only',
+      );
+      const path = await pagedSoccer();
+      const held = await holdQueries(page, [CONTROLS[label].query], { watchFromStart: false });
+      await page.clock.install();
+      await page.goto(path);
+      await expect(nextIn(page, label)).toBeVisible();
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      held.watchNewSubscriptions();
+      await nextIn(page, label).focus();
+      await page.keyboard.press('Enter');
+      await expect.poll(() => held.isHolding()).toBe(true);
+
+      await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+      const unavailable = page.getByRole('heading', {
+        level: 1,
+        name: 'This page is temporarily unavailable',
+      });
+      await expect(unavailable).toBeFocused();
+      await expect(page.locator('main app-page-load-status [role="status"]')).toHaveText(
+        'This page is temporarily unavailable.',
+      );
+
+      held.release();
+      await expect(unavailable).toHaveCount(0);
+      await expect(page.locator(`#${CONTROLS[label].firstRow}`)).toBeVisible();
+      await expect(page.locator('main[id="main"]')).toBeFocused();
+    });
+  }
 });

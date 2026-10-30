@@ -85,9 +85,10 @@ const rowNames = (harness: RouterTestingHarness, section: string) =>
 const list = (harness: RouterTestingHarness, section: string) =>
   host(harness).querySelector(`#${section} ul`);
 
-function activate(nav: Element | null, name: string): void {
+function activate(nav: Element | null, name: string, { focus = false } = {}): void {
   const link = [...(nav?.querySelectorAll('a') ?? [])].find((a) => text(a) === name);
   expect(link, name).toBeDefined();
+  if (focus) link?.focus();
   link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
 }
 
@@ -340,6 +341,26 @@ describe('a page change on the organization page', () => {
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(
       `${ORG}?leagues=3&locations=2`,
     );
+  });
+});
+
+describe('focus after a page change whose query fails on the organization page', () => {
+  let harness: RouterTestingHarness;
+  beforeEach(async () => {
+    harness = await openWith(open(), pagedResults(PAGED));
+  });
+
+  it.each([
+    ['Leagues pages', LEAGUES],
+    ['Locations pages', LOCATIONS],
+  ])('moves focus from Next in %s to the server-error view h1', async (label, failing) => {
+    activate(control(harness, label), 'Next page', { focus: true });
+    await settle(harness);
+    subscription(failing).fail(new Error('down'));
+    await settle(harness);
+    const heading = host(harness).querySelector('main h1');
+    expect(text(heading)).toBe('This page is temporarily unavailable');
+    expect(document.activeElement).toBe(heading);
   });
 });
 

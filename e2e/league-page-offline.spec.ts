@@ -1,5 +1,7 @@
+import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { screenshot } from './support/screenshot';
 import { numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
 
 test.describe('public league page offline', () => {
@@ -87,14 +89,25 @@ test.describe('public league page offline', () => {
 
     // A page never viewed has no saved copy: as on a fresh load offline, the not-saved view shows,
     // not the previous page's rows under `?page=3`.
-    await pages.getByRole('link', { name: 'Page 3' }).click();
-    await expect(page.locator('app-not-saved-view')).toBeVisible({ timeout: 3_000 });
+    await pages.getByRole('link', { name: 'Page 3' }).focus();
+    await page.keyboard.press('Enter');
+    const notSaved = page.locator('app-not-saved-view');
+    const heading = notSaved.getByRole('heading', { level: 1 });
+    await expect(notSaved).toBeVisible({ timeout: 3_000 });
+    await expect(heading).toBeFocused();
     await expect(rows).toHaveCount(0);
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
     await expect(pages).toHaveCount(0);
     await expect(page.locator('app-not-saved-view a')).toHaveAttribute('href', `${path}?page=3`);
     await dump('offline-page-3-unsaved');
+    await screenshot(page, testInfo, '422-not-saved-heading-focused');
+    await expectAccessible(page);
 
+    await heading.focus();
+    await page.keyboard.press('Tab');
+    await expect(notSaved.getByRole('link', { name: 'Try again' })).toBeFocused();
     await context.setOffline(false);
+    await expect(rows).toHaveText(['Season 02', 'Season 01']);
+    await expect(page.locator('main[id="main"]')).toBeFocused();
   });
 });

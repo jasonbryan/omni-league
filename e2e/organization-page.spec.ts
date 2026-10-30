@@ -1,5 +1,6 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
+import { PAGE_LOAD_WAIT_MS } from '../src/app/public-layout/page-load-wait-ms';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -1240,4 +1241,114 @@ test.describe('organization page: numbered pages in the browser', () => {
       await expectAccessible(page);
     });
   }
+});
+
+const LIST_OF_CONTROL = {
+  'Leagues pages': { query: 'organizations:listPublicLeagues', section: 'leagues' },
+  'Locations pages': { query: 'organizations:listPublicLocations', section: 'locations' },
+} as const;
+
+test.describe('organization page offline', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  for (const label of ['Leagues pages', 'Locations pages'] as const) {
+    test(`Next in ${label} pressed by keyboard to a page never viewed moves focus to the not-saved view h1`, async ({
+      page,
+      context,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-mobile',
+        'the offline flows run in chromium-mobile',
+      );
+      const tenant = await pagedTenant();
+      await page.goto(tenant.path);
+      const control = page.getByRole('navigation', { name: label });
+      await expect(control).toBeVisible();
+      await hydrated(consoleGuard);
+
+      await context.setOffline(true);
+      await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+      await control.getByRole('link', { name: 'Next page' }).focus();
+      await page.keyboard.press('Enter');
+      const notSaved = page.locator('app-not-saved-view');
+      await expect(notSaved).toBeVisible({ timeout: 3_000 });
+      await expect(notSaved.getByRole('heading', { level: 1 })).toBeFocused();
+      await context.setOffline(false);
+    });
+  }
+});
+
+test.describe('organization page: a page change that never answers', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  const unavailable = (page: Page) =>
+    page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' });
+
+  async function holdNextPage(page: Page, label: keyof typeof LIST_OF_CONTROL) {
+    const tenant = await pagedTenant();
+    const held = await holdQueries(page, [LIST_OF_CONTROL[label].query], {
+      watchFromStart: false,
+    });
+    await page.clock.install();
+    await page.goto(tenant.path);
+    await expect(page.getByRole('navigation', { name: label })).toBeVisible();
+    return held;
+  }
+
+  for (const label of ['Leagues pages', 'Locations pages'] as const) {
+    test(`Next in ${label} pressed by keyboard moves focus to the server-error view h1 after the wait, then to main when the page arrives`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+      const held = await holdNextPage(page, label);
+      await hydrated(consoleGuard);
+      held.watchNewSubscriptions();
+      await page
+        .getByRole('navigation', { name: label })
+        .getByRole('link', { name: 'Next page' })
+        .focus();
+      await page.keyboard.press('Enter');
+      await expect.poll(() => held.isHolding()).toBe(true);
+
+      await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+      await expect(unavailable(page)).toBeFocused();
+      await expect(page.locator('main app-page-load-status [role="status"]')).toHaveText(
+        'This page is temporarily unavailable.',
+      );
+      if (label === 'Leagues pages') {
+        await screenshot(page, testInfo, '422-server-error-heading-focused');
+        await expectAccessible(page);
+        await unavailable(page).focus();
+      }
+
+      held.release();
+      const { section } = LIST_OF_CONTROL[label];
+      await expect(page.locator(`#${section} li[id]`).first()).toHaveId(
+        `${section.slice(0, -1)}-6`,
+      );
+      await expect(unavailable(page)).toHaveCount(0);
+      await expect(page.locator('main[id="main"]')).toBeFocused();
+    });
+  }
+
+  test('a mouse click on Next moves focus to the server-error view h1 after the wait', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+    const held = await holdNextPage(page, 'Leagues pages');
+    await hydrated(consoleGuard);
+    held.watchNewSubscriptions();
+    await page
+      .getByRole('navigation', { name: 'Leagues pages' })
+      .getByRole('link', { name: 'Next page' })
+      .click();
+    await expect.poll(() => held.isHolding()).toBe(true);
+
+    await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
+    await expect(unavailable(page)).toBeFocused();
+    held.release();
+  });
 });

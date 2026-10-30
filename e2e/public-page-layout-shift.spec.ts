@@ -183,6 +183,10 @@ test.describe('a hard load of a public page', () => {
     await expect(footer(page)).toBeVisible();
     await expect(announcement).toHaveText('This page is temporarily unavailable.');
     await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', path);
+    // Nothing was pressed, so the view takes no focus and the first Tab still reaches the skip link.
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
 
     held.release();
     await expect(page.getByRole('heading', { level: 1, name: /Alpha League/ })).toBeVisible();
