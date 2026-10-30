@@ -78,7 +78,7 @@ export class MainFocusRecord {
  */
 export function focusWhenReplacing(heading: () => HTMLElement): void {
   const record = inject(MainFocusRecord);
-  const host: HTMLElement = inject(ElementRef).nativeElement;
+  const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   const environment = inject(EnvironmentInjector);
   afterNextRender({
     write: () => {
