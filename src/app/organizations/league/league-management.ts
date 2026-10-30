@@ -32,13 +32,20 @@ import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
-import { publicLeaguePath } from '../public-league/public-league-path';
+import { publicSeasonPath } from '../public-league/public-league-path';
+import { LeagueBreadcrumb } from './league-breadcrumb';
 import { LeagueContext } from './league-context';
 import { LeagueDetailsForm } from './league-details-form';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
 import { SeasonCreateForm } from './season-create-form';
+
+interface PublishedSeason {
+  seasonId: Id<'seasons'>;
+  name: string;
+  slug: string;
+}
 
 /**
  * A draft league has no Publish buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a link to the Leagues page;
@@ -48,6 +55,7 @@ import { SeasonCreateForm } from './season-create-form';
   selector: 'app-league-management',
   imports: [
     AdminAlert,
+    LeagueBreadcrumb,
     LeagueDetailsForm,
     NgIcon,
     PublishSeasonDialog,
@@ -76,7 +84,7 @@ import { SeasonCreateForm } from './season-create-form';
     @if (league(); as league) {
       <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div class="min-w-0">
-          <p class="text-sm font-medium text-muted-foreground">{{ league.organization.name }}</p>
+          <app-league-breadcrumb [league]="league" />
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
             {{ league.name }}
           </h1>
@@ -176,7 +184,7 @@ import { SeasonCreateForm } from './season-create-form';
                 kind="success"
                 [title]="published.name + ' is published.'"
                 description="It’s on the league’s public page now."
-                ><a [routerLink]="publicPath()">View public page</a></app-admin-alert
+                ><a [routerLink]="publishedSeasonPath()">View season page</a></app-admin-alert
               >
             </div>
           }
@@ -372,9 +380,12 @@ export class LeagueManagement {
     () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#create-season`,
   );
 
-  protected readonly publicPath = computed(() =>
-    publicLeaguePath(this.context.orgSlug(), this.context.leagueSlug()),
-  );
+  protected readonly publishedSeasonPath = computed(() => {
+    const published = this.published();
+    return published
+      ? publicSeasonPath(this.context.orgSlug(), this.context.leagueSlug(), published.slug)
+      : null;
+  });
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
   protected readonly detailsPath = computed(
@@ -383,14 +394,16 @@ export class LeagueManagement {
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
-  protected readonly published = signal<{ seasonId: Id<'seasons'>; name: string } | null>(null);
+  protected readonly published = signal<PublishedSeason | null>(null);
+  private publishing: PublishedSeason | null = null;
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
   protected publish(
-    row: { seasonId: Id<'seasons'>; name: string; registrationDeadline: string },
+    row: PublishedSeason & { registrationDeadline: string },
     leagueName: string,
   ): void {
     this.published.set(null);
+    this.publishing = { seasonId: row.seasonId, name: row.name, slug: row.slug };
     this.publishDialog()?.open({
       seasonId: row.seasonId,
       name: row.name,
@@ -402,7 +415,7 @@ export class LeagueManagement {
   /** A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on that row's Publish button. */
   protected publishDismissed(outcome: PublishSeasonOutcome): void {
     if (outcome.published) {
-      this.published.set({ seasonId: outcome.seasonId, name: outcome.name });
+      this.published.set(this.publishing);
       afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
       return;
     }

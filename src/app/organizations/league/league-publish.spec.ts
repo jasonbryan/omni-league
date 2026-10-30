@@ -219,17 +219,30 @@ describe('LeagueManagement: publishing a season', () => {
         'Fall 2027 is published.',
       );
       expect(text(region.querySelector('[data-slot="alert-description"]'))).toBe(
-        'It’s on the league’s public page now. View public page',
+        'It’s on the league’s public page now. View season page',
       );
       const link = region.querySelector('a')!;
-      expect(text(link)).toBe('View public page');
+      expect(text(link)).toBe('View season page');
       expect(link.getAttribute('href')).toBe(
-        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec',
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/fall-2027',
       );
       const list = page.querySelector('#seasons-list')!;
       expect(region.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(document.activeElement).toBe(region);
       expect(page.querySelector('app-league-management')?.hasAttribute('inert')).toBe(false);
+    });
+
+    it('links to the published season even once the list no longer has its row', async () => {
+      await open();
+      await pressPublish(0);
+      dialogButton('Publish season').click();
+      await o.flush();
+      o.convex.calls[0].resolve(null);
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([]);
+      await o.flush();
+      expect(notice()!.querySelector('a')!.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/fall-2027',
+      );
     });
 
     it('the status goes when the next dialog opens, and names the next season', async () => {
