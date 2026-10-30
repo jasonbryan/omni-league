@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { leagueDivisionLabel } from './lib/leagueDivision';
+import { logoUrlField } from './lib/organizationLogo';
 import { leagueLocationNames, leagueRowSeasons } from './lib/publicLeague';
 import { pageOf, PUBLIC_LIST_MAX_ROWS, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import {
@@ -46,7 +47,11 @@ export const leagues = query({
       if (!organization) continue;
       const label = await leagueDivisionLabel(ctx, league);
       rows.push({
-        organization: { name: organization.name, slug: organization.slug },
+        organization: {
+          name: organization.name,
+          slug: organization.slug,
+          ...(await logoUrlField(ctx, organization)),
+        },
         name: league.name,
         slug: league.slug,
         sportName: sportName(league.sport),
@@ -77,14 +82,18 @@ export const organizations = query({
       .take(PUBLIC_LIST_MAX_ROWS);
     const { page, pageCount } = pageOf(listed.length, args.page);
     const start = (page - 1) * PUBLIC_LIST_PAGE_SIZE;
-    const rows = listed.slice(start, start + PUBLIC_LIST_PAGE_SIZE).map((organization) => ({
-      name: organization.name,
-      slug: organization.slug,
-      sportNames: (Object.keys(SPORT_NAMES) as Sport[])
-        .filter((sport) => (organization.sportLeagueCounts?.[sport] ?? 0) > 0)
-        .map(sportName),
-      ...(organization.cityState !== undefined && { cityState: organization.cityState }),
-    }));
+    const rows = [];
+    for (const organization of listed.slice(start, start + PUBLIC_LIST_PAGE_SIZE)) {
+      rows.push({
+        name: organization.name,
+        slug: organization.slug,
+        sportNames: (Object.keys(SPORT_NAMES) as Sport[])
+          .filter((sport) => (organization.sportLeagueCounts?.[sport] ?? 0) > 0)
+          .map(sportName),
+        ...(organization.cityState !== undefined && { cityState: organization.cityState }),
+        ...(await logoUrlField(ctx, organization)),
+      });
+    }
     return { rows, page, pageCount, total: listed.length };
   },
 });

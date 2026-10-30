@@ -181,6 +181,25 @@ describe('FindPage results', () => {
     expect(saturday.querySelector('[data-slot="badge"]')).toBeNull();
   });
 
+  it('shows the organization logo in the mark of a row whose organization has one, and the initials for the others', async () => {
+    const logoUrl = 'https://example.convex.cloud/api/storage/gulf-logo';
+    subscription().emit({
+      more: false,
+      rows: [
+        { ...SUNDAY_4S_ROW, organization: { ...SUNDAY_4S_ROW.organization, logoUrl } },
+        SATURDAY_6S_ROW,
+      ],
+    });
+    await settle(harness);
+    const [sunday, saturday] = [...results(harness)!.querySelectorAll('ul > li')];
+    const image = sunday.querySelector('app-organization-mark img');
+    expect(image?.getAttribute('src')).toBe(logoUrl);
+    expect(image?.getAttribute('alt')).toBe('');
+    expect(text(sunday.querySelector('app-organization-mark'))).toBe('');
+    expect(saturday.querySelector('app-organization-mark img')).toBeNull();
+    expect(text(saturday.querySelector('app-organization-mark'))).toBe('LS');
+  });
+
   it('marks the view noindex with the canonical /leagues and a title naming the search', () => {
     expect(robots()).toBe('noindex');
     expect(canonical()).toBe(`${location.origin}/leagues`);

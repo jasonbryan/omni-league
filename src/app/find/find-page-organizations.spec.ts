@@ -10,7 +10,13 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { FindPage } from './find-page';
 import { COED_RESULTS } from './testing/find-data';
-import { NO_ORGANIZATIONS, ORGANIZATIONS, organizationsPage } from './testing/organizations-data';
+import {
+  GULF_ROW,
+  NO_CITY_ROW,
+  NO_ORGANIZATIONS,
+  ORGANIZATIONS,
+  organizationsPage,
+} from './testing/organizations-data';
 
 const ORGANIZATIONS_QUERY = 'search:organizations';
 
@@ -137,6 +143,18 @@ describe('FindPage organizations: the list', () => {
       'GC',
       'SV',
     ]);
+  });
+
+  it('shows the logo of an organization that has one in its mark, and the initials for the others', async () => {
+    const logoUrl = 'https://example.convex.cloud/api/storage/gulf-logo';
+    await emit(harness, { ...ORGANIZATIONS, rows: [{ ...GULF_ROW, logoUrl }, NO_CITY_ROW] });
+    const [gulf, saguaro] = [...section(harness)!.querySelectorAll('ul > li')];
+    const image = gulf.querySelector('app-organization-mark img');
+    expect(image?.getAttribute('src')).toBe(logoUrl);
+    expect(image?.getAttribute('alt')).toBe('');
+    expect(text(gulf.querySelector('app-organization-mark'))).toBe('');
+    expect(saguaro.querySelector('app-organization-mark img')).toBeNull();
+    expect(text(saguaro.querySelector('app-organization-mark'))).toBe('SV');
   });
 
   it('shows no page control for one page', () => {
