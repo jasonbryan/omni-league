@@ -3,6 +3,7 @@ import { ConvexError } from 'convex/values';
 import { afterEach, vi } from 'vitest';
 import { LOGO_HINT } from '../../../../convex/lib/logoFile';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -290,6 +291,16 @@ describe('AdminDetails: the Logo section', () => {
       expect(tokens(remove.className)).toEqual(tokens(DESTRUCTIVE_BUTTON));
       expect(document.activeElement).toBe(cancel);
       expect(o.convex.calls).toEqual([]);
+    });
+
+    describe('in a browser with the popover API', () => {
+      beforeEach(stubPopoverApi);
+      afterEach(removePopoverApi);
+
+      it('opens in the overlay container, not the popover top layer', async () => {
+        await pressRemove();
+        expect(overlayPanes()).toEqual([{ inContainer: true, inPopover: false }]);
+      });
     });
 
     it('makes the page behind inert while it is open', async () => {
