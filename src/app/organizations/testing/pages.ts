@@ -1,3 +1,4 @@
+import { pageOf, PUBLIC_LIST_PAGE_SIZE } from '../../../../convex/lib/publicList';
 import type { PublicOrganizationPage } from '../organization-path';
 
 export const GULF_COAST: PublicOrganizationPage = {
@@ -133,3 +134,83 @@ export const PORT_ARANSAS: PublicOrganizationPage = {
   locations: [],
   leagues: [],
 };
+
+/** One page of a list as `listPublicLeagues` and `listPublicLocations` return it. */
+export function listPage<T>(rows: readonly T[], requested: number, total = rows.length) {
+  const { page, pageCount } = pageOf(total, requested);
+  return {
+    rows: rows.slice((page - 1) * PUBLIC_LIST_PAGE_SIZE, page * PUBLIC_LIST_PAGE_SIZE),
+    page,
+    pageCount,
+    total,
+  };
+}
+
+const SOCCER_LEAGUE_COUNT = 12;
+const SOCCER_LOCATION_COUNT = 8;
+const twoDigits = (n: number) => String(n).padStart(2, '0');
+
+/** 26 leagues and 14 locations, as Confluence Sport & Social: soccer has 12 leagues and 8 locations, softball the rest. */
+export const PAGED: PublicOrganizationPage = {
+  name: 'Confluence Sport & Social',
+  slug: 'confluence-sport-social',
+  leagueCount: 26,
+  locationCount: 14,
+  sportCount: 2,
+  sports: [
+    {
+      key: 'soccer',
+      segment: 'soccer',
+      name: 'Soccer',
+      leagueCount: SOCCER_LEAGUE_COUNT,
+      locationCount: SOCCER_LOCATION_COUNT,
+    },
+    { key: 'softball', segment: 'softball', name: 'Softball', leagueCount: 14, locationCount: 6 },
+  ],
+  leagues: Array.from({ length: 26 }, (_, i) => ({
+    name: `League ${twoDigits(i + 1)}`,
+    slug: `league-${twoDigits(i + 1)}`,
+    sportName: i < SOCCER_LEAGUE_COUNT ? 'Soccer' : 'Softball',
+    locationNames: [],
+    seasons: [],
+  })),
+  locations: Array.from({ length: 14 }, (_, i) => ({
+    name: `Location ${twoDigits(i + 1)}`,
+    address: `${i + 1} Test Road, Sacramento, CA 95814`,
+    sportNames: [i < SOCCER_LOCATION_COUNT ? 'Soccer' : 'Softball'],
+  })),
+};
+
+/** The four results for one URL: the organization page, or the sport view of `segment`. */
+export function pagedResults(
+  page: PublicOrganizationPage,
+  pages: { leagues?: number; locations?: number } = {},
+  segment?: string,
+): Record<string, unknown> {
+  const { leagues, locations, openSeasons = [], ...header } = page;
+  const sport =
+    segment === undefined ? undefined : header.sports.find((entry) => entry.segment === segment);
+  if (segment !== undefined && !sport) throw new Error(`No sport ${segment}`);
+  const shownLeagues = sport
+    ? leagues.filter((league) => league.sportName === sport.name)
+    : leagues;
+  const shownLocations = sport
+    ? locations.filter((location) => location.sportNames?.includes(sport.name))
+    : locations;
+  return {
+    'organizations:getPublicPage': header,
+    'organizations:listPublicLeagues': listPage(
+      shownLeagues,
+      pages.leagues ?? 1,
+      sport?.leagueCount ?? header.leagueCount,
+    ),
+    'organizations:listPublicLocations': listPage(
+      shownLocations,
+      pages.locations ?? 1,
+      sport?.locationCount ?? header.locationCount,
+    ),
+    'seasons:listOpenForOrganization': sport
+      ? openSeasons.filter((season) => season.league.sportName === sport.name)
+      : openSeasons,
+  };
+}

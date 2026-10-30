@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  linkedSignal,
+  type Signal,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
@@ -16,16 +23,38 @@ import { ServerErrorView } from '../server-error/server-error-view';
 import { PageLoadStatus } from '../public-layout/page-load-status';
 import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
-import { OrganizationOverview } from './organization-overview';
+import { OrganizationOverview, type ListPaging } from './organization-overview';
 import { OrganizationSkeleton } from './organization-skeleton';
-import { organizationPath, sportViewCanonicalPath } from './organization-path';
+import { listPagesPath } from './organization-path';
 import { openSeasonsBySoonestDeadline } from './season-status';
 
 type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagues>;
+type PublicLocations = FunctionReturnType<typeof api.organizations.listPublicLocations>;
+
+/** Offline, a page with no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL, and the load would never end. */
+function holdPreviousPage<T>(
+  key: () => string,
+  value: () => T | undefined,
+  online: () => boolean,
+): Signal<{ key: string; value: T } | undefined> {
+  return linkedSignal<
+    { key: string; value: T | undefined; online: boolean },
+    { key: string; value: T } | undefined
+  >({
+    source: () => ({ key: key(), value: value(), online: online() }),
+    computation: (current, previous) => {
+      if (current.value !== undefined) return { key: current.key, value: current.value };
+      return current.online && previous?.value?.key === current.key ? previous.value : undefined;
+    },
+  });
+}
+
+function pagingOf(list: { page: number; pageCount: number; total: number }): ListPaging {
+  return { page: list.page, pageCount: list.pageCount, total: list.total };
+}
 
 /**
- * The organization page asks for page 1 of each list and nothing from the URL, so the server and the browser use the same `TransferState` keys and the server HTML holds no query string.
- * The sport view also reads `?page=N` with `parseListPage`, from every value of the parameter, so the HTML holds only the page number the query result gives.
+ * Each page is read with `parseListPage` from every value of its parameter, so the HTML holds only the page numbers the query results give.
  * A segment that names no sport asks no query, because the queries validate their `sport` argument and would fail with a 503 instead of a 404.
  */
 @Component({
@@ -42,14 +71,16 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
-      @if (organization(); as organization) {
+      @if (shownOrganization(); as organization) {
         <app-organization-overview
           [page]="organization"
           [leagues]="leagueRows()"
           [locations]="locationRows()"
           [sport]="sport()"
           [leaguePaging]="leaguePaging()"
-          [busy]="busy()"
+          [locationPaging]="locationPaging()"
+          [leaguesBusy]="leaguesBusy()"
+          [locationsBusy]="locationsBusy()"
           [savedAt]="savedAt()"
           [openSeasons]="openSeasons()"
           [now]="now()"
@@ -58,9 +89,9 @@ type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagu
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
-        <app-server-error-view [retryHref]="path()" />
+        <app-server-error-view [retryHref]="requestedPagesPath()" />
       } @else if (state() === 'not-saved') {
-        <app-not-saved-view [retryHref]="path()" />
+        <app-not-saved-view [retryHref]="requestedPagesPath()" />
       } @else {
         <app-organization-skeleton />
       }
@@ -76,24 +107,32 @@ export class OrganizationPage {
     { requireSync: true },
   );
   private readonly segment = toSignal(
-    this.route.paramMap.pipe(map((params) => params.get('sport'))),
+    this.route.paramMap.pipe(map((params) => params.get('sport') ?? undefined)),
     { requireSync: true },
   );
-  private readonly requestedPage = toSignal(
-    this.route.queryParamMap.pipe(map((params) => parseListPage(params.getAll('page')))),
+  private readonly requestedPages = toSignal(
+    this.route.queryParamMap.pipe(
+      map((params) => ({
+        leagues: parseListPage(params.getAll('leagues')),
+        page: parseListPage(params.getAll('page')),
+        locations: parseListPage(params.getAll('locations')),
+      })),
+    ),
     { requireSync: true },
   );
 
   private readonly sportKey = computed(() => {
     const segment = this.segment();
-    return segment === null ? undefined : sportFromSegment(segment);
+    return segment === undefined ? undefined : sportFromSegment(segment);
   });
   private readonly unknownSport = computed(
-    () => this.segment() !== null && this.sportKey() === undefined,
+    () => this.segment() !== undefined && this.sportKey() === undefined,
   );
-  private readonly leaguesPage = computed(() =>
-    this.segment() === null ? 1 : this.requestedPage(),
-  );
+  private readonly leaguesPage = computed(() => {
+    const pages = this.requestedPages();
+    return this.segment() === undefined ? pages.leagues : pages.page;
+  });
+  private readonly locationsPage = computed(() => this.requestedPages().locations);
   private readonly listArgs = computed(() => {
     const sport = this.sportKey();
     return sport ? { sport } : {};
@@ -108,7 +147,9 @@ export class OrganizationPage {
       : { slug: this.slug(), page: this.leaguesPage(), ...this.listArgs() },
   );
   private readonly locations = injectQuery(api.organizations.listPublicLocations, () =>
-    this.unknownSport() ? skipToken : { slug: this.slug(), page: 1, ...this.listArgs() },
+    this.unknownSport()
+      ? skipToken
+      : { slug: this.slug(), page: this.locationsPage(), ...this.listArgs() },
   );
   private readonly openSeasonRows = injectQuery(api.seasons.listOpenForOrganization, () =>
     this.unknownSport() ? skipToken : { orgSlug: this.slug(), ...this.listArgs() },
@@ -120,32 +161,24 @@ export class OrganizationPage {
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 
-  /**
-   * Online, the previous page of the same list stays while the next one loads.
-   * Offline, a page with no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL, and the load would never end.
-   * Another sport's leagues are never kept.
-   */
-  private readonly shownLeagues = linkedSignal<
-    { key: string; value: PublicLeagues | undefined; online: boolean },
-    { key: string; value: PublicLeagues } | undefined
-  >({
-    source: () => ({
-      key: `${this.slug()}/${this.segment()}`,
-      value: this.leagues.value(),
-      online: this.online(),
-    }),
-    computation: ({ key, value, online }, previous) => {
-      if (value) return { key, value };
-      return online && previous?.value?.key === key ? previous.value : undefined;
-    },
-  });
+  private readonly listKey = computed(() => `${this.slug()}/${this.segment()}`);
+  private readonly shownLeagues = holdPreviousPage<PublicLeagues>(
+    this.listKey,
+    this.leagues.value,
+    this.online,
+  );
+  private readonly shownLocations = holdPreviousPage<PublicLocations>(
+    this.listKey,
+    this.locations.value,
+    this.online,
+  );
 
-  protected readonly path = computed(() => {
-    const segment = this.segment();
-    return segment === null
-      ? organizationPath(this.slug())
-      : sportViewCanonicalPath(this.slug(), segment, this.leaguesPage());
-  });
+  protected readonly requestedPagesPath = computed(() =>
+    listPagesPath(this.slug(), this.segment(), {
+      leagues: this.leaguesPage(),
+      locations: this.locationsPage(),
+    }),
+  );
 
   private readonly failed = computed(
     () =>
@@ -164,7 +197,7 @@ export class OrganizationPage {
   );
 
   protected readonly leagueRows = computed(() => this.shownLeagues()?.value.rows);
-  protected readonly locationRows = computed(() => this.locations.value()?.rows);
+  protected readonly locationRows = computed(() => this.shownLocations()?.value.rows);
 
   // The query reads no clock, so which seasons are open is decided here, at the server's request time or the browser's clock.
   protected readonly openSeasons = computed(() => {
@@ -183,12 +216,18 @@ export class OrganizationPage {
 
   protected readonly leaguePaging = computed(() => {
     const leagues = this.shownLeagues()?.value;
-    if (!leagues || !this.sport()) return undefined;
-    return { page: leagues.page, pageCount: leagues.pageCount, total: leagues.total };
+    return leagues && pagingOf(leagues);
+  });
+  protected readonly locationPaging = computed(() => {
+    const locations = this.shownLocations()?.value;
+    return locations && pagingOf(locations);
   });
 
-  protected readonly busy = computed(
+  protected readonly leaguesBusy = computed(
     () => this.shownLeagues() !== undefined && this.leagues.value() === undefined,
+  );
+  protected readonly locationsBusy = computed(
+    () => this.shownLocations() !== undefined && this.locations.value() === undefined,
   );
 
   protected readonly savedAt = computed(() => {
@@ -213,27 +252,39 @@ export class OrganizationPage {
     return 'loading';
   });
 
-  private readonly waitedOut = injectPageLoadWait(
-    () => this.phase() === 'loading',
-    () => this.path(),
+  private readonly waiting = computed(
+    () =>
+      this.phase() === 'loading' ||
+      (this.phase() === 'page' && (this.leaguesBusy() || this.locationsBusy())),
   );
-  protected readonly stalled = computed(() => this.phase() === 'loading' && this.waitedOut());
+  private readonly waitedOut = injectPageLoadWait(this.waiting, this.requestedPagesPath);
+  protected readonly stalled = computed(() => this.waiting() && this.waitedOut());
 
   protected readonly state = computed(() => (this.stalled() ? 'error' : this.phase()));
 
+  protected readonly shownOrganization = computed(() =>
+    this.state() === 'page' ? this.organization() : undefined,
+  );
+
   constructor() {
     bindPageMeta(() => {
-      const page = this.organization();
-      if (!page || !this.leagueRows() || !this.locationRows()) return null;
+      const page = this.shownOrganization();
+      const leagues = this.leaguePaging();
+      const locations = this.locationPaging();
+      if (!page || !leagues || !locations) return null;
       const sport = this.sport();
       const inCity = page.cityState === undefined ? '' : ` in ${page.cityState}`;
+      const path = listPagesPath(page.slug, sport?.segment, {
+        leagues: leagues.page,
+        locations: locations.page,
+      });
       if (!sport) {
         return {
           title: `${page.name} | Omni League`,
           ogTitle: page.name,
           ogDescription: `Leagues and locations of ${page.name} on Omni League${inCity}.`,
           ogType: 'website',
-          path: organizationPath(page.slug),
+          path,
         };
       }
       return {
@@ -241,7 +292,7 @@ export class OrganizationPage {
         ogTitle: `${sport.name} | ${page.name}`,
         ogDescription: `${sport.name} leagues and locations of ${page.name} on Omni League${inCity}.`,
         ogType: 'website',
-        path: sportViewCanonicalPath(page.slug, sport.segment, this.leaguePaging()?.page ?? 1),
+        path,
       };
     });
   }

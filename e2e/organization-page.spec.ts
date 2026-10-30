@@ -964,3 +964,280 @@ test.describe('organization page: Registration open', () => {
     await expect(page.locator('#registration')).toBeVisible();
   });
 });
+
+const twoDigits = (n: number) => String(n).padStart(2, '0');
+
+/** 26 leagues and 14 locations by default, as Confluence Sport & Social in `seed:demo`. */
+function pagedTenant(leagueCount = 26, locationCount = 14): Promise<Tenant> {
+  const locations = numberedLocations(locationCount);
+  const sports = ['beachVolleyball', 'soccer', 'softball'] as const;
+  return seedTenant({
+    name: 'E2E Pages',
+    locations,
+    leagues: Array.from({ length: leagueCount }, (_, i) => ({
+      name: `League ${twoDigits(i + 1)}`,
+      sport: sports[i % sports.length],
+      locations: [locations[i % locations.length].name],
+    })),
+  });
+}
+
+const decoded = (value: string) => value.replaceAll('&amp;', '&');
+
+const textOfHtml = (html: string) =>
+  decoded(html.replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+
+function rowIdsOf(html: string, kind: 'league' | 'location'): string[] {
+  return [...html.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
+}
+
+function controlOf(html: string, label: string): string | undefined {
+  return new RegExp(`<nav\\b[^>]*aria-label="${label}"[^>]*>([\\s\\S]*?)</nav>`).exec(html)?.[1];
+}
+
+interface ControlLink {
+  text: string;
+  href: string | undefined;
+  current: boolean;
+}
+
+function linksOf(nav: string | undefined): ControlLink[] {
+  return [...(nav ?? '').matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attrs, inner]) => {
+    const href = /\bhref="([^"]*)"/.exec(attrs)?.[1];
+    const url = href === undefined ? undefined : new URL(decoded(href), ORIGIN);
+    return {
+      text: textOfHtml(inner),
+      href: url && `${url.pathname}${url.search}${url.hash}`,
+      current: /\baria-current="page"/.test(attrs),
+    };
+  });
+}
+
+function disabledOf(nav: string | undefined): string[] {
+  return (nav ?? '')
+    .split('aria-disabled="true"')
+    .slice(1)
+    .map((part) => textOfHtml(part.slice(part.indexOf('>') + 1).split('</li>')[0]));
+}
+
+const rangeOf = (nav: string | undefined) =>
+  textOfHtml(/<p\b[^>]*>([\s\S]*?)<\/p>/.exec(nav ?? '')?.[1] ?? '');
+
+const rowIds = (kind: 'league' | 'location', from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
+
+const rowNames = (noun: string, from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => `${noun} ${twoDigits(from + i)}`);
+
+test.describe('organization page: numbered pages, raw server HTML', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    '?leagues=3: leagues 11 to 15, locations 1 to 5, the range, page 3 current, its links, and its canonical',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await pagedTenant();
+      const { status, headers, html } = await fetchRawHtml(request, `${tenant.path}?leagues=3`);
+      expect(status).toBe(200);
+      expect(headers['cache-control']?.replace(/\s+/g, '')).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(headers['location']).toBeUndefined();
+      expect(rowIdsOf(html, 'league')).toEqual(rowIds('league', 11, 15));
+      expect(rowIdsOf(html, 'location')).toEqual(rowIds('location', 1, 5));
+
+      const leagues = controlOf(html, 'Leagues pages');
+      expect(rangeOf(leagues)).toBe('11–15 of 26 leagues');
+      const links = linksOf(leagues);
+      expect(links.filter((link) => link.current).map((link) => link.text)).toEqual(['Page 3']);
+      const hrefOf = (name: string) => links.find((link) => link.text === name)?.href;
+      expect(hrefOf('Previous page')).toBe(`${tenant.path}?leagues=2#leagues`);
+      expect(hrefOf('Next page')).toBe(`${tenant.path}?leagues=4#leagues`);
+      expect(hrefOf('Page 1')).toBe(`${tenant.path}#leagues`);
+
+      const canonical = `${ORIGIN}${tenant.path}?leagues=3`;
+      expect(canonicalHrefs(html).map(decoded)).toEqual([canonical]);
+      expect(decoded(metaContent(html, 'og:url') ?? '')).toBe(canonical);
+    },
+  );
+
+  test(
+    '?leagues=6&locations=3: the last page of each list, Next not a link, and locations links that keep leagues=6',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await pagedTenant();
+      const { status, html } = await fetchRawHtml(request, `${tenant.path}?leagues=6&locations=3`);
+      expect(status).toBe(200);
+      expect(rowIdsOf(html, 'league')).toEqual(['league-26']);
+      expect(rowIdsOf(html, 'location')).toEqual(rowIds('location', 11, 14));
+      for (const label of ['Leagues pages', 'Locations pages']) {
+        const nav = controlOf(html, label);
+        expect(disabledOf(nav), label).toEqual(['Next page']);
+        expect(
+          linksOf(nav).map((link) => link.text),
+          label,
+        ).not.toContain('Next page');
+      }
+      const locations = linksOf(controlOf(html, 'Locations pages'));
+      expect(locations.find((link) => link.text === 'Previous page')?.href).toBe(
+        `${tenant.path}?leagues=6&locations=2#locations`,
+      );
+      for (const link of locations) expect(link.href, link.text).toContain('leagues=6');
+
+      const reordered = await fetchRawHtml(
+        request,
+        `${tenant.path}?locations=3&leagues=6&utm_source=x`,
+      );
+      expect(canonicalHrefs(reordered.html).map(decoded)).toEqual([
+        `${ORIGIN}${tenant.path}?leagues=6&locations=3`,
+      ]);
+      expect(reordered.html).not.toContain('utm_source');
+    },
+  );
+
+  test(
+    'no control for 5 leagues and 5 locations; 2 pages each for 6',
+    RAW_HTTP,
+    async ({ request }) => {
+      const five = await pagedTenant(5, 5);
+      const { html: fiveHtml } = await fetchRawHtml(request, five.path);
+      expect(rowIdsOf(fiveHtml, 'league')).toHaveLength(5);
+      expect(rowIdsOf(fiveHtml, 'location')).toHaveLength(5);
+      expect(controlOf(fiveHtml, 'Leagues pages')).toBeUndefined();
+      expect(controlOf(fiveHtml, 'Locations pages')).toBeUndefined();
+
+      const six = await pagedTenant(6, 6);
+      const { html: sixHtml } = await fetchRawHtml(request, six.path);
+      for (const label of ['Leagues pages', 'Locations pages']) {
+        const pages = linksOf(controlOf(sixHtml, label))
+          .map((link) => link.text)
+          .filter((text) => text.startsWith('Page '));
+        expect(pages, label).toEqual(['Page 1', 'Page 2']);
+      }
+    },
+  );
+});
+
+test.describe('organization page: numbered pages in the browser', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test('Next by keyboard changes one list, keeps the other, and focuses its heading; Back restores page 1', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+    const tenant = await pagedTenant();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await page.evaluate(() => {
+      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+    });
+    const hero = page.getByRole('main').getByText('· 26 leagues at 14 locations');
+    await expect(hero).toBeVisible();
+    const leagues = page.locator('#leagues li[id] h3');
+    const locations = page.locator('#locations li[id] h3');
+    const next = (label: string) =>
+      page.getByRole('navigation', { name: label }).getByRole('link', { name: 'Next page' });
+
+    await next('Leagues pages').focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?leagues=2#leagues`);
+    await expect(leagues).toHaveText(rowNames('League', 6, 10));
+    await expect(page.locator('#leagues-heading')).toBeFocused();
+    await expect(locations).toHaveText(rowNames('Location', 1, 5));
+    await expect(hero).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+    await expect(leagues).toHaveText(rowNames('League', 1, 5));
+
+    await page.goForward();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?leagues=2#leagues`);
+    await expect(leagues).toHaveText(rowNames('League', 6, 10));
+    await next('Locations pages').focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?leagues=2&locations=2#locations`);
+    await expect(locations).toHaveText(rowNames('Location', 6, 10));
+    await expect(leagues).toHaveText(rowNames('League', 6, 10));
+    await expect(page.locator('#locations-heading')).toBeFocused();
+    expect(
+      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+    ).toBe(true);
+  });
+
+  test('a league added into page 1 shifts page 2 in place, and pages 1 to 6 then show all 27 leagues once', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'browser flows run in chromium-desktop only');
+    const tenant = await pagedTenant();
+    await page.goto(`${tenant.path}?leagues=2`);
+    await hydrated(consoleGuard);
+    const leagues = page.locator('#leagues li[id] h3');
+    await expect(leagues).toHaveText(rowNames('League', 6, 10));
+    await page.evaluate(() => {
+      const watch = window as Window & { e2eNoReload?: boolean; e2eFocused?: Element | null };
+      watch.e2eNoReload = true;
+      watch.e2eFocused = document.activeElement;
+    });
+
+    await convexRun('testing:addLeague', {
+      organizationSlug: tenant.slug,
+      name: 'Aardvark League',
+      sport: 'soccer',
+      locations: ['Location 01'],
+    });
+
+    await expect(leagues).toHaveText(rowNames('League', 5, 9));
+    await expect(
+      page.getByRole('navigation', { name: 'Leagues pages' }).getByText('6–10 of 27'),
+    ).toBeVisible();
+    await expect(page.getByRole('main').getByText('· 27 leagues at 14 locations')).toBeVisible();
+    expect(
+      await page.evaluate(() => {
+        const watch = window as Window & { e2eNoReload?: boolean; e2eFocused?: Element | null };
+        return watch.e2eNoReload === true && watch.e2eFocused === document.activeElement;
+      }),
+    ).toBe(true);
+
+    const seen: string[] = [];
+    for (let n = 1; n <= 6; n++) {
+      await page.goto(`${tenant.path}?leagues=${n}`);
+      seen.push(...(await leagues.allTextContents()).map((name) => name.trim()));
+    }
+    expect(seen).toHaveLength(27);
+    expect(new Set(seen).size).toBe(27);
+    expect(seen).toContain('Aardvark League');
+  });
+
+  test('nothing scrolls sideways at 320px on ?leagues=3&locations=2', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), 'the phone layout runs in chromium-mobile');
+    const tenant = await pagedTenant();
+    await page.goto(`${tenant.path}?leagues=3&locations=2`);
+    await hydrated(consoleGuard);
+    await page.setViewportSize({ width: 320, height: 800 });
+    await expect(page.getByRole('navigation', { name: 'Leagues pages' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+  });
+
+  for (const [label, query] of [
+    ['page 1', ''],
+    ['a middle page', '?leagues=3&locations=2'],
+    ['the last pages', '?leagues=6&locations=3'],
+  ]) {
+    test(`passes the axe helper on ${label} of both lists`, async ({ page, consoleGuard }) => {
+      const tenant = await pagedTenant();
+      await page.goto(`${tenant.path}${query}`);
+      await expect(page.getByRole('navigation', { name: 'Leagues pages' })).toBeVisible();
+      await hydrated(consoleGuard);
+      await expectAccessible(page);
+    });
+  }
+});

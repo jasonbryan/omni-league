@@ -6,7 +6,7 @@ import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
-import { seedTenant, type LeagueSeed, type Tenant } from './support/tenant';
+import { numberedLocations, seedTenant, type LeagueSeed, type Tenant } from './support/tenant';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const ORIGIN = new URL(baseURL).origin;
@@ -429,3 +429,102 @@ async function expectNoSidewaysScroll(page: Page): Promise<void> {
   }));
   expect(widths.scroll).toBeLessThanOrEqual(widths.client);
 }
+
+test.describe('the sport view: locations pages', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  async function twelveSoccer(): Promise<Tenant> {
+    const locations = numberedLocations(8);
+    return seedTenant({
+      name: 'E2E Soccer Pages',
+      locations,
+      leagues: Array.from({ length: 12 }, (_, i) => ({
+        name: `Soccer League ${String(i + 1).padStart(2, '0')}`,
+        sport: 'soccer' as const,
+        locations: [locations[i % locations.length].name],
+      })),
+    });
+  }
+
+  const decoded = (value: string) => value.replaceAll('&amp;', '&');
+  const rowIdsOf = (html: string, kind: 'league' | 'location') =>
+    [...html.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
+  const controlOf = (html: string, label: string) =>
+    new RegExp(`<nav\\b[^>]*aria-label="${label}"[^>]*>([\\s\\S]*?)</nav>`).exec(html)?.[1] ?? '';
+  const linksOf = (nav: string) =>
+    [...nav.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attrs, inner]) => {
+      const url = new URL(decoded(/\bhref="([^"]*)"/.exec(attrs)?.[1] ?? ''), ORIGIN);
+      return {
+        text: textOf(inner),
+        href: `${url.pathname}${url.search}${url.hash}`,
+        current: /\baria-current="page"/.test(attrs),
+      };
+    });
+
+  test(
+    '?locations=2 holds locations 6 to 8 with the range, page 2 current, and its canonical',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await twelveSoccer();
+      const path = `${tenant.path}/sports/soccer`;
+      const { status, headers, html } = await fetchRawHtml(request, `${path}?locations=2`);
+      expect(status).toBe(200);
+      expect(headers['cache-control']?.replace(/\s+/g, '')).toBe(
+        PUBLIC_PAGE_CACHE.replace(/\s+/g, ''),
+      );
+      expect(rowIdsOf(html, 'location')).toEqual(['location-6', 'location-7', 'location-8']);
+      const nav = controlOf(html, 'Locations pages');
+      expect(textOf(/<p\b[^>]*>([\s\S]*?)<\/p>/.exec(nav)?.[1] ?? '')).toBe('6–8 of 8 locations');
+      expect(
+        linksOf(nav)
+          .filter((link) => link.current)
+          .map((link) => link.text),
+      ).toEqual(['Page 2']);
+      const canonical = `${ORIGIN}${path}?locations=2`;
+      expect(canonicalHrefs(html).map(decoded)).toEqual([canonical]);
+      expect(decoded(metaContent(html, 'og:url') ?? '')).toBe(canonical);
+    },
+  );
+
+  test(
+    '?page=2&locations=2: leagues 6 to 10, and each control keeps the other list on its page',
+    RAW_HTTP,
+    async ({ request }) => {
+      const tenant = await twelveSoccer();
+      const path = `${tenant.path}/sports/soccer`;
+      const { status, html } = await fetchRawHtml(request, `${path}?page=2&locations=2`);
+      expect(status).toBe(200);
+      expect(rowIdsOf(html, 'league')).toEqual([
+        'league-6',
+        'league-7',
+        'league-8',
+        'league-9',
+        'league-10',
+      ]);
+      expect(rowIdsOf(html, 'location')).toEqual(['location-6', 'location-7', 'location-8']);
+      const leagues = linksOf(controlOf(html, 'Leagues pages'));
+      expect(leagues.find((link) => link.text === 'Next page')?.href).toBe(
+        `${path}?page=3&locations=2#leagues`,
+      );
+      for (const link of leagues) expect(link.href, link.text).toContain('locations=2');
+      const locations = linksOf(controlOf(html, 'Locations pages'));
+      expect(locations.find((link) => link.text === 'Previous page')?.href).toBe(
+        `${path}?page=2#locations`,
+      );
+      for (const link of locations) expect(link.href, link.text).toContain('page=2');
+      expect(canonicalHrefs(html).map(decoded)).toEqual([`${ORIGIN}${path}?page=2&locations=2`]);
+    },
+  );
+
+  test('?page=2 numbers the leagues 6 to 10', RAW_HTTP, async ({ request }) => {
+    const tenant = await twelveSoccer();
+    const { html } = await fetchRawHtml(request, `${tenant.path}/sports/soccer?page=2`);
+    expect(rowIdsOf(html, 'league')).toEqual([
+      'league-6',
+      'league-7',
+      'league-8',
+      'league-9',
+      'league-10',
+    ]);
+  });
+});

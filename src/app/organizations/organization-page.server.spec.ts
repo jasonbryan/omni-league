@@ -21,7 +21,14 @@ import {
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { provideSpartanHlm } from '../ui/utils';
-import { GULF_COAST, PORT_ARANSAS, queryResults, sportQueryResults } from './testing/pages';
+import {
+  GULF_COAST,
+  PAGED,
+  PORT_ARANSAS,
+  pagedResults,
+  queryResults,
+  sportQueryResults,
+} from './testing/pages';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -282,7 +289,7 @@ describe('OrganizationPage server render', () => {
     );
     expect(text(body.querySelector('#leagues-heading')?.nextElementSibling)).toBe('13 leagues');
     expect(
-      body.querySelectorAll('main section[aria-labelledby="leagues-heading"] li'),
+      body.querySelectorAll('main section[aria-labelledby="leagues-heading"] li[id]'),
     ).toHaveLength(5);
   });
 
@@ -586,5 +593,102 @@ describe('sport view server render', () => {
       expect(responseInit.status).toBe(503);
       expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
     });
+  }
+});
+
+describe('numbered pages on the server', () => {
+  const ORG = `/organizations/${PAGED.slug}`;
+  const paged =
+    (pages: { leagues?: number; locations?: number }, segment?: string) =>
+    (name: string, args: unknown) => {
+      const page = (args as { page?: number }).page ?? 1;
+      const results = pagedResults(
+        PAGED,
+        name === 'organizations:listPublicLocations'
+          ? { ...pages, locations: page }
+          : { ...pages, leagues: page },
+        segment,
+      );
+      return Promise.resolve(results[name]);
+    };
+
+  it('renders the pages the URL asks for, with ids across pages, page links, and the canonical', async () => {
+    const { html, body, head, responseInit, queries } = await render(
+      `${ORG}?leagues=3&locations=2&utm_source=x`,
+      paged({}),
+    );
+    expect(responseInit.status).toBeUndefined();
+    expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
+    expect(queries.find((q) => q.name === 'organizations:listPublicLeagues')?.args).toEqual({
+      slug: PAGED.slug,
+      page: 3,
+    });
+    expect(queries.find((q) => q.name === 'organizations:listPublicLocations')?.args).toEqual({
+      slug: PAGED.slug,
+      page: 2,
+    });
+    expect([...body.querySelectorAll('#leagues li[id]')].map((row) => row.id)).toEqual([
+      'league-11',
+      'league-12',
+      'league-13',
+      'league-14',
+      'league-15',
+    ]);
+    expect([...body.querySelectorAll('#locations li[id]')].map((row) => row.id)).toEqual([
+      'location-6',
+      'location-7',
+      'location-8',
+      'location-9',
+      'location-10',
+    ]);
+    const leagues = body.querySelector('nav[aria-label="Leagues pages"]');
+    expect(text(leagues?.querySelector('p'))).toBe('11–15 of 26 leagues');
+    expect(text(leagues?.querySelector('[aria-current="page"]'))).toBe('Page 3');
+    const target = (a: Element | null | undefined) => {
+      const url = new URL(a?.getAttribute('href') ?? '', ORIGIN);
+      return `${url.pathname}${url.search}${url.hash}`;
+    };
+    expect(target(leagues?.querySelector('a'))).toBe(`${ORG}?leagues=2&locations=2#leagues`);
+    expect(target(body.querySelector('nav[aria-label="Locations pages"] a'))).toBe(
+      `${ORG}?leagues=3#locations`,
+    );
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}${ORG}?leagues=3&locations=2`,
+    );
+    expect(meta(head, 'og:url')).toBe(`${ORIGIN}${ORG}?leagues=3&locations=2`);
+    expect(html).not.toContain('utm_source');
+  });
+
+  for (const failing of ['organizations:listPublicLeagues', 'organizations:listPublicLocations']) {
+    const query = failing === 'organizations:listPublicLeagues' ? '?leagues=3' : '?locations=3';
+    for (const [where, path] of [
+      ['organization page', `${ORG}${query}`],
+      ['sport view', `${ORG}/sports/softball${query.replace('leagues', 'page')}`],
+    ]) {
+      it(`answers 503 with no-store on the ${where} when page 3 of ${failing} fails`, async () => {
+        const { body, responseInit } = await render(path, (name, args) =>
+          name === failing
+            ? Promise.reject(new Error('connect ECONNREFUSED internal-db.corp.example:443'))
+            : paged({}, path.includes('/sports/') ? 'softball' : undefined)(name, args),
+        );
+        expect(responseInit.status).toBe(503);
+        expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+        expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
+        expect(body.querySelector('main a')?.getAttribute('href')).toBe(path);
+      });
+
+      it(`answers 503 with no-store on the ${where} when page 3 of ${failing} times out`, async () => {
+        const { responseInit } = await render(
+          path,
+          (name, args) =>
+            name === failing
+              ? new Promise(() => undefined)
+              : paged({}, path.includes('/sports/') ? 'softball' : undefined)(name, args),
+          30,
+        );
+        expect(responseInit.status).toBe(503);
+        expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+      });
+    }
   }
 });
