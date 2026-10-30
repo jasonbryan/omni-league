@@ -1,4 +1,5 @@
 import { convertToParamMap } from '@angular/router';
+import { api } from '../../../convex/_generated/api';
 import { NO_DIVISION_FILTERS, type DivisionFilters } from '../../../convex/lib/leagueFilters';
 import {
   divisionFilterQueryArgs,
@@ -7,6 +8,7 @@ import {
   filterPills,
   parseDivisionFilters,
 } from './division-filters';
+import { savedCopyKey } from '../core/data/convex/saved-copies';
 import { listPagesPath, pageQueryFor } from './organization-path';
 
 const parse = (query: string, sport?: 'beachVolleyball' | 'soccer') =>
@@ -209,5 +211,36 @@ describe('filterGroups', () => {
     expect(
       filterGroups([{ gender: 'coed' }], NO_DIVISION_FILTERS, 'soccer').map((g) => g.legend),
     ).toEqual(['Gender']);
+  });
+});
+
+describe('saved-copy keys of filtered views', () => {
+  const leaguesKey = (query: string) =>
+    savedCopyKey(api.organizations.listPublicLeagues, {
+      slug: 'lake',
+      page: 1,
+      ...divisionFilterQueryArgs(parse(query)),
+    });
+
+  it('gives one key to every spelling of the same filters', () => {
+    expect(leaguesKey('format=6v6&format=4v4&format=4v4')).toBe(
+      leaguesKey('format=4v4&format=6v6'),
+    );
+    expect(leaguesKey('gender=mens&gender=coed')).toBe(leaguesKey('gender=coed&gender=mens'));
+    expect(leaguesKey('age=u10&gender=girls')).toBe(leaguesKey('gender=womens&age=u10'));
+    expect(leaguesKey('level=b&level=bb&gender=coed')).toBe(
+      leaguesKey('gender=coed&level=bb&level=b'),
+    );
+  });
+
+  it('keeps the unfiltered key, and an ignored value adds nothing to it', () => {
+    const unfiltered = savedCopyKey(api.organizations.listPublicLeagues, { slug: 'lake', page: 1 });
+    expect(leaguesKey('')).toBe(unfiltered);
+    expect(leaguesKey('gender=nope&format=4x4&level=zz&age=u99')).toBe(unfiltered);
+  });
+
+  it('gives different filters different keys', () => {
+    expect(leaguesKey('gender=coed')).not.toBe(leaguesKey('gender=mens'));
+    expect(leaguesKey('format=4v4')).not.toBe(leaguesKey('format=4v4&format=6v6'));
   });
 });
