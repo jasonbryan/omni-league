@@ -20,11 +20,14 @@ import { leagueDivisionLabel } from './lib/leagueDivision';
 import { leagueRowSeasons } from './lib/publicLeague';
 import {
   detectLogoType,
+  isLogoMimeType,
   LOGO_HEAD_BYTES,
   LOGO_MAX_BYTES,
+  LOGO_MIME_TYPES,
   LOGO_UPLOAD_MAX_AGE_MS,
   logoError,
   type LogoInputError,
+  type LogoMimeType,
 } from './lib/logoFile';
 import { logoUrlField } from './lib/organizationLogo';
 import { insertOrgAdminMembership } from './lib/memberships';
@@ -417,16 +420,21 @@ async function deleteFileIfPresent(ctx: MutationCtx, storageId: Id<'_storage'>):
 }
 
 type LogoCheck =
-  { status: 'ok' } | { status: 'refused'; error: LogoInputError; deleteFile: boolean };
+  | { status: 'ok'; contentType: LogoMimeType }
+  | { status: 'refused'; error: LogoInputError; deleteFile: boolean };
 
 const logoCheckValidator = v.union(
-  v.object({ status: v.literal('ok') }),
+  v.object({
+    status: v.literal('ok'),
+    contentType: v.union(...LOGO_MIME_TYPES.map((type) => v.literal(type))),
+  }),
   v.object({ status: v.literal('refused'), error: logoRefusalValidator, deleteFile: v.boolean() }),
 );
 
 /**
  * Throws for anyone who is not an org admin of the organization, before the file is read, so a refused caller deletes nothing.
  * A file some organization already holds is refused without `deleteFile`: it is not this caller's to delete.
+ * The file's URL serves the stored Content-Type with no `nosniff` or CSP, so only an image type is allowed: an HTML one would run script.
  */
 export const checkLogoUpload = internalQuery({
   args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },
@@ -444,7 +452,10 @@ export const checkLogoUpload = internalQuery({
     if (file.size > LOGO_MAX_BYTES) {
       return { status: 'refused', error: logoError('logoSize', file.size), deleteFile: true };
     }
-    return { status: 'ok' };
+    if (!isLogoMimeType(file.contentType)) {
+      return { status: 'refused', error: logoError('logoType'), deleteFile: true };
+    }
+    return { status: 'ok', contentType: file.contentType };
   },
 });
 
@@ -466,15 +477,16 @@ export const applyLogo = internalMutation({
   },
 });
 
-async function hasLogoBytes(blob: Blob): Promise<boolean> {
+async function logoTypeOfBytes(blob: Blob): Promise<LogoMimeType | null> {
   const head = new Uint8Array(await blob.slice(0, LOGO_HEAD_BYTES).arrayBuffer());
-  return detectLogoType(head) !== null;
+  return detectLogoType(head);
 }
 
 /**
- * An action because it reads the file: the Content-Type stored with an upload is only what the uploader sent, so the file's first bytes decide.
+ * An action because it reads the file: the Content-Type stored with an upload is only what the uploader sent, so it must match the type the first bytes show.
  * A file is deleted only after the caller has passed the org admin check inside `checkLogoUpload`.
  */
+// eslint-disable-next-line @convex-dev/require-access-control -- an action has no database: checkLogoUpload authorizes the caller as an org admin of the organization before the file is read or deleted, and applyLogo again inside the transaction that writes.
 export const setLogo = action({
   args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },
   returns: v.null(),
@@ -486,7 +498,7 @@ export const setLogo = action({
     }
     const file = await ctx.storage.get(args.storageId);
     if (!file) refuse(logoError('logoMissing'));
-    if (!(await hasLogoBytes(file))) {
+    if ((await logoTypeOfBytes(file)) !== check.contentType) {
       await ctx.storage.delete(args.storageId);
       refuse(logoError('logoType'));
     }

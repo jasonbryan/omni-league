@@ -80,8 +80,19 @@ async function setup() {
 
 type T = Awaited<ReturnType<typeof setup>>['t'];
 
-const upload = (t: T, body: Uint8Array, type = 'image/png') =>
-  t.run(async (ctx) => ctx.storage.store(new Blob([body.slice()], { type })));
+interface StorageMetadataWriter {
+  patch(table: '_storage', id: Id<'_storage'>, value: { contentType: string }): Promise<void>;
+}
+
+/** convex-test does not record a stored blob's type, so it is written as the backend records an upload's Content-Type. */
+const upload = (t: T, body: Uint8Array, contentType = 'image/png') =>
+  t.run(async (ctx) => {
+    const storageId = await ctx.storage.store(new Blob([body.slice()]));
+    await (ctx.db as unknown as StorageMetadataWriter).patch('_storage', storageId, {
+      contentType,
+    });
+    return storageId;
+  });
 
 const fileExists = (t: T, id: Id<'_storage'>) =>
   t.run(async (ctx) => (await ctx.db.system.get('_storage', id)) !== null);
@@ -160,7 +171,7 @@ describe('organizations.setLogo, a file another organization holds', () => {
 
   test('goes to one organization when both claim it at once, and the file stays', async () => {
     const { t, a, b, adminA, adminB } = await setup();
-    const shared = await upload(t, jpeg());
+    const shared = await upload(t, jpeg(), 'image/jpeg');
     const outcomes = await Promise.allSettled([
       adminA.action(api.organizations.setLogo, { organizationId: a, storageId: shared }),
       adminB.action(api.organizations.setLogo, { organizationId: b, storageId: shared }),

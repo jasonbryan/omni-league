@@ -41,6 +41,7 @@ const jpeg = (size = 2048) => padded([0xff, 0xd8, 0xff, 0xe0], size);
 const webp = (size = 2048) => padded([...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WEBP')], size);
 const svg = () => Uint8Array.from(ascii('<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>'));
 const html = () => Uint8Array.from(ascii('<!doctype html><script>alert(1)</script>'));
+const pngThenHtml = () => Uint8Array.from([...PNG_HEAD, ...html()]);
 
 async function setup() {
   const t = convexTest(schema, modules);
@@ -85,9 +86,27 @@ async function setup() {
 
 type T = Awaited<ReturnType<typeof setup>>['t'];
 
-/** What an upload leaves: a file in storage, whose Content-Type is whatever the uploader said. */
-const upload = (t: T, body: Uint8Array, type = 'image/png') =>
-  t.run(async (ctx) => ctx.storage.store(new Blob([body.slice()], { type })));
+interface StorageMetadataWriter {
+  patch(table: '_storage', id: Id<'_storage'>, value: { contentType: string }): Promise<void>;
+}
+
+/**
+ * What an upload leaves: a file whose `contentType` is the Content-Type the uploader sent, or none.
+ * convex-test does not record a stored blob's type, so it is written as the backend records it.
+ */
+const upload = (t: T, body: Uint8Array, contentType: string | null = 'image/png') =>
+  t.run(async (ctx) => {
+    const storageId = await ctx.storage.store(new Blob([body.slice()]));
+    if (contentType !== null) {
+      await (ctx.db as unknown as StorageMetadataWriter).patch('_storage', storageId, {
+        contentType,
+      });
+    }
+    return storageId;
+  });
+
+const storedType = (t: T, id: Id<'_storage'>) =>
+  t.run(async (ctx) => (await ctx.db.system.get('_storage', id))?.contentType ?? null);
 
 const fileExists = (t: T, id: Id<'_storage'>) =>
   t.run(async (ctx) => (await ctx.db.system.get('_storage', id)) !== null);
@@ -112,22 +131,49 @@ async function rejected(call: Promise<unknown>): Promise<void> {
 }
 
 describe('organizations.setLogo', () => {
-  test('an org admin sets a 100 KB PNG, a JPEG, and a WebP', async () => {
+  test('an org admin sets a 100 KB PNG, a JPEG, and a WebP, each stored as the type its bytes show', async () => {
     const { t, a, admin } = await setup();
-    for (const body of [png(), jpeg(), webp()]) {
-      const storageId = await upload(t, body, 'application/octet-stream');
+    for (const [body, type] of [
+      [png(), 'image/png'],
+      [jpeg(), 'image/jpeg'],
+      [webp(), 'image/webp'],
+    ] as const) {
+      const storageId = await upload(t, body, type);
       await expect(
         admin.action(api.organizations.setLogo, { organizationId: a, storageId }),
       ).resolves.toBeNull();
       expect(await logoOf(t, a)).toBe(storageId);
+      expect(await storedType(t, storageId)).toBe(type);
     }
+  });
+
+  test.each([
+    ['PNG bytes followed by a script, stored as text/html', pngThenHtml(), 'text/html'],
+    ['PNG bytes stored as image/svg+xml', png(), 'image/svg+xml'],
+    ['PNG bytes stored as application/octet-stream', png(), 'application/octet-stream'],
+    ['PNG bytes stored with no Content-Type', png(), null],
+    ['JPEG bytes stored as image/png', jpeg(), 'image/png'],
+    ['WebP bytes stored as image/jpeg', webp(), 'image/jpeg'],
+    ['PNG bytes stored as image/png with a parameter', png(), 'image/png; charset=utf-8'],
+  ])('refuses %s, deletes it, and keeps the previous logo', async (_, body, contentType) => {
+    const { t, a, admin } = await setup();
+    const previous = await upload(t, png());
+    await admin.action(api.organizations.setLogo, { organizationId: a, storageId: previous });
+    const bad = await upload(t, body, contentType);
+    const data = await refusal(
+      admin.action(api.organizations.setLogo, { organizationId: a, storageId: bad }),
+    );
+    expect(data).toMatchObject({ field: 'logo', code: 'logoType' });
+    expect(await fileExists(t, bad)).toBe(false);
+    expect(await logoOf(t, a)).toBe(previous);
+    expect(await fileExists(t, previous)).toBe(true);
   });
 
   test('a replacement keeps the new file and deletes the old one', async () => {
     const { t, a, admin } = await setup();
     const first = await upload(t, png());
     await admin.action(api.organizations.setLogo, { organizationId: a, storageId: first });
-    const second = await upload(t, jpeg());
+    const second = await upload(t, jpeg(), 'image/jpeg');
     await admin.action(api.organizations.setLogo, { organizationId: a, storageId: second });
     expect(await logoOf(t, a)).toBe(second);
     expect(await fileExists(t, first)).toBe(false);
@@ -190,7 +236,7 @@ describe('organizations.setLogo', () => {
     const old = await upload(t, png());
     await setLogoOn(t, a, old);
     await t.run(async (ctx) => ctx.storage.delete(old));
-    const next = await upload(t, jpeg());
+    const next = await upload(t, jpeg(), 'image/jpeg');
     await admin.action(api.organizations.setLogo, { organizationId: a, storageId: next });
     expect(await logoOf(t, a)).toBe(next);
   });
@@ -228,7 +274,7 @@ describe('organizations.setLogo', () => {
     await rejected(
       admin.action(api.organizations.setLogo, { organizationId: a, storageId: theirs }),
     );
-    const next = await upload(t, jpeg());
+    const next = await upload(t, jpeg(), 'image/jpeg');
     await admin.action(api.organizations.setLogo, { organizationId: a, storageId: next });
     expect(await fileExists(t, theirs)).toBe(true);
     expect(await logoOf(t, b)).toBe(theirs);
@@ -252,13 +298,14 @@ describe('organizations.setLogo', () => {
     await setLogoOn(t, b, theirs);
     const orphan = await upload(t, png());
     const bad = await upload(t, svg());
+    const disguised = await upload(t, pngThenHtml(), 'text/html');
     for (const caller of ['organizer-a', 'admin-b', 'stranger', 'ghost', null]) {
       const run = caller ? t.withIdentity(identity(caller)) : t;
-      for (const storageId of [theirs, orphan, bad]) {
+      for (const storageId of [theirs, orphan, bad, disguised]) {
         await rejected(run.action(api.organizations.setLogo, { organizationId: a, storageId }));
       }
     }
-    for (const id of [theirs, orphan, bad]) expect(await fileExists(t, id)).toBe(true);
+    for (const id of [theirs, orphan, bad, disguised]) expect(await fileExists(t, id)).toBe(true);
     expect(await logoOf(t, a)).toBeNull();
     expect(await logoOf(t, b)).toBe(theirs);
   });
@@ -322,7 +369,7 @@ describe('the callers of the logo functions', () => {
     const { t, a } = await setup();
     const current = await upload(t, png());
     await setLogoOn(t, a, current);
-    const next = await upload(t, jpeg());
+    const next = await upload(t, jpeg(), 'image/jpeg');
     for (const caller of ['organizer-a', 'admin-b', 'stranger', 'ghost', null]) {
       const run = caller ? t.withIdentity(identity(caller)) : t;
       await rejected(run.mutation(api.organizations.generateLogoUploadUrl, { organizationId: a }));

@@ -57,6 +57,33 @@ test.describe('the Details page: Logo, files the server refuses', () => {
     await expect(previewImage(page)).toHaveAttribute('src', kept ?? '');
     await expect(logoSection(page).getByText('Uploading…')).toHaveCount(0);
   });
+
+  test('a PNG whose upload is sent as text/html is refused under the field, and the previous logo stays', async ({
+    page,
+  }) => {
+    await openDetails(page);
+    await fileInput(page).setInputFiles({
+      name: 'logo.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(demoLogoBytes()),
+    });
+    await expect(status(page)).toContainText('Logo saved.');
+    const kept = await previewImage(page).getAttribute('src');
+
+    await page.route(/\/api\/storage\/upload\b/, (route) =>
+      route.continue({ headers: { ...route.request().headers(), 'content-type': 'text/html' } }),
+    );
+    await fileInput(page).setInputFiles({
+      name: 'logo.png',
+      mimeType: 'image/png',
+      buffer: Buffer.concat([
+        Buffer.from(demoLogoBytes()),
+        Buffer.from('<!doctype html><script>document.title = "ran"</script>'),
+      ]),
+    });
+    await expect(page.locator('#logo-error')).toHaveText('Use a PNG, JPEG, or WebP image.');
+    await expect(previewImage(page)).toHaveAttribute('src', kept ?? '');
+  });
 });
 
 test.describe('the Details page: Logo, by keyboard', () => {

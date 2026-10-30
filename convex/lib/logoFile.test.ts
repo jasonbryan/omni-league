@@ -3,6 +3,7 @@ import {
   checkLogoPick,
   detectLogoType,
   formatFileSize,
+  isLogoMimeType,
   LOGO_HEAD_BYTES,
   LOGO_MAX_BYTES,
   LOGO_MESSAGES,
@@ -38,6 +39,25 @@ describe('detectLogoType', () => {
 
   test('needs only the first 12 bytes', () => {
     expect(LOGO_HEAD_BYTES).toBe(12);
+  });
+});
+
+describe('isLogoMimeType', () => {
+  test('is true only for the exact PNG, JPEG, and WebP types', () => {
+    for (const type of ['image/png', 'image/jpeg', 'image/webp']) {
+      expect(isLogoMimeType(type)).toBe(true);
+    }
+    for (const type of [
+      undefined,
+      '',
+      'text/html',
+      'image/svg+xml',
+      'application/octet-stream',
+      'image/png; charset=utf-8',
+      'IMAGE/PNG',
+    ]) {
+      expect(isLogoMimeType(type)).toBe(false);
+    }
   });
 });
 

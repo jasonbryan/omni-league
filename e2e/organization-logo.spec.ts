@@ -98,6 +98,9 @@ test.describe('the Details page: Logo', () => {
       await expect
         .poll(() => previewImage(page).evaluate((img: HTMLImageElement) => img.naturalWidth))
         .toBe(64);
+      const served = await request.get((await previewImage(page).getAttribute('src')) ?? '');
+      expect(served.status()).toBe(200);
+      expect(served.headers()['content-type']).toBe('image/png');
       await screenshot(page, testInfo, '251-logo-saved');
 
       const mark = await markHtml(request, tenant.path);

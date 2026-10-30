@@ -9,6 +9,10 @@ export const LOGO_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as cons
 
 export type LogoMimeType = (typeof LOGO_MIME_TYPES)[number];
 
+export function isLogoMimeType(type: string | undefined): type is LogoMimeType {
+  return (LOGO_MIME_TYPES as readonly (string | undefined)[]).includes(type);
+}
+
 /** The longest signature is a WebP's: `RIFF`, four size bytes, `WEBP`. */
 export const LOGO_HEAD_BYTES = 12;
 
@@ -49,9 +53,9 @@ export function logoError(code: LogoInputCode, size = 0): LogoInputError {
   return { field: 'logo', code, message };
 }
 
-/** The checks the page runs before it uploads; the server checks the same size and the file's bytes again. */
+/** The checks the page runs before it uploads; the server checks the same size, the stored type, and the file's bytes again. */
 export function checkLogoPick(file: { type: string; size: number }): LogoInputError | null {
-  if (!(LOGO_MIME_TYPES as readonly string[]).includes(file.type) || file.size === 0) {
+  if (!isLogoMimeType(file.type) || file.size === 0) {
     return logoError('logoType');
   }
   if (file.size > LOGO_MAX_BYTES) return logoError('logoSize', file.size);
