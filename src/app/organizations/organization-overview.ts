@@ -41,7 +41,15 @@ import {
 } from './organization-path';
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
+import { LeagueFilters } from './league-filters';
+import type { FilterGroup } from './division-filters';
 import {
+  NO_DIVISION_FILTERS,
+  hasDivisionFilters,
+  type DivisionFilters,
+} from '../../../convex/lib/leagueFilters';
+import {
+  OUTLINE_BUTTON,
   OUTLINE_BUTTON_LARGE,
   PRIMARY_BUTTON,
   PRIMARY_BUTTON_LARGE,
@@ -69,6 +77,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
 @Component({
   selector: 'app-organization-overview',
   imports: [
+    LeagueFilters,
     NgIcon,
     OpenSeasonsSkeleton,
     OrganizationMark,
@@ -116,7 +125,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
               ><ng-icon name="lucidePencil" data-icon="inline-start" aria-hidden="true" />Manage</a
             >
           }
-          @if (!isEmpty()) {
+          @if (!isEmpty() && !noMatches()) {
             @if (openCards() === undefined) {
               <span
                 aria-hidden="true"
@@ -144,6 +153,17 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
       [allSportsLeagueCount]="page().leagueCount"
       [currentSegment]="sport()?.segment"
     />
+    @if (!isEmpty()) {
+      <app-league-filters
+        [path]="pagePath()"
+        [sportView]="sport() !== undefined"
+        [filters]="filters()"
+        [groups]="filterGroups()"
+        [locationsPage]="locationPaging()?.page ?? 1"
+        [total]="leagueTotal()"
+        [matching]="matchingCount()"
+      />
+    }
     @if (isEmpty()) {
       <div class="border-t border-border">
         <div class="mx-auto w-full max-w-6xl px-4 py-12 md:px-8 md:py-20">
@@ -167,7 +187,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
     }
     @if (!isEmpty() || locationsLoading() || locationRows().length) {
       <div class="mx-auto w-full max-w-6xl px-4 md:px-8">
-        @if (!isEmpty()) {
+        @if (!isEmpty() && !noMatches()) {
           <section
             id="registration-open"
             aria-labelledby="registration-open-heading"
@@ -263,20 +283,33 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
               aria-labelledby="leagues-heading"
               class="py-8 md:py-12 lg:col-span-2"
             >
-              <div class="flex items-baseline justify-between gap-4">
-                <h2
-                  #heading
-                  id="leagues-heading"
-                  tabindex="-1"
-                  class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
-                >
-                  {{ leaguesHeading() }}
-                </h2>
-                <p class="text-sm text-muted-foreground">{{ leagueTotal() }}</p>
-              </div>
+              <h2
+                #heading
+                id="leagues-heading"
+                tabindex="-1"
+                class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+              >
+                {{ leaguesHeading() }}
+              </h2>
               @if (leaguesLoading()) {
                 <p role="status" class="sr-only">Loading the leagues.</p>
                 <app-organization-rows-skeleton kind="league" class="mt-2 block" />
+              } @else if (noMatches()) {
+                <div
+                  class="mt-4 flex max-w-md flex-col items-start rounded-xl border border-dashed border-border p-6"
+                >
+                  <p class="font-medium">No leagues match these filters</p>
+                  <p class="mt-1 text-sm text-muted-foreground">Remove a filter to see more.</p>
+                  <a
+                    [routerLink]="pagePath()"
+                    [queryParams]="filterBar()?.clearQuery()"
+                    data-slot="button"
+                    [class]="clearButton"
+                    class="mt-4"
+                    (click)="filterBar()?.focusCountNext($event)"
+                    >Clear all</a
+                  >
+                </div>
               } @else {
                 <ul
                   role="list"
@@ -419,12 +452,16 @@ export class OrganizationOverview {
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly now = input.required<number>();
   readonly canManage = input(false);
+  readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
+  readonly filterGroups = input<readonly FilterGroup[] | undefined>(undefined);
 
   protected readonly followLink = inject(FollowLink);
   protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
   protected readonly registerButton = PRIMARY_BUTTON;
   protected readonly manageButton = OUTLINE_BUTTON_LARGE;
   protected readonly findButton = OUTLINE_BUTTON_LARGE;
+  protected readonly clearButton = `${OUTLINE_BUTTON} pointer-coarse:h-11`;
+  protected readonly filterBar = viewChild(LeagueFilters);
   protected readonly openBadge = OPEN_BADGE;
   protected readonly mutedBadge = MUTED_BADGE;
 
@@ -462,9 +499,16 @@ export class OrganizationOverview {
       : 'border-t border-border py-8 md:py-12 lg:border-t-0',
   );
 
-  protected readonly leagueTotal = computed(() =>
-    plural(this.sport()?.leagueCount ?? this.page().leagueCount, 'league'),
+  protected readonly leagueTotal = computed(
+    () => this.sport()?.leagueCount ?? this.page().leagueCount,
   );
+
+  protected readonly matchingCount = computed(() =>
+    hasDivisionFilters(this.filters()) ? this.leaguePaging()?.total : undefined,
+  );
+
+  // The Registration open section and the hero's Register link would speak of the whole organization, so a view with no match leaves them out.
+  protected readonly noMatches = computed(() => this.matchingCount() === 0 && !this.leaguesBusy());
 
   protected readonly leaguesHeading = computed(() => {
     const sport = this.sport();
@@ -488,10 +532,10 @@ export class OrganizationOverview {
     locations: this.locationPaging()?.page ?? 1,
   }));
   protected readonly leagueQueryFor = computed(() =>
-    pageQueryFor('leagues', this.shownPages(), this.sport() !== undefined),
+    pageQueryFor('leagues', this.shownPages(), this.sport() !== undefined, this.filters()),
   );
   protected readonly locationQueryFor = computed(() =>
-    pageQueryFor('locations', this.shownPages(), this.sport() !== undefined),
+    pageQueryFor('locations', this.shownPages(), this.sport() !== undefined, this.filters()),
   );
 
   protected readonly manageHref = computed(() => `/app/organizations/${this.page().slug}`);

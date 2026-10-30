@@ -186,6 +186,18 @@ export const DEMO: readonly Tenant[] = [
         locations: ['Harbor Point Sand Courts'],
         division: division('mens', 4, 'aa'),
       },
+      {
+        name: 'Monday Coed 4s',
+        sport: 'beachVolleyball',
+        locations: ['Driftwood Beach Courts'],
+        division: division('coed', 4, 'bb'),
+      },
+      {
+        name: 'Wednesday Reverse Coed 4s',
+        sport: 'beachVolleyball',
+        locations: ['Harbor Point Sand Courts'],
+        division: division('coed', 4, 'b'),
+      },
     ],
   },
   {
