@@ -3,6 +3,7 @@ import { ConvexError } from 'convex/values';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
+import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -64,6 +65,32 @@ describe('SeasonCreateForm', () => {
     endDate: '2026-11-15',
     registrationDeadline: '2026-08-25',
   };
+
+  describe('the sticky footer', () => {
+    it('holds the submit button in the shared sticky footer, below the fields, and the card clips instead of hiding overflow', async () => {
+      await open();
+      const footer = submitButton().parentElement!;
+      expect(footer.getAttribute('data-slot')).toBe('form-footer');
+      expect(tokens(footer.className)).toEqual(tokens(STICKY_FOOTER));
+      expect(tokens(footer.className)).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
+      expect(footer.parentElement).toBe(form());
+      expect(
+        form().querySelector('[data-slot="field-group"]')!.compareDocumentPosition(footer) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const card = page.querySelector('#create-season')!;
+      expect(tokens(card.className)).toContain('overflow-clip');
+      expect(tokens(card.className)).not.toContain('overflow-hidden');
+    });
+
+    it('keeps its fields clear of the footer when they take focus (WCAG 2.4.11)', async () => {
+      await open();
+      const group = form().querySelector('[data-slot="field-group"]')!;
+      expect(tokens(group.className)).toEqual(
+        expect.arrayContaining(tokens(STICKY_FOOTER_CLEARANCE)),
+      );
+    });
+  });
 
   describe('the fields (states 4 and "Messages and attributes")', () => {
     it('is a labelled section and form with the mockup attributes', async () => {

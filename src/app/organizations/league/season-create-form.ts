@@ -275,7 +275,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             To change them,
             <a
               [href]="detailsHref()"
-              class="font-medium text-foreground underline underline-offset-4"
+              class="inline-block font-medium text-foreground underline underline-offset-4"
               (click)="detailsOpened.emit($event)"
               >edit the league details</a
             >. Seasons already published keep theirs.

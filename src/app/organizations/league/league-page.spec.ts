@@ -83,7 +83,7 @@ describe('LeaguePage', () => {
     it('has the organization, the h1, the status and sport badges, the locations, and the title', async () => {
       await open(COED, []);
       const main = page.querySelector('main')!;
-      expect(text(main.querySelector('p.text-sm.font-medium'))).toBe(GULF.name);
+      expect(text(main.querySelector('nav[aria-label="Breadcrumb"] a'))).toBe(GULF.name);
       expect(page.querySelectorAll('h1')).toHaveLength(1);
       expect(text(main.querySelector('h1'))).toBe('Coed 7v7 Rec');
       expect(

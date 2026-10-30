@@ -335,9 +335,12 @@ function normalize(text: string, organization: string): string {
   const lines = text
     .replaceAll(organization, 'ORG')
     .replaceAll(' View public page', '')
+    .replaceAll(' View season page', '')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
+  // The mockup writes the organization above the h1 as plain text; the app writes a breadcrumb there, which is hidden while the text is read.
+  if (lines[0] === 'ORG') lines.shift();
   const kept: string[] = [];
   let skipping = false;
   for (const line of lines) {
@@ -356,7 +359,7 @@ async function appText(page: Page, organization: string): Promise<string> {
   const text = await page.locator('main#main').evaluate((main: HTMLElement) => {
     const apart = [
       ...main.querySelectorAll<HTMLElement>(
-        '#details, [data-slot="league-division"], a[href$="#details"], section[aria-labelledby="from-league-heading"]',
+        'nav[aria-label="Breadcrumb"], #details, [data-slot="league-division"], a[href$="#details"], section[aria-labelledby="from-league-heading"]',
       ),
     ];
     const displays = apart.map((element) => element.style.display);

@@ -32,7 +32,8 @@ import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
-import { publicLeaguePath } from '../public-league/public-league-path';
+import { publicSeasonPath } from '../public-league/public-league-path';
+import { LeagueBreadcrumb } from './league-breadcrumb';
 import { LeagueContext } from './league-context';
 import { LeagueDetailsForm } from './league-details-form';
 import { leaguePath } from './league-path';
@@ -48,6 +49,7 @@ import { SeasonCreateForm } from './season-create-form';
   selector: 'app-league-management',
   imports: [
     AdminAlert,
+    LeagueBreadcrumb,
     LeagueDetailsForm,
     NgIcon,
     PublishSeasonDialog,
@@ -76,7 +78,7 @@ import { SeasonCreateForm } from './season-create-form';
     @if (league(); as league) {
       <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div class="min-w-0">
-          <p class="text-sm font-medium text-muted-foreground">{{ league.organization.name }}</p>
+          <app-league-breadcrumb [league]="league" />
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
             {{ league.name }}
           </h1>
@@ -176,7 +178,7 @@ import { SeasonCreateForm } from './season-create-form';
                 kind="success"
                 [title]="published.name + ' is published.'"
                 description="It’s on the league’s public page now."
-                ><a [routerLink]="publicPath()">View public page</a></app-admin-alert
+                ><a [routerLink]="publishedSeasonPath()">View season page</a></app-admin-alert
               >
             </div>
           }
@@ -372,9 +374,11 @@ export class LeagueManagement {
     () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#create-season`,
   );
 
-  protected readonly publicPath = computed(() =>
-    publicLeaguePath(this.context.orgSlug(), this.context.leagueSlug()),
-  );
+  protected readonly publishedSeasonPath = computed(() => {
+    const published = this.published();
+    const season = this.rows()?.find((row) => row.seasonId === published?.seasonId);
+    return publicSeasonPath(this.context.orgSlug(), this.context.leagueSlug(), season?.slug ?? '');
+  });
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
   protected readonly detailsPath = computed(

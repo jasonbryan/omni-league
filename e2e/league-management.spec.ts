@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -81,6 +81,7 @@ async function memberOf(page: Page, role: Role, assigned: string[] = [COED]) {
 }
 
 const main = (page: Page) => page.getByRole('main');
+const breadcrumb = (page: Page) => main(page).getByRole('navigation', { name: 'Breadcrumb' });
 const form = (page: Page) => page.locator('#create-season form');
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft season/ });
 const rows = (page: Page) => page.locator('#seasons-list > li');
@@ -149,6 +150,49 @@ test.describe('League management: an org admin', () => {
     await submit(page).click();
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page).first()).toContainText('6v6 · at least 8 players');
+  });
+
+  test('a breadcrumb above the h1 links to the admin Overview and Leagues, and the league is the current page', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    const crumbs = breadcrumb(page);
+    await expect(crumbs.getByRole('listitem')).toHaveText([tenant.name, 'Leagues', 'Coed 7v7 Rec']);
+    await expect(crumbs.getByRole('link', { name: tenant.name })).toHaveAttribute('href', base);
+    await expect(crumbs.getByRole('link', { name: 'Leagues' })).toHaveAttribute(
+      'href',
+      `${base}/leagues`,
+    );
+    await expect(crumbs.getByRole('link', { name: 'Coed 7v7 Rec' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    const [crumbsBox, headingBox] = await Promise.all([
+      crumbs.boundingBox(),
+      main(page).getByRole('heading', { level: 1 }).boundingBox(),
+    ]);
+    expect(crumbsBox!.y).toBeLessThan(headingBox!.y);
+    await screenshot(page, testInfo, '125-league-breadcrumb');
+    await expectAccessible(page);
+
+    await crumbs.getByRole('link', { name: 'Leagues' }).click();
+    await expect(page).toHaveURL(`${base}/leagues`);
+  });
+
+  test('the breadcrumb wraps at 320px without a horizontal scroll, and axe finds nothing', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(`${base}/leagues/${COED}`);
+    await expect(breadcrumb(page)).toBeVisible();
+    const { clientWidth, scrollWidth } = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+    await expectAccessible(page);
   });
 
   test('the link in the league block moves to the league details', async ({ page }) => {
@@ -324,6 +368,27 @@ test.describe('League management: an assigned league organizer', () => {
     await expectAccessible(page);
   });
 
+  test('a breadcrumb reads Your organizations and the league, linking to /app, because the admin area is closed to them', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'leagueOrganizer');
+    await page.goto(`${base}/leagues/${COED}`);
+    const crumbs = breadcrumb(page);
+    await expect(crumbs.getByRole('listitem')).toHaveText(['Your organizations', 'Coed 7v7 Rec']);
+    await expect(crumbs.getByRole('link', { name: 'Your organizations' })).toHaveAttribute(
+      'href',
+      '/app',
+    );
+    await expect(crumbs.getByRole('link', { name: 'Coed 7v7 Rec' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expectAccessible(page);
+
+    await crumbs.getByRole('link', { name: 'Your organizations' }).click();
+    await expect(page).toHaveURL('/app');
+  });
+
   test(
     'the sidebar lists every assigned league, drafts included, by name, and marks the one open',
     VIEWPORT_AGNOSTIC,
@@ -410,5 +475,72 @@ test.describe('League management: callers who may not open it', () => {
     await expectAccessible(page);
     expect(sent.some((frame) => frame.includes('leagues:getOrganizerContext'))).toBe(true);
     expect(sent.some((frame) => frame.includes('seasons:listForOrganizer'))).toBe(false);
+  });
+});
+
+test.describe('League management: the create-season form on a phone', () => {
+  const PHONE = { width: 360, height: 640 };
+
+  test('the Create button stays at the bottom of the viewport while the form is taller than it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues/${COED}`);
+    await page.locator('#name').focus();
+    expect((await form(page).boundingBox())!.height).toBeGreaterThan(PHONE.height);
+    await expect(submit(page)).toBeInViewport({ ratio: 1 });
+    const box = (await submit(page).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(PHONE.height);
+    expect(box.y).toBeGreaterThan(PHONE.height - 80);
+
+    await form(page).evaluate((el) => el.scrollIntoView({ block: 'end' }));
+    await expect(submit(page)).toBeInViewport({ ratio: 1 });
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(submit(page)).not.toBeInViewport();
+  });
+
+  test('a keyboard user Tabbing through every field never has one under the sticky button (WCAG 2.4.11)', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues/${COED}`);
+    await page.locator('#name').focus();
+    const tab = tabKey(page);
+
+    const seen: { control: string; inViewport: boolean; unobscured: boolean }[] = [];
+    // A date field takes several Tabs, one per part, so the cap leaves room for them.
+    for (let step = 0; step < 40; step++) {
+      seen.push(
+        await page.evaluate(() => {
+          const active = document.activeElement as HTMLElement;
+          const rect = active.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+          const hit = inViewport ? document.elementFromPoint(x, y) : null;
+          return {
+            control: active.id || active.tagName,
+            inViewport,
+            unobscured: !!hit && active.contains(hit),
+          };
+        }),
+      );
+      if (await submit(page).evaluate((b) => b === document.activeElement)) break;
+      await page.keyboard.press(tab);
+    }
+
+    expect([...new Set(seen.map((s) => s.control))]).toEqual([
+      'name',
+      'slug',
+      'start-date',
+      'end-date',
+      'registration-deadline',
+      'A',
+      'BUTTON',
+    ]);
+    expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
   });
 });
