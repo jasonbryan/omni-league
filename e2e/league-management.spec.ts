@@ -61,10 +61,19 @@ const RAISED = 'raised-sand-6s';
 
 type Role = 'orgAdmin' | 'leagueOrganizer' | null;
 
-async function memberOf(page: Page, role: Role, assigned: string[] = [COED]) {
+async function memberOf(
+  page: Page,
+  role: Role,
+  assigned: string[] = [COED],
+  organizationName = 'E2E Seasons',
+) {
   const user = newUser(role === 'orgAdmin' ? 'Admin' : 'Organizer');
   await signUp(page, user);
-  const tenant = await seedTenant({ name: 'E2E Seasons', locations: LOCATIONS, leagues: LEAGUES });
+  const tenant = await seedTenant({
+    name: organizationName,
+    locations: LOCATIONS,
+    leagues: LEAGUES,
+  });
   if (role === 'orgAdmin') {
     await convexRun('testing:addMembership', {
       organizationSlug: tenant.slug,
@@ -197,6 +206,32 @@ test.describe('League management: an org admin', () => {
     }));
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
     await expectAccessible(page);
+  });
+
+  test('with a long organization name, only the names shorten: Leagues stays whole at 320 and 360px, with no horizontal scroll', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(
+      page,
+      'orgAdmin',
+      [COED],
+      'Gulf Coast Sport and Social Club of the Greater Bay Area',
+    );
+    await page.goto(`${base}/leagues/${COED}`);
+    const leagues = breadcrumb(page).getByRole('link', { name: 'Leagues' }).locator('span');
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 640 });
+      await expect(leagues).toBeVisible();
+      const fit = await leagues.evaluate((label) => ({
+        label: { scroll: label.scrollWidth, client: label.clientWidth },
+        page: {
+          scroll: document.documentElement.scrollWidth,
+          client: document.documentElement.clientWidth,
+        },
+      }));
+      expect(fit.label.scroll, `Leagues at ${width}px`).toBeLessThanOrEqual(fit.label.client);
+      expect(fit.page.scroll, `page at ${width}px`).toBeLessThanOrEqual(fit.page.client);
+    }
   });
 
   test('the link in the league block moves to the league details', async ({ page }) => {

@@ -90,4 +90,17 @@ describe('LeagueManagement: the breadcrumb', () => {
     }
     expect(current.className).toContain('shrink-100');
   });
+
+  for (const [label, context] of [
+    ['Leagues', COED],
+    ['Your organizations', COED_AS_ORGANIZER],
+  ] as const) {
+    it(`never shortens the fixed label ${label}`, async () => {
+      await open(context);
+      const crumb = [...nav().querySelectorAll<HTMLElement>('ol > li:not([aria-hidden])')].find(
+        (li) => text(li) === label,
+      )!;
+      expect(crumb.className.split(' ')).toContain('shrink-0');
+    });
+  }
 });

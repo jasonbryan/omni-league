@@ -10,9 +10,14 @@ const CRUMB_LINK =
   'inline-flex max-w-full items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 
+const NAME_CRUMB = 'flex min-w-11';
+const FIXED_LABEL_CRUMB = 'flex shrink-0';
+
 interface Crumb {
   label: string;
   path: string;
+  /** A fixed label, unlike a name, is short and never needs shortening. */
+  fixedLabel: boolean;
 }
 
 /**
@@ -41,7 +46,7 @@ interface Crumb {
               />
             </li>
           }
-          <li class="flex min-w-11">
+          <li [class]="crumb.fixedLabel ? fixedLabelCrumb : nameCrumb">
             <a [routerLink]="crumb.path" [class]="crumbLink"
               ><span class="truncate">{{ crumb.label }}</span></a
             >
@@ -64,13 +69,17 @@ export class LeagueBreadcrumb {
 
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
+  protected readonly nameCrumb = NAME_CRUMB;
+  protected readonly fixedLabelCrumb = FIXED_LABEL_CRUMB;
 
   protected readonly crumbs = computed<Crumb[]>(() => {
     const { role, organization } = this.league();
-    if (role !== 'orgAdmin') return [{ label: 'Your organizations', path: '/app' }];
+    if (role !== 'orgAdmin') {
+      return [{ label: 'Your organizations', path: '/app', fixedLabel: true }];
+    }
     return [
-      { label: organization.name, path: adminPath(organization.slug) },
-      { label: 'Leagues', path: adminPath(organization.slug, 'leagues') },
+      { label: organization.name, path: adminPath(organization.slug), fixedLabel: false },
+      { label: 'Leagues', path: adminPath(organization.slug, 'leagues'), fixedLabel: true },
     ];
   });
 
