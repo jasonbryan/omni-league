@@ -549,8 +549,16 @@ async function pagedSoccer(): Promise<string> {
 }
 
 const CONTROLS = {
-  'Leagues pages': { query: 'organizations:listPublicLeagues', firstRow: 'league-6' },
-  'Locations pages': { query: 'organizations:listPublicLocations', firstRow: 'location-6' },
+  'Leagues pages': {
+    query: 'organizations:listPublicLeagues',
+    section: 'leagues',
+    firstRow: 'league-6',
+  },
+  'Locations pages': {
+    query: 'organizations:listPublicLocations',
+    section: 'locations',
+    firstRow: 'location-6',
+  },
 } as const;
 
 const nextIn = (page: Page, label: string) =>
@@ -607,6 +615,8 @@ test.describe('sport view: a page change that never answers', () => {
       await nextIn(page, label).focus();
       await page.keyboard.press('Enter');
       await expect.poll(() => held.isHolding()).toBe(true);
+      // The wait's timer starts in the render that marks the list busy, which can come after the held answer.
+      await expect(page.locator(`#${CONTROLS[label].section} ul[aria-busy="true"]`)).toBeVisible();
 
       await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
       const unavailable = page.getByRole('heading', {

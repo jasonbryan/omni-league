@@ -1285,6 +1285,10 @@ test.describe('organization page: a page change that never answers', () => {
   const unavailable = (page: Page) =>
     page.getByRole('heading', { level: 1, name: 'This page is temporarily unavailable' });
 
+  // The wait's timer starts in the render that marks the list busy, which can come after the held answer.
+  const busyList = (page: Page, label: keyof typeof LIST_OF_CONTROL) =>
+    page.locator(`#${LIST_OF_CONTROL[label].section} ul[aria-busy="true"]`);
+
   async function holdNextPage(page: Page, label: keyof typeof LIST_OF_CONTROL) {
     const tenant = await pagedTenant();
     const held = await holdQueries(page, [LIST_OF_CONTROL[label].query], {
@@ -1311,6 +1315,7 @@ test.describe('organization page: a page change that never answers', () => {
         .focus();
       await page.keyboard.press('Enter');
       await expect.poll(() => held.isHolding()).toBe(true);
+      await expect(busyList(page, label)).toBeVisible();
 
       await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
       await expect(unavailable(page)).toBeFocused();
@@ -1346,6 +1351,7 @@ test.describe('organization page: a page change that never answers', () => {
       .getByRole('link', { name: 'Next page' })
       .click();
     await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(busyList(page, 'Leagues pages')).toBeVisible();
 
     await page.clock.fastForward(PAGE_LOAD_WAIT_MS);
     await expect(unavailable(page)).toBeFocused();
