@@ -19,7 +19,7 @@ import { TopBarAccount } from '../shell/top-bar-account';
 import { TopBarFind } from './top-bar-find';
 
 const FOOTER_LINK_CLASSES =
-  'inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0';
+  'inline-flex items-center rounded-md hover:text-foreground hover:underline pointer-coarse:min-h-11';
 
 /**
  * "Sign in" and the account link come from `TopBarAccount`, which shows the account link only in the browser: the server HTML is cached by the CDN,
@@ -75,7 +75,7 @@ const FOOTER_LINK_CLASSES =
             <div class="max-w-xs">
               <a
                 routerLink="/"
-                class="flex min-h-11 md:min-h-0 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
+                class="flex pointer-coarse:min-h-11 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
               >
                 <ng-container [ngTemplateOutlet]="brand" />
               </a>
@@ -86,7 +86,10 @@ const FOOTER_LINK_CLASSES =
             <nav aria-label="Footer" class="grid grid-cols-2 gap-x-12 gap-y-8 text-sm">
               <div>
                 <h2 class="font-medium">Players</h2>
-                <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
+                <ul
+                  role="list"
+                  class="mt-2 text-muted-foreground md:mt-3 md:space-y-2 pointer-fine:space-y-2"
+                >
                   <li>
                     <a routerLink="/leagues" [class]="footerLink">Find a league</a>
                   </li>
@@ -97,7 +100,10 @@ const FOOTER_LINK_CLASSES =
               </div>
               <div>
                 <h2 class="font-medium">Organizers</h2>
-                <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
+                <ul
+                  role="list"
+                  class="mt-2 text-muted-foreground md:mt-3 md:space-y-2 pointer-fine:space-y-2"
+                >
                   <li>
                     <a routerLink="/app/organizations/new" [class]="footerLink"
                       >Create an organization</a

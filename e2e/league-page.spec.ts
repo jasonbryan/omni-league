@@ -3,6 +3,13 @@ import { axeScan, describeViolations, expectAccessible, tabKey } from './support
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import {
+  breadcrumbLinksAndText,
+  expectLinkHeights,
+  footerAnchors,
+  pointerOf,
+  TOUCH_TABLET,
+} from './support/link-heights';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -493,6 +500,50 @@ test.describe('public league page in the browser', () => {
     await page.goto(`${tenant.path}/leagues/zeta-open`);
     await expect(page.locator('section#registration-open')).toBeVisible();
     await expectAccessible(page);
+  });
+
+  test('the breadcrumb, the footer, and "See their other leagues" are 44px tall under a touch pointer and a line tall under a mouse', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant, path } = await seed();
+    const pointer = pointerOf(testInfo);
+    await page.goto(path);
+    await hydrated(consoleGuard);
+    await expectLinkHeights(page, breadcrumbLinksAndText(page), pointer);
+    await expectLinkHeights(page, footerAnchors(page), pointer);
+
+    await page.goto(`${tenant.path}/leagues/quiet-league`);
+    await expect(page.getByText('No seasons yet')).toBeVisible();
+    await expectLinkHeights(
+      page,
+      page.getByRole('link', { name: 'See their other leagues' }),
+      pointer,
+    );
+  });
+
+  test.describe('a touch tablet', () => {
+    test.use(TOUCH_TABLET);
+
+    test('the breadcrumb, the footer, and "See their other leagues" are 44px tall', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport and touch');
+      const { tenant, path } = await seed();
+      await page.goto(path);
+      await hydrated(consoleGuard);
+      await expectLinkHeights(page, breadcrumbLinksAndText(page), 'touch');
+      await expectLinkHeights(page, footerAnchors(page), 'touch');
+
+      await page.goto(`${tenant.path}/leagues/quiet-league`);
+      await expect(page.getByText('No seasons yet')).toBeVisible();
+      await expectLinkHeights(
+        page,
+        page.getByRole('link', { name: 'See their other leagues' }),
+        'touch',
+      );
+    });
   });
 
   test('the open season card registers through the season page, and a row opens its season', async ({
