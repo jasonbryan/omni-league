@@ -130,6 +130,29 @@ describe('leagues.getOrganizerContext', () => {
     expect(context).toMatchObject({ slug: 'coed-7v7', role: 'leagueOrganizer' });
   });
 
+  test('gives the org admin role to an org admin whose membership also lists the league', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const organization = (await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'org-a'))
+        .unique())!;
+      const userId = await ctx.db.insert('users', {
+        authUserId: 'admin-and-organizer',
+        name: 'admin-and-organizer',
+        adultConfirmedAt: 1,
+      });
+      await ctx.db.insert('memberships', {
+        userId,
+        organizationId: organization._id,
+        role: 'orgAdmin',
+        leagueIds: [s.ids.l],
+      });
+    });
+    const context = await s.as('admin-and-organizer').query(api.leagues.getOrganizerContext, L);
+    expect(context).toMatchObject({ slug: 'coed-7v7', role: 'orgAdmin' });
+  });
+
   test('gives the division with its label, and the league’s own custom level', async () => {
     const s = await setup();
     const customLevelId = await s.t.run(async (ctx) => {

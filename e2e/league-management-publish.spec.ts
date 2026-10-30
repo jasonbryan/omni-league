@@ -138,9 +138,9 @@ test.describe('League management: publishing a season', () => {
     await expect(result(page)).toContainText('It’s on the league’s public page now.');
     await expect(result(page)).toBeFocused();
     await expect(page.locator('app-league-management')).not.toHaveAttribute('inert', '');
-    await expect(result(page).getByRole('link', { name: 'View public page' })).toHaveAttribute(
+    await expect(result(page).getByRole('link', { name: 'View season page' })).toHaveAttribute(
       'href',
-      `/organizations/${tenant.slug}/leagues/${COED}`,
+      `/organizations/${tenant.slug}/leagues/${COED}/seasons/fall-2027`,
     );
     const [resultBox, listBox] = await Promise.all([
       result(page).boundingBox(),
@@ -153,6 +153,17 @@ test.describe('League management: publishing a season', () => {
     await expect(publishButton(page, 'Spring 2027')).toBeVisible();
     const raw = await fetchRawHtml(request, tenant.path);
     expect(raw.html).not.toContain('Spring 2027');
+  });
+
+  test('the result links to the published season’s own page', async ({ page }) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await publishButton(page, 'Fall 2027').click();
+    await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+    await expect(result(page)).toBeFocused();
+    await result(page).getByRole('link', { name: 'View season page' }).click();
+    await expect(page).toHaveURL(`/organizations/${tenant.slug}/leagues/${COED}/seasons/fall-2027`);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Fall 2027');
   });
 
   test('Cancel and Escape leave it a draft, write nothing, and return focus to that row’s Publish button', async ({
