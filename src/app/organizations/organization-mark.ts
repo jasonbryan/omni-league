@@ -24,7 +24,6 @@ const SIZES: Record<MarkSize, { classes: string; pixels: number }> = {
 const BASE = 'flex shrink-0 items-center justify-center overflow-hidden';
 const INITIALS = 'bg-accent font-semibold text-accent-foreground';
 
-/** The organization's logo, or its initials when it has none or the image does not load. */
 @Component({
   selector: 'app-organization-mark',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,7 +38,7 @@ const INITIALS = 'bg-accent font-semibold text-accent-foreground';
         [attr.width]="pixels()"
         [attr.height]="pixels()"
         class="size-full object-cover"
-        (error)="failed.set(true)"
+        (error)="failedForCurrentUrl.set(true)"
       />
       <!-- eslint-enable @angular-eslint/template/prefer-ngsrc -->
     } @else {
@@ -52,12 +51,11 @@ export class OrganizationMark {
   readonly logoUrl = input<string | undefined>(undefined);
   readonly size = input<MarkSize>('hero');
 
-  /** A new URL gets a new try. */
-  protected readonly failed = linkedSignal<string | undefined, boolean>({
+  protected readonly failedForCurrentUrl = linkedSignal<string | undefined, boolean>({
     source: this.logoUrl,
     computation: () => false,
   });
-  protected readonly showsImage = computed(() => !!this.logoUrl() && !this.failed());
+  protected readonly showsImage = computed(() => !!this.logoUrl() && !this.failedForCurrentUrl());
   protected readonly initials = computed(() => initials(this.name()));
   protected readonly pixels = computed(() => SIZES[this.size()].pixels);
   protected readonly classes = computed(
@@ -70,7 +68,7 @@ export class OrganizationMark {
     // The server's HTML can fail to load its image before this class listens for `error`.
     afterNextRender(() => {
       const image = this.logo()?.nativeElement;
-      if (image?.complete && image.naturalWidth === 0) this.failed.set(true);
+      if (image?.complete && image.naturalWidth === 0) this.failedForCurrentUrl.set(true);
     });
   }
 }

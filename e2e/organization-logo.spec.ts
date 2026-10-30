@@ -15,14 +15,14 @@ test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex bac
 
 const SIZE_100_KB = 100 * 1024;
 
-/** A valid PNG followed by zeros, which decoders ignore after the end chunk. */
-const png = (size = SIZE_100_KB) =>
+/** Decoders ignore bytes after the end chunk. */
+const paddedPng = (size = SIZE_100_KB) =>
   Buffer.concat([Buffer.from(demoLogoBytes()), Buffer.alloc(size - demoLogoBytes().length)]);
 
 const pngFile = (name = 'logo.png', size = SIZE_100_KB) => ({
   name,
   mimeType: 'image/png',
-  buffer: png(size),
+  buffer: paddedPng(size),
 });
 
 const fileInput = (page: Page) => page.locator('#logo-file');
@@ -117,7 +117,7 @@ test.describe('the Details page: Logo', () => {
     const { tenant } = await openDetails(page);
     await upload(page);
     const first = await previewImage(page).getAttribute('src');
-    await expect(logoSection(page).getByText('Replace logo')).toBeVisible();
+    await expect(fileInput(page)).toHaveAttribute('aria-label', 'Replace logo');
 
     await fileInput(page).setInputFiles(pngFile('second.png', 50 * 1024));
     await expect(previewImage(page)).not.toHaveAttribute('src', first ?? '');

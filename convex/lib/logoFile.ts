@@ -53,7 +53,7 @@ export function logoError(code: LogoInputCode, size = 0): LogoInputError {
   return { field: 'logo', code, message };
 }
 
-/** The checks the page runs before it uploads; the server checks the same size, the stored type, and the file's bytes again. */
+/** The server checks the size, the stored type, and the bytes again. */
 export function checkLogoPick(file: { type: string; size: number }): LogoInputError | null {
   if (!isLogoMimeType(file.type) || file.size === 0) {
     return logoError('logoType');
@@ -71,7 +71,6 @@ function startsWith(head: Uint8Array, signature: readonly number[], offset = 0):
   return signature.every((byte, index) => head[offset + index] === byte);
 }
 
-/** The type the file's first bytes show, whatever Content-Type the uploader sent. */
 export function detectLogoType(head: Uint8Array): LogoMimeType | null {
   if (startsWith(head, PNG_SIGNATURE)) return 'image/png';
   if (startsWith(head, JPEG_SIGNATURE)) return 'image/jpeg';

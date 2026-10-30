@@ -90,10 +90,7 @@ interface StorageMetadataWriter {
   patch(table: '_storage', id: Id<'_storage'>, value: { contentType: string }): Promise<void>;
 }
 
-/**
- * What an upload leaves: a file whose `contentType` is the Content-Type the uploader sent, or none.
- * convex-test does not record a stored blob's type, so it is written as the backend records it.
- */
+/** convex-test does not record a stored blob's type, so it is written as the backend records it. */
 const upload = (t: T, body: Uint8Array, contentType: string | null = 'image/png') =>
   t.run(async (ctx) => {
     const storageId = await ctx.storage.store(new Blob([body.slice()]));

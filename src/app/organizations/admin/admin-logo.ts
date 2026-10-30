@@ -143,16 +143,19 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
                   type="file"
                   class="peer absolute inset-0 size-full cursor-pointer opacity-0"
                   [accept]="accept"
+                  [attr.aria-label]="uploadLabel()"
                   [attr.aria-describedby]="error() ? 'logo-hint logo-error' : 'logo-hint'"
                   [attr.aria-invalid]="error() ? 'true' : null"
-                  (click)="pressed($event)"
+                  [attr.aria-disabled]="uploadBlocked() ? 'true' : null"
+                  (click)="blockPickerWhenBusyOrOffline($event)"
                   (change)="picked($event)"
                 />
                 <label
                   for="logo-file"
                   data-slot="button"
                   [class]="uploadClass()"
-                  [attr.aria-disabled]="uploading() || !online() ? 'true' : null"
+                  [attr.aria-disabled]="uploadBlocked() ? 'true' : null"
+                  aria-hidden="true"
                 >
                   @if (uploading()) {
                     <ng-icon
@@ -162,7 +165,7 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
                       aria-hidden="true"
                     />Uploading…
                   } @else if (organization.logoUrl) {
-                    Replace<span class="sr-only"> logo</span>
+                    Replace
                   } @else {
                     Upload a logo
                   }
@@ -227,6 +230,12 @@ export class AdminLogo {
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<Notice | null>(null);
 
+  protected readonly uploadBlocked = computed(() => this.uploading() || !this.online());
+  protected readonly uploadLabel = computed(() => {
+    if (this.uploading()) return 'Uploading…';
+    return this.organization()?.logoUrl ? 'Replace logo' : 'Upload a logo';
+  });
+
   protected readonly uploadClass = computed(() => {
     const base = this.organization()?.logoUrl ? OUTLINE_BUTTON : PRIMARY_BUTTON;
     const dimmed = !this.online() && !this.uploading() ? ' opacity-50' : '';
@@ -238,11 +247,10 @@ export class AdminLogo {
   private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
   private readonly removeDialog = viewChild(RemoveLogoDialog);
 
-  /** True while the Remove confirmation is open, so the page behind can be made inert. */
+  /** So the page behind can be made inert. */
   readonly dialogOpen = computed(() => this.removeDialog()?.isOpen() ?? false);
 
-  /** Stops the file picker from opening when it would lead nowhere. */
-  protected pressed(event: Event): void {
+  protected blockPickerWhenBusyOrOffline(event: Event): void {
     if (this.uploading()) {
       event.preventDefault();
       return;

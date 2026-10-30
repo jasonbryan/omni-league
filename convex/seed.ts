@@ -630,7 +630,7 @@ async function leagueIdsBySlugs(
   return ids;
 }
 
-/** True while the demo logo's organization exists and has no logo, so a run stores the file only once. */
+/** So a run stores the file only once. */
 export const demoLogoNeeded = internalQuery({
   args: {},
   returns: v.boolean(),
@@ -641,7 +641,7 @@ export const demoLogoNeeded = internalQuery({
   },
 });
 
-/** Sets the stored file as the demo logo, or deletes it when the organization gained a logo since `demoLogoNeeded` answered. Returns 1 when it set it. */
+/** The organization may have gained a logo since `demoLogoNeeded` answered. */
 export const setDemoLogo = internalMutation({
   args: { storageId: v.id('_storage') },
   returns: v.number(),

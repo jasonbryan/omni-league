@@ -482,10 +482,7 @@ async function logoTypeOfBytes(blob: Blob): Promise<LogoMimeType | null> {
   return detectLogoType(head);
 }
 
-/**
- * An action because it reads the file: the Content-Type stored with an upload is only what the uploader sent, so it must match the type the first bytes show.
- * A file is deleted only after the caller has passed the org admin check inside `checkLogoUpload`.
- */
+/** An action because it reads the file: the Content-Type stored with an upload is only what the uploader sent, so it must match the type the first bytes show. */
 // eslint-disable-next-line @convex-dev/require-access-control -- an action has no database: checkLogoUpload authorizes the caller as an org admin of the organization before the file is read or deleted, and applyLogo again inside the transaction that writes.
 export const setLogo = action({
   args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },

@@ -68,8 +68,7 @@ describe('AdminDetails: the Logo section', () => {
     await o.flush();
   }
 
-  /** Lets the page's upload run to the point where it waits for the action. */
-  async function uploadAcceptedFile(chosen = file()) {
+  async function uploadUntilSetLogoRuns(chosen = file()) {
     await choose(chosen);
     o.convex.calls[0].resolve(POSTED_URL);
     await o.flush();
@@ -85,6 +84,15 @@ describe('AdminDetails: the Logo section', () => {
       expect(preview().querySelector('img')).toBeNull();
       expect(text(fileLabel())).toBe('Upload a logo');
       expect(removeButton()).toBeNull();
+    });
+
+    it('names the file input once: the input carries the name and the label drawn as the button is hidden from assistive technology', async () => {
+      expect(fileInput().getAttribute('aria-label')).toBe('Upload a logo');
+      expect(fileLabel().getAttribute('aria-hidden')).toBe('true');
+      await choose(file());
+      expect(fileInput().getAttribute('aria-label')).toBe('Uploading…');
+      expect(fileInput().getAttribute('aria-disabled')).toBe('true');
+      expect(fileLabel().getAttribute('aria-hidden')).toBe('true');
     });
 
     it('labels the file input, accepts PNG, JPEG, and WebP, and describes it with the hint', () => {
@@ -161,20 +169,22 @@ describe('AdminDetails: the Logo section', () => {
     });
 
     it('on success: "Logo saved." in a status that takes focus, and the new mark once the query answers', async () => {
-      await uploadAcceptedFile();
+      await uploadUntilSetLogoRuns();
       o.convex.calls[1].resolve(null);
       o.subscription(GET_ADMIN_CONTEXT)!.emit({ ...COASTAL, logoUrl: LOGO_URL });
       await o.flush();
       expect(text(status()?.querySelector('[data-slot="alert-title"]'))).toBe('Logo saved.');
       expect(document.activeElement).toBe(status());
       expect(preview().querySelector('img')?.getAttribute('src')).toBe(LOGO_URL);
-      expect(text(fileLabel())).toBe('Replace logo');
+      expect(text(fileLabel())).toBe('Replace');
+      expect(fileInput().getAttribute('aria-label')).toBe('Replace logo');
+      expect(fileInput().getAttribute('aria-disabled')).toBeNull();
       expect(removeButton()).not.toBeNull();
     });
 
     it('shows the server’s message under the field, focuses it, and keeps the mark', async () => {
       const message = 'Use a PNG, JPEG, or WebP image.';
-      await uploadAcceptedFile();
+      await uploadUntilSetLogoRuns();
       o.convex.calls[1].reject(new ConvexError({ field: 'logo', code: 'logoType', message }));
       await o.flush();
       expect(text(fieldError())).toBe(message);
@@ -223,12 +233,12 @@ describe('AdminDetails: the Logo section', () => {
   describe('with a logo', () => {
     beforeEach(() => open(LOGO_URL));
 
-    it('shows the logo in the 48px mark, "Replace logo", and Remove', () => {
+    it('shows the logo in the 48px mark, "Replace" named "Replace logo", and Remove', () => {
       const image = preview().querySelector('img')!;
       expect(image.getAttribute('src')).toBe(LOGO_URL);
       expect(image.getAttribute('alt')).toBe('');
-      expect(text(fileLabel())).toBe('Replace logo');
-      expect(fileLabel().querySelector('.sr-only')?.textContent).toBe(' logo');
+      expect(text(fileLabel())).toBe('Replace');
+      expect(fileInput().getAttribute('aria-label')).toBe('Replace logo');
       expect(tokens(fileLabel().className)).toEqual(expect.arrayContaining(tokens(OUTLINE_BUTTON)));
       expect(text(removeButton())).toBe('Remove logo');
       expect(removeButton()?.querySelector('.sr-only')?.textContent).toBe(' logo');
@@ -243,7 +253,7 @@ describe('AdminDetails: the Logo section', () => {
     });
 
     it('keeps the current mark while the replacement uploads, and after it is refused', async () => {
-      await uploadAcceptedFile();
+      await uploadUntilSetLogoRuns();
       expect(preview().querySelector('img')?.getAttribute('src')).toBe(LOGO_URL);
       o.convex.calls[1].reject(
         new ConvexError({
