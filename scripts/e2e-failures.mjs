@@ -14,9 +14,9 @@ function firstLine(message) {
 
 /**
  * @param {unknown} report
- * @returns {string[]}
+ * @returns {{ failures: string[], errors: string[] }}
  */
-export function failingTests(report) {
+function reportFailures(report) {
   const failures = [];
   /** @param {any} suite @param {string[]} titles */
   const walk = (suite, titles) => {
@@ -36,26 +36,62 @@ export function failingTests(report) {
   };
   const root = /** @type {any} */ (report);
   walk({ suites: root?.suites ?? [] }, []);
+  const errors = [];
+  for (const error of root?.errors ?? []) {
+    const line = firstLine(error?.message);
+    if (line) errors.push(`run error: ${line}`);
+  }
+  return { failures, errors };
+}
+
+/** @param {unknown[]} reports @returns {string[]} */
+function listFailures(reports) {
+  const failures = [];
+  const errors = [];
+  for (const report of reports) {
+    const found = reportFailures(report);
+    failures.push(...found.failures);
+    errors.push(...found.errors);
+  }
   failures.sort();
   const listed = failures.slice(0, MAX_LISTED);
   if (failures.length > MAX_LISTED) listed.push(`and ${failures.length - MAX_LISTED} more`);
-  for (const error of root?.errors ?? []) {
-    const line = firstLine(error?.message);
-    if (line) listed.push(`run error: ${line}`);
+  return [...listed, ...errors];
+}
+
+/**
+ * @param {unknown} report
+ * @returns {string[]}
+ */
+export function failingTests(report) {
+  return listFailures([report]);
+}
+
+/** @param {string} path @returns {unknown} */
+function readReport(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return undefined;
   }
-  return listed;
 }
 
 /** @param {string} path @returns {string[]} */
 export function failuresFromFile(path) {
-  try {
-    return failingTests(JSON.parse(readFileSync(path, 'utf8')));
-  } catch {
-    return [];
-  }
+  return failuresFromFiles([path]);
+}
+
+/**
+ * A missing or unreadable report adds nothing: a run that was skipped or cancelled wrote none.
+ * @param {string[]} paths
+ * @returns {string[]}
+ */
+export function failuresFromFiles(paths) {
+  return listFailures(paths.map(readReport).filter((report) => report !== undefined));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const failures = failuresFromFile(process.argv[2] ?? 'test-results/results.json');
+  const paths = process.argv.slice(2);
+  const failures = failuresFromFiles(paths.length > 0 ? paths : ['test-results/results.json']);
   process.stdout.write(`failures=${JSON.stringify(failures)}\n`);
 }
