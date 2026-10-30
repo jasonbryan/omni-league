@@ -227,6 +227,47 @@ test.describe('organization filters: raw server HTML', () => {
   );
 });
 
+test.describe('organization filters on the sport view: raw server HTML', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test(
+    'a filtered page 2 is noindex, names the sport view as its canonical, and writes its links in canonical order',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await filterTenant();
+      const sportPath = `${tenant.path}/sports/beach-volleyball`;
+      const { status, html } = await fetchRawHtml(
+        request,
+        `${sportPath}?page=2&format=6v6&format=4v4&format=4v4`,
+      );
+      expect(status).toBe(200);
+      expect(metaName(html, 'robots')).toBe('noindex');
+      expect(canonicalOf(html)).toBe(`${ORIGIN}${sportPath}`);
+      expect(countOf(html)).toBe('6 of 7 leagues');
+      expect(leagueRows(html)).toHaveLength(1);
+      const pageLinks = hrefsIn(between(html, 'aria-label="Leagues pages"', '</nav>'));
+      expect(pageLinks).toContain(`${sportPath}?format=4v4&format=6v6#leagues`);
+      for (const href of hrefsIn(between(html, 'aria-label="Active filters"', '</ul>'))) {
+        expect(href).not.toContain('page=');
+      }
+    },
+  );
+
+  test(
+    'an unfiltered page 2 stays indexed with its own page as the canonical',
+    RAW_HTTP,
+    async ({ request }, testInfo) => {
+      test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
+      const tenant = await filterTenant();
+      const { html } = await fetchRawHtml(request, `${tenant.path}?leagues=2&gender=nope`);
+      expect(metaName(html, 'robots')).toBeUndefined();
+      expect(canonicalOf(html)).toBe(`${ORIGIN}${tenant.path}?leagues=2`);
+      expect(countOf(html)).toBe('7 leagues');
+    },
+  );
+});
+
 test.describe('organization filters in the browser', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
@@ -259,6 +300,56 @@ test.describe('organization filters in the browser', () => {
     expect(await page.evaluate(() => (window as Window & { e2eMarker?: number }).e2eMarker)).toBe(
       1,
     );
+  });
+
+  test('a pill pressed while the new page loads holds the rows busy and the count never reads the previous result', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await filterTenant();
+    const held = await holdQueries(page, ['organizations:listPublicLeagues'], {
+      holdFromStart: false,
+    });
+    await page.goto(`${tenant.path}?gender=coed&format=4v4`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(count(page)).toHaveText('2 of 7 leagues');
+    held.holdNextAnswer();
+    await pills(page).filter({ hasText: 'Gender: Coed' }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4`);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    await expect(page.locator('#leagues ul[aria-busy="true"]')).toHaveCount(1);
+    await expect(count(page)).toBeFocused();
+    await expect(count(page)).not.toHaveText('2 of 7 leagues');
+    held.release();
+    await expect(count(page)).toHaveText('3 of 7 leagues');
+    await expect(page.locator('#leagues [aria-busy="true"]')).toHaveCount(0);
+  });
+
+  test('from page 2, the keyboard opens Filters, checks Coed, and Show leagues loads page 1 of the result with focus kept', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await filterTenant();
+    await page.goto(`${tenant.path}?format=4v4&format=6v6&leagues=2`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const form = page.getByRole('search', { name: 'Filter leagues' });
+    await form.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    const coed = form.getByRole('checkbox', { name: 'Coed' });
+    await expect(coed).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(coed).toBeChecked();
+    const show = form.getByRole('button', { name: 'Show leagues' });
+    for (let presses = 0; presses < 20; presses++) {
+      if (await show.evaluate((button) => button === document.activeElement)) break;
+      await page.keyboard.press('Tab');
+    }
+    await expect(show).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=coed&format=4v4&format=6v6`);
+    await expect(count(page)).toHaveText('4 of 7 leagues');
+    await expect(show).toBeFocused();
   });
 
   test('the Locations page links keep gender=coed, and a filter change keeps locations=2', async ({
@@ -368,6 +459,35 @@ test.describe('organization filters offline', () => {
     await form.getByText('Filters').click();
     await expect(page.getByRole('group', { name: 'Gender' })).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Coed' })).toBeChecked();
+    await context.setOffline(false);
+  });
+
+  test('offline, a filter never seen shows the not-saved view, whose Try again keeps the filters', async ({
+    page,
+    context,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    const tenant = await filterTenant();
+    await page.goto(`${tenant.path}?gender=coed&format=4v4`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(count(page)).toHaveText('2 of 7 leagues');
+
+    await context.setOffline(true);
+    await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
+    await page
+      .getByRole('list', { name: 'Active filters' })
+      .getByRole('link')
+      .filter({ hasText: 'Gender: Coed' })
+      .click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4`);
+    await expect(
+      page.getByRole('heading', { name: "This page isn't saved on this device" }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute(
+      'href',
+      `${tenant.path}?format=4v4`,
+    );
     await context.setOffline(false);
   });
 
