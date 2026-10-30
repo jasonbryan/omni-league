@@ -86,7 +86,10 @@ const FOOTER_LINK_CLASSES =
             <nav aria-label="Footer" class="grid grid-cols-2 gap-x-12 gap-y-8 text-sm">
               <div>
                 <h2 class="font-medium">Players</h2>
-                <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
+                <ul
+                  role="list"
+                  class="mt-2 text-muted-foreground md:mt-3 md:space-y-2 pointer-fine:space-y-2"
+                >
                   <li>
                     <a routerLink="/leagues" [class]="footerLink">Find a league</a>
                   </li>
@@ -97,7 +100,10 @@ const FOOTER_LINK_CLASSES =
               </div>
               <div>
                 <h2 class="font-medium">Organizers</h2>
-                <ul role="list" class="mt-2 text-muted-foreground md:mt-3 md:space-y-2">
+                <ul
+                  role="list"
+                  class="mt-2 text-muted-foreground md:mt-3 md:space-y-2 pointer-fine:space-y-2"
+                >
                   <li>
                     <a routerLink="/app/organizations/new" [class]="footerLink"
                       >Create an organization</a

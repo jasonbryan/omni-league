@@ -4,7 +4,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import {
-  breadcrumbItems,
+  breadcrumbLinksAndText,
   expectLinkHeights,
   footerAnchors,
   pointerOf,
@@ -510,7 +510,7 @@ test.describe('public league page in the browser', () => {
     const pointer = pointerOf(testInfo);
     await page.goto(path);
     await hydrated(consoleGuard);
-    await expectLinkHeights(page, breadcrumbItems(page), pointer);
+    await expectLinkHeights(page, breadcrumbLinksAndText(page), pointer);
     await expectLinkHeights(page, footerAnchors(page), pointer);
 
     await page.goto(`${tenant.path}/leagues/quiet-league`);
@@ -533,7 +533,7 @@ test.describe('public league page in the browser', () => {
       const { tenant, path } = await seed();
       await page.goto(path);
       await hydrated(consoleGuard);
-      await expectLinkHeights(page, breadcrumbItems(page), 'touch');
+      await expectLinkHeights(page, breadcrumbLinksAndText(page), 'touch');
       await expectLinkHeights(page, footerAnchors(page), 'touch');
 
       await page.goto(`${tenant.path}/leagues/quiet-league`);

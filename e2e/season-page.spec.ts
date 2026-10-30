@@ -4,7 +4,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import {
-  breadcrumbItems,
+  breadcrumbLinksAndText,
   expectLinkHeights,
   pointerOf,
   TOUCH_TABLET,
@@ -402,7 +402,7 @@ test.describe('public season page in the browser', () => {
     const { path } = await seed();
     await page.goto(path);
     await hydrated(consoleGuard);
-    await expectLinkHeights(page, breadcrumbItems(page), pointerOf(testInfo));
+    await expectLinkHeights(page, breadcrumbLinksAndText(page), pointerOf(testInfo));
   });
 
   test.describe('a touch tablet', () => {
@@ -413,7 +413,7 @@ test.describe('public season page in the browser', () => {
       const { path } = await seed();
       await page.goto(path);
       await hydrated(consoleGuard);
-      await expectLinkHeights(page, breadcrumbItems(page), 'touch');
+      await expectLinkHeights(page, breadcrumbLinksAndText(page), 'touch');
     });
   });
 
