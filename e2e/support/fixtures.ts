@@ -18,9 +18,17 @@ export interface ConsoleFixtureOptions {
   expectedConsoleWarnings: readonly (string | RegExp)[];
 }
 
+export interface NetlifyDrawerOptions {
+  /**
+   * `false` leaves the context with no `context.route`, so its HTTP cache stays on, as in a user's
+   * browser. Only for runs on `localhost` or a preview with the Drawer off.
+   */
+  netlifyDrawerStub: boolean;
+}
+
 export interface ConsoleFixtures {
   consoleGuard: ConsoleGuard;
-  netlifyDrawerStub: void;
+  netlifyDrawer: void;
 }
 
 /**
@@ -37,13 +45,14 @@ export function failedRequests(
 /**
  * The console fixture runs automatically on every page the test opens and fails the test at
  * teardown. With `E2E_BASE_URL` set, the Netlify Drawer script is stubbed in every test's browser
- * context.
+ * context unless the test sets `netlifyDrawerStub: false`.
  */
-export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
+export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions & NetlifyDrawerOptions>({
   expectedDocumentStatus: [undefined, { option: true }],
   expectedConvexErrors: [[], { option: true }],
   expectedFailedRequests: [[], { option: true }],
   expectedConsoleWarnings: [[], { option: true }],
+  netlifyDrawerStub: [true, { option: true }],
   consoleGuard: [
     async (
       {
@@ -70,9 +79,9 @@ export const test = base.extend<ConsoleFixtures & ConsoleFixtureOptions>({
     },
     { auto: true },
   ],
-  netlifyDrawerStub: [
-    async ({ context }, use) => {
-      if (remoteBaseUrl) await stubNetlifyDrawer(context);
+  netlifyDrawer: [
+    async ({ context, netlifyDrawerStub }, use) => {
+      if (remoteBaseUrl && netlifyDrawerStub) await stubNetlifyDrawer(context);
       await use();
     },
     { auto: true },

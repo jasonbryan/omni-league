@@ -280,6 +280,9 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
   });
 
   test.describe('expectedFailedRequests: 504 on a RegExp path', () => {
+    // On a production build the worker answers requests that `page.route` never sees.
+    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+
     const PROBE_FILE = /^\/probe-files\/[^/]+$/;
 
     async function failRequest(page: Page, path: string, status: number): Promise<void> {

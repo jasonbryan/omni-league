@@ -7,7 +7,7 @@
 // saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
 // the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
 // that reason.
-import type { BrowserContext, Page, TestInfo } from '@playwright/test';
+import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { expectAccessible } from './support/a11y';
@@ -323,6 +323,14 @@ async function savedAtOf(page: Page, slug: string): Promise<number | null> {
   }, savedKey(slug));
 }
 
+async function expectLogoLoaded(mark: Locator): Promise<void> {
+  const logo = mark.locator('img');
+  await expect(logo).toHaveCount(1);
+  await expect
+    .poll(() => logo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
+    .toBe(true);
+}
+
 async function expectLinksEnabled(page: Page): Promise<void> {
   const links = page.locator('a[href]');
   expect(await links.count()).toBeGreaterThan(0);
@@ -364,8 +372,8 @@ test.describe('saved copies (production build with seed:demo data)', () => {
   });
 
   test.describe('on the demo organization with a logo', () => {
-    // The worker caches nothing from /api/, so offline the logo request fails with its 504.
-    test.use({ expectedFailedRequests: [{ status: 504, path: ORGANIZATION_LOGO }] });
+    // A route would turn off the context's HTTP cache; a user's browser has no route and keeps the logo.
+    test.use({ netlifyDrawerStub: false });
 
     test('a page opened online opens offline from its saved copy with the note; the live result replaces it on reconnect', async ({
       page,
@@ -377,7 +385,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       const h1 = page.getByRole('heading', { level: 1, name: organization.name });
       await expect(h1).toBeVisible();
       const mark = page.locator('app-organization-mark');
-      await expect(mark.locator('img')).toHaveCount(1);
+      await expectLogoLoaded(mark);
       await expect
         .poll(() =>
           page.evaluate(
@@ -395,8 +403,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       const reload = await page.reload();
       expect(reload?.fromServiceWorker()).toBe(true);
       await expect(h1).toBeVisible();
-      await expect(mark.locator('img')).toHaveCount(0);
-      await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+      await expectLogoLoaded(mark);
       const leagueList = page.locator('#leagues');
       for (const league of leagues) {
         await expect(
@@ -503,6 +510,42 @@ test.describe('saved copies (production build with seed:demo data)', () => {
           `${missing} restored`,
         ).toBeVisible();
       }
+    });
+
+    test.describe('with the HTTP cache off', () => {
+      // Playwright disables the HTTP cache in a routed context, so the worker has no copy and answers 504.
+      test.use({ expectedFailedRequests: [{ status: 504, path: ORGANIZATION_LOGO }] });
+
+      test('offline, a logo the browser cache does not hold falls back to the initials', async ({
+        page,
+        context,
+      }) => {
+        // Playwright disables the HTTP cache in a routed context, as for a user whose cache no longer holds the logo.
+        await context.route('**/e2e-never-requested', (route) => route.continue());
+        const { organization } = SAVED_ORG;
+        await installWorker(page);
+        await page.goto(SAVED_PATH);
+        const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+        await expect(h1).toBeVisible();
+        const mark = page.locator('app-organization-mark');
+        await expectLogoLoaded(mark);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              (keys) => keys.map((key) => localStorage.getItem(key) !== null),
+              savedPageKeys(organization.slug),
+            ),
+          )
+          .toEqual([true, true, true, true]);
+
+        await setOffline(context, true);
+        const reload = await page.reload();
+        expect(reload?.fromServiceWorker()).toBe(true);
+        await expect(h1).toBeVisible();
+        await expect(page.locator('main [data-saved-copy-note]')).toBeVisible();
+        await expect(mark.locator('img')).toHaveCount(0);
+        await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+      });
     });
   });
 
