@@ -7,6 +7,7 @@ import { FakeConvexClient } from './data/convex/testing/fake-convex-client';
 import { NotSavedView } from '../offline/not-saved-view';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
+import { Shell } from '../shell/shell';
 
 type Shown = 'content' | 'view' | 'other view';
 
@@ -199,3 +200,100 @@ describe.each(VIEWS)('focus when %s replaces the content', (_label, kind) => {
     expect(document.activeElement).toBe(viewHeading());
   });
 });
+
+@Component({
+  selector: 'app-replaced-focus-shell-test-page',
+  imports: [NotSavedView, Shell, ServerErrorView],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <app-shell>
+      @if (shown() === 'content') {
+        <div id="content"><a href="/next" id="pressed">Next page</a></div>
+      } @else if (kind() === 'server-error') {
+        <app-server-error-view retryHref="/here" />
+      } @else {
+        <app-not-saved-view retryHref="/here" />
+      }
+    </app-shell>
+  `,
+})
+class ShellTestPage {
+  readonly kind = input.required<'server-error' | 'not-saved'>();
+  readonly shown = signal<'content' | 'view'>('content');
+}
+
+describe.each(VIEWS)(
+  'focus when %s replaces the content in the signed-in shell',
+  (_label, kind) => {
+    let fixture: ComponentFixture<ShellTestPage>;
+
+    async function settle(): Promise<void> {
+      for (let i = 0; i < 3; i++) {
+        TestBed.tick();
+        await fixture.whenStable();
+      }
+    }
+
+    async function open(): Promise<void> {
+      const auth = new FakeAuthClient();
+      TestBed.configureTestingModule({
+        providers: [
+          provideFakeAuthClient(auth),
+          { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+          provideRouter([]),
+        ],
+      });
+      auth.emitSession(null);
+      fixture = TestBed.createComponent(ShellTestPage);
+      fixture.componentRef.setInput('kind', kind);
+      await settle();
+    }
+
+    async function show(shown: 'content' | 'view'): Promise<void> {
+      fixture.componentInstance.shown.set(shown);
+      await settle();
+    }
+
+    const find = (selector: string) =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(selector)!;
+    const click = (element: HTMLElement) =>
+      element.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+
+    afterEach(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+
+    it('focuses its h1 when the focused link it replaced was removed with focus', async () => {
+      await open();
+      find('#pressed').focus();
+      click(find('#pressed'));
+      await show('view');
+      expect(document.activeElement).toBe(find('main h1'));
+    });
+
+    it('focuses its h1 when the link it replaced was clicked without taking focus, as in WebKit', async () => {
+      await open();
+      click(find('#pressed'));
+      expect(document.activeElement).toBe(document.body);
+      await show('view');
+      expect(document.activeElement).toBe(find('main h1'));
+    });
+
+    it('moves focus to #main when the content returns while its h1 has focus', async () => {
+      await open();
+      find('#pressed').focus();
+      await show('view');
+      expect(document.activeElement).toBe(find('main h1'));
+      await show('content');
+      expect(document.activeElement).toBe(find('main#main'));
+    });
+
+    it('takes no focus when nothing in main was pressed or focused', async () => {
+      await open();
+      await show('view');
+      expect(document.activeElement).toBe(document.body);
+    });
+  },
+);
