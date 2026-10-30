@@ -29,7 +29,7 @@ import { filterPills, parseDivisionFilters, type FilterGroup } from './division-
 import { listPagesQuery } from './organization-path';
 
 const PILL =
-  'inline-flex h-11 items-center gap-1.5 rounded-full bg-secondary ps-3.5 pe-2.5 text-sm font-medium text-secondary-foreground hover:bg-accent md:h-8 pointer-coarse:min-h-11';
+  'inline-flex h-11 items-center gap-1.5 rounded-full bg-secondary ps-3 pe-2 text-sm font-medium text-secondary-foreground hover:bg-muted md:h-9 pointer-coarse:min-h-11';
 
 /**
  * A GET form, so the filters work before hydration and every filtered view has a URL. After hydration, Show leagues, a pill, and Clear all
@@ -55,7 +55,7 @@ const PILL =
             @if (groups.length) {
               <details class="group/filters">
                 <summary
-                  class="inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-full border border-input px-4 text-sm font-medium select-none hover:bg-muted md:h-9 pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden"
+                  class="inline-flex h-11 cursor-pointer items-center gap-2 rounded-full border border-input px-4 text-sm font-medium select-none hover:bg-muted md:h-9 pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden"
                 >
                   <ng-icon
                     name="lucideSlidersHorizontal"
@@ -64,12 +64,12 @@ const PILL =
                   />Filters
                   @if (activeCount()) {
                     <span
-                      class="flex size-5 items-center justify-center rounded-full bg-foreground text-xs tabular-nums text-background"
+                      class="flex size-6 items-center justify-center rounded-full bg-foreground text-xs tabular-nums text-background"
                       >{{ activeCount() }}</span
                     ><span class="sr-only"> active</span>
                   }
                 </summary>
-                <div class="mt-4 space-y-6">
+                <div class="mt-4 space-y-4">
                   @for (group of groups; track group.legend) {
                     <fieldset>
                       <legend class="text-sm font-medium">{{ group.legend }}</legend>

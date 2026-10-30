@@ -503,21 +503,24 @@ export class OrganizationOverview {
     () => this.sport()?.leagueCount ?? this.page().leagueCount,
   );
 
+  // While a filter change loads, the held page is the previous filters' result, so its total is not shown.
   protected readonly matchingCount = computed(() =>
-    hasDivisionFilters(this.filters()) ? this.leaguePaging()?.total : undefined,
+    hasDivisionFilters(this.filters()) && !this.leaguesBusy()
+      ? this.leaguePaging()?.total
+      : undefined,
   );
 
   // The Registration open section and the hero's Register link would speak of the whole organization, so a view with no match leaves them out.
-  protected readonly noMatches = computed(() => this.matchingCount() === 0 && !this.leaguesBusy());
+  protected readonly noMatches = computed(() => this.matchingCount() === 0);
 
   protected readonly leaguesHeading = computed(() => {
     const sport = this.sport();
     return sport ? `${sport.name} leagues` : 'Leagues';
   });
 
-  // The chip row ends in a rule of its own, so the sections below it start without one, unless the Registration open section sits between.
+  // The chip row and the filter bar end in a rule of their own, so the sections below start without one, unless the Registration open section sits between.
   protected readonly gridClass = computed(() =>
-    !this.isEmpty() || !hasSportChoice(this.page().sports)
+    !this.noMatches() && (!this.isEmpty() || !hasSportChoice(this.page().sports))
       ? 'grid gap-x-12 border-t border-border lg:grid-cols-3'
       : 'grid gap-x-12 lg:grid-cols-3',
   );

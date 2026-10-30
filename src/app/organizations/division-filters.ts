@@ -158,10 +158,6 @@ export interface FilterGroup {
   readonly options: readonly FilterOption[];
 }
 
-/**
- * Offers the values some league in view has, plus any chosen one, so a submit keeps it. `sport` is the sport whose formats and levels
- * apply (`filterSport`); with none, as on All sports with several sports, Format and Level are not offered.
- */
 /** A league's division values as the facets query gives them: strings, of which only the standard ones are offered. */
 export interface LeagueFacet {
   readonly gender?: string;
@@ -170,6 +166,10 @@ export interface LeagueFacet {
   readonly ageGroup?: string;
 }
 
+/**
+ * Offers the values some league in view has, plus any chosen one, so a submit keeps it. `sport` is the sport whose formats and levels
+ * apply (`filterSport`); with none, as on All sports with several sports, Format and Level are not offered.
+ */
 export function filterGroups(
   facets: readonly LeagueFacet[],
   filters: DivisionFilters,

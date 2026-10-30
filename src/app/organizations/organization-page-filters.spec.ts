@@ -184,6 +184,7 @@ describe('a filter change after hydration', () => {
     expect(leaguesList(harness)?.getAttribute('aria-busy')).toBe('true');
     expect(rowNames(harness)).toEqual(['Monday Coed 4s', 'Wednesday Reverse Coed 4s']);
     expect(document.activeElement).toBe(count(harness));
+    expect(text(count(harness))).toBe('');
 
     emit(sandResults({ playersPerSide: [4] }), [LEAGUES]);
     await settle(harness);
@@ -243,6 +244,7 @@ describe('the no-matches state', () => {
     expect(text(leagues)).toContain('No leagues match these filters');
     expect(link(harness, 'Register for a season')).toBeUndefined();
     expect(host(harness).querySelector('#registration-open')).toBeNull();
+    expect(leagues?.parentElement?.classList.contains('border-t')).toBe(false);
     const clear = [...(leagues?.querySelectorAll<HTMLAnchorElement>('a') ?? [])].find(
       (a) => text(a) === 'Clear all',
     );
