@@ -1,3 +1,4 @@
+import { Dialog } from '@angular/cdk/dialog';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -18,6 +19,7 @@ import {
   BrnAlertDialogOverlay,
   BrnAlertDialogTitle,
 } from '@spartan-ng/brain/alert-dialog';
+import { BrnDialogService } from '@spartan-ng/brain/dialog';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
@@ -66,7 +68,10 @@ export const REMOVE_LOGO_ALERTS = {
     BrnAlertDialogTitle,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideImageOff, lucideLoaderCircle }), provideSpartanOverlay()],
+  providers: [
+    provideIcons({ lucideImageOff, lucideLoaderCircle }),
+    provideSpartanOverlay(Dialog, BrnDialogService),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog

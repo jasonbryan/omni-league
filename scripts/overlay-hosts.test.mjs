@@ -6,16 +6,54 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const OVERLAY_HOST =
-  /<brn-(?:alert-dialog|dialog|sheet)[\s>]|\bextends Brn(?:AlertDialog|Dialog|Sheet)\b/;
-const PROVIDES_OVERLAY = /\bprovideSpartanOverlay\(\)/;
+const rootDirectiveUse = (...names) => {
+  const kebab = names.map((name) => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`));
+  const pascal = names.map((name) => name[0].toUpperCase() + name.slice(1));
+  return new RegExp(
+    [
+      `<brn-(?:${kebab.join('|')})[\\s>/]`,
+      `[\\s\\[]brn(?:${pascal.join('|')})(?=[\\s=\\]>/])`,
+      `\\bextends Brn(?:${pascal.join('|')})\\b`,
+    ].join('|'),
+  );
+};
+
+const KINDS = [
+  {
+    kind: 'dialog',
+    host: rootDirectiveUse('dialog', 'alertDialog', 'sheet', 'drawer'),
+    openers: ['Dialog', 'BrnDialogService'],
+  },
+  {
+    kind: 'popover',
+    host: rootDirectiveUse('popover', 'overlay', 'select', 'combobox', 'autocomplete'),
+    openers: ['BrnOverlayService'],
+  },
+  {
+    kind: 'CDK overlay',
+    host: new RegExp(
+      [
+        rootDirectiveUse('tooltip', 'hoverCard', 'navigationMenu').source,
+        '\\bcdk(?:MenuTriggerFor|ConnectedOverlay|ContextMenuTriggerFor)\\b',
+        '\\binject\\((?:Overlay|Dialog)\\)',
+      ].join('|'),
+    ),
+    openers: [],
+  },
+];
 
 /**
  * @param {string} text
- * @returns {boolean}
+ * @returns {string[]}
  */
-function missesOverlayDefault(text) {
-  return OVERLAY_HOST.test(text) && !PROVIDES_OVERLAY.test(text);
+function overlayDefaultProblems(text) {
+  const call = text.match(/\bprovideSpartanOverlay\(([^)]*)\)/);
+  const passed = new Set((call?.[1] ?? '').split(',').map((name) => name.trim()));
+  return KINDS.filter(({ host }) => host.test(text))
+    .filter(({ openers }) => !call || openers.some((name) => !passed.has(name)))
+    .map(
+      ({ kind, openers }) => `${kind} host without provideSpartanOverlay(${openers.join(', ')})`,
+    );
 }
 
 async function appSources() {
@@ -26,21 +64,59 @@ async function appSources() {
 }
 
 describe('overlay hosts', () => {
-  it('flags a brain dialog, alert dialog, or sheet host without provideSpartanOverlay()', () => {
-    assert.equal(missesOverlayDefault('template: `<brn-alert-dialog [state]="s">`'), true);
-    assert.equal(missesOverlayDefault('export class HlmSheet extends BrnSheet {}'), true);
-    assert.equal(
-      missesOverlayDefault('providers: [provideSpartanOverlay()], template: `<brn-alert-dialog>`'),
-      false,
+  it('names the kind of host and the call it lacks', () => {
+    assert.deepEqual(overlayDefaultProblems('template: `<brn-alert-dialog [state]="s">`'), [
+      'dialog host without provideSpartanOverlay(Dialog, BrnDialogService)',
+    ]);
+    assert.deepEqual(overlayDefaultProblems('export class HlmSheet extends BrnSheet {}'), [
+      'dialog host without provideSpartanOverlay(Dialog, BrnDialogService)',
+    ]);
+    assert.deepEqual(
+      overlayDefaultProblems('providers: [provideSpartanOverlay()], template: `<div brnSelect>`'),
+      ['popover host without provideSpartanOverlay(BrnOverlayService)'],
     );
-    assert.equal(missesOverlayDefault('template: `<hlm-sheet>`'), false);
+    assert.deepEqual(overlayDefaultProblems('template: `<button brnTooltip="Tip">`'), [
+      'CDK overlay host without provideSpartanOverlay()',
+    ]);
+    assert.deepEqual(overlayDefaultProblems('readonly overlay = inject(Overlay);'), [
+      'CDK overlay host without provideSpartanOverlay()',
+    ]);
+  });
+
+  it('passes a host with the call its kind needs, and the parts and wrappers of a host', () => {
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(Dialog, BrnDialogService)], template: `<brn-alert-dialog>`',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(BrnOverlayService)], template: `<brn-popover>`',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay()], template: `<button brnTooltip="x">`',
+      ),
+      [],
+    );
+    assert.deepEqual(overlayDefaultProblems('template: `<div *brnAlertDialogContent>`'), []);
+    assert.deepEqual(
+      overlayDefaultProblems('export class HlmSheetClose extends BrnSheetClose {}'),
+      [],
+    );
+    assert.deepEqual(overlayDefaultProblems('template: `<hlm-sheet>`'), []);
   });
 
   it('every host in src/app provides the overlay default, so its overlay stays out of the popover top layer', async () => {
-    const missing = [];
+    const problems = [];
     for (const file of await appSources()) {
-      if (missesOverlayDefault(await readFile(file, 'utf8'))) missing.push(relative(root, file));
+      for (const problem of overlayDefaultProblems(await readFile(file, 'utf8'))) {
+        problems.push(`${relative(root, file)}: ${problem}`);
+      }
     }
-    assert.deepEqual(missing, []);
+    assert.deepEqual(problems, []);
   });
 });

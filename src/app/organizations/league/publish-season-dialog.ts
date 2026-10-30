@@ -1,3 +1,4 @@
+import { Dialog } from '@angular/cdk/dialog';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -18,6 +19,7 @@ import {
   BrnAlertDialogOverlay,
   BrnAlertDialogTitle,
 } from '@spartan-ng/brain/alert-dialog';
+import { BrnDialogService } from '@spartan-ng/brain/dialog';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
@@ -79,7 +81,10 @@ type PublishAlert = 'failed' | 'offline';
     BrnAlertDialogTitle,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideGlobe, lucideLoaderCircle }), provideSpartanOverlay()],
+  providers: [
+    provideIcons({ lucideGlobe, lucideLoaderCircle }),
+    provideSpartanOverlay(Dialog, BrnDialogService),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog

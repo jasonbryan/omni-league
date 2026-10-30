@@ -1,5 +1,10 @@
+import { Dialog } from '@angular/cdk/dialog';
 import { ChangeDetectionStrategy, Component, forwardRef } from '@angular/core';
-import { BrnDialog, provideBrnDialogDefaultOptions } from '@spartan-ng/brain/dialog';
+import {
+  BrnDialog,
+  BrnDialogService,
+  provideBrnDialogDefaultOptions,
+} from '@spartan-ng/brain/dialog';
 import { BrnSheet } from '@spartan-ng/brain/sheet';
 import { provideSpartanOverlay } from '../utils/provide-spartan-overlay';
 import { HlmSheetOverlay } from './hlm-sheet-overlay';
@@ -18,7 +23,7 @@ import { HlmSheetOverlay } from './hlm-sheet-overlay';
       useExisting: forwardRef(() => HlmSheet),
     },
     provideBrnDialogDefaultOptions({}),
-    provideSpartanOverlay(),
+    provideSpartanOverlay(Dialog, BrnDialogService),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

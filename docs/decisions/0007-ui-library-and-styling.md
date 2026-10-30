@@ -4,7 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #6
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
-- **Amended:** 2026-10-30 (#202): the overlay default moves from `app.config.ts` to each component that hosts an overlay. See "Amendment: overlay default per host (2026-10-30)" at the end.
+- **Amended:** 2026-10-30 (#202): the overlay default moves from `app.config.ts` to each component that hosts an overlay. See "Amendment: overlay default per host (2026-10-30)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 
 ## Context
 
@@ -510,6 +510,10 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
 
 Issue #202. Caveat 4 under "Server rendering and hydration" put `provideSpartanHlm()` in `app.config.ts`. Its `OVERLAY_DEFAULT_CONFIG` import pulled about 45 kB of CDK overlay code into the initial bundle, which only the lazy sheet and alert dialogs use.
 
-- `provideSpartanOverlay()` (`src/app/ui/utils/provide-spartan-overlay.ts`) replaces it. Each component that hosts a brain sheet, dialog, or alert dialog lists it in its `providers`: today `HlmSheet`, `PublishLeagueDialog`, `PublishSeasonDialog`, and `RemoveLogoDialog`.
-- It provides `{ usePopover: false }` together with `Dialog` and `BrnDialogService`. The CDK reads the config from the injector of the `Dialog` that opens the overlay, and both services are root-provided, so a route-level provider alone would not reach them.
-- A new overlay host adds `provideSpartanOverlay()`; `scripts/overlay-hosts.test.mjs` fails for a file under `src/app` that uses `<brn-alert-dialog>`, `<brn-dialog>`, or `<brn-sheet>`, or extends their classes, without it. Its e2e test checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.
+- `provideSpartanOverlay(...openers)` (`src/app/ui/utils/provide-spartan-overlay.ts`) replaces it. Each component that hosts a CDK overlay lists it in its `providers`. Today the hosts are `HlmSheet`, `PublishLeagueDialog`, `PublishSeasonDialog`, and `RemoveLogoDialog`.
+- It provides `{ usePopover: false }` and `Overlay`, plus the services the host's overlay opens through, which the host passes in:
+  - a brain dialog, alert dialog, sheet, or drawer: `Dialog` and `BrnDialogService`;
+  - a brain popover, select, combobox, or autocomplete: `BrnOverlayService`;
+  - a brain tooltip, hover card, or navigation menu, or a CDK menu or connected overlay: nothing more.
+- The CDK reads the config from the injector of the `Overlay` or `Dialog` that opens the overlay. Those and the brain services that use them are root-provided, so a route-level provider alone would not reach them. Passing the openers keeps each host from bundling another kind's code.
+- `scripts/overlay-hosts.test.mjs` fails for a file under `src/app` that hosts any of these kinds without the matching call. Each host's e2e spec checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.

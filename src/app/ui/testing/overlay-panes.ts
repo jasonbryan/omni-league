@@ -18,7 +18,6 @@ export function removePopoverApi(): void {
   }
 }
 
-/** Each open overlay pane, with whether it sits in `.cdk-overlay-container` and whether a `popover` element holds it. */
 export function overlayPanes(): { inContainer: boolean; inPopover: boolean }[] {
   return [...document.querySelectorAll('.cdk-overlay-pane')].map((pane) => ({
     inContainer: pane.closest('.cdk-overlay-container') !== null,
