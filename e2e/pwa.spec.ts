@@ -7,12 +7,13 @@
 // saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
 // the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
 // that reason.
-import type { BrowserContext, Page, TestInfo } from '@playwright/test';
+import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { expectedOpenCards } from './support/open-seasons';
 
 interface NgswManifest {
   assetGroups: { name: string; urls: string[] }[];
@@ -327,6 +328,14 @@ const savedListKeys = (slug: string) =>
   ['listPublicLeagues', 'listPublicLocations'].map(
     (name) => `cvx-saved:organizations:${name}:${JSON.stringify({ page: 1, slug })}`,
   );
+const savedOpenSeasonsKey = (slug: string) =>
+  `cvx-saved:seasons:listOpenForOrganization:${JSON.stringify({ orgSlug: slug })}`;
+const savedPageKeys = (slug: string) => [
+  savedKey(slug),
+  ...savedListKeys(slug),
+  savedOpenSeasonsKey(slug),
+];
+const ORGANIZATION_LOGO = /^\/api\/storage\/[^/]+$/;
 const NOT_SAVED_HEADING = "This page isn't saved on this device";
 
 async function savedAtOf(page: Page, slug: string): Promise<number | null> {
@@ -334,6 +343,14 @@ async function savedAtOf(page: Page, slug: string): Promise<number | null> {
     const raw = localStorage.getItem(key);
     return raw === null ? null : (JSON.parse(raw) as { savedAt: number }).savedAt;
   }, savedKey(slug));
+}
+
+async function expectLogoLoaded(mark: Locator): Promise<void> {
+  const logo = mark.locator('img');
+  await expect(logo).toHaveCount(1);
+  await expect
+    .poll(() => logo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
+    .toBe(true);
 }
 
 async function expectLinksEnabled(page: Page): Promise<void> {
@@ -376,121 +393,182 @@ test.describe('saved copies (production build with seed:demo data)', () => {
     await routeConvexSockets(context);
   });
 
-  test('a page opened online opens offline from its saved copy with the note; the live result replaces it on reconnect', async ({
-    page,
-    context,
-  }, testInfo) => {
-    const { organization, leagues, locations } = SAVED_ORG;
-    await installWorker(page);
-    await page.goto(SAVED_PATH);
-    const h1 = page.getByRole('heading', { level: 1, name: organization.name });
-    await expect(h1).toBeVisible();
-    await expect.poll(() => savedAtOf(page, organization.slug)).not.toBeNull();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (keys) => keys.map((key) => localStorage.getItem(key) !== null),
-          savedListKeys(organization.slug),
+  test.describe('on the demo organization with a logo', () => {
+    // A route would turn off the context's HTTP cache; a user's browser has no route and keeps the logo.
+    test.use({ netlifyDrawerStub: false });
+
+    test('a page opened online opens offline from its saved copy with the note; the live result replaces it on reconnect', async ({
+      page,
+      context,
+    }, testInfo) => {
+      const { organization, leagues, locations } = SAVED_ORG;
+      await installWorker(page);
+      await page.goto(SAVED_PATH);
+      const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+      await expect(h1).toBeVisible();
+      const mark = page.locator('app-organization-mark');
+      await expectLogoLoaded(mark);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (keys) => keys.map((key) => localStorage.getItem(key) !== null),
+            savedPageKeys(organization.slug),
+          ),
+        )
+        .toEqual([true, true, true, true]);
+      const firstSavedAt = (await savedAtOf(page, organization.slug)) ?? 0;
+      const savedNote = page.locator('main [data-saved-copy-note]');
+      const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
+      await expect(savedNote).toHaveCount(0);
+
+      await setOffline(context, true);
+      const reload = await page.reload();
+      expect(reload?.fromServiceWorker()).toBe(true);
+      await expect(h1).toBeVisible();
+      await expectLogoLoaded(mark);
+      const leagueList = page.locator('#leagues');
+      for (const league of leagues) {
+        await expect(
+          leagueList.getByRole('heading', { level: 3, name: league.name }),
+        ).toBeVisible();
+      }
+      const locationList = page.locator('#locations');
+      for (const location of locations) {
+        await expect(
+          locationList.getByRole('heading', { level: 3, name: location.name }),
+        ).toBeVisible();
+        await expect(locationList.getByText(location.address)).toBeVisible();
+      }
+      const registrationOpen = page.locator('#registration-open');
+      const expectedCards = expectedOpenCards(organization.slug, Date.now());
+      if (expectedCards.length === 0) {
+        await expect(registrationOpen.getByText(/^No season is open/)).toBeVisible();
+      } else {
+        const cards = registrationOpen.locator(':scope > ul > li');
+        await expect(cards.getByRole('heading', { level: 3 })).toHaveText(
+          expectedCards.map((card) => card.leagueName),
+        );
+        for (const [i, card] of expectedCards.entries()) {
+          await expect(cards.nth(i).getByText(card.seasonName, { exact: true })).toBeVisible();
+        }
+      }
+      await expect(offlineNote).toBeVisible();
+      await expect(savedNote).toBeVisible();
+      expect(
+        await page.evaluate(
+          () =>
+            document.querySelector('main h1')?.parentElement?.nextElementSibling?.nextElementSibling
+              ?.tagName,
         ),
-      )
-      .toEqual([true, true]);
-    const firstSavedAt = (await savedAtOf(page, organization.slug)) ?? 0;
-    const savedNote = page.locator('main [data-saved-copy-note]');
-    const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
-    await expect(savedNote).toHaveCount(0);
+      ).toBe('APP-SAVED-COPY-NOTE');
+      const expectedTime = await page.evaluate(
+        (savedAt) => new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(savedAt),
+        firstSavedAt,
+      );
+      const noteText = ((await savedNote.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      expect(noteText).toBe(
+        `Saved copy from today at ${expectedTime.replace(/\s+/g, ' ')}. It may have changed since.`,
+      );
+      await expect(savedNote.locator('time')).toHaveAttribute(
+        'datetime',
+        /^\d{4}-\d\d-\d\dT\d\d:\d\d-0[56]:00$/,
+      );
+      await expectLinksEnabled(page);
+      await screenshotsAndAxe(page, testInfo, 'saved-copy-offline');
 
-    await setOffline(context, true);
-    const reload = await page.reload();
-    expect(reload?.fromServiceWorker()).toBe(true);
-    await expect(h1).toBeVisible();
-    const main = page.getByRole('main');
-    for (const league of leagues) {
-      await expect(main.getByRole('heading', { level: 3, name: league.name })).toBeVisible();
-    }
-    for (const location of locations) {
-      await expect(main.getByRole('heading', { level: 3, name: location.name })).toBeVisible();
-      await expect(main.getByText(location.address)).toBeVisible();
-    }
-    await expect(offlineNote).toBeVisible();
-    await expect(savedNote).toBeVisible();
-    expect(
-      await page.evaluate(
-        () =>
-          document.querySelector('main h1')?.parentElement?.nextElementSibling?.nextElementSibling
-            ?.tagName,
-      ),
-    ).toBe('APP-SAVED-COPY-NOTE');
-    const expectedTime = await page.evaluate(
-      (savedAt) => new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(savedAt),
-      firstSavedAt,
-    );
-    const noteText = ((await savedNote.textContent()) ?? '').replace(/\s+/g, ' ').trim();
-    expect(noteText).toBe(
-      `Saved copy from today at ${expectedTime.replace(/\s+/g, ' ')}. It may have changed since.`,
-    );
-    await expect(savedNote.locator('time')).toHaveAttribute(
-      'datetime',
-      /^\d{4}-\d\d-\d\dT\d\d:\d\d-0[56]:00$/,
-    );
-    await expectLinksEnabled(page);
-    await screenshotsAndAxe(page, testInfo, 'saved-copy-offline');
-
-    await page.evaluate(() => {
-      (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+      await page.evaluate(() => {
+        (window as Window & { e2eNoReload?: boolean }).e2eNoReload = true;
+      });
+      await setOffline(context, false);
+      await expect(savedNote).toHaveCount(0, { timeout: 30_000 });
+      await expect(offlineNote).toBeHidden();
+      await expect(h1).toBeVisible();
+      await expect.poll(() => savedAtOf(page, organization.slug)).toBeGreaterThan(firstSavedAt);
+      expect(
+        await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
+      ).toBe(true);
     });
-    await setOffline(context, false);
-    await expect(savedNote).toHaveCount(0, { timeout: 30_000 });
-    await expect(offlineNote).toBeHidden();
-    await expect(h1).toBeVisible();
-    await expect.poll(() => savedAtOf(page, organization.slug)).toBeGreaterThan(firstSavedAt);
-    expect(
-      await page.evaluate(() => (window as Window & { e2eNoReload?: boolean }).e2eNoReload),
-    ).toBe(true);
-  });
 
-  test('offline, the page needs the header and both lists saved: any one missing shows the not-saved view', async ({
-    page,
-    context,
-  }) => {
-    const { organization } = SAVED_ORG;
-    const keys = [savedKey(organization.slug), ...savedListKeys(organization.slug)];
-    await installWorker(page);
-    await page.goto(SAVED_PATH);
-    const h1 = page.getByRole('heading', { level: 1, name: organization.name });
-    await expect(h1).toBeVisible();
-    await expect
-      .poll(() =>
-        page.evaluate((all) => all.map((key) => localStorage.getItem(key) !== null), keys),
-      )
-      .toEqual([true, true, true]);
+    test('offline, the page needs the header, both lists, and the open seasons saved: any one missing shows the not-saved view', async ({
+      page,
+      context,
+    }) => {
+      const { organization } = SAVED_ORG;
+      const keys = savedPageKeys(organization.slug);
+      await installWorker(page);
+      await page.goto(SAVED_PATH);
+      const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+      await expect(h1).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate((all) => all.map((key) => localStorage.getItem(key) !== null), keys),
+        )
+        .toEqual([true, true, true, true]);
 
-    await setOffline(context, true);
-    for (const missing of keys) {
-      const kept = await page.evaluate((key) => {
-        const raw = localStorage.getItem(key);
-        localStorage.removeItem(key);
-        return raw;
-      }, missing);
-      expect(kept, missing).not.toBeNull();
-      const response = await page.reload();
-      expect(response?.fromServiceWorker(), missing).toBe(true);
-      await expect(
-        page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING }),
-        missing,
-      ).toBeVisible({ timeout: 5_000 });
-      await expect(page.locator('[data-saved-copy-note]'), missing).toHaveCount(0);
+      await setOffline(context, true);
+      for (const missing of keys) {
+        const kept = await page.evaluate((key) => {
+          const raw = localStorage.getItem(key);
+          localStorage.removeItem(key);
+          return raw;
+        }, missing);
+        expect(kept, missing).not.toBeNull();
+        const response = await page.reload();
+        expect(response?.fromServiceWorker(), missing).toBe(true);
+        await expect(
+          page.getByRole('heading', { level: 1, name: NOT_SAVED_HEADING }),
+          missing,
+        ).toBeVisible({ timeout: 5_000 });
+        await expect(page.locator('[data-saved-copy-note]'), missing).toHaveCount(0);
 
-      await page.evaluate(([key, raw]) => localStorage.setItem(key, raw), [
-        missing,
-        kept!,
-      ] as const);
-      await page.reload();
-      await expect(h1, `${missing} restored`).toBeVisible({ timeout: 5_000 });
-      await expect(
-        page.locator('main [data-saved-copy-note]'),
-        `${missing} restored`,
-      ).toBeVisible();
-    }
+        await page.evaluate(([key, raw]) => localStorage.setItem(key, raw), [
+          missing,
+          kept!,
+        ] as const);
+        await page.reload();
+        await expect(h1, `${missing} restored`).toBeVisible({ timeout: 5_000 });
+        await expect(
+          page.locator('main [data-saved-copy-note]'),
+          `${missing} restored`,
+        ).toBeVisible();
+      }
+    });
+
+    test.describe('with the HTTP cache off', () => {
+      // Playwright disables the HTTP cache in a routed context, so the worker has no copy and answers 504.
+      test.use({ expectedFailedRequests: [{ status: 504, path: ORGANIZATION_LOGO }] });
+
+      test('offline, a logo the browser cache does not hold falls back to the initials', async ({
+        page,
+        context,
+      }) => {
+        // Playwright disables the HTTP cache in a routed context, as for a user whose cache no longer holds the logo.
+        await context.route('**/e2e-never-requested', (route) => route.continue());
+        const { organization } = SAVED_ORG;
+        await installWorker(page);
+        await page.goto(SAVED_PATH);
+        const h1 = page.getByRole('heading', { level: 1, name: organization.name });
+        await expect(h1).toBeVisible();
+        const mark = page.locator('app-organization-mark');
+        await expectLogoLoaded(mark);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              (keys) => keys.map((key) => localStorage.getItem(key) !== null),
+              savedPageKeys(organization.slug),
+            ),
+          )
+          .toEqual([true, true, true, true]);
+
+        await setOffline(context, true);
+        const reload = await page.reload();
+        expect(reload?.fromServiceWorker()).toBe(true);
+        await expect(h1).toBeVisible();
+        await expect(page.locator('main [data-saved-copy-note]')).toBeVisible();
+        await expect(mark.locator('img')).toHaveCount(0);
+        await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+      });
+    });
   });
 
   test('a page never opened shows the not-saved view offline within 5 s, with links enabled', async ({
