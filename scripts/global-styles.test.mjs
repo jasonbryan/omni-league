@@ -263,3 +263,62 @@ describe('colour literals in src/', () => {
     }
   });
 });
+
+describe('touch-target classes in src/', () => {
+  // A width breakpoint cannot tell a tablet from a desktop, so `min-h-11` released at `md:` leaves a
+  // 768px-wide touch screen below 44px. `pointer-coarse:min-h-11` asks the pointer instead.
+  const QUOTED = /(["'`])([^"'`\n]*)\1/g;
+  const WIDTH_RELEASE = /^(?:sm|md|lg|xl|2xl):min-h-(?:0|auto)$/;
+
+  function findWidthReleasedTouchTargets(sources) {
+    const matches = [];
+    for (const [file, text] of Object.entries(sources)) {
+      text.split('\n').forEach((line, index) => {
+        for (const [, , classes] of line.matchAll(QUOTED)) {
+          const tokens = classes.split(/\s+/);
+          if (tokens.includes('min-h-11') && tokens.some((token) => WIDTH_RELEASE.test(token))) {
+            matches.push(`${file}:${index + 1}: ${classes.trim()}`);
+          }
+        }
+      });
+    }
+    return matches;
+  }
+
+  it('finds no class string that pairs min-h-11 with a width-prefixed min-h-0 or min-h-auto', async () => {
+    const files = await filesUnder(join(root, 'src'), ['.ts', '.html']);
+    assert.ok(files.length > 10, 'the source files were actually listed');
+    const sources = {};
+    for (const file of files) sources[file] = await read(file);
+    assert.deepEqual(findWidthReleasedTouchTargets(sources), []);
+  });
+
+  it('names the file and line of each class string that pairs the two', () => {
+    const found = findWidthReleasedTouchTargets({
+      'a.ts': [
+        "const A = 'inline-flex min-h-11 items-center md:min-h-0';",
+        '<a class="flex min-h-11 md:min-h-0 gap-2">x</a>',
+        'const B = `min-h-11 2xl:min-h-auto`;',
+        'ok',
+      ].join('\n'),
+    });
+    assert.equal(found.length, 3);
+    assert.match(found[0], /^a\.ts:1: /);
+    assert.match(found[1], /^a\.ts:2: /);
+    assert.match(found[2], /^a\.ts:3: /);
+  });
+
+  it('accepts the pointer query, a lone min-h-0, and min-h-11 with a different release', () => {
+    assert.deepEqual(
+      findWidthReleasedTouchTargets({
+        'a.ts': [
+          "const A = 'inline-flex items-center pointer-coarse:min-h-11';",
+          "const B = 'min-h-0 md:min-h-0';",
+          "const C = 'min-h-11 pointer-fine:min-h-0';",
+          "const D = 'md:min-h-11 md:min-h-0';",
+        ].join('\n'),
+      }),
+      [],
+    );
+  });
+});

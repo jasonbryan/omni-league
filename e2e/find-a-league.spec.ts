@@ -25,7 +25,7 @@ const THURSDAY = 'Thursday Night Coed 2s';
 const DRAFT = 'Coed Draft Night';
 const NORTH_BEACH = 'North Beach Sand Courts';
 const HARBOR = 'Harbor Fields';
-const ADDRESS = '3500 Surfside Blvd, Corpus Christi, TX 78402';
+const ADDRESS = '3500 Sandcourt Ln, Corpus Christi, TX 78402';
 
 const OPEN_SEASON = {
   name: 'Open Season',

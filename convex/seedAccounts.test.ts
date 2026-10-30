@@ -153,7 +153,7 @@ async function membershipsOf(t: T, email: string) {
 }
 
 const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
-const DATA = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 6 };
+const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 43, seasons: 6 };
 const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 
 describe('seed:demo accounts: a new deployment', () => {
@@ -203,7 +203,9 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(memberships).toHaveLength(5);
       expect(invites).toHaveLength(1);
       const gulfCoast = organizations.find((o) => o.slug === GULF_COAST);
-      const league = leagues.find((l) => l.slug === 'coed-7v7-rec');
+      const league = leagues.find(
+        (l) => l.slug === 'coed-7v7-rec' && l.organizationId === gulfCoast?._id,
+      );
       expect(invites[0]).toMatchObject({
         organizationId: gulfCoast?._id,
         email: INVITED,

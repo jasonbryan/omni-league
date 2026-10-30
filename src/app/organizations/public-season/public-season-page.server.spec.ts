@@ -186,7 +186,7 @@ describe('PublicSeasonPage server render', () => {
       'Dates Jun 6 – Aug 29, 2027',
       'Division Coed · 4v4 · Rec From the league · teams need at least 4 players',
       'Registration closes May 23, 2027',
-      'Location North Beach Sand Courts3500 Surfside Blvd, Corpus Christi, TX 78402',
+      'Location North Beach Sand Courts3500 Sandcourt Ln, Corpus Christi, TX 78402',
     ]);
     expect(
       [...body.querySelectorAll('main dl time')].map((time) => time.getAttribute('datetime')),

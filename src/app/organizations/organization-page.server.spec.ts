@@ -174,7 +174,7 @@ describe('OrganizationPage server render', () => {
     ]);
     expect(lines(body.querySelector('#location-1'))).toEqual([
       'Bayside Athletic Complex',
-      '4410 Ocean Dr, Corpus Christi, TX 78412',
+      '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
       'Soccer, softball',
     ]);
     expect([...body.querySelectorAll('main [role="status"]')].map(text)).toEqual(['']);

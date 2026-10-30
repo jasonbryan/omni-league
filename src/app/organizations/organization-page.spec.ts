@@ -229,11 +229,19 @@ describe('OrganizationPage', () => {
       ];
       expect(rows.map((row) => row.id)).toEqual(['location-1', 'location-2', 'location-3']);
       expect(rows.map((row) => [...row.querySelectorAll('h3, p')].map(text))).toEqual([
-        ['Bayside Athletic Complex', '4410 Ocean Dr, Corpus Christi, TX 78412', 'Soccer, softball'],
-        ['Flour Bluff Softball Park', '2001 Waldron Rd, Corpus Christi, TX 78418', 'Softball'],
+        [
+          'Bayside Athletic Complex',
+          '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
+          'Soccer, softball',
+        ],
+        [
+          'Flour Bluff Softball Park',
+          '2001 Bluff Diamond Rd, Corpus Christi, TX 78418',
+          'Softball',
+        ],
         [
           'North Beach Sand Courts',
-          '3500 Surfside Blvd, Corpus Christi, TX 78402',
+          '3500 Sandcourt Ln, Corpus Christi, TX 78402',
           'Beach volleyball',
         ],
       ]);
@@ -262,7 +270,7 @@ describe('OrganizationPage', () => {
         [...(host(harness).querySelector('#location-1')?.querySelectorAll('h3, p') ?? [])].map(
           text,
         ),
-      ).toEqual(['Bayside Athletic Complex', '4410 Ocean Dr, Corpus Christi, TX 78412']);
+      ).toEqual(['Bayside Athletic Complex', '4410 Gullwing Commons Dr, Corpus Christi, TX 78412']);
     });
 
     it('renders in the public layout: top bar and footer, no sidebar and no menu button', () => {

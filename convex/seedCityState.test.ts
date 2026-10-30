@@ -13,6 +13,7 @@ const DEMO_CITY_STATES: Readonly<Record<string, string>> = {
   'lakeshore-sand-league': 'Chicago, IL',
   'saguaro-valley-softball': 'Phoenix, AZ',
   'rockport-sand-volleyball': 'Rockport, TX',
+  'confluence-sport-social': 'Sacramento, CA',
 };
 
 function setup() {
@@ -61,7 +62,7 @@ describe('seed:demo City, state', () => {
     for (const slug of Object.keys(DEMO_CITY_STATES)) await insertBare(t, slug);
 
     const first = await t.mutation(internal.seed.insertDemoData, {});
-    expect(first.updated).toEqual({ organizations: 6 });
+    expect(first.updated).toEqual({ organizations: 7 });
     expect((await cityStates(t))['lakeshore-sand-league']).toBe('Chicago, IL');
     expect(await cityStates(t)).toMatchObject(DEMO_CITY_STATES);
 

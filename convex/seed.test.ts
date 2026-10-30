@@ -21,7 +21,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 6, locations: 11, customLevels: 1, leagues: 17, seasons: 6 };
+const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 43, seasons: 6 };
 const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
@@ -445,17 +445,17 @@ describe('seed:demo', () => {
     expect(gulfLocations.rows).toEqual([
       {
         name: 'Bayside Athletic Complex',
-        address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+        address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
         sportNames: ['Soccer', 'Softball'],
       },
       {
         name: 'Flour Bluff Softball Park',
-        address: '2001 Waldron Rd, Corpus Christi, TX 78418',
+        address: '2001 Bluff Diamond Rd, Corpus Christi, TX 78418',
         sportNames: ['Softball'],
       },
       {
         name: 'North Beach Sand Courts',
-        address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+        address: '3500 Sandcourt Ln, Corpus Christi, TX 78402',
         sportNames: ['Beach volleyball'],
       },
     ]);
@@ -569,10 +569,13 @@ describe('seed:demo', () => {
       insertTenant(ctx, {
         organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast-sport-social' },
         locations: [
-          { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
+          {
+            name: 'Bayside Athletic Complex',
+            address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
+          },
           {
             name: 'North Beach Sand Courts',
-            address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+            address: '3500 Sandcourt Ln, Corpus Christi, TX 78402',
           },
         ],
         leagues: [
