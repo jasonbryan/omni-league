@@ -32,7 +32,7 @@ import { seasonStatus } from './league-seasons';
 import { publicLeaguePath, publicSeasonPath, type PublicLeagueView } from './public-league-path';
 
 const CRUMB_LINK =
-  'inline-flex min-h-11 items-center rounded-md font-medium hover:text-foreground hover:underline md:min-h-0';
+  'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -70,7 +70,7 @@ function plural(count: number, noun: string): string {
             @if (sportHref(); as sportHref) {
               <a [routerLink]="sportHref" class="${CRUMB_LINK}">{{ view().league.sportName }}</a>
             } @else {
-              <span class="inline-flex min-h-11 items-center font-medium md:min-h-0">{{
+              <span class="inline-flex items-center font-medium pointer-coarse:min-h-11">{{
                 view().league.sportName
               }}</span>
             }
@@ -236,7 +236,7 @@ function plural(count: number, noun: string): string {
                 </p>
                 <a
                   [routerLink]="organizationHref()"
-                  class="mt-5 inline-flex min-h-11 items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4 md:min-h-0"
+                  class="mt-5 inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary underline underline-offset-4 pointer-coarse:min-h-11"
                   >See their other leagues<ng-icon
                     name="lucideChevronRight"
                     class="text-base"

@@ -6,6 +6,7 @@ import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { expectLinkHeights, footerAnchors, pointerOf, TOUCH_TABLET } from './support/link-heights';
 import { signUp } from './support/session';
 import { seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser } from './support/users';
@@ -182,6 +183,33 @@ test.describe('public layout: other routes', () => {
       await expectAccessible(page);
       await expectTouchTargets(page, testInfo.project.name === 'chromium-mobile');
     }
+  });
+});
+
+test.describe('public layout: footer link heights', () => {
+  test('the footer links and the brand link are 44px tall under a touch pointer and a line tall under a mouse', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    await page.goto(tenant.path);
+    await hydrated(consoleGuard);
+    await expectLinkHeights(page, footerAnchors(page), pointerOf(testInfo));
+  });
+
+  test.describe('a touch tablet', () => {
+    test.use(TOUCH_TABLET);
+
+    test('the footer links and the brand link are 44px tall', async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport and touch');
+      const { tenant } = await seed();
+      await page.goto(tenant.path);
+      await hydrated(consoleGuard);
+      await expectLinkHeights(page, footerAnchors(page), 'touch');
+    });
   });
 });
 
