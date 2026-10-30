@@ -12,7 +12,14 @@ import {
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
-import { GULF_COAST, queryResults, sportQueryResults } from './testing/pages';
+import {
+  GULF_COAST,
+  listPage,
+  PAGED,
+  pagedResults,
+  queryResults,
+  sportQueryResults,
+} from './testing/pages';
 
 const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
@@ -395,5 +402,176 @@ describe('moving between the chips', () => {
     expect(
       host(harness).querySelector('nav[aria-label="Sports"] [aria-current="page"]')?.textContent,
     ).toContain('All sports');
+  });
+});
+
+const PAGED_SOCCER = `/organizations/${PAGED.slug}/sports/soccer`;
+
+const pagedSoccer = (pages: { leagues?: number; locations?: number } = {}) =>
+  pagedResults(PAGED, pages, 'soccer');
+
+const pagesControl = (harness: RouterTestingHarness, label: string) =>
+  host(harness).querySelector(`nav[aria-label="${label}"]`);
+const linksOf = (nav: Element | null) =>
+  [...(nav?.querySelectorAll('a') ?? [])].map((a) => [text(a), a.getAttribute('href')] as const);
+const idsIn = (harness: RouterTestingHarness, section: string) =>
+  [...host(harness).querySelectorAll(`#${section} li[id]`)].map((row) => row.id);
+const namesIn = (harness: RouterTestingHarness, section: string) =>
+  [...host(harness).querySelectorAll(`#${section} li[id] h3`)].map(text);
+
+function click(nav: Element | null, name: string): void {
+  const link = [...(nav?.querySelectorAll('a') ?? [])].find((a) => text(a) === name);
+  expect(link, name).toBeDefined();
+  link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+}
+
+describe('the sport view locations pages', () => {
+  it('reads the locations page from the locations parameter alone', async () => {
+    await open(`${PAGED_SOCCER}?page=2&locations=3&leagues=4`);
+    expect(subscription(LEAGUES).args).toEqual({ slug: PAGED.slug, page: 2, sport: 'soccer' });
+    expect(subscription(LOCATIONS).args).toEqual({ slug: PAGED.slug, page: 3, sport: 'soccer' });
+  });
+
+  it.each(['?locations=0', '?locations=abc', '?locations=2&locations=3'])(
+    'asks for locations page 1 for %s',
+    async (query) => {
+      await open(`${PAGED_SOCCER}${query}`);
+      expect(subscription(LOCATIONS).args).toMatchObject({ page: 1 });
+    },
+  );
+
+  it('shows locations 6 to 8 on ?locations=2, with its range, page 2 current, and its canonical', async () => {
+    const harness = await open(`${PAGED_SOCCER}?locations=2`);
+    emit(pagedSoccer({ locations: 2 }));
+    await settle(harness);
+    expect(idsIn(harness, 'locations')).toEqual(['location-6', 'location-7', 'location-8']);
+    const nav = pagesControl(harness, 'Locations pages');
+    expect(text(nav?.querySelector('p'))).toBe('6–8 of 8 locations');
+    expect(text(nav?.querySelector('[aria-current="page"]'))).toBe('Page 2');
+    const origin = TestBed.inject(DOCUMENT).location.origin;
+    expect(canonical()).toBe(`${origin}${PAGED_SOCCER}?locations=2`);
+    expect(metaContent('og:url')).toBe(`${origin}${PAGED_SOCCER}?locations=2`);
+  });
+
+  it('on ?page=2&locations=2, numbers both lists across pages and keeps the other page in each control', async () => {
+    const harness = await open(`${PAGED_SOCCER}?page=2&locations=2`);
+    emit(pagedSoccer({ leagues: 2, locations: 2 }));
+    await settle(harness);
+    expect(idsIn(harness, 'leagues')).toEqual([
+      'league-6',
+      'league-7',
+      'league-8',
+      'league-9',
+      'league-10',
+    ]);
+    expect(namesIn(harness, 'leagues')[0]).toBe('League 06');
+    expect(idsIn(harness, 'locations')).toEqual(['location-6', 'location-7', 'location-8']);
+    expect(linksOf(pagesControl(harness, 'Leagues pages'))).toEqual([
+      ['Previous page', `${PAGED_SOCCER}?locations=2#leagues`],
+      ['Page 1', `${PAGED_SOCCER}?locations=2#leagues`],
+      ['Page 2', `${PAGED_SOCCER}?page=2&locations=2#leagues`],
+      ['Page 3', `${PAGED_SOCCER}?page=3&locations=2#leagues`],
+      ['Next page', `${PAGED_SOCCER}?page=3&locations=2#leagues`],
+    ]);
+    expect(linksOf(pagesControl(harness, 'Locations pages'))).toEqual([
+      ['Previous page', `${PAGED_SOCCER}?page=2#locations`],
+      ['Page 1', `${PAGED_SOCCER}?page=2#locations`],
+      ['Page 2', `${PAGED_SOCCER}?page=2&locations=2#locations`],
+    ]);
+    const origin = TestBed.inject(DOCUMENT).location.origin;
+    expect(canonical()).toBe(`${origin}${PAGED_SOCCER}?page=2&locations=2`);
+  });
+
+  it('shows no locations control for 5 locations and 2 pages for 6', async () => {
+    const withLocations = (count: number) => ({
+      ...PAGED,
+      sports: PAGED.sports.map((sport) =>
+        sport.key === 'soccer' ? { ...sport, locationCount: count } : sport,
+      ),
+      locations: PAGED.locations.slice(0, count),
+    });
+    const five = await open(PAGED_SOCCER);
+    emit(pagedResults(withLocations(5), {}, 'soccer'));
+    await settle(five);
+    expect(idsIn(five, 'locations')).toHaveLength(5);
+    expect(pagesControl(five, 'Locations pages')).toBeNull();
+
+    TestBed.resetTestingModule();
+    const six = await open(PAGED_SOCCER);
+    emit(pagedResults(withLocations(6), {}, 'soccer'));
+    await settle(six);
+    expect(
+      linksOf(pagesControl(six, 'Locations pages')).filter(([name]) => name.startsWith('Page ')),
+    ).toHaveLength(2);
+  });
+
+  it('keeps the shown locations with aria-busy, then swaps them and focuses the Locations heading', async () => {
+    const harness = await open(PAGED_SOCCER);
+    emit(pagedSoccer());
+    await settle(harness);
+    const kept = [subscription(HEADER), subscription(LEAGUES)];
+    click(pagesControl(harness, 'Locations pages'), 'Next page');
+    await settle(harness);
+    expect(TestBed.inject(Router).url).toBe(`${PAGED_SOCCER}?locations=2#locations`);
+    expect([subscription(HEADER), subscription(LEAGUES)]).toEqual(kept);
+    const list = () => locationsSection(harness)?.querySelector('ul');
+    expect(list()?.getAttribute('aria-busy')).toBe('true');
+    expect(namesIn(harness, 'locations')).toEqual([
+      'Location 01',
+      'Location 02',
+      'Location 03',
+      'Location 04',
+      'Location 05',
+    ]);
+    expect(document.activeElement).not.toBe(locationsSection(harness)?.querySelector('h2'));
+
+    subscription(LOCATIONS).emit(pagedSoccer({ locations: 2 })[LOCATIONS]);
+    await settle(harness);
+    expect(list()?.getAttribute('aria-busy')).toBeNull();
+    expect(namesIn(harness, 'locations')).toEqual(['Location 06', 'Location 07', 'Location 08']);
+    expect(document.activeElement).toBe(locationsSection(harness)?.querySelector('h2'));
+  });
+
+  it('keeps the locations subscription open across a leagues page change', async () => {
+    const harness = await open(PAGED_SOCCER);
+    emit(pagedSoccer());
+    await settle(harness);
+    const kept = [subscription(HEADER), subscription(LOCATIONS)];
+    click(pagesControl(harness, 'Leagues pages'), 'Next page');
+    await settle(harness);
+    expect(TestBed.inject(Router).url).toBe(`${PAGED_SOCCER}?page=2#leagues`);
+    expect([subscription(HEADER), subscription(LOCATIONS)]).toEqual(kept);
+  });
+
+  it('shows the server-error view with Try again to the requested pages when a locations page fails', async () => {
+    const harness = await open(`${PAGED_SOCCER}?page=2`);
+    emit(pagedSoccer({ leagues: 2 }));
+    await settle(harness);
+    click(pagesControl(harness, 'Locations pages'), 'Next page');
+    await settle(harness);
+    subscription(LOCATIONS).fail(new Error('down'));
+    await settle(harness);
+    expect(text(host(harness).querySelector('main h1'))).toBe(
+      'This page is temporarily unavailable',
+    );
+    expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(
+      `${PAGED_SOCCER}?page=2&locations=2`,
+    );
+  });
+
+  it('shows locations page 1 when the shown page is past the last, and leaves the URL alone', async () => {
+    const harness = await open(`${PAGED_SOCCER}?locations=2`);
+    emit(pagedSoccer({ locations: 2 }));
+    await settle(harness);
+    subscription(LOCATIONS).emit(listPage(PAGED.locations.slice(0, 5), 2));
+    await settle(harness);
+    expect(idsIn(harness, 'locations')).toEqual([
+      'location-1',
+      'location-2',
+      'location-3',
+      'location-4',
+      'location-5',
+    ]);
+    expect(TestBed.inject(Router).url).toBe(`${PAGED_SOCCER}?locations=2`);
   });
 });

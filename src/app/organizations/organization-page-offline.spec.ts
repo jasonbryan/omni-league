@@ -16,7 +16,7 @@ import { PlainTestPage } from '../shell/testing/test-pages';
 import { PAGE_LOAD_WAIT_MS } from '../public-layout/page-load-wait-ms';
 import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
-import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
+import { GULF_COAST, PAGED, PORT_ARANSAS, pagedResults, queryResults } from './testing/pages';
 
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
@@ -433,4 +433,88 @@ describe('OrganizationPage offline', () => {
     expect(text(host(harness).querySelector('main h1'))).toBe(GULF_COAST.name);
     expect(host(harness).querySelector('app-server-error-view')).toBeNull();
   });
+});
+
+describe('OrganizationPage pages offline', () => {
+  const ORG = `/organizations/${PAGED.slug}`;
+  const slug = PAGED.slug;
+
+  function plantPages(pages: { leagues: number; locations: number }): void {
+    const results = pagedResults(PAGED, pages);
+    plantSavedCopy(api.organizations.getPublicPage, { slug }, results[HEADER], SAVED_AT);
+    plantSavedCopy(
+      api.organizations.listPublicLeagues,
+      { slug, page: pages.leagues },
+      results[LEAGUES],
+      SAVED_AT,
+    );
+    plantSavedCopy(
+      api.organizations.listPublicLocations,
+      { slug, page: pages.locations },
+      results[LOCATIONS],
+      SAVED_AT,
+    );
+    plantSavedCopy(
+      api.seasons.listOpenForOrganization,
+      { orgSlug: slug },
+      results[OPEN_SEASONS],
+      SAVED_AT,
+    );
+  }
+
+  function activate(harness: RouterTestingHarness, label: string): void {
+    const link = host(harness).querySelector<HTMLAnchorElement>(
+      `nav[aria-label="${label}"] a[href*="=2#"]`,
+    );
+    expect(link, label).not.toBeNull();
+    link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(NOW);
+    stubOnLine(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('shows a saved ?leagues=2 with leagues 6 to 10 and the saved-copy note', async () => {
+    plantPages({ leagues: 2, locations: 1 });
+    const harness = await open(`${ORG}?leagues=2`, { socket: 'down' });
+    expect([...host(harness).querySelectorAll('#leagues li[id]')].map((row) => row.id)).toEqual([
+      'league-6',
+      'league-7',
+      'league-8',
+      'league-9',
+      'league-10',
+    ]);
+    expect(text(host(harness).querySelector('#leagues li[id] h3'))).toBe('League 06');
+    expect(text(note(harness))).toBe(
+      `Saved copy from ${formatSavedTime(SAVED_AT, NOW).text}. It may have changed since.`,
+    );
+  });
+
+  it.each([
+    ['Leagues pages', `${ORG}?leagues=2`],
+    ['Locations pages', `${ORG}?locations=2`],
+  ])(
+    'after %s to a page with no saved copy, shows the not-saved view at once with Try again to %s',
+    async (label, retry) => {
+      plantPages({ leagues: 1, locations: 1 });
+      const harness = await open(ORG, { socket: 'down' });
+      expect(host(harness).querySelector('#leagues li[id]')).not.toBeNull();
+      activate(harness, label);
+      await settle(harness);
+      expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+      expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(retry);
+      expect(host(harness).querySelector('main li[id]')).toBeNull();
+      expect(host(harness).textContent).not.toContain('League 01');
+      expect(host(harness).textContent).not.toContain('Location 01');
+    },
+  );
 });

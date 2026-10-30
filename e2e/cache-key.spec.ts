@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
-import { numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
+import { numberedLocations, numberedSeasons, seedSeasons, seedTenant } from './support/tenant';
 
 /**
  * Paths the edge function answers (server and client routes), one per route kind. Add one for every
@@ -314,6 +314,152 @@ test.describe('query strings and the CDN', () => {
         expect(response.headers['netlify-vary'], sample(token)).toBe('query');
         const h1 = (body: string) => /<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(body)?.[1]?.trim();
         expect(h1(response.body), sample(token)).toBe(h1(first.body));
+      }
+    },
+  );
+});
+
+const PUBLIC_PAGE_CACHE = 'public,max-age=0,s-maxage=60,stale-while-revalidate=300';
+const ORIGIN = new URL(baseURL).origin;
+
+const rowIdsOf = (body: string, kind: 'league' | 'location') =>
+  [...body.matchAll(new RegExp(`\\sid="(${kind}-\\d+)"`, 'g'))].map(([, id]) => id);
+const canonicalOf = (body: string) => {
+  const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(body)?.[0] ?? '';
+  return /\bhref="([^"]*)"/.exec(tag)?.[1]?.replaceAll('&amp;', '&');
+};
+const rowIds = (kind: 'league' | 'location', from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => `${kind}-${from + i}`);
+
+/**
+ * On a preview, Confluence Sport & Social from `seed:demo` (26 leagues, 14 locations; soccer has 8
+ * leagues and 7 locations). Locally, a tenant seeded with the same counts.
+ */
+async function pagedOrganization(): Promise<string> {
+  if (remoteBaseUrl !== undefined) return '/organizations/confluence-sport-social';
+  const locations = numberedLocations(14);
+  const tenant = await seedTenant({
+    name: 'E2E Cache Key Organization Pages',
+    locations,
+    leagues: Array.from({ length: 26 }, (_, i) => ({
+      name: `League ${String(i + 1).padStart(2, '0')}`,
+      sport: i < 8 ? ('soccer' as const) : ('softball' as const),
+      locations: [locations[i < 8 ? i % 7 : 7 + (i % 7)].name],
+    })),
+  });
+  return tenant.path;
+}
+
+test.describe('numbered pages of the organization page and the sport view', () => {
+  test(
+    'the organization page: a page that is not valid or past the last renders page 1, cacheable, with no Location and none of the value',
+    RAW_HTTP,
+    async () => {
+      const path = await pagedOrganization();
+      for (const query of [
+        '?leagues=0',
+        '?leagues=7',
+        '?leagues=41',
+        '?leagues=2.5',
+        '?leagues=02',
+        '?leagues=abc',
+        '?leagues=',
+        '?leagues=2&leagues=3',
+      ]) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+          PUBLIC_PAGE_CACHE,
+        );
+        expect(response.headers.location, query).toBeUndefined();
+        expect(response.headers['netlify-vary'], query).toBe('query');
+        expect(rowIdsOf(response.body, 'league'), query).toEqual(rowIds('league', 1, 5));
+        expect(canonicalOf(response.body), query).toBe(`${ORIGIN}${path}`);
+        if (query !== '?leagues=') {
+          const raw = query.slice(1);
+          expect(response.body, query).not.toContain(raw);
+          expect(response.body, query).not.toContain(raw.replaceAll('&', '&amp;'));
+        }
+      }
+      for (const sample of [
+        (c: string) => `?leagues=${c}`,
+        (c: string) => `?leagues=2&leagues=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
+        expect(rowIdsOf(response.body, 'league'), sample(token)).toEqual(rowIds('league', 1, 5));
+      }
+    },
+  );
+
+  test(
+    'the organization page: a request for one leagues page never gets the body of a request for another',
+    RAW_HTTP,
+    async () => {
+      const path = await pagedOrganization();
+      const expected: Record<string, string[]> = {
+        '?leagues=2': rowIds('league', 6, 10),
+        '?leagues=3': rowIds('league', 11, 15),
+        '?leagues=2&leagues=3': rowIds('league', 1, 5),
+        '': rowIds('league', 1, 5),
+      };
+      for (const query of [
+        '?leagues=2',
+        '?leagues=2',
+        '?leagues=3',
+        '?leagues=2&leagues=3',
+        '',
+        '?leagues=2',
+      ]) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(rowIdsOf(response.body, 'league'), query).toEqual(expected[query]);
+      }
+    },
+  );
+
+  test(
+    'the sport view: a locations page that is not valid renders page 1 with no Location, and ?locations=2 holds the last 2 of 7',
+    RAW_HTTP,
+    async () => {
+      const path = `${await pagedOrganization()}/sports/soccer`;
+      const lastTwo =
+        remoteBaseUrl === undefined
+          ? ['Location 06', 'Location 07']
+          : ['Mallard Point Park', 'Sunrise Ridge Turf'];
+      const second = await rawGet(`${path}?locations=2`);
+      expect(second.status).toBe(200);
+      expect(rowIdsOf(second.body, 'location')).toEqual(['location-6', 'location-7']);
+      const locations =
+        /<section\b[^>]*\bid="locations"[^>]*>([\s\S]*?)<\/section>/.exec(second.body)?.[1] ?? '';
+      expect(
+        [...locations.matchAll(/<h3\b[^>]*>\s*([^<]*)/g)].map(([, name]) => name.trim()),
+      ).toEqual(lastTwo);
+      expect(locations).toMatch(/>\s*6–7 of 7\s*<span\b[^>]*>\s*locations\s*<\/span>/);
+      expect(canonicalOf(second.body)).toBe(`${ORIGIN}${path}?locations=2`);
+
+      for (const query of ['?locations=0', '?locations=abc', '?locations=2&locations=3']) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(response.headers.location, query).toBeUndefined();
+        expect(response.headers['netlify-vary'], query).toBe('query');
+        expect(rowIdsOf(response.body, 'location'), query).toEqual(rowIds('location', 1, 5));
+        expect(canonicalOf(response.body), query).toBe(`${ORIGIN}${path}`);
+      }
+      for (const sample of [
+        (c: string) => `?locations=${c}`,
+        (c: string) => `?locations=2&locations=${c}`,
+      ]) {
+        const token = canary();
+        const response = await rawGet(`${path}${sample(token)}`);
+        expect(response.status, sample(token)).toBe(200);
+        expect(response.body, sample(token)).not.toContain(token);
+        expect(JSON.stringify(response.headers), sample(token)).not.toContain(token);
+        expect(response.headers.location, sample(token)).toBeUndefined();
       }
     },
   );

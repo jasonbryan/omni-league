@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe('OrganizationPage', () => {
-  it("subscribes to the header and page 1 of each list with the route's slug only", async () => {
+  it("subscribes to the header and each list with the route's slug and the page from the URL only", async () => {
     await open('/organizations/gulf-coast-sport-social?ott=SECRET&leagues=3#league-2');
     expect(
       client.activeSubscriptions
@@ -90,7 +90,7 @@ describe('OrganizationPage', () => {
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
-      { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 1 } },
+      { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 3 } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1 } },
       { name: OPEN_SEASONS, args: { orgSlug: 'gulf-coast-sport-social' } },
     ]);
@@ -380,11 +380,12 @@ describe('OrganizationPage', () => {
       expect(host(harness).querySelector('nav[aria-label="Sports"]')).toBeNull();
     });
 
-    it('shows no page control on the organization page, which lists page 1 only', async () => {
+    it('shows the leagues page control on the organization page for 13 leagues', async () => {
       const harness = await open();
       emit({ ...GULF_COAST, leagueCount: 13 });
       await settle(harness);
-      expect(host(harness).querySelector('app-page-control')).toBeNull();
+      expect(host(harness).querySelector('nav[aria-label="Leagues pages"]')).not.toBeNull();
+      expect(host(harness).querySelector('nav[aria-label="Locations pages"]')).toBeNull();
     });
   });
 

@@ -1,3 +1,4 @@
+import type { Params } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '../../../convex/_generated/api';
 
@@ -33,8 +34,32 @@ export function sportViewPath(orgSlug: string, segment: string): string {
   return `${organizationPath(orgSlug)}/sports/${encodeURIComponent(segment)}`;
 }
 
-/** Built from the query result's page number, an integer, never the request's query string. */
-export function sportViewCanonicalPath(orgSlug: string, segment: string, page: number): string {
-  const path = sportViewPath(orgSlug, segment);
-  return page > 1 ? `${path}?page=${page}` : path;
+export type PagedList = 'leagues' | 'locations';
+
+export type ListPages = Readonly<Record<PagedList, number>>;
+
+/** The sport view names its leagues page `page`, which links already shared use. */
+export function listPagesQuery(pages: ListPages, sportView: boolean): Params {
+  return {
+    ...(pages.leagues > 1 && { [sportView ? 'page' : 'leagues']: pages.leagues }),
+    ...(pages.locations > 1 && { locations: pages.locations }),
+  };
+}
+
+/** Built from page numbers, integers from `parseListPage` or a query result, never the request's query string. */
+export function listPagesPath(slug: string, segment: string | undefined, pages: ListPages): string {
+  const path = segment === undefined ? organizationPath(slug) : sportViewPath(slug, segment);
+  const query = Object.entries(listPagesQuery(pages, segment !== undefined))
+    .map(([name, page]) => `${name}=${page}`)
+    .join('&');
+  return query ? `${path}?${query}` : path;
+}
+
+/** The links of one list's control, each keeping the other list on its page. */
+export function pageQueryFor(
+  list: PagedList,
+  pages: ListPages,
+  sportView: boolean,
+): (page: number) => Params {
+  return (page) => listPagesQuery({ ...pages, [list]: page }, sportView);
 }
