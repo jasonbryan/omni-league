@@ -34,6 +34,7 @@ import { AlertText, OfflineAlertText } from '../admin/alert-text';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
+import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 
 export interface PublishSeasonTarget {
   seasonId: Id<'seasons'>;
@@ -78,7 +79,7 @@ type PublishAlert = 'failed' | 'offline';
     BrnAlertDialogTitle,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideGlobe, lucideLoaderCircle })],
+  providers: [provideIcons({ lucideGlobe, lucideLoaderCircle }), provideSpartanOverlay()],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog

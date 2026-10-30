@@ -33,6 +33,7 @@ import {
   ALERT_DIALOG_TITLE,
 } from './alert-dialog-classes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 
 export interface PublishTarget {
   leagueId: Id<'leagues'>;
@@ -72,7 +73,7 @@ export const PUBLISH_ALERTS = {
     BrnAlertDialogTitle,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideGlobe, lucideLoaderCircle })],
+  providers: [provideIcons({ lucideGlobe, lucideLoaderCircle }), provideSpartanOverlay()],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog

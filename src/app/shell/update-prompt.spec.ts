@@ -26,6 +26,40 @@ const CARD_CLASSES =
   'fixed inset-x-3 bottom-3 z-40 rounded-xl bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] ' +
   'text-card-foreground shadow-lg ring-1 ring-foreground/10 sm:inset-x-auto sm:end-4 sm:bottom-4 sm:w-96';
 
+// Lucide's shapes, drawn inline so the prompt, which must load with the first page, needs no icon library.
+const REFRESH_CW = [
+  'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8',
+  'M21 3v5h-5',
+  'M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16',
+  'M8 16H3v5',
+];
+const ROTATE_CW = ['M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8', 'M21 3v5h-5'];
+const CIRCLE_ALERT = ['circle 12 12 10', 'line 12 8 12 12', 'line 12 16 12.01 16'];
+
+/** Each icon in the card as a 24-unit Lucide stroke drawing, with whether it sits in the tile; any other kind of icon fails the comparison. */
+function icons(section: HTMLElement | null) {
+  const shape = (element: Element) =>
+    element.tagName === 'path'
+      ? element.getAttribute('d')
+      : element.tagName === 'circle'
+        ? ['circle', ...['cx', 'cy', 'r'].map((name) => element.getAttribute(name))].join(' ')
+        : [
+            element.tagName,
+            ...['x1', 'y1', 'x2', 'y2'].map((name) => element.getAttribute(name)),
+          ].join(' ');
+  return [...(section?.querySelectorAll('svg, ng-icon') ?? [])].map((icon) => ({
+    tile: icon.parentElement?.tagName === 'SPAN',
+    paths:
+      icon.tagName === 'svg' &&
+      icon.getAttribute('aria-hidden') === 'true' &&
+      icon.getAttribute('viewBox') === '0 0 24 24' &&
+      icon.getAttribute('stroke') === 'currentColor' &&
+      icon.getAttribute('stroke-width') === '2'
+        ? [...icon.children].map(shape)
+        : icon.tagName,
+  }));
+}
+
 const text = (element: Element | null | undefined) =>
   (element?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const sorted = (classes: string) => classes.split(/\s+/).filter(Boolean).sort();
@@ -106,22 +140,24 @@ describe('UpdatePrompt', () => {
       const laterButton = button('Later');
       expect(reloadButton?.type).toBe('button');
       expect(sorted(reloadButton?.className ?? '')).toEqual(sorted(hlm(buttonVariants())));
-      expect(reloadButton?.querySelector('ng-icon')?.getAttribute('data-icon')).toBe(
-        'inline-start',
-      );
+      expect(reloadButton?.firstElementChild?.getAttribute('data-icon')).toBe('inline-start');
       expect(laterButton?.type).toBe('button');
       expect(sorted(laterButton?.className ?? '')).toEqual(
         sorted(hlm(buttonVariants({ variant: 'ghost' }))),
       );
-      for (const icon of card()?.querySelectorAll('ng-icon') ?? []) {
-        expect(icon.getAttribute('aria-hidden')).toBe('true');
-      }
       const tile = card()?.querySelector('span');
       expect(sorted(tile?.className ?? '')).toEqual(
         sorted(
           'flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground',
         ),
       );
+    });
+
+    it('draws the refresh icon in its tile and the rotate icon first in Reload, hidden from screen readers', () => {
+      expect(icons(card())).toEqual([
+        { tile: true, paths: REFRESH_CW },
+        { tile: false, paths: ROTATE_CW },
+      ]);
     });
 
     it('does not take focus', () => {
@@ -210,6 +246,13 @@ describe('UpdatePrompt', () => {
         ),
       );
       expect(text(status())).toBe('');
+    });
+
+    it('draws the alert icon in its tile and the rotate icon first in Reload, hidden from screen readers', () => {
+      expect(icons(card())).toEqual([
+        { tile: true, paths: CIRCLE_ALERT },
+        { tile: false, paths: ROTATE_CW },
+      ]);
     });
 
     it('Reload reloads the page', () => {

@@ -4,7 +4,6 @@ import { provideServerRendering, renderApplication } from '@angular/platform-ser
 import { provideRouter } from '@angular/router';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { App } from '../app';
-import { provideSpartanHlm } from '../ui/utils';
 import { PublicLayout } from './public-layout';
 
 @Component({
@@ -33,11 +32,7 @@ function render(): Promise<string> {
     bootstrapApplication(
       App,
       {
-        providers: [
-          provideServerRendering(),
-          provideRouter([{ path: '**', component: TestPage }]),
-          provideSpartanHlm(),
-        ],
+        providers: [provideServerRendering(), provideRouter([{ path: '**', component: TestPage }])],
       },
       context,
     );

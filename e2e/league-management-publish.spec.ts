@@ -3,6 +3,7 @@ import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { overlayPanes } from './support/overlay';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
@@ -110,6 +111,7 @@ test.describe('League management: publishing a season', () => {
     await publishButton(page, 'Fall 2027').click();
 
     await expect(dialog(page)).toBeVisible();
+    expect(await overlayPanes(page)).toEqual([{ inContainer: true, inPopover: false }]);
     await expect(dialog(page).getByRole('heading')).toHaveText('Publish Fall 2027?');
     await expect(dialog(page)).toContainText(
       'It will appear on Coed 7v7 Rec’s public page, and players can register until Aug 25, 2027. Seasons can’t be unpublished yet.',

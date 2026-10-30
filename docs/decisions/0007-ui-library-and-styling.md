@@ -4,6 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #6
 - **Date:** 2026-10-07 (revised 2026-10-07 for ADR 0006 hybrid rendering)
+- **Amended:** 2026-10-30 (#202): the overlay default moves from `app.config.ts` to each component that hosts an overlay. See "Amendment: overlay default per host (2026-10-30)" at the end.
 
 ## Context
 
@@ -504,3 +505,11 @@ ADR 0006 renders public pages on the server and hydrates them. ADR 0006 requires
   - Package contents: `@spartan-ng/cli` 1.6.1 `src/generators/ui/libs/{utils,button,input,label,dialog,select,native-select,textarea}/files/**` and `src/generators/ui/style-vega.css`; `@spartan-ng/brain` 1.6.1 `fesm2022/*.mjs`; `@ng-icons/core` 36.1.0 `fesm2022/ng-icons-core.mjs`.
   - Scratch SSR app, 2026-10-07: Node 26.11.0, npm 11.20.0 under ADR 0003's policy, `@angular/*` and `@angular/ssr` 22.2.1, Playwright 1.64.0 (Chromium). Results are in "Server rendering and hydration".
 - **Measurements:** scratch builds with Angular CLI 22.2.2 on Node 24.16.0, 2026-10-07. They covered the bundle sizes in the Options table and the `mockup-kit` configuration test (mockup-only class present in `mockup-kit.css`, absent from `styles.css`, kit not injected into `index.html`).
+
+## Amendment: overlay default per host (2026-10-30)
+
+Issue #202. Caveat 4 under "Server rendering and hydration" put `provideSpartanHlm()` in `app.config.ts`. Its `OVERLAY_DEFAULT_CONFIG` import pulled about 45 kB of CDK overlay code into the initial bundle, which only the lazy sheet and alert dialogs use.
+
+- `provideSpartanOverlay()` (`src/app/ui/utils/provide-spartan-overlay.ts`) replaces it. Each component that hosts a brain sheet, dialog, or alert dialog lists it in its `providers`: today `HlmSheet`, `PublishLeagueDialog`, and `PublishSeasonDialog`.
+- It provides `{ usePopover: false }` together with `Dialog` and `BrnDialogService`. The CDK reads the config from the injector of the `Dialog` that opens the overlay, and both services are root-provided, so a route-level provider alone would not reach them.
+- A new overlay host adds `provideSpartanOverlay()`, and its e2e test checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.

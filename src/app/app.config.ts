@@ -12,9 +12,6 @@ import {
 import { provideFocusMainAfterNavigation } from './core/focus-main';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 import { provideUpdatePrompt } from './shell/update-prompt';
-// Not the `./ui/utils` barrel: through it, the eager bundle would share the helm class merging
-// (tailwind-merge) with every lazy chunk that uses a helm component.
-import { provideSpartanHlm } from './ui/utils/provide-spartan-hlm';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -27,7 +24,6 @@ export const appConfig: ApplicationConfig = {
     provideConvex(),
     // The browser Convex client authenticates with Better Auth's JWT. The server ignores it: AUTH_CLIENT is null there, so server renders stay anonymous.
     provideConvexAuth(AuthService),
-    provideSpartanHlm(),
     // Registers a worker only in production builds with angular.json's `serviceWorker` option, so development and kill-switch builds register none.
     provideServiceWorker(
       'ngsw-worker.js',

@@ -279,6 +279,21 @@ test.describe('service worker (production build)', () => {
     await expect(alert).toBeVisible();
     await expect(alert).toHaveAccessibleName('Omni League needs to reload');
     await expect(alert.getByRole('button')).toHaveText(['Reload']);
+    await expect(alert.locator('svg')).toHaveCount(2);
+    for (const icon of await alert.locator('svg').all()) await expect(icon).toBeVisible();
+    expect(
+      await alert
+        .locator('svg')
+        .evaluateAll((icons) =>
+          icons.map((icon) => [
+            icon.getBoundingClientRect().width,
+            icon.querySelectorAll('*').length,
+          ]),
+        ),
+    ).toEqual([
+      [18, 3],
+      [16, 2],
+    ]);
     for (const [width, height] of [
       [360, 800],
       [1280, 720],
