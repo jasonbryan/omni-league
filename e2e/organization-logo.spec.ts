@@ -4,6 +4,7 @@ import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -157,6 +158,7 @@ test.describe('the Details page: Logo', () => {
     await removeButton(page).click();
     const dialog = page.getByRole('alertdialog', { name: 'Remove the logo?' });
     await expect(dialog).toBeVisible();
+    expect(await overlayPanes(page)).toEqual([{ inContainer: true, inPopover: false }]);
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await screenshot(page, testInfo, '251-logo-remove-confirm');
     await dialog.getByRole('button', { name: 'Cancel' }).click();

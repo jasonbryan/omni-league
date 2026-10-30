@@ -1,4 +1,4 @@
-import { OVERLAY_DEFAULT_CONFIG } from '@angular/cdk/overlay';
+import { Component, viewChild } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, UrlSerializer } from '@angular/router';
 import { SwRegistrationOptions, SwUpdate } from '@angular/service-worker';
@@ -9,11 +9,25 @@ import { AuthService } from './core/auth/auth.service';
 import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
 import { AppUpdates } from './core/service-worker/app-updates';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
+import { HlmSheet, HlmSheetContent, HlmSheetPortal } from './ui/sheet';
+import { overlayPanes, removePopoverApi, stubPopoverApi } from './ui/testing/overlay-panes';
 
 // TestBed has no server response, so provideClientHydration() warns NG0505. That warning is a test
 // artifact (the real browser receives server-rendered HTML); every other console call fails the test.
 const isTestOnlyHydrationWarning = (args: unknown[]) =>
   typeof args[0] === 'string' && args[0].startsWith('NG0505:');
+
+@Component({
+  imports: [HlmSheet, HlmSheetContent, HlmSheetPortal],
+  template: `
+    <hlm-sheet>
+      <hlm-sheet-content *hlmSheetPortal>Content</hlm-sheet-content>
+    </hlm-sheet>
+  `,
+})
+class SheetHost {
+  readonly sheet = viewChild.required(HlmSheet);
+}
 
 describe('appConfig with no Convex URL', () => {
   it('registers the Convex provider, creates no client, and renders the placeholder silently', async () => {
@@ -40,10 +54,20 @@ describe('appConfig with no Convex URL', () => {
     }
   });
 
-  it('provides the spartan helm defaults (overlays do not use the popover API)', () => {
-    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+  describe('in a browser with the popover API', () => {
+    beforeEach(stubPopoverApi);
+    afterEach(removePopoverApi);
 
-    expect(TestBed.inject(OVERLAY_DEFAULT_CONFIG)).toEqual({ usePopover: false });
+    it('opens a sheet in the overlay container, not the popover top layer', async () => {
+      TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+      const fixture = TestBed.createComponent(SheetHost);
+      fixture.detectChanges();
+
+      fixture.componentInstance.sheet().open();
+      await fixture.whenStable();
+
+      expect(overlayPanes()).toEqual([{ inContainer: true, inPopover: false }]);
+    });
   });
 
   it('registers AuthService as the Convex auth source, with no Better Auth client', () => {

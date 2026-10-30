@@ -198,6 +198,13 @@ test.describe('service worker (production build)', () => {
     const status = prompt.locator('[role="status"]');
     await expect(card).toHaveCount(0);
     await expect(status).toHaveText('');
+    // Unsaved input holds a ready version and the unrecoverable reload, so both cards show instead of the page reloading by itself.
+    await page.locator('main').evaluate((main) => {
+      const field = document.createElement('input');
+      field.setAttribute('aria-label', 'Unsaved note');
+      main.append(field);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 
     await workerEvent(page, {
       type: 'VERSION_READY',
@@ -280,6 +287,21 @@ test.describe('service worker (production build)', () => {
     await expect(alert).toBeVisible();
     await expect(alert).toHaveAccessibleName('Omni League needs to reload');
     await expect(alert.getByRole('button')).toHaveText(['Reload']);
+    await expect(alert.locator('svg')).toHaveCount(2);
+    for (const icon of await alert.locator('svg').all()) await expect(icon).toBeVisible();
+    expect(
+      await alert
+        .locator('svg')
+        .evaluateAll((icons) =>
+          icons.map((icon) => [
+            icon.getBoundingClientRect().width,
+            icon.querySelectorAll('*').length,
+          ]),
+        ),
+    ).toEqual([
+      [18, 3],
+      [16, 2],
+    ]);
     for (const [width, height] of [
       [360, 800],
       [1280, 720],

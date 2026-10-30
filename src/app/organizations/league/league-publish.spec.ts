@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
@@ -104,6 +105,17 @@ describe('LeagueManagement: publishing a season', () => {
   });
 
   describe('the confirmation (state 17)', () => {
+    describe('in a browser with the popover API', () => {
+      beforeEach(stubPopoverApi);
+      afterEach(removePopoverApi);
+
+      it('opens in the overlay container, not the popover top layer', async () => {
+        await open();
+        await pressPublish(0);
+        expect(overlayPanes()).toEqual([{ inContainer: true, inPopover: false }]);
+      });
+    });
+
     it('opens an alert dialog titled for the season that names the league and the registration deadline, with focus on Cancel', async () => {
       await open();
       await pressPublish(0);

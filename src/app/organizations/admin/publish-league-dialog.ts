@@ -1,3 +1,4 @@
+import { Dialog } from '@angular/cdk/dialog';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -18,6 +19,7 @@ import {
   BrnAlertDialogOverlay,
   BrnAlertDialogTitle,
 } from '@spartan-ng/brain/alert-dialog';
+import { BrnDialogService } from '@spartan-ng/brain/dialog';
 import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
@@ -33,6 +35,7 @@ import {
   ALERT_DIALOG_TITLE,
 } from './alert-dialog-classes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 
 export interface PublishTarget {
   leagueId: Id<'leagues'>;
@@ -72,7 +75,10 @@ export const PUBLISH_ALERTS = {
     BrnAlertDialogTitle,
     NgIcon,
   ],
-  providers: [provideIcons({ lucideGlobe, lucideLoaderCircle })],
+  providers: [
+    provideIcons({ lucideGlobe, lucideLoaderCircle }),
+    provideSpartanOverlay(Dialog, BrnDialogService),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog
