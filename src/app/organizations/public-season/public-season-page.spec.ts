@@ -186,7 +186,7 @@ describe('PublicSeasonPage populated', () => {
       ['Dates', ['Jun 6 – Aug 29, 2027']],
       ['Division', ['Coed · 4v4 · Rec', 'From the league · teams need at least 4 players']],
       ['Registration closes', ['May 23, 2027']],
-      ['Location', ['North Beach Sand Courts 3500 Surfside Blvd, Corpus Christi, TX 78402']],
+      ['Location', ['North Beach Sand Courts 3500 Sandcourt Ln, Corpus Christi, TX 78402']],
     ]);
     expect(text(host(harness).querySelector('main dl'))).not.toMatch(/weeks|Sundays/);
   });
@@ -261,7 +261,7 @@ describe('PublicSeasonPage populated', () => {
             ...SUMMER_2027.league,
             locations: [
               { name: 'Bayside Athletic Complex', address: '1 Bay Road, Corpus Christi, TX 78412' },
-              { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd' },
+              { name: 'North Beach Sand Courts', address: '3500 Sandcourt Ln' },
             ],
           },
         },
@@ -272,7 +272,7 @@ describe('PublicSeasonPage populated', () => {
       'Locations',
       [
         'Bayside Athletic Complex 1 Bay Road, Corpus Christi, TX 78412',
-        'North Beach Sand Courts 3500 Surfside Blvd',
+        'North Beach Sand Courts 3500 Sandcourt Ln',
       ],
     ]);
   });

@@ -23,7 +23,7 @@ const PAGE = {
   ],
 };
 
-const LOCATION = { name: 'Bayside', address: '4410 Ocean Dr' };
+const LOCATION = { name: 'Bayside', address: '4410 Gullwing Commons Dr' };
 const LEAGUE = {
   name: 'Coed 2s',
   slug: 'coed-2s',

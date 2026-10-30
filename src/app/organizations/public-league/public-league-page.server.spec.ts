@@ -179,7 +179,7 @@ describe('PublicLeaguePage server render', () => {
       'Register for Summer 2027',
     );
     expect(text(body.querySelector('main section#where'))).toContain(
-      '3500 Surfside Blvd, Corpus Christi, TX 78402',
+      '3500 Sandcourt Ln, Corpus Christi, TX 78402',
     );
     expect(text(body.querySelector('main section#where > p'))).toBe(
       'Run by Gulf Coast Sport & Social',

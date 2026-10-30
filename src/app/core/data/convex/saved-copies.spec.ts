@@ -155,7 +155,7 @@ describe('ConvexSavedCopies', () => {
       [
         'organizations:listPublicLocations',
         listPublicLocations,
-        list([{ name: 'Bayside', address: '4410 Ocean Dr' }]),
+        list([{ name: 'Bayside', address: '4410 Gullwing Commons Dr' }]),
       ],
     ])(
       'saves page 1 of %s under a key with its slug and page, and reads it back',

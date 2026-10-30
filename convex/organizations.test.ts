@@ -37,8 +37,11 @@ function seedA(t: T): Promise<Id<'organizations'>> {
   return seed(t, {
     organization: { name: 'Gulf Coast Sport & Social', slug: 'gulf-coast' },
     locations: [
-      { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
-      { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
+      { name: 'North Beach Sand Courts', address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' },
+      {
+        name: 'Bayside Athletic Complex',
+        address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
+      },
     ],
     leagues: [
       {
@@ -398,12 +401,12 @@ describe('organizations:listPublicLocations rows', () => {
       rows: [
         {
           name: 'Bayside Athletic Complex',
-          address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+          address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
           sportNames: ['Soccer', 'Softball'],
         },
         {
           name: 'North Beach Sand Courts',
-          address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+          address: '3500 Sandcourt Ln, Corpus Christi, TX 78402',
           sportNames: ['Softball'],
         },
       ],
@@ -491,7 +494,7 @@ describe('organizations:listPublicLocations with a sport', () => {
       rows: [
         {
           name: 'Bayside Athletic Complex',
-          address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+          address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
           sportNames: ['Soccer', 'Softball'],
         },
       ],
