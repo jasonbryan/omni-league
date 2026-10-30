@@ -55,7 +55,6 @@ export function listPagesPath(slug: string, segment: string | undefined, pages: 
   return query ? `${path}?${query}` : path;
 }
 
-/** The links of one list's control, each keeping the other list on its page. */
 export function pageQueryFor(
   list: PagedList,
   pages: ListPages,

@@ -61,8 +61,9 @@ export interface ListPaging {
   readonly total: number;
 }
 
-function rowsBefore(paging: ListPaging | undefined): number {
-  return ((paging?.page ?? 1) - 1) * LIST_PAGE_SIZE;
+function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: number): string {
+  const rowsBefore = ((paging?.page ?? 1) - 1) * LIST_PAGE_SIZE;
+  return `${list}-${rowsBefore + i + 1}`;
 }
 
 @Component({
@@ -516,13 +517,11 @@ export class OrganizationOverview {
     })),
   );
 
-  // Ids count across pages, so `#league-12` is the twelfth league of the whole list.
-  protected readonly leagueRows = computed(() => {
-    const before = rowsBefore(this.leaguePaging());
-    return (this.leagues() ?? []).map((league, i) => {
+  protected readonly leagueRows = computed(() =>
+    (this.leagues() ?? []).map((league, i) => {
       const status = leagueSeasonStatus(league.seasons, this.now());
       return {
-        id: `league-${before + i + 1}`,
+        id: rowId('league', this.leaguePaging(), i),
         name: league.name,
         href: publicLeaguePath(this.page().slug, league.slug),
         divisionLabel: league.divisionLabel,
@@ -536,18 +535,17 @@ export class OrganizationOverview {
               }
             : undefined,
       };
-    });
-  });
+    }),
+  );
 
-  protected readonly locationRows = computed(() => {
-    const before = rowsBefore(this.locationPaging());
-    return (this.locations() ?? []).map((location, i) => ({
-      id: `location-${before + i + 1}`,
+  protected readonly locationRows = computed(() =>
+    (this.locations() ?? []).map((location, i) => ({
+      id: rowId('location', this.locationPaging(), i),
       name: location.name,
       address: location.address,
       sports: sportsCommaList(location.sportNames ?? []),
-    }));
-  });
+    })),
+  );
 
   constructor() {
     this.focusHeadingAfterPageChange('leagues', this.leagues, this.heading);

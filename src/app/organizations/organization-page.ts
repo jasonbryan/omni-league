@@ -31,11 +31,7 @@ import { openSeasonsBySoonestDeadline } from './season-status';
 type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagues>;
 type PublicLocations = FunctionReturnType<typeof api.organizations.listPublicLocations>;
 
-/**
- * Online, the previous page of the same list stays while the next one loads.
- * Offline, a page with no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL, and the load would never end.
- * Another organization's or sport's rows are never kept.
- */
+/** Offline, a page with no saved copy shows nothing, so the not-saved view takes its place: the previous rows would sit under another page's URL, and the load would never end. */
 function holdPreviousPage<T>(
   key: () => string,
   value: () => T | undefined,
@@ -58,8 +54,7 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
 }
 
 /**
- * The organization page reads its leagues page from `?leagues=N` and its locations page from `?locations=N`; the sport view reads `?page=N` and `?locations=N`.
- * Each is read with `parseListPage` from every value of the parameter, so the HTML holds only the page numbers the query results give.
+ * Each page is read with `parseListPage` from every value of its parameter, so the HTML holds only the page numbers the query results give.
  * A segment that names no sport asks no query, because the queries validate their `sport` argument and would fail with a 503 instead of a 404.
  */
 @Component({
@@ -94,9 +89,9 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
       } @else if (state() === 'error') {
-        <app-server-error-view [retryHref]="path()" />
+        <app-server-error-view [retryHref]="requestedPagesPath()" />
       } @else if (state() === 'not-saved') {
-        <app-not-saved-view [retryHref]="path()" />
+        <app-not-saved-view [retryHref]="requestedPagesPath()" />
       } @else {
         <app-organization-skeleton />
       }
@@ -178,8 +173,7 @@ export class OrganizationPage {
     this.online,
   );
 
-  /** The pages the URL asks for, so Try again repeats the request. */
-  protected readonly path = computed(() =>
+  protected readonly requestedPagesPath = computed(() =>
     listPagesPath(this.slug(), this.segment(), {
       leagues: this.leaguesPage(),
       locations: this.locationsPage(),
@@ -263,7 +257,7 @@ export class OrganizationPage {
       this.phase() === 'loading' ||
       (this.phase() === 'page' && (this.leaguesBusy() || this.locationsBusy())),
   );
-  private readonly waitedOut = injectPageLoadWait(this.waiting, this.path);
+  private readonly waitedOut = injectPageLoadWait(this.waiting, this.requestedPagesPath);
   protected readonly stalled = computed(() => this.waiting() && this.waitedOut());
 
   protected readonly state = computed(() => (this.stalled() ? 'error' : this.phase()));
