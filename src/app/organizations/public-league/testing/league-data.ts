@@ -46,7 +46,7 @@ export const SUNDAY_4S: PublicLeagueHeader = {
   divisionLabel: 'Coed · 4v4 · BB',
   locationNames: ['North Beach Sand Courts'],
   locations: [
-    { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+    { name: 'North Beach Sand Courts', address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' },
   ],
   seasons: SEASONS.slice(0, 3).map((season) => ({
     name: season.name,

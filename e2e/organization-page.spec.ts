@@ -42,9 +42,12 @@ function smallTenant(): Promise<Tenant> {
 }
 
 const GULF_COAST_LOCATIONS = [
-  { name: 'Bayside Athletic Complex', address: '4410 Ocean Dr, Corpus Christi, TX 78412' },
-  { name: 'Flour Bluff Softball Park', address: '2001 Waldron Rd, Corpus Christi, TX 78418' },
-  { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+  {
+    name: 'Bayside Athletic Complex',
+    address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
+  },
+  { name: 'Flour Bluff Softball Park', address: '2001 Bluff Diamond Rd, Corpus Christi, TX 78418' },
+  { name: 'North Beach Sand Courts', address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' },
 ];
 
 // Named like the demo organization, so its mark reads "GC".

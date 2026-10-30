@@ -206,7 +206,11 @@ describe('the sport view populated', () => {
   it('lists only the locations where the sport is played, with all their sports', () => {
     const rows = [...(locationsSection(harness)?.querySelectorAll('li') ?? [])];
     expect(rows.map((row) => [...row.querySelectorAll('h3, p')].map(text))).toEqual([
-      ['Bayside Athletic Complex', '4410 Ocean Dr, Corpus Christi, TX 78412', 'Soccer, softball'],
+      [
+        'Bayside Athletic Complex',
+        '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
+        'Soccer, softball',
+      ],
     ]);
   });
 

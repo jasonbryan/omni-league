@@ -12,7 +12,7 @@ export const SUMMER_2027: PublicSeasonData = {
     locationNames: ['North Beach Sand Courts'],
     divisionLabel: 'Coed · 4v4 · Rec',
     locations: [
-      { name: 'North Beach Sand Courts', address: '3500 Surfside Blvd, Corpus Christi, TX 78402' },
+      { name: 'North Beach Sand Courts', address: '3500 Sandcourt Ln, Corpus Christi, TX 78402' },
     ],
     upcomingSeasons: [
       {

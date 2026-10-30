@@ -14,15 +14,15 @@ const NO_SEED = 'E2E_BASE_URL is set: no local Convex backend to seed a tenant';
 
 const BAYSIDE = {
   name: 'Bayside Athletic Complex',
-  address: '4410 Ocean Dr, Corpus Christi, TX 78412',
+  address: '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
 };
 const FLOUR_BLUFF = {
   name: 'Flour Bluff Softball Park',
-  address: '2001 Waldron Rd, Corpus Christi, TX 78418',
+  address: '2001 Bluff Diamond Rd, Corpus Christi, TX 78418',
 };
 const NORTH_BEACH = {
   name: 'North Beach Sand Courts',
-  address: '3500 Surfside Blvd, Corpus Christi, TX 78402',
+  address: '3500 Sandcourt Ln, Corpus Christi, TX 78402',
 };
 
 const GULF_COAST_LEAGUES: LeagueSeed[] = [
