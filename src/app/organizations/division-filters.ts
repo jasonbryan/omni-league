@@ -13,7 +13,7 @@ import {
   type Gender,
   type StandardLevel,
 } from '../../../convex/lib/divisions';
-import type { DivisionFilters, LeagueDivisionValues } from '../../../convex/lib/leagueFilters';
+import type { DivisionFilters } from '../../../convex/lib/leagueFilters';
 import { SPORT_NAMES, type Sport } from '../../../convex/lib/sports';
 
 const ALL_SPORTS = Object.keys(SPORT_NAMES) as Sport[];
@@ -38,13 +38,13 @@ function formatsOf(sport: Sport | undefined): number[] {
 }
 
 /** Deduped, and in `order`, so every URL that names the same filters gives the same query args and saved copy. */
-function inOrder<T>(order: readonly T[], values: readonly (T | undefined)[]): T[] {
+function inOrder<T>(order: readonly T[], values: readonly unknown[]): T[] {
   return order.filter((value) => values.includes(value));
 }
 
 /** Only values from the standard lists reach the args, the links, or the HTML: an unknown one is dropped, never echoed. */
 export function parseDivisionFilters(params: ParamMap, sport: Sport | undefined): DivisionFilters {
-  const known = <T>(name: string, read: (value: string) => T | undefined) =>
+  const known = (name: string, read: (value: string) => unknown = (value) => value) =>
     params.getAll(name).map(read);
   return {
     gender: inOrder(
@@ -60,14 +60,8 @@ export function parseDivisionFilters(params: ParamMap, sport: Sport | undefined)
         return match ? Number(match[1]) : undefined;
       }),
     ),
-    level: inOrder(
-      sport === undefined ? ALL_LEVELS : levelsOfSport(sport),
-      known('level', (value) => value as StandardLevel),
-    ),
-    ageGroup: inOrder(
-      AGE_GROUP_KEYS,
-      known('age', (value) => value as AgeGroup),
-    ),
+    level: inOrder(sport === undefined ? ALL_LEVELS : levelsOfSport(sport), known('level')),
+    ageGroup: inOrder(AGE_GROUP_KEYS, known('age')),
   };
 }
 
@@ -168,15 +162,23 @@ export interface FilterGroup {
  * Offers the values some league in view has, plus any chosen one, so a submit keeps it. `sport` is the sport whose formats and levels
  * apply (`filterSport`); with none, as on All sports with several sports, Format and Level are not offered.
  */
+/** A league's division values as the facets query gives them: strings, of which only the standard ones are offered. */
+export interface LeagueFacet {
+  readonly gender?: string;
+  readonly playersPerSide?: number;
+  readonly level?: string;
+  readonly ageGroup?: string;
+}
+
 export function filterGroups(
-  facets: readonly LeagueDivisionValues[],
+  facets: readonly LeagueFacet[],
   filters: DivisionFilters,
   sport: Sport | undefined,
 ): FilterGroup[] {
   const youth = youthOnly(filters);
   const offered = <T>(
     order: readonly T[],
-    read: (facet: LeagueDivisionValues) => T | undefined,
+    read: (facet: LeagueFacet) => unknown,
     chosen: readonly T[],
   ) =>
     inOrder(order, [...facets.map(read), ...chosen]).map((value) => ({

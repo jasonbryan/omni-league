@@ -1,5 +1,4 @@
 import { v, type Infer, type Validator } from 'convex/values';
-import { ageGroupValidator, genderValidator, standardLevelValidator } from './divisionValues';
 import { sportValidator } from './sports';
 
 // These live apart from the function modules and import no function code, so the Angular app can
@@ -202,13 +201,15 @@ export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
 
 export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;
 
-// Standard values only, and only the fields a league has: a custom level is offered as the standard level it maps to.
+// Standard values only, and only the fields a league has: a custom level is given as the standard level it maps to.
+// Strings, not the division validators, so the app's first bundle, which checks saved copies, does not take in all of `divisions.ts`;
+// the page offers only values from the standard lists.
 export const publicLeagueFacetsValidator = v.array(
   v.object({
-    gender: v.optional(genderValidator),
+    gender: v.optional(v.string()),
     playersPerSide: v.optional(v.number()),
-    level: v.optional(standardLevelValidator),
-    ageGroup: v.optional(ageGroupValidator),
+    level: v.optional(v.string()),
+    ageGroup: v.optional(v.string()),
   }),
 );
 
