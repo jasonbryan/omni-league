@@ -2,7 +2,6 @@ import { bootstrapApplication, type BootstrapContext } from '@angular/platform-b
 import { provideServerRendering, renderApplication } from '@angular/platform-server';
 import { provideRouter } from '@angular/router';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
-import { provideSpartanHlm } from '../ui/utils';
 import { App } from '../app';
 import { SidebarTestPage } from './testing/test-pages';
 
@@ -23,7 +22,6 @@ function render(): Promise<string> {
         providers: [
           provideServerRendering(),
           provideRouter([{ path: '**', component: SidebarTestPage }]),
-          provideSpartanHlm(),
         ],
       },
       context,

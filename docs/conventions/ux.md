@@ -43,7 +43,7 @@ Every screen designs, builds, and tests each of these states that applies: **emp
 ## Accessibility and performance
 
 - Everything works by keyboard and screen reader: [Angular conventions, Accessibility](angular.md#accessibility) and the [WCAG checklist](../process/wcag-checklist.md).
-- The initial bundle (the `Initial total` line of `ng build`) grows by no more than 2 kB over `main`, unless the PR states why. Once #202 closes, the limit is the `angular.json` initial warning of 500 kB instead. Reserve space for content that arrives late (skeletons the size of the content, image width and height) so nothing shifts.
+- The initial bundle (the `Initial total` line of `ng build`) stays within the `angular.json` initial warning of 500 kB, so the build prints no `bundle initial exceeded` warning. Reserve space for content that arrives late (skeletons the size of the content, image width and height) so nothing shifts.
 
 ## UX checklist
 
@@ -56,4 +56,4 @@ The implementer copies this list into the PR body and ticks it; the tester and P
 - [ ] Touch targets are 44px or more; no horizontal scroll at 320px; long phone forms keep the action visible.
 - [ ] Breadcrumb and current marker, a URL for each shareable state, Back works, focus moves after navigation.
 - [ ] Copy is plain, errors say how to fix, dates and money use `Intl`.
-- [ ] Initial bundle no more than 2 kB over `main`, or the reason is stated (500 kB once #202 closes); no layout shift as data arrives.
+- [ ] Initial bundle within 500 kB (no `bundle initial exceeded` warning); no layout shift as data arrives.

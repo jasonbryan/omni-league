@@ -1,0 +1,106 @@
+import { openAdmin, text } from '../admin/testing/admin-harness';
+import {
+  COED,
+  COED_AS_ORGANIZER,
+  GET_ORGANIZER_CONTEXT,
+  GULF,
+  LEAGUE_ROUTES,
+  LEAGUE_URL,
+  LIST_FOR_ORGANIZER,
+} from './testing/league-harness';
+
+describe('LeagueManagement: the breadcrumb', () => {
+  let page: HTMLElement;
+
+  async function open(context: unknown) {
+    const o = await openAdmin(LEAGUE_ROUTES, LEAGUE_URL);
+    page = o.page;
+    o.acceptToken();
+    o.subscription(GET_ORGANIZER_CONTEXT)!.emit(context);
+    await o.flush();
+    o.subscription(LIST_FOR_ORGANIZER)!.emit([]);
+    await o.flush();
+  }
+
+  const nav = () => page.querySelector<HTMLElement>('main nav[aria-label="Breadcrumb"]')!;
+  const items = () =>
+    [...nav().querySelectorAll<HTMLElement>('ol > li:not([aria-hidden])')].map((li) => {
+      const link = li.querySelector('a')!;
+      return {
+        text: text(li),
+        href: link.getAttribute('href'),
+        current: link.getAttribute('aria-current'),
+      };
+    });
+
+  it('for an org admin reads the organization, Leagues, and the league, linking to the admin Overview and Leagues', async () => {
+    await open(COED);
+    expect(items()).toEqual([
+      { text: GULF.name, href: `/app/organizations/${GULF.slug}`, current: null },
+      { text: 'Leagues', href: `/app/organizations/${GULF.slug}/leagues`, current: null },
+      {
+        text: 'Coed 7v7 Rec',
+        href: `/app/organizations/${GULF.slug}/leagues/${COED.slug}`,
+        current: 'page',
+      },
+    ]);
+  });
+
+  it('sits above the h1 and replaces the plain organization name', async () => {
+    await open(COED);
+    const h1 = page.querySelector('main h1')!;
+    expect(nav().compareDocumentPosition(h1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(page.querySelector('main p.text-sm.font-medium')).toBeNull();
+  });
+
+  it('separates the items with hidden chevrons, so a screen reader hears a plain list', async () => {
+    await open(COED);
+    expect(nav().querySelectorAll('ol > li[aria-hidden="true"]')).toHaveLength(2);
+  });
+
+  it('for a league organizer who is not an org admin reads Your organizations and the league, because the admin area is closed to them', async () => {
+    await open(COED_AS_ORGANIZER);
+    expect(items()).toEqual([
+      { text: 'Your organizations', href: '/app', current: null },
+      {
+        text: 'Coed 7v7 Rec',
+        href: `/app/organizations/${GULF.slug}/leagues/${COED.slug}`,
+        current: 'page',
+      },
+    ]);
+    expect(nav().textContent).not.toContain(GULF.name);
+  });
+
+  it('gives each link a 44px target on touch screens', async () => {
+    await open(COED);
+    for (const link of nav().querySelectorAll('a')) {
+      expect(link.className).toContain('min-h-11');
+    }
+  });
+
+  it('keeps the trail on one line, so the h1 sits where the loading skeleton put it, and shortens the league name first', async () => {
+    await open(COED);
+    const list = nav().querySelector('ol')!;
+    expect(list.className).toContain('flex-nowrap');
+    expect(list.className).not.toContain('flex-wrap ');
+    const [first, , current] = nav().querySelectorAll<HTMLElement>('ol > li:not([aria-hidden])');
+    for (const li of [first, current]) {
+      expect(li.className).toContain('min-w-');
+      expect(li.querySelector('a > span')!.className).toContain('truncate');
+    }
+    expect(current.className).toContain('shrink-100');
+  });
+
+  for (const [label, context] of [
+    ['Leagues', COED],
+    ['Your organizations', COED_AS_ORGANIZER],
+  ] as const) {
+    it(`never shortens the fixed label ${label}`, async () => {
+      await open(context);
+      const crumb = [...nav().querySelectorAll<HTMLElement>('ol > li:not([aria-hidden])')].find(
+        (li) => text(li) === label,
+      )!;
+      expect(crumb.className.split(' ')).toContain('shrink-0');
+    });
+  }
+});

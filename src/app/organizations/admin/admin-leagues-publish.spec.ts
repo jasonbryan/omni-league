@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -110,6 +111,17 @@ describe('AdminLeagues: publishing', () => {
   });
 
   describe('the confirmation (state 9)', () => {
+    describe('in a browser with the popover API', () => {
+      beforeEach(stubPopoverApi);
+      afterEach(removePopoverApi);
+
+      it('opens in the overlay container, not the popover top layer', async () => {
+        await open();
+        await pressPublish(1);
+        expect(overlayPanes()).toEqual([{ inContainer: true, inPopover: false }]);
+      });
+    });
+
     it('opens an alert dialog titled for the league, with the two sentences and focus on Cancel', async () => {
       await open();
       await pressPublish(1);

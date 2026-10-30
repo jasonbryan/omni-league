@@ -20,7 +20,6 @@ import {
 } from '../../core/data/convex';
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
-import { provideSpartanHlm } from '../../ui/utils';
 import { at, leagueQueryResults, NO_SEASONS, OPEN_DAY, seasonsPage } from './testing/league-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
@@ -98,7 +97,6 @@ async function render(
           provideRouter(routes),
           provideClientHydration(),
           provideConvex(),
-          provideSpartanHlm(),
           { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
           { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => client },
           { provide: CONVEX_SERVER_QUERY_TIMEOUT_MS, useValue: timeoutMs },

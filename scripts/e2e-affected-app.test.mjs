@@ -665,7 +665,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/ui/sheet/index.ts': SHEET,
     'src/app/ui/utils/hlm.ts': SHEET,
     'src/app/ui/utils/index.ts': SHEET,
-    'src/app/ui/utils/provide-spartan-hlm.ts': MAIN_SERVER,
+    'src/app/ui/utils/provide-spartan-overlay.ts': SHEET,
   };
 
   it('lists the files whose outcome is the full suite, each with a reason', () => {
