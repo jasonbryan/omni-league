@@ -3,6 +3,12 @@ import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import {
+  breadcrumbItems,
+  expectLinkHeights,
+  pointerOf,
+  TOUCH_TABLET,
+} from './support/link-heights';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -387,6 +393,28 @@ test.describe('public season page in the browser', () => {
     await expect(page.locator('main dl')).toContainText('teams need at least 4 players');
     await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toBeVisible();
     await expectAccessible(page);
+  });
+
+  test('the breadcrumb links are 44px tall under a touch pointer and a line tall under a mouse', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { path } = await seed();
+    await page.goto(path);
+    await hydrated(consoleGuard);
+    await expectLinkHeights(page, breadcrumbItems(page), pointerOf(testInfo));
+  });
+
+  test.describe('a touch tablet', () => {
+    test.use(TOUCH_TABLET);
+
+    test('the breadcrumb links are 44px tall', async ({ page, consoleGuard }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport and touch');
+      const { path } = await seed();
+      await page.goto(path);
+      await hydrated(consoleGuard);
+      await expectLinkHeights(page, breadcrumbItems(page), 'touch');
+    });
   });
 
   test('the open season passes the axe helper, with nothing fixed over a focused element', async ({

@@ -22,7 +22,7 @@ import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
 const CRUMB_LINK =
-  'inline-flex min-h-11 items-center rounded-md font-medium hover:text-foreground hover:underline md:min-h-0';
+  'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 const FACT = 'relative min-h-18 py-4 ps-14';
 const FACT_ICON =

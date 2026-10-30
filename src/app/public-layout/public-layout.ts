@@ -19,7 +19,7 @@ import { TopBarAccount } from '../shell/top-bar-account';
 import { TopBarFind } from './top-bar-find';
 
 const FOOTER_LINK_CLASSES =
-  'inline-flex min-h-11 items-center rounded-md hover:text-foreground hover:underline md:min-h-0';
+  'inline-flex items-center rounded-md hover:text-foreground hover:underline pointer-coarse:min-h-11';
 
 /**
  * "Sign in" and the account link come from `TopBarAccount`, which shows the account link only in the browser: the server HTML is cached by the CDN,
@@ -75,7 +75,7 @@ const FOOTER_LINK_CLASSES =
             <div class="max-w-xs">
               <a
                 routerLink="/"
-                class="flex min-h-11 md:min-h-0 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
+                class="flex pointer-coarse:min-h-11 shrink-0 items-center gap-2 rounded-md text-base font-semibold"
               >
                 <ng-container [ngTemplateOutlet]="brand" />
               </a>
