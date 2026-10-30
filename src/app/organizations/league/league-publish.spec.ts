@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ConvexOfflineError } from '../../core/data/convex';
+import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
@@ -104,6 +105,17 @@ describe('LeagueManagement: publishing a season', () => {
   });
 
   describe('the confirmation (state 17)', () => {
+    describe('in a browser with the popover API', () => {
+      beforeEach(stubPopoverApi);
+      afterEach(removePopoverApi);
+
+      it('opens in the overlay container, not the popover top layer', async () => {
+        await open();
+        await pressPublish(0);
+        expect(overlayPanes()).toEqual([{ inContainer: true, inPopover: false }]);
+      });
+    });
+
     it('opens an alert dialog titled for the season that names the league and the registration deadline, with focus on Cancel', async () => {
       await open();
       await pressPublish(0);
@@ -219,17 +231,30 @@ describe('LeagueManagement: publishing a season', () => {
         'Fall 2027 is published.',
       );
       expect(text(region.querySelector('[data-slot="alert-description"]'))).toBe(
-        'It’s on the league’s public page now. View public page',
+        'It’s on the league’s public page now. View season page',
       );
       const link = region.querySelector('a')!;
-      expect(text(link)).toBe('View public page');
+      expect(text(link)).toBe('View season page');
       expect(link.getAttribute('href')).toBe(
-        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec',
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/fall-2027',
       );
       const list = page.querySelector('#seasons-list')!;
       expect(region.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(document.activeElement).toBe(region);
       expect(page.querySelector('app-league-management')?.hasAttribute('inert')).toBe(false);
+    });
+
+    it('links to the published season even once the list no longer has its row', async () => {
+      await open();
+      await pressPublish(0);
+      dialogButton('Publish season').click();
+      await o.flush();
+      o.convex.calls[0].resolve(null);
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([]);
+      await o.flush();
+      expect(notice()!.querySelector('a')!.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/fall-2027',
+      );
     });
 
     it('the status goes when the next dialog opens, and names the next season', async () => {

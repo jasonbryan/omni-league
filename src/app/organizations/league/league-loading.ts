@@ -11,9 +11,11 @@ const PANEL =
   host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
   template: `
     <p role="status" class="sr-only">Loading the league.</p>
-    <div aria-hidden="true" class="${PULSE} h-4 w-40"></div>
-    <div aria-hidden="true" class="${PULSE} mt-3 h-8 w-56"></div>
-    <div aria-hidden="true" class="${PULSE} mt-3 h-5 w-44"></div>
+    <div aria-hidden="true" data-slot="crumb-row" class="flex h-5 items-center pointer-coarse:h-11">
+      <div class="${PULSE} h-4 w-40"></div>
+    </div>
+    <div aria-hidden="true" class="${PULSE} mt-1 h-8 w-56 md:h-9"></div>
+    <div aria-hidden="true" class="${PULSE} mt-2 h-5 w-44"></div>
     <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
       <div aria-hidden="true" class="${PANEL} lg:col-span-2">
         <div class="border-b border-border px-4 py-3 md:px-5">

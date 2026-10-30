@@ -20,7 +20,6 @@ import {
 } from '../core/data/convex';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
-import { provideSpartanHlm } from '../ui/utils';
 import {
   GULF_COAST,
   PAGED,
@@ -104,7 +103,6 @@ async function render(
           provideRouter(routes),
           provideClientHydration(),
           provideConvex(),
-          provideSpartanHlm(),
           { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
           { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => client },
           ...(timeoutMs === undefined
