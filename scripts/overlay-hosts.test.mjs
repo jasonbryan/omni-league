@@ -18,25 +18,33 @@ const rootDirectiveUse = (...names) => {
   );
 };
 
+const directInject = (service) => `\\binject\\(${service}\\)`;
+const either = (...sources) => new RegExp(sources.join('|'));
+
 const KINDS = [
   {
     kind: 'dialog',
-    host: rootDirectiveUse('dialog', 'alertDialog', 'sheet', 'drawer'),
+    host: either(
+      rootDirectiveUse('dialog', 'alertDialog', 'sheet', 'drawer').source,
+      directInject('BrnDialogService'),
+    ),
     openers: ['Dialog', 'BrnDialogService'],
   },
   {
     kind: 'popover',
-    host: rootDirectiveUse('popover', 'overlay', 'select', 'combobox', 'autocomplete'),
+    host: either(
+      rootDirectiveUse('popover', 'overlay', 'select', 'combobox', 'autocomplete').source,
+      directInject('BrnOverlayService'),
+    ),
     openers: ['BrnOverlayService'],
   },
+  { kind: 'CDK dialog', host: either(directInject('Dialog')), openers: ['Dialog'] },
   {
     kind: 'CDK overlay',
-    host: new RegExp(
-      [
-        rootDirectiveUse('tooltip', 'hoverCard', 'navigationMenu').source,
-        '\\bcdk(?:MenuTriggerFor|ConnectedOverlay|ContextMenuTriggerFor)\\b',
-        '\\binject\\((?:Overlay|Dialog)\\)',
-      ].join('|'),
+    host: either(
+      rootDirectiveUse('tooltip', 'hoverCard', 'navigationMenu').source,
+      '\\bcdk(?:MenuTriggerFor|ConnectedOverlay|ContextMenuTriggerFor)\\b',
+      directInject('Overlay'),
     ),
     openers: [],
   },
@@ -81,6 +89,22 @@ describe('overlay hosts', () => {
     assert.deepEqual(overlayDefaultProblems('readonly overlay = inject(Overlay);'), [
       'CDK overlay host without provideSpartanOverlay()',
     ]);
+    assert.deepEqual(
+      overlayDefaultProblems('providers: [provideSpartanOverlay()], dialog = inject(Dialog);'),
+      ['CDK dialog host without provideSpartanOverlay(Dialog)'],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(BrnDialogService)], dialogs = inject(BrnDialogService);',
+      ),
+      ['dialog host without provideSpartanOverlay(Dialog, BrnDialogService)'],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay()], overlays = inject(BrnOverlayService);',
+      ),
+      ['popover host without provideSpartanOverlay(BrnOverlayService)'],
+    );
   });
 
   it('passes a host with the call its kind needs, and the parts and wrappers of a host', () => {
@@ -99,6 +123,24 @@ describe('overlay hosts', () => {
     assert.deepEqual(
       overlayDefaultProblems(
         'providers: [provideSpartanOverlay()], template: `<button brnTooltip="x">`',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(Dialog)], dialog = inject(Dialog);',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(Dialog, BrnDialogService)], dialogs = inject(BrnDialogService);',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(BrnOverlayService)], overlays = inject(BrnOverlayService);',
       ),
       [],
     );

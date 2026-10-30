@@ -512,8 +512,9 @@ Issue #202. Caveat 4 under "Server rendering and hydration" put `provideSpartanH
 
 - `provideSpartanOverlay(...openers)` (`src/app/ui/utils/provide-spartan-overlay.ts`) replaces it. Each component that hosts a CDK overlay lists it in its `providers`. Today the hosts are `HlmSheet`, `PublishLeagueDialog`, `PublishSeasonDialog`, and `RemoveLogoDialog`.
 - It provides `{ usePopover: false }` and `Overlay`, plus the services the host's overlay opens through, which the host passes in:
-  - a brain dialog, alert dialog, sheet, or drawer: `Dialog` and `BrnDialogService`;
-  - a brain popover, select, combobox, or autocomplete: `BrnOverlayService`;
-  - a brain tooltip, hover card, or navigation menu, or a CDK menu or connected overlay: nothing more.
+  - a brain dialog, alert dialog, sheet, or drawer, or a direct `BrnDialogService`: `Dialog` and `BrnDialogService`;
+  - a brain popover, select, combobox, or autocomplete, or a direct `BrnOverlayService`: `BrnOverlayService`;
+  - a direct CDK `Dialog`: `Dialog`;
+  - a brain tooltip, hover card, or navigation menu, a CDK menu or connected overlay, or a direct `Overlay`: nothing more.
 - The CDK reads the config from the injector of the `Overlay` or `Dialog` that opens the overlay. Those and the brain services that use them are root-provided, so a route-level provider alone would not reach them. Passing the openers keeps each host from bundling another kind's code.
 - `scripts/overlay-hosts.test.mjs` fails for a file under `src/app` that hosts any of these kinds without the matching call. Each host's e2e spec checks that the pane sits in `.cdk-overlay-container` with no `popover` ancestor.
