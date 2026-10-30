@@ -146,6 +146,7 @@ test.describe('service worker (production build)', () => {
     page,
   }, testInfo) => {
     skipUnlessMobile(testInfo);
+    test.skip(true, 'negative check: the expected-tests step must fail on this skip');
     const manifest = await installWorker(page);
     const listed = new Set(manifest.assetGroups.flatMap((group) => group.urls));
     const origin = new URL(page.url()).origin;

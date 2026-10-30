@@ -183,6 +183,7 @@ test.describe('a new version of the app (local production builds)', () => {
     consoleGuard,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
+    expect(false, 'negative check: e2e failures must list this test').toBe(true);
     test.setTimeout(12 * 60_000);
     if (port === undefined) throw new Error('no port');
 
