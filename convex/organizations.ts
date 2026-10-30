@@ -475,7 +475,6 @@ async function hasLogoBytes(blob: Blob): Promise<boolean> {
  * An action because it reads the file: the Content-Type stored with an upload is only what the uploader sent, so the file's first bytes decide.
  * A file is deleted only after the caller has passed the org admin check inside `checkLogoUpload`.
  */
-// eslint-disable-next-line @convex-dev/require-access-control -- the first call, internal.organizations.checkLogoUpload, runs requireOrgAdmin as this caller and throws for anyone else before any file is read or deleted.
 export const setLogo = action({
   args: { organizationId: v.id('organizations'), storageId: v.id('_storage') },
   returns: v.null(),

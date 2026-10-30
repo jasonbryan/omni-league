@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { demoLogoBytes } from '../convex/seedAssets';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
-import { remoteBaseUrl } from './support/env';
+import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -40,7 +40,10 @@ async function openDetails(page: Page): Promise<{ tenant: Tenant; base: string }
   const tenant = await seedTenant({
     name: 'E2E Logo',
     locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
-    leagues: [{ name: 'Alpha League', sport: 'soccer', locations: ['Alpha Field'] }],
+    leagues: [
+      { name: 'Alpha League', sport: 'soccer', locations: ['Alpha Field'] },
+      { name: 'Beta League', sport: 'softball', locations: ['Alpha Field'] },
+    ],
   });
   await convexRun('testing:addMembership', {
     organizationSlug: tenant.slug,
@@ -55,6 +58,18 @@ async function openDetails(page: Page): Promise<{ tenant: Tenant; base: string }
 async function upload(page: Page, file = pngFile()): Promise<void> {
   await fileInput(page).setInputFiles(file);
   await expect(status(page)).toContainText('Logo saved.');
+}
+
+/** The upload swaps the label from a primary to an outline button, and its colours transition, so axe would read a colour halfway between the two. */
+async function transitionsFinished(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
 }
 
 async function markHtml(request: Parameters<typeof fetchRawHtml>[0], path: string) {
@@ -107,7 +122,7 @@ test.describe('the Details page: Logo', () => {
     expect(second).toMatch(/\/api\/storage\//);
 
     await page.goto(tenant.path);
-    await expect(preview(page).locator('img')).toHaveAttribute('src', second ?? '');
+    await expect(page.locator('app-organization-mark img')).toHaveAttribute('src', second ?? '');
   });
 
   test('a file of the wrong type or over 256 KB is refused before it is sent, with its message', async ({
@@ -147,6 +162,7 @@ test.describe('the Details page: Logo', () => {
     await expect(previewImage(page)).toHaveCount(1);
 
     await removeButton(page).click();
+    await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(removeButton(page)).toBeFocused();
@@ -159,7 +175,7 @@ test.describe('the Details page: Logo', () => {
     await expect(logoSection(page).getByText('Upload a logo')).toBeVisible();
 
     await page.goto(tenant.path);
-    const mark = preview(page);
+    const mark = page.locator('app-organization-mark');
     await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
     await expect(mark.locator('img')).toHaveCount(0);
   });
@@ -182,12 +198,11 @@ test.describe('the Details page: Logo', () => {
 
     await upload(page);
     await expect(page.getByLabel('Replace logo')).toHaveAttribute('type', 'file');
+    await transitionsFinished(page);
     await expectAccessible(page);
   });
 
-  test('the controls are 44px tall on a touch screen and Save stays visible', async ({
-    page,
-  }, testInfo) => {
+  test('the controls are 44px tall on a touch screen', async ({ page }, testInfo) => {
     await openDetails(page);
     await upload(page);
     const minimum = testInfo.project.use.hasTouch ? 44 : 36;
@@ -252,14 +267,20 @@ test.describe('the public organization page: the logo mark', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
     const tenant = await organizationWithLogo(page);
+    const chips = page.getByRole('navigation', { name: 'Sports' });
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
     await expect(page.locator('app-organization-mark img')).toHaveCount(1);
+    // The sport view is viewed online too, so it has a saved copy to open offline.
+    await chips.getByRole('link', { name: /^Soccer/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}/sports/soccer`);
+    await expect(page.locator('app-organization-mark img')).toHaveCount(1);
+    await chips.getByRole('link', { name: /^All sports/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
 
     await page.route(/\/api\/storage\//, (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: 'not an image' }),
     );
-    const chips = page.getByRole('navigation', { name: 'Sports' });
     await context.setOffline(true);
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await chips.getByRole('link', { name: /^Soccer/ }).click();

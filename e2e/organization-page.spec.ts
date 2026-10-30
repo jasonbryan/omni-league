@@ -441,7 +441,7 @@ test.describe('organization page: hero, divisions, and sports', () => {
       const html = rendered.replaceAll('&#39;', "'");
 
       expect(html).toMatch(
-        /<app-organization-mark\b[^>]*\baria-hidden="true"[^>]*>\s*GC\s*<\/app-organization-mark>\s*<h1\b/,
+        /<app-organization-mark\b[^>]*\baria-hidden="true"[^>]*>\s*(?:<!--[^>]*-->\s*)*GC\s*(?:<!--[^>]*-->\s*)*<\/app-organization-mark>\s*<h1\b/,
       );
       expect(html.match(/<h1\b/g)).toHaveLength(1);
       expect(html).toMatch(

@@ -46,7 +46,7 @@ type Notice = 'saved' | 'removed' | LogoAlert;
 
 const ACCEPT = LOGO_MIME_TYPES.join(',');
 const FOCUS_RING =
-  'cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring';
+  'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring';
 
 function logoRefusal(failure: unknown): string | null {
   if (!(failure instanceof ConvexError)) return null;
@@ -69,7 +69,7 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
 }
 
 /**
- * The file input sits before its label, which is drawn as the button, so the keyboard reaches the input and its focus ring shows on the label.
+ * The file input sits before its label, which is drawn as the button, and covers it with no opacity: the keyboard and a press reach the input, and its focus ring shows on the label.
  * A status takes focus after a change, because the pressed control may have changed; the Remove dialog hands focus back through `dismissed`.
  * Only the admin area renders this page, and only once the caller is known to be an org admin of this organization.
  */
@@ -141,7 +141,7 @@ async function postFile(url: string, file: File): Promise<Id<'_storage'>> {
                   #fileInput
                   id="logo-file"
                   type="file"
-                  class="peer sr-only"
+                  class="peer absolute inset-0 size-full cursor-pointer opacity-0"
                   [accept]="accept"
                   [attr.aria-describedby]="error() ? 'logo-hint logo-error' : 'logo-hint'"
                   [attr.aria-invalid]="error() ? 'true' : null"

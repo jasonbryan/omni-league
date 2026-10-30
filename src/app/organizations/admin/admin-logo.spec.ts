@@ -97,10 +97,11 @@ describe('AdminDetails: the Logo section', () => {
       expect(status()).toBeNull();
     });
 
-    it('draws the label as a primary button with the file input beside it for the keyboard', () => {
+    it('draws the label as a primary button with the file input over it for the keyboard and a press', () => {
       expect(fileLabel().getAttribute('data-slot')).toBe('button');
       expect(tokens(fileLabel().className)).toEqual(expect.arrayContaining(tokens(PRIMARY_BUTTON)));
-      expect(fileInput().classList).toContain('sr-only');
+      expect(fileInput().classList).toContain('opacity-0');
+      expect(fileInput().classList).toContain('inset-0');
       expect(fileInput().tabIndex).not.toBe(-1);
     });
 
