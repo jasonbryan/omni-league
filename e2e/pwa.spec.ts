@@ -197,6 +197,13 @@ test.describe('service worker (production build)', () => {
     const status = prompt.locator('[role="status"]');
     await expect(card).toHaveCount(0);
     await expect(status).toHaveText('');
+    // Unsaved input holds a ready version and the unrecoverable reload, so both cards show instead of the page reloading by itself.
+    await page.locator('main').evaluate((main) => {
+      const field = document.createElement('input');
+      field.setAttribute('aria-label', 'Unsaved note');
+      main.append(field);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 
     await workerEvent(page, {
       type: 'VERSION_READY',
