@@ -97,7 +97,7 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
       <div class="flex flex-col gap-5 md:flex-row md:items-end md:justify-between md:gap-8">
         <div class="min-w-0 flex-1">
           <div class="flex items-start gap-3 md:items-center md:gap-4">
-            <app-organization-mark [name]="page().name" />
+            <app-organization-mark [name]="page().name" [logoUrl]="page().logoUrl" />
             <h1 class="min-w-0 text-2xl font-semibold tracking-tight text-balance md:text-5xl">
               {{ page().name }}
             </h1>

@@ -8,6 +8,7 @@ import {
   internalQuery,
   type ActionCtx,
   type MutationCtx,
+  type QueryCtx,
 } from './_generated/server';
 import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
@@ -20,6 +21,7 @@ import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
 import { findLeagueBySlugs } from './lib/seasonLookup';
+import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import type { Sport } from './lib/sports';
 import {
@@ -789,6 +791,7 @@ type AccountCode = Infer<typeof accountCodeValidator>;
 
 const demoResultValidator = v.object({
   ...resultValidator.fields,
+  logos: v.number(),
   memberships: v.number(),
   invites: v.number(),
   accounts: v.object({
@@ -800,7 +803,7 @@ const demoResultValidator = v.object({
 
 type DemoResult = Infer<typeof demoResultValidator>;
 
-async function organizationBySlug(ctx: Pick<MutationCtx, 'db'>, slug: string) {
+async function organizationBySlug(ctx: Pick<QueryCtx | MutationCtx, 'db'>, slug: string) {
   return ctx.db
     .query('organizations')
     .withIndex('by_slug', (q) => q.eq('slug', slug))
@@ -824,6 +827,41 @@ async function leagueIdsBySlugs(
     ids.push(league._id);
   }
   return ids;
+}
+
+/** So a run stores the file only once. */
+export const demoLogoNeeded = internalQuery({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    assertPreviewDeployment();
+    const organization = await organizationBySlug(ctx, DEMO_LOGO_ORGANIZATION_SLUG);
+    return organization !== null && organization.logoStorageId === undefined;
+  },
+});
+
+/** The organization may have gained a logo since `demoLogoNeeded` answered. */
+export const setDemoLogo = internalMutation({
+  args: { storageId: v.id('_storage') },
+  returns: v.number(),
+  handler: async (ctx, { storageId }) => {
+    assertPreviewDeployment();
+    const organization = await organizationBySlug(ctx, DEMO_LOGO_ORGANIZATION_SLUG);
+    if (!organization || organization.logoStorageId !== undefined) {
+      await ctx.storage.delete(storageId);
+      return 0;
+    }
+    await ctx.db.patch('organizations', organization._id, { logoStorageId: storageId });
+    return 1;
+  },
+});
+
+async function ensureDemoLogo(ctx: ActionCtx): Promise<number> {
+  if (!(await ctx.runQuery(internal.seed.demoLogoNeeded, {}))) return 0;
+  const storageId = await ctx.storage.store(
+    new Blob([demoLogoBytes().slice()], { type: 'image/png' }),
+  );
+  return await ctx.runMutation(internal.seed.setDemoLogo, { storageId });
 }
 
 /**
@@ -1035,6 +1073,7 @@ export const demo = internalAction({
   handler: async (ctx): Promise<DemoResult> => {
     assertPreviewDeployment();
     const data = await ctx.runMutation(internal.seed.insertDemoData, {});
+    const logos = await ensureDemoLogo(ctx);
     const invites = await ctx.runMutation(internal.seed.insertDemoInvite, {
       tokenHash: await hashInviteToken(generateInviteToken()),
     });
@@ -1059,6 +1098,6 @@ export const demo = internalAction({
         }
       }
     }
-    return { ...data, memberships, invites, accounts };
+    return { ...data, logos, memberships, invites, accounts };
   },
 });

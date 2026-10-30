@@ -115,6 +115,25 @@ describe('OrganizationPage', () => {
       expect(mark?.parentElement).toBe(h1s[0].parentElement);
     });
 
+    it('shows no image in the mark when the organization has no logo', () => {
+      expect(
+        host(harness).querySelector('main h1')?.previousElementSibling?.querySelector('img'),
+      ).toBeNull();
+    });
+
+    it('shows the logo as a decorative image in the mark when the organization has one', async () => {
+      const logoUrl = 'https://example.convex.cloud/api/storage/logo-1';
+      emit({ ...GULF_COAST, logoUrl });
+      await settle(harness);
+      const mark = host(harness).querySelector('main h1')?.previousElementSibling;
+      const img = mark?.querySelector('img');
+      expect(img?.getAttribute('src')).toBe(logoUrl);
+      expect(img?.getAttribute('alt')).toBe('');
+      expect(img?.getAttribute('width')).toBe('48');
+      expect(img?.getAttribute('height')).toBe('48');
+      expect(text(mark)).toBe('');
+    });
+
     it('says the sports and the league and location counts under the name', () => {
       const h1 = host(harness).querySelector('main h1');
       const line = h1?.parentElement?.nextElementSibling;

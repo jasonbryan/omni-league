@@ -21,6 +21,7 @@ import { checkCityState, CITY_STATE_HINT } from '../../../../convex/lib/organiza
 import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { AdminAlert } from './admin-alert';
+import { AdminLogo } from './admin-logo';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -49,10 +50,13 @@ function cityStateRefusal(failure: unknown): string | null {
  */
 @Component({
   selector: 'app-admin-details',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, NgTemplateOutlet],
+  imports: [AdminAlert, AdminLogo, AdminOfflineAlert, FormField, NgIcon, NgTemplateOutlet],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
+  host: {
+    class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8',
+    '[attr.inert]': 'logo()?.dialogOpen() ? "" : null',
+  },
   template: `
     @if (organization(); as organization) {
       <div class="min-w-0">
@@ -221,6 +225,7 @@ function cityStateRefusal(failure: unknown): string | null {
           <p role="status" class="sr-only">{{ saving() ? 'Saving the details.' : '' }}</p>
         </form>
       </section>
+      <app-admin-logo />
     }
     <ng-template #undoAction>
       @if (undoTarget(); as target) {
@@ -300,6 +305,7 @@ export class AdminDetails {
   );
 
   private readonly cityStateInput = viewChild<ElementRef<HTMLInputElement>>('cityStateInput');
+  protected readonly logo = viewChild(AdminLogo);
   private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
 
   constructor() {

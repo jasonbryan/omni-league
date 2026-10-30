@@ -32,9 +32,11 @@ export default defineSchema({
     sportLocationCounts: v.optional(sportCountsValidator),
     sortName: v.optional(v.string()),
     hasPublishedLeague: v.optional(v.boolean()),
+    logoStorageId: v.optional(v.id('_storage')),
   })
     .index('by_slug', ['slug'])
-    .index('by_hasPublishedLeague_and_sortName', ['hasPublishedLeague', 'sortName']),
+    .index('by_hasPublishedLeague_and_sortName', ['hasPublishedLeague', 'sortName'])
+    .index('by_logoStorageId', ['logoStorageId']),
 
   memberships: defineTable({
     userId: v.id('users'),

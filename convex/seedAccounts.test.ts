@@ -164,6 +164,7 @@ describe('seed:demo accounts: a new deployment', () => {
       const result = await run(t);
       expect(result).toEqual({
         ...DATA,
+        logos: 1,
         backfilled: NO_BACKFILL,
         updated: { organizations: 0 },
         memberships: 5,
@@ -367,6 +368,7 @@ describe('seed:demo accounts: a second run', () => {
         customLevels: 0,
         leagues: 0,
         seasons: 0,
+        logos: 0,
         backfilled: NO_BACKFILL,
         updated: { organizations: 0 },
         memberships: 0,
@@ -486,6 +488,7 @@ describe('seed:demo accounts: the password', () => {
       const result = await run(t);
       expect(result).toEqual({
         ...DATA,
+        logos: 1,
         backfilled: NO_BACKFILL,
         updated: { organizations: 0 },
         memberships: 0,

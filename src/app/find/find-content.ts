@@ -16,7 +16,7 @@ import { lucideChevronRight, lucideCircleAlert, lucideSearch } from '@ng-icons/l
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
 import { isPlainClick } from '../shell/follow-link';
 import { SavedCopyNote } from '../offline/saved-copy-note';
-import { initials } from '../organizations/initials';
+import { OrganizationMark } from '../organizations/organization-mark';
 import { publicLeaguePath } from '../organizations/public-league/public-league-path';
 import { leagueSeasonStatus, MUTED_BADGE, OPEN_BADGE } from '../organizations/season-status';
 import { SEARCH_BUTTON } from '../ui/button/button-classes';
@@ -36,7 +36,7 @@ const TEXT_LINK_CLASSES =
 
 @Component({
   selector: 'app-find-content',
-  imports: [FindSkeleton, NgIcon, RouterLink, SavedCopyNote],
+  imports: [FindSkeleton, NgIcon, OrganizationMark, RouterLink, SavedCopyNote],
   providers: [provideIcons({ lucideChevronRight, lucideCircleAlert, lucideSearch })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -119,11 +119,11 @@ const TEXT_LINK_CLASSES =
                   @for (row of rows(); track row.href) {
                     <li class="group relative">
                       <div class="flex min-h-18 items-center gap-4 py-4">
-                        <span
-                          aria-hidden="true"
-                          class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-accent-foreground"
-                          >{{ row.mark }}</span
-                        >
+                        <app-organization-mark
+                          size="row"
+                          [name]="row.organizationName"
+                          [logoUrl]="row.logoUrl"
+                        />
                         <div class="min-w-0 flex-1">
                           <h3 class="font-medium">
                             <a [routerLink]="row.href" [class]="linkClasses">{{ row.name }}</a>
@@ -225,7 +225,8 @@ export class FindContent {
     (this.results()?.rows ?? []).map((league) => ({
       href: publicLeaguePath(league.organization.slug, league.slug),
       name: league.name,
-      mark: initials(league.organization.name),
+      organizationName: league.organization.name,
+      logoUrl: league.organization.logoUrl,
       divisionLabel: league.divisionLabel,
       where: [league.organization.name, league.locationNames.join(', ')]
         .filter(Boolean)
