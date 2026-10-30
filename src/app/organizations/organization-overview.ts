@@ -27,9 +27,12 @@ import { FollowLink } from '../shell/follow-link';
 import { SavedCopyNote } from '../offline/saved-copy-note';
 import { OrganizationMark } from './organization-mark';
 import { seasonDates } from './league/season-dates';
+import { LIST_PAGE_SIZE } from '../core/list-page';
 import {
   organizationPath,
+  pageQueryFor,
   sportViewPath,
+  type PagedList,
   type PublicLeagueRows,
   type PublicOpenSeasonRows,
   type PublicLocationRows,
@@ -50,6 +53,17 @@ import { sportsCommaList, sportsInSentence } from './sport-list';
 
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+export interface ListPaging {
+  readonly page: number;
+  readonly pageCount: number;
+  readonly total: number;
+}
+
+function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: number): string {
+  const rowsBefore = ((paging?.page ?? 1) - 1) * LIST_PAGE_SIZE;
+  return `${list}-${rowsBefore + i + 1}`;
 }
 
 @Component({
@@ -267,7 +281,7 @@ function plural(count: number, noun: string): string {
                 <ul
                   role="list"
                   class="mt-2 divide-y divide-border"
-                  [attr.aria-busy]="busy() ? 'true' : null"
+                  [attr.aria-busy]="leaguesBusy() ? 'true' : null"
                 >
                   @for (league of leagueRows(); track league.id) {
                     <li [id]="league.id" class="group relative">
@@ -325,9 +339,10 @@ function plural(count: number, noun: string): string {
                     [page]="paging.page"
                     [pageCount]="paging.pageCount"
                     [total]="paging.total"
-                    [path]="sportHref()"
+                    [path]="pagePath()"
                     fragment="leagues"
-                    (pageActivated)="pageRequested = true"
+                    [queryFor]="leagueQueryFor()"
+                    (pageActivated)="pageRequested.leagues = true"
                   />
                 </div>
               }
@@ -335,14 +350,23 @@ function plural(count: number, noun: string): string {
           }
           @if (locationsLoading() || locationRows().length) {
             <section id="locations" aria-labelledby="locations-heading" [class]="locationsClass()">
-              <h2 id="locations-heading" class="text-xl font-semibold tracking-tight md:text-2xl">
+              <h2
+                #locationsHeading
+                id="locations-heading"
+                tabindex="-1"
+                class="text-xl font-semibold tracking-tight focus:outline-none md:text-2xl"
+              >
                 Locations
               </h2>
               @if (locationsLoading()) {
                 <p role="status" class="sr-only">Loading the locations.</p>
                 <app-organization-rows-skeleton kind="location" class="mt-4 block" />
               } @else {
-                <ul role="list" class="mt-4 divide-y divide-border">
+                <ul
+                  role="list"
+                  class="mt-4 divide-y divide-border"
+                  [attr.aria-busy]="locationsBusy() ? 'true' : null"
+                >
                   @for (location of locationRows(); track location.id) {
                     <li [id]="location.id" class="flex gap-3 py-4">
                       <span
@@ -360,6 +384,21 @@ function plural(count: number, noun: string): string {
                   }
                 </ul>
               }
+              @if (locationPaging(); as paging) {
+                <div class="-mx-4 md:-mx-5">
+                  <app-page-control
+                    label="Locations pages"
+                    noun="locations"
+                    [page]="paging.page"
+                    [pageCount]="paging.pageCount"
+                    [total]="paging.total"
+                    [path]="pagePath()"
+                    fragment="locations"
+                    [queryFor]="locationQueryFor()"
+                    (pageActivated)="pageRequested.locations = true"
+                  />
+                </div>
+              }
             </section>
           }
         </div>
@@ -373,10 +412,10 @@ export class OrganizationOverview {
   readonly locations = input.required<PublicLocationRows | undefined>();
   readonly savedAt = input<number | undefined>(undefined);
   readonly sport = input<PublicSport | undefined>(undefined);
-  readonly leaguePaging = input<{ page: number; pageCount: number; total: number } | undefined>(
-    undefined,
-  );
-  readonly busy = input(false);
+  readonly leaguePaging = input<ListPaging | undefined>(undefined);
+  readonly locationPaging = input<ListPaging | undefined>(undefined);
+  readonly leaguesBusy = input(false);
+  readonly locationsBusy = input(false);
   readonly openSeasons = input<PublicOpenSeasonRows | undefined>(undefined);
   readonly now = input.required<number>();
   readonly canManage = input(false);
@@ -390,9 +429,13 @@ export class OrganizationOverview {
   protected readonly mutedBadge = MUTED_BADGE;
 
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly locationsHeading = viewChild<ElementRef<HTMLElement>>('locationsHeading');
   private readonly injector = inject(Injector);
 
-  protected pageRequested = false;
+  protected readonly pageRequested: Record<PagedList, boolean> = {
+    leagues: false,
+    locations: false,
+  };
 
   protected readonly leaguesLoading = computed(() => this.leagues() === undefined);
   protected readonly locationsLoading = computed(() => this.locations() === undefined);
@@ -428,11 +471,6 @@ export class OrganizationOverview {
     return sport ? `${sport.name} leagues` : 'Leagues';
   });
 
-  protected readonly sportHref = computed(() => {
-    const sport = this.sport();
-    return sport ? sportViewPath(this.page().slug, sport.segment) : '';
-  });
-
   // The chip row ends in a rule of its own, so the sections below it start without one, unless the Registration open section sits between.
   protected readonly gridClass = computed(() =>
     !this.isEmpty() || !hasSportChoice(this.page().sports)
@@ -445,6 +483,17 @@ export class OrganizationOverview {
     const sport = this.sport();
     return sport ? sportViewPath(slug, sport.segment) : organizationPath(slug);
   });
+  private readonly shownPages = computed(() => ({
+    leagues: this.leaguePaging()?.page ?? 1,
+    locations: this.locationPaging()?.page ?? 1,
+  }));
+  protected readonly leagueQueryFor = computed(() =>
+    pageQueryFor('leagues', this.shownPages(), this.sport() !== undefined),
+  );
+  protected readonly locationQueryFor = computed(() =>
+    pageQueryFor('locations', this.shownPages(), this.sport() !== undefined),
+  );
+
   protected readonly manageHref = computed(() => `/app/organizations/${this.page().slug}`);
   protected readonly openHref = computed(() => `${this.pagePath()}#registration-open`);
 
@@ -472,7 +521,7 @@ export class OrganizationOverview {
     (this.leagues() ?? []).map((league, i) => {
       const status = leagueSeasonStatus(league.seasons, this.now());
       return {
-        id: `league-${i + 1}`,
+        id: rowId('league', this.leaguePaging(), i),
         name: league.name,
         href: publicLeaguePath(this.page().slug, league.slug),
         divisionLabel: league.divisionLabel,
@@ -491,7 +540,7 @@ export class OrganizationOverview {
 
   protected readonly locationRows = computed(() =>
     (this.locations() ?? []).map((location, i) => ({
-      id: `location-${i + 1}`,
+      id: rowId('location', this.locationPaging(), i),
       name: location.name,
       address: location.address,
       sports: sportsCommaList(location.sportNames ?? []),
@@ -499,13 +548,22 @@ export class OrganizationOverview {
   );
 
   constructor() {
-    // Focus moves only in the browser, and only for a click on a page link: a live update of the shown page leaves it alone.
+    this.focusHeadingAfterPageChange('leagues', this.leagues, this.heading);
+    this.focusHeadingAfterPageChange('locations', this.locations, this.locationsHeading);
+  }
+
+  // Focus moves only in the browser, and only for a click on a page link: a live update of the shown page leaves it alone.
+  private focusHeadingAfterPageChange(
+    list: PagedList,
+    rows: () => unknown,
+    heading: () => ElementRef<HTMLElement> | undefined,
+  ): void {
     effect(() => {
-      this.leagues();
+      rows();
       untracked(() => {
-        if (!this.pageRequested) return;
-        this.pageRequested = false;
-        afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
+        if (!this.pageRequested[list]) return;
+        this.pageRequested[list] = false;
+        afterNextRender(() => heading()?.nativeElement.focus(), { injector: this.injector });
       });
     });
   }
