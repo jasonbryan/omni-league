@@ -38,6 +38,9 @@ describe('seed:demo search text', () => {
     expect(texts['sunday-reverse-coed-4s']).toBe(
       'Sunday Reverse Coed 4s Beach volleyball Coed 4v4 BB Gulf Coast Sport & Social North Beach Sand Courts Corpus Christi, TX',
     );
+    expect(texts['monday-coed-4s']).toBe(
+      'Monday Coed 4s Beach volleyball Coed 4v4 BB Confluence Sport & Social American River Sand Courts Sacramento, CA',
+    );
   });
 
   test('fills the text of leagues written without one, counts them, and a second run changes none', async () => {

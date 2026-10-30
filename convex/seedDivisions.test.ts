@@ -308,8 +308,18 @@ describe('seed:demo divisions on an empty deployment', () => {
   test('raises the minimum roster size of Coed 6v6 Indoor to 8 and adds the youth league U10 Girls Fall Rec', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
-    const leagues = await t.run((ctx) => ctx.db.query('leagues').collect());
-    expect(leagues.find((league) => league.name === 'Coed 6v6 Indoor')).toMatchObject({
+    const { leagues, frontRange } = await t.run(async (ctx) => ({
+      leagues: await ctx.db.query('leagues').collect(),
+      frontRange: await ctx.db
+        .query('organizations')
+        .withIndex('by_slug', (q) => q.eq('slug', 'front-range-rec-sports'))
+        .unique(),
+    }));
+    expect(
+      leagues.find(
+        (league) => league.name === 'Coed 6v6 Indoor' && league.organizationId === frontRange?._id,
+      ),
+    ).toMatchObject({
       playersPerSide: 6,
       minimumRosterSize: 8,
     });

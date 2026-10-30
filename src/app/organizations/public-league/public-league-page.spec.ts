@@ -337,7 +337,7 @@ describe('PublicLeaguePage populated', () => {
       expect(text(where()?.querySelector('h2'))).toBe('Where it’s played');
       const place = where()?.querySelector('li');
       expect(text(place?.querySelector('h3'))).toBe('North Beach Sand Courts');
-      expect(text(place?.querySelector('p'))).toBe('3500 Surfside Blvd, Corpus Christi, TX 78402');
+      expect(text(place?.querySelector('p'))).toBe('3500 Sandcourt Ln, Corpus Christi, TX 78402');
       const runBy = where()?.querySelector(':scope > p');
       expect(text(runBy)).toBe('Run by Gulf Coast Sport & Social');
       expect(runBy?.querySelector('a')?.getAttribute('href')).toBe(

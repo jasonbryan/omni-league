@@ -125,13 +125,17 @@ describe('seed:demo backfill of the organizations list fields', () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     const page = await t.query(api.search.organizations, { page: 1 });
+    expect(page.pageCount).toBe(2);
     expect(page.rows.map((row) => row.slug)).toEqual([
+      'confluence-sport-social',
       'front-range-rec-sports',
       'gulf-coast-sport-social',
       'lakeshore-sand-league',
       'rockport-sand-volleyball',
-      'saguaro-valley-softball',
     ]);
+    expect(
+      (await t.query(api.search.organizations, { page: 2 })).rows.map((row) => row.slug),
+    ).toEqual(['saguaro-valley-softball']);
     expect(page.rows.find((row) => row.slug === 'gulf-coast-sport-social')).toEqual({
       name: 'Gulf Coast Sport & Social',
       slug: 'gulf-coast-sport-social',
