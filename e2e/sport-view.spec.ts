@@ -531,13 +531,15 @@ test.describe('the sport view: locations pages', () => {
   });
 });
 
-// Twelve soccer leagues at eight locations: three leagues pages and two locations pages in the soccer view.
+const SOCCER_LEAGUE_COUNT = 12;
+const SOCCER_LOCATION_COUNT = 8;
+
 async function pagedSoccer(): Promise<string> {
-  const locations = numberedLocations(8);
+  const locations = numberedLocations(SOCCER_LOCATION_COUNT);
   const tenant = await seedTenant({
     name: 'E2E Soccer Focus',
     locations,
-    leagues: Array.from({ length: 12 }, (_, i) => ({
+    leagues: Array.from({ length: SOCCER_LEAGUE_COUNT }, (_, i) => ({
       name: `Soccer League ${String(i + 1).padStart(2, '0')}`,
       sport: 'soccer' as const,
       locations: [locations[i % locations.length].name],
@@ -569,7 +571,7 @@ test.describe('sport view offline', () => {
       );
       await page.goto(await pagedSoccer());
       await expect(nextIn(page, label)).toBeVisible();
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await hydrated(consoleGuard);
 
       await context.setOffline(true);
       await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
@@ -600,7 +602,7 @@ test.describe('sport view: a page change that never answers', () => {
       await page.clock.install();
       await page.goto(path);
       await expect(nextIn(page, label)).toBeVisible();
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await hydrated(consoleGuard);
       held.watchNewSubscriptions();
       await nextIn(page, label).focus();
       await page.keyboard.press('Enter');

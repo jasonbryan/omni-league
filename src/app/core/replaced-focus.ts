@@ -12,10 +12,6 @@ import {
 const MAIN = '#main';
 const PRESSABLE = 'a[href], button';
 
-/**
- * The element last pressed or focused inside `#main`. A click counts as well as focus, because a click or tap does not focus a link
- * in WebKit.
- */
 @Injectable({ providedIn: 'root' })
 export class MainFocusRecord {
   private readonly document = inject(DOCUMENT);
@@ -29,6 +25,7 @@ export class MainFocusRecord {
     if (!this.browser || this.listening) return;
     this.listening = true;
     const onFocusIn = (event: FocusEvent) => this.record(event.target);
+    // A click counts as well as focus, because a click or tap does not focus a link in WebKit.
     const onClick = (event: MouseEvent) => {
       const pressed = event.target instanceof Element ? event.target.closest(PRESSABLE) : null;
       if (pressed) this.record(pressed);
@@ -36,9 +33,11 @@ export class MainFocusRecord {
     const onFocusOut = (event: FocusEvent) => {
       if (event.relatedTarget !== null) return;
       const left = event.target;
-      // Some engines fire focusout as they remove a focused element; only an element still in the page lost focus to nothing.
+      // Some engines fire focusout as they remove a focused element, and leaving the window fires it while the element keeps focus.
       queueMicrotask(() => {
-        if (left === this.last && left instanceof Element && left.isConnected) this.last = null;
+        const lostFocusToNothing =
+          left instanceof Element && left.isConnected && this.document.activeElement !== left;
+        if (left === this.last && lostFocusToNothing) this.last = null;
       });
     };
     const options = { capture: true };
@@ -52,7 +51,6 @@ export class MainFocusRecord {
     });
   }
 
-  /** The element last pressed or focused inside `#main` has left the page, and focus fell to `<body>` with it. */
   focusFellWithRemovedElement(): boolean {
     const active = this.document.activeElement;
     const onBody = active === null || active === this.document.body;
@@ -72,19 +70,24 @@ export class MainFocusRecord {
   }
 }
 
-/**
- * For a view that replaces a page's content (ux.md, Feedback and Navigation): it takes focus on its heading when the element last
- * pressed or focused went with the content, and gives focus to `#main` when the content returns while focus is inside it.
- */
 export function focusWhenReplacing(heading: () => HTMLElement): void {
+  focusHeadingIfPressedElementLeft(heading);
+  focusMainOnDestroyIfHoldingFocus();
+}
+
+function focusHeadingIfPressedElementLeft(heading: () => HTMLElement): void {
   const record = inject(MainFocusRecord);
-  const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-  const environment = inject(EnvironmentInjector);
   afterNextRender({
     write: () => {
       if (record.focusFellWithRemovedElement()) heading().focus();
     },
   });
+}
+
+function focusMainOnDestroyIfHoldingFocus(): void {
+  const record = inject(MainFocusRecord);
+  const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  const environment = inject(EnvironmentInjector);
   inject(DestroyRef).onDestroy(() => {
     if (!record.lastIsInside(host)) return;
     // The read phase runs after the write phase, so a view that replaces this one takes focus first.

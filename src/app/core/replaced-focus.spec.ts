@@ -115,6 +115,17 @@ describe.each(VIEWS)('focus when %s replaces the content', (_label, kind) => {
     expect(document.activeElement).toBe(viewHeading());
   });
 
+  it('focuses its h1 when the visitor switched tabs while the focused link waited, then the link was removed', async () => {
+    await open();
+    const link = find('#pressed');
+    pressByKeyboard(link);
+    link.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    await settle();
+    expect(document.activeElement).toBe(link);
+    await show('view');
+    expect(document.activeElement).toBe(viewHeading());
+  });
+
   it('focuses its h1 when the link it replaced was clicked without taking focus, as in WebKit', async () => {
     await open();
     press(find('#pressed'));
