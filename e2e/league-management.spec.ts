@@ -3,6 +3,7 @@ import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { seedTenant, type TenantSeed } from './support/tenant';
@@ -501,46 +502,68 @@ test.describe('League management: the create-season form on a phone', () => {
     await expect(submit(page)).not.toBeInViewport();
   });
 
-  test('a keyboard user Tabbing through every field never has one under the sticky button (WCAG 2.4.11)', async ({
+  for (const role of ['orgAdmin', 'leagueOrganizer'] as const) {
+    test(`${role === 'orgAdmin' ? 'an org admin' : 'a league organizer'} Tabbing through every field never has one under the sticky button (WCAG 2.4.11)`, async ({
+      page,
+    }) => {
+      const { base } = await memberOf(page, role);
+      await page.setViewportSize(PHONE);
+      await page.goto(`${base}/leagues/${COED}`);
+      await page.locator('#name').focus();
+      const tab = tabKey(page);
+
+      const seen: { control: string; inViewport: boolean; unobscured: boolean }[] = [];
+      // A date field takes several Tabs, one per part, so the cap leaves room for them.
+      for (let step = 0; step < 40; step++) {
+        seen.push(
+          await page.evaluate(() => {
+            const active = document.activeElement as HTMLElement;
+            const rect = active.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+            const hit = inViewport ? document.elementFromPoint(x, y) : null;
+            return {
+              control: active.id || active.tagName,
+              inViewport,
+              unobscured: !!hit && active.contains(hit),
+            };
+          }),
+        );
+        if (await submit(page).evaluate((b) => b === document.activeElement)) break;
+        await page.keyboard.press(tab);
+      }
+
+      expect([...new Set(seen.map((s) => s.control))]).toEqual([
+        'name',
+        'slug',
+        'start-date',
+        'end-date',
+        'registration-deadline',
+        'A',
+        'BUTTON',
+      ]);
+      expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
+    });
+  }
+});
+
+test.describe('League management: the page as the league arrives', () => {
+  test('the h1 stays within 4px of the skeleton’s heading bar when the league loads', async ({
     page,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin');
-    await page.setViewportSize(PHONE);
+    const held = await holdQueries(page, ['leagues:getOrganizerContext']);
     await page.goto(`${base}/leagues/${COED}`);
-    await page.locator('#name').focus();
-    const tab = tabKey(page);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const skeleton = page.locator('app-league-loading');
+    await expect(skeleton).toBeVisible();
+    const headingBar = await skeleton.locator('div[aria-hidden="true"]').nth(1).boundingBox();
 
-    const seen: { control: string; inViewport: boolean; unobscured: boolean }[] = [];
-    // A date field takes several Tabs, one per part, so the cap leaves room for them.
-    for (let step = 0; step < 40; step++) {
-      seen.push(
-        await page.evaluate(() => {
-          const active = document.activeElement as HTMLElement;
-          const rect = active.getBoundingClientRect();
-          const x = rect.left + rect.width / 2;
-          const y = rect.top + rect.height / 2;
-          const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
-          const hit = inViewport ? document.elementFromPoint(x, y) : null;
-          return {
-            control: active.id || active.tagName,
-            inViewport,
-            unobscured: !!hit && active.contains(hit),
-          };
-        }),
-      );
-      if (await submit(page).evaluate((b) => b === document.activeElement)) break;
-      await page.keyboard.press(tab);
-    }
-
-    expect([...new Set(seen.map((s) => s.control))]).toEqual([
-      'name',
-      'slug',
-      'start-date',
-      'end-date',
-      'registration-deadline',
-      'A',
-      'BUTTON',
-    ]);
-    expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
+    held.release();
+    const h1 = main(page).getByRole('heading', { level: 1, name: 'Coed 7v7 Rec' });
+    await expect(h1).toBeVisible();
+    const heading = await h1.boundingBox();
+    expect(Math.abs(heading!.y - headingBar!.y)).toBeLessThanOrEqual(4);
   });
 });
