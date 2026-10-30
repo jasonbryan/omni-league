@@ -6,7 +6,7 @@ import { ConvexOfflineError } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
-import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import {
   adminRoutes,
   COASTAL,
@@ -17,6 +17,7 @@ import {
   text,
   expectPageAndShellSubscriptions,
 } from './testing/admin-harness';
+import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'leagues', component: AdminLeagues }]);
 const URL = `/app/organizations/${COASTAL.slug}/leagues`;
@@ -263,7 +264,6 @@ describe('AdminLeagues', () => {
       await open([]);
       const footer = submitButton().parentElement!;
       expect(footer.getAttribute('data-slot')).toBe('form-footer');
-      expect(tokens(footer.className)).toEqual(tokens(STICKY_FOOTER));
       expect(tokens(footer.className)).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
       expect(footer.parentElement).toBe(form());
       expect(
@@ -282,6 +282,11 @@ describe('AdminLeagues', () => {
       expect(tokens(group.className)).toEqual(
         expect.arrayContaining(tokens(STICKY_FOOTER_CLEARANCE)),
       );
+    });
+
+    it('brings a focused field back above the footer when an error pushes it down (WCAG 2.4.11)', async () => {
+      await open([]);
+      expectStickyFooterWithFocusFix(o.harness.fixture.debugElement, form());
     });
   });
 

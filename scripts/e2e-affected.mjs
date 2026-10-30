@@ -510,8 +510,13 @@ export const AREAS = [
   },
   {
     name: 'sticky form footer',
-    test: named('src/app/organizations/admin/', ['sticky-footer']),
-    specs: [...LEAGUE_ADMIN, 'organization-leagues-mockup', ...LEAGUE_MANAGEMENT],
+    test: named('src/app/organizations/admin/', ['sticky-footer', 'sticky-footer-focus']),
+    specs: [
+      ...LEAGUE_ADMIN,
+      'organization-leagues-mockup',
+      ...LEAGUE_MANAGEMENT,
+      'organization-details',
+    ],
   },
   {
     name: 'admin leagues publish dialog',

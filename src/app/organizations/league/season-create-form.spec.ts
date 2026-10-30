@@ -1,11 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
-import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
-import { StickyFooterFocus } from '../admin/sticky-footer-focus';
+import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { expectStickyFooterWithFocusFix } from '../admin/testing/sticky-footer-check';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -73,7 +72,6 @@ describe('SeasonCreateForm', () => {
       await open();
       const footer = submitButton().parentElement!;
       expect(footer.getAttribute('data-slot')).toBe('form-footer');
-      expect(tokens(footer.className)).toEqual(tokens(STICKY_FOOTER));
       expect(tokens(footer.className)).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
       expect(footer.parentElement).toBe(form());
       expect(
@@ -95,8 +93,7 @@ describe('SeasonCreateForm', () => {
 
     it('brings a focused field back above the footer when an error pushes it down (WCAG 2.4.11)', async () => {
       await open();
-      const applied = o.harness.fixture.debugElement.query(By.directive(StickyFooterFocus));
-      expect(applied?.nativeElement).toBe(form());
+      expectStickyFooterWithFocusFix(o.harness.fixture.debugElement, form());
     });
   });
 

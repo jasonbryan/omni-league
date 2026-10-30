@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { StickyFooterFocus } from './sticky-footer-focus';
+import { GAP_ABOVE_FOOTER_PX, StickyFooterFocus } from './sticky-footer-focus';
 
 class FakeResizeObserver {
   static last: FakeResizeObserver | undefined;
@@ -23,6 +23,7 @@ class FakeResizeObserver {
     @if (shown()) {
       <form appStickyFooterFocus>
         <input id="field" />
+        <div id="status" tabindex="-1">Saved.</div>
         <div data-slot="form-footer" [style.position]="position()">
           <button id="submit" type="submit">Save</button>
         </div>
@@ -38,10 +39,16 @@ class Host {
 describe('StickyFooterFocus', () => {
   let host: Host;
   let element: HTMLElement;
-  let scrolled: ReturnType<typeof vi.fn<(options?: boolean | ScrollIntoViewOptions) => void>>;
+  let scrolled: ReturnType<typeof vi.fn<(options?: ScrollToOptions) => void>>;
+  let scrollY: number;
 
   function rect(top: number, bottom: number): DOMRect {
     return { top, bottom, left: 0, right: 100, width: 100, height: bottom - top } as DOMRect;
+  }
+
+  /** Places an element at a page position, so its viewport rect follows the window's scroll. */
+  function placeAt(element: Element, top: number, bottom: number) {
+    element.getBoundingClientRect = () => rect(top - scrollY, bottom - scrollY);
   }
 
   async function render() {
@@ -51,36 +58,64 @@ describe('StickyFooterFocus', () => {
     document.body.append(element);
     host = fixture.componentInstance;
     await fixture.whenStable();
-    const footer = element.querySelector<HTMLElement>('[data-slot="form-footer"]')!;
-    footer.getBoundingClientRect = () => rect(570, 640);
-    scrolled = vi.fn<(options?: boolean | ScrollIntoViewOptions) => void>();
-    for (const control of element.querySelectorAll<HTMLElement>('input, button')) {
-      control.scrollIntoView = scrolled;
-    }
+    footer().getBoundingClientRect = () => rect(570, 640);
+    scrollY = 0;
+    scrolled = vi.fn<(options?: ScrollToOptions) => void>((options) => {
+      scrollY += options?.top ?? 0;
+    });
+    vi.spyOn(window, 'scrollBy').mockImplementation(scrolled as typeof window.scrollBy);
     return fixture;
   }
 
   const field = () => element.querySelector<HTMLInputElement>('#field')!;
+  const status = () => element.querySelector<HTMLElement>('#status')!;
+  const footer = () => element.querySelector<HTMLElement>('[data-slot="form-footer"]')!;
+  const footerTop = () => footer().getBoundingClientRect().top;
 
   afterEach(() => {
     element?.remove();
     FakeResizeObserver.last = undefined;
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('scrolls the focused control back into view when the form grows and pushes it under the sticky footer', async () => {
     await render();
     expect(FakeResizeObserver.last?.observed).toEqual([element.querySelector('form')]);
     field().focus();
-    field().getBoundingClientRect = () => rect(552, 596);
+    placeAt(field(), 552, 596);
     FakeResizeObserver.last!.callback();
-    expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' });
+    expect(scrolled).toHaveBeenCalledOnce();
+    expect(field().getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
+  });
+
+  it('brings a focused element with tabindex="-1" from under the footer to wholly above it', async () => {
+    await render();
+    placeAt(status(), 590, 630);
+    status().focus();
+    FakeResizeObserver.last!.callback();
+    expect(status().getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+    expect(status().getBoundingClientRect().bottom).toBeLessThanOrEqual(footerTop());
+  });
+
+  it('measures a chip by its label, as the radio inside it is visually hidden', async () => {
+    await render();
+    const label = document.createElement('label');
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    label.append(radio);
+    field().before(label);
+    placeAt(label, 540, 584);
+    placeAt(radio, 540, 541);
+    radio.focus();
+    FakeResizeObserver.last!.callback();
+    expect(label.getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
   });
 
   it('leaves the page alone while the focused control is clear of the footer', async () => {
     await render();
     field().focus();
-    field().getBoundingClientRect = () => rect(480, 524);
+    placeAt(field(), 480, 524);
     FakeResizeObserver.last!.callback();
     expect(scrolled).not.toHaveBeenCalled();
   });
@@ -90,7 +125,7 @@ describe('StickyFooterFocus', () => {
     host.position.set('static');
     await fixture.whenStable();
     field().focus();
-    field().getBoundingClientRect = () => rect(600, 640);
+    placeAt(field(), 600, 640);
     FakeResizeObserver.last!.callback();
     expect(scrolled).not.toHaveBeenCalled();
   });
@@ -111,11 +146,12 @@ describe('StickyFooterFocus', () => {
       frames.push(callback);
       return frames.length;
     });
-    field().getBoundingClientRect = () => rect(572, 592);
+    placeAt(field(), 572, 592);
     field().focus();
     expect(scrolled).not.toHaveBeenCalled();
     frames.forEach((callback) => callback(0));
-    expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' });
+    expect(scrolled).toHaveBeenCalledOnce();
+    expect(field().getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
   });
 
   it('stops observing when the form goes away', async () => {
