@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -93,7 +95,8 @@ describe('SeasonCreateForm', () => {
 
     it('brings a focused field back above the footer when an error pushes it down (WCAG 2.4.11)', async () => {
       await open();
-      expect(form().hasAttribute('appstickyfooterfocus')).toBe(true);
+      const applied = o.harness.fixture.debugElement.query(By.directive(StickyFooterFocus));
+      expect(applied?.nativeElement).toBe(form());
     });
   });
 

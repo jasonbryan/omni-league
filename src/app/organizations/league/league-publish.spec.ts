@@ -232,6 +232,19 @@ describe('LeagueManagement: publishing a season', () => {
       expect(page.querySelector('app-league-management')?.hasAttribute('inert')).toBe(false);
     });
 
+    it('links to the published season even once the list no longer has its row', async () => {
+      await open();
+      await pressPublish(0);
+      dialogButton('Publish season').click();
+      await o.flush();
+      o.convex.calls[0].resolve(null);
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([]);
+      await o.flush();
+      expect(notice()!.querySelector('a')!.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/fall-2027',
+      );
+    });
+
     it('the status goes when the next dialog opens, and names the next season', async () => {
       await open();
       await pressPublish(0);

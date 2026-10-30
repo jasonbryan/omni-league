@@ -41,6 +41,12 @@ import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
 import { SeasonCreateForm } from './season-create-form';
 
+interface PublishedSeason {
+  seasonId: Id<'seasons'>;
+  name: string;
+  slug: string;
+}
+
 /**
  * A draft league has no Publish buttons and no dialog: a note says why, and what to do depends on the role. An org admin gets a link to the Leagues page;
  * a league organizer is told to ask an org admin, with no link, because the admin area shows them the no-access view.
@@ -376,8 +382,9 @@ export class LeagueManagement {
 
   protected readonly publishedSeasonPath = computed(() => {
     const published = this.published();
-    const season = this.rows()?.find((row) => row.seasonId === published?.seasonId);
-    return publicSeasonPath(this.context.orgSlug(), this.context.leagueSlug(), season?.slug ?? '');
+    return published
+      ? publicSeasonPath(this.context.orgSlug(), this.context.leagueSlug(), published.slug)
+      : null;
   });
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
@@ -387,14 +394,16 @@ export class LeagueManagement {
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
-  protected readonly published = signal<{ seasonId: Id<'seasons'>; name: string } | null>(null);
+  protected readonly published = signal<PublishedSeason | null>(null);
+  private publishing: PublishedSeason | null = null;
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
   protected publish(
-    row: { seasonId: Id<'seasons'>; name: string; registrationDeadline: string },
+    row: PublishedSeason & { registrationDeadline: string },
     leagueName: string,
   ): void {
     this.published.set(null);
+    this.publishing = { seasonId: row.seasonId, name: row.name, slug: row.slug };
     this.publishDialog()?.open({
       seasonId: row.seasonId,
       name: row.name,
@@ -406,7 +415,7 @@ export class LeagueManagement {
   /** A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on that row's Publish button. */
   protected publishDismissed(outcome: PublishSeasonOutcome): void {
     if (outcome.published) {
-      this.published.set({ seasonId: outcome.seasonId, name: outcome.name });
+      this.published.set(this.publishing);
       afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
       return;
     }
