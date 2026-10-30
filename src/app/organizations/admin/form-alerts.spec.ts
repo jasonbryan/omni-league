@@ -1,10 +1,12 @@
 import { DETAILS_ALERTS } from '../league/league-details-state';
 import { SEASON_FORM_ALERTS } from '../league/season-form';
+import { LOGO_ALERTS } from './admin-logo';
 import { AlertTexts } from './alert-text';
 import { INVITE_FORM_ALERTS } from './invite-form';
 import { LEAGUE_FORM_ALERTS } from './league-form';
 import { FORM_ALERTS } from './location-form';
 import { PUBLISH_ALERTS } from './publish-league-dialog';
+import { REMOVE_LOGO_ALERTS } from './remove-logo-dialog';
 
 type AlertMap = Record<string, { title?: string; description: string }>;
 
@@ -15,6 +17,8 @@ const ALERT_MAPS: Record<string, AlertMap> = {
   'season form': SEASON_FORM_ALERTS,
   'league details form': DETAILS_ALERTS,
   'publish league dialog': PUBLISH_ALERTS,
+  'logo section': LOGO_ALERTS,
+  'remove logo dialog': REMOVE_LOGO_ALERTS,
 };
 
 describe('form alert texts', () => {

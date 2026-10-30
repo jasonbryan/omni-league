@@ -962,10 +962,12 @@ describe('seed:demo', () => {
     const exports = Object.entries(functions);
     expect(exports.map(([name]) => name).sort()).toEqual([
       'demo',
+      'demoLogoNeeded',
       'findDemoCredential',
       'grantDemoMemberships',
       'insertDemoData',
       'insertDemoInvite',
+      'setDemoLogo',
     ]);
     for (const [name, fn] of exports) {
       const markers = fn as Partial<Record<'isInternal' | 'isPublic', boolean>>;

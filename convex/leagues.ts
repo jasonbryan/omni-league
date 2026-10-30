@@ -27,6 +27,7 @@ import {
   type LeagueInputError,
 } from './lib/leagueInput';
 import { leagueStatusValidator } from './lib/leagueStatus';
+import { logoUrlField } from './lib/organizationLogo';
 import { leaguePageSeasons, leagueLocations } from './lib/publicLeague';
 import { getLeaguePublicPageReturns, type PublicLeaguePage } from './lib/publicPage';
 import { roleValidator } from './lib/roles';
@@ -426,7 +427,11 @@ export const getPublicPage = query({
     const locations = await leagueLocations(ctx, organization, league);
     const divisionLabel = await leagueDivisionLabel(ctx, league);
     return {
-      organization: { name: organization.name, slug: organization.slug },
+      organization: {
+        name: organization.name,
+        slug: organization.slug,
+        ...(await logoUrlField(ctx, organization)),
+      },
       name: league.name,
       slug: league.slug,
       sportName: sportName(league.sport),

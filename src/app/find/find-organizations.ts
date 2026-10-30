@@ -14,7 +14,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronRight, lucideCircleAlert } from '@ng-icons/lucide';
-import { initials } from '../organizations/initials';
+import { OrganizationMark } from '../organizations/organization-mark';
 import { organizationPath } from '../organizations/organization-path';
 import { PageControl } from '../organizations/page-control';
 import { sportsCommaList } from '../organizations/sport-list';
@@ -58,7 +58,7 @@ export class FindOrganizationsSkeleton {
  */
 @Component({
   selector: 'app-find-organizations',
-  imports: [FindOrganizationsSkeleton, NgIcon, PageControl, RouterLink],
+  imports: [FindOrganizationsSkeleton, NgIcon, OrganizationMark, PageControl, RouterLink],
   providers: [provideIcons({ lucideChevronRight, lucideCircleAlert })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -104,11 +104,7 @@ export class FindOrganizationsSkeleton {
                 @for (row of rows(); track row.href) {
                   <li class="group relative md:border-b md:border-border">
                     <div class="flex min-h-18 items-center gap-4 py-4">
-                      <span
-                        aria-hidden="true"
-                        class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-accent-foreground"
-                        >{{ row.mark }}</span
-                      >
+                      <app-organization-mark size="row" [name]="row.name" [logoUrl]="row.logoUrl" />
                       <div class="min-w-0 flex-1">
                         <h3 class="font-medium">
                           <a [routerLink]="row.href" [class]="linkClasses">{{ row.name }}</a>
@@ -174,7 +170,7 @@ export class FindOrganizationsList {
     (this.result()?.rows ?? []).map((organization) => ({
       href: organizationPath(organization.slug),
       name: organization.name,
-      mark: initials(organization.name),
+      logoUrl: organization.logoUrl,
       where: [sportsCommaList(organization.sportNames), organization.cityState]
         .filter(Boolean)
         .join(' · '),
