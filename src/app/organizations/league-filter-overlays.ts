@@ -8,6 +8,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { Router, type Params } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideX } from '@ng-icons/lucide';
@@ -77,6 +78,7 @@ function plainClick(event: MouseEvent): boolean {
 @Component({
   selector: 'app-filter-fieldset',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'block' },
   template: `
     <fieldset>
       <legend class="text-sm font-medium">{{ group().legend }}</legend>
@@ -112,6 +114,7 @@ export class FilterFieldset {
 @Component({
   selector: 'app-league-filter-overlays',
   imports: [
+    CdkTrapFocus,
     FilterFieldset,
     HlmButton,
     HlmPopover,
@@ -201,6 +204,7 @@ export class FilterFieldset {
           *hlmPopoverPortal
           class="w-80"
           role="dialog"
+          cdkTrapFocus
           [id]="popoverId(group.name)"
           [attr.aria-label]="group.legend"
         >

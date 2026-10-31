@@ -150,6 +150,9 @@ describe('the filter buttons after hydration', () => {
     expect(
       [...(filterForm(harness)?.querySelectorAll('button') ?? [])].slice(1).map((b) => text(b)),
     ).toEqual(['Gender: Coed', 'Format: 4v4', 'Level', 'Age group']);
+    for (const dimension of [...(filterForm(harness)?.querySelectorAll('button') ?? [])].slice(1)) {
+      expect(dimension.getAttribute('aria-haspopup'), text(dimension)).toBe('dialog');
+    }
   });
 
   it('create no sheet or popover until a button is pressed', async () => {

@@ -114,6 +114,7 @@ const PILL =
                       #dimensionButton
                       type="button"
                       [class]="button.choice ? activeDimensionClass : idleDimensionClass"
+                      aria-haspopup="dialog"
                       [attr.aria-expanded]="openPopover() === button.name"
                       [attr.aria-controls]="openPopover() === button.name ? button.popoverId : null"
                       [attr.aria-busy]="pressed() === button.name ? 'true' : null"
