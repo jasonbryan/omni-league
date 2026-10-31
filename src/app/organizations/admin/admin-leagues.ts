@@ -266,8 +266,9 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               data-slot="create-league-skeleton"
               class="px-4 py-4 md:px-5 md:py-5"
             >
-              <div class="mb-5 flex h-5 items-center">
-                <div class="${PULSE} h-3.5 w-64 max-w-full"></div>
+              <div class="mb-5">
+                <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-full"></div></div>
+                <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-24"></div></div>
               </div>
               <div class="flex flex-col gap-5">
                 @for (field of skeletonFields; track field) {
@@ -277,11 +278,16 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                       data-slot="skeleton-input"
                       class="${PULSE} h-9 w-full rounded-lg pointer-coarse:h-11"
                     ></div>
-                    <div class="flex h-5 items-center">
-                      <div class="${PULSE} h-3.5 w-full"></div>
-                    </div>
-                    <div class="flex h-5 items-center">
-                      <div class="${PULSE} h-3.5 w-40 max-w-full"></div>
+                    <div>
+                      <div class="flex h-5 items-center">
+                        <div class="${PULSE} h-3.5 w-full"></div>
+                      </div>
+                      <div class="flex h-5 items-center">
+                        <div class="${PULSE} h-3.5 w-full"></div>
+                      </div>
+                      <div class="flex h-5 items-center">
+                        <div class="${PULSE} h-3.5 w-24"></div>
+                      </div>
                     </div>
                   </div>
                 }
