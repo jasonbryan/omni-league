@@ -18,7 +18,6 @@ import {
 } from './support/sticky-footer';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
-import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import { failMutation } from './support/fail-mutation';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -529,21 +528,24 @@ test.describe('League management: the save status on a phone', () => {
 });
 
 test.describe('League management: the save status on wider screens', () => {
-  for (const width of [768, 1280]) {
-    test(
-      `at ${width}px the saved status sits on top of Save in the footer`,
-      VIEWPORT_AGNOSTIC,
-      async ({ page }, testInfo) => {
-        await page.setViewportSize({ width, height: 900 });
-        await openDetails(page);
-        await details(page).locator('#league-name').fill('Sunday Sand');
-        await save(page).click();
-        const saved = status(page).getByText('League details saved.');
-        await expect(saved).toBeVisible();
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'each test sets its own width');
+  });
 
-        await expectStatusOnTopOfButton(details(page).locator('form'), status(page), save(page));
-        await screenshot(page, testInfo, '445-league-details-saved');
-      },
-    );
+  for (const width of [768, 1280]) {
+    test(`at ${width}px the saved status sits on top of Save in the footer`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openDetails(page);
+      await details(page).locator('#league-name').fill('Sunday Sand');
+      await save(page).click();
+      const saved = status(page).getByText('League details saved.');
+      await expect(saved).toBeVisible();
+
+      await expectStatusOnTopOfButton(details(page).locator('form'), status(page), save(page));
+      await screenshot(page, testInfo, '445-league-details-saved');
+    });
   }
 });

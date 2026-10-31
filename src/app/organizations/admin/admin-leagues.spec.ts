@@ -950,11 +950,10 @@ describe('AdminLeagues', () => {
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
     });
 
-    it('clamps the title to two lines, with the whole name in the text that is announced', async () => {
+    it('holds the whole name in the title, so the region announces it even where the title is clamped', async () => {
       await open([]);
       await created();
       const title = createdStatus()!.querySelector('[data-slot="created-title"]')!;
-      expect(tokens(title.className)).toContain('line-clamp-2');
       expect(title.textContent).toBe('Sunday Reverse Coed 4s created as a draft.');
     });
 

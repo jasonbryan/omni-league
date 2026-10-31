@@ -290,7 +290,10 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           @if (created(); as name) {
             <div [class]="createdClass">
               <ng-icon name="lucideCheck" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
-              <span data-slot="created-title" [class]="createdTitleClass"
+              <span
+                data-slot="created-title"
+                [class]="createdTitleClass"
+                style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden"
                 >{{ name }} created as a draft.</span
               >
             </div>

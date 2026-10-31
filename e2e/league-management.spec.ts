@@ -9,6 +9,7 @@ import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import {
   controlsInTabOrder,
+  expectAtMostTwoLines,
   expectStatusOnTopOfButton,
   expectVisibleInFooter,
   footerHeight,
@@ -610,13 +611,16 @@ test.describe('League management: the created status on a phone', () => {
     await expect(created(page)).toHaveCount(0);
   });
 
-  test('with a 100-character name the footer stays within 200px', async ({ page }) => {
+  test('with a 100-character name the title takes two lines and the footer stays within 200px', async ({
+    page,
+  }) => {
     const name =
       'Fall 2026: Sunday Coed Sevens at Redfish Flats, with Late Kickoffs, Short Halves, and Long Playoffs.';
     expect(name).toHaveLength(MAX_SEASON_NAME_LENGTH);
     await createFromTheBottom(page, name);
 
     await expectVisibleInFooter(page, created(page, name));
+    await expectAtMostTwoLines(created(page, name));
     expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
   });
 
@@ -652,23 +656,26 @@ test.describe('League management: the created status on a phone', () => {
 });
 
 test.describe('League management: the created status on wider screens', () => {
-  for (const width of [768, 1280]) {
-    test(
-      `at ${width}px the created status sits on top of Create in the footer`,
-      VIEWPORT_AGNOSTIC,
-      async ({ page }, testInfo) => {
-        const { base } = await memberOf(page, 'orgAdmin');
-        await page.setViewportSize({ width, height: 900 });
-        await page.goto(`${base}/leagues/${COED}`);
-        await fillFall2026(page);
-        await submit(page).click();
-        const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
-        await expect(status).toBeVisible();
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'each test sets its own width');
+  });
 
-        await expectStatusOnTopOfButton(form(page), status, submit(page));
-        await screenshot(page, testInfo, '445-league-season-created');
-      },
-    );
+  for (const width of [768, 1280]) {
+    test(`at ${width}px the created status sits on top of Create in the footer`, async ({
+      page,
+    }, testInfo) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base}/leagues/${COED}`);
+      await fillFall2026(page);
+      await submit(page).click();
+      const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
+      await expect(status).toBeVisible();
+
+      await expectStatusOnTopOfButton(form(page), status, submit(page));
+      await screenshot(page, testInfo, '445-league-season-created');
+    });
   }
 });
 

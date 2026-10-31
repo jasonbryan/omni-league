@@ -114,3 +114,15 @@ export async function expectStatusOnTopOfButton(
   expect(below.y - (box.y + box.height)).toBeGreaterThanOrEqual(0);
   expect(below.y - (box.y + box.height)).toBeLessThanOrEqual(16);
 }
+
+export async function expectAtMostTwoLines(title: Locator): Promise<void> {
+  const { lines, clamp } = await title.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      lines: element.getBoundingClientRect().height / parseFloat(style.lineHeight),
+      clamp: style.webkitLineClamp,
+    };
+  });
+  expect(clamp).toBe('2');
+  expect(lines).toBeLessThanOrEqual(2);
+}

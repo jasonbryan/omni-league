@@ -12,6 +12,7 @@ import { signUp } from './support/session';
 import {
   controlsInTabOrder,
   expectWhollyAboveFooter,
+  expectAtMostTwoLines,
   expectStatusOnTopOfButton,
   expectVisibleInFooter,
   footerHeight,
@@ -561,7 +562,7 @@ test.describe('Leagues: the created status on a phone', () => {
     await expect(nextStep(page)).toHaveCount(0);
   });
 
-  test('with a 100-character name the footer stays within 200px, and "Add the first season" is 44px tall', async ({
+  test('with a 100-character name the title takes two lines, the footer stays within 200px, and "Add the first season" is 44px tall', async ({
     page,
   }) => {
     const name =
@@ -570,6 +571,7 @@ test.describe('Leagues: the created status on a phone', () => {
     await createFromTheBottom(page, { ...SUNDAY, name });
 
     await expectVisibleInFooter(page, nextStep(page));
+    await expectAtMostTwoLines(form(page).locator('[data-slot="created-title"]'));
     expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
     await expectLinkHeights(page, nextStep(page), 'touch');
   });
@@ -607,26 +609,29 @@ test.describe('Leagues: the created status on a phone', () => {
 });
 
 test.describe('Leagues: the created status on wider screens', () => {
-  for (const width of [768, 1280]) {
-    test(
-      `at ${width}px the created status sits on top of Create in the footer`,
-      VIEWPORT_AGNOSTIC,
-      async ({ page }, testInfo) => {
-        const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
-        await page.setViewportSize({ width, height: 900 });
-        await page.goto(`${base}/leagues`);
-        await createDraft(page, {
-          name: 'Sunday Reverse Coed 4s',
-          sport: 'Beach volleyball',
-          locations: [LOCATIONS[1].name],
-        });
-        const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
-        await expect(status).toBeVisible();
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'each test sets its own width');
+  });
 
-        await expectStatusOnTopOfButton(form(page), status, submit(page));
-        await screenshot(page, testInfo, '445-leagues-created');
-      },
-    );
+  for (const width of [768, 1280]) {
+    test(`at ${width}px the created status sits on top of Create in the footer`, async ({
+      page,
+    }, testInfo) => {
+      const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base}/leagues`);
+      await createDraft(page, {
+        name: 'Sunday Reverse Coed 4s',
+        sport: 'Beach volleyball',
+        locations: [LOCATIONS[1].name],
+      });
+      const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
+      await expect(status).toBeVisible();
+
+      await expectStatusOnTopOfButton(form(page), status, submit(page));
+      await screenshot(page, testInfo, '445-leagues-created');
+    });
   }
 });
 
