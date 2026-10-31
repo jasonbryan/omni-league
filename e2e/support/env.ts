@@ -3,7 +3,8 @@ import convexBackend from './convex-backend.json';
 /**
  * - `E2E_BASE_URL`: target an already running app (for example a Netlify preview). No local server
  *   or Convex backend starts, and the checks that need the local development build are skipped.
- * - `E2E_WEBKIT=1`: also run the `webkit-mobile` project (release PRs, `workflow_dispatch`).
+ * - `E2E_WEBKIT=1`: also run the `webkit-mobile` project, as the `E2E` `workflow_dispatch` does with
+ *   `webkit: true`.
  * - `E2E_RUN_NAME=<name>`: write results, traces, and reports under `test-results/<name>/` and
  *   `playwright-report/<name>/`, so several runs in one job keep each other's output.
  */

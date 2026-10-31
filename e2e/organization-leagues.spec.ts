@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible, tabKey } from './support/a11y';
+import { chip, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -13,6 +14,7 @@ import {
   expectWhollyAboveFooter,
   PHONE,
   footerTabWalk,
+  settleAfterFocusScroll,
   underTheFooter,
 } from './support/sticky-footer';
 import { numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
@@ -63,8 +65,8 @@ async function createDraft(
 ) {
   await page.locator('#name').fill(league.name);
   if (league.slug !== undefined) await page.locator('#slug').fill(league.slug);
-  await page.getByRole('radio', { name: league.sport }).check({ force: true });
-  await page.getByRole('radio', { name: DEFAULT_FORMAT[league.sport] }).check({ force: true });
+  await chooseChip(chip(page, league.sport));
+  await chooseChip(chip(page, DEFAULT_FORMAT[league.sport]));
   for (const location of league.locations) {
     await page.getByRole('checkbox', { name: location }).click();
   }
@@ -84,7 +86,7 @@ test.describe('Leagues: creating a draft', () => {
     await expectAccessible(page);
 
     await page.locator('#name').fill('  Sunday Reverse Coed 4s ');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
     await expect(page.getByRole('radio', { name: '4v4' })).toBeChecked();
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await screenshot(page, testInfo, '66-leagues-filled');
@@ -185,11 +187,11 @@ test.describe('Leagues: creating a draft', () => {
     await submit(page).click();
     await expect(page.locator('#name-error')).toHaveCount(0);
     await expect(page.locator('#sport-error')).toBeVisible();
-    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
+    await chooseChip(chip(page, 'Soccer'));
     await submit(page).click();
     await expect(page.locator('#format-error')).toBeVisible();
     await expect(page.getByRole('radio', { name: '4v4' })).toBeFocused();
-    await page.getByRole('radio', { name: '7v7' }).check({ force: true });
+    await chooseChip(chip(page, '7v7'));
     await submit(page).click();
     await expect(page.locator('#locations-error')).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' })).toBeFocused();
@@ -200,7 +202,7 @@ test.describe('Leagues: creating a draft', () => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Fine');
-    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
+    await chooseChip(chip(page, 'Soccer'));
     await page.getByRole('checkbox', { name: 'Redfish Flats Fields' }).click();
     for (const slug of ['Bad Slug', 'ab', 'new']) {
       await page.locator('#slug').fill(slug);
@@ -333,7 +335,7 @@ test.describe('Leagues: defaults and the next step', () => {
 
     // Name and Sport are enough: the location needs no tick.
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
     await submit(page).click();
 
     const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
@@ -381,6 +383,34 @@ test.describe('Leagues: the create form on a phone', () => {
     await expect(submit(page)).toBeInViewport({ ratio: 1 });
   });
 
+  test('Create pressed with Name empty focuses Name wholly above the sticky button', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await expect(form(page)).toBeVisible();
+
+    await submit(page).click();
+
+    await expect(page.locator('#name-error')).toBeVisible();
+    await expectWhollyAboveFooter(page, page.locator('#name'));
+  });
+
+  test('Tab from the control before Name brings Name wholly above the sticky button', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await expect(form(page)).toBeVisible();
+    await main(page).getByRole('link', { name: 'Create a league' }).focus();
+
+    await page.keyboard.press(tabKey(page));
+
+    await expectWhollyAboveFooter(page, page.locator('#name'));
+  });
+
   test('a keyboard user Tabbing through every field never has one under the sticky button, as cleared Name and Slug show their errors (WCAG 2.4.11)', async ({
     page,
   }) => {
@@ -415,10 +445,8 @@ test.describe('Leagues: the create form on a phone', () => {
     await page.setViewportSize(PHONE);
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
-    await page
-      .getByRole('radio', { name: DEFAULT_FORMAT['Beach volleyball'] })
-      .check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
+    await chooseChip(chip(page, DEFAULT_FORMAT['Beach volleyball']));
     await expect(page.locator('#slug')).toHaveValue('sunday-reverse-coed-4s');
     for (const box of await page.getByRole('checkbox', { name: /^Location/ }).all()) {
       await expect(box).not.toBeChecked();
@@ -442,6 +470,8 @@ test.describe('Leagues: the create form on a phone', () => {
 
     for (let step = 0; step < 9; step++) {
       await page.keyboard.press(back);
+      // WebKit scrolls to the newly focused control in a later frame, not as focus moves.
+      await settleAfterFocusScroll(page);
       const clear = await page.evaluate(() => {
         const active = document.activeElement as HTMLElement;
         // A chip's radio is visually hidden: its label is what the user sees.
@@ -465,12 +495,20 @@ test.describe('Leagues: the create form on a phone', () => {
 
   test('every location, however far down, can be clicked once the page is scrolled to it', async ({
     page,
+    browserName,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(8) });
     await page.setViewportSize(PHONE);
     await page.goto(`${base}/leagues`);
     await page.locator('#name').focus();
     await expect(submit(page)).toBeInViewport({ ratio: 1 });
+    // Playwright's mobile WebKit has no mouse wheel and no touch swipe, so the page scrolls by script.
+    const swipeBy = (dy: number) =>
+      browserName === 'webkit'
+        ? page.evaluate((top) => window.scrollBy({ top, behavior: 'instant' }), dy)
+        : page.mouse.wheel(0, dy);
+    const pressAt = (x: number, y: number) =>
+      browserName === 'webkit' ? page.touchscreen.tap(x, y) : page.mouse.click(x, y);
 
     for (let n = 1; n <= 8; n++) {
       const location = page.getByRole('checkbox', { name: `Location 0${n}` });
@@ -478,13 +516,13 @@ test.describe('Leagues: the create form on a phone', () => {
       let box = (await location.boundingBox())!;
       const footerTop = (await form(page).locator('[data-slot="form-footer"]').boundingBox())!.y;
       for (let swipe = 0; swipe < 40 && !(box.y >= 0 && box.y + box.height <= footerTop); swipe++) {
-        await page.mouse.wheel(0, box.y < 0 ? -80 : 80);
+        await swipeBy(box.y < 0 ? -80 : 80);
         await page.waitForTimeout(30);
         box = (await location.boundingBox())!;
       }
       expect(box.y, `Location 0${n} scrolled into view`).toBeGreaterThanOrEqual(0);
       expect(box.y + box.height, `Location 0${n} above the button`).toBeLessThanOrEqual(footerTop);
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await pressAt(box.x + box.width / 2, box.y + box.height / 2);
       await expect(location).toBeChecked();
     }
   });
