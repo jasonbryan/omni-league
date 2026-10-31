@@ -7,8 +7,9 @@ import {
   makeStateKey,
 } from '@angular/core';
 import { ConvexHttpClient } from 'convex/browser';
-import { getFunctionName, type FunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
 import { convexToJson, type Value } from 'convex/values';
+import { getFunctionName } from './api';
 import { CONVEX_URL } from './convex-url';
 import type { TransferredQuery } from './transfer';
 

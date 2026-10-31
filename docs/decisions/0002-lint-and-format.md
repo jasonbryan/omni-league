@@ -4,6 +4,7 @@
 - **Gate:** `gate:technology`
 - **Issue:** #2
 - **Date:** 2026-10-07 (revised 2026-10-07: config-file patterns, ADR 0006 SSR files)
+- **Amended:** 2026-10-31, by #419: outside specs, `src/` may import `convex/server` and `convex/_generated/api` only with `import type`. See "Amendment: type-only Convex server imports (#419, 2026-10-31)" at the end.
 
 ## Context
 
@@ -199,7 +200,7 @@ No separate block is needed, and none of these files may be listed in `allowDefa
 
 - `allowTypeImports` stays at its default of `false`, so `import type` from `convex/browser` is also blocked outside the adapter. Test fakes get the client type from the adapter's injection token.
 - The rule checks static `import`/`export` only, not dynamic `import()`. PR review covers that remaining case.
-- `convex/server` and `convex/values` stay allowed, because components need `FunctionReference` types and `api` from `convex/_generated/api`.
+- `convex/server` and `convex/values` stay allowed, because components need `FunctionReference` types and `api` from `convex/_generated/api`. Amended by #419: outside specs, `convex/server` and `convex/_generated/api` are allowed only as `import type` (see the amendment at the end).
 
 ### Covered file types
 
@@ -323,3 +324,15 @@ With the recommended config, `ng build` still succeeded, and `tsc -p tsconfig.to
   - [Configuration](https://biomejs.dev/reference/configuration/)
   - [noRestrictedImports](https://biomejs.dev/linter/rules/no-restricted-imports/)
   - [Roadmap 2026](https://biomejs.dev/blog/roadmap-2026/)
+
+## Amendment: type-only Convex server imports (#419, 2026-10-31)
+
+A usage-rule change to the restricted-imports rule; no tool changes.
+
+| Rule in this ADR                                      | Was                                              | Now                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `convex/server` and `convex/_generated/api` in `src/` | Allowed, for `FunctionReference` types and `api` | `no-restricted-imports` adds `CONVEX_SERVER_PATHS` (`convex/server`) and `CONVEX_SERVER_PATTERNS` (any path ending `convex/_generated/api` or `.js`), both with `allowTypeImports: true`, to every block that covers non-spec `src/` files. `api` and `getFunctionName` come from the Convex adapter |
+| Specs                                                 | Same as other `src/` files                       | Exempt from the new entries, because specs never ship in the browser bundle. The convex/browser and React bans still apply to them                                                                                                                                                                   |
+| `convex/values`                                       | Allowed                                          | Unchanged                                                                                                                                                                                                                                                                                            |
+
+**Why.** A runtime import of either module puts Convex's server code in the browser's initial bundle. See [ADR 0006, "Amendment: Convex server code out of the browser bundle"](0006-angular-app-baseline.md#amendment-convex-server-code-out-of-the-browser-bundle-419-2026-10-31). `scripts/eslint-convex-server.test.mjs` pins the rule.

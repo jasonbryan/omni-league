@@ -21,8 +21,7 @@ import {
   lucidePlus,
   lucideTrophy,
 } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { isPlainClick } from '../../shell/follow-link';
 import { leaguePath } from '../league/league-path';
 import { publicLeaguePath } from '../public-league/public-league-path';

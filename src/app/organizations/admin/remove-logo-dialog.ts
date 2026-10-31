@@ -20,9 +20,8 @@ import {
   BrnAlertDialogTitle,
 } from '@spartan-ng/brain/alert-dialog';
 import { BrnDialogService } from '@spartan-ng/brain/dialog';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';

@@ -1,3 +1,4 @@
+export { api, getFunctionName } from './api';
 export { CONVEX_CLIENT, type ConvexClientLike } from './client-token';
 export {
   CONVEX_AUTH,

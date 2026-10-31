@@ -22,6 +22,25 @@ const REACT_PATHS = ['react', 'react-dom', '@convex-dev/better-auth/react'].map(
 }));
 const REACT_PATTERNS = [{ group: ['react/*', 'react-dom/*'], message: REACT_MESSAGE }];
 
+// A runtime import of either puts Convex's server code (its schema builder) in the browser bundle.
+// Specs may import them at runtime: specs never ship in the browser bundle.
+const CONVEX_SERVER_MESSAGE =
+  'Import api and getFunctionName from the Convex adapter in src/app/core/data/convex/; only `import type` may name this module.';
+const CONVEX_SERVER_PATHS = [
+  { name: 'convex/server', message: CONVEX_SERVER_MESSAGE, allowTypeImports: true },
+];
+const CONVEX_SERVER_PATTERNS = [
+  {
+    regex: String.raw`(^|/)convex/_generated/api(\.js)?$`,
+    message: CONVEX_SERVER_MESSAGE,
+    allowTypeImports: true,
+  },
+];
+const CONVEX_BROWSER_PATH = {
+  name: 'convex/browser',
+  message: 'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
+};
+
 export default defineConfig([
   globalIgnores([
     'convex/_generated/',
@@ -110,20 +129,38 @@ export default defineConfig([
 
   {
     files: ['src/**/*.ts'],
-    ignores: ['src/app/core/data/convex/**'],
+    ignores: ['src/app/core/data/convex/**', 'src/**/*.spec.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          paths: [
-            {
-              name: 'convex/browser',
-              message:
-                'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
-            },
-            ...REACT_PATHS,
-          ],
-          patterns: REACT_PATTERNS,
+          paths: [CONVEX_BROWSER_PATH, ...CONVEX_SERVER_PATHS, ...REACT_PATHS],
+          patterns: [...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ['src/**/*.spec.ts'],
+    ignores: ['src/app/core/data/convex/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { paths: [CONVEX_BROWSER_PATH, ...REACT_PATHS], patterns: REACT_PATTERNS },
+      ],
+    },
+  },
+
+  {
+    files: ['src/app/core/data/convex/**/*.ts'],
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [...CONVEX_SERVER_PATHS, ...REACT_PATHS],
+          patterns: [...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
         },
       ],
     },
@@ -135,7 +172,7 @@ export default defineConfig([
   // key. A file added to that import graph needs a `files` entry here:
   // scripts/eslint-edge-runtime.test.mjs walks the imports and fails when one is missing.
   // This block replaces the options of the no-restricted-imports block above for these files, so
-  // it repeats convex/browser.
+  // it repeats convex/browser and the Convex server modules.
   {
     files: ['src/server*.ts', 'src/app/core/url-serializer.ts'],
     ignores: ['src/**/*.spec.ts'],
@@ -189,11 +226,8 @@ export default defineConfig([
         'error',
         {
           paths: [
-            {
-              name: 'convex/browser',
-              message:
-                'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
-            },
+            CONVEX_BROWSER_PATH,
+            ...CONVEX_SERVER_PATHS,
             // Un-prefixed built-ins (`fs`, `fs/promises`, ...), as exact names: a pattern like
             // `path` would also match a relative `./path` module.
             ...builtinModules.map((name) => ({
@@ -207,6 +241,7 @@ export default defineConfig([
               group: ['node:*'],
               message: 'Server-entry files are Web-API-only: no node: imports.',
             },
+            ...CONVEX_SERVER_PATTERNS,
             ...REACT_PATTERNS,
           ],
         },

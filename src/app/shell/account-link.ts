@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
-import { injectQuery, skipToken } from '../core/data/convex';
+import { api, injectQuery, skipToken } from '../core/data/convex';
 import { initialsOf } from './initials';
 
 /**
