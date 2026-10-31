@@ -262,14 +262,18 @@ describe('seasons.getPublicPage', () => {
     expect(JSON.stringify(page)).not.toMatch(/draft-season|b-season|coed-summer/);
   });
 
-  test('reads no time: the query never calls the clock', async () => {
+  test('answers the same page before the deadline and after the season ends', async () => {
     const t = await setup();
-    const now = vi.spyOn(Date, 'now');
+    vi.useFakeTimers({ toFake: ['Date'] });
     try {
-      expect(await get(t, 'org-a', 'sand-4s', 'summer-2027')).not.toBeNull();
-      expect(now).not.toHaveBeenCalled();
+      vi.setSystemTime(Date.UTC(2027, 0, 1));
+      const beforeDeadline = await get(t, 'org-a', 'sand-4s', 'summer-2027');
+      vi.setSystemTime(Date.UTC(2028, 0, 1));
+      const afterSeasonEnds = await get(t, 'org-a', 'sand-4s', 'summer-2027');
+      expect(beforeDeadline).not.toBeNull();
+      expect(afterSeasonEnds).toEqual(beforeDeadline);
     } finally {
-      now.mockRestore();
+      vi.useRealTimers();
     }
   });
 

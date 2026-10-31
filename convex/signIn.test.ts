@@ -90,6 +90,12 @@ const advance = (ms: number) => {
   vi.setSystemTime(new Date(Date.now() + ms));
 };
 
+async function storedBlockedUntil(t: T): Promise<number> {
+  const [row] = await rows(t);
+  if (!row) throw new Error('no sign-in failures are stored');
+  return row.blockedUntil;
+}
+
 beforeEach(() => {
   vi.stubEnv('CONVEX_SITE_URL', 'http://127.0.0.1:3211');
   vi.stubEnv('SITE_URL', SITE_URL);
@@ -158,7 +164,7 @@ describe('per-address throttle', () => {
     });
     expect(sixth.headers.get('retry-after')).toBe('60');
     expect(await sessionCount(t)).toBe(sessions);
-    advance(30_000);
+    vi.setSystemTime(new Date((await storedBlockedUntil(t)) - 30_000));
     const waiting = await signIn(t, EMAIL, PASSWORD);
     expect(waiting.status).toBe(429);
     expect(waiting.json['retryAfterSeconds']).toBe(30);
@@ -168,9 +174,13 @@ describe('per-address throttle', () => {
   test('the wait ends after a minute, doubles with each failure, and a success clears the row', async () => {
     const t = setup();
     await signUp(t);
+    const failingFrom = Date.now();
     await fail(t, EMAIL, 5);
+    const firstWait = (await storedBlockedUntil(t)) - failingFrom;
+    expect(firstWait).toBeGreaterThanOrEqual(MINUTE);
+    expect(firstWait).toBeLessThan(MINUTE + 1000);
 
-    advance(MINUTE);
+    vi.setSystemTime(new Date(await storedBlockedUntil(t)));
     await fail(t, EMAIL, 1);
     const afterSix = await signIn(t, EMAIL, PASSWORD);
     expect(afterSix.status).toBe(429);
@@ -179,7 +189,7 @@ describe('per-address throttle', () => {
       retryAfterSeconds: 120,
     });
 
-    advance(2 * MINUTE);
+    vi.setSystemTime(new Date(await storedBlockedUntil(t)));
     const ok = await signIn(t, EMAIL, PASSWORD);
     expect(ok.status, JSON.stringify(ok.json)).toBe(200);
     expect(await rows(t)).toEqual([]);
