@@ -263,10 +263,10 @@ describe('seasons.getPublicPage', () => {
   });
 
   test('answers the same page before the deadline and after the season ends', async () => {
-    const t = await setup();
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       vi.setSystemTime(Date.UTC(2027, 0, 1));
+      const t = await setup();
       const beforeDeadline = await get(t, 'org-a', 'sand-4s', 'summer-2027');
       vi.setSystemTime(Date.UTC(2028, 0, 1));
       const afterSeasonEnds = await get(t, 'org-a', 'sand-4s', 'summer-2027');
