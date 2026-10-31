@@ -1,11 +1,19 @@
 import type { Browser, Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { holdQueries } from './support/hold-queries';
 import { otherUser, signUp } from './support/session';
+import {
+  controlsInTabOrder,
+  expectWhollyAboveFooter,
+  PHONE,
+  settleAfterFocusScroll,
+  footerTabWalk,
+  underTheFooter,
+} from './support/sticky-footer';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
 
@@ -342,5 +350,115 @@ test.describe('League management: league details', () => {
     await expect(save(page)).toBeInViewport();
     await screenshot(page, testInfo, '237-league-details-phone');
     await expectAccessible(page);
+  });
+});
+
+test.describe('League management: league details on a phone', () => {
+  const name = (page: Page) => details(page).locator('#league-name');
+  const minimum = (page: Page) => details(page).locator('#details-minimum-roster-size');
+  const form = (page: Page) => details(page).locator('form');
+
+  async function openOnPhone(page: Page, role: 'orgAdmin' | 'leagueOrganizer' = 'orgAdmin') {
+    await page.setViewportSize(PHONE);
+    await openDetails(page, role);
+    await details(page).getByRole('button', { name: 'Raise the minimum roster size' }).click();
+    await expect(minimum(page)).toBeFocused();
+  }
+
+  for (const role of ['orgAdmin', 'leagueOrganizer'] as const) {
+    test(`${role === 'orgAdmin' ? 'an org admin' : 'a league organizer'} Tabbing through every field never has one under the sticky button, as Name and Minimum roster size show their errors (WCAG 2.4.11)`, async ({
+      page,
+    }) => {
+      await openOnPhone(page, role);
+      await name(page).focus();
+      await name(page).fill('');
+      const toMinimum = await footerTabWalk(page, { form: form(page), until: minimum(page) });
+      await minimum(page).fill('1');
+      await page.keyboard.press(tabKey(page));
+      const toSave = await footerTabWalk(page, { form: form(page), until: save(page) });
+      const seen = [...toMinimum, ...toSave];
+
+      await expect(details(page).locator('#league-name-error')).toBeVisible();
+      await expect(details(page).locator('#details-minimum-roster-size-error')).toBeVisible();
+      expect(controlsInTabOrder(seen)).toEqual([
+        'league-name',
+        expect.stringMatching(/^details-gender/),
+        expect.stringMatching(/^details-format/),
+        'details-minimum-roster-size',
+        expect.stringMatching(/^details-level/),
+        ...(role === 'orgAdmin' ? ['BUTTON'] : []),
+        expect.stringMatching(/^details-age/),
+        'BUTTON',
+      ]);
+      expect(underTheFooter(seen)).toEqual([]);
+    });
+  }
+
+  const undo = (page: Page) => status(page).getByRole('button', { name: 'Undo' });
+
+  async function saveWithStatusUnderFooter(page: Page) {
+    await page.setViewportSize(PHONE);
+    await openDetails(page);
+    await name(page).fill('Sunday Sand');
+    await save(page).click();
+    await expect(status(page)).toContainText('League details saved.');
+    await statusUnderFooter(page);
+  }
+
+  async function statusUnderFooter(page: Page) {
+    await status(page).evaluate((element) => {
+      const footer = element.closest('form')!.querySelector('[data-slot="form-footer"]')!;
+      const box = element.getBoundingClientRect();
+      const bar = footer.getBoundingClientRect();
+      window.scrollBy({
+        top: (box.top + box.bottom - bar.top - bar.bottom) / 2,
+        behavior: 'instant',
+      });
+    });
+    const place = await status(page).evaluate((element) => {
+      const footer = element.closest('form')!.querySelector('[data-slot="form-footer"]')!;
+      return {
+        box: element.getBoundingClientRect().bottom,
+        bar: footer.getBoundingClientRect().top,
+      };
+    });
+    expect(place.box).toBeGreaterThan(place.bar);
+  }
+
+  test('Undo, reached by Shift+Tab while the save status is behind the sticky button, is above it', async ({
+    page,
+  }) => {
+    await saveWithStatusUnderFooter(page);
+
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+
+    await expectWhollyAboveFooter(page, undo(page));
+  });
+
+  test('Undo focuses the restored status above the sticky button, even when it was behind it', async ({
+    page,
+  }) => {
+    await saveWithStatusUnderFooter(page);
+    await undo(page).focus();
+    await settleAfterFocusScroll(page);
+    await statusUnderFooter(page);
+
+    await page.keyboard.press('Enter');
+
+    await expect(status(page)).toContainText('Earlier details restored.');
+    await expectWhollyAboveFooter(page, status(page).locator('[tabindex="-1"]'));
+  });
+
+  test('Save with a minimum below the format, pressed from the bottom of the form, focuses Minimum roster size above the sticky button', async ({
+    page,
+  }) => {
+    await openOnPhone(page);
+    await minimum(page).fill('1');
+    await form(page).evaluate((element) => element.scrollIntoView({ block: 'end' }));
+
+    await save(page).click();
+
+    await expect(details(page).locator('#details-minimum-roster-size-error')).toBeVisible();
+    await expectWhollyAboveFooter(page, minimum(page));
   });
 });

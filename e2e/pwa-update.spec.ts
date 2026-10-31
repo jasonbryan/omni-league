@@ -1,6 +1,6 @@
-// Local only: it runs two production builds and its own SSR server, and waits out the 30 s
-// registration window twice (about 4 minutes in all), so `ci` and `npm run e2e` skip it. Run it with
-// a free port:
+// It runs two production builds and its own SSR server, and waits out the 30 s registration window
+// twice (about 4 minutes in all), so `npm run e2e` skips it and the nightly `e2e-production` job runs
+// it. Run it with a free port:
 //
 //   E2E_PWA_UPDATE=1 E2E_BASE_URL=http://localhost:4101 npx playwright test e2e/pwa-update.spec.ts --project=chromium-mobile
 //

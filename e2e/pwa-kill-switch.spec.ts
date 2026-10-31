@@ -1,6 +1,6 @@
-// Local only: it runs two production builds and its own SSR server, and waits out the 30 s
-// registration window (about 2 minutes in all), so `ci` and `npm run e2e` skip it. Run it with no
-// Convex URL (`CONVEX_URL` unset and absent from `.env.local`) and a free port:
+// It runs two production builds and its own SSR server, and waits out the 30 s registration window
+// (about 2 minutes in all), so `npm run e2e` skips it and the nightly `e2e-production` job runs it.
+// Run it with no Convex URL (`CONVEX_URL` unset and absent from `.env.local`) and a free port:
 //
 //   E2E_KILL_SWITCH=1 E2E_BASE_URL=http://localhost:4100 npx playwright test e2e/pwa-kill-switch.spec.ts
 //
