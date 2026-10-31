@@ -22,9 +22,8 @@ import {
   lucideLoaderCircle,
   lucideUserPlus,
 } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { injectAction, injectOnline } from '../../core/data/convex';
+import { api, injectAction, injectOnline } from '../../core/data/convex';
 import { Checkbox } from '../../ui/checkbox';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';

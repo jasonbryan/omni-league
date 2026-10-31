@@ -8,8 +8,7 @@ import {
   lucideTrophy,
   lucideUsers,
 } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';

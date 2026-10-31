@@ -23,7 +23,6 @@ import {
   lucideWifiOff,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
-import { api } from '../../../convex/_generated/api';
 import {
   checkCityState,
   checkOrganizationName,
@@ -34,6 +33,7 @@ import {
 } from '../../../convex/lib/organizationInput';
 import { slugify } from '../../../convex/lib/slugs';
 import {
+  api,
   ConvexOfflineError,
   injectMutation,
   injectOfflineTitle,

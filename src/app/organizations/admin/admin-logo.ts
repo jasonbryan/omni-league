@@ -12,10 +12,10 @@ import {
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideImageOff, lucideLoaderCircle } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { checkLogoPick, LOGO_HINT, LOGO_MIME_TYPES } from '../../../../convex/lib/logoFile';
 import {
+  api,
   ConvexOfflineError,
   injectAction,
   injectMutation,

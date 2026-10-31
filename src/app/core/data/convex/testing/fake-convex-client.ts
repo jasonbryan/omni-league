@@ -1,5 +1,6 @@
 import type { ConnectionState } from 'convex/browser';
-import { getFunctionName, type FunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
+import { getFunctionName } from '../api';
 import type { ConvexClientLike } from '../client-token';
 
 export interface FakeSubscription {

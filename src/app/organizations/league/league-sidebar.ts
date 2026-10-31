@@ -2,9 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronsUpDown, lucideGlobe, lucideTrophy } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import { AuthService } from '../../core/auth/auth.service';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 import {
   SIDEBAR_GROUP_LABEL,
   SIDEBAR_HEAD_LINK,

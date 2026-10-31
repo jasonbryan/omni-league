@@ -384,6 +384,18 @@ async function revokedInvite(
 const restore = (s: Setup, inviteId: Id<'invites'>) =>
   s.asAdminA.mutation(api.invites.restore, { inviteId });
 
+const storedInvite = async (s: Setup, inviteId: Id<'invites'>) =>
+  (await allInvites(s)).find((row) => row._id === inviteId);
+
+const statusOf = async (s: Setup, inviteId: Id<'invites'>) =>
+  (await storedInvite(s, inviteId))?.status;
+
+async function storedRevokedAt(s: Setup, inviteId: Id<'invites'>): Promise<number> {
+  const revokedAt = (await storedInvite(s, inviteId))?.revokedAt;
+  if (revokedAt === undefined) throw new Error('the invite has no revokedAt');
+  return revokedAt;
+}
+
 describe('invites.restore', () => {
   test('sets the invite back to pending with the same hash and expiry; the original link works again', async () => {
     const s = await setup();
@@ -420,13 +432,20 @@ describe('invites.restore', () => {
 
   test('works at exactly the end of the window and refuses one millisecond later', async () => {
     const s = await setup();
-    const { inviteId } = await revokedInvite(s, 'dana@example.com');
-    vi.setSystemTime(NOW + INVITE_RESTORE_WINDOW_MS + 1);
-    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'windowPassed' } });
-    expect((await allInvites(s))[0].status).toBe('revoked');
-    vi.setSystemTime(NOW + INVITE_RESTORE_WINDOW_MS);
-    await restore(s, inviteId);
-    expect((await allInvites(s))[0].status).toBe('pending');
+    const atEnd = await revokedInvite(s, 'dana@example.com');
+    const pastEnd = await revokedInvite(s, 'erin@example.com');
+    const atEndRevokedAt = await storedRevokedAt(s, atEnd.inviteId);
+    const pastEndRevokedAt = await storedRevokedAt(s, pastEnd.inviteId);
+
+    vi.setSystemTime(atEndRevokedAt + INVITE_RESTORE_WINDOW_MS);
+    await restore(s, atEnd.inviteId);
+    expect(await statusOf(s, atEnd.inviteId)).toBe('pending');
+
+    vi.setSystemTime(pastEndRevokedAt + INVITE_RESTORE_WINDOW_MS + 1);
+    await expect(restore(s, pastEnd.inviteId)).rejects.toMatchObject({
+      data: { code: 'windowPassed' },
+    });
+    expect(await statusOf(s, pastEnd.inviteId)).toBe('revoked');
     expect(INVITE_RESTORE_WINDOW_MS).toBe(10 * 60 * 1000);
   });
 
@@ -614,12 +633,14 @@ describe('invites.restore: edge cases', () => {
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     await restore(s, inviteId);
     await expect(restore(s, inviteId)).rejects.toThrow(/revoked/);
+    const secondRevokeAt = NOW + 5 * 60 * 1000;
+    vi.setSystemTime(secondRevokeAt);
     await s.asAdminA.mutation(api.invites.revoke, { inviteId });
     await invite(s, 'dana@example.com');
     const before = await allInvites(s);
     await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'alreadyInvited' } });
     expect(await allInvites(s)).toEqual(before);
-    expect(before.find((row) => row._id === inviteId)?.revokedAt).toBe(NOW);
+    expect(await storedRevokedAt(s, inviteId)).toBe(secondRevokeAt);
   });
 
   test('the same error for an unknown invite and another organization’s invite (neither reveals which exists)', async () => {
@@ -692,14 +713,14 @@ describe('invites.listPending', () => {
         email: 'dana@example.com',
         role: 'leagueOrganizer',
         leagueNames: ['Sand 2s', 'Coed 7v7'],
-        expiresAt: NOW + INVITE_LIFETIME_MS,
+        expiresAt: first.expiresAt,
       },
       {
         inviteId: second.inviteId,
         email: 'boss@example.com',
         role: 'orgAdmin',
         leagueNames: [],
-        expiresAt: NOW + INVITE_LIFETIME_MS,
+        expiresAt: second.expiresAt,
       },
     ]);
     const text = JSON.stringify(rows);

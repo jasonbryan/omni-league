@@ -21,11 +21,11 @@ import {
   lucideUserPlus,
   lucideUsers,
 } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { INVITE_MESSAGES } from '../../../../convex/lib/inviteInput';
 import type { Role } from '../../../../convex/lib/roles';
 import {
+  api,
   ConvexOfflineError,
   injectMutation,
   injectOnline,
