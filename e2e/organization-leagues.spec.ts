@@ -4,6 +4,7 @@ import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdQueries } from './support/hold-queries';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
@@ -289,6 +290,35 @@ test.describe('Leagues: creating a draft', () => {
     await jump.click();
     await expect(page.locator('#name')).toBeFocused();
     await expect(page.locator('#name')).toBeInViewport();
+  });
+
+  test('the form replacing the loading skeleton keeps the scroll where the user left it (360)', async ({
+    page,
+  }) => {
+    test.skip(
+      (page.viewportSize()?.width ?? 0) >= 1024,
+      'the phone layout, where the form is below the list',
+    );
+    const { base } = await memberOf(page, 'orgAdmin', {
+      locations: LOCATIONS,
+      leagues: ['Coed 7v7 Rec', 'Sunday Reverse Coed 4s', 'Wednesday Coed Slow-Pitch'].map(
+        (name) => ({ name, sport: 'soccer' as const, locations: [LOCATIONS[0].name] }),
+      ),
+    });
+    const held = await holdQueries(page, ['locations:listForAdmin']);
+    await page.goto(`${base}/leagues`);
+    await expect(leagueRows(page)).toHaveCount(3);
+    await expect(page.locator('[data-slot="create-league-skeleton"]')).toBeVisible();
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const nearTheBottom = await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 40);
+      return window.scrollY;
+    });
+    expect(nearTheBottom).toBeGreaterThan(0);
+    held.release();
+    await expect(form(page)).toBeVisible();
+    await expect(page.locator('[data-slot="create-league-skeleton"]')).toHaveCount(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(nearTheBottom);
   });
 });
 

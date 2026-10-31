@@ -60,6 +60,14 @@ export function injectSectionJump(
       },
       options,
     );
+    // Focus that leaves for nothing has left the page: Shift+Tab out of it fires no focusin in WebKit.
+    document.addEventListener(
+      'focusout',
+      (event) => {
+        if (event.relatedTarget === null) cancel();
+      },
+      options,
+    );
     // A click counts as well as focus, because a click or tap does not focus a link in WebKit.
     document.addEventListener(
       'click',

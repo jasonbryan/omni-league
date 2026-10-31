@@ -332,6 +332,17 @@ describe('AdminLeagues', () => {
           expect(scrolled).toEqual([section()]);
         });
 
+        it('focus leaving the page (Shift+Tab out, which fires no focusin in WebKit) cancels the jump', async () => {
+          await open([], null);
+          await press();
+          section().dispatchEvent(
+            new FocusEvent('focusout', { bubbles: true, relatedTarget: null }),
+          );
+          await locationsArrive();
+          expect(document.activeElement).toBe(section());
+          expect(scrolled).toEqual([section()]);
+        });
+
         it('a later press on a link that takes no focus cancels the jump', async () => {
           await open(LEAGUES, null);
           const router = TestBed.inject(Router);
@@ -467,6 +478,36 @@ describe('AdminLeagues', () => {
           expect(scrolled).toEqual([section()]);
           expect(document.activeElement).toBe(locationsAlert());
         });
+      });
+
+      it('the skeleton comes out one render after the content goes in, with a layout in between (WebKit keeps the scroll)', async () => {
+        await open([], null);
+        const order: string[] = [];
+        const observer = new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              if (node instanceof Element && node.matches('app-league-create-form')) {
+                order.push('form in');
+              }
+            }
+            for (const node of record.removedNodes) {
+              if (node instanceof Element && node.matches('[data-slot="create-league-skeleton"]')) {
+                order.push('skeleton out');
+              }
+            }
+          }
+        });
+        observer.observe(section(), { childList: true });
+        const layouts: boolean[] = [];
+        const measure = section().getBoundingClientRect.bind(section());
+        vi.spyOn(section(), 'getBoundingClientRect').mockImplementation(() => {
+          layouts.push(!!section().querySelector('form') && !!skeleton());
+          return measure();
+        });
+        await locationsArrive();
+        observer.disconnect();
+        expect(order).toEqual(['form in', 'skeleton out']);
+        expect(layouts).toContain(true);
       });
 
       it('while the locations load, a skeleton shaped like the form stands in, hidden from screen readers, beside the status', async () => {

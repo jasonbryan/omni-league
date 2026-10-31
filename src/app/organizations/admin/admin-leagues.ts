@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   Injector,
@@ -259,7 +260,8 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 description="Check your connection and try again."
               />
             </div>
-          } @else {
+          }
+          @if (skeletonShown()) {
             <p role="status" class="sr-only">Loading the locations.</p>
             <div
               aria-hidden="true"
@@ -352,6 +354,9 @@ export class AdminLeagues {
   protected readonly failed = computed(() => this.list.error() !== undefined);
   protected readonly locations = computed(() => this.locationList.value());
   protected readonly locationsFailed = computed(() => this.locationList.error() !== undefined);
+  protected readonly locationsLoading = computed(
+    () => this.locations() === undefined && !this.locationsFailed(),
+  );
   protected readonly createPath = computed(
     () => `${adminPath(this.context.slug(), 'leagues')}#create-league`,
   );
@@ -379,8 +384,20 @@ export class AdminLeagues {
     return league ? publicLeaguePath(this.context.slug(), league.slug) : '';
   });
 
+  protected readonly skeletonShown = signal(true);
+
   constructor() {
     bindAdminTitle('Leagues');
+    // WebKit moves the scroll when the content's arrival and the skeleton's removal reach the same
+    // layout, so the skeleton goes one render later, after a layout with both in the page.
+    afterRenderEffect({
+      earlyRead: () => {
+        if (!this.locationsLoading()) this.createSection()?.nativeElement.getBoundingClientRect();
+      },
+      write: () => {
+        if (!this.locationsLoading()) this.skeletonShown.set(false);
+      },
+    });
   }
 
   protected publish(row: PublishTarget): void {
