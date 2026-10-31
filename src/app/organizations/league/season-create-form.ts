@@ -21,7 +21,7 @@ import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
-import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
 import type { OrganizerLeague } from './league-context';
@@ -61,7 +61,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 
 @Component({
   selector: 'app-season-create-form',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, StickyFooterFocus],
+  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, StickyFooter, StickyFooterFocus],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -291,7 +291,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
           class="mt-5"
         />
       }
-      <div data-slot="form-footer" [class]="footerClass">
+      <div appStickyFooter>
         <button
           #submitButton
           type="submit"
@@ -350,7 +350,6 @@ export class SeasonCreateForm {
   protected readonly divisionMissing = computed(() => !this.division());
 
   protected readonly fieldGroupClass = FIELD_GROUP;
-  protected readonly footerClass = STICKY_FOOTER;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
   protected readonly fieldClass = FIELD;
   protected readonly labelClass = LABEL;

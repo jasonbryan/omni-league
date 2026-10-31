@@ -729,15 +729,17 @@ describe('the public-page specs', () => {
         .filter((name) => name.endsWith('.spec.ts'))
         .map((name) => `${dir}/${name}`),
     );
-    const expected = specFiles.filter((file) => {
-      const text = readSpec(file);
-      return (
-        /[`'"]\/organizations\//.test(text) ||
-        PUBLIC_QUERIES.some((query) => text.includes(query)) ||
-        /[`'"]search:/.test(text) ||
-        (text.includes('seedTenant') && /\b\w*[tT]enant\w*\.path\b|\b\w+\.path\}/.test(text))
-      );
-    });
+    const expected = specFiles
+      .filter((file) => {
+        const text = readSpec(file);
+        return (
+          /[`'"]\/organizations\//.test(text) ||
+          PUBLIC_QUERIES.some((query) => text.includes(query)) ||
+          /[`'"]search:/.test(text) ||
+          (text.includes('seedTenant') && /\b\w*[tT]enant\w*\.path\b|\b\w+\.path\}/.test(text))
+        );
+      })
+      .sort();
     assert.ok(expected.length >= KNOWN_PUBLIC_PAGE_SPECS.length, expected.join(', '));
     assert.deepEqual(
       found.filter((file) => expected.includes(file)),

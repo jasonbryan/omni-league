@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: package.json
       - name: install
@@ -96,7 +96,7 @@ jobs:
         run: node scripts/e2e-failures.mjs >> "$GITHUB_OUTPUT"
       - name: e2e report
         if: ${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-report
           path: |
@@ -106,11 +106,116 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # The specs that need a production build, each in its own Playwright run so every spec gets its
+  # own project and report folder (E2E_RUN_NAME). Runs after the first use !cancelled(), so one
+  # night reports every failing run. Each run has a step timeout below its specs' own (up to 12 min
+  # a try, retried once), so a hang fails that step and the check, list, and upload still run inside
+  # the job's 20 minutes.
+  e2e-production:
+    name: e2e-production
+    needs: nightly-gate
+    if: ${{ !cancelled() && needs.nightly-gate.outputs.skip != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      e2e_failures: ${{ steps.failures.outputs.failures }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - name: install
+        run: npm ci
+      - name: e2e browsers
+        id: browsers
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: e2e backend
+        run: |
+          node scripts/e2e-convex.mjs serve > "$RUNNER_TEMP/convex.log" 2>&1 &
+          if ! curl -fsS -o /dev/null --retry 60 --retry-delay 1 --retry-all-errors --retry-max-time 60 --max-time 5 http://127.0.0.1:3210/version; then
+            cat "$RUNNER_TEMP/convex.log"
+            echo "::error::the local Convex backend did not answer /version within 60 s"
+            exit 1
+          fi
+          # /version answers before `convex dev` has pushed the functions that seed-demo runs.
+          for _ in $(seq 60); do
+            if grep -q 'Convex functions ready!' "$RUNNER_TEMP/convex.log"; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/convex.log"
+          echo "::error::convex dev did not push the functions within 60 s"
+          exit 1
+      - name: seed demo
+        run: node scripts/e2e-convex.mjs seed-demo
+      - name: build
+        env:
+          CONVEX_URL: http://127.0.0.1:3210
+        run: npm run build
+      - name: app server
+        id: app
+        run: |
+          PORT=4000 npm run serve:ssr > "$RUNNER_TEMP/ssr.log" 2>&1 &
+          if ! curl -fsS -o /dev/null --retry 60 --retry-delay 1 --retry-all-errors --retry-max-time 60 --max-time 5 http://localhost:4000/; then
+            cat "$RUNNER_TEMP/ssr.log"
+            echo "::error::npm run serve:ssr did not answer http://localhost:4000/ with 200 within 60 s"
+            exit 1
+          fi
+      - name: production-mobile
+        timeout-minutes: 3
+        env:
+          E2E_RUN_NAME: production-mobile
+          E2E_BASE_URL: http://localhost:4000
+        run: npx playwright test e2e/pwa.spec.ts --project=chromium-mobile
+      - name: production-desktop
+        timeout-minutes: 2
+        if: ${{ !cancelled() && steps.app.outcome == 'success' }}
+        env:
+          E2E_RUN_NAME: production-desktop
+          E2E_BASE_URL: http://localhost:4000
+        run: npx playwright test e2e/harness/no-service-worker.spec.ts --project=chromium-desktop
+      # Builds and serves its own two versions on another port.
+      - name: pwa-update
+        timeout-minutes: 6
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        env:
+          E2E_RUN_NAME: pwa-update
+          E2E_PWA_UPDATE: '1'
+          E2E_BASE_URL: http://localhost:4101
+        run: npx playwright test e2e/pwa-update.spec.ts --project=chromium-mobile
+      # Last: it builds with no Convex URL, edits angular.json while it runs, and replaces dist/.
+      - name: kill-switch
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        env:
+          E2E_RUN_NAME: kill-switch
+          E2E_KILL_SWITCH: '1'
+          E2E_BASE_URL: http://localhost:4100
+        run: npx playwright test e2e/pwa-kill-switch.spec.ts --project=chromium-mobile
+      - name: expected tests
+        if: ${{ !cancelled() }}
+        run: node scripts/e2e-production-check.mjs
+      - name: e2e failures
+        id: failures
+        if: ${{ failure() }}
+        run: node scripts/e2e-failures.mjs --problems test-results/expected-tests.json test-results/production-mobile/results.json test-results/production-desktop/results.json test-results/pwa-update/results.json test-results/kill-switch/results.json | tee -a "$GITHUB_OUTPUT"
+      - name: e2e report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-production-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
   # issues: write for this job only; no checkout, no other secret.
   nightly-issue:
     name: nightly-issue
-    needs: e2e
-    if: ${{ !cancelled() && needs.e2e.result == 'failure' && github.event_name == 'schedule' }}
+    needs: [e2e, e2e-production]
+    if: ${{ !cancelled() && (needs.e2e.result == 'failure' || needs.e2e-production.result == 'failure') && github.event_name == 'schedule' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -118,20 +223,25 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      FAILURES: ${{ needs.e2e.outputs.e2e_failures }}
+      E2E_FAILURES: ${{ needs.e2e.outputs.e2e_failures }}
+      PRODUCTION_FAILURES: ${{ needs.e2e-production.outputs.e2e_failures }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       COMMIT: ${{ github.sha }}
       ISSUE_TITLE: Nightly e2e failed on main
     steps:
       - name: open or update the issue
         run: |
-          failures="$(printf '%s' "${FAILURES:-[]}" | jq -c 'if type == "array" then . else [] end' 2>/dev/null)" || failures='[]'
-          [ -n "$failures" ] || failures='[]'
+          list() {
+            local parsed
+            parsed="$(printf '%s' "${1:-[]}" | jq -c 'if type == "array" then . else [] end' 2>/dev/null)" || parsed='[]'
+            printf '%s' "${parsed:-[]}"
+          }
+          failures="$(jq -cn --argjson a "$(list "${E2E_FAILURES:-}")" --argjson b "$(list "${PRODUCTION_FAILURES:-}")" '$a + $b')"
           body="$(jq -rn --arg run "$RUN_URL" --arg commit "${COMMIT:0:7}" --argjson failures "$failures" '
             "Nightly e2e: FAIL (main \($commit))\n\nRun: \($run)\n\n"
             + (if ($failures | length) > 0
                then "Failing tests:\n" + ($failures | map("- `" + gsub("`"; "\u0027") + "`") | join("\n"))
-               else "No failing test was recorded: a step before or after the e2e step failed. See the run." end)')"
+               else "No failing test was recorded: a step other than a Playwright run failed. See the run." end)')"
           number="$(gh issue list --state open --label type:bug --limit 100 --json number,title \
             | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')"
           if [ -n "$number" ]; then
