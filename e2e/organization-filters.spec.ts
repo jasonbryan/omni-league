@@ -747,7 +747,10 @@ test.describe('organization filters in the browser', () => {
           return {
             inPopover: !!active?.closest('[data-slot="popover-content"]'),
             popoverOpen: document.querySelector('[data-slot="popover-content"]') !== null,
-            focused: (active?.textContent ?? '').trim(),
+            focused:
+              !active || active === document.body
+                ? 'the page itself'
+                : (active.getAttribute('aria-label') ?? active.textContent ?? '').trim(),
           };
         });
       const adjacent = (state: Awaited<ReturnType<typeof focusState>>, neighbour: string) =>
@@ -757,7 +760,7 @@ test.describe('organization filters in the browser', () => {
       await levelPanel(page).getByRole('button', { name: 'Show 4 leagues' }).focus();
       await page.keyboard.press('Tab');
       const afterLast = await focusState();
-      expect(adjacent(afterLast, 'Age group'), JSON.stringify(afterLast)).toBe(true);
+      expect.soft(adjacent(afterLast, 'Age group'), JSON.stringify(afterLast)).toBe(true);
 
       await page.keyboard.press('Escape');
       await dimensionButton(page, 'Level').click();
