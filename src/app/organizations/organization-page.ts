@@ -93,6 +93,7 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
           [canManage]="viewerIsOrgAdmin.value() === true"
           [filters]="filters()"
           [filterGroups]="filterGroups()"
+          [facets]="filterFacets()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -213,8 +214,11 @@ export class OrganizationPage {
   );
 
   // A copy saved before the filters existed has no facets, so offline without one the page still shows, with nothing to offer.
+  protected readonly filterFacets = computed(
+    () => this.facets.value() ?? (this.online() ? undefined : []),
+  );
   protected readonly filterGroups = computed(() => {
-    const facets = this.facets.value() ?? (this.online() ? undefined : []);
+    const facets = this.filterFacets();
     return facets && filterGroups(facets, this.filters(), this.formatAndLevelSport());
   });
 

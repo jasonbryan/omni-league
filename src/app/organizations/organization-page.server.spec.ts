@@ -757,6 +757,7 @@ describe('filtered views server render', () => {
     expect(legends(body)).toEqual(['Gender', 'Format', 'Level', 'Age group']);
     expect(checked(body)).toEqual(['gender=coed', 'format=4v4']);
     expect(text(body.querySelector('main details summary'))).toBe('Filters 2 active');
+    expect(form?.querySelectorAll('button[type="button"]')).toHaveLength(0);
   });
 
   it('ignores unknown values, which appear nowhere in the HTML or the query args', async () => {

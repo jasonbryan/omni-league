@@ -42,7 +42,8 @@ import {
 import { OpenSeasonsSkeleton, OrganizationRowsSkeleton } from './organization-skeleton';
 import { PageControl } from './page-control';
 import { LeagueFilters } from './league-filters';
-import type { FilterGroup } from './division-filters';
+import type { FilterGroup, LeagueFacet } from './division-filters';
+import type { SportCounts } from '../../../convex/lib/sports';
 import {
   NO_DIVISION_FILTERS,
   hasDivisionFilters,
@@ -162,6 +163,9 @@ function rowId(list: 'league' | 'location', paging: ListPaging | undefined, i: n
         [locationsPage]="locationPaging()?.page ?? 1"
         [total]="leagueTotal()"
         [matching]="matchingCount()"
+        [facets]="facets()"
+        [sportLeagueCounts]="sportLeagueCounts()"
+        [sport]="sport()?.key"
       />
     }
     @if (isEmpty()) {
@@ -454,6 +458,7 @@ export class OrganizationOverview {
   readonly canManage = input(false);
   readonly filters = input<DivisionFilters>(NO_DIVISION_FILTERS);
   readonly filterGroups = input<readonly FilterGroup[] | undefined>(undefined);
+  readonly facets = input<readonly LeagueFacet[] | undefined>(undefined);
 
   protected readonly followLink = inject(FollowLink);
   protected readonly registerButtonLarge = PRIMARY_BUTTON_LARGE;
@@ -497,6 +502,10 @@ export class OrganizationOverview {
     this.isEmpty()
       ? 'py-8 md:py-12 lg:col-span-3'
       : 'border-t border-border py-8 md:py-12 lg:border-t-0',
+  );
+
+  protected readonly sportLeagueCounts = computed((): SportCounts =>
+    Object.fromEntries(this.page().sports.map((sport) => [sport.key, sport.leagueCount])),
   );
 
   protected readonly leagueTotal = computed(
