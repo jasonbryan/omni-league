@@ -271,6 +271,10 @@ The adapter lives in `src/app/core/data/convex/`. Code outside the folder import
 
 ```ts
 // src/app/core/data/convex/index.ts
+export const api: typeof import('convex/_generated/api').api; // proxy typed from api.d.ts; see the amendment at the end
+export function getFunctionName(
+  reference: FunctionReference<'query' | 'mutation' | 'action'>,
+): string; // reads the name Convex's own references carry
 export function provideConvex(): EnvironmentProviders; // registered once in app.config.ts
 export function provideConvexAuth(source: ConvexAuthSource): EnvironmentProviders; // implemented and used by the #7 follow-up
 
@@ -550,4 +554,4 @@ A usage rule for packages already accepted; no technology changes.
 | `convex/server` in app code           | Types and `getFunctionName` from `convex/server` may be used anywhere | Outside specs, `convex/server` is imported only with `import type`. `getFunctionName` comes from the adapter (`src/app/core/data/convex/index.ts`)                                       |
 | Function references (`api.module.fn`) | `api` from `convex/_generated/api`                                    | `api` from the adapter, a proxy typed from `convex/_generated/api.d.ts`. Outside specs, `convex/_generated/api` is imported only with `import type`. `convex/_generated/` stays unedited |
 
-**Why.** `convex/_generated/api.js` imports `anyApi` and `componentsGeneric` from `convex/server`, whose index keeps `schema.js` (its top-level `defineSchema(...)` call) in the bundle. Any runtime import of either module put about 4.5 kB of server code in the browser's initial bundle, which had about 0.2 kB of room under its 500 kB budget. `convex/browser` exports only the clients, so no browser-safe entry point exists. `no-restricted-imports` (with `allowTypeImports`) enforces the rule in `src/`; specs may import `convex/server` to compare the adapter's helpers with it (`api.spec.ts`).
+**Why.** `convex/_generated/api.js` imports `anyApi` and `componentsGeneric` from `convex/server`, whose index keeps `schema.js` (its top-level `defineSchema(...)` call) in the bundle. Any runtime import of either module put about 4.5 kB of server code in the browser's initial bundle, which had about 0.2 kB of room under its 500 kB budget. `convex/browser` exports only the clients, so no browser-safe entry point exists. `no-restricted-imports` (with `allowTypeImports`) enforces the rule in `src/`. Specs may import both modules at runtime, because specs never ship in the browser bundle.

@@ -58,7 +58,7 @@ describe('runtime imports of Convex server code', () => {
     });
   }
 
-  it('are allowed in specs, which compare the adapter with convex/server', async () => {
+  it('are allowed in specs, which never ship in the browser bundle', async () => {
     const text = "import { anyApi } from 'convex/server';\nexport { anyApi };\n";
     for (const file of ['src/app/core/data/convex/api.spec.ts', 'src/app/find/find-page.spec.ts']) {
       assert.deepEqual(await restrictedImports(file, text), [], file);

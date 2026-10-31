@@ -8,8 +8,7 @@ import { api, getFunctionName } from './api';
 import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import { SAVED_COPY_PREFIX, savedCopyKey } from './saved-copies';
 
-/** Walks a `module/path:export` name through an api object, as `api.module.path.export`. */
-function referenceAt(root: unknown, name: string): FunctionReference<'query' | 'mutation'> {
+function referenceForName(root: unknown, name: string): FunctionReference<'query' | 'mutation'> {
   const [modulePath, exportName = 'default'] = name.split(':');
   const parts = [...modulePath.split('/'), exportName];
   return parts.reduce<unknown>(
@@ -37,7 +36,9 @@ describe('the local Convex api and getFunctionName', () => {
     expect(names).toEqual(SAVED_QUERY_NAMES);
     for (const [index, { query }] of OFFLINE_SAVED_QUERIES.entries()) {
       expect(convexGetFunctionName(query)).toBe(names[index]);
-      expect(getFunctionName(query)).toBe(convexGetFunctionName(referenceAt(anyApi, names[index])));
+      expect(getFunctionName(query)).toBe(
+        convexGetFunctionName(referenceForName(anyApi, names[index])),
+      );
     }
   });
 
@@ -50,8 +51,8 @@ describe('the local Convex api and getFunctionName', () => {
 
   it('name nested modules and default exports as convex/server does', () => {
     for (const name of ['lib/nested:fn', 'module']) {
-      expect(getFunctionName(referenceAt(api, name))).toBe(
-        convexGetFunctionName(referenceAt(anyApi, name)),
+      expect(getFunctionName(referenceForName(api, name))).toBe(
+        convexGetFunctionName(referenceForName(anyApi, name)),
       );
     }
   });
@@ -77,7 +78,7 @@ describe('the local Convex api and getFunctionName', () => {
   it('keep the saved-copy key of every saved query, so copies saved by the previous build are found', () => {
     const args = { slug: 'org', page: 2, filters: { sport: 'soccer', gender: 'mixed' } };
     for (const { query } of OFFLINE_SAVED_QUERIES) {
-      const name = convexGetFunctionName(referenceAt(anyApi, getFunctionName(query)));
+      const name = convexGetFunctionName(referenceForName(anyApi, getFunctionName(query)));
       expect(savedCopyKey(query, args)).toBe(
         `${SAVED_COPY_PREFIX}${name}:{"filters":{"gender":"mixed","sport":"soccer"},"page":2,"slug":"org"}`,
       );

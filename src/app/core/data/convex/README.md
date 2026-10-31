@@ -2,7 +2,7 @@
 
 Signal-based access to Convex for components and services. Code outside this folder imports only from `index.ts`. Only this folder may import `convex/browser`; the `no-restricted-imports` lint rule enforces that.
 
-Function references come from this folder too: `api` (typed from `convex/_generated/api.d.ts`) and `getFunctionName`. A runtime import of `convex/_generated/api` or `convex/server` would put Convex's server code (its schema builder, about 4.5 kB) in the initial bundle, so outside specs both may be named only by `import type`, which `no-restricted-imports` also enforces. `api.spec.ts` checks that both give the names `convex/server` gives, so a Convex update that changes how references carry their name fails it.
+Function references come from this folder too: `api` (typed from `convex/_generated/api.d.ts`) and `getFunctionName`. A runtime import of `convex/_generated/api` or `convex/server` would put Convex's server code (its schema builder) in the initial bundle, so outside specs both may be named only by `import type`, which `no-restricted-imports` also enforces. `api.spec.ts` checks that both give the names `convex/server` gives, so a Convex update that changes how references carry their name fails it.
 
 ## Setup
 
