@@ -5,6 +5,7 @@ import {
   getLeaguePublicPageReturns,
   getPublicPageReturns,
   getSeasonPublicPageReturns,
+  publicLeagueFacetsValidator,
   publicLeaguesValidator,
   publicLocationsValidator,
   publicOpenSeasonsValidator,
@@ -36,6 +37,7 @@ const ORGANIZATION_PAGE_QUERIES: readonly OfflineSavedQuery[] = [
   savedQuery(api.organizations.listPublicLeagues, publicLeaguesValidator, 1),
   savedQuery(api.organizations.listPublicLocations, publicLocationsValidator, 1),
   savedQuery(api.seasons.listOpenForOrganization, publicOpenSeasonsValidator, 1),
+  savedQuery(api.organizations.listPublicLeagueFacets, publicLeagueFacetsValidator, 1),
 ];
 
 const LEAGUE_PAGE_QUERIES: readonly OfflineSavedQuery[] = [

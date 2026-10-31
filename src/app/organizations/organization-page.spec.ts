@@ -36,6 +36,7 @@ const HEADER = 'organizations:getPublicPage';
 const LEAGUES = 'organizations:listPublicLeagues';
 const LOCATIONS = 'organizations:listPublicLocations';
 const OPEN_SEASONS = 'seasons:listOpenForOrganization';
+const FACETS = 'organizations:listPublicLeagueFacets';
 
 function subscription(name = HEADER): FakeSubscription {
   const active = client.activeSubscriptions.filter((s) => s.name === name);
@@ -90,6 +91,7 @@ describe('OrganizationPage', () => {
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
+      { name: FACETS, args: { slug: 'gulf-coast-sport-social' } },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 3 } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1 } },
       { name: OPEN_SEASONS, args: { orgSlug: 'gulf-coast-sport-social' } },
@@ -140,14 +142,16 @@ describe('OrganizationPage', () => {
       expect(text(line)).toBe('Beach volleyball, soccer, and softball · 5 leagues at 3 locations');
     });
 
-    it('shows the league total beside the Leagues heading, not the number of rows', async () => {
+    it('shows the league total in the count, not the number of rows', async () => {
       const section = () =>
         host(harness).querySelector('section[aria-labelledby="leagues-heading"]');
+      const count = () =>
+        host(harness).querySelector('form[aria-label="Filter leagues"] [role="status"]');
       expect(text(section()?.querySelector('h2'))).toBe('Leagues');
-      expect(text(section()?.querySelector('h2')?.nextElementSibling)).toBe('5 leagues');
+      expect(text(count())).toBe('5 leagues');
       emit({ ...GULF_COAST, leagueCount: 13 });
       await settle(harness);
-      expect(text(section()?.querySelector('h2')?.nextElementSibling)).toBe('13 leagues');
+      expect(text(count())).toBe('13 leagues');
     });
 
     it('has no tiles and no eyebrow', () => {
@@ -284,7 +288,9 @@ describe('OrganizationPage', () => {
         'Footer',
       ]);
       expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
-      expect(root.querySelector('button')).toBeNull();
+      expect([...root.querySelectorAll('button')].map((button) => text(button))).toEqual([
+        'Show leagues',
+      ]);
     });
 
     it('sets the title, og tags, and canonical from the result, with the path built from the slug', () => {
@@ -485,7 +491,9 @@ describe('OrganizationPage', () => {
       expect(main()?.querySelector('[role="status"]')).not.toBeNull();
       subscription(LOCATIONS).emit(results[LOCATIONS]);
       await settle(harness);
-      expect(text(main()?.querySelector('[role="status"]'))).toBe('Loading the open seasons.');
+      expect(text(main()?.querySelector('#registration-open [role="status"]'))).toBe(
+        'Loading the open seasons.',
+      );
       subscription(OPEN_SEASONS).emit(results[OPEN_SEASONS]);
       await settle(harness);
       expect(main()?.querySelector('app-organization-skeleton')).toBeNull();

@@ -26,6 +26,8 @@ import {
   PORT_ARANSAS,
   pagedResults,
   queryResults,
+  SAND,
+  sandResults,
   sportQueryResults,
 } from './testing/pages';
 
@@ -141,6 +143,7 @@ describe('OrganizationPage server render', () => {
     const slug = 'gulf-coast-sport-social';
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'organizations:getPublicPage', args: { slug } },
+      { name: 'organizations:listPublicLeagueFacets', args: { slug } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1 } },
       { name: 'organizations:listPublicLocations', args: { slug, page: 1 } },
       { name: 'seasons:listOpenForOrganization', args: { orgSlug: slug } },
@@ -182,7 +185,7 @@ describe('OrganizationPage server render', () => {
       '4410 Gullwing Commons Dr, Corpus Christi, TX 78412',
       'Soccer, softball',
     ]);
-    expect([...body.querySelectorAll('main [role="status"]')].map(text)).toEqual(['']);
+    expect([...body.querySelectorAll('main [role="status"]')].map(text)).toEqual(['5 leagues', '']);
 
     expect(publicFrame(body)).toEqual({ ...PUBLIC_FRAME, navs: ['Sports', 'Footer'] });
     const chips = [...body.querySelectorAll('nav[aria-label="Sports"] a')];
@@ -285,7 +288,9 @@ describe('OrganizationPage server render', () => {
     expect(text(body.querySelector('main h1')?.parentElement?.nextElementSibling)).toBe(
       'Beach volleyball, soccer, and softball · 13 leagues at 13 locations',
     );
-    expect(text(body.querySelector('#leagues-heading')?.nextElementSibling)).toBe('13 leagues');
+    expect(text(body.querySelector('form[aria-label="Filter leagues"] [role="status"]'))).toBe(
+      '13 leagues',
+    );
     expect(
       body.querySelectorAll('main section[aria-labelledby="leagues-heading"] li[id]'),
     ).toHaveLength(5);
@@ -338,6 +343,7 @@ describe('OrganizationPage server render', () => {
     'organizations:listPublicLeagues',
     'organizations:listPublicLocations',
     'seasons:listOpenForOrganization',
+    'organizations:listPublicLeagueFacets',
   ]) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
       const { html, body, head, responseInit } = await render(
@@ -452,6 +458,7 @@ describe('sport view server render', () => {
     const slug = 'gulf-coast-sport-social';
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'organizations:getPublicPage', args: { slug } },
+      { name: 'organizations:listPublicLeagueFacets', args: { slug, sport: 'soccer' } },
       { name: 'organizations:listPublicLeagues', args: { slug, page: 1, sport: 'soccer' } },
       { name: 'organizations:listPublicLocations', args: { slug, page: 1, sport: 'soccer' } },
       { name: 'seasons:listOpenForOrganization', args: { orgSlug: slug, sport: 'soccer' } },
@@ -565,6 +572,7 @@ describe('sport view server render', () => {
     'organizations:listPublicLeagues',
     'organizations:listPublicLocations',
     'seasons:listOpenForOrganization',
+    'organizations:listPublicLeagueFacets',
   ]) {
     it(`answers 503 with no-store when ${failing} fails`, async () => {
       const { html, body, responseInit } = await render(`${SOCCER}?ott=SECRET`, (name) =>
@@ -689,4 +697,132 @@ describe('numbered pages on the server', () => {
       });
     }
   }
+});
+
+describe('filtered views server render', () => {
+  const SAND_PATH = `/organizations/${SAND.slug}`;
+  const sand =
+    (args: Parameters<typeof sandResults>[0] = {}) =>
+    (name: string) =>
+      Promise.resolve(sandResults(args)[name]);
+  const pathOf = (a: Element | undefined) => {
+    const url = new URL(a?.getAttribute('href') ?? '', ORIGIN);
+    return `${url.pathname}${url.search}`;
+  };
+  const pills = (body: HTMLElement) =>
+    [...body.querySelectorAll('ul[aria-label="Active filters"] a')].map((a) => [
+      text(a),
+      pathOf(a),
+    ]);
+  const legends = (body: HTMLElement) => [...body.querySelectorAll('main legend')].map(text);
+  const checked = (body: HTMLElement) =>
+    [...body.querySelectorAll<HTMLInputElement>('main input[type="checkbox"]')]
+      .filter((input) => input.hasAttribute('checked'))
+      .map((input) => `${input.name}=${input.value}`);
+  const count = (body: HTMLElement) =>
+    text(body.querySelector('form[aria-label="Filter leagues"] [role="status"]'));
+
+  it('renders the matching rows, pills, count, Clear all, noindex, and the unfiltered canonical', async () => {
+    const { body, head, queries } = await render(
+      `${SAND_PATH}?gender=coed&format=4v4`,
+      sand({ gender: ['coed'], playersPerSide: [4] }),
+    );
+    const filterArgs = { gender: ['coed'], playersPerSide: [4] };
+    expect(queries).toContainEqual({
+      name: 'organizations:listPublicLeagues',
+      args: { slug: SAND.slug, page: 1, ...filterArgs },
+    });
+    expect(queries).toContainEqual({
+      name: 'seasons:listOpenForOrganization',
+      args: { orgSlug: SAND.slug, ...filterArgs },
+    });
+    expect([...body.querySelectorAll('#leagues li[id] h3')].map(text)).toEqual([
+      'Monday Coed 4s',
+      'Wednesday Reverse Coed 4s',
+    ]);
+    expect(pills(body)).toEqual([
+      ['Gender: Coed: remove the gender filter', `${SAND_PATH}?format=4v4`],
+      ['4v4: remove the format filter', `${SAND_PATH}?gender=coed`],
+    ]);
+    expect(count(body)).toBe('2 of 7 leagues');
+    const clearAll = [...body.querySelectorAll('main a')].find((a) => text(a) === 'Clear all');
+    expect(pathOf(clearAll)).toBe(SAND_PATH);
+    expect(head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex');
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}${SAND_PATH}`,
+    );
+    const form = body.querySelector('form[aria-label="Filter leagues"]');
+    expect(form?.getAttribute('method')).toBe('get');
+    expect(form?.getAttribute('action')).toBe(SAND_PATH);
+    expect(legends(body)).toEqual(['Gender', 'Format', 'Level', 'Age group']);
+    expect(checked(body)).toEqual(['gender=coed', 'format=4v4']);
+    expect(text(body.querySelector('main details summary'))).toBe('Filters 2 active');
+  });
+
+  it('ignores unknown values, which appear nowhere in the HTML or the query args', async () => {
+    const canary = 'zq7canary';
+    const { html, queries, head } = await render(
+      `${SAND_PATH}?gender=nope&format=4x4&format=${canary}&level=${canary}&age=${canary}`,
+      sand(),
+    );
+    expect(html).not.toContain(canary);
+    expect(html).not.toContain('nope');
+    expect(html).not.toContain('4x4');
+    expect(queries).toContainEqual({
+      name: 'organizations:listPublicLeagues',
+      args: { slug: SAND.slug, page: 1 },
+    });
+    expect(head.querySelector('meta[name="robots"]')).toBeNull();
+  });
+
+  it("ignores a format outside the organization's one sport on All sports", async () => {
+    const { body, head } = await render(`${SAND_PATH}?format=11v11`, sand());
+    expect(pills(body)).toEqual([]);
+    expect(count(body)).toBe('7 leagues');
+    expect(head.querySelector('meta[name="robots"]')).toBeNull();
+    expect(body.innerHTML).not.toContain('11v11');
+  });
+
+  it('shows no matches without the Registration open section or the Register link', async () => {
+    const { body } = await render(
+      `${SAND_PATH}?gender=mens&format=6v6`,
+      sand({ gender: ['mens'], playersPerSide: [6] }),
+    );
+    expect(text(body.querySelector('#leagues'))).toContain('No leagues match these filters');
+    expect(text(body.querySelector('#leagues'))).toContain('Remove a filter to see more.');
+    expect([...body.querySelectorAll('#leagues a')].map((a) => [text(a), pathOf(a)])).toEqual([
+      ['Clear all', SAND_PATH],
+    ]);
+    expect(body.querySelector('#registration-open')).toBeNull();
+    expect(body.textContent).not.toContain('Register for a season');
+    expect(count(body)).toBe('0 of 7 leagues');
+  });
+
+  it('retries the error view to the filtered URL, filters and pages in canonical order', async () => {
+    const { body } = await render(
+      `${SAND_PATH}?leagues=2&format=6v6&format=4v4&format=4v4`,
+      (name) =>
+        name === 'organizations:listPublicLeagues'
+          ? Promise.reject(new Error('down'))
+          : sand()(name),
+    );
+    const retry = [...body.querySelectorAll('main a')].find((a) => text(a) === 'Try again');
+    expect(retry?.getAttribute('href')).toBe(`${SAND_PATH}?format=4v4&format=6v6&leagues=2`);
+  });
+
+  it('offers no Format or Level and shows no pill for them on All sports with several sports', async () => {
+    const { body, queries } = await render(
+      '/organizations/gulf-coast-sport-social?format=4v4&level=bb&leagues=2',
+      gulfCoast,
+    );
+    expect(legends(body)).not.toContain('Format');
+    expect(legends(body)).not.toContain('Level');
+    expect(pills(body)).toEqual([]);
+    expect(body.innerHTML).not.toContain('format=');
+    expect(body.innerHTML).not.toContain('level=');
+    expect(queries).toContainEqual({
+      name: 'organizations:listPublicLeagues',
+      args: { slug: 'gulf-coast-sport-social', page: 2, playersPerSide: [4], level: ['bb'] },
+    });
+  });
 });

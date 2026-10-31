@@ -21,7 +21,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 43, seasons: 6 };
+const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 6 };
 const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };

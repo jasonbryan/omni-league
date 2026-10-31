@@ -170,7 +170,9 @@ describe('OrganizationPage offline', () => {
       expect(text(main?.querySelector('h1')?.parentElement?.nextElementSibling)).toBe(
         'Beach volleyball, soccer, and softball · 5 leagues at 3 locations',
       );
-      expect(text(main?.querySelector('#leagues-heading')?.nextElementSibling)).toBe('5 leagues');
+      expect(text(main?.querySelector('form[aria-label="Filter leagues"] [role="status"]'))).toBe(
+        '5 leagues',
+      );
     });
   });
 

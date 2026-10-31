@@ -270,7 +270,7 @@ test.describe('organization page: more than 5 rows per list', () => {
       expect(content).toMatch(new RegExp(`${tenant.leagues[0].locations[0]}\\s*<`));
 
       expect(html).toMatch(/>\s*Soccer and softball · 13 leagues at 13 locations\s*</);
-      expect(html).toMatch(/>\s*13 leagues\s*</);
+      expect(html).toMatch(/role="status"[^>]*>\s*<span\b[^>]*>13<\/span>\s*leagues\s*</);
 
       expect(html).not.toContain('utm_source');
     },
@@ -301,6 +301,7 @@ test.describe('organization page in the browser', () => {
         'nav[aria-label="Sports"] li:nth-child(1) a',
         'nav[aria-label="Sports"] li:nth-child(2) a',
         'nav[aria-label="Sports"] li:nth-child(3) a',
+        'form[aria-label="Filter leagues"] summary',
         ...tenant.leagues.map(
           (league) =>
             `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,

@@ -129,6 +129,10 @@ describe('the sport view queries', () => {
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
+      {
+        name: 'organizations:listPublicLeagueFacets',
+        args: { slug: 'gulf-coast-sport-social', sport: 'soccer' },
+      },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' } },
       {
@@ -203,7 +207,9 @@ describe('the sport view populated', () => {
   it('titles the leagues section by the sport and lists only its leagues', () => {
     const section = leaguesSection(harness);
     expect(text(section?.querySelector('h2'))).toBe('Soccer leagues');
-    expect(text(section?.querySelector('h2')?.nextElementSibling)).toBe('2 leagues');
+    expect(
+      text(host(harness).querySelector('form[aria-label="Filter leagues"] [role="status"]')),
+    ).toBe('2 leagues');
     expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual([
       'Coed 7v7 Rec',
       "Men's Over-30 11v11",
@@ -315,9 +321,9 @@ describe('the sport view with several pages', () => {
       `${SOCCER}?page=2#leagues`,
       `${SOCCER}?page=2#leagues`,
     ]);
-    expect(text(leaguesSection(harness)?.querySelector('h2')?.nextElementSibling)).toBe(
-      `${SOCCER_LEAGUES} leagues`,
-    );
+    expect(
+      text(host(harness).querySelector('form[aria-label="Filter leagues"] [role="status"]')),
+    ).toBe(`${SOCCER_LEAGUES} leagues`);
   });
 
   it('puts the page in the canonical only past page 1', async () => {
