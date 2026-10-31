@@ -17,7 +17,7 @@ export function organizationHeaderSavedKey(slug: string): string {
   return savedCopyKey('organizations:getPublicPage', { slug });
 }
 
-/** The page opens offline only when all four are saved (`ORGANIZATION_PAGE_QUERIES` in `src/app/core/data/convex/offline-saved-queries.ts`). */
+/** The page opens offline only when these four are saved; without the facets copy it opens with no filters (`organization-page.ts`). */
 export function organizationPageSavedKeys(slug: string, sport?: string): string[] {
   const sportArg: SavedCopyArgs = sport === undefined ? {} : { sport };
   return [
