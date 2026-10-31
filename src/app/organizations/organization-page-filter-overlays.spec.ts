@@ -314,6 +314,32 @@ describe('a dimension popover', () => {
     expect(document.activeElement).toBe(count(harness));
   });
 
+  it('discards the choices of a popover closed by opening another, so reopening it shows only the applied ones', async () => {
+    const harness = await shown(`${ORG}?gender=coed`, sandResults({ gender: ['coed'] }));
+    const level = button(harness, 'Level');
+    await press(harness, level);
+    checkbox(popover('filter-level'), 'bb').click();
+    await settle(harness);
+    expect(text(within(popover('filter-level'), 'Show 1 league'))).toBe('Show 1 league');
+
+    await press(harness, button(harness, 'Gender: Coed'));
+    expect(popover('filter-level')).toBeNull();
+    expect(level.getAttribute('aria-expanded')).toBe('false');
+    const gender = popover('filter-gender');
+    expect(text(gender?.querySelector('button[type="submit"]'))).toBe('Show 4 leagues');
+    expect(
+      [...(gender?.querySelectorAll<HTMLInputElement>('input[type="hidden"]') ?? [])].map(
+        (input) => input.name,
+      ),
+    ).toEqual([]);
+
+    escape();
+    await settle(harness);
+    await press(harness, level);
+    expect(checkbox(popover('filter-level'), 'bb').checked).toBe(false);
+    expect(url()).toBe(`${ORG}?gender=coed`);
+  });
+
   it('on the sport view, counts 6v6 as 3 and Show loads the sport view path with no page', async () => {
     const harness = await shown(`${SPORT_VIEW}?page=2`, sandResults({ page: 2 }));
     await press(harness, button(harness, 'Format'));
@@ -354,6 +380,22 @@ describe('a press waiting on the overlay chunk', () => {
     await settle(harness);
     expect(filters.getAttribute('aria-busy')).toBe('true');
     escape();
+    await settle(harness);
+    expect(filters.getAttribute('aria-busy')).toBeNull();
+    hold.release();
+    await settle(harness);
+    expect(dialog()).toBeNull();
+    expect(filters.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('drops the press when a navigation starts before the import arrives', async () => {
+    const hold = holdImport();
+    const harness = await shown(`${ORG}?gender=coed`, sandResults({ gender: ['coed'] }));
+    const filters = filtersButton(harness);
+    filters.click();
+    await settle(harness);
+    expect(filters.getAttribute('aria-busy')).toBe('true');
+    await TestBed.inject(Router).navigateByUrl(ORG);
     await settle(harness);
     expect(filters.getAttribute('aria-busy')).toBeNull();
     hold.release();

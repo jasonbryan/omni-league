@@ -473,6 +473,39 @@ test.describe('organization filters in the browser', () => {
     for (const url of loadedByPress) expect(beforePress).not.toContain(url);
   });
 
+  test('an open overlay and its unapplied draft leave the URL, canonical link, and saved copies unchanged', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await page.goto(`${tenant.path}?gender=coed&locations=2`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(count(page)).toHaveText('4 of 7 leagues');
+    const pageState = () =>
+      page.evaluate(() => ({
+        url: location.href,
+        canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href'),
+        savedCopies: Object.keys(localStorage)
+          .filter((key) => key.startsWith('cvx-saved:'))
+          .sort(),
+      }));
+    // One saved copy for each of the page's five queries.
+    await expect.poll(async () => (await pageState()).savedCopies.length).toBe(5);
+    const before = await pageState();
+
+    const overlay = isDesktop(testInfo)
+      ? page.getByRole('dialog', { name: 'Format' })
+      : sheet(page);
+    await (isDesktop(testInfo) ? dimensionButton(page, 'Format') : filtersButton(page)).click();
+    await overlay.getByText('6v6', { exact: true }).click();
+    await expect(overlay.getByRole('button', { name: 'Show 2 leagues' })).toBeVisible();
+    expect(await pageState()).toEqual(before);
+
+    await page.keyboard.press('Escape');
+    await expect(overlay).toHaveCount(0);
+    expect(await pageState()).toEqual(before);
+  });
+
   test.describe('the phone sheet', () => {
     test.skip(({ isMobile }) => !isMobile, 'the sheet runs at phone widths only');
 
@@ -578,6 +611,49 @@ test.describe('organization filters in the browser', () => {
         expect(box).toBeGreaterThanOrEqual(44);
       }
     });
+
+    test('Tab and Shift+Tab never leave the open sheet for the page behind', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await filtersButton(page).click();
+      await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();
+      const focusInSheet = () =>
+        page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+      const tabStops = await sheet(page).locator('button, a, input').count();
+      for (const key of ['Tab', 'Shift+Tab']) {
+        for (let press = 0; press <= tabStops; press++) {
+          await page.keyboard.press(key);
+          expect(await focusInSheet(), `${key} press ${String(press + 1)}`).toBe(true);
+        }
+      }
+    });
+
+    test("the sheet's fieldsets sit 24px apart, as the approved mockup draws them", async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await filtersButton(page).click();
+      await expect(sheet(page).getByRole('group')).toHaveCount(4);
+      const gaps = await sheet(page)
+        .getByRole('group')
+        .evaluateAll((fieldsets) =>
+          fieldsets
+            .slice(1)
+            .map((fieldset, i) =>
+              Math.round(
+                fieldset.getBoundingClientRect().top - fieldsets[i].getBoundingClientRect().bottom,
+              ),
+            ),
+        );
+      expect(gaps).toEqual([24, 24, 24]);
+    });
   });
 
   test.describe('the desktop popovers', () => {
@@ -656,6 +732,39 @@ test.describe('organization filters in the browser', () => {
         Promise.all(element.getAnimations({ subtree: true }).map((a) => a.finished)),
       );
       expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    });
+
+    test('Tab past either end of the open Level popover keeps it next to Level in the focus order', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const focusState = () =>
+        page.evaluate(() => {
+          const active = document.activeElement;
+          return {
+            inPopover: !!active?.closest('[data-slot="popover-content"]'),
+            popoverOpen: document.querySelector('[data-slot="popover-content"]') !== null,
+            focused: (active?.textContent ?? '').trim(),
+          };
+        });
+      const adjacent = (state: Awaited<ReturnType<typeof focusState>>, neighbour: string) =>
+        state.inPopover || (!state.popoverOpen && state.focused === neighbour);
+
+      await dimensionButton(page, 'Level').click();
+      await levelPanel(page).getByRole('button', { name: 'Show 4 leagues' }).focus();
+      await page.keyboard.press('Tab');
+      const afterLast = await focusState();
+      expect(adjacent(afterLast, 'Age group'), JSON.stringify(afterLast)).toBe(true);
+
+      await page.keyboard.press('Escape');
+      await dimensionButton(page, 'Level').click();
+      await levelPanel(page).getByRole('checkbox', { name: 'Rec' }).focus();
+      await page.keyboard.press('Shift+Tab');
+      const beforeFirst = await focusState();
+      expect(adjacent(beforeFirst, 'Level'), JSON.stringify(beforeFirst)).toBe(true);
     });
   });
 
