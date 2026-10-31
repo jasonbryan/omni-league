@@ -283,7 +283,7 @@ test.describe('organization page in the browser', () => {
   test('hydrates with no console error and passes the axe helper; no sidebar and no menu button', async ({
     page,
     consoleGuard,
-  }) => {
+  }, testInfo) => {
     const tenant = await tallTenant();
     await page.goto(tenant.path);
     await expect(page.getByRole('heading', { level: 1, name: tenant.name })).toBeVisible();
@@ -301,7 +301,12 @@ test.describe('organization page in the browser', () => {
         'nav[aria-label="Sports"] li:nth-child(1) a',
         'nav[aria-label="Sports"] li:nth-child(2) a',
         'nav[aria-label="Sports"] li:nth-child(3) a',
-        'form[aria-label="Filter leagues"] summary',
+        ...(isDesktop(testInfo)
+          ? [
+              '[data-filter-buttons] div button:nth-child(1)',
+              '[data-filter-buttons] div button:nth-child(2)',
+            ]
+          : ['[data-filter-buttons] > button']),
         ...tenant.leagues.map(
           (league) =>
             `main a[href="${tenant.path}/leagues/${league.name.toLowerCase().replaceAll(' ', '-')}"]`,
