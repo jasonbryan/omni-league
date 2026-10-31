@@ -21,6 +21,7 @@ import {
   type PublicSeasons,
 } from './lib/publicPage';
 import { leagueDivisionLabel } from './lib/leagueDivision';
+import { divisionFilterArgs, matchesDivisionFilters, scopedFilters } from './lib/leagueFilters';
 import {
   findLeagueBySlugs,
   findOrganizationBySlug,
@@ -208,11 +209,12 @@ export const getPublicPage = query({
  */
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const listOpenForOrganization = query({
-  args: { orgSlug: v.string(), sport: v.optional(sportValidator) },
+  args: { orgSlug: v.string(), sport: v.optional(sportValidator), ...divisionFilterArgs },
   returns: publicOpenSeasonsValidator,
-  handler: async (ctx, { orgSlug, sport }): Promise<PublicOpenSeasons> => {
+  handler: async (ctx, { orgSlug, sport, ...requested }): Promise<PublicOpenSeasons> => {
     const organization = await findOrganizationBySlug(ctx, orgSlug);
     if (!organization) return [];
+    const filters = scopedFilters(organization.sportLeagueCounts, sport, requested);
     const seasons = await ctx.db
       .query('seasons')
       .withIndex('by_organizationId_and_status_and_registrationDeadline', (q) =>
@@ -228,7 +230,8 @@ export const listOpenForOrganization = query({
         const shown =
           league?.organizationId === organization._id &&
           league.status === 'published' &&
-          (sport === undefined || league.sport === sport);
+          (sport === undefined || league.sport === sport) &&
+          matchesDivisionFilters(league, filters);
         const divisionLabel = shown ? await leagueDivisionLabel(ctx, league) : undefined;
         leagues.set(
           season.leagueId,

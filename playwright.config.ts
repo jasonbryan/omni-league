@@ -5,11 +5,13 @@ import {
   LOCAL_CONVEX_URL,
   LOCAL_PORT,
   remoteBaseUrl,
+  runOutput,
   webkitEnabled,
 } from './e2e/support/env';
 import { projectFilter } from './e2e/support/viewport-agnostic';
 
 const ci = !!process.env['CI'];
+const output = runOutput(process.env['E2E_RUN_NAME']);
 
 // No `channel` anywhere: headless Chromium runs the headless shell, which CI installs with
 // `npx playwright install --with-deps --only-shell chromium`.
@@ -51,11 +53,12 @@ export default defineConfig({
   // independent of order and of each other.
   workers: ci ? 2 : undefined,
   retries: ci ? 1 : 0,
+  outputDir: output.outputDir,
   // The JSON report names the failing tests in the nightly run's issue.
   reporter: [
     ['list'],
-    ['html', { open: 'never' }],
-    ['json', { outputFile: 'test-results/results.json' }],
+    ['html', { open: 'never', outputFolder: output.htmlReport }],
+    ['json', { outputFile: output.jsonReport }],
   ],
   use: {
     baseURL,

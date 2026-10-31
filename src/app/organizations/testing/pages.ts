@@ -1,3 +1,10 @@
+import { divisionLabel, levelLabel } from '../../../../convex/lib/divisions';
+import {
+  filtersInScope,
+  hasDivisionFilters,
+  matchesDivisionFilters,
+  type DivisionFilters,
+} from '../../../../convex/lib/leagueFilters';
 import { pageOf, PUBLIC_LIST_PAGE_SIZE } from '../../../../convex/lib/publicList';
 import type { PublicOrganizationPage } from '../organization-path';
 
@@ -77,10 +84,17 @@ export const GULF_COAST: PublicOrganizationPage = {
       seasons: [],
     },
   ],
+  facets: [
+    { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
+    { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
+    { gender: 'coed', playersPerSide: 4, level: 'bb', ageGroup: 'adult' },
+    { gender: 'coed', playersPerSide: 2, level: 'b', ageGroup: 'adult' },
+    { gender: 'coed', playersPerSide: 10, level: 'rec', ageGroup: 'adult' },
+  ],
 };
 
 export function queryResults(page: PublicOrganizationPage): Record<string, unknown> {
-  const { leagues, locations, openSeasons = [], ...header } = page;
+  const { leagues, locations, openSeasons = [], facets = [], ...header } = page;
   const list = (rows: unknown[], total: number) => ({
     rows,
     page: 1,
@@ -92,6 +106,7 @@ export function queryResults(page: PublicOrganizationPage): Record<string, unkno
     'organizations:listPublicLeagues': list(leagues, header.leagueCount),
     'organizations:listPublicLocations': list(locations, header.locationCount),
     'seasons:listOpenForOrganization': openSeasons,
+    'organizations:listPublicLeagueFacets': facets,
   };
 }
 
@@ -99,7 +114,7 @@ export function sportQueryResults(
   page: PublicOrganizationPage,
   segment: string,
 ): Record<string, unknown> {
-  const { leagues, locations, openSeasons = [], ...header } = page;
+  const { leagues, locations, openSeasons = [], facets = [], ...header } = page;
   const sport = header.sports.find((entry) => entry.segment === segment);
   if (!sport) throw new Error(`No sport ${segment}`);
   const list = (rows: unknown[], total: number) => ({
@@ -121,6 +136,7 @@ export function sportQueryResults(
     'seasons:listOpenForOrganization': openSeasons.filter(
       (season) => season.league.sportName === sport.name,
     ),
+    'organizations:listPublicLeagueFacets': facets,
   };
 }
 
@@ -187,7 +203,7 @@ export function pagedResults(
   pages: { leagues?: number; locations?: number } = {},
   segment?: string,
 ): Record<string, unknown> {
-  const { leagues, locations, openSeasons = [], ...header } = page;
+  const { leagues, locations, openSeasons = [], facets = [], ...header } = page;
   const sport =
     segment === undefined ? undefined : header.sports.find((entry) => entry.segment === segment);
   if (segment !== undefined && !sport) throw new Error(`No sport ${segment}`);
@@ -212,5 +228,66 @@ export function pagedResults(
     'seasons:listOpenForOrganization': sport
       ? openSeasons.filter((season) => season.league.sportName === sport.name)
       : openSeasons,
+    'organizations:listPublicLeagueFacets': facets,
+  };
+}
+
+const SAND_DIVISIONS = [
+  ['Friday Coed 6s', 'coed', 6, 'b'],
+  ['Monday Coed 4s', 'coed', 4, 'bb'],
+  ['Saturday Coed 6s', 'coed', 6, 'rec'],
+  ["Sunday Women's 6s", 'womens', 6, 'a'],
+  ["Thursday Men's 4s", 'mens', 4, 'aa'],
+  ["Tuesday Women's 2s", 'womens', 2, 'a'],
+  ['Wednesday Reverse Coed 4s', 'coed', 4, 'b'],
+] as const;
+
+const SAND_FACETS = SAND_DIVISIONS.map(([, gender, playersPerSide, level]) => ({
+  gender,
+  playersPerSide,
+  level,
+  ageGroup: 'adult' as const,
+}));
+
+/** One sport and seven leagues, as the e2e seed of the filters, with a facet per league in name order. */
+export const SAND: PublicOrganizationPage = {
+  name: 'Sand Org',
+  slug: 'sand',
+  leagueCount: 7,
+  locationCount: 1,
+  sportCount: 1,
+  sports: [
+    {
+      key: 'beachVolleyball',
+      segment: 'beach-volleyball',
+      name: 'Beach volleyball',
+      leagueCount: 7,
+      locationCount: 1,
+    },
+  ],
+  locations: [{ name: 'Sand Courts', address: '1 Sand St', sportNames: ['Beach volleyball'] }],
+  leagues: SAND_DIVISIONS.map(([name, gender, playersPerSide, level]) => ({
+    name,
+    slug: name.toLowerCase().replace(/'/g, '').replace(/ /g, '-'),
+    divisionLabel: divisionLabel({ gender, playersPerSide, levelLabel: levelLabel(level) }),
+    sportName: 'Beach volleyball',
+    locationNames: ['Sand Courts'],
+    seasons: [],
+  })),
+  facets: SAND_FACETS,
+};
+
+/** The results for one URL of `SAND`, its leagues filtered as the query filters them. */
+export function sandResults(
+  args: Partial<DivisionFilters> & { page?: number; locations?: number } = {},
+): Record<string, unknown> {
+  const filters = filtersInScope(args, 'beachVolleyball');
+  const matching = SAND.leagues.filter((_, i) => matchesDivisionFilters(SAND_FACETS[i], filters));
+  return {
+    ...pagedResults(SAND, { locations: args.locations }),
+    'organizations:listPublicLeagues': listPage(
+      hasDivisionFilters(filters) ? matching : SAND.leagues,
+      args.page ?? 1,
+    ),
   };
 }

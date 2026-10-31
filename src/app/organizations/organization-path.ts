@@ -1,6 +1,8 @@
 import type { Params } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '../../../convex/_generated/api';
+import { NO_DIVISION_FILTERS, type DivisionFilters } from '../../../convex/lib/leagueFilters';
+import { divisionFilterQuery } from './division-filters';
 
 export type PublicOrganizationHeader = NonNullable<
   FunctionReturnType<typeof api.organizations.getPublicPage>
@@ -16,10 +18,15 @@ export type PublicLocationRows = FunctionReturnType<
 
 export type PublicOpenSeasonRows = FunctionReturnType<typeof api.seasons.listOpenForOrganization>;
 
+export type PublicLeagueFacets = FunctionReturnType<
+  typeof api.organizations.listPublicLeagueFacets
+>;
+
 export type PublicOrganizationPage = PublicOrganizationHeader & {
   leagues: PublicLeagueRows;
   locations: PublicLocationRows;
   openSeasons?: PublicOpenSeasonRows;
+  facets?: PublicLeagueFacets;
 };
 
 /** Built from the slug, never copied from the current URL, which can carry `?ott=` or a fragment. The path is explicit because `<base href="/">` would resolve a bare `#league-1` to `/#league-1`. */
@@ -39,18 +46,30 @@ export type PagedList = 'leagues' | 'locations';
 export type ListPages = Readonly<Record<PagedList, number>>;
 
 /** The sport view names its leagues page `page`, which links already shared use. */
-export function listPagesQuery(pages: ListPages, sportView: boolean): Params {
+export function listPagesQuery(
+  pages: ListPages,
+  sportView: boolean,
+  filters: DivisionFilters = NO_DIVISION_FILTERS,
+): Params {
   return {
+    ...divisionFilterQuery(filters),
     ...(pages.leagues > 1 && { [sportView ? 'page' : 'leagues']: pages.leagues }),
     ...(pages.locations > 1 && { locations: pages.locations }),
   };
 }
 
-/** Built from page numbers, integers from `parseListPage` or a query result, never the request's query string. */
-export function listPagesPath(slug: string, segment: string | undefined, pages: ListPages): string {
+/** Built from page numbers, integers from `parseListPage` or a query result, and parsed filters, never the request's query string. */
+export function listPagesPath(
+  slug: string,
+  segment: string | undefined,
+  pages: ListPages,
+  filters: DivisionFilters = NO_DIVISION_FILTERS,
+): string {
   const path = segment === undefined ? organizationPath(slug) : sportViewPath(slug, segment);
-  const query = Object.entries(listPagesQuery(pages, segment !== undefined))
-    .map(([name, page]) => `${name}=${page}`)
+  const query = Object.entries(listPagesQuery(pages, segment !== undefined, filters))
+    .flatMap(([name, value]) =>
+      (Array.isArray(value) ? value : [value]).map((one) => `${name}=${one}`),
+    )
     .join('&');
   return query ? `${path}?${query}` : path;
 }
@@ -59,6 +78,7 @@ export function pageQueryFor(
   list: PagedList,
   pages: ListPages,
   sportView: boolean,
+  filters: DivisionFilters = NO_DIVISION_FILTERS,
 ): (page: number) => Params {
-  return (page) => listPagesQuery({ ...pages, [list]: page }, sportView);
+  return (page) => listPagesQuery({ ...pages, [list]: page }, sportView, filters);
 }
