@@ -469,6 +469,22 @@ test.describe('League management: the save status on a phone', () => {
     await expect(undo(page)).toHaveCount(0);
   });
 
+  test('Undo reached by Shift+Tab from Save and pressed by Enter shows "Earlier details restored." next to Save and focuses it', async ({
+    page,
+  }) => {
+    await saveFromName(page, 'Enter');
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+    await expect(undo(page)).toBeFocused();
+    await expectVisibleInFooter(page, undo(page));
+
+    await page.keyboard.press('Enter');
+
+    const restored = status(page).getByText('Earlier details restored.');
+    await expectVisibleInFooter(page, restored);
+    await expect(status(page).locator('[tabindex="-1"]')).toBeFocused();
+    await expect(undo(page)).toHaveCount(0);
+  });
+
   test('Undo pressed offline shows the offline note next to it, keeps focus on Undo, and the footer stays within 200px', async ({
     page,
   }) => {
