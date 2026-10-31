@@ -11,6 +11,7 @@ import {
 import { PRIMARY_OUTLET, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideTrophy } from '@ng-icons/lucide';
+import { MainFocusRecord } from '../core/replaced-focus';
 import { injectCurrentUrl } from '../shell/current-url';
 import { OfflineNote } from '../shell/offline-note';
 import { skipLinkHref } from '../shell/skip-link';
@@ -155,6 +156,10 @@ export class PublicLayout {
   protected readonly skipHref = computed(() =>
     skipLinkHref(this.router, this.url(), !this.onServer),
   );
+
+  constructor() {
+    inject(MainFocusRecord).listen();
+  }
 
   protected skipToMain(event: MouseEvent): void {
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {

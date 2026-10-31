@@ -279,6 +279,79 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
     });
   });
 
+  test.describe('expectedFailedRequests: 504 on a RegExp path', () => {
+    // On a production build the worker answers requests that `page.route` never sees.
+    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+
+    const PROBE_FILE = /^\/probe-files\/[^/]+$/;
+
+    async function failRequest(page: Page, path: string, status: number): Promise<void> {
+      await page.route(`**${path}`, (route) => route.fulfill({ status, body: '' }));
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate((p) => fetch(p).then(() => undefined), path),
+      ]);
+    }
+
+    test('allows a path the RegExp matches', async ({ browser }) => {
+      const { page, guard, close } = await guardedPage(browser, {
+        expectedFailedRequests: [{ status: 504, path: PROBE_FILE }],
+      });
+      await page.goto('/');
+      await failRequest(page, '/probe-files/a1', 504);
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    for (const [path, status] of [
+      ['/probe-files/a1/b2', 504],
+      ['/other/probe-files/a1', 504],
+      ['/probe-files/a1', 500],
+    ] as const) {
+      test(`still fails on ${status} ${path}`, async ({ browser }) => {
+        const { page, guard, close } = await guardedPage(browser, {
+          expectedFailedRequests: [{ status: 504, path: PROBE_FILE }],
+        });
+        await page.goto('/');
+        await failRequest(page, '/probe-files/a1', 504);
+        await failRequest(page, path, status);
+        expect(guard.problems()).toEqual([
+          expect.stringMatching(
+            new RegExp(
+              `^console\\.error: Failed to load resource: the server responded with a status of ${status} `,
+            ),
+          ),
+        ]);
+        await close();
+      });
+    }
+
+    test('a RegExp with the g flag matches every request, not every other one', async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await guardedPage(browser, {
+        expectedFailedRequests: [{ status: 504, path: /^\/probe-files\/[^/]+$/g }],
+      });
+      await page.goto('/');
+      await failRequest(page, '/probe-files/a1', 504);
+      await failRequest(page, '/probe-files/a2', 504);
+      await failRequest(page, '/probe-files/a3', 504);
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    test('fails on an unused RegExp entry, naming it', async ({ browser }) => {
+      const { guard, close } = await guardedPage(browser, {
+        expectedFailedRequests: [{ status: 504, path: PROBE_FILE }],
+      });
+      expect(guard.problems()).toEqual([
+        'expectedFailedRequests entry 504 /^\\/probe-files\\/[^/]+$/ was not used: no request ' +
+          'with that status and path failed; remove the stale entry',
+      ]);
+      await close();
+    });
+  });
+
   test.describe("expectedConsoleWarnings: ['probe warning']", () => {
     const options = { expectedConsoleWarnings: ['probe warning'] };
 
