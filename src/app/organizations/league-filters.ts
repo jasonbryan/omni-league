@@ -184,7 +184,6 @@ export class LeagueFilters {
     };
   });
 
-  /** A filter change starts at the first page of leagues and keeps the Locations page. */
   private queryFor(filters: DivisionFilters): Params {
     return listPagesQuery(
       { leagues: 1, locations: this.locationsPage() },

@@ -166,14 +166,11 @@ export interface LeagueFacet {
   readonly ageGroup?: string;
 }
 
-/**
- * Offers the values some league in view has, plus any chosen one, so a submit keeps it. `sport` is the sport whose formats and levels
- * apply (`filterSport`); with none, as on All sports with several sports, Format and Level are not offered.
- */
+/** Offers the values some league in view has, plus any chosen one, so a submit keeps it. */
 export function filterGroups(
   facets: readonly LeagueFacet[],
   filters: DivisionFilters,
-  sport: Sport | undefined,
+  formatAndLevelSport: Sport | undefined,
 ): FilterGroup[] {
   const youth = youthOnly(filters);
   const offered = <T>(
@@ -197,13 +194,13 @@ export function filterGroups(
         }),
       ),
     },
-    ...(sport === undefined
+    ...(formatAndLevelSport === undefined
       ? []
       : [
           {
             legend: 'Format',
             options: offered(
-              playersPerSideOfSport(sport),
+              playersPerSideOfSport(formatAndLevelSport),
               (facet) => facet.playersPerSide,
               filters.playersPerSide,
             ).map(({ value, checked }) => ({
@@ -215,9 +212,16 @@ export function filterGroups(
           },
           {
             legend: 'Level',
-            options: offered(levelsOfSport(sport), (facet) => facet.level, filters.level).map(
-              ({ value, checked }) => ({ name: 'level', value, label: levelLabel(value), checked }),
-            ),
+            options: offered(
+              levelsOfSport(formatAndLevelSport),
+              (facet) => facet.level,
+              filters.level,
+            ).map(({ value, checked }) => ({
+              name: 'level',
+              value,
+              label: levelLabel(value),
+              checked,
+            })),
           },
         ]),
     {

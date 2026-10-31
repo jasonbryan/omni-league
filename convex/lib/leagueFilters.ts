@@ -43,8 +43,10 @@ export function sportsWithLeagues(counts: SportCounts | undefined): Sport[] {
   return (Object.keys(counts ?? {}) as Sport[]).filter((sport) => (counts?.[sport] ?? 0) > 0);
 }
 
-/** The sport whose formats and levels a filter may name: the sport view's, or the only sport the organization plays. */
-export function filterSport(sport: Sport | undefined, sports: readonly Sport[]): Sport | undefined {
+export function formatAndLevelSport(
+  sport: Sport | undefined,
+  sports: readonly Sport[],
+): Sport | undefined {
   return sport ?? (sports.length === 1 ? sports[0] : undefined);
 }
 
@@ -67,13 +69,13 @@ export function filtersInScope(
   };
 }
 
-/** The filters a query applies: both the backend and the page read the organization's sports from `sportLeagueCounts`. */
+/** Both the backend and the page read the organization's sports from `sportLeagueCounts`. */
 export function scopedFilters(
   sportLeagueCounts: SportCounts | undefined,
   sport: Sport | undefined,
   filters: Partial<DivisionFilters>,
 ): DivisionFilters {
-  return filtersInScope(filters, filterSport(sport, sportsWithLeagues(sportLeagueCounts)));
+  return filtersInScope(filters, formatAndLevelSport(sport, sportsWithLeagues(sportLeagueCounts)));
 }
 
 export interface LeagueDivisionValues {
@@ -87,7 +89,6 @@ function matchesAny<T>(chosen: readonly T[], value: T | undefined): boolean {
   return chosen.length === 0 || (value !== undefined && chosen.includes(value));
 }
 
-/** Values of one dimension match any, dimensions combine. A league with no value in a dimension never matches a filter on it. */
 export function matchesDivisionFilters(
   league: LeagueDivisionValues,
   filters: DivisionFilters,

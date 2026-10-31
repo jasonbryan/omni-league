@@ -45,7 +45,7 @@ export type PagedList = 'leagues' | 'locations';
 
 export type ListPages = Readonly<Record<PagedList, number>>;
 
-/** The sport view names its leagues page `page`, which links already shared use. The filters come first, then the pages. */
+/** The sport view names its leagues page `page`, which links already shared use. */
 export function listPagesQuery(
   pages: ListPages,
   sportView: boolean,

@@ -51,7 +51,7 @@ const openSeason = (name: string) => ({
   registrationDeadline: dateFromToday(10),
 });
 
-/** The seven beach volleyball leagues of the plan, six locations so Locations has two pages, and two open seasons. */
+/** The seven beach volleyball leagues, six locations so Locations has two pages, and two open seasons. */
 async function filterTenant(): Promise<Tenant> {
   const tenant = await seedTenant({ name: 'E2E Filters', locations: LOCATIONS, leagues: LEAGUES });
   await Promise.all([

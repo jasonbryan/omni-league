@@ -201,9 +201,7 @@ export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
 
 export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;
 
-// Standard values only, and only the fields a league has: a custom level is given as the standard level it maps to.
-// Strings, not the division validators, so the app's first bundle, which checks saved copies, does not take in all of `divisions.ts`;
-// the page offers only values from the standard lists.
+// Strings, not the division validators, which would bring all of `divisions.ts` into the first bundle; the page offers only standard values.
 export const publicLeagueFacetsValidator = v.array(
   v.object({
     gender: v.optional(v.string()),

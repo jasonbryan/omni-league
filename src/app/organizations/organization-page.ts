@@ -11,7 +11,11 @@ import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
-import { filterSport, filtersInScope, hasDivisionFilters } from '../../../convex/lib/leagueFilters';
+import {
+  filtersInScope,
+  formatAndLevelSport,
+  hasDivisionFilters,
+} from '../../../convex/lib/leagueFilters';
 import { sportFromSegment } from '../../../convex/lib/sports';
 import { AuthService } from '../core/auth/auth.service';
 import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
@@ -191,11 +195,11 @@ export class OrganizationPage {
     this.online,
   );
 
-  /** The sport whose formats and levels apply, read from the same `sportLeagueCounts` as the queries. */
-  private readonly filterSport = computed(() => {
+  // Read from the same `sportLeagueCounts` as the queries, so the page drops the values they drop.
+  private readonly formatAndLevelSport = computed(() => {
     const header = this.header.value();
     return header
-      ? filterSport(
+      ? formatAndLevelSport(
           this.sportKey(),
           header.sports.map((sport) => sport.key),
         )
@@ -204,14 +208,14 @@ export class OrganizationPage {
 
   protected readonly filters = computed(() =>
     this.header.value()
-      ? filtersInScope(this.requestedFilters(), this.filterSport())
+      ? filtersInScope(this.requestedFilters(), this.formatAndLevelSport())
       : this.requestedFilters(),
   );
 
   // A copy saved before the filters existed has no facets, so offline without one the page still shows, with nothing to offer.
   protected readonly filterGroups = computed(() => {
     const facets = this.facets.value() ?? (this.online() ? undefined : []);
-    return facets && filterGroups(facets, this.filters(), this.filterSport());
+    return facets && filterGroups(facets, this.filters(), this.formatAndLevelSport());
   });
 
   protected readonly requestedPagesPath = computed(() =>
@@ -319,12 +323,12 @@ export class OrganizationPage {
       if (!page || !leagues || !locations) return null;
       const sport = this.sport();
       const inCity = page.cityState === undefined ? '' : ` in ${page.cityState}`;
-      // A filtered view is not indexed, and names the unfiltered first page as its canonical.
       const filtered = hasDivisionFilters(this.filters());
-      const pages = filtered
+      // Page N of a filtered list holds other leagues than unfiltered page N.
+      const canonicalPages = filtered
         ? { leagues: 1, locations: 1 }
         : { leagues: leagues.page, locations: locations.page };
-      const path = listPagesPath(page.slug, sport?.segment, pages);
+      const path = listPagesPath(page.slug, sport?.segment, canonicalPages);
       const noindex = filtered ? { noindex: true } : {};
       if (!sport) {
         return {

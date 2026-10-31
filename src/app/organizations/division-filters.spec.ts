@@ -212,6 +212,17 @@ describe('filterGroups', () => {
       filterGroups([{ gender: 'coed' }], NO_DIVISION_FILTERS, 'soccer').map((g) => g.legend),
     ).toEqual(['Gender']);
   });
+
+  it('never offers a facet value that is not a standard one', () => {
+    const odd = [
+      { gender: 'nope', playersPerSide: 12, level: 'd', ageGroup: 'u5' },
+      { gender: 'Coed', level: 'BB', ageGroup: 'over40' },
+    ];
+    const groups = filterGroups(odd, NO_DIVISION_FILTERS, 'beachVolleyball');
+    expect(groups.map((group) => [group.legend, group.options.map((o) => o.value)])).toEqual([
+      ['Age group', ['over40']],
+    ]);
+  });
 });
 
 describe('saved-copy keys of filtered views', () => {
