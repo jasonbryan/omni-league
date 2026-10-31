@@ -1,7 +1,7 @@
 import { MAX_LEAGUE_NAME_LENGTH } from '../convex/lib/leagueInput';
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { checkReflow, expectAccessible, tabKey } from './support/a11y';
+import { checkReflow, REFLOW_WIDTH, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -576,7 +576,7 @@ test.describe('Leagues: the created status on a phone', () => {
     await expectLinkHeights(page, nextStep(page), 'touch');
   });
 
-  test('with a 100-character name holding one 60-character word, the page does not scroll sideways at 320px', async ({
+  test('with a 100-character name holding one 60-character word, the page does not scroll sideways at 320px and the title keeps to two lines', async ({
     page,
   }) => {
     const name = `${'W'.repeat(60)} Sunday Reverse Coed Fours at Pelican Shoals`.slice(
@@ -586,6 +586,9 @@ test.describe('Leagues: the created status on a phone', () => {
     await createFromTheBottom(page, { ...SUNDAY, name });
 
     expect(await checkReflow(page)).toMatchObject({ passed: true });
+
+    await page.setViewportSize({ width: REFLOW_WIDTH, height: 640 });
+    await expectAtMostTwoLines(form(page).locator('[data-slot="created-title"]'));
   });
 
   test('Tabbing through the cleared form from Name with the created status shown never leaves a control under the taller footer (WCAG 2.4.11)', async ({
