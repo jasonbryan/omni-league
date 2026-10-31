@@ -1,6 +1,6 @@
 import { MAX_SEASON_NAME_LENGTH } from '../convex/lib/seasonInput';
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { checkReflow, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -622,6 +622,18 @@ test.describe('League management: the created status on a phone', () => {
     await expectVisibleInFooter(page, created(page, name));
     await expectAtMostTwoLines(created(page, name));
     expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+  });
+
+  test('with a 100-character name holding one 60-character word, the page does not scroll sideways at 320px', async ({
+    page,
+  }) => {
+    const name = `${'W'.repeat(60)} Session at Redfish Flats, Sundays and Late Kickoffs`.slice(
+      0,
+      MAX_SEASON_NAME_LENGTH,
+    );
+    await createFromTheBottom(page, name);
+
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
   });
 
   test('Tabbing through the cleared form from Name with the created status shown never leaves a control under the taller footer (WCAG 2.4.11)', async ({
