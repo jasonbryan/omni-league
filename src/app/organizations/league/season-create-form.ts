@@ -293,7 +293,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               <span
                 data-slot="created-title"
                 [class]="createdTitleClass"
-                style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden"
+                style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere"
                 >{{ name }} created as a draft.</span
               >
             </div>
