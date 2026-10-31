@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
+import { lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
@@ -21,6 +21,7 @@ import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
+import { CREATED_STATUS, CREATED_TITLE } from '../admin/footer-status';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
@@ -62,7 +63,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 @Component({
   selector: 'app-season-create-form',
   imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, StickyFooter, StickyFooterFocus],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
+  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -73,15 +74,8 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
       aria-describedby="create-season-note"
       class="px-4 py-4 md:px-5 md:py-5"
       (submit)="submit($event)"
+      (input)="edited()"
     >
-      @if (created(); as name) {
-        <app-admin-alert
-          kind="success"
-          [title]="name + ' created as a draft.'"
-          description="Publish it when it’s ready for players to see."
-          class="mb-5"
-        />
-      }
       @if (form.alert(); as kind) {
         @if (kind === 'offline') {
           <app-admin-offline-alert
@@ -292,6 +286,16 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         />
       }
       <div appStickyFooter>
+        <div role="status" data-slot="created-status">
+          @if (created(); as name) {
+            <div [class]="createdClass">
+              <ng-icon name="lucideCheck" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
+              <span data-slot="created-title" [class]="createdTitleClass"
+                >{{ name }} created as a draft.</span
+              >
+            </div>
+          }
+        </div>
         <button
           #submitButton
           type="submit"
@@ -357,6 +361,8 @@ export class SeasonCreateForm {
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
+  protected readonly createdClass = CREATED_STATUS;
+  protected readonly createdTitleClass = CREATED_TITLE;
 
   protected readonly created = signal<string | null>(null);
 
@@ -372,6 +378,10 @@ export class SeasonCreateForm {
     const ids = [description, this.form.errors[field]() ? `${errorId}-error` : null];
     const described = ids.filter((id): id is string => id !== null).join(' ');
     return described === '' ? null : described;
+  }
+
+  protected edited(): void {
+    this.created.set(null);
   }
 
   protected nameTyped(event: Event): void {

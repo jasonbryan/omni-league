@@ -1,3 +1,4 @@
+import { MAX_LEAGUE_NAME_LENGTH } from '../convex/lib/leagueInput';
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { expectAccessible, tabKey } from './support/a11y';
@@ -11,10 +12,14 @@ import { signUp } from './support/session';
 import {
   controlsInTabOrder,
   expectWhollyAboveFooter,
+  expectStatusOnTopOfButton,
+  expectVisibleInFooter,
+  footerHeight,
   PHONE,
   footerTabWalk,
   underTheFooter,
 } from './support/sticky-footer';
+import { expectLinkHeights } from './support/link-heights';
 import { numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -72,7 +77,7 @@ async function createDraft(
 }
 
 test.describe('Leagues: creating a draft', () => {
-  test('creates a draft: Draft in the list, the status above the form, the form cleared, and nothing on the public page', async ({
+  test('creates a draft: Draft in the list, the status next to the button, the form cleared, and nothing on the public page', async ({
     page,
     request,
   }, testInfo) => {
@@ -91,8 +96,9 @@ test.describe('Leagues: creating a draft', () => {
     await submit(page).click();
 
     const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
-    await expect(status).toContainText('Sunday Reverse Coed 4s created as a draft.');
-    await expect(status).toContainText('Publish it when it’s ready for players to see.');
+    await expect(status).toHaveText(
+      /^Sunday Reverse Coed 4s created as a draft\.\s*Add the first season$/,
+    );
     await expect(page.locator('#name')).toHaveValue('');
     await expect(page.locator('#slug')).toHaveValue('');
     await expect(page.getByRole('radio', { name: 'Beach volleyball' })).not.toBeChecked();
@@ -344,9 +350,7 @@ test.describe('Leagues: defaults and the next step', () => {
     await screenshot(page, testInfo, '209-leagues-created-next-step');
     await expectAccessible(page);
 
-    const next = status.getByRole('link', {
-      name: 'Add the first season to Sunday Reverse Coed 4s',
-    });
+    const next = status.getByRole('link', { name: 'Add the first season', exact: true });
     await expect(next).toHaveAttribute('href', `${base}/leagues/sunday-reverse-coed-4s`);
     await next.click();
     await expect(page).toHaveURL(`${base}/leagues/sunday-reverse-coed-4s`);
@@ -502,6 +506,128 @@ test.describe('Leagues: the create form on a phone', () => {
     await expect(submit(page)).toHaveCSS('width', `${(await footer.boundingBox())!.width}px`);
     await screenshot(page, testInfo, '209-leagues-form-desktop');
   });
+});
+
+test.describe('Leagues: the created status on a phone', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+  });
+
+  const SUNDAY = {
+    name: 'Sunday Reverse Coed 4s',
+    sport: 'Beach volleyball',
+    locations: ['Location 01'],
+  };
+  const created = (page: Page, name = SUNDAY.name) =>
+    form(page).getByRole('status').getByText(`${name} created as a draft.`);
+  const nextStep = (page: Page) =>
+    form(page).getByRole('status').getByRole('link', { name: 'Add the first season' });
+
+  async function createFromTheBottom(page: Page, league = SUNDAY) {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').fill(league.name);
+    await page.locator('#slug').fill('sunday-reverse-coed-4s');
+    await page.getByRole('radio', { name: league.sport }).check({ force: true });
+    await page.getByRole('radio', { name: DEFAULT_FORMAT[league.sport] }).check({ force: true });
+    for (const location of league.locations) {
+      await page.getByRole('checkbox', { name: location }).click();
+    }
+    await form(page).evaluate((element) => element.scrollIntoView({ block: 'end' }));
+    await submit(page).click();
+    await expect(created(page, league.name)).toBeAttached();
+    return base;
+  }
+
+  test('Create pressed at the bottom of the form shows "<league> created as a draft." and "Add the first season" next to it, with focus kept on Create', async ({
+    page,
+  }) => {
+    const base = await createFromTheBottom(page);
+
+    await expectVisibleInFooter(page, created(page));
+    await expectVisibleInFooter(page, nextStep(page));
+    await expect(nextStep(page)).toHaveAttribute('href', `${base}/leagues/sunday-reverse-coed-4s`);
+    await expect(submit(page)).toBeFocused();
+  });
+
+  test('the created status goes once the user types in Name', async ({ page }) => {
+    await createFromTheBottom(page);
+
+    await page.locator('#name').pressSequentially('S');
+
+    await expect(created(page)).toHaveCount(0);
+    await expect(nextStep(page)).toHaveCount(0);
+  });
+
+  test('with a 100-character name the footer stays within 200px, and "Add the first season" is 44px tall', async ({
+    page,
+  }) => {
+    const name =
+      'Sunday Reverse Coed Fours at Pelican Shoals with Late Starts, Short Rallies, and Sand That Stays Hot';
+    expect(name).toHaveLength(MAX_LEAGUE_NAME_LENGTH);
+    await createFromTheBottom(page, { ...SUNDAY, name });
+
+    await expectVisibleInFooter(page, nextStep(page));
+    expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+    await expectLinkHeights(page, nextStep(page), 'touch');
+  });
+
+  test('Tabbing through the cleared form from Name with the created status shown never leaves a control under the taller footer (WCAG 2.4.11)', async ({
+    page,
+  }) => {
+    await createFromTheBottom(page);
+    await page.locator('#name').focus();
+
+    const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
+
+    await expect(submit(page)).toBeFocused();
+    await expect(created(page)).toBeVisible();
+    expect(controlsInTabOrder(seen)).toEqual([
+      'name',
+      'slug',
+      expect.stringMatching(/^sport/),
+      'location-1',
+      'location-2',
+      'location-3',
+      'A',
+      'BUTTON',
+    ]);
+    expect(underTheFooter(seen)).toEqual([]);
+  });
+
+  test('with the created status shown, the page passes axe and does not scroll sideways at 320px', async ({
+    page,
+  }, testInfo) => {
+    await createFromTheBottom(page);
+    await screenshot(page, testInfo, '445-leagues-created-phone');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('Leagues: the created status on wider screens', () => {
+  for (const width of [768, 1280]) {
+    test(
+      `at ${width}px the created status sits on top of Create in the footer`,
+      VIEWPORT_AGNOSTIC,
+      async ({ page }, testInfo) => {
+        const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${base}/leagues`);
+        await createDraft(page, {
+          name: 'Sunday Reverse Coed 4s',
+          sport: 'Beach volleyball',
+          locations: [LOCATIONS[1].name],
+        });
+        const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
+        await expect(status).toBeVisible();
+
+        await expectStatusOnTopOfButton(form(page), status, submit(page));
+        await screenshot(page, testInfo, '445-leagues-created');
+      },
+    );
+  }
 });
 
 test.describe('Leagues: no locations', () => {

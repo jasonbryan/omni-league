@@ -75,3 +75,42 @@ export const controlsInTabOrder = (seen: FocusedPlace[]): string[] =>
 
 export const underTheFooter = (seen: FocusedPlace[]): FocusedPlace[] =>
   seen.filter((place) => !place.inViewport || !place.unobscured || !place.aboveFooter);
+
+/** In the viewport, unobscured at its centre, and inside the form's footer. */
+export async function expectVisibleInFooter(page: Page, shown: Locator): Promise<void> {
+  await expect(shown).toBeVisible();
+  await settleAfterFocusScroll(page);
+  const place = await shown.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const footer = element.closest('form')?.querySelector('[data-slot="form-footer"]');
+    return {
+      inViewport:
+        rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth,
+      unobscured: !!hit && element.contains(hit),
+      inFooter: !!footer && footer.contains(element),
+    };
+  });
+  expect(place).toEqual({ inViewport: true, unobscured: true, inFooter: true });
+}
+
+export async function footerHeight(form: Locator): Promise<number> {
+  return (await form.locator('[data-slot="form-footer"]').boundingBox())!.height;
+}
+
+/** At 768px and wider the footer is in the flow, and the status sits on top of the button. */
+export async function expectStatusOnTopOfButton(
+  form: Locator,
+  status: Locator,
+  button: Locator,
+): Promise<void> {
+  const footer = form.locator('[data-slot="form-footer"]');
+  await expect(footer).toHaveCSS('position', 'static');
+  expect(await status.evaluate((element) => !!element.closest('[data-slot="form-footer"]'))).toBe(
+    true,
+  );
+  const box = (await status.boundingBox())!;
+  const below = (await button.boundingBox())!;
+  expect(below.y - (box.y + box.height)).toBeGreaterThanOrEqual(0);
+  expect(below.y - (box.y + box.height)).toBeLessThanOrEqual(16);
+}
