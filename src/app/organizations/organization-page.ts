@@ -11,6 +11,11 @@ import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
 import { api } from '../../../convex/_generated/api';
+import {
+  filtersInScope,
+  formatAndLevelSport,
+  hasDivisionFilters,
+} from '../../../convex/lib/leagueFilters';
 import { sportFromSegment } from '../../../convex/lib/sports';
 import { AuthService } from '../core/auth/auth.service';
 import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
@@ -26,6 +31,7 @@ import { PublicLayout } from '../public-layout/public-layout';
 import { OrganizationOverview, type ListPaging } from './organization-overview';
 import { OrganizationSkeleton } from './organization-skeleton';
 import { listPagesPath } from './organization-path';
+import { divisionFilterQueryArgs, filterGroups, parseDivisionFilters } from './division-filters';
 import { openSeasonsBySoonestDeadline } from './season-status';
 
 type PublicLeagues = FunctionReturnType<typeof api.organizations.listPublicLeagues>;
@@ -85,6 +91,8 @@ function pagingOf(list: { page: number; pageCount: number; total: number }): Lis
           [openSeasons]="openSeasons()"
           [now]="now()"
           [canManage]="viewerIsOrgAdmin.value() === true"
+          [filters]="filters()"
+          [filterGroups]="filterGroups()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -110,16 +118,15 @@ export class OrganizationPage {
     this.route.paramMap.pipe(map((params) => params.get('sport') ?? undefined)),
     { requireSync: true },
   );
-  private readonly requestedPages = toSignal(
-    this.route.queryParamMap.pipe(
-      map((params) => ({
-        leagues: parseListPage(params.getAll('leagues')),
-        page: parseListPage(params.getAll('page')),
-        locations: parseListPage(params.getAll('locations')),
-      })),
-    ),
-    { requireSync: true },
-  );
+  private readonly queryParams = toSignal(this.route.queryParamMap, { requireSync: true });
+  private readonly requestedPages = computed(() => {
+    const params = this.queryParams();
+    return {
+      leagues: parseListPage(params.getAll('leagues')),
+      page: parseListPage(params.getAll('page')),
+      locations: parseListPage(params.getAll('locations')),
+    };
+  });
 
   private readonly sportKey = computed(() => {
     const segment = this.segment();
@@ -137,6 +144,11 @@ export class OrganizationPage {
     const sport = this.sportKey();
     return sport ? { sport } : {};
   });
+  // On All sports the organization's sports are not known until its header arrives, so the URL may name any sport's format or level, and the query drops what does not apply, as the page does below.
+  private readonly requestedFilters = computed(() =>
+    parseDivisionFilters(this.queryParams(), this.sportKey()),
+  );
+  private readonly filterArgs = computed(() => divisionFilterQueryArgs(this.requestedFilters()));
 
   private readonly header = injectQuery(api.organizations.getPublicPage, () =>
     this.unknownSport() ? skipToken : { slug: this.slug() },
@@ -144,7 +156,12 @@ export class OrganizationPage {
   private readonly leagues = injectQuery(api.organizations.listPublicLeagues, () =>
     this.unknownSport()
       ? skipToken
-      : { slug: this.slug(), page: this.leaguesPage(), ...this.listArgs() },
+      : {
+          slug: this.slug(),
+          page: this.leaguesPage(),
+          ...this.listArgs(),
+          ...this.filterArgs(),
+        },
   );
   private readonly locations = injectQuery(api.organizations.listPublicLocations, () =>
     this.unknownSport()
@@ -152,7 +169,12 @@ export class OrganizationPage {
       : { slug: this.slug(), page: this.locationsPage(), ...this.listArgs() },
   );
   private readonly openSeasonRows = injectQuery(api.seasons.listOpenForOrganization, () =>
-    this.unknownSport() ? skipToken : { orgSlug: this.slug(), ...this.listArgs() },
+    this.unknownSport()
+      ? skipToken
+      : { orgSlug: this.slug(), ...this.listArgs(), ...this.filterArgs() },
+  );
+  private readonly facets = injectQuery(api.organizations.listPublicLeagueFacets, () =>
+    this.unknownSport() ? skipToken : { slug: this.slug(), ...this.listArgs() },
   );
   // Signed-out views and the server render skip it, so signed-out visitors cost no extra function call.
   protected readonly viewerIsOrgAdmin = injectQuery(api.organizations.viewerIsOrgAdmin, () =>
@@ -173,11 +195,36 @@ export class OrganizationPage {
     this.online,
   );
 
+  // Read from the same `sportLeagueCounts` as the queries, so the page drops the values they drop.
+  private readonly formatAndLevelSport = computed(() => {
+    const header = this.header.value();
+    return header
+      ? formatAndLevelSport(
+          this.sportKey(),
+          header.sports.map((sport) => sport.key),
+        )
+      : undefined;
+  });
+
+  protected readonly filters = computed(() =>
+    this.header.value()
+      ? filtersInScope(this.requestedFilters(), this.formatAndLevelSport())
+      : this.requestedFilters(),
+  );
+
+  // A copy saved before the filters existed has no facets, so offline without one the page still shows, with nothing to offer.
+  protected readonly filterGroups = computed(() => {
+    const facets = this.facets.value() ?? (this.online() ? undefined : []);
+    return facets && filterGroups(facets, this.filters(), this.formatAndLevelSport());
+  });
+
   protected readonly requestedPagesPath = computed(() =>
-    listPagesPath(this.slug(), this.segment(), {
-      leagues: this.leaguesPage(),
-      locations: this.locationsPage(),
-    }),
+    listPagesPath(
+      this.slug(),
+      this.segment(),
+      { leagues: this.leaguesPage(), locations: this.locationsPage() },
+      this.filters(),
+    ),
   );
 
   private readonly failed = computed(
@@ -185,7 +232,8 @@ export class OrganizationPage {
       this.header.error() !== undefined ||
       this.leagues.error() !== undefined ||
       this.locations.error() !== undefined ||
-      this.openSeasonRows.error() !== undefined,
+      this.openSeasonRows.error() !== undefined ||
+      this.facets.error() !== undefined,
   );
 
   protected readonly sport = computed(() =>
@@ -237,6 +285,7 @@ export class OrganizationPage {
       this.leagues.savedAt(),
       this.locations.savedAt(),
       this.openSeasonRows.savedAt(),
+      this.facets.savedAt(),
     ].filter((time) => time !== undefined);
     return times.length > 0 ? Math.min(...times) : undefined;
   });
@@ -274,10 +323,13 @@ export class OrganizationPage {
       if (!page || !leagues || !locations) return null;
       const sport = this.sport();
       const inCity = page.cityState === undefined ? '' : ` in ${page.cityState}`;
-      const path = listPagesPath(page.slug, sport?.segment, {
-        leagues: leagues.page,
-        locations: locations.page,
-      });
+      const filtered = hasDivisionFilters(this.filters());
+      // Page N of a filtered list holds other leagues than unfiltered page N.
+      const canonicalPages = filtered
+        ? { leagues: 1, locations: 1 }
+        : { leagues: leagues.page, locations: locations.page };
+      const path = listPagesPath(page.slug, sport?.segment, canonicalPages);
+      const noindex = filtered ? { noindex: true } : {};
       if (!sport) {
         return {
           title: `${page.name} | Omni League`,
@@ -285,6 +337,7 @@ export class OrganizationPage {
           ogDescription: `Leagues and locations of ${page.name} on Omni League${inCity}.`,
           ogType: 'website',
           path,
+          ...noindex,
         };
       }
       return {
@@ -293,6 +346,7 @@ export class OrganizationPage {
         ogDescription: `${sport.name} leagues and locations of ${page.name} on Omni League${inCity}.`,
         ogType: 'website',
         path,
+        ...noindex,
       };
     });
   }

@@ -464,3 +464,72 @@ test.describe('numbered pages of the organization page and the sport view', () =
     },
   );
 });
+
+const countOf = (body: string) => {
+  const form = body.slice(body.indexOf('aria-label="Filter leagues"'));
+  const status = form.slice(form.indexOf('role="status"'));
+  return status
+    .slice(status.indexOf('>') + 1, status.indexOf('</p>'))
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+test.describe('division filters of the organization page', () => {
+  test(
+    'an unknown or canary filter value is ignored, cacheable, with no Location and none of the value',
+    RAW_HTTP,
+    async () => {
+      const path = await pagedOrganization();
+      for (const sample of [
+        () => '?gender=nope',
+        () => '?format=4x4',
+        (c: string) => `?gender=${c}`,
+        (c: string) => `?format=${c}`,
+        (c: string) => `?level=${c}`,
+        (c: string) => `?age=${c}`,
+        (c: string) => `?gender=coed&format=${c}&leagues=2`,
+      ]) {
+        const token = canary();
+        const query = sample(token);
+        const value = query.includes(token) ? token : query.split('=')[1];
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        expect(response.headers['cache-control']?.replace(/\s+/g, ''), query).toBe(
+          PUBLIC_PAGE_CACHE,
+        );
+        expect(response.headers.location, query).toBeUndefined();
+        expect(response.headers['netlify-vary'], query).toBe('query');
+        expect(response.body, query).not.toContain(value);
+        expect(JSON.stringify(response.headers), query).not.toContain(value);
+      }
+    },
+  );
+
+  test(
+    'a request for one filter never gets the body of a request for another',
+    RAW_HTTP,
+    async () => {
+      const path = await pagedOrganization();
+      const seen: Record<string, string> = {};
+      for (const query of [
+        '?gender=coed',
+        '',
+        '?gender=coed',
+        '?gender=mens',
+        '',
+        '?gender=mens',
+      ]) {
+        const response = await rawGet(`${path}${query}`);
+        expect(response.status, query).toBe(200);
+        const count = countOf(response.body);
+        seen[query] ??= count;
+        expect(count, query).toBe(seen[query]);
+      }
+      expect(seen['']).toBe('26 leagues');
+      expect(seen['?gender=coed']).toMatch(/^\d+ of 26 leagues$/);
+      expect(seen['?gender=mens']).toMatch(/^\d+ of 26 leagues$/);
+    },
+  );
+});

@@ -129,6 +129,10 @@ describe('the sport view queries', () => {
         .sort((a, b) => (a.name < b.name ? -1 : 1)),
     ).toEqual([
       { name: HEADER, args: { slug: 'gulf-coast-sport-social' } },
+      {
+        name: 'organizations:listPublicLeagueFacets',
+        args: { slug: 'gulf-coast-sport-social', sport: 'soccer' },
+      },
       { name: LEAGUES, args: { slug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' } },
       { name: LOCATIONS, args: { slug: 'gulf-coast-sport-social', page: 1, sport: 'soccer' } },
       {
@@ -203,7 +207,9 @@ describe('the sport view populated', () => {
   it('titles the leagues section by the sport and lists only its leagues', () => {
     const section = leaguesSection(harness);
     expect(text(section?.querySelector('h2'))).toBe('Soccer leagues');
-    expect(text(section?.querySelector('h2')?.nextElementSibling)).toBe('2 leagues');
+    expect(
+      text(host(harness).querySelector('form[aria-label="Filter leagues"] [role="status"]')),
+    ).toBe('2 leagues');
     expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual([
       'Coed 7v7 Rec',
       "Men's Over-30 11v11",
@@ -315,9 +321,9 @@ describe('the sport view with several pages', () => {
       `${SOCCER}?page=2#leagues`,
       `${SOCCER}?page=2#leagues`,
     ]);
-    expect(text(leaguesSection(harness)?.querySelector('h2')?.nextElementSibling)).toBe(
-      `${SOCCER_LEAGUES} leagues`,
-    );
+    expect(
+      text(host(harness).querySelector('form[aria-label="Filter leagues"] [role="status"]')),
+    ).toBe(`${SOCCER_LEAGUES} leagues`);
   });
 
   it('puts the page in the canonical only past page 1', async () => {
@@ -419,9 +425,10 @@ const idsIn = (harness: RouterTestingHarness, section: string) =>
 const namesIn = (harness: RouterTestingHarness, section: string) =>
   [...host(harness).querySelectorAll(`#${section} li[id] h3`)].map(text);
 
-function click(nav: Element | null, name: string): void {
+function click(nav: Element | null, name: string, { focus = false } = {}): void {
   const link = [...(nav?.querySelectorAll('a') ?? [])].find((a) => text(a) === name);
   expect(link, name).toBeDefined();
+  if (focus) link?.focus();
   link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
 }
 
@@ -573,5 +580,23 @@ describe('the sport view locations pages', () => {
       'location-5',
     ]);
     expect(TestBed.inject(Router).url).toBe(`${PAGED_SOCCER}?locations=2`);
+  });
+});
+
+describe('focus after a page change whose query fails on the sport view', () => {
+  it.each([
+    ['Leagues pages', LEAGUES],
+    ['Locations pages', LOCATIONS],
+  ])('moves focus from Next in %s to the server-error view h1', async (label, failing) => {
+    const harness = await open(PAGED_SOCCER);
+    emit(pagedSoccer());
+    await settle(harness);
+    click(pagesControl(harness, label), 'Next page', { focus: true });
+    await settle(harness);
+    subscription(failing).fail(new Error('down'));
+    await settle(harness);
+    const heading = host(harness).querySelector('main h1');
+    expect(text(heading)).toBe('This page is temporarily unavailable');
+    expect(document.activeElement).toBe(heading);
   });
 });

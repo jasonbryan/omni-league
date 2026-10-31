@@ -229,6 +229,16 @@ test.describe('find a league: the organizations list screens', () => {
     await expect(page).toHaveURL(`${baseURL}/leagues?page=2`);
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
     await expect(rows(page)).toHaveText(saved);
+
+    // Page 1 was never viewed, so it has no saved copy.
+    await page
+      .getByRole('navigation', { name: 'Organizations pages' })
+      .getByRole('link', { name: 'Previous page' })
+      .focus();
+    await page.keyboard.press('Enter');
+    const notSaved = page.locator('app-not-saved-view');
+    await expect(notSaved).toBeVisible({ timeout: 3_000 });
+    await expect(notSaved.getByRole('heading', { level: 1 })).toBeFocused();
     await context.setOffline(false);
   });
 });

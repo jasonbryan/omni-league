@@ -200,3 +200,15 @@ const publicOpenSeasonValidator = v.object({
 export const publicOpenSeasonsValidator = v.array(publicOpenSeasonValidator);
 
 export type PublicOpenSeasons = Infer<typeof publicOpenSeasonsValidator>;
+
+// Strings, not the division validators, which would bring all of `divisions.ts` into the first bundle; the page offers only standard values.
+export const publicLeagueFacetsValidator = v.array(
+  v.object({
+    gender: v.optional(v.string()),
+    playersPerSide: v.optional(v.number()),
+    level: v.optional(v.string()),
+    ageGroup: v.optional(v.string()),
+  }),
+);
+
+export type PublicLeagueFacets = Infer<typeof publicLeagueFacetsValidator>;

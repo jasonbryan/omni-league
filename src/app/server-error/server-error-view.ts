@@ -1,8 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  input,
+  viewChild,
+} from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCloudOff, lucideRotateCw } from '@ng-icons/lucide';
 import { setServerErrorStatus } from '../core/server-error-status';
+import { focusWhenReplacing } from '../core/replaced-focus';
 import { PRIMARY_BUTTON } from '../ui/button/button-classes';
 
 /** It never shows the error's message, which on the server is the real one. */
@@ -21,7 +29,11 @@ import { PRIMARY_BUTTON } from '../ui/button/button-classes';
       >
         <ng-icon name="lucideCloudOff" class="text-2xl" aria-hidden="true" />
       </span>
-      <h1 class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+      <h1
+        #heading
+        tabindex="-1"
+        class="mt-6 text-2xl font-semibold tracking-tight text-balance md:text-3xl"
+      >
         This page is temporarily unavailable
       </h1>
       <p class="mt-3 text-balance text-muted-foreground">
@@ -42,7 +54,10 @@ export class ServerErrorView {
 
   protected readonly retryClasses = `${PRIMARY_BUTTON} mt-8`;
 
+  private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
+
   constructor() {
+    focusWhenReplacing(() => this.heading().nativeElement);
     setServerErrorStatus();
     inject(Title).setTitle('Temporarily unavailable | Omni League');
   }

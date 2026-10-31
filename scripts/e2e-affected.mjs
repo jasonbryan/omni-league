@@ -36,6 +36,7 @@ const ADMIN = [
 ];
 const PUBLIC_PAGE = [
   'organization-page',
+  'organization-filters',
   'organization-admin',
   'organization-leagues-publish',
   'organization-leagues-publish-states',
@@ -72,7 +73,11 @@ export const SESSION = '@session';
 export const ROUTE_SPECS = {
   '': ['install', 'pwa', 'pwa-kill-switch'],
   leagues: ['find-a-league'],
-  'organizations/:orgSlug': ['organization-page', 'organization-page-manage'],
+  'organizations/:orgSlug': [
+    'organization-page',
+    'organization-page-manage',
+    'organization-filters',
+  ],
   'organizations/:orgSlug/sports/:sport': ['sport-view'],
   'organizations/:orgSlug/leagues/:leagueSlug': ['league-page', 'league-page-offline'],
   'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug': ['season-page'],
@@ -166,6 +171,7 @@ export const PUBLIC_QUERIES = [
   'organizations:getPublicPage',
   'organizations:listPublicLocations',
   'organizations:listPublicLeagues',
+  'organizations:listPublicLeagueFacets',
   'leagues:getPublicPage',
   'seasons:listPublic',
   'seasons:getPublicPage',
@@ -377,7 +383,7 @@ function specsImporting(graph, targets) {
 
 // The sport route renders the organization page with the organization queries.
 export const OFFLINE_QUERY_GROUP_SPECS = {
-  ORGANIZATION_PAGE_QUERIES: ['organization-page', 'sport-view'],
+  ORGANIZATION_PAGE_QUERIES: ['organization-page', 'sport-view', 'organization-filters'],
   LEAGUE_PAGE_QUERIES: ['league-page'],
   SEASON_PAGE_QUERIES: ['season-page'],
   FIND_PAGE_QUERIES: ['find-a-league', 'find-organizations'],
@@ -542,6 +548,8 @@ export const AREAS = [
       'organization-mark',
       'organization-skeleton',
       'organization-path',
+      'division-filters',
+      'league-filters',
       'sport-list',
       'sport-chips',
       'initials',
