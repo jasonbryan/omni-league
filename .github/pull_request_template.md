@@ -26,7 +26,7 @@ What `seed:demo` now adds or changes, or `none` with the reason.
 
 - [ ] Every gate on the linked issue is approved, or none applies
 - [ ] Uses only technology in Accepted ADRs
-- [ ] UI uses only design tokens and existing patterns, and matches an approved mockup where one covers it, or no UI changed
+- [ ] UI uses only design tokens and existing patterns, and `src/app/ui` spartan components, or a listed exception, and matches an approved mockup where one covers it, or no UI changed
 
 ## UX checklist
 
