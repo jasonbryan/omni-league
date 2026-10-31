@@ -10,7 +10,7 @@
 - **Amended:** 2026-10-12 (#178): Playwright `workers: 2` in CI and `timeout-minutes: 45` on `ci`, because the suite outgrew one worker and 25 minutes. See "Amendment: e2e workers and job timeout (2026-10-12)" at the end. Where the sections above say `workers: 1` or `timeout-minutes: 25`, the amendment applies.
 - **Amended:** 2026-10-26: `ci` runs no e2e tests; the full e2e suite, the Convex backend push, and the codegen drift check run once a day on `main` in a second workflow, `e2e.yml`. See "Amendment: e2e only nightly, in its own workflow (2026-10-26)" at the end. Where the sections above or the #186 amendment put e2e steps in `ci`, this amendment applies.
 - **Amended:** 2026-10-30 (#426): `e2e.yml` gets a second job, `e2e-production`, that builds for production and runs the service-worker specs every night instead of skipping them. See "Amendment: the nightly run builds for production (2026-10-30)" at the end.
-- **Amended:** 2026-10-31 (#461), process only: a PR runs only its own e2e specs locally, the orchestrator runs the full suite on `main` once per batch of merges, and the nightly run is the backstop. See "Amendment: own e2e specs and the batch run (2026-10-31)" at the end.
+- **Amended:** 2026-10-31 (#461), process only: a PR runs only its own e2e specs locally, the orchestrator runs the full suite on `main` once per batch of merges, and the nightly run is the backstop. See "Amendment: own e2e specs and the batch run (2026-10-31)" at the end. Where the sections above say otherwise, this amendment applies.
 
 ## Context
 

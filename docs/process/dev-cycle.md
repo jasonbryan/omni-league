@@ -134,7 +134,7 @@ If the list is still empty, the PR runs no e2e. A Dependabot PR has no linked is
 A [low-risk PR](#low-risk-prs) skips this phase. On every other PR, the tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The checks run, including the serial unit tests and the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`: the specs the PR adds or changes, the specs that import a changed file directly or through other `e2e/` files, the specs the issue names, and `e2e/smoke.spec.ts` when there are none of these and the ci scope is `app`. The full suite runs once per [batch](#batch-run) on `main`. On an npm Dependabot PR that is not low-risk, such as one that moves a 0.x major ([Low-risk PRs](#low-risk-prs)), the tester runs the full `npm run e2e` on the head SHA, and that run is the `PASS` or `FAIL`.
+- The checks run, including the serial unit tests and the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`. An npm Dependabot PR that is not low-risk runs the full `npm run e2e` instead ([Low-risk PRs](#low-risk-prs)).
 - UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
 - The demo data shows the feature:
@@ -144,7 +144,7 @@ A [low-risk PR](#low-risk-prs) skips this phase. On every other PR, the tester c
 
 Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fixes it and the tester re-runs.
 
-**Done when:** `PASS` is recorded as a PR comment, with the test evidence collapsed, and no process the tester started is still running.
+**Done when:** `PASS` is recorded as a PR comment, with the test evidence collapsed and naming the head SHA tested and the own-specs command, and no process the tester started is still running.
 
 #### Low-risk PRs
 
@@ -167,7 +167,7 @@ A low-risk PR goes from the implementer straight to Phase 6. The orchestrator fi
 
 The PR reviewer reads the full diff against the issue and the conventions files, and returns `APPROVE` or `CHANGES` with file:line findings ranked by severity. Focus: correctness, Convex authorization and argument validation, Stripe safety, Angular conventions, visible changes that break the design system, test quality, and scope creep beyond the issue.
 
-It checks that the Evidence block's own-specs command lists the [own e2e specs](#own-e2e-specs) and passed on the head SHA under review. On a PR with a `Test: skipped` record, it re-checks the [low-risk](#low-risk-prs) classification against the file list, and against the `package.json` version diff for a bump. A classification that does not hold is a **blocking** finding.
+It checks that the latest own-specs run on the head SHA under review, in the PR Evidence block or the tester's `Test: PASS` Evidence (a tester push moves the head), lists the [own e2e specs](#own-e2e-specs) and passed. On a PR with a `Test: skipped` record, it re-checks the [low-risk](#low-risk-prs) classification against the file list and, for a bump, the version diff its rule reads (`package.json`, or `package-lock.json` on a lockfile-only Dependabot PR). A classification that does not hold is a **blocking** finding.
 
 It compares the PR's seed change with the issue's own Demo data criterion. A PR that does not deliver it is a **blocking** finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 
@@ -218,14 +218,18 @@ The orchestrator runs the full e2e suite once on the `main` head per batch. A ba
 - after the 5th merge since the SHA the last batch run tested;
 - before the deployer opens a release PR.
 
-The run is skipped when every PR in the batch had ci scope `docs`. Merges continue while a run is in progress; a PR merged during the run belongs to the next batch.
+The run is skipped when every PR in the batch had ci scope `docs`.
 
-**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 25 CI minutes, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check follows a green batch run. The nightly `E2E` run stays as the backstop.
+The **batch SHA** is the SHA of the last green batch run. It covers a `main` SHA being deployed or released when it is that SHA, or when every squash commit `<c>` in `git rev-list <batch SHA>..<main SHA>` has ci scope `docs` (`git diff --no-renames --name-only <c>^ <c> | GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main node scripts/ci-scope.mjs` prints `scope=docs`). The orchestrator names the batch SHA to the deployer, and the deployer reports it.
+
+Merges continue while a run is in progress; a PR merged during the run belongs to the next batch.
+
+**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git fetch origin main`, `git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 25 CI minutes, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check follows a green batch run. The nightly `E2E` run stays as the backstop.
 
 **On failure.** The orchestrator re-runs the failing specs once. A spec that passes on the re-run is flaky: the batch counts as `PASS`, and a `type:bug` issue records the flaky test. A spec that fails twice is a regression:
 
 - From then until a batch run is green again, only ci-scope `docs` PRs and the fix or revert PR below merge.
-- The orchestrator finds the causing PR by running the failing specs at the squash commits from the last green batch SHA to the failing head: `git bisect start <failing head> <last green batch SHA>`, then `git bisect run npm run e2e -- <failing specs>`.
+- The orchestrator finds the causing PR by running the failing specs at the squash commits from the last green batch SHA to the failing head: `git bisect start <failing head> <last green batch SHA>`, then `git bisect run sh -c 'npm ci && npm run e2e -- <failing specs>'`, so each commit runs on its own dependencies.
 - It opens a `type:bug` issue, `status:ready`, that names that PR.
 - It dispatches `implementer` for a fix-forward PR. If that PR's first tester round returns `FAIL`, it dispatches `implementer` for a `git revert` PR of the causing squash commit instead.
 - The own specs of the fix or revert PR include the failing specs.
