@@ -14,17 +14,19 @@ Record the PID and port of any local process the system starts (dev server, SSR 
 
 ## Preview or staging
 
-1. Deploy `main` (or the named PR) using the method in the hosting ADR.
-2. Run the smoke tests against the deployed URL.
-3. Comment on the linked issues (see `AGENTS.md`, Writing on GitHub): `Deployed: <target> <URL>`, then the smoke-test result.
+1. For staging, confirm that the batch run the orchestrator names (`docs/process/dev-cycle.md`, Batch run) is green, and note its SHA. If it is red or missing, stop and report.
+2. Deploy `main` (or the named PR) using the method in the hosting ADR.
+3. Run the smoke tests against the deployed URL.
+4. Comment on the linked issues (see `AGENTS.md`, Writing on GitHub): `Deployed: <target> <URL>`, then the smoke-test result and, for staging, the batch SHA.
 
 ## Production release (gate:production)
 
-1. List the PRs merged since the last release tag, every Convex schema change and its migration plan, and every Stripe configuration change. Copy each PR's Migration section into the release request and follow its deploy order.
-2. Open a release PR or deploy request issue (see `AGENTS.md`, Writing on GitHub) with that list and labels `gate:production`, `area:infra`. Stop; the owner approves by merging or commenting approval.
-3. After approval, deploy, run the smoke tests against production, and tag the release (`vX.Y.Z`).
-4. If smoke tests fail, roll back with the method in the hosting ADR, confirm the rollback, and open a `type:bug` issue with the failure output.
+1. Confirm the orchestrator's batch run on the `main` SHA being released is green. If it is red or missing, stop and report.
+2. List the PRs merged since the last release tag, every Convex schema change and its migration plan, and every Stripe configuration change. Copy each PR's Migration section into the release request and follow its deploy order.
+3. Open a release PR or deploy request issue (see `AGENTS.md`, Writing on GitHub) with that list and labels `gate:production`, `area:infra`. Stop; the owner approves by merging or commenting approval.
+4. After approval, deploy, run the smoke tests against production, and tag the release (`vX.Y.Z`).
+5. If smoke tests fail, roll back with the method in the hosting ADR, confirm the rollback, and open a `type:bug` issue with the failure output.
 
 ## Report
 
-Return the outcome first (target, version, URL, smoke-test pass or fail), then any rollback.
+Return the outcome first (target, version, URL, batch SHA, smoke-test pass or fail), then any rollback.

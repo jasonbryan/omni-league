@@ -107,7 +107,8 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
-- Run e2e with `npm run e2e:affected`, which runs only the specs the branch's changed files map to. A new route, or a new source directory under `src/app/` whose files would run the full suite, adds its rule in `scripts/e2e-affected.mjs` in the same PR, and `npm run test:scripts` fails until it does ([CI, Affected e2e specs](ci.md#affected-e2e-specs-and-the-nightly-run)).
+- Run the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`, not the full suite, which runs once per [batch](#batch-run) on `main`. Put the command and its result for the head SHA in the PR Evidence block, or the empty list when the PR has no own specs.
+- A new route, or a new source directory under `src/app/` whose files would run the full suite, still adds its rule in `scripts/e2e-affected.mjs` in the same PR, and `npm run test:scripts` fails until it does ([CI, Affected e2e specs](ci.md#affected-e2e-specs-and-the-nightly-run)). `npm run e2e:affected` is an on-demand tool, not the per-PR run.
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 - Stop local processes as in [Local processes](#local-processes).
 
@@ -117,12 +118,24 @@ The PR stays draft through Phases 4 to 6. CI does not run on drafts ([ADR 0009](
 
 The serial run (`npm run test:serial`) runs the Angular specs in one worker, as on the CI runner while it is the 2-vCPU private-repo runner (Vitest uses one worker fewer than the CPUs), so a cross-file leak that a many-core machine hides by spreading files across workers can fail locally too. File order can still differ from CI's, so it is not a guarantee.
 
+#### Own e2e specs
+
+The implementer and the tester run only the PR's own specs, with `npm run e2e -- <files>`, which takes the machine lock ([Local processes](#local-processes)), pushes the local backend, and builds first. A bare `npx playwright test` skips all three, so it is not the per-PR run. The changed files are `git diff --no-renames --name-only origin/main...HEAD`. The own specs are:
+
+- every `e2e/**/*.spec.ts` the PR adds or changes: `git diff --no-renames --name-only --diff-filter=d origin/main...HEAD -- 'e2e/*.spec.ts' 'e2e/**/*.spec.ts'`;
+- every spec that imports a changed non-spec file (any path, deleted files included), directly or through other files under `e2e/`. For each file in the set, run `git grep -lE "/<stem>(\.[a-z]+)?'" -- 'e2e/'`, where `<stem>` is the file name without its extension. Add every non-spec file found to the set and repeat until no new file turns up, then take every spec found. For example, `e2e/support/console-guard.ts` finds `e2e/support/fixtures.ts`, which finds every spec that imports it. A stem that also matches an unrelated file only adds specs, which is safe;
+- every spec that the issue's Test plan or an acceptance criterion names;
+- `e2e/smoke.spec.ts`, when the list above is empty and the PR's ci scope is `app`: `git diff --no-renames --name-only origin/main...HEAD | GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main node scripts/ci-scope.mjs` prints `scope=app`.
+
+If the list is still empty, the PR runs no e2e. A Dependabot PR has no linked issue; its test path is in [Low-risk PRs](#low-risk-prs).
+
 ### 5. Test
 
-The tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
+A [low-risk PR](#low-risk-prs) skips this phase. On every other PR, the tester checks out the PR branch in its own worktree and verifies it without trusting the implementer's claims:
 
 - Every acceptance criterion maps to a passing test; missing tests are written and pushed to the branch.
-- The checks run, including the serial unit tests and the affected e2e specs (`npm run e2e:affected`; the full e2e suite runs nightly on `main`, and the tester adds a named spec only when an acceptance criterion needs it); UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
+- The checks run, including the serial unit tests and the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`: the specs the PR adds or changes, the specs that import a changed file directly or through other `e2e/` files, the specs the issue names, and `e2e/smoke.spec.ts` when there are none of these and the ci scope is `app`. The full suite runs once per [batch](#batch-run) on `main`. On an npm Dependabot PR that is not low-risk, such as one that moves a 0.x major ([Low-risk PRs](#low-risk-prs)), the tester runs the full `npm run e2e` on the head SHA, and that run is the `PASS` or `FAIL`.
+- UI work gets screenshots at mobile and desktop widths, compared with the approved mockup where one exists and otherwise checked for consistency with the design system (tokens only, no new colours, existing component patterns), plus an automated accessibility check.
 - Edge cases: empty data, permissions (wrong user, wrong league), concurrent edits, and for payments, failed and duplicated webhooks.
 - The demo data shows the feature:
   - **Screens behind sign-in:** the proof is a screenshot as the matching demo account on the anonymous local backend with a local build ([hosting, Service worker, "With data"](hosting.md#service-worker)), using a throwaway `DEMO_ACCOUNT_PASSWORD` set only on that backend. `DEMO_ACCOUNT_PASSWORD` is owner-held and never given to an agent ([AGENTS.md, Secrets](../../AGENTS.md#secrets)), so no agent signs in on a preview.
@@ -133,21 +146,47 @@ Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fix
 
 **Done when:** `PASS` is recorded as a PR comment, with the test evidence collapsed, and no process the tester started is still running.
 
+#### Low-risk PRs
+
+The orchestrator classifies the PR's head SHA from `git fetch origin pull/<n>/head && git diff --no-renames --name-only origin/main...FETCH_HEAD`, so a rename counts both its old and its new path, as in `scripts/ci-scope.mjs`. A PR is low-risk when one of these holds:
+
+- **Tests and docs only.** Every changed file is a test file or a docs file:
+  - a test file is `*.spec.ts`, `*.test.ts`, `*.test.mjs`, or any file under `e2e/`, `scripts/fixtures/`, or a `testing/` directory under `src/`. A file under `src/**/testing/` counts only while no non-test `src/` file imports one: `git grep -lE "/testing/" -- 'src/' ':!*.spec.ts' ':!src/**/testing/**'` prints nothing;
+  - a docs file is a `*.md` under `docs/` or `.claude/`, a root `*.md`, or a `README.md` under `src/` or `convex/` (`scripts/e2e-affected.mjs` already treats those as outside the build).
+- **Dependency bump only.** The changed files are exactly `package.json` and `package-lock.json`, and `git diff origin/main...FETCH_HEAD -- package.json` changes only the version strings of existing entries in `dependencies`, `devDependencies`, and `overrides`. Each changed version keeps its major: for `>=1.0.0` the first number; for `0.y.z` the first two (`^0.12` to `^0.13` is a major); for `0.0.z` any change is a major. A package added or removed, or a change to any other field (`devEngines`, `engines`, `allowScripts`, `scripts`, and the rest), brings the tester back.
+- **Dependabot.** An npm Dependabot PR (groups included) is low-risk only when it meets the dependency bump rule, read from its `package.json` diff, not from Dependabot's label or group: Dependabot calls `convex-test` `0.0.60` to `0.0.66` a patch and `@convex-dev/better-auth` `0.12` to `0.13` a minor, and both are majors here. It records `dependency bump`. A Dependabot PR that changes only `package-lock.json` (a transitive security update) is low-risk only when every package whose version changes in `git diff origin/main...FETCH_HEAD -- package-lock.json` keeps its major by the same rule, and it also records `dependency bump`. An npm Dependabot PR that is not low-risk, such as one that moves a 0.x major, goes to the tester. It has no linked issue, so the tester runs the full `npm run e2e` on the head SHA, and that run is the `Test: PASS` or `FAIL`. This "major" sets only the tester path: the `gate:technology` rule for npm majors ([CI, Merge procedure](ci.md#merge-procedure), `AGENTS.md`) stays as it is. A GitHub Actions Dependabot PR is low-risk while every changed file is under `.github/`, and records `Dependabot github-actions`; the reviewer still reads the action's release notes.
+
+Any other changed file brings the tester back, including:
+
+- any non-test file under `src/`, `convex/` (`convex/testing.ts` included), `public/`, `design/`, `.github/` (`.github/pull_request_template.md` included), or `scripts/`. The one exception is a file under `.github/` on a GitHub Actions Dependabot PR;
+- root config files such as `playwright.config.ts`, `angular.json`, `tsconfig*`, `netlify.toml`, and `ngsw-config.json`.
+
+A low-risk PR goes from the implementer straight to Phase 6. The orchestrator first posts `Test: skipped (low-risk: <tests and docs only | dependency bump | Dependabot github-actions>) at <head SHA>` on the PR. It re-classifies on every push: a push that adds a file outside these rules sends the PR to the tester, and a push that keeps the PR low-risk gets a new record for the new head SHA. A clean `gh pr update-branch` keeps the record, as it keeps `PASS`. `ci` still gates the merge in Phase 7. The implementer's PR Evidence block still carries the own-specs command and its result for the head SHA.
+
 ### 6. PR review
 
 The PR reviewer reads the full diff against the issue and the conventions files, and returns `APPROVE` or `CHANGES` with file:line findings ranked by severity. Focus: correctness, Convex authorization and argument validation, Stripe safety, Angular conventions, visible changes that break the design system, test quality, and scope creep beyond the issue.
 
+It checks that the Evidence block's own-specs command lists the [own e2e specs](#own-e2e-specs) and passed on the head SHA under review. On a PR with a `Test: skipped` record, it re-checks the [low-risk](#low-risk-prs) classification against the file list, and against the `package.json` version diff for a bump. A classification that does not hold is a **blocking** finding.
+
 It compares the PR's seed change with the issue's own Demo data criterion. A PR that does not deliver it is a **blocking** finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 
-On `CHANGES`, the implementer fixes it, then the tester re-runs, then the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
+On `CHANGES`, the implementer fixes it, the orchestrator re-classifies the new head SHA ([Low-risk PRs](#low-risk-prs)), the tester re-runs unless the PR is still low-risk, and the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
 
 **Done when:** `APPROVE` is recorded as a PR review comment.
 
 ### 7. Merge
 
-A PR may merge when tester `PASS` and reviewer `APPROVE` are on its latest commit, it has no `gate:*` label, it is outside the owner-merge scope ([Who merges](#who-merges)), and every gate on the linked issue is approved. The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
+A PR may merge when all of these hold:
 
-1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS` and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
+- On the SHA that merges, it has tester `PASS`, or a `Test: skipped (low-risk: <tests and docs only | dependency bump | Dependabot github-actions>) at <sha>` record and still meets [Low-risk PRs](#low-risk-prs). A push that adds a file outside those rules brings the tester back.
+- Reviewer `APPROVE` is on its latest commit.
+- It has no `gate:*` label, it is outside the owner-merge scope ([Who merges](#who-merges)), and every gate on the linked issue is approved.
+- No [batch run](#batch-run) regression holds merges, or the PR is ci-scope `docs` or the fix or revert PR for it.
+
+The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
+
+1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS`, a `Test: skipped` record, and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
 2. **Mark ready.** `gh pr ready <n>` starts the `ci` run.
 3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then `gh pr checks <n> --watch` until `ci` passes. `skipping` is not a pass.
 4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
@@ -161,15 +200,35 @@ Until #12 adds the `ci` workflow, the orchestrator merges on `PASS` and `APPROVE
 
 The deployer runs after merges to `main`:
 
-- **Preview/staging:** deploy, run smoke tests against it, report the URL on the issue.
+- **Preview/staging:** deploy, run smoke tests against it, report the URL on the issue. The staging check follows a green [batch run](#batch-run).
 - **Production:** behind `gate:production`. The deployer opens a release PR or deploy request listing the merged changes since the last release, any Convex schema migrations, and any Stripe configuration changes. After the owner approves, the deployer ships, runs smoke tests, and on failure rolls back and opens a `type:bug` issue.
 
 Hosting and deployment follow [ADR 0010](../decisions/0010-hosting-and-deployment.md). Netlify builds and deploys from Git, so no deploy secret lives in GitHub. The two exceptions are the Convex team token for preview cleanup, held as a secret of the `preview-cleanup` environment, and the Netlify build hook URL for the scheduled staging rebuild, held as a secret of the `staging-rebuild` environment. Only `main` can read either ([hosting, Where secrets live](hosting.md#where-secrets-live)).
 
 - **Previews.** Every PR against `main` gets `https://deploy-preview-<n>--<site>.netlify.app` with its own Convex preview deployment `pr-<n>`. Previews are public and `noindex`. The tester smoke-tests the preview locally (`E2E_BASE_URL=<preview URL> npm run e2e -- <smoke spec>`) and puts the output in the Evidence block of its PR comment; no GitHub Actions workflow runs it. **Merging a PR deletes its Convex preview deployment automatically** (`.github/workflows/clean-previews.yml` runs on the push to `main`; a daily sweep deletes the preview of a PR closed without a merge and any the push run missed; [hosting, Cleanup](hosting.md#cleanup)), so the team's 40-deployment cap is not reached. The orchestrator checks the daily run's result (`gh run list --workflow clean-previews.yml`) and reports a failure to the owner. Netlify deletes preview deploys after 30 days (Free) or 90 days (paid plans); Convex also deletes preview backends after 5 days.
-- **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app` and resets it to the seeded demo data and demo logins ([hosting, Staging reset](hosting.md#staging-reset)); owner-created data and sessions do not survive a merge. The deployer smoke-tests it and reports the URL. The owner reviews UI changes there and requests changes as new issues. A scheduled workflow (`staging-rebuild.yml`) also rebuilds it every 2 days, so its Convex deployment never expires in a week without merges, and a failed run opens the issue `Scheduled staging rebuild failed`. GitHub turns scheduled workflows off after 60 days without repository activity, so the orchestrator checks `gh workflow list --all` for `disabled_inactivity` whenever work resumes after a pause, and runs `gh workflow enable <file>` for each ([hosting, Scheduled staging rebuild](hosting.md#scheduled-staging-rebuild)).
+- **Staging.** Every merge to `main` updates staging at `https://main--<site>.netlify.app` and resets it to the seeded demo data and demo logins ([hosting, Staging reset](hosting.md#staging-reset)); owner-created data and sessions do not survive a merge. After a green [batch run](#batch-run), the deployer smoke-tests it and reports the URL with the batch SHA. The owner reviews UI changes there and requests changes as new issues. A scheduled workflow (`staging-rebuild.yml`) also rebuilds it every 2 days, so its Convex deployment never expires in a week without merges, and a failed run opens the issue `Scheduled staging rebuild failed`. GitHub turns scheduled workflows off after 60 days without repository activity, so the orchestrator checks `gh workflow list --all` for `disabled_inactivity` whenever work resumes after a pause, and runs `gh workflow enable <file>` for each ([hosting, Scheduled staging rebuild](hosting.md#scheduled-staging-rebuild)).
 - **Production.** The deployer opens a release PR from `main` into the `production` branch. The owner's merge approves and ships it: Netlify builds with the owner-held production key, then the deployer smoke-tests the production URL.
 - **Rollback.** If the production smoke tests fail, the deployer opens a `type:bug` issue with the rollback steps, and the owner runs them: Netlify **Publish deploy** of the previous build, then merging a revert on `production` to redeploy the previous Convex functions.
+
+## Batch run
+
+The orchestrator runs the full e2e suite once on the `main` head per batch. A batch is the PRs merged to `main` since the SHA the last batch run tested. The run happens:
+
+- before each milestone report;
+- after the 5th merge since the SHA the last batch run tested;
+- before the deployer opens a release PR.
+
+The run is skipped when every PR in the batch had ci scope `docs`. Merges continue while a run is in progress; a PR merged during the run belongs to the next batch.
+
+**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 25 CI minutes, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check follows a green batch run. The nightly `E2E` run stays as the backstop.
+
+**On failure.** The orchestrator re-runs the failing specs once. A spec that passes on the re-run is flaky: the batch counts as `PASS`, and a `type:bug` issue records the flaky test. A spec that fails twice is a regression:
+
+- From then until a batch run is green again, only ci-scope `docs` PRs and the fix or revert PR below merge.
+- The orchestrator finds the causing PR by running the failing specs at the squash commits from the last green batch SHA to the failing head: `git bisect start <failing head> <last green batch SHA>`, then `git bisect run npm run e2e -- <failing specs>`.
+- It opens a `type:bug` issue, `status:ready`, that names that PR.
+- It dispatches `implementer` for a fix-forward PR. If that PR's first tester round returns `FAIL`, it dispatches `implementer` for a `git revert` PR of the causing squash commit instead.
+- The own specs of the fix or revert PR include the failing specs.
 
 ## Who merges
 
@@ -180,7 +239,7 @@ The owner merges only:
 
 The owner may also tell the orchestrator in chat to merge one of these PRs; the orchestrator then merges it and comments the owner's words on it, quoted exactly, as the record of approval. Only the owner's own chat message counts; no agent's message is an approval.
 
-Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` and `APPROVE` where those phases apply and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
+Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` (or a low-risk `Test: skipped` record) and `APPROVE` where those phases apply and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
 
 ## Reporting to the owner
 
@@ -210,7 +269,7 @@ Sessions share one machine, and default ports (`ng serve` 4200, Convex local bac
 
 It never stops a process the system did not start, whether by name (`pkill`, `killall`) or by a PID found with `lsof`.
 
-Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over (a PID reused by another process keeps the lock held until that process ends), and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
+Local e2e runs (`npm run e2e`, `e2e:affected`, `e2e:screenshots`, and the orchestrator's [batch run](#batch-run)) also share one machine-wide lock, a file at `~/.cache/omni-league/e2e.lock` that holds the PID of the run in progress. A second run waits and prints that PID, a lock whose process is gone is taken over (a PID reused by another process keeps the lock held until that process ends), and CI (a truthy `CI`) and runs against `E2E_BASE_URL` skip it; nobody deletes the file by hand.
 
 ## Escalation
 

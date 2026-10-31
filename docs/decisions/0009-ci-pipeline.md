@@ -10,6 +10,7 @@
 - **Amended:** 2026-10-12 (#178): Playwright `workers: 2` in CI and `timeout-minutes: 45` on `ci`, because the suite outgrew one worker and 25 minutes. See "Amendment: e2e workers and job timeout (2026-10-12)" at the end. Where the sections above say `workers: 1` or `timeout-minutes: 25`, the amendment applies.
 - **Amended:** 2026-10-26: `ci` runs no e2e tests; the full e2e suite, the Convex backend push, and the codegen drift check run once a day on `main` in a second workflow, `e2e.yml`. See "Amendment: e2e only nightly, in its own workflow (2026-10-26)" at the end. Where the sections above or the #186 amendment put e2e steps in `ci`, this amendment applies.
 - **Amended:** 2026-10-30 (#426): `e2e.yml` gets a second job, `e2e-production`, that builds for production and runs the service-worker specs every night instead of skipping them. See "Amendment: the nightly run builds for production (2026-10-30)" at the end.
+- **Amended:** 2026-10-31 (#461), process only: a PR runs only its own e2e specs locally, the orchestrator runs the full suite on `main` once per batch of merges, and the nightly run is the backstop. See "Amendment: own e2e specs and the batch run (2026-10-31)" at the end.
 
 ## Context
 
@@ -825,7 +826,7 @@ The owner also made the repository public the same day, so Actions minutes for i
 
 **Why a second workflow now.** The #186 amendment kept the nightly run in `ci.yml` to avoid copying about a dozen steps. With no e2e left in `ci`, the nightly job shares only checkout, setup-node, and install with it, so a separate file copies three steps and keeps each workflow's conditions simple. The required check name stays `ci`.
 
-**What a PR loses.** An e2e regression or a `convex/_generated` drift is no longer caught before merge; the next nightly run catches it and opens the `Nightly e2e failed on main` issue. The tester still runs `npm run e2e:affected` locally before `PASS` ([dev cycle, Test](../process/dev-cycle.md#5-test)), so the PR-level net is the local run.
+**What a PR loses.** An e2e regression or a `convex/_generated` drift is no longer caught before merge; the next nightly run catches it and opens the `Nightly e2e failed on main` issue. The PR-level net is a local run before `PASS`; since 2026-10-31 it covers the PR's own specs, and the full suite runs once per batch on `main` (see "Amendment: own e2e specs and the batch run (2026-10-31)" below).
 
 **Minutes.** An app PR's `ci` drops from about 13 to 25 minutes to about 5 to 6 (the measured 4.8 minutes outside e2e in #186's run, plus about 0.5 for the Chromium install that `test:scripts` uses). The nightly run is unchanged at about 20 to 25 minutes on a night with new commits.
 
@@ -868,3 +869,18 @@ Issue #426. The nightly job `e2e` runs a development build with no `E2E_BASE_URL
 **Why one job of four runs.** One Playwright run cannot pin each spec to its own project: with both `--project` flags `pwa.spec.ts` is also listed on `chromium-desktop`, where it skips every test. The runs share one build and one seeded backend; `pwa-update` and `kill-switch` make their own builds on other ports, and `kill-switch` runs last because it edits `angular.json` and replaces `dist/`. Runs after the first use `!cancelled()`, so one night reports every failing run.
 
 **What stays manual.** The release check in `docs/process/hosting.md` still records these specs on the release commit, because the nightly run tests `main`, not the release branch.
+
+## Amendment: own e2e specs and the batch run (2026-10-31)
+
+Issue #461. The owner's direction, in chat on 2026-10-31: "make the recommended changes. prior them". This changes process only: no workflow, script, package, or required check changes, so it is not a `gate:technology` change.
+
+| Item                    | Before                                                        | After                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| e2e before a PR's merge | `npm run e2e:affected`, run by the implementer and the tester | the PR's own specs with `npm run e2e -- <files>` ([dev cycle, Own e2e specs](../process/dev-cycle.md#own-e2e-specs))                                    |
+| Full suite on `main`    | the nightly `E2E` run only                                    | the orchestrator's batch run on the `main` head ([dev cycle, Batch run](../process/dev-cycle.md#batch-run)), with the nightly `E2E` run as the backstop |
+| Tester                  | every PR except Dependabot minor and patch PRs                | every PR except a low-risk PR ([dev cycle, Low-risk PRs](../process/dev-cycle.md#low-risk-prs))                                                         |
+| `npm run e2e:affected`  | the per-PR run                                                | an on-demand tool; `test:scripts` still enforces its `AREAS` rules                                                                                      |
+
+**Minutes.** The batch run is local by default, so it bills no minutes. Its fallback, `gh workflow run E2E --ref main`, costs about 25 minutes a run, and the repository is public, so none of it is billed (2026-10-26 amendment).
+
+**What a PR loses.** An e2e regression in a spec the PR does not own is caught by the next batch run instead of before merge. A spec that fails twice there holds every merge except ci-scope `docs` PRs and the fix or revert PR until a batch run is green again.
