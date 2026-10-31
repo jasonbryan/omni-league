@@ -12,6 +12,16 @@ import { skipLinkHref } from './skip-link';
 import { LOAD_PAGE } from './follow-link';
 import { PendingTestPage, PlainTestPage, SidebarTestPage } from './testing/test-pages';
 
+function emptyRouter(): Router {
+  TestBed.configureTestingModule({ providers: [provideRouter([])] });
+  return TestBed.inject(Router);
+}
+
+function expectOnThisSite(href: string): void {
+  expect(href).toMatch(/^\/(?![/\\])/);
+  expect(href.endsWith('#main')).toBe(true);
+}
+
 async function render(
   page: Type<unknown>,
   url = '/',
@@ -108,7 +118,6 @@ describe('Shell', () => {
     });
 
     // An href starting with `//` (or `/\`, which browsers read the same way) would leave the site.
-    // For `/(//evil.com)` the router's own `url` is `//evil.com`.
     for (const url of [
       '//evil.com/x',
       '///evil.com/x',
@@ -125,25 +134,33 @@ describe('Shell', () => {
       });
     }
 
-    // The serializer alone gives a leading `//` for these (an empty primary segment beside an
-    // auxiliary route), so skipLinkHref collapses leading slashes whatever URL it is given.
-    for (const [url, expected] of [
-      ['/(//evil.com)', '/evil.com#main'],
-      ['//(//evil.com:)', '/evil.com:#main'],
-    ]) {
+    // A leading `//` or `/\` would leave the site, and skipLinkHref does not trust the serializer to
+    // avoid one, so these assert where the href points rather than one router's exact output.
+    for (const url of ['/(//evil.com)', '//(//evil.com:)']) {
       it(`skipLinkHref keeps ${url} on this site`, () => {
-        TestBed.configureTestingModule({ providers: [provideRouter([])] });
-        expect(skipLinkHref(TestBed.inject(Router), url)).toBe(expected);
+        expectOnThisSite(skipLinkHref(emptyRouter(), url));
+      });
+    }
+
+    it('skipLinkHref without the query keeps /(//evil.com)?ott=SECRET on this site and drops the query', () => {
+      const href = skipLinkHref(emptyRouter(), '/(//evil.com)?ott=SECRET', false);
+      expectOnThisSite(href);
+      expect(href).not.toContain('?');
+      expect(href).not.toContain('ott=SECRET');
+    });
+
+    for (const serialized of ['//evil.com#main', '/\\evil.com#main']) {
+      it(`skipLinkHref collapses ${serialized} from the serializer to a single leading slash`, () => {
+        const router = emptyRouter();
+        vi.spyOn(router, 'serializeUrl').mockReturnValue(serialized);
+        expect(skipLinkHref(router, '/x')).toBe('/evil.com#main');
       });
     }
 
     it('skipLinkHref without the query keeps the path and drops the query and fragment', () => {
-      TestBed.configureTestingModule({ providers: [provideRouter([])] });
-      const router = TestBed.inject(Router);
-      expect(skipLinkHref(router, '/organizations/x?ott=SECRET&y=1#top', false)).toBe(
+      expect(skipLinkHref(emptyRouter(), '/organizations/x?ott=SECRET&y=1#top', false)).toBe(
         '/organizations/x#main',
       );
-      expect(skipLinkHref(router, '/(//evil.com)?ott=SECRET', false)).toBe('/evil.com#main');
     });
 
     it('follows the URL after a navigation', async () => {
