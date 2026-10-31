@@ -7,6 +7,13 @@ import { expect, test } from './support/fixtures';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
+import {
+  controlsOf,
+  expectWhollyAboveFooter,
+  PHONE,
+  footerTabWalk,
+  underTheFooter,
+} from './support/sticky-footer';
 import { numberedLocations, seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -327,8 +334,6 @@ test.describe('Leagues: defaults and the next step', () => {
 });
 
 test.describe('Leagues: the create form on a phone', () => {
-  const PHONE = { width: 360, height: 640 };
-
   test('the Create button stays at the bottom of the viewport while the form is taller than it', async ({
     page,
   }) => {
@@ -346,44 +351,22 @@ test.describe('Leagues: the create form on a phone', () => {
     await expect(submit(page)).toBeInViewport({ ratio: 1 });
   });
 
-  test('a keyboard user Tabbing through every field never has one under the sticky button (WCAG 2.4.11)', async ({
+  test('a keyboard user Tabbing through every field never has one under the sticky button, as cleared Name and Slug show their errors (WCAG 2.4.11)', async ({
     page,
   }) => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
     await page.setViewportSize(PHONE);
     await page.goto(`${base}/leagues`);
     await page.locator('#name').focus();
-    const tab = tabKey(page);
+    // An untouched field shows no error when left, so Name is typed and cleared, which clears Slug.
+    await page.keyboard.type('Sunday');
+    await page.locator('#name').fill('');
 
-    const seen: { control: string; inViewport: boolean; unobscured: boolean }[] = [];
-    for (let step = 0; step < 20; step++) {
-      seen.push(
-        await page.evaluate(() => {
-          const active = document.activeElement as HTMLElement;
-          // A chip's radio is visually hidden: its label is what the user sees.
-          const face = active.closest('label') ?? active;
-          const rect = face.getBoundingClientRect();
-          const x = rect.left + rect.width / 2;
-          const y = rect.top + rect.height / 2;
-          const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
-          const hit = inViewport ? document.elementFromPoint(x, y) : null;
-          return {
-            control: [active.id, active.getAttribute('name'), active.tagName].find(Boolean)!,
-            inViewport,
-            unobscured: !!hit && face.contains(hit),
-          };
-        }),
-      );
-      if (
-        seen.at(-1)!.control !== 'name' &&
-        (await submit(page).evaluate((b) => b === document.activeElement))
-      ) {
-        break;
-      }
-      await page.keyboard.press(tab);
-    }
+    const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
 
-    expect(seen.map((s) => s.control)).toEqual([
+    await expect(page.locator('#name-error')).toBeVisible();
+    await expect(page.locator('#slug-error')).toBeVisible();
+    expect(controlsOf(seen)).toEqual([
       'name',
       'slug',
       expect.stringMatching(/^sport/),
@@ -392,7 +375,30 @@ test.describe('Leagues: the create form on a phone', () => {
       'location-3',
       'BUTTON',
     ]);
-    expect(seen.filter((s) => !s.inViewport || !s.unobscured)).toEqual([]);
+    expect(underTheFooter(seen)).toEqual([]);
+  });
+
+  test('Create with every location unticked, pressed from the bottom of the form, focuses the first location box above the sticky button', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin', { locations: numberedLocations(3) });
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues`);
+    await page.locator('#name').fill('Sunday Reverse Coed 4s');
+    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+    await page
+      .getByRole('radio', { name: DEFAULT_FORMAT['Beach volleyball'] })
+      .check({ force: true });
+    await expect(page.locator('#slug')).toHaveValue('sunday-reverse-coed-4s');
+    for (const box of await page.getByRole('checkbox', { name: /^Location/ }).all()) {
+      await expect(box).not.toBeChecked();
+    }
+    await form(page).evaluate((element) => element.scrollIntoView({ block: 'end' }));
+
+    await submit(page).click();
+
+    await expect(page.locator('#locations-error')).toBeVisible();
+    await expectWhollyAboveFooter(page, page.locator('#location-1'));
   });
 
   test('Shift+Tab from the Create button back through the fields never leaves one under it', async ({

@@ -44,7 +44,8 @@ import {
   type DivisionField,
   type OwnCustomLevel,
 } from '../admin/league-division-fields';
-import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
+import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import type { OrganizerLeague } from './league-context';
 import {
   DETAILS_ALERTS,
@@ -85,7 +86,16 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
 
 @Component({
   selector: 'app-league-details-form',
-  imports: [AdminAlert, AdminOfflineAlert, FieldNoteText, FormField, LeagueDivisionFields, NgIcon],
+  imports: [
+    AdminAlert,
+    AdminOfflineAlert,
+    FieldNoteText,
+    FormField,
+    LeagueDivisionFields,
+    NgIcon,
+    StickyFooter,
+    StickyFooterFocus,
+  ],
   providers: [
     provideIcons({
       lucideCheck,
@@ -99,6 +109,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
   host: { class: 'block' },
   template: `
     <form
+      appStickyFooterFocus
       novalidate
       aria-labelledby="details-heading"
       class="px-4 py-5 md:px-6 md:py-6"
@@ -227,7 +238,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
           </div>
         }
       </div>
-      <div data-slot="form-footer" [class]="footerClass">
+      <div appStickyFooter>
         <button
           #submitButton
           type="submit"
@@ -279,7 +290,6 @@ export class LeagueDetailsForm implements OnInit {
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
-  protected readonly footerClass = STICKY_FOOTER;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
 
   protected readonly status = signal<Status | null>(null);

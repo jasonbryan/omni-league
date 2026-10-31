@@ -1,11 +1,12 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible, tabKey } from './support/a11y';
+import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
+import { controlsOf, PHONE, footerTabWalk, underTheFooter } from './support/sticky-footer';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -518,8 +519,6 @@ test.describe('League management: callers who may not open it', () => {
 });
 
 test.describe('League management: the create-season form on a phone', () => {
-  const PHONE = { width: 360, height: 640 };
-
   test('the Create button stays at the bottom of the viewport while the form is taller than it', async ({
     page,
   }) => {
@@ -548,43 +547,9 @@ test.describe('League management: the create-season form on a phone', () => {
       await page.setViewportSize(PHONE);
       await page.goto(`${base}/leagues/${COED}`);
       await page.locator('#name').focus();
-      const tab = tabKey(page);
+      const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
 
-      const seen: {
-        control: string;
-        inViewport: boolean;
-        unobscured: boolean;
-        aboveFooter: boolean;
-      }[] = [];
-      // A date field takes several Tabs, one per part, so the cap leaves room for them.
-      for (let step = 0; step < 40; step++) {
-        seen.push(
-          await page.evaluate(async () => {
-            // The error for the field just left renders after the focus scroll, so the check waits for it.
-            for (let frame = 0; frame < 3; frame++) {
-              await new Promise((resolve) => requestAnimationFrame(resolve));
-            }
-            const active = document.activeElement as HTMLElement;
-            const rect = active.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top + rect.height / 2;
-            const inViewport = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
-            const hit = inViewport ? document.elementFromPoint(x, y) : null;
-            const footer = active.closest('form')!.querySelector('[data-slot="form-footer"]')!;
-            return {
-              control: active.id || active.tagName,
-              inViewport,
-              unobscured: !!hit && active.contains(hit),
-              aboveFooter:
-                footer.contains(active) || rect.bottom <= footer.getBoundingClientRect().top,
-            };
-          }),
-        );
-        if (await submit(page).evaluate((b) => b === document.activeElement)) break;
-        await page.keyboard.press(tab);
-      }
-
-      expect([...new Set(seen.map((s) => s.control))]).toEqual([
+      expect(controlsOf(seen)).toEqual([
         'name',
         'slug',
         'start-date',
@@ -593,7 +558,7 @@ test.describe('League management: the create-season form on a phone', () => {
         'A',
         'BUTTON',
       ]);
-      expect(seen.filter((s) => !s.inViewport || !s.unobscured || !s.aboveFooter)).toEqual([]);
+      expect(underTheFooter(seen)).toEqual([]);
     });
   }
 });

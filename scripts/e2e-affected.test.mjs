@@ -98,22 +98,25 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the shared sticky form footer to the league specs and the organizer league page specs, and to its importers', () => {
-    const specs = specsFor(['src/app/organizations/admin/sticky-footer.ts']);
-    assert.ok(!specs.includes('FULL'));
-    for (const name of [
-      'league-management-details',
-      'league-management-mockup',
-      'league-management-publish',
-      'league-management',
-      'organization-leagues-mockup',
-      'organization-leagues-publish-states',
-      'organization-leagues-publish',
-      'organization-leagues',
-    ]) {
-      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
-    }
-  });
+  for (const file of ['sticky-footer', 'sticky-footer-focus']) {
+    it(`maps the shared sticky form footer (${file}) to the specs of the four forms that use it`, () => {
+      const specs = specsFor([`src/app/organizations/admin/${file}.ts`]);
+      assert.ok(!specs.includes('FULL'));
+      for (const name of [
+        'league-management-details',
+        'league-management-mockup',
+        'league-management-publish',
+        'league-management',
+        'organization-details',
+        'organization-leagues-mockup',
+        'organization-leagues-publish-states',
+        'organization-leagues-publish',
+        'organization-leagues',
+      ]) {
+        assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+      }
+    });
+  }
 
   it('maps an admin staff file to the staff and accept-invite specs', () => {
     assert.deepEqual(

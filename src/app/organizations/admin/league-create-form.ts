@@ -42,7 +42,8 @@ import {
   LABEL,
   LEGEND,
 } from './field-classes';
-import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
+import { StickyFooterFocus } from './sticky-footer-focus';
 import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields } from './league-division-fields';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
@@ -63,12 +64,15 @@ export interface LeagueLocationChoice {
     LeagueDivisionFields,
     NgIcon,
     RouterLink,
+    StickyFooter,
+    StickyFooterFocus,
   ],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus, lucideSparkles })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
     <form
+      appStickyFooterFocus
       novalidate
       aria-labelledby="create-league-heading"
       aria-describedby="create-league-note"
@@ -305,7 +309,7 @@ export interface LeagueLocationChoice {
           }
         </fieldset>
       </div>
-      <div data-slot="form-footer" [class]="footerClass">
+      <div appStickyFooter>
         <button
           #submitButton
           type="submit"
@@ -358,7 +362,6 @@ export class LeagueCreateForm {
   protected readonly errorClass = FIELD_ERROR;
   protected readonly contentClass = FIELD_CONTENT;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
-  protected readonly footerClass = STICKY_FOOTER;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
 
   protected readonly created = signal<{ name: string; slug: string } | null>(null);

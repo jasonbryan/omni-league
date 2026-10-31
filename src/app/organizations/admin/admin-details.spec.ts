@@ -5,7 +5,6 @@ import { CITY_STATE_HINT } from '../../../../convex/lib/organizationInput';
 import { AdminArea } from './admin-area';
 import { AdminDetails } from './admin-details';
 import { PRIMARY_BUTTON } from './button-classes';
-import { STICKY_FOOTER } from './sticky-footer';
 import {
   adminRoutes,
   COASTAL,
@@ -14,6 +13,7 @@ import {
   openAdmin,
   text,
 } from './testing/admin-harness';
+import { expectStickyFooterWithFocusFix } from './testing/sticky-footer-check';
 
 const ROUTES = adminRoutes(AdminArea, [{ path: 'details', component: AdminDetails }]);
 const URL = `/app/organizations/${COASTAL.slug}/details`;
@@ -105,10 +105,15 @@ describe('AdminDetails', () => {
     it('keeps Save in a footer that sticks to the bottom on phones, in a card that clips', async () => {
       await open();
       const footer = form().querySelector('[data-slot="form-footer"]')!;
-      expect(tokens(footer.className)).toEqual(tokens(STICKY_FOOTER));
+      expect(tokens(footer.className)).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
       expect(footer.contains(save())).toBe(true);
       expect(tokens(save().className)).toEqual(tokens(`${PRIMARY_BUTTON} w-full`));
       expect(page.querySelector('main section')?.className).toContain('overflow-clip');
+    });
+
+    it('keeps a focused control above the sticky footer (WCAG 2.4.11)', async () => {
+      await open();
+      expectStickyFooterWithFocusFix(o.harness.fixture.debugElement, form());
     });
   });
 
