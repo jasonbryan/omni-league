@@ -5,6 +5,7 @@ import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { expectLogoLoaded } from './support/organization-mark';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
@@ -275,16 +276,19 @@ test.describe('the public organization page: the logo mark', () => {
     test.skip(testInfo.project.name !== 'chromium-mobile', 'one browser project only');
     const tenant = await organizationWithLogo(page);
     const chips = page.getByRole('navigation', { name: 'Sports' });
+    const mark = page.locator('app-organization-mark');
     await page.goto(tenant.path);
     await hydrated(consoleGuard);
-    await expect(page.locator('app-organization-mark img')).toHaveCount(1);
+    // The route below does not answer a logo request already in flight, which then fails offline with a console error.
+    await expectLogoLoaded(mark);
     // The sport view is viewed online too, so it has a saved copy to open offline.
     await chips.getByRole('link', { name: /^Soccer/ }).click();
     await expect(page).toHaveURL(`${baseURL}${tenant.path}/sports/soccer`);
-    await expect(page.locator('app-organization-mark img')).toHaveCount(1);
+    await expectLogoLoaded(mark);
     await expectSavedCopies(page, organizationPageSavedKeys(tenant.slug, 'soccer'));
     await chips.getByRole('link', { name: /^All sports/ }).click();
     await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+    await expectLogoLoaded(mark);
     await expectSavedCopies(page, organizationPageSavedKeys(tenant.slug));
 
     await page.route(/\/api\/storage\//, (route) =>
@@ -294,7 +298,6 @@ test.describe('the public organization page: the logo mark', () => {
     await expect(page.locator('header + [role="status"] [data-offline-note]')).toBeVisible();
     await chips.getByRole('link', { name: /^Soccer/ }).click();
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
-    const mark = page.locator('app-organization-mark');
     await expect(mark).toHaveText(initials(tenant.name));
     await expect(mark.locator('img')).toHaveCount(0);
     await context.setOffline(false);

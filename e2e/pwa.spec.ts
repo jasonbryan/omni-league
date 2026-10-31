@@ -7,7 +7,7 @@
 // saved-copy tests need page data: a build against a backend seeded by `seed:demo` (a preview, or
 // the local sequence in docs/process/hosting.md, Service worker). Without it they are skipped with
 // that reason.
-import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
+import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
 import { initials } from '../src/app/organizations/initials';
@@ -15,6 +15,7 @@ import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { expectedOpenCards } from './support/open-seasons';
+import { expectLogoLoaded } from './support/organization-mark';
 import {
   expectSavedCopies,
   organizationHeaderSavedKey,
@@ -336,14 +337,6 @@ async function savedAtOf(page: Page, slug: string): Promise<number | null> {
     const raw = localStorage.getItem(key);
     return raw === null ? null : (JSON.parse(raw) as { savedAt: number }).savedAt;
   }, organizationHeaderSavedKey(slug));
-}
-
-async function expectLogoLoaded(mark: Locator): Promise<void> {
-  const logo = mark.locator('img');
-  await expect(logo).toHaveCount(1);
-  await expect
-    .poll(() => logo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
-    .toBe(true);
 }
 
 async function expectLinksEnabled(page: Page): Promise<void> {
