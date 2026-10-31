@@ -47,11 +47,19 @@ import {
 } from './lib/publicList';
 import {
   getPublicPageReturns,
+  publicLeagueFacetsValidator,
   publicLeaguesValidator,
   publicLocationsValidator,
+  type PublicLeagueFacets,
   type PublicLeagues,
   type PublicLocations,
 } from './lib/publicPage';
+import {
+  divisionFilterArgs,
+  hasDivisionFilters,
+  matchesDivisionFilters,
+  scopedFilters,
+} from './lib/leagueFilters';
 import { roleValidator } from './lib/roles';
 import { findOrganizationBySlug } from './lib/seasonLookup';
 import { SPORT_NAMES, sportName, sportSegment, sportValidator, type Sport } from './lib/sports';
@@ -181,53 +189,96 @@ export const listPublicLocations = query({
   },
 });
 
+function publishedLeagues(
+  ctx: QueryCtx,
+  organizationId: Id<'organizations'>,
+  sport: Sport | undefined,
+) {
+  return sport === undefined
+    ? ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_status_and_sortName', (q) =>
+          q.eq('organizationId', organizationId).eq('status', 'published'),
+        )
+    : ctx.db
+        .query('leagues')
+        .withIndex('by_organizationId_and_sport_and_status_and_sortName', (q) =>
+          q.eq('organizationId', organizationId).eq('sport', sport).eq('status', 'published'),
+        );
+}
+
+async function publicLeagueRow(
+  ctx: QueryCtx,
+  organization: Doc<'organizations'>,
+  league: Doc<'leagues'>,
+): Promise<PublicLeagues['rows'][number]> {
+  const locationNames: string[] = [];
+  for (const id of league.locationIds) {
+    const location = await ctx.db.get('locations', id);
+    // Only this organization's locations: a league can never name another organization's.
+    if (location?.organizationId === organization._id) locationNames.push(location.name);
+  }
+  const label = await leagueDivisionLabel(ctx, league);
+  return {
+    name: league.name,
+    slug: league.slug,
+    sportName: sportName(league.sport),
+    locationNames,
+    ...(label !== undefined && { divisionLabel: label }),
+    seasons: await leagueRowSeasons(ctx, league),
+  };
+}
+
 // eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only published fields.
 export const listPublicLeagues = query({
-  args: { ...listArgs, sport: v.optional(sportValidator) },
+  args: { ...listArgs, sport: v.optional(sportValidator), ...divisionFilterArgs },
   returns: publicLeaguesValidator,
   handler: async (ctx, args): Promise<PublicLeagues> => {
     const organization = await findOrganizationBySlug(ctx, args.slug);
     if (!organization) return EMPTY_LIST;
     const { sport } = args;
+    const filters = scopedFilters(organization.sportLeagueCounts, sport, args);
+    const leagues = publishedLeagues(ctx, organization._id, sport);
+    const matched = hasDivisionFilters(filters)
+      ? (await leagues.take(PUBLIC_LIST_MAX_ROWS)).filter((league) =>
+          matchesDivisionFilters(league, filters),
+        )
+      : undefined;
     const total =
-      sport === undefined
+      matched?.length ??
+      (sport === undefined
         ? (organization.leagueCount ?? 0)
-        : (organization.sportLeagueCounts?.[sport] ?? 0);
+        : (organization.sportLeagueCounts?.[sport] ?? 0));
     const { page, pageCount } = pageOf(total, args.page);
     if (pageCount === 0) return EMPTY_LIST;
-    const leagues =
-      sport === undefined
-        ? ctx.db
-            .query('leagues')
-            .withIndex('by_organizationId_and_status_and_sortName', (q) =>
-              q.eq('organizationId', organization._id).eq('status', 'published'),
-            )
-        : ctx.db
-            .query('leagues')
-            .withIndex('by_organizationId_and_sport_and_status_and_sortName', (q) =>
-              q.eq('organizationId', organization._id).eq('sport', sport).eq('status', 'published'),
-            );
-    const read = await leagues.take(page * PUBLIC_LIST_PAGE_SIZE);
+    const read = matched ?? (await leagues.take(page * PUBLIC_LIST_PAGE_SIZE));
     const rows = [];
-    for (const league of pageRows(read, page)) {
-      const locationNames: string[] = [];
-      for (const id of league.locationIds) {
-        const location = await ctx.db.get('locations', id);
-        // Only this organization's locations: a league can never name another organization's.
-        if (location?.organizationId === organization._id) locationNames.push(location.name);
-      }
-      const label = await leagueDivisionLabel(ctx, league);
-      const seasons = await leagueRowSeasons(ctx, league);
-      rows.push({
-        name: league.name,
-        slug: league.slug,
-        sportName: sportName(league.sport),
-        locationNames,
-        ...(label !== undefined && { divisionLabel: label }),
-        seasons,
-      });
+    for (const league of pageRows(read.slice(0, page * PUBLIC_LIST_PAGE_SIZE), page)) {
+      rows.push(await publicLeagueRow(ctx, organization, league));
     }
     return { rows, page, pageCount, total };
+  },
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only the division values of published leagues, never their names.
+export const listPublicLeagueFacets = query({
+  args: { slug: v.string(), sport: v.optional(sportValidator) },
+  returns: publicLeagueFacetsValidator,
+  handler: async (ctx, { slug, sport }): Promise<PublicLeagueFacets> => {
+    const organization = await findOrganizationBySlug(ctx, slug);
+    if (!organization) return [];
+    const leagues = await publishedLeagues(ctx, organization._id, sport).take(PUBLIC_LIST_MAX_ROWS);
+    const facets: PublicLeagueFacets = [];
+    for (const { gender, playersPerSide, level, ageGroup } of leagues) {
+      const facet = {
+        ...(gender !== undefined && { gender }),
+        ...(playersPerSide !== undefined && { playersPerSide }),
+        ...(level !== undefined && { level }),
+        ...(ageGroup !== undefined && { ageGroup }),
+      };
+      if (Object.keys(facet).length > 0) facets.push(facet);
+    }
+    return facets;
   },
 });
 
