@@ -627,6 +627,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/auth/make-auth-client.ts': 'loaded with a dynamic import()',
     'src/app/core/auth/return-to.ts': 'imported only by guards.ts',
     'src/app/core/changes-in-flight.ts': MAIN_SERVER,
+    'src/app/core/data/convex/api.ts': MAIN_SERVER,
     'src/app/core/data/convex/client-token.ts': MAIN_SERVER,
     'src/app/core/data/convex/connection.ts': MAIN_SERVER,
     'src/app/core/data/convex/convex-client.ts': MAIN_SERVER,

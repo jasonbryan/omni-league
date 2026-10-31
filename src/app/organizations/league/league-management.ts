@@ -22,11 +22,10 @@ import {
   lucidePlus,
   lucideUsers,
 } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { sportName } from '../../../../convex/lib/sports';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';

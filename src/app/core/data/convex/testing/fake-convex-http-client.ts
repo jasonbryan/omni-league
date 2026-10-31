@@ -1,4 +1,5 @@
-import { getFunctionName, type FunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
+import { getFunctionName } from '../api';
 import type { ConvexHttpClientLike } from '../server-query-loader';
 
 export interface FakeHttpQuery {

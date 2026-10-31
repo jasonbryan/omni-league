@@ -10,9 +10,8 @@ import {
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideMapPinOff, lucidePlus } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { isPlainClick } from '../../shell/follow-link';
 import { AddLocationForm } from './add-location-form';
 import { AdminAlert } from './admin-alert';
