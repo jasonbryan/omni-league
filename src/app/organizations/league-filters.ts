@@ -55,7 +55,7 @@ const FILTERS_BUTTON =
   'inline-flex h-11 items-center gap-2 rounded-full border border-input px-4 text-sm font-medium hover:bg-muted aria-expanded:bg-muted md:hidden pointer-coarse:min-h-11';
 
 const DIMENSION_BUTTON =
-  'inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium whitespace-nowrap pointer-coarse:min-h-11';
+  'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium whitespace-nowrap pointer-coarse:min-h-11';
 
 const PILL =
   'inline-flex h-11 items-center gap-1.5 rounded-full bg-secondary ps-3 pe-2 text-sm font-medium text-secondary-foreground hover:bg-muted md:h-9 pointer-coarse:min-h-11';
@@ -103,7 +103,7 @@ const PILL =
                   />Filters
                   @if (activeCount()) {
                     <span
-                      class="flex size-6 items-center justify-center rounded-full bg-foreground text-xs tabular-nums text-background"
+                      class="flex size-5 items-center justify-center rounded-full bg-foreground text-xs tabular-nums text-background"
                       >{{ activeCount() }}</span
                     ><span class="sr-only"> active</span>
                   }

@@ -137,9 +137,9 @@ export class FilterFieldset {
       <hlm-sheet-content
         *hlmSheetPortal
         [showCloseButton]="false"
-        class="top-4 gap-0 rounded-xl border-transparent"
+        class="top-10 gap-0 rounded-t-2xl border-transparent"
       >
-        <div class="flex items-center justify-between border-b border-border py-1 px-4 pe-2">
+        <div class="flex items-center justify-between border-b border-border py-1 ps-4 pe-2">
           <h2 hlmSheetTitle class="text-base font-semibold">Filters</h2>
           <button
             hlmBtn
@@ -160,7 +160,7 @@ export class FilterFieldset {
           (change)="readDraft($event)"
           (submit)="apply($event, 'sheet')"
         >
-          <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5">
+          <div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5">
             @for (group of groups(); track group.name) {
               <app-filter-fieldset [group]="group" />
             }
@@ -199,7 +199,7 @@ export class FilterFieldset {
       >
         <hlm-popover-content
           *hlmPopoverPortal
-          class="w-64"
+          class="w-80"
           role="dialog"
           [id]="popoverId(group.name)"
           [attr.aria-label]="group.legend"
