@@ -641,6 +641,21 @@ describe('PublicLeaguePage page changes', () => {
     );
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(`${PATH}?page=2`);
   });
+
+  it('moves focus from a Seasons pages link pressed by keyboard to the server-error view h1 when the new page fails', async () => {
+    const harness = await onPage1();
+    const next = host(harness).querySelector<HTMLAnchorElement>(
+      'nav[aria-label="Seasons pages"] a[href$="?page=2#seasons"]',
+    )!;
+    next.focus();
+    next.click();
+    await settle(harness);
+    subscription(SEASONS_QUERY).fail(new Error('boom'));
+    await settle(harness);
+    const heading = host(harness).querySelector('main h1');
+    expect(text(heading)).toBe('This page is temporarily unavailable');
+    expect(host(harness).ownerDocument.activeElement).toBe(heading);
+  });
 });
 
 describe('PublicLeaguePage open season first and the seasons intro', () => {

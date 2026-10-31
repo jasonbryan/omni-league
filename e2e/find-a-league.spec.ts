@@ -806,8 +806,12 @@ test.describe('find a league: offline', () => {
     await expect(rowNames(page)).toHaveText([SUNDAY, THURSDAY]);
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
 
-    await submit(page, `never viewed ${id}`);
+    await field(page).fill(`never viewed ${id}`);
+    await field(page).press('Enter');
     await expect(page.locator('app-not-saved-view')).toBeVisible({ timeout: 3_000 });
+    await expect(
+      page.locator('app-not-saved-view').getByRole('heading', { level: 1 }),
+    ).toBeFocused();
     await expect(page.locator('app-not-saved-view a')).toHaveAttribute(
       'href',
       url(`never viewed ${id}`),

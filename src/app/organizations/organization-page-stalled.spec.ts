@@ -273,14 +273,13 @@ describe('OrganizationPage when a new page never answers', () => {
     ['Leagues pages', LEAGUES, `${SOCCER}?page=2`, 'soccer'],
     ['Locations pages', LOCATIONS, `${SOCCER}?locations=2`, 'soccer'],
   ])(
-    'after %s on %s held for the wait, shows the error view with Try again to %s, announced, focus unmoved',
+    'after %s on %s held for the wait, shows the error view with Try again to %s, announced, with focus on its h1 and then on main when the page arrives',
     async (label, name, retry, segment) => {
       const harness = await shown(segment ? SOCCER : ORG, segment);
       const region = announcement(harness);
       activate(harness, label);
       await settle(harness);
       expect(busyList(harness)).not.toBeNull();
-      const focused = document.activeElement;
 
       await elapse(harness, PAGE_LOAD_WAIT_MS - 1);
       expect(errorView(harness)).toBeNull();
@@ -294,7 +293,7 @@ describe('OrganizationPage when a new page never answers', () => {
       expect(host(harness).querySelector('main ul')).toBeNull();
       expect(announcement(harness)).toBe(region);
       expect(region?.textContent).toBe(PAGE_STALLED_ANNOUNCEMENT);
-      expect(document.activeElement).toBe(focused);
+      expect(document.activeElement).toBe(errorView(harness)?.querySelector('h1'));
       expect(TestBed.inject(Title).getTitle()).toBe('Temporarily unavailable | Omni League');
 
       const page = name === LEAGUES ? { leagues: 2 } : { locations: 2 };
@@ -305,6 +304,7 @@ describe('OrganizationPage when a new page never answers', () => {
       const section = name === LEAGUES ? '#leagues' : '#locations';
       const first = name === LEAGUES ? 'league-6' : 'location-6';
       expect(host(harness).querySelector(`${section} li[id]`)?.id).toBe(first);
+      expect(document.activeElement).toBe(host(harness).querySelector('main#main'));
     },
   );
 
