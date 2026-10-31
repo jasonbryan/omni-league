@@ -6,6 +6,9 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { PROBLEMS_FILE, PRODUCTION_RUNS } from './e2e-production-check.mjs';
 
+const SETUP_MINUTES = 2;
+const SPARE_MINUTES = 1;
+
 const workflow = readFileSync(
   join(import.meta.dirname, '..', '.github', 'workflows', 'e2e.yml'),
   'utf8',
@@ -254,10 +257,9 @@ describe('the e2e-production job', () => {
     });
     const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e-production'))?.[1]);
     const runs = Object.values(timeouts).reduce((sum, minutes) => sum + minutes, 0);
-    // Measured setup before the first run: under 1.5 minutes.
     assert.ok(
-      runs + 2 <= limit - 1,
-      `${runs} minutes of runs plus setup leave no minute in ${limit}`,
+      runs + SETUP_MINUTES <= limit - SPARE_MINUTES,
+      `${runs} minutes of runs plus ${SETUP_MINUTES} of setup leave under ${SPARE_MINUTES} spare in ${limit}`,
     );
     for (const name of ['expected tests', 'e2e failures', 'e2e report']) {
       assert.doesNotMatch(step(name).block, /timeout-minutes/, name);
