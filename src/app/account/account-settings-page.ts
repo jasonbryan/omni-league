@@ -2,9 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideLogOut } from '@ng-icons/lucide';
-import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
-import { injectQuery, skipToken } from '../core/data/convex';
+import { api, injectQuery, skipToken } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { Shell } from '../shell';
 import { initialsOf } from '../shell/initials';

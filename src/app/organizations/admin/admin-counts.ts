@@ -1,8 +1,7 @@
 import { computed, inject } from '@angular/core';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { AuthService } from '../../core/auth/auth.service';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 
 function leagueCount(
   published: number | undefined,

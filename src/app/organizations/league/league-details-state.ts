@@ -1,7 +1,6 @@
 import { computed, linkedSignal, signal, type Signal, type WritableSignal } from '@angular/core';
 import { form, required, type FieldTree } from '@angular/forms/signals';
 import type { FunctionArgs } from 'convex/server';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import type { AgeGroup, Gender, StandardLevel } from '../../../../convex/lib/divisions';
 import {
@@ -13,7 +12,7 @@ import {
   type LeagueField,
 } from '../../../../convex/lib/leagueInput';
 import type { Sport } from '../../../../convex/lib/sports';
-import { ConvexOfflineError } from '../../core/data/convex';
+import { api, ConvexOfflineError } from '../../core/data/convex';
 import { ShownUntilValid, changedSince } from '../../core/forms/shown-errors';
 import type { AlertTexts } from '../admin/alert-text';
 import { ConvexError } from 'convex/values';

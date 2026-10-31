@@ -8,6 +8,7 @@ import { expect, test } from './support/fixtures';
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { organizationHeaderSavedKey } from './support/saved-copies';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 import {
   dateFromToday,
@@ -379,7 +380,7 @@ test.describe('organization page in the browser', () => {
     VIEWPORT_AGNOSTIC,
     async ({ page, consoleGuard }) => {
       const tenant = await smallTenant();
-      const key = `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug: tenant.slug })}`;
+      const key = organizationHeaderSavedKey(tenant.slug);
       const savedAt = Date.now() - 60_000;
       const saved = JSON.stringify({
         v: {

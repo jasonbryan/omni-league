@@ -1,5 +1,6 @@
-import { getFunctionName, type FunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
 import { convexToJson, type Value } from 'convex/values';
+import { getFunctionName } from '../api';
 import { OFFLINE_SAVED_QUERIES } from '../offline-saved-queries';
 import { savedCopyKey } from '../saved-copies';
 

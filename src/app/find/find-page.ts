@@ -10,9 +10,8 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
-import { api } from '../../../convex/_generated/api';
 import { parseSearchQuery } from '../../../convex/lib/searchQuery';
-import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
+import { api, injectOnline, injectQuery, skipToken } from '../core/data/convex';
 import { parseListPage } from '../core/list-page';
 import { injectNow } from '../core/now';
 import { bindPageMeta } from '../core/page-meta';

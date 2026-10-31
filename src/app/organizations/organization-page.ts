@@ -10,7 +10,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
-import { api } from '../../../convex/_generated/api';
 import {
   filtersInScope,
   formatAndLevelSport,
@@ -18,7 +17,7 @@ import {
 } from '../../../convex/lib/leagueFilters';
 import { sportFromSegment } from '../../../convex/lib/sports';
 import { AuthService } from '../core/auth/auth.service';
-import { injectOnline, injectQuery, skipToken } from '../core/data/convex';
+import { api, injectOnline, injectQuery, skipToken } from '../core/data/convex';
 import { parseListPage } from '../core/list-page';
 import { injectNow } from '../core/now';
 import { bindPageMeta } from '../core/page-meta';

@@ -11,9 +11,8 @@ import {
   lucideSettings,
   lucideTrophy,
 } from '@ng-icons/lucide';
-import { api } from '../../../convex/_generated/api';
 import { AuthService } from '../core/auth/auth.service';
-import { injectQuery, skipToken } from '../core/data/convex';
+import { api, injectQuery, skipToken } from '../core/data/convex';
 import { adminPath } from '../organizations/admin/admin-path';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
 

@@ -1,6 +1,7 @@
 import { DOCUMENT, Injectable, inject } from '@angular/core';
-import { getFunctionName, type FunctionReference } from 'convex/server';
+import type { FunctionReference } from 'convex/server';
 import { convexToJson, jsonToConvex, type JSONValue, type Value } from 'convex/values';
+import { getFunctionName } from './api';
 import { matchesValidator } from './matches-validator';
 import { OFFLINE_SAVED_QUERIES, type OfflineSavedQuery } from './offline-saved-queries';
 
