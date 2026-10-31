@@ -26,7 +26,8 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import { AdminContext, bindAdminTitle } from './admin-context';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from './field-classes';
-import { STICKY_FOOTER, STICKY_FOOTER_CLEARANCE } from './sticky-footer';
+import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
+import { StickyFooterFocus } from './sticky-footer-focus';
 
 type Notice =
   | { kind: 'saved'; previous: string | null }
@@ -50,7 +51,16 @@ function cityStateRefusal(failure: unknown): string | null {
  */
 @Component({
   selector: 'app-admin-details',
-  imports: [AdminAlert, AdminLogo, AdminOfflineAlert, FormField, NgIcon, NgTemplateOutlet],
+  imports: [
+    AdminAlert,
+    AdminLogo,
+    AdminOfflineAlert,
+    FormField,
+    NgIcon,
+    NgTemplateOutlet,
+    StickyFooter,
+    StickyFooterFocus,
+  ],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucideUndo2 })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
@@ -77,6 +87,7 @@ function cityStateRefusal(failure: unknown): string | null {
           <h2 id="details-heading" class="font-semibold">Organization details</h2>
         </div>
         <form
+          appStickyFooterFocus
           novalidate
           aria-labelledby="details-heading"
           class="px-4 py-4 md:px-5 md:py-5"
@@ -202,7 +213,7 @@ function cityStateRefusal(failure: unknown): string | null {
               }
             </div>
           </div>
-          <div data-slot="form-footer" [class]="footerClass">
+          <div appStickyFooter>
             <button
               type="submit"
               data-slot="button"
@@ -273,7 +284,6 @@ export class AdminDetails {
   protected readonly inputClass = INPUT;
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
-  protected readonly footerClass = STICKY_FOOTER;
   protected readonly saveClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly undoClass = `${OUTLINE_BUTTON} pointer-coarse:min-h-11 pointer-coarse:px-4`;
 

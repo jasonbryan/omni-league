@@ -2,7 +2,9 @@ import { ConvexError, type Value } from 'convex/values';
 import { LEAGUE_MESSAGES } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
+import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
 import { openAdmin, text } from '../admin/testing/admin-harness';
+import { expectStickyFooterWithFocusFix } from '../admin/testing/sticky-footer-check';
 import {
   COED,
   COED_AS_ORGANIZER,
@@ -180,6 +182,29 @@ describe('LeagueDetailsForm', () => {
     it('shows the division label under the league’s name', async () => {
       await open();
       expect(text(page.querySelector('[data-slot="league-division"]'))).toBe('Coed · 4v4 · BB');
+    });
+  });
+
+  describe('the sticky footer', () => {
+    it('holds Save in the shared sticky footer, after the save status', async () => {
+      await open();
+      const footer = save().parentElement!;
+      expect(footer.getAttribute('data-slot')).toBe('form-footer');
+      expect(footer.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
+      expect(footer.previousElementSibling).toBe(status());
+    });
+
+    it('keeps its fields clear of the footer when they take focus (WCAG 2.4.11)', async () => {
+      await open();
+      const group = form().querySelector('[data-slot="field-group"]')!;
+      expect(group.className.split(' ')).toEqual(
+        expect.arrayContaining(STICKY_FOOTER_CLEARANCE.split(' ')),
+      );
+    });
+
+    it('brings a focused field, Undo, or the status it focuses back above the footer (WCAG 2.4.11)', async () => {
+      await open();
+      expectStickyFooterWithFocusFix(o.harness.fixture.debugElement, form());
     });
   });
 
