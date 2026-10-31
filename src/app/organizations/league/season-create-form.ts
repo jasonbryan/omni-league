@@ -14,11 +14,10 @@ import {
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
-import { injectMutation, injectOnline } from '../../core/data/convex';
+import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { PRIMARY_BUTTON } from '../admin/button-classes';

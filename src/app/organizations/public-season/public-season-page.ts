@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
-import { api } from '../../../../convex/_generated/api';
-import { injectOnline, injectQuery } from '../../core/data/convex';
+import { api, injectOnline, injectQuery } from '../../core/data/convex';
 import { injectNow } from '../../core/now';
 import { bindPageMeta } from '../../core/page-meta';
 import { NotFoundView } from '../../not-found/not-found-view';

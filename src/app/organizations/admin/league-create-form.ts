@@ -20,10 +20,9 @@ import {
   lucidePlus,
   lucideSparkles,
 } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
-import { injectMutation, injectOnline } from '../../core/data/convex';
+import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { Checkbox } from '../../ui/checkbox';
 import { leaguePath } from '../league/league-path';
 import { AdminAlert } from './admin-alert';

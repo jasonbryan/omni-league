@@ -14,7 +14,6 @@ import {
 import { ConvexError } from 'convex/values';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import {
   checkCustomLevelName,
@@ -25,6 +24,7 @@ import {
 import { levelLabel, levelsOfSport, type StandardLevel } from '../../../../convex/lib/divisions';
 import { SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
 import {
+  api,
   ConvexOfflineError,
   injectMutation,
   injectOfflineTitle,

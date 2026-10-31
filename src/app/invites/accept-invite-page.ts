@@ -24,11 +24,11 @@ import {
   lucideMailOpen,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
-import { api } from '../../../convex/_generated/api';
 import type { AcceptRefusal } from '../../../convex/invites';
 import type { Role } from '../../../convex/lib/roles';
 import { AuthService } from '../core/auth/auth.service';
 import {
+  api,
   ConvexOfflineError,
   injectMutation,
   injectOnline,

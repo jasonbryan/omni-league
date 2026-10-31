@@ -4,10 +4,9 @@ import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import type { FunctionReturnType } from 'convex/server';
 import { map } from 'rxjs';
-import { api } from '../../../../convex/_generated/api';
 import { isForbidden } from '../../../../convex/lib/forbidden';
 import { AuthService } from '../../core/auth/auth.service';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 
 export type AdminOrganization = NonNullable<
   FunctionReturnType<typeof api.organizations.getAdminContext>

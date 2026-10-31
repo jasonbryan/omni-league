@@ -7,6 +7,7 @@
 - **Amended:** 2026-10-08, wording only: hydration seed timing (first read of the args, not creation). See "Amendment: seed timing (2026-10-08)" at the end.
 - **Amended:** 2026-10-09, `provideConvexAuth` also accepts an injectable class (#62, PR #102). See "Amendment: injectable auth source (2026-10-09)" at the end.
 - **Amended:** 2026-10-13, by #269: `ngSkipHydration` takes a one-line why comment, with no issue link. See "Amendment: code comments (#269)" at the end. Where the sections above say the comment links an issue, the amendment applies.
+- **Amended:** 2026-10-31, by #419: app code takes `api` and `getFunctionName` from the adapter, and imports `convex/server` and `convex/_generated/api` by type only. See "Amendment: Convex server code out of the browser bundle (#419, 2026-10-31)" at the end.
 
 ## Context
 
@@ -266,7 +267,7 @@ The variable name `CONVEX_URL` is the one Convex infers for this project today. 
 
 ### Location and public surface
 
-The adapter lives in `src/app/core/data/convex/`. Code outside the folder imports only from `src/app/core/data/convex/index.ts`. Only this folder imports `convex/browser` (both `ConvexClient` and `ConvexHttpClient`), as ADR 0002's rule enforces. Types from `convex/server` (`FunctionReference`, `FunctionArgs`, `FunctionReturnType`, `getFunctionName`) and `convex/values` (`ConvexError`, `convexToJson`, `jsonToConvex`) may be used anywhere.
+The adapter lives in `src/app/core/data/convex/`. Code outside the folder imports only from `src/app/core/data/convex/index.ts`. Only this folder imports `convex/browser` (both `ConvexClient` and `ConvexHttpClient`), as ADR 0002's rule enforces. Types from `convex/server` (`FunctionReference`, `FunctionArgs`, `FunctionReturnType`) and `convex/values` (`ConvexError`, `convexToJson`, `jsonToConvex`) may be used anywhere. Outside specs, `convex/server` and `convex/_generated/api` are imported only with `import type`; function references and their names come from the adapter's `api` and `getFunctionName` (see "Amendment: Convex server code out of the browser bundle (#419, 2026-10-31)").
 
 ```ts
 // src/app/core/data/convex/index.ts
@@ -539,3 +540,14 @@ The owner set one rule for code comments: [AGENTS.md, Code comments](../../AGENT
 | Browser-only widgets and `ngSkipHydration` (SSR-safe code rule) | "only with a code comment and an issue link" | Only with a one-line code comment giving the why. The tracking issue stays open, and the PR that adds `ngSkipHydration` links it |
 
 **Why.** The comment says why the widget cannot hydrate, which the code cannot express. The PR carries the issue link.
+
+## Amendment: Convex server code out of the browser bundle (#419, 2026-10-31)
+
+A usage rule for packages already accepted; no technology changes.
+
+| Rule in this ADR                      | Was                                                                   | Now                                                                                                                                                                                      |
+| ------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `convex/server` in app code           | Types and `getFunctionName` from `convex/server` may be used anywhere | Outside specs, `convex/server` is imported only with `import type`. `getFunctionName` comes from the adapter (`src/app/core/data/convex/index.ts`)                                       |
+| Function references (`api.module.fn`) | `api` from `convex/_generated/api`                                    | `api` from the adapter, a proxy typed from `convex/_generated/api.d.ts`. Outside specs, `convex/_generated/api` is imported only with `import type`. `convex/_generated/` stays unedited |
+
+**Why.** `convex/_generated/api.js` imports `anyApi` and `componentsGeneric` from `convex/server`, whose index keeps `schema.js` (its top-level `defineSchema(...)` call) in the bundle. Any runtime import of either module put about 4.5 kB of server code in the browser's initial bundle, which had about 0.2 kB of room under its 500 kB budget. `convex/browser` exports only the clients, so no browser-safe entry point exists. `no-restricted-imports` (with `allowTypeImports`) enforces the rule in `src/`; specs may import `convex/server` to compare the adapter's helpers with it (`api.spec.ts`).

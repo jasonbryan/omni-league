@@ -20,10 +20,9 @@ import {
   BrnAlertDialogTitle,
 } from '@spartan-ng/brain/alert-dialog';
 import { BrnDialogService } from '@spartan-ng/brain/dialog';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
-import { ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import {
   ALERT_DIALOG_CONTENT,
   ALERT_DIALOG_DESCRIPTION,

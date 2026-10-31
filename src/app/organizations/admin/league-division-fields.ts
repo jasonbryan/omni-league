@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucidePlus } from '@ng-icons/lucide';
-import { api } from '../../../../convex/_generated/api';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import {
   AGE_GROUPS,
@@ -27,7 +26,7 @@ import {
   type StandardLevel,
 } from '../../../../convex/lib/divisions';
 import { ROSTER_SIZE_INPUT_MAX, SPORT_NAMES, type Sport } from '../../../../convex/lib/sports';
-import { injectQuery, skipToken } from '../../core/data/convex';
+import { api, injectQuery, skipToken } from '../../core/data/convex';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
 import { CustomLevelPanel, type AddedCustomLevel } from './custom-level-panel';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';

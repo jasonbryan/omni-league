@@ -24,10 +24,10 @@ import {
   lucideUndo2,
 } from '@ng-icons/lucide';
 import type { FunctionReturnType } from 'convex/server';
-import { api } from '../../../../convex/_generated/api';
 import { filledFromNameMessage } from '../admin/league-division';
 import { inputErrorOf } from '../admin/league-form';
 import {
+  api,
   ConvexOfflineError,
   injectMutation,
   injectOfflineCause,
