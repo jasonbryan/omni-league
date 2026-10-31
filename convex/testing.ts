@@ -13,6 +13,7 @@ import { normaliseInviteEmail } from './lib/inviteInput';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
+import { addRosterEntry, insertTeam, removeRosterEntry } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { playersPerSideOfSport } from './lib/divisions';
 import type { Sport } from './lib/sports';
@@ -389,6 +390,76 @@ function withPlayersPerSide<S extends { playersPerSide?: number | undefined }>(
       season.playersPerSide ?? league.playersPerSide ?? smallestPlayersPerSide(league.sport),
   };
 }
+
+// Through the roster writer, so a seeded team keeps the counters and the one-team rule. Skips the registration window.
+export const seedTeam = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    leagueSlug: v.string(),
+    seasonSlug: v.string(),
+    name: v.string(),
+    captainEmail: v.string(),
+  },
+  returns: v.object({ teamId: v.id('teams') }),
+  handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, name, captainEmail }) => {
+    assertTestDeployment();
+    const organization = await organizationBySlug(ctx, organizationSlug);
+    const league = await ctx.db
+      .query('leagues')
+      .withIndex('by_organizationId_and_slug', (q) =>
+        q.eq('organizationId', organization._id).eq('slug', leagueSlug),
+      )
+      .unique();
+    const season = league
+      ? await ctx.db
+          .query('seasons')
+          .withIndex('by_leagueId_and_slug', (q) =>
+            q.eq('leagueId', league._id).eq('slug', seasonSlug),
+          )
+          .unique()
+      : null;
+    if (!season) throw new Error(`No season has the slug ${JSON.stringify(seasonSlug)}`);
+    const captain = await userByEmail(ctx, captainEmail);
+    const teamId = await insertTeam(ctx, season, { name, captainUserId: captain._id });
+    return { teamId };
+  },
+});
+
+export const addToTeam = internalMutation({
+  args: { teamId: v.id('teams'), email: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { teamId, email }) => {
+    assertTestDeployment();
+    const team = await ctx.db.get('teams', teamId);
+    if (!team) throw new Error('No team has this id');
+    const user = await userByEmail(ctx, email);
+    await addRosterEntry(ctx, team, {
+      userId: user._id,
+      source: 'invite',
+      addedByUserId: team.captainUserId,
+    });
+    return null;
+  },
+});
+
+export const removeFromTeam = internalMutation({
+  args: { teamId: v.id('teams'), email: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { teamId, email }) => {
+    assertTestDeployment();
+    const team = await ctx.db.get('teams', teamId);
+    if (!team) throw new Error('No team has this id');
+    const user = await userByEmail(ctx, email);
+    const entries = await ctx.db
+      .query('rosterEntries')
+      .withIndex('by_teamId_and_status', (q) => q.eq('teamId', teamId).eq('status', 'rostered'))
+      .take(200);
+    const entry = entries.find((row) => row.userId === user._id);
+    if (!entry) throw new Error('This user has no rostered entry on the team');
+    await removeRosterEntry(ctx, entry, team.captainUserId);
+    return null;
+  },
+});
 
 async function organizationBySlug(
   ctx: Pick<MutationCtx, 'db'>,

@@ -1,6 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { forbidden } from './forbidden';
+import { rosteredEntryInSeason } from './rosterWrites';
 import { getCurrentUser } from './users';
 
 type Ctx = Pick<QueryCtx | MutationCtx, 'auth' | 'db'>;
@@ -74,6 +75,29 @@ export async function requireLocationAdmin(
 
 function mayOrganizeLeague(membership: Doc<'memberships'>, leagueId: Id<'leagues'>): boolean {
   return membership.role === 'orgAdmin' || membership.leagueIds.includes(leagueId);
+}
+
+export async function organizesLeague(
+  ctx: Ctx,
+  userId: Id<'users'>,
+  league: Doc<'leagues'>,
+): Promise<boolean> {
+  const membership = await membershipOf(ctx, userId, league.organizationId);
+  return membership !== null && mayOrganizeLeague(membership, league._id);
+}
+
+/** For a team's own pages: its rostered players and the league's organizers. Anyone else gets FORBIDDEN. */
+export async function requireTeamMemberOrOrganizer(
+  ctx: Ctx,
+  team: Doc<'teams'>,
+  league: Doc<'leagues'>,
+): Promise<Doc<'users'>> {
+  const user = await getCurrentUser(ctx);
+  if (!user) throw forbidden();
+  const own = await rosteredEntryInSeason(ctx, team.seasonId, user._id);
+  const isMember = own?.teamId === team._id;
+  if (!isMember && !(await organizesLeague(ctx, user._id, league))) throw forbidden();
+  return user;
 }
 
 export async function requireLeagueOrganizerOrForbidden(

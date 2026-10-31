@@ -17,7 +17,15 @@ const EMAILS = {
   admin: `admin@${DOMAIN}`,
   organizer: `organizer@${DOMAIN}`,
   player: `player@${DOMAIN}`,
+  captain: `captain@${DOMAIN}`,
 } as const;
+const FICTIONAL_CAPTAINS = [
+  `maya.chen@${DOMAIN}`,
+  `jordan.reyes@${DOMAIN}`,
+  `priya.patel@${DOMAIN}`,
+] as const;
+/** The four demo accounts and the three fictional captains. */
+const USERS = 7;
 const INVITED = `invited@${DOMAIN}`;
 const PASSWORD = 'throwaway demo passphrase 2026';
 const OTHER_PASSWORD = 'a different throwaway phrase 2026';
@@ -126,7 +134,45 @@ async function appRows(t: T) {
     invites: await ctx.db.query('invites').collect(),
     organizations: await ctx.db.query('organizations').collect(),
     leagues: await ctx.db.query('leagues').collect(),
+    teams: await ctx.db.query('teams').collect(),
+    rosterEntries: await ctx.db.query('rosterEntries').collect(),
   }));
+}
+
+/** Each demo team of the season by name, with its captain's address and its roster entries' addresses. */
+async function demoTeams(t: T) {
+  return t.run(async (ctx) => {
+    const season = (await ctx.db.query('seasons').collect()).find(
+      (row) => row.slug === 'summer-2027' && row.minimumRosterSize === 4,
+    );
+    if (!season) throw new Error('demo season missing');
+    const users = await ctx.db.query('users').collect();
+    const { page } = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: 'user',
+      paginationOpts: { numItems: 200, cursor: null },
+    })) as { page: { _id: string; email: string }[] };
+    const emailOf = (userId: string) => {
+      const authUserId = users.find((user) => user._id === userId)?.authUserId;
+      return page.find((authUser) => authUser._id === authUserId)?.email;
+    };
+    const entries = await ctx.db.query('rosterEntries').collect();
+    const teams = (await ctx.db.query('teams').collect()).filter((t) => t.seasonId === season._id);
+    return {
+      teamCount: (await ctx.db.get('seasons', season._id))?.teamCount,
+      teams: Object.fromEntries(
+        teams.map((team) => [
+          team.name,
+          {
+            captain: emailOf(team.captainUserId),
+            rosterCount: team.rosterCount,
+            roster: entries
+              .filter((entry) => entry.teamId === team._id)
+              .map((entry) => [emailOf(entry.userId), entry.status, entry.source]),
+          },
+        ]),
+      ),
+    };
+  });
 }
 
 async function membershipsOf(t: T, email: string) {
@@ -153,7 +199,7 @@ async function membershipsOf(t: T, email: string) {
   });
 }
 
-const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
+const ALL = (code: string) => ({ admin: code, organizer: code, player: code, captain: code });
 
 // An action's storage write can land in another function's transaction in convex-test: https://github.com/convex/convex-test/pull/151
 async function seedDataWithLogo(t: T) {
@@ -181,11 +227,18 @@ async function logoFiles(t: T) {
 }
 
 const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 6 };
-const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
+const NO_BACKFILL = {
+  organizations: 0,
+  locations: 0,
+  leagues: 0,
+  seasons: 0,
+  leagueDivisions: 0,
+  teamCounts: 0,
+};
 
 describe('seed:demo accounts: a new deployment', () => {
   test(
-    'creates the three accounts, which sign in with the password',
+    'creates the four accounts, which sign in with the password, and the demo teams',
     async () => {
       const t = setup();
       const result = await run(t);
@@ -196,6 +249,7 @@ describe('seed:demo accounts: a new deployment', () => {
         updated: { organizations: 0 },
         memberships: 5,
         invites: 1,
+        teams: 4,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -205,7 +259,7 @@ describe('seed:demo accounts: a new deployment', () => {
       }
       expect((await signIn(t, EMAILS.admin, OTHER_PASSWORD)).status).toBe(401);
       const { users } = await appRows(t);
-      expect(users).toHaveLength(3);
+      expect(users).toHaveLength(USERS);
       for (const user of users) expect(user.adultConfirmedAt).toBeGreaterThan(0);
     },
     SLOW,
@@ -226,6 +280,7 @@ describe('seed:demo accounts: a new deployment', () => {
         { organization: GULF_COAST, role: 'leagueOrganizer', leagues: ['sunday-reverse-coed-4s'] },
       ]);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
+      expect(await membershipsOf(t, EMAILS.captain)).toEqual([]);
       const { memberships, invites, leagues, organizations } = await appRows(t);
       expect(memberships).toHaveLength(5);
       expect(invites).toHaveLength(1);
@@ -375,6 +430,86 @@ describe('seed:demo accounts: a new deployment', () => {
   );
 });
 
+describe('seed:demo accounts: the demo teams', () => {
+  const captainOnly = (email: string) => ({
+    captain: email,
+    rosterCount: 1,
+    roster: [[email, 'rostered', 'captain']],
+  });
+
+  test(
+    'puts four teams in sunday-reverse-coed-4s / summer-2027, Sand Sharks captained by captain@, and player@ on none',
+    async () => {
+      const t = setup();
+      await run(t);
+      expect(await demoTeams(t)).toEqual({
+        teamCount: 4,
+        teams: {
+          'Net Results': captainOnly(FICTIONAL_CAPTAINS[0]),
+          'Block Party': captainOnly(FICTIONAL_CAPTAINS[1]),
+          'Dig Dynasty': captainOnly(FICTIONAL_CAPTAINS[2]),
+          'Sand Sharks': captainOnly(EMAILS.captain),
+        },
+      });
+      const captain = await as(t, EMAILS.captain);
+      const slugs = {
+        orgSlug: GULF_COAST,
+        leagueSlug: 'sunday-reverse-coed-4s',
+        seasonSlug: 'summer-2027',
+      };
+      const registration = await captain.query(api.seasons.getForRegistration, slugs);
+      expect(registration?.team).toMatchObject({ name: 'Sand Sharks', isCaptain: true });
+      const teamId = registration?.team?.teamId ?? '';
+      expect(await captain.query(api.teams.getForMember, { teamId })).toMatchObject({
+        name: 'Sand Sharks',
+        rosterCount: 1,
+        roster: [{ name: 'Demo Captain', isCaptain: true, isViewer: true }],
+      });
+      const player = await as(t, EMAILS.player);
+      expect((await player.query(api.seasons.getForRegistration, slugs))?.team).toBeNull();
+      // Each fictional captain's password was random and discarded.
+      for (const email of FICTIONAL_CAPTAINS) {
+        expect((await signIn(t, email)).status).toBe(401);
+      }
+    },
+    SLOW,
+  );
+
+  test(
+    'adds Sand Sharks on a later run once the captain@ account exists, and nothing after that',
+    async () => {
+      const t = setup();
+      await t.mutation(internal.seed.insertDemoData, {});
+      expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
+      const first = await run(t);
+      expect(first.teams).toBe(4);
+      vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
+      expect((await run(t)).teams).toBe(0);
+      vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
+      expect((await run(t)).teams).toBe(0);
+      expect(Object.keys((await demoTeams(t)).teams)).toHaveLength(4);
+    },
+    SLOW,
+  );
+
+  test(
+    'gives an address someone else holds no team, and seeds the others',
+    async () => {
+      const t = setup();
+      await signUp(t, EMAILS.captain, OTHER_PASSWORD);
+      const result = await run(t);
+      expect(result.accounts.captain).toBe('conflict');
+      expect(result.teams).toBe(3);
+      expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
+        'Block Party',
+        'Dig Dynasty',
+        'Net Results',
+      ]);
+    },
+    SLOW,
+  );
+});
+
 describe('seed:demo accounts: a second run', () => {
   test(
     'returns exists for all, duplicates nothing, makes no breach call and no session',
@@ -400,6 +535,7 @@ describe('seed:demo accounts: a second run', () => {
         updated: { organizations: 0 },
         memberships: 0,
         invites: 0,
+        teams: 0,
         accounts: ALL('exists'),
       });
       expect({
@@ -454,6 +590,7 @@ describe('seed:demo accounts: an address someone else holds', () => {
         admin: 'created',
         organizer: 'conflict',
         player: 'created',
+        captain: 'created',
       });
       expect(await membershipsOf(t, EMAILS.organizer)).toEqual([]);
       expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(4);
@@ -490,13 +627,15 @@ describe('seed:demo accounts: an address someone else holds', () => {
         admin: 'created',
         organizer: 'created',
         player: 'conflict',
+        captain: 'created',
       });
       const players = (await authRows(t, 'user')).filter((u) => u['email'] === EMAILS.player);
       expect(players).toHaveLength(1);
       expect((await authRows(t, 'account')).map((a) => a['userId'])).not.toContain(
         players[0]?.['_id'],
       );
-      expect(await authRows(t, 'session')).toHaveLength(2);
+      // One per sign-up: three demo accounts and the three fictional captains.
+      expect(await authRows(t, 'session')).toHaveLength(6);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
     SLOW,
@@ -520,6 +659,7 @@ describe('seed:demo accounts: the password', () => {
         updated: { organizations: 0 },
         memberships: 0,
         invites: 1,
+        teams: 0,
         accounts: ALL('skipped:unset'),
       });
       expect(await authRows(t, 'user')).toEqual([]);
@@ -587,7 +727,7 @@ describe('seed:demo accounts: the password', () => {
       const t = setup();
       const result = await run(t);
       expect(result.accounts).toEqual(ALL(code));
-      expect(result).toMatchObject({ ...DATA, memberships: 0, invites: 1 });
+      expect(result).toMatchObject({ ...DATA, memberships: 0, invites: 1, teams: 0 });
       expect(await authRows(t, 'user')).toEqual([]);
       expect(await authRows(t, 'account')).toEqual([]);
       expect((await appRows(t)).memberships).toEqual([]);
@@ -624,6 +764,11 @@ describe('seed:demo accounts: the production guard', () => {
         t.mutation(internal.seed.grantDemoMemberships, { authUserId: 'someone', account: 'admin' }),
     ],
     ['findDemoCredential', (t) => t.query(internal.seed.findDemoCredential, { account: 'admin' })],
+    [
+      'findDemoCaptain',
+      (t) => t.query(internal.seed.findDemoCaptain, { email: FICTIONAL_CAPTAINS[0] }),
+    ],
+    ['insertDemoTeams', (t) => t.mutation(internal.seed.insertDemoTeams, { captains: [] })],
   ];
 
   test.each(calls)(
@@ -667,7 +812,7 @@ describe('seed:demo accounts: two runs at once', () => {
       const third = await run(t);
       expect(third.accounts).toEqual(ALL('exists'));
       const rows = await appRows(t);
-      expect(rows.users).toHaveLength(3);
+      expect(rows.users).toHaveLength(USERS);
       expect(rows.memberships).toHaveLength(5);
       expect(rows.invites).toHaveLength(1);
       expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(4);
@@ -854,7 +999,7 @@ describe('seed:demo accounts: three runs at once', () => {
       }
       expect((await run(t)).accounts).toEqual(ALL('exists'));
       const rows = await appRows(t);
-      expect(rows.users).toHaveLength(3);
+      expect(rows.users).toHaveLength(USERS);
       expect(rows.memberships).toHaveLength(5);
       expect(rows.invites).toHaveLength(1);
     },

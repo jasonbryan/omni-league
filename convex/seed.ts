@@ -20,7 +20,13 @@ import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
-import { findLeagueBySlugs } from './lib/seasonLookup';
+import {
+  backfillSeasonTeamCounts,
+  insertTeam,
+  rosteredEntryInSeason,
+  teamWithSortName,
+} from './lib/rosterWrites';
+import { findLeagueBySlugs, findSeasonBySlugs } from './lib/seasonLookup';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import type { Sport } from './lib/sports';
@@ -591,7 +597,11 @@ const resultValidator = v.object({
   customLevels: v.number(),
   leagues: v.number(),
   seasons: v.number(),
-  backfilled: v.object({ ...backfilledValidator.fields, ...divisionBackfilledValidator.fields }),
+  backfilled: v.object({
+    ...backfilledValidator.fields,
+    ...divisionBackfilledValidator.fields,
+    teamCounts: v.number(),
+  }),
   updated: v.object({ organizations: v.number() }),
 });
 
@@ -660,7 +670,11 @@ export const insertDemoData = internalMutation({
       if (existing) inserted.customLevels += await ensureCustomLevels(ctx, existing._id, slug);
     }
     const divisionBackfilled = await backfillDivisionFields(ctx, DEMO_DIVISIONS);
-    const backfilled = { ...(await backfillTenantFields(ctx)), ...divisionBackfilled };
+    const backfilled = {
+      ...(await backfillTenantFields(ctx)),
+      ...divisionBackfilled,
+      teamCounts: await backfillSeasonTeamCounts(ctx),
+    };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
@@ -728,6 +742,7 @@ const accountKeyValidator = v.union(
   v.literal('admin'),
   v.literal('organizer'),
   v.literal('player'),
+  v.literal('captain'),
 );
 
 type AccountKey = Infer<typeof accountKeyValidator>;
@@ -774,7 +789,36 @@ export const DEMO_ACCOUNTS: Readonly<
     ],
   },
   player: { email: `player@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Player', memberships: [] },
+  // Captains Sand Sharks (`DEMO_TEAMS`).
+  captain: { email: `captain@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Captain', memberships: [] },
 };
+
+const ACCOUNT_KEYS = ['admin', 'organizer', 'player', 'captain'] as const;
+
+/** The season the demo teams register in. */
+export const DEMO_TEAM_SEASON = {
+  orgSlug: 'gulf-coast-sport-social',
+  leagueSlug: 'sunday-reverse-coed-4s',
+  seasonSlug: 'summer-2027',
+} as const;
+
+/**
+ * Fictional captains, signed up with a random password that is discarded, so nobody can sign in as
+ * them. An address is the captain's identity, so an entry is never renamed or removed.
+ */
+export const DEMO_CAPTAINS = [
+  { email: `maya.chen@${DEMO_ACCOUNT_DOMAIN}`, name: 'Maya Chen' },
+  { email: `jordan.reyes@${DEMO_ACCOUNT_DOMAIN}`, name: 'Jordan Reyes' },
+  { email: `priya.patel@${DEMO_ACCOUNT_DOMAIN}`, name: 'Priya Patel' },
+] as const;
+
+/** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
+export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
+  { name: 'Net Results', captainEmail: DEMO_CAPTAINS[0].email },
+  { name: 'Block Party', captainEmail: DEMO_CAPTAINS[1].email },
+  { name: 'Dig Dynasty', captainEmail: DEMO_CAPTAINS[2].email },
+  { name: 'Sand Sharks', captainEmail: `captain@${DEMO_ACCOUNT_DOMAIN}` },
+];
 
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
@@ -806,10 +850,12 @@ const demoResultValidator = v.object({
   logos: v.number(),
   memberships: v.number(),
   invites: v.number(),
+  teams: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
     player: accountCodeValidator,
+    captain: accountCodeValidator,
   }),
 });
 
@@ -977,6 +1023,52 @@ export const findDemoCredential = internalQuery({
   },
 });
 
+/** Takes only a fictional captain's address, and answers its auth user id. */
+export const findDemoCaptain = internalQuery({
+  args: { email: v.string() },
+  returns: v.union(v.null(), v.string()),
+  handler: async (ctx, { email }) => {
+    assertPreviewDeployment();
+    if (!DEMO_CAPTAINS.some((captain) => captain.email === email)) {
+      throw new Error('seed:demo looked up an address that is not a fictional demo captain');
+    }
+    return authUserIdByEmail(ctx, email);
+  },
+});
+
+/**
+ * Inserts each demo team whose captain is in `captains` (auth user ids by address) and is on no team
+ * in the season yet, through the roster writer. Returns the teams inserted.
+ */
+export const insertDemoTeams = internalMutation({
+  args: { captains: v.array(v.object({ email: v.string(), authUserId: v.string() })) },
+  returns: v.number(),
+  handler: async (ctx, { captains }) => {
+    assertPreviewDeployment();
+    const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
+    if (!found) return 0;
+    let inserted = 0;
+    for (const team of DEMO_TEAMS) {
+      const authUserId = captains.find(
+        (captain) => captain.email === team.captainEmail,
+      )?.authUserId;
+      if (authUserId === undefined) continue;
+      if (await teamWithSortName(ctx, found.season._id, team.name)) continue;
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+        .unique();
+      if (!user) continue;
+      if (await rosteredEntryInSeason(ctx, found.season._id, user._id)) continue;
+      const season = await ctx.db.get('seasons', found.season._id);
+      if (!season) return inserted;
+      await insertTeam(ctx, season, { name: team.name, captainUserId: user._id });
+      inserted++;
+    }
+    return inserted;
+  },
+});
+
 interface AccountOutcome {
   code: AccountCode;
   authUserId?: string;
@@ -1009,10 +1101,10 @@ function authErrorOf(error: unknown): { code?: string; status?: unknown } | null
  */
 async function signUp(
   auth: ReturnType<typeof createAuth>,
-  key: AccountKey,
+  { email, name }: { email: string; name: string },
   password: string,
+  label: string,
 ): Promise<SignUpOutcome> {
-  const { email, name } = DEMO_ACCOUNTS[key];
   try {
     // The 18+ field is this app's (convex/auth.ts), so Better Auth's body type does not list it.
     const body = { name, email, password, [ADULT_CONFIRMATION_FIELD]: true };
@@ -1034,7 +1126,7 @@ async function signUp(
     }
     const named = code !== undefined && /^[A-Z_]{1,60}$/.test(code) ? ` (${code})` : '';
     // eslint-disable-next-line preserve-caught-error -- the cause is dropped on purpose: only its constant code is named, so no message from Better Auth reaches the build log.
-    throw new Error(`seed:demo could not create the ${key} demo account${named}`);
+    throw new Error(`seed:demo could not create the ${label} demo account${named}`);
   }
 }
 
@@ -1061,7 +1153,7 @@ async function ensureAccount(
   const found = await ctx.runQuery(internal.seed.findDemoCredential, { account: key });
   if (found.status !== 'absent') return verifyExistingAccount(found, password);
 
-  const signedUp = await signUp(auth, key, password);
+  const signedUp = await signUp(auth, DEMO_ACCOUNTS[key], password, key);
   if (signedUp.kind === 'created') return { code: 'created', authUserId: signedUp.authUserId };
   if (signedUp.kind === 'rejected') return { code: signedUp.code };
 
@@ -1071,6 +1163,22 @@ async function ensureAccount(
     throw new Error(`seed:demo could not create the ${key} demo account and found none`);
   }
   return verifyExistingAccount(again, password);
+}
+
+/** Answers the captain's auth user id, or `null` when sign-up refused it this run (a later run tries again). */
+async function ensureFictionalCaptain(
+  ctx: ActionCtx,
+  auth: ReturnType<typeof createAuth>,
+  captain: (typeof DEMO_CAPTAINS)[number],
+): Promise<string | null> {
+  const existing = await ctx.runQuery(internal.seed.findDemoCaptain, { email: captain.email });
+  if (existing !== null) return existing;
+  // Made here and discarded, so the account has no usable password.
+  const signedUp = await signUp(auth, captain, generateInviteToken(), 'fictional captain');
+  if (signedUp.kind === 'created') return signedUp.authUserId;
+  if (signedUp.kind === 'rejected') return null;
+  // Another run took the address between the lookup and the create.
+  return ctx.runQuery(internal.seed.findDemoCaptain, { email: captain.email });
 }
 
 /**
@@ -1095,21 +1203,33 @@ export const demo = internalAction({
       admin: 'skipped:unset',
       organizer: 'skipped:unset',
       player: 'skipped:unset',
+      captain: 'skipped:unset',
     };
     let memberships = 0;
+    let teams = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
-      for (const key of ['admin', 'organizer', 'player'] as const) {
+      const captains: { email: string; authUserId: string }[] = [];
+      for (const key of ACCOUNT_KEYS) {
         const outcome = await ensureAccount(ctx, auth, key, password);
         accounts[key] = outcome.code;
         if (outcome.authUserId !== undefined) {
+          captains.push({ email: DEMO_ACCOUNTS[key].email, authUserId: outcome.authUserId });
           memberships += await ctx.runMutation(internal.seed.grantDemoMemberships, {
             authUserId: outcome.authUserId,
             account: key,
           });
         }
       }
+      // The demo teams are data for the demo accounts to see, so none is seeded while no account exists.
+      if (captains.length > 0) {
+        for (const captain of DEMO_CAPTAINS) {
+          const authUserId = await ensureFictionalCaptain(ctx, auth, captain);
+          if (authUserId !== null) captains.push({ email: captain.email, authUserId });
+        }
+        teams = await ctx.runMutation(internal.seed.insertDemoTeams, { captains });
+      }
     }
-    return { ...data, logos, memberships, invites, accounts };
+    return { ...data, logos, memberships, invites, teams, accounts };
   },
 });

@@ -592,6 +592,7 @@ export async function insertSeason(
     playersPerSide: season.playersPerSide,
     minimumRosterSize: season.minimumRosterSize,
     status,
+    teamCount: 0,
   });
   if (status === 'published') await countPublishedSeason(ctx, league._id);
   return seasonId;
