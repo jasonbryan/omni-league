@@ -632,28 +632,32 @@ test.describe('organization filters in the browser', () => {
       }
     });
 
-    test("the sheet's fieldsets sit 24px apart, as the approved mockup draws them", async ({
-      page,
-      consoleGuard,
-    }) => {
-      const tenant = await filterTenant();
-      await page.goto(tenant.path);
-      await expect.poll(() => consoleGuard.hydrated).toBe(true);
-      await filtersButton(page).click();
-      await expect(sheet(page).getByRole('group')).toHaveCount(4);
-      const gaps = await sheet(page)
-        .getByRole('group')
-        .evaluateAll((fieldsets) =>
-          fieldsets
-            .slice(1)
-            .map((fieldset, i) =>
-              Math.round(
-                fieldset.getBoundingClientRect().top - fieldsets[i].getBoundingClientRect().bottom,
+    for (const width of [320, 360]) {
+      test(`the sheet's fieldsets sit 24px apart at ${String(width)}px, as the approved mockup draws them`, async ({
+        page,
+        consoleGuard,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const tenant = await filterTenant();
+        await page.goto(tenant.path);
+        await expect.poll(() => consoleGuard.hydrated).toBe(true);
+        await filtersButton(page).click();
+        await expect(sheet(page).getByRole('group')).toHaveCount(4);
+        const gaps = await sheet(page)
+          .getByRole('group')
+          .evaluateAll((fieldsets) =>
+            fieldsets
+              .slice(1)
+              .map((fieldset, i) =>
+                Math.round(
+                  fieldset.getBoundingClientRect().top -
+                    fieldsets[i].getBoundingClientRect().bottom,
+                ),
               ),
-            ),
-        );
-      expect(gaps).toEqual([24, 24, 24]);
-    });
+          );
+        expect(gaps).toEqual([24, 24, 24]);
+      });
+    }
   });
 
   test.describe('the desktop popovers', () => {
@@ -768,6 +772,79 @@ test.describe('organization filters in the browser', () => {
       await page.keyboard.press('Shift+Tab');
       const beforeFirst = await focusState();
       expect(adjacent(beforeFirst, 'Level'), JSON.stringify(beforeFirst)).toBe(true);
+    });
+
+    test('pressing Gender while the Level popover is open leaves focus on the first Gender check box once Level has closed', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const level = dimensionButton(page, 'Level');
+      await level.focus();
+      await page.keyboard.press('Enter');
+      await expect(levelPanel(page).getByRole('checkbox').first()).toBeFocused();
+
+      await dimensionButton(page, 'Gender').click();
+      await expect(levelPanel(page)).toHaveCount(0);
+      await expect(level).toHaveAttribute('aria-expanded', 'false');
+      const coed = genderPanel(page).getByRole('checkbox', { name: 'Coed' });
+      await expect(coed).toBeFocused();
+      await genderPanel(page).evaluate((element) =>
+        Promise.all(element.getAnimations({ subtree: true }).map((a) => a.finished)),
+      );
+      await expect(coed).toBeFocused();
+      await expect(dimensionButton(page, 'Gender')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('a click on page text outside the open Level popover closes it with focus back on Level', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const level = dimensionButton(page, 'Level');
+      const outside = {
+        'the Leagues heading': page.getByRole('heading', { name: 'Leagues', exact: true }),
+        'the organization summary': page.getByText('7 leagues at 6 locations'),
+      };
+      for (const [name, target] of Object.entries(outside)) {
+        await level.click();
+        await expect(levelPanel(page)).toBeVisible();
+        await target.click();
+        await expect(levelPanel(page)).toHaveCount(0);
+        await expect(level, `after a click on ${name}`).toBeFocused();
+      }
+    });
+
+    test("Shift+Tab after a click on the open Level popover's legend keeps focus next to Level", async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await dimensionButton(page, 'Level').click();
+      await expect(levelPanel(page)).toBeVisible();
+      await levelPanel(page).locator('legend').click();
+      await page.keyboard.press('Shift+Tab');
+      const state = await page.evaluate(() => {
+        const active = document.activeElement;
+        return {
+          inPopover: !!active?.closest('[data-slot="popover-content"]'),
+          popoverOpen: document.querySelector('[data-slot="popover-content"]') !== null,
+          focused:
+            !active || active === document.body
+              ? 'the page itself'
+              : (active.getAttribute('aria-label') ?? active.textContent ?? '').trim(),
+        };
+      });
+      expect(
+        state.inPopover || (!state.popoverOpen && state.focused === 'Level'),
+        JSON.stringify(state),
+      ).toBe(true);
     });
   });
 
