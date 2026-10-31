@@ -104,5 +104,27 @@ test.describe('Netlify Drawer stub', VIEWPORT_AGNOSTIC, () => {
       expect(await response.text()).toBe('');
       expect(await page.locator('iframe').count()).toBe(0);
     });
+
+    test('by default, the Drawer path gets the empty stub in the test context', async ({
+      page,
+    }) => {
+      await page.goto('/');
+      expect(await fetchFromPage(page, NETLIFY_DRAWER_SCRIPT_PATH)).toEqual({
+        status: 200,
+        body: '',
+      });
+    });
+
+    test.describe('with netlifyDrawerStub: false', () => {
+      // Locally the SSR handler has no such route and answers its 404 page; on Netlify the real script answers.
+      test.use({ netlifyDrawerStub: false, expectedDocumentStatus: 404 });
+
+      test("the Drawer path gets the server's own response, not the empty stub", async ({
+        page,
+      }) => {
+        const response = await page.goto(NETLIFY_DRAWER_SCRIPT_PATH);
+        expect(await response?.text()).not.toBe('');
+      });
+    });
   });
 });

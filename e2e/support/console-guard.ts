@@ -4,11 +4,11 @@ export type ExpectedDocumentStatus = 404;
 
 /**
  * By URL path on any origin: for example a 422 from `/api/auth/sign-up/email` when the email
- * already has an account.
+ * already has an account. A string matches the whole path, a RegExp anywhere in it.
  */
 export interface ExpectedFailedRequest {
   status: number;
-  path: string;
+  path: string | RegExp;
 }
 
 export interface ConsoleGuardOptions {
@@ -105,7 +105,7 @@ export class ConsoleGuard {
       .filter((entry) => !this.usedRequestAllowances.has(entry))
       .map(
         (entry) =>
-          `expectedFailedRequests entry ${entry.status} ${entry.path} was not used: no request ` +
+          `expectedFailedRequests entry ${entry.status} ${String(entry.path)} was not used: no request ` +
           'with that status and path failed; remove the stale entry',
       );
     const unusedWarnings = this.expectedConsoleWarnings
@@ -179,8 +179,11 @@ export class ConsoleGuard {
     } catch {
       return false;
     }
+    // `search` ignores `lastIndex`, so a RegExp with the `g` flag matches the same way every time.
     const entry = this.expectedFailedRequests.find(
-      (e) => String(e.status) === status && e.path === path,
+      (e) =>
+        String(e.status) === status &&
+        (typeof e.path === 'string' ? e.path === path : path.search(e.path) !== -1),
     );
     if (entry === undefined) return false;
     this.usedRequestAllowances.add(entry);
