@@ -7,10 +7,10 @@ import { screenshot } from './support/screenshot';
 import { holdQueries } from './support/hold-queries';
 import { otherUser, signUp } from './support/session';
 import {
-  controlsOf,
+  controlsInTabOrder,
   expectWhollyAboveFooter,
-  focusedPlace,
   PHONE,
+  settleAfterFocusScroll,
   footerTabWalk,
   underTheFooter,
 } from './support/sticky-footer';
@@ -380,7 +380,7 @@ test.describe('League management: league details on a phone', () => {
 
       await expect(details(page).locator('#league-name-error')).toBeVisible();
       await expect(details(page).locator('#details-minimum-roster-size-error')).toBeVisible();
-      expect(controlsOf(seen)).toEqual([
+      expect(controlsInTabOrder(seen)).toEqual([
         'league-name',
         expect.stringMatching(/^details-gender/),
         expect.stringMatching(/^details-format/),
@@ -396,7 +396,6 @@ test.describe('League management: league details on a phone', () => {
 
   const undo = (page: Page) => status(page).getByRole('button', { name: 'Undo' });
 
-  /** Saves a new name, then scrolls as a thumb would until the status sits behind the sticky footer. */
   async function saveWithStatusUnderFooter(page: Page) {
     await page.setViewportSize(PHONE);
     await openDetails(page);
@@ -441,8 +440,7 @@ test.describe('League management: league details on a phone', () => {
   }) => {
     await saveWithStatusUnderFooter(page);
     await undo(page).focus();
-    // Lets the form's own scroll on focus finish, so it does not undo the next one.
-    await focusedPlace(page);
+    await settleAfterFocusScroll(page);
     await statusUnderFooter(page);
 
     await page.keyboard.press('Enter');

@@ -1,13 +1,13 @@
 import { DestroyRef, Directive, ElementRef, afterNextRender, inject } from '@angular/core';
 
-/** Space left between the focused control and the top of the sticky footer. */
 export const GAP_ABOVE_FOOTER_PX = 16;
 
 /**
- * Keeps the focused control of a form above its sticky footer (WCAG 2.4.11), whether the user Tabs to
- * it or the form focuses it. The browser's focus scroll can leave it under the footer: an error under
- * the field just left pushes it down afterwards, an element without `STICKY_FOOTER_CLEARANCE`'s scroll
- * margin scrolls only to the viewport edge, and one behind the footer counts as in view and stays.
+ * The browser's focus scroll can leave the focused control under the footer (WCAG 2.4.11): an error
+ * under the field just left pushes it down afterwards, an element without `STICKY_FOOTER_CLEARANCE`'s
+ * scroll margin scrolls only to the viewport edge, and one behind the footer counts as in view and
+ * stays. The fix scrolls the window, the scroller of every page form, so a footer in a scrolling sheet
+ * or dialog would not be covered.
  */
 @Directive({
   selector: 'form[appStickyFooterFocus]',

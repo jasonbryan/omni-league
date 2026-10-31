@@ -12,13 +12,18 @@ export interface FocusedPlace {
   aboveFooter: boolean;
 }
 
-/** Where the focused control sits once the form has settled, relative to its form's footer. */
-export function focusedPlace(page: Page): Promise<FocusedPlace> {
+export function settleAfterFocusScroll(page: Page): Promise<void> {
   return page.evaluate(async () => {
     // The error for the field just left renders after the focus scroll, so the check waits for it.
     for (let frame = 0; frame < 3; frame++) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
+  });
+}
+
+export async function focusedPlace(page: Page): Promise<FocusedPlace> {
+  await settleAfterFocusScroll(page);
+  return page.evaluate(() => {
     const active = document.activeElement as HTMLElement;
     // A chip's radio is visually hidden: its label is what the user sees.
     const face = active.closest('label') ?? active;
@@ -38,23 +43,19 @@ export function focusedPlace(page: Page): Promise<FocusedPlace> {
   });
 }
 
-/** In the viewport, its bottom at or above the footer's top, and its centre not covered. */
 export async function expectWhollyAboveFooter(page: Page, focused: Locator): Promise<void> {
   await expect(focused).toBeFocused();
   const place = await focusedPlace(page);
   expect(place).toMatchObject({ inViewport: true, unobscured: true, aboveFooter: true });
 }
 
-/**
- * Tabs from the focused control until `until` has focus, recording where each control lands. Asserts
- * first that the form is taller than the viewport, or no control could ever end under the footer.
- */
 export async function footerTabWalk(
   page: Page,
   // A date field takes several Tabs, one per part, so the cap leaves room for them.
   { form, until, maxSteps = 40 }: { form: Locator; until: Locator; maxSteps?: number },
 ): Promise<FocusedPlace[]> {
   const viewport = page.viewportSize()!;
+  // Or no control could ever end under the footer.
   expect((await form.boundingBox())!.height).toBeGreaterThan(viewport.height);
   const tab = tabKey(page);
   const seen: FocusedPlace[] = [];
@@ -66,8 +67,8 @@ export async function footerTabWalk(
   return seen;
 }
 
-/** The controls in Tab order, once each run of steps in one control (a date's parts) is merged. */
-export const controlsOf = (seen: FocusedPlace[]): string[] =>
+// A date field takes one Tab per part.
+export const controlsInTabOrder = (seen: FocusedPlace[]): string[] =>
   seen
     .map((place) => place.control)
     .filter((control, step, controls) => control !== controls[step - 1]);

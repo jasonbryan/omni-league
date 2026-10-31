@@ -8,7 +8,7 @@ import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import {
-  controlsOf,
+  controlsInTabOrder,
   expectWhollyAboveFooter,
   PHONE,
   footerTabWalk,
@@ -366,7 +366,7 @@ test.describe('Leagues: the create form on a phone', () => {
 
     await expect(page.locator('#name-error')).toBeVisible();
     await expect(page.locator('#slug-error')).toBeVisible();
-    expect(controlsOf(seen)).toEqual([
+    expect(controlsInTabOrder(seen)).toEqual([
       'name',
       'slug',
       expect.stringMatching(/^sport/),

@@ -46,8 +46,7 @@ describe('StickyFooterFocus', () => {
     return { top, bottom, left: 0, right: 100, width: 100, height: bottom - top } as DOMRect;
   }
 
-  /** Places an element at a page position, so its viewport rect follows the window's scroll. */
-  function placeAt(element: Element, top: number, bottom: number) {
+  function placeOnPage(element: Element, top: number, bottom: number) {
     element.getBoundingClientRect = () => rect(top - scrollY, bottom - scrollY);
   }
 
@@ -83,7 +82,7 @@ describe('StickyFooterFocus', () => {
     await render();
     expect(FakeResizeObserver.last?.observed).toEqual([element.querySelector('form')]);
     field().focus();
-    placeAt(field(), 552, 596);
+    placeOnPage(field(), 552, 596);
     FakeResizeObserver.last!.callback();
     expect(scrolled).toHaveBeenCalledOnce();
     expect(field().getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
@@ -91,7 +90,7 @@ describe('StickyFooterFocus', () => {
 
   it('brings a focused element with tabindex="-1" from under the footer to wholly above it', async () => {
     await render();
-    placeAt(status(), 590, 630);
+    placeOnPage(status(), 590, 630);
     status().focus();
     FakeResizeObserver.last!.callback();
     expect(status().getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
@@ -105,8 +104,8 @@ describe('StickyFooterFocus', () => {
     radio.type = 'radio';
     label.append(radio);
     field().before(label);
-    placeAt(label, 540, 584);
-    placeAt(radio, 540, 541);
+    placeOnPage(label, 540, 584);
+    placeOnPage(radio, 540, 541);
     radio.focus();
     FakeResizeObserver.last!.callback();
     expect(label.getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
@@ -115,7 +114,7 @@ describe('StickyFooterFocus', () => {
   it('leaves the page alone while the focused control is clear of the footer', async () => {
     await render();
     field().focus();
-    placeAt(field(), 480, 524);
+    placeOnPage(field(), 480, 524);
     FakeResizeObserver.last!.callback();
     expect(scrolled).not.toHaveBeenCalled();
   });
@@ -125,7 +124,7 @@ describe('StickyFooterFocus', () => {
     host.position.set('static');
     await fixture.whenStable();
     field().focus();
-    placeAt(field(), 600, 640);
+    placeOnPage(field(), 600, 640);
     FakeResizeObserver.last!.callback();
     expect(scrolled).not.toHaveBeenCalled();
   });
@@ -146,7 +145,7 @@ describe('StickyFooterFocus', () => {
       frames.push(callback);
       return frames.length;
     });
-    placeAt(field(), 572, 592);
+    placeOnPage(field(), 572, 592);
     field().focus();
     expect(scrolled).not.toHaveBeenCalled();
     frames.forEach((callback) => callback(0));

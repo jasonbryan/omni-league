@@ -10,16 +10,13 @@ const STICKY_FOOTER =
 export const STICKY_FOOTER_CLEARANCE =
   '[&_:is(input,button,select,textarea,a)]:scroll-mb-24 md:[&_:is(input,button,select,textarea,a)]:scroll-mb-0';
 
-/**
- * The footer that holds a form's submit button, stuck to the bottom of the viewport on phones. It
- * requires `appStickyFooterFocus` on its form, so no form can have the footer without the focus fix.
- */
 @Directive({
   selector: '[appStickyFooter]',
   host: { 'data-slot': 'form-footer', class: STICKY_FOOTER },
 })
 export class StickyFooter {
   constructor() {
+    // So no form can have the footer without the focus fix.
     inject(StickyFooterFocus);
   }
 }

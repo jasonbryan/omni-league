@@ -6,7 +6,7 @@ import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
-import { controlsOf, PHONE, footerTabWalk, underTheFooter } from './support/sticky-footer';
+import { controlsInTabOrder, PHONE, footerTabWalk, underTheFooter } from './support/sticky-footer';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -549,7 +549,7 @@ test.describe('League management: the create-season form on a phone', () => {
       await page.locator('#name').focus();
       const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
 
-      expect(controlsOf(seen)).toEqual([
+      expect(controlsInTabOrder(seen)).toEqual([
         'name',
         'slug',
         'start-date',
