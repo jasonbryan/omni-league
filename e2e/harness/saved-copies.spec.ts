@@ -56,11 +56,11 @@ test.describe('expectSavedCopies', VIEWPORT_AGNOSTIC, () => {
     const leaguesKey = keys.find((key) =>
       key.startsWith('cvx-saved:organizations:listPublicLeagues:'),
     );
+    expect(leaguesKey).toBeDefined();
     const failure = await expectSavedCopies(page, keys, { timeout: 1_000 }).then(
       () => undefined,
       (error: unknown) => error,
     );
-    expect(leaguesKey).toBeDefined();
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain(leaguesKey);
 

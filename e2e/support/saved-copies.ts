@@ -1,30 +1,20 @@
 import { expect, type Page } from '@playwright/test';
-
-type SavedCopyArgs = Record<string, string | number>;
-
-/** Matches `savedCopyKey` in `src/app/core/data/convex/saved-copies.ts`, which imports Angular and so cannot load here. */
-function savedCopyKey(functionName: string, args: SavedCopyArgs): string {
-  const sorted = Object.fromEntries(
-    Object.keys(args)
-      .sort()
-      .map((key) => [key, args[key]]),
-  );
-  return `cvx-saved:${functionName}:${JSON.stringify(sorted)}`;
-}
+import { api } from '../../convex/_generated/api';
+import { savedCopyKey } from '../../src/app/core/data/convex/saved-copies';
 
 /** The header query takes no `sport`, so every view of one organization shares this key. */
 export function organizationHeaderSavedKey(slug: string): string {
-  return savedCopyKey('organizations:getPublicPage', { slug });
+  return savedCopyKey(api.organizations.getPublicPage, { slug });
 }
 
 /** The page opens offline only when these four are saved; without the facets copy it opens with no filters (`organization-page.ts`). */
 export function organizationPageSavedKeys(slug: string, sport?: string): string[] {
-  const sportArg: SavedCopyArgs = sport === undefined ? {} : { sport };
+  const sportArg = sport === undefined ? {} : { sport };
   return [
     organizationHeaderSavedKey(slug),
-    savedCopyKey('organizations:listPublicLeagues', { slug, page: 1, ...sportArg }),
-    savedCopyKey('organizations:listPublicLocations', { slug, page: 1, ...sportArg }),
-    savedCopyKey('seasons:listOpenForOrganization', { orgSlug: slug, ...sportArg }),
+    savedCopyKey(api.organizations.listPublicLeagues, { slug, page: 1, ...sportArg }),
+    savedCopyKey(api.organizations.listPublicLocations, { slug, page: 1, ...sportArg }),
+    savedCopyKey(api.seasons.listOpenForOrganization, { orgSlug: slug, ...sportArg }),
   ];
 }
 
