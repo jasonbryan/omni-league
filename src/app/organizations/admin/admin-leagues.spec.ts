@@ -366,6 +366,26 @@ describe('AdminLeagues', () => {
           });
         }
 
+        for (const key of [
+          ' ',
+          'PageUp',
+          'Home',
+          'End',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+        ]) {
+          it(`the scroll key "${key}" cancels the jump`, async () => {
+            await open([], null);
+            await press();
+            section().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+            await locationsArrive();
+            expect(document.activeElement).toBe(section());
+            expect(scrolled).toEqual([section()]);
+          });
+        }
+
         it('a key that does not scroll keeps the jump', async () => {
           await open([], null);
           await press();
@@ -406,6 +426,20 @@ describe('AdminLeagues', () => {
           window.dispatchEvent(new Event('online'));
           await locationsArrive();
           expect(document.activeElement).toBe(input('name'));
+        });
+
+        it('offline, a user scroll before reconnect cancels the jump: the form’s arrival moves neither focus nor scroll', async () => {
+          await open([], null);
+          await press();
+          const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+          window.dispatchEvent(new Event('offline'));
+          await o.flush();
+          page.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+          onLine.mockReturnValue(true);
+          window.dispatchEvent(new Event('online'));
+          await locationsArrive();
+          expect(document.activeElement).toBe(section());
+          expect(scrolled).toEqual([section()]);
         });
 
         it('pressed again, the jump still ends on Name', async () => {
