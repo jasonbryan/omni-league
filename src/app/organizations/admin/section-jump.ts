@@ -1,28 +1,12 @@
 import { DOCUMENT } from '@angular/common';
 import { DestroyRef, Injector, afterEveryRender, inject } from '@angular/core';
-
-const SCROLL_KEYS = new Set([
-  ' ',
-  'PageUp',
-  'PageDown',
-  'Home',
-  'End',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-]);
-const CONTROL = 'a[href], button, input, select, textarea, label, summary';
+import { onLaterChoiceOrScroll } from './later-choice';
 
 export interface SectionJump {
-  /** Scrolls to the section and focuses its target, or the section (`tabindex="-1"`) until the target renders. */
+  /** The section needs `tabindex="-1"`: it holds focus until its target renders. */
   jump(section: HTMLElement): void;
 }
 
-/**
- * A target that renders after the press takes focus then, unless the user has pressed, focused, or
- * scrolled since.
- */
 export function injectSectionJump(
   targetIn: (section: HTMLElement) => HTMLElement | null,
 ): SectionJump {
@@ -51,41 +35,7 @@ export function injectSectionJump(
       cancelPending = null;
     };
     cancelPending = cancel;
-
-    const options = { capture: true, passive: true, signal: listening.signal };
-    document.addEventListener(
-      'focusin',
-      (event) => {
-        if (event.target !== section) cancel();
-      },
-      options,
-    );
-    // Focus that leaves for nothing has left the page: Shift+Tab out of it fires no focusin in WebKit.
-    document.addEventListener(
-      'focusout',
-      (event) => {
-        if (event.relatedTarget === null) cancel();
-      },
-      options,
-    );
-    // A click counts as well as focus, because a click or tap does not focus a link in WebKit.
-    document.addEventListener(
-      'click',
-      (event) => {
-        if (event.target instanceof Element && event.target.closest(CONTROL)) cancel();
-      },
-      options,
-    );
-    // The jump's own scrolling fires only `scroll`, which is not listened to.
-    document.addEventListener(
-      'keydown',
-      (event) => {
-        if (SCROLL_KEYS.has(event.key)) cancel();
-      },
-      options,
-    );
-    document.addEventListener('wheel', cancel, options);
-    document.addEventListener('touchmove', cancel, options);
+    onLaterChoiceOrScroll(document, { exclude: [section], signal: listening.signal }, cancel);
   }
 
   return {

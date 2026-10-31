@@ -394,9 +394,7 @@ export class AdminLeagues {
       earlyRead: () => {
         if (!this.locationsLoading()) this.createSection()?.nativeElement.getBoundingClientRect();
       },
-      write: () => {
-        if (!this.locationsLoading()) this.skeletonShown.set(false);
-      },
+      write: () => this.skeletonShown.set(this.locationsLoading()),
     });
   }
 

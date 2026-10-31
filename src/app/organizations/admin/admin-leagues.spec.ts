@@ -283,15 +283,13 @@ describe('AdminLeagues', () => {
       const goToLocations = () => section().querySelector<HTMLAnchorElement>('a[href]')!;
       const locationsAlert = () => section().querySelector<HTMLElement>('[data-slot="alert"]')!;
 
-      /** A press in Chromium: the link takes focus, then the click. */
-      async function press() {
+      async function pressAsChromium() {
         jumpLink().focus();
         jumpLink().click();
         await o.flush();
       }
 
-      /** A tap in WebKit: the click, with no focus on the link. */
-      async function tap() {
+      async function tapAsWebKit() {
         jumpLink().click();
         await o.flush();
       }
@@ -306,7 +304,7 @@ describe('AdminLeagues', () => {
           await open([], null);
           expect(section().getAttribute('tabindex')).toBe('-1');
           expect(tokens(section().className)).toContain('focus:outline-none');
-          await press();
+          await pressAsChromium();
           expect(scrolled).toEqual([section()]);
           expect(document.activeElement).toBe(section());
           await locationsArrive();
@@ -316,7 +314,7 @@ describe('AdminLeagues', () => {
 
         it('a tap that leaves the link unfocused (WebKit) still ends on Name', async () => {
           await open([], null);
-          await tap();
+          await tapAsWebKit();
           expect(document.activeElement).toBe(section());
           await locationsArrive();
           expect(document.activeElement).toBe(input('name'));
@@ -324,7 +322,7 @@ describe('AdminLeagues', () => {
 
         it('a later focus elsewhere cancels the jump: the form’s arrival moves no focus', async () => {
           await open(LEAGUES, null);
-          await press();
+          await pressAsChromium();
           const leagueLink = items()[0].querySelector<HTMLAnchorElement>('h3 a')!;
           leagueLink.focus();
           await locationsArrive();
@@ -332,22 +330,34 @@ describe('AdminLeagues', () => {
           expect(scrolled).toEqual([section()]);
         });
 
-        it('focus leaving the page (Shift+Tab out, which fires no focusin in WebKit) cancels the jump', async () => {
+        for (const shiftKey of [false, true]) {
+          it(`a ${shiftKey ? 'Shift+Tab' : 'Tab'} keydown cancels the jump, as Shift+Tab out of the page fires no focusin in WebKit`, async () => {
+            await open([], null);
+            await pressAsChromium();
+            section().dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true }),
+            );
+            await locationsArrive();
+            expect(document.activeElement).toBe(section());
+            expect(scrolled).toEqual([section()]);
+          });
+        }
+
+        it('the window losing focus (a focusout to nothing, with no key) keeps the jump', async () => {
           await open([], null);
-          await press();
+          await pressAsChromium();
           section().dispatchEvent(
             new FocusEvent('focusout', { bubbles: true, relatedTarget: null }),
           );
           await locationsArrive();
-          expect(document.activeElement).toBe(section());
-          expect(scrolled).toEqual([section()]);
+          expect(document.activeElement).toBe(input('name'));
         });
 
         it('a later press on a link that takes no focus cancels the jump', async () => {
           await open(LEAGUES, null);
           const router = TestBed.inject(Router);
           const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
-          await press();
+          await pressAsChromium();
           items()[0].querySelector<HTMLAnchorElement>('h3 a')!.click();
           await o.flush();
           expect(navigate).toHaveBeenCalledTimes(1);
@@ -369,7 +379,7 @@ describe('AdminLeagues', () => {
         ] as const) {
           it(`a user scroll by ${name} cancels the jump: the form’s arrival moves neither focus nor scroll`, async () => {
             await open([], null);
-            await press();
+            await pressAsChromium();
             scroll();
             await locationsArrive();
             expect(document.activeElement).toBe(section());
@@ -389,7 +399,7 @@ describe('AdminLeagues', () => {
         ]) {
           it(`the scroll key "${key}" cancels the jump`, async () => {
             await open([], null);
-            await press();
+            await pressAsChromium();
             section().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
             await locationsArrive();
             expect(document.activeElement).toBe(section());
@@ -399,7 +409,7 @@ describe('AdminLeagues', () => {
 
         it('a key that does not scroll keeps the jump', async () => {
           await open([], null);
-          await press();
+          await pressAsChromium();
           section().dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
           await locationsArrive();
           expect(document.activeElement).toBe(input('name'));
@@ -407,7 +417,7 @@ describe('AdminLeagues', () => {
 
         it('no locations arriving focuses "Go to Locations"', async () => {
           await open([], null);
-          await press();
+          await pressAsChromium();
           await locationsArrive([]);
           expect(text(goToLocations())).toBe('Go to Locations');
           expect(document.activeElement).toBe(goToLocations());
@@ -415,7 +425,7 @@ describe('AdminLeagues', () => {
 
         it('a failed query focuses the alert', async () => {
           await open([], null);
-          await press();
+          await pressAsChromium();
           o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
           await o.flush();
           expect(text(locationsAlert())).toBe(
@@ -426,7 +436,7 @@ describe('AdminLeagues', () => {
 
         it('offline, the status and skeleton stay and nothing moves focus; on reconnect the form’s arrival focuses Name', async () => {
           await open([], null);
-          await press();
+          await pressAsChromium();
           const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
           window.dispatchEvent(new Event('offline'));
           await o.flush();
@@ -441,7 +451,7 @@ describe('AdminLeagues', () => {
 
         it('offline, a user scroll before reconnect cancels the jump: the form’s arrival moves neither focus nor scroll', async () => {
           await open([], null);
-          await press();
+          await pressAsChromium();
           const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
           window.dispatchEvent(new Event('offline'));
           await o.flush();
@@ -455,8 +465,8 @@ describe('AdminLeagues', () => {
 
         it('pressed again, the jump still ends on Name', async () => {
           await open([], null);
-          await press();
-          await press();
+          await pressAsChromium();
+          await pressAsChromium();
           await locationsArrive();
           expect(document.activeElement).toBe(input('name'));
         });
@@ -465,7 +475,7 @@ describe('AdminLeagues', () => {
       describe('pressed once the locations are in', () => {
         it('none: scrolls to the section and focuses "Go to Locations"', async () => {
           await open([], []);
-          await press();
+          await pressAsChromium();
           expect(scrolled).toEqual([section()]);
           expect(document.activeElement).toBe(goToLocations());
         });
@@ -474,7 +484,7 @@ describe('AdminLeagues', () => {
           await open([], null);
           o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
           await o.flush();
-          await press();
+          await pressAsChromium();
           expect(scrolled).toEqual([section()]);
           expect(document.activeElement).toBe(locationsAlert());
         });
