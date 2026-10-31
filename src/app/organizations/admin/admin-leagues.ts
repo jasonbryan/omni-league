@@ -267,12 +267,12 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
               class="px-4 py-4 md:px-5 md:py-5"
             >
               <div class="mb-5 flex h-5 items-center">
-                <div class="${PULSE} h-3.5 w-72 max-w-full"></div>
+                <div class="${PULSE} h-3.5 w-64 max-w-full"></div>
               </div>
               <div class="flex flex-col gap-5">
                 @for (field of skeletonFields; track field) {
                   <div class="flex flex-col gap-2">
-                    <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-12"></div></div>
+                    <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-16"></div></div>
                     <div
                       data-slot="skeleton-input"
                       class="${PULSE} h-9 w-full rounded-lg pointer-coarse:h-11"
@@ -287,7 +287,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                 }
                 <div>
                   <div class="mb-1.5 flex h-5 items-center">
-                    <div class="${PULSE} h-3.5 w-12"></div>
+                    <div class="${PULSE} h-3.5 w-16"></div>
                   </div>
                   <div class="flex flex-wrap gap-2">
                     @for (chip of skeletonChips; track chip) {
