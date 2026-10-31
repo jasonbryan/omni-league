@@ -23,7 +23,7 @@ const REACT_PATHS = ['react', 'react-dom', '@convex-dev/better-auth/react'].map(
 const REACT_PATTERNS = [{ group: ['react/*', 'react-dom/*'], message: REACT_MESSAGE }];
 
 // A runtime import of either puts Convex's server code (its schema builder) in the browser bundle.
-// Specs may import them: they compare the adapter's `api` and `getFunctionName` with Convex's.
+// Specs may import them at runtime: specs never ship in the browser bundle.
 const CONVEX_SERVER_MESSAGE =
   'Import api and getFunctionName from the Convex adapter in src/app/core/data/convex/; only `import type` may name this module.';
 const CONVEX_SERVER_PATHS = [
