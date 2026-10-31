@@ -8,7 +8,6 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { Router, type Params } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideX } from '@ng-icons/lucide';
@@ -71,6 +70,21 @@ interface PendingNavigation {
   readonly focusCount: boolean;
 }
 
+const PANEL_TAB_STOPS = 'input[type="checkbox"], a[href], button';
+
+/** CDK's focus trap puts a tabbable anchor ahead of the panel, which brain's initial focus would land on. */
+function wrapTabInside(event: KeyboardEvent): void {
+  if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+  const panel = event.currentTarget as HTMLElement;
+  const stops = panel.querySelectorAll<HTMLElement>(PANEL_TAB_STOPS);
+  const first = stops.item(0);
+  const last = stops.item(stops.length - 1);
+  const active = panel.ownerDocument.activeElement;
+  if (!first || !last || active !== (event.shiftKey ? first : last)) return;
+  event.preventDefault();
+  (event.shiftKey ? last : first).focus();
+}
+
 function plainClick(event: MouseEvent): boolean {
   return event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
@@ -114,7 +128,6 @@ export class FilterFieldset {
 @Component({
   selector: 'app-league-filter-overlays',
   imports: [
-    CdkTrapFocus,
     FilterFieldset,
     HlmButton,
     HlmPopover,
@@ -204,9 +217,9 @@ export class FilterFieldset {
           *hlmPopoverPortal
           class="w-80"
           role="dialog"
-          cdkTrapFocus
           [id]="popoverId(group.name)"
           [attr.aria-label]="group.legend"
+          (keydown)="wrapTab($event)"
         >
           <form
             method="get"
@@ -256,6 +269,7 @@ export class LeagueFilterOverlays {
   readonly focusCount = input.required<() => void>();
 
   protected readonly clearLink = CLEAR_LINK;
+  protected readonly wrapTab = wrapTabInside;
   protected readonly showButton = PRIMARY_BUTTON;
   protected readonly showButtonLarge = PRIMARY_BUTTON_LARGE;
 

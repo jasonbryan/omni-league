@@ -525,7 +525,7 @@ test.describe('organization filters in the browser', () => {
       await expect(sheetContent(page)).toBeVisible();
       // The modal hides the page from the accessibility tree, so the button is found by its markup.
       await expect(
-        page.locator('[data-filter-buttons] button[aria-haspopup="dialog"]'),
+        page.locator('[data-filter-buttons] button', { hasText: 'Filters' }),
       ).toHaveAttribute('aria-expanded', 'true');
       await expect(sheet(page)).toHaveAttribute('aria-modal', 'true');
       await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();

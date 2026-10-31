@@ -274,6 +274,28 @@ describe('a dimension popover', () => {
     expect(document.activeElement).toBe(level);
   });
 
+  it('starts on its first check box, and Tab past either end wraps to the other end', async () => {
+    const harness = await shown(ORG, sandResults());
+    await press(harness, button(harness, 'Level'));
+    const panel = popover('filter-level');
+    const first = panel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const show = panel?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    expect(document.activeElement).toBe(first);
+    const tab = (from: HTMLElement | null | undefined, shiftKey: boolean) => {
+      from?.focus();
+      return from?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }),
+      );
+    };
+
+    expect(tab(show, false)).toBe(false);
+    expect(document.activeElement).toBe(first);
+    expect(tab(first, true)).toBe(false);
+    expect(document.activeElement).toBe(show);
+    expect(tab(first, false)).toBe(true);
+    expect(popover('filter-level')).not.toBeNull();
+  });
+
   it('a second press of its button closes it', async () => {
     const harness = await shown(ORG, sandResults());
     const level = button(harness, 'Level');
