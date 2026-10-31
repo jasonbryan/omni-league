@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { demoLogoBytes } from '../convex/seedAssets';
+import { initials } from '../src/app/organizations/initials';
 import { expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
@@ -7,6 +8,7 @@ import { expect, test } from './support/fixtures';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { expectSavedCopies, organizationPageSavedKeys } from './support/saved-copies';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
 import { seedTenant, type Tenant } from './support/tenant';
@@ -181,7 +183,7 @@ test.describe('the Details page: Logo', () => {
 
     await page.goto(tenant.path);
     const mark = page.locator('app-organization-mark');
-    await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+    await expect(mark).toHaveText(initials(tenant.name));
     await expect(mark.locator('img')).toHaveCount(0);
   });
 
@@ -262,7 +264,7 @@ test.describe('the public organization page: the logo mark', () => {
     await hydrated(consoleGuard);
     const mark = page.locator('app-organization-mark');
     await expect(mark.locator('img')).toHaveCount(0);
-    await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+    await expect(mark).toHaveText(initials(tenant.name));
   });
 
   test('shows the initials offline from a saved copy whose image is not cached', async ({
@@ -280,8 +282,10 @@ test.describe('the public organization page: the logo mark', () => {
     await chips.getByRole('link', { name: /^Soccer/ }).click();
     await expect(page).toHaveURL(`${baseURL}${tenant.path}/sports/soccer`);
     await expect(page.locator('app-organization-mark img')).toHaveCount(1);
+    await expectSavedCopies(page, organizationPageSavedKeys(tenant.slug, 'soccer'));
     await chips.getByRole('link', { name: /^All sports/ }).click();
     await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+    await expectSavedCopies(page, organizationPageSavedKeys(tenant.slug));
 
     await page.route(/\/api\/storage\//, (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: 'not an image' }),
@@ -291,7 +295,7 @@ test.describe('the public organization page: the logo mark', () => {
     await chips.getByRole('link', { name: /^Soccer/ }).click();
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
     const mark = page.locator('app-organization-mark');
-    await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+    await expect(mark).toHaveText(initials(tenant.name));
     await expect(mark.locator('img')).toHaveCount(0);
     await context.setOffline(false);
   });

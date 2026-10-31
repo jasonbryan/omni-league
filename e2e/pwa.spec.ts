@@ -10,10 +10,16 @@
 import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { DEMO } from '../convex/seed';
 import { OFFLINE_SAVED_QUERIES } from '../src/app/core/data/convex/offline-saved-queries';
+import { initials } from '../src/app/organizations/initials';
 import { expectAccessible } from './support/a11y';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { expectedOpenCards } from './support/open-seasons';
+import {
+  expectSavedCopies,
+  organizationHeaderSavedKey,
+  organizationPageSavedKeys,
+} from './support/saved-copies';
 
 interface NgswManifest {
   assetGroups: { name: string; urls: string[] }[];
@@ -322,19 +328,6 @@ test.describe('service worker (production build)', () => {
 const [SAVED_ORG, UNUSABLE_ORG, NOT_SAVED_ORG, FIELD_WIFI_ORG] = DEMO;
 const orgPath = (slug: string) => `/organizations/${slug}`;
 const SAVED_PATH = orgPath(SAVED_ORG.organization.slug);
-const savedKey = (slug: string) =>
-  `cvx-saved:organizations:getPublicPage:${JSON.stringify({ slug })}`;
-const savedListKeys = (slug: string) =>
-  ['listPublicLeagues', 'listPublicLocations'].map(
-    (name) => `cvx-saved:organizations:${name}:${JSON.stringify({ page: 1, slug })}`,
-  );
-const savedOpenSeasonsKey = (slug: string) =>
-  `cvx-saved:seasons:listOpenForOrganization:${JSON.stringify({ orgSlug: slug })}`;
-const savedPageKeys = (slug: string) => [
-  savedKey(slug),
-  ...savedListKeys(slug),
-  savedOpenSeasonsKey(slug),
-];
 const ORGANIZATION_LOGO = /^\/api\/storage\/[^/]+$/;
 const NOT_SAVED_HEADING = "This page isn't saved on this device";
 
@@ -342,7 +335,7 @@ async function savedAtOf(page: Page, slug: string): Promise<number | null> {
   return page.evaluate((key) => {
     const raw = localStorage.getItem(key);
     return raw === null ? null : (JSON.parse(raw) as { savedAt: number }).savedAt;
-  }, savedKey(slug));
+  }, organizationHeaderSavedKey(slug));
 }
 
 async function expectLogoLoaded(mark: Locator): Promise<void> {
@@ -408,14 +401,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       await expect(h1).toBeVisible();
       const mark = page.locator('app-organization-mark');
       await expectLogoLoaded(mark);
-      await expect
-        .poll(() =>
-          page.evaluate(
-            (keys) => keys.map((key) => localStorage.getItem(key) !== null),
-            savedPageKeys(organization.slug),
-          ),
-        )
-        .toEqual([true, true, true, true]);
+      await expectSavedCopies(page, organizationPageSavedKeys(organization.slug));
       const firstSavedAt = (await savedAtOf(page, organization.slug)) ?? 0;
       const savedNote = page.locator('main [data-saved-copy-note]');
       const offlineNote = page.locator('header + [role="status"] [data-offline-note]');
@@ -494,16 +480,12 @@ test.describe('saved copies (production build with seed:demo data)', () => {
       context,
     }) => {
       const { organization } = SAVED_ORG;
-      const keys = savedPageKeys(organization.slug);
+      const keys = organizationPageSavedKeys(organization.slug);
       await installWorker(page);
       await page.goto(SAVED_PATH);
       const h1 = page.getByRole('heading', { level: 1, name: organization.name });
       await expect(h1).toBeVisible();
-      await expect
-        .poll(() =>
-          page.evaluate((all) => all.map((key) => localStorage.getItem(key) !== null), keys),
-        )
-        .toEqual([true, true, true, true]);
+      await expectSavedCopies(page, keys);
 
       await setOffline(context, true);
       for (const missing of keys) {
@@ -551,14 +533,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
         await expect(h1).toBeVisible();
         const mark = page.locator('app-organization-mark');
         await expectLogoLoaded(mark);
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (keys) => keys.map((key) => localStorage.getItem(key) !== null),
-              savedPageKeys(organization.slug),
-            ),
-          )
-          .toEqual([true, true, true, true]);
+        await expectSavedCopies(page, organizationPageSavedKeys(organization.slug));
 
         await setOffline(context, true);
         const reload = await page.reload();
@@ -566,7 +541,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
         await expect(h1).toBeVisible();
         await expect(page.locator('main [data-saved-copy-note]')).toBeVisible();
         await expect(mark.locator('img')).toHaveCount(0);
-        await expect(mark).toHaveText(/^\s*[A-Z]{1,2}\s*$/);
+        await expect(mark).toHaveText(initials(organization.name));
       });
     });
   });
@@ -654,7 +629,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
           localStorage.setItem(key, value);
         },
         [
-          savedKey(organization.slug),
+          organizationHeaderSavedKey(organization.slug),
           JSON.stringify({ savedAt: Date.now(), usedAt: Date.now(), ...stored }),
         ] as const,
       );
@@ -688,7 +663,7 @@ test.describe('saved copies (production build with seed:demo data)', () => {
                   v?: { name?: string };
                   version?: number;
                 } | null,
-              savedKey(organization.slug),
+              organizationHeaderSavedKey(organization.slug),
             ),
           { message: label },
         )

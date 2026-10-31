@@ -123,7 +123,8 @@ test.describe('Netlify Drawer stub', VIEWPORT_AGNOSTIC, () => {
         page,
       }) => {
         const response = await page.goto(NETLIFY_DRAWER_SCRIPT_PATH);
-        expect(await response?.text()).not.toBe('');
+        expect(response).not.toBeNull();
+        expect(await response!.text()).not.toBe('');
       });
     });
   });
