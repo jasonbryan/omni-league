@@ -36,6 +36,10 @@ import {
   type PublishOutcome,
   type PublishTarget,
 } from './publish-league-dialog';
+import { injectSectionJump } from './section-jump';
+
+const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
+const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="alert"]'];
 
 @Component({
   selector: 'app-admin-leagues',
@@ -212,8 +216,9 @@ import {
         <section
           #createSection
           id="create-league"
+          tabindex="-1"
           aria-labelledby="create-league-heading"
-          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+          class="overflow-clip rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 focus:outline-none"
         >
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -256,6 +261,55 @@ import {
             </div>
           } @else {
             <p role="status" class="sr-only">Loading the locations.</p>
+            <div
+              aria-hidden="true"
+              data-slot="create-league-skeleton"
+              class="px-4 py-4 md:px-5 md:py-5"
+            >
+              <div class="mb-5 flex h-5 items-center">
+                <div class="${PULSE} h-3.5 w-72 max-w-full"></div>
+              </div>
+              <div class="flex flex-col gap-5">
+                @for (field of skeletonFields; track field) {
+                  <div class="flex flex-col gap-2">
+                    <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-12"></div></div>
+                    <div
+                      data-slot="skeleton-input"
+                      class="${PULSE} h-9 w-full rounded-lg pointer-coarse:h-11"
+                    ></div>
+                    <div class="flex h-5 items-center">
+                      <div class="${PULSE} h-3.5 w-full"></div>
+                    </div>
+                    <div class="flex h-5 items-center">
+                      <div class="${PULSE} h-3.5 w-40 max-w-full"></div>
+                    </div>
+                  </div>
+                }
+                <div>
+                  <div class="mb-1.5 flex h-5 items-center">
+                    <div class="${PULSE} h-3.5 w-12"></div>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    @for (chip of skeletonChips; track chip) {
+                      <div
+                        data-slot="skeleton-chip"
+                        class="${PULSE} h-9 w-24 rounded-full pointer-coarse:h-11"
+                      ></div>
+                    }
+                  </div>
+                </div>
+                <div>
+                  <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-20"></div></div>
+                  <div
+                    data-slot="skeleton-location"
+                    class="mt-3 flex h-5 items-center gap-3 pointer-coarse:h-11"
+                  >
+                    <div class="${PULSE} size-4 shrink-0 rounded-sm"></div>
+                    <div class="${PULSE} h-3.5 w-48 max-w-full"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           }
         </section>
       </div>
@@ -275,6 +329,8 @@ export class AdminLeagues {
   protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly outlineBadge = BADGE_OUTLINE;
   protected readonly placeholders = [1, 2, 3];
+  protected readonly skeletonFields = [1, 2];
+  protected readonly skeletonChips = [1, 2, 3];
 
   private readonly list = injectQuery(api.leagues.listForAdmin, () => {
     const organization = this.context.organization();
@@ -300,6 +356,13 @@ export class AdminLeagues {
   }
 
   private readonly createSection = viewChild<ElementRef<HTMLElement>>('createSection');
+  private readonly sectionJump = injectSectionJump((section) => {
+    for (const selector of NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT) {
+      const target = section.querySelector<HTMLElement>(selector);
+      if (target) return target;
+    }
+    return null;
+  });
   private readonly publishDialog = viewChild(PublishLeagueDialog);
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
@@ -344,7 +407,6 @@ export class AdminLeagues {
     const section = this.createSection()?.nativeElement;
     if (!section) return;
     event.preventDefault();
-    section.scrollIntoView();
-    section.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
+    this.sectionJump.jump(section);
   }
 }

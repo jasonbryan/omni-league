@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { ConvexError } from 'convex/values';
 import { LEAGUE_MESSAGES } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
@@ -256,6 +257,198 @@ describe('AdminLeagues', () => {
       await o.flush();
       expect(scrolled).toHaveBeenCalledTimes(1);
       expect(document.activeElement).toBe(input('name'));
+    });
+
+    describe('with the scroll recorded', () => {
+      let scrolled: Element[];
+      const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+
+      beforeEach(() => {
+        scrolled = [];
+        Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+          scrolled.push(this);
+        });
+      });
+
+      afterEach(() => {
+        if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+        else delete (Element.prototype as Partial<Element>).scrollIntoView;
+        vi.restoreAllMocks();
+      });
+
+      const jumpLink = () => page.querySelector<HTMLAnchorElement>('main a[data-slot="button"]')!;
+      const section = () => page.querySelector<HTMLElement>('#create-league')!;
+      const skeleton = () => section().querySelector('[data-slot="create-league-skeleton"]');
+      const loadingStatus = () => text(section().querySelector('p[role="status"].sr-only'));
+      const goToLocations = () => section().querySelector<HTMLAnchorElement>('a[href]')!;
+      const locationsAlert = () => section().querySelector<HTMLElement>('[data-slot="alert"]')!;
+
+      /** A press in Chromium: the link takes focus, then the click. */
+      async function press() {
+        jumpLink().focus();
+        jumpLink().click();
+        await o.flush();
+      }
+
+      /** A tap in WebKit: the click, with no focus on the link. */
+      async function tap() {
+        jumpLink().click();
+        await o.flush();
+      }
+
+      async function locationsArrive(locations: unknown[] = COASTAL_LOCATIONS) {
+        o.subscription(LIST_FOR_ADMIN)!.emit(locations);
+        await o.flush();
+      }
+
+      describe('pressed while the locations load', () => {
+        it('at once scrolls to the section and focuses it, then focuses Name and brings it into view once the form renders', async () => {
+          await open([], null);
+          expect(section().getAttribute('tabindex')).toBe('-1');
+          expect(tokens(section().className)).toContain('focus:outline-none');
+          await press();
+          expect(scrolled).toEqual([section()]);
+          expect(document.activeElement).toBe(section());
+          await locationsArrive();
+          expect(document.activeElement).toBe(input('name'));
+          expect(scrolled).toEqual([section(), input('name')]);
+        });
+
+        it('a tap that leaves the link unfocused (WebKit) still ends on Name', async () => {
+          await open([], null);
+          await tap();
+          expect(document.activeElement).toBe(section());
+          await locationsArrive();
+          expect(document.activeElement).toBe(input('name'));
+        });
+
+        it('a later focus elsewhere cancels the jump: the form’s arrival moves no focus', async () => {
+          await open(LEAGUES, null);
+          await press();
+          const leagueLink = items()[0].querySelector<HTMLAnchorElement>('h3 a')!;
+          leagueLink.focus();
+          await locationsArrive();
+          expect(document.activeElement).toBe(leagueLink);
+          expect(scrolled).toEqual([section()]);
+        });
+
+        it('a later press on a link that takes no focus cancels the jump', async () => {
+          await open(LEAGUES, null);
+          const router = TestBed.inject(Router);
+          const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+          await press();
+          items()[0].querySelector<HTMLAnchorElement>('h3 a')!.click();
+          await o.flush();
+          expect(navigate).toHaveBeenCalledTimes(1);
+          await locationsArrive();
+          expect(document.activeElement).toBe(section());
+          expect(scrolled).toEqual([section()]);
+        });
+
+        for (const [name, scroll] of [
+          ['the wheel', () => page.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))],
+          ['a touch scroll', () => page.dispatchEvent(new Event('touchmove', { bubbles: true }))],
+          [
+            'Page Down',
+            () =>
+              section().dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }),
+              ),
+          ],
+        ] as const) {
+          it(`a user scroll by ${name} cancels the jump: the form’s arrival moves neither focus nor scroll`, async () => {
+            await open([], null);
+            await press();
+            scroll();
+            await locationsArrive();
+            expect(document.activeElement).toBe(section());
+            expect(scrolled).toEqual([section()]);
+          });
+        }
+
+        it('a key that does not scroll keeps the jump', async () => {
+          await open([], null);
+          await press();
+          section().dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+          await locationsArrive();
+          expect(document.activeElement).toBe(input('name'));
+        });
+
+        it('no locations arriving focuses "Go to Locations"', async () => {
+          await open([], null);
+          await press();
+          await locationsArrive([]);
+          expect(text(goToLocations())).toBe('Go to Locations');
+          expect(document.activeElement).toBe(goToLocations());
+        });
+
+        it('a failed query focuses the alert', async () => {
+          await open([], null);
+          await press();
+          o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
+          await o.flush();
+          expect(text(locationsAlert())).toBe(
+            'The locations could not be loaded. Check your connection and try again.',
+          );
+          expect(document.activeElement).toBe(locationsAlert());
+        });
+
+        it('offline, the status and skeleton stay and nothing moves focus; on reconnect the form’s arrival focuses Name', async () => {
+          await open([], null);
+          await press();
+          const onLine = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+          window.dispatchEvent(new Event('offline'));
+          await o.flush();
+          expect(loadingStatus()).toBe('Loading the locations.');
+          expect(skeleton()).not.toBeNull();
+          expect(document.activeElement).toBe(section());
+          onLine.mockReturnValue(true);
+          window.dispatchEvent(new Event('online'));
+          await locationsArrive();
+          expect(document.activeElement).toBe(input('name'));
+        });
+
+        it('pressed again, the jump still ends on Name', async () => {
+          await open([], null);
+          await press();
+          await press();
+          await locationsArrive();
+          expect(document.activeElement).toBe(input('name'));
+        });
+      });
+
+      describe('pressed once the locations are in', () => {
+        it('none: scrolls to the section and focuses "Go to Locations"', async () => {
+          await open([], []);
+          await press();
+          expect(scrolled).toEqual([section()]);
+          expect(document.activeElement).toBe(goToLocations());
+        });
+
+        it('failed: scrolls to the section and focuses the alert', async () => {
+          await open([], null);
+          o.subscription(LIST_FOR_ADMIN)!.fail(new Error('Server Error'));
+          await o.flush();
+          await press();
+          expect(scrolled).toEqual([section()]);
+          expect(document.activeElement).toBe(locationsAlert());
+        });
+      });
+
+      it('while the locations load, a skeleton shaped like the form stands in, hidden from screen readers, beside the status', async () => {
+        await open([], null);
+        expect(loadingStatus()).toBe('Loading the locations.');
+        const shown = skeleton()!;
+        expect(shown.getAttribute('aria-hidden')).toBe('true');
+        const pulses = shown.querySelectorAll('.bg-muted.motion-safe\\:animate-pulse');
+        expect(pulses.length).toBeGreaterThan(0);
+        expect(shown.querySelectorAll('[data-slot="skeleton-input"]')).toHaveLength(2);
+        expect(shown.querySelectorAll('[data-slot="skeleton-chip"]').length).toBeGreaterThan(0);
+        expect(shown.querySelectorAll('[data-slot="skeleton-location"]')).toHaveLength(1);
+        await locationsArrive();
+        expect(skeleton()).toBeNull();
+        expect(text(section())).not.toContain('Loading the locations.');
+      });
     });
   });
 
