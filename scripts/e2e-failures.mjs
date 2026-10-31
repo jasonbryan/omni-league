@@ -90,8 +90,22 @@ export function failuresFromFiles(paths) {
   return listFailures(paths.map(readReport).filter((report) => report !== undefined));
 }
 
+/**
+ * The problems that `scripts/e2e-production-check.mjs` wrote; a missing or malformed file adds none.
+ * @param {string} path
+ * @returns {string[]}
+ */
+export function expectedTestProblems(path) {
+  const list = readReport(path);
+  if (!Array.isArray(list) || !list.every((item) => typeof item === 'string')) return [];
+  return list.map((problem) => `expected tests: ${problem}`);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const paths = process.argv.slice(2);
-  const failures = failuresFromFiles(paths.length > 0 ? paths : ['test-results/results.json']);
-  process.stdout.write(`failures=${JSON.stringify(failures)}\n`);
+  const args = process.argv.slice(2);
+  const flag = args.indexOf('--problems');
+  const problemsFile = flag === -1 ? undefined : args.splice(flag, 2)[1];
+  const problems = problemsFile === undefined ? [] : expectedTestProblems(problemsFile);
+  const failures = failuresFromFiles(args.length > 0 ? args : ['test-results/results.json']);
+  process.stdout.write(`failures=${JSON.stringify([...problems, ...failures])}\n`);
 }

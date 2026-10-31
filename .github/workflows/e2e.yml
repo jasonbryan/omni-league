@@ -108,7 +108,9 @@ jobs:
 
   # The specs that need a production build, each in its own Playwright run so every spec gets its
   # own project and report folder (E2E_RUN_NAME). Runs after the first use !cancelled(), so one
-  # night reports every failing run.
+  # night reports every failing run. Each run has a step timeout below its specs' own (up to 12 min
+  # a try, retried once), so a hang fails that step and the check, list, and upload still run inside
+  # the job's 20 minutes.
   e2e-production:
     name: e2e-production
     needs: nightly-gate
@@ -161,11 +163,13 @@ jobs:
             exit 1
           fi
       - name: production-mobile
+        timeout-minutes: 3
         env:
           E2E_RUN_NAME: production-mobile
           E2E_BASE_URL: http://localhost:4000
         run: npx playwright test e2e/pwa.spec.ts --project=chromium-mobile
       - name: production-desktop
+        timeout-minutes: 2
         if: ${{ !cancelled() && steps.app.outcome == 'success' }}
         env:
           E2E_RUN_NAME: production-desktop
@@ -173,6 +177,7 @@ jobs:
         run: npx playwright test e2e/harness/no-service-worker.spec.ts --project=chromium-desktop
       # Builds and serves its own two versions on another port.
       - name: pwa-update
+        timeout-minutes: 6
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         env:
           E2E_RUN_NAME: pwa-update
@@ -181,6 +186,7 @@ jobs:
         run: npx playwright test e2e/pwa-update.spec.ts --project=chromium-mobile
       # Last: it builds with no Convex URL, edits angular.json while it runs, and replaces dist/.
       - name: kill-switch
+        timeout-minutes: 5
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         env:
           E2E_RUN_NAME: kill-switch
@@ -193,7 +199,7 @@ jobs:
       - name: e2e failures
         id: failures
         if: ${{ failure() }}
-        run: node scripts/e2e-failures.mjs test-results/production-mobile/results.json test-results/production-desktop/results.json test-results/pwa-update/results.json test-results/kill-switch/results.json | tee -a "$GITHUB_OUTPUT"
+        run: node scripts/e2e-failures.mjs --problems test-results/expected-tests.json test-results/production-mobile/results.json test-results/production-desktop/results.json test-results/pwa-update/results.json test-results/kill-switch/results.json | tee -a "$GITHUB_OUTPUT"
       - name: e2e report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -1,6 +1,6 @@
 // A spec that skips, or that its project's filter never lists, still exits Playwright 0, so the job
 // compares each run's JSON report against this table.
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** @typedef {{ name: string, spec: string, project: string, tests: number }} ProductionRun */
@@ -26,6 +26,8 @@ export const PRODUCTION_RUNS = Object.freeze(
 );
 
 export const REPORT_ROOT = 'test-results';
+// Read by `scripts/e2e-failures.mjs --problems`, so a skip-only night still lists what is wrong.
+export const PROBLEMS_FILE = 'expected-tests.json';
 
 const RAN = new Set(['expected', 'unexpected', 'flaky']);
 
@@ -130,7 +132,10 @@ export function checkReports(root = REPORT_ROOT) {
 }
 
 if (import.meta.main) {
-  const { summaries, problems } = checkReports(process.argv[2]);
+  const root = process.argv[2] ?? REPORT_ROOT;
+  const { summaries, problems } = checkReports(root);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, PROBLEMS_FILE), `${JSON.stringify(problems)}\n`);
   for (const line of summaries) console.log(line);
   for (const problem of problems) console.error(`::error::${problem}`);
   process.exitCode = problems.length === 0 ? 0 : 1;

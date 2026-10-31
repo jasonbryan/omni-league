@@ -216,6 +216,59 @@ describe('the command line', () => {
     assert.equal(JSON.parse(result.stdout.slice('failures='.length)).length, 2);
   });
 
+  it('lists the expected-tests problems of a --problems file first, then the failing tests', () => {
+    const problems = join(scratch, 'cli-problems.json');
+    writeFileSync(
+      problems,
+      JSON.stringify([
+        'production-mobile: e2e/pwa.spec.ts on chromium-mobile: skipped: e2e/pwa.spec.ts:145: t',
+      ]),
+    );
+    const path = join(scratch, 'cli-with-problems.json');
+    writeFileSync(path, JSON.stringify(report));
+    const result = spawnSync(process.execPath, [script, '--problems', problems, path], {
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const listed = JSON.parse(result.stdout.slice('failures='.length));
+    assert.equal(listed.length, 3);
+    assert.equal(
+      listed[0],
+      'expected tests: production-mobile: e2e/pwa.spec.ts on chromium-mobile: skipped: e2e/pwa.spec.ts:145: t',
+    );
+  });
+
+  it('lists a skip-only night, whose reports have no failing test', () => {
+    const problems = join(scratch, 'cli-skip-only.json');
+    writeFileSync(
+      problems,
+      JSON.stringify(['kill-switch: e2e/x.spec.ts on chromium-mobile: no report']),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [script, '--problems', problems, join(scratch, 'cli-never-written.json')],
+      { encoding: 'utf8' },
+    );
+    assert.equal(
+      result.stdout,
+      `failures=${JSON.stringify(['expected tests: kill-switch: e2e/x.spec.ts on chromium-mobile: no report'])}\n`,
+    );
+  });
+
+  it('adds nothing for a --problems file that is missing or not a list of strings', () => {
+    const notList = join(scratch, 'cli-not-list.json');
+    writeFileSync(notList, '{"problems":1}');
+    for (const problems of [join(scratch, 'cli-no-problems.json'), notList]) {
+      const result = spawnSync(
+        process.execPath,
+        [script, '--problems', problems, join(scratch, 'none.json')],
+        { encoding: 'utf8' },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, 'failures=[]\n', problems);
+    }
+  });
+
   it('prints failures=[] and exits 0 when the report is missing', () => {
     const result = spawnSync(process.execPath, [script, join(scratch, 'none.json')], {
       encoding: 'utf8',

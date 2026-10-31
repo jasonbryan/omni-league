@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { PRODUCTION_RUNS, checkReports, checkRun, reportPath } from './e2e-production-check.mjs';
+import {
+  PROBLEMS_FILE,
+  PRODUCTION_RUNS,
+  checkReports,
+  checkRun,
+  reportPath,
+} from './e2e-production-check.mjs';
 
 const script = join(import.meta.dirname, 'e2e-production-check.mjs');
 const scratch = mkdtempSync(join(tmpdir(), 'e2e-production-check-'));
@@ -192,6 +198,18 @@ describe('checkReports and the command line', () => {
     );
     assert.match(result.stderr, /kill-switch: .*no report/);
     assert.match(result.stdout, /^production-desktop: .*2 of 2 run/m);
+    const written = JSON.parse(readFileSync(join(dir, PROBLEMS_FILE), 'utf8'));
+    assert.equal(written.length, 2, written.join('\n'));
+    assert.match(written[0], /^production-mobile: .*skipped: e2e\/pwa\.spec\.ts:10:/);
+    assert.match(written[1], /^kill-switch: .*no report/);
+  });
+
+  it('writes an empty problem list when every run matches', () => {
+    const dir = join(scratch, 'pass-file');
+    writeReports(dir, allPassing());
+    const result = spawnSync(process.execPath, [script, dir], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, PROBLEMS_FILE), 'utf8')), []);
   });
 
   it('reports an unreadable report as missing', () => {

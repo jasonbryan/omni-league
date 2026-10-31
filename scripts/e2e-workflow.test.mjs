@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { PRODUCTION_RUNS } from './e2e-production-check.mjs';
+import { PROBLEMS_FILE, PRODUCTION_RUNS } from './e2e-production-check.mjs';
 
 const workflow = readFileSync(
   join(import.meta.dirname, '..', '.github', 'workflows', 'e2e.yml'),
@@ -239,6 +239,32 @@ describe('the e2e-production job', () => {
     assert.equal(step('e2e browsers').id, 'browsers');
   });
 
+  it('gives each run a step timeout, so a hang still leaves time for the check, list, and upload', () => {
+    const timeouts = Object.fromEntries(
+      runNames.map((name) => [
+        name,
+        Number(/^ {8}timeout-minutes: (\d+)$/m.exec(step(name).block)?.[1]),
+      ]),
+    );
+    assert.deepEqual(timeouts, {
+      'production-mobile': 3,
+      'production-desktop': 2,
+      'pwa-update': 6,
+      'kill-switch': 5,
+    });
+    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e-production'))?.[1]);
+    const runs = Object.values(timeouts).reduce((sum, minutes) => sum + minutes, 0);
+    // Measured setup before the first run: under 1.5 minutes.
+    assert.ok(
+      runs + 2 <= limit - 1,
+      `${runs} minutes of runs plus setup leave no minute in ${limit}`,
+    );
+    for (const name of ['expected tests', 'e2e failures', 'e2e report']) {
+      assert.doesNotMatch(step(name).block, /timeout-minutes/, name);
+      assert.match(step(name).condition ?? '', /!cancelled\(\)|failure\(\)/, name);
+    }
+  });
+
   it('checks every run against the expected table, after a failed run too', () => {
     const check = step('expected tests');
     assert.equal(check.condition, '${{ !cancelled() }}');
@@ -251,7 +277,9 @@ describe('the e2e-production job', () => {
     assert.equal(failures.condition, '${{ failure() }}');
     const paths = runNames.map((name) => `test-results/${name}/results.json`);
     assert.ok(
-      (failures.run ?? '').includes(`node scripts/e2e-failures.mjs ${paths.join(' ')}`),
+      (failures.run ?? '').includes(
+        `node scripts/e2e-failures.mjs --problems test-results/${PROBLEMS_FILE} ${paths.join(' ')}`,
+      ),
       failures.run,
     );
     assert.match(failures.run ?? '', /"\$GITHUB_OUTPUT"/);
