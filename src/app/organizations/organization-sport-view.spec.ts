@@ -419,9 +419,10 @@ const idsIn = (harness: RouterTestingHarness, section: string) =>
 const namesIn = (harness: RouterTestingHarness, section: string) =>
   [...host(harness).querySelectorAll(`#${section} li[id] h3`)].map(text);
 
-function click(nav: Element | null, name: string): void {
+function click(nav: Element | null, name: string, { focus = false } = {}): void {
   const link = [...(nav?.querySelectorAll('a') ?? [])].find((a) => text(a) === name);
   expect(link, name).toBeDefined();
+  if (focus) link?.focus();
   link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
 }
 
@@ -573,5 +574,23 @@ describe('the sport view locations pages', () => {
       'location-5',
     ]);
     expect(TestBed.inject(Router).url).toBe(`${PAGED_SOCCER}?locations=2`);
+  });
+});
+
+describe('focus after a page change whose query fails on the sport view', () => {
+  it.each([
+    ['Leagues pages', LEAGUES],
+    ['Locations pages', LOCATIONS],
+  ])('moves focus from Next in %s to the server-error view h1', async (label, failing) => {
+    const harness = await open(PAGED_SOCCER);
+    emit(pagedSoccer());
+    await settle(harness);
+    click(pagesControl(harness, label), 'Next page', { focus: true });
+    await settle(harness);
+    subscription(failing).fail(new Error('down'));
+    await settle(harness);
+    const heading = host(harness).querySelector('main h1');
+    expect(text(heading)).toBe('This page is temporarily unavailable');
+    expect(document.activeElement).toBe(heading);
   });
 });

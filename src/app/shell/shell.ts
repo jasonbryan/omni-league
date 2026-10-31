@@ -25,6 +25,7 @@ import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideMenu } from '@ng-icons/lucide';
 import { filter, map } from 'rxjs';
+import { MainFocusRecord } from '../core/replaced-focus';
 import { AccountRow } from './account-row';
 import { HomeSidebar } from './home-sidebar';
 import { OfflineNote } from './offline-note';
@@ -153,6 +154,7 @@ export class Shell {
   private sheetRef: ComponentRef<ShellSheet> | null = null;
 
   constructor() {
+    inject(MainFocusRecord).listen();
     // Destroying the sheet's ComponentRef also detaches its view from ApplicationRef, and the helm
     // sheet closes its dialog: no scrim or scroll block stays on the next page.
     this.destroyRef.onDestroy(() => {
