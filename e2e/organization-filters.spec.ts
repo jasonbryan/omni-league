@@ -21,6 +21,7 @@ const ORIGIN = new URL(baseURL).origin;
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
 const LOCATIONS = numberedLocations(6);
+const SAVED_PAGE_QUERIES = 5;
 
 const beach = (
   name: string,
@@ -489,8 +490,7 @@ test.describe('organization filters in the browser', () => {
           .filter((key) => key.startsWith('cvx-saved:'))
           .sort(),
       }));
-    // One saved copy for each of the page's five queries.
-    await expect.poll(async () => (await pageState()).savedCopies.length).toBe(5);
+    await expect.poll(async () => (await pageState()).savedCopies.length).toBe(SAVED_PAGE_QUERIES);
     const before = await pageState();
 
     const overlay = isDesktop(testInfo)

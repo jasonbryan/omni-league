@@ -363,15 +363,10 @@ export class LeagueFilters {
       return;
     }
     this.pressed.set(overlay);
-    this.overlaysLoad ??= this.loadOverlays().catch((error: unknown) => {
-      this.overlaysLoad = null;
-      throw error;
-    });
     let overlays: LeagueFilterOverlays | null;
     try {
-      overlays = await this.overlaysLoad;
+      overlays = await this.loadOverlaysOnce();
     } catch {
-      // A failed chunk load opens nothing, and the next press tries it again.
       if (this.pressed() === overlay) this.pressed.set(null);
       return;
     }
@@ -380,6 +375,14 @@ export class LeagueFilters {
     if (!overlays || this.destroyRef.destroyed || this.router.currentNavigation()) return;
     if (overlay === 'sheet') overlays.openSheet();
     else overlays.openPopoverFor(overlay, trigger);
+  }
+
+  private loadOverlaysOnce(): Promise<LeagueFilterOverlays | null> {
+    this.overlaysLoad ??= this.loadOverlays().catch((error: unknown) => {
+      this.overlaysLoad = null;
+      throw error;
+    });
+    return this.overlaysLoad;
   }
 
   private async loadOverlays(): Promise<LeagueFilterOverlays | null> {

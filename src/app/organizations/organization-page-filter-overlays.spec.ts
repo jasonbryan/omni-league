@@ -16,8 +16,7 @@ import { SAND, sandResults } from './testing/pages';
 const ORG = `/organizations/${SAND.slug}`;
 const LOCATIONS = 'organizations:listPublicLocations';
 
-/** SAND with its locations on page 2 of 2. */
-const onLocationsPage2 = (results: Record<string, unknown>) => ({
+const onLastLocationsPage = (results: Record<string, unknown>) => ({
   ...results,
   [LOCATIONS]: { rows: SAND.locations, page: 2, pageCount: 2, total: 6 },
 });
@@ -223,7 +222,7 @@ describe('the phone sheet', () => {
   it('Clear all removes every filter by router navigation and moves focus to the count', async () => {
     const harness = await shown(
       `${ORG}?gender=coed&format=4v4&locations=2`,
-      onLocationsPage2(sandResults({ gender: ['coed'], playersPerSide: [4] })),
+      onLastLocationsPage(sandResults({ gender: ['coed'], playersPerSide: [4] })),
     );
     await press(harness, filtersButton(harness));
     const clear = within(dialog(), 'Clear all');
@@ -239,7 +238,7 @@ describe('the phone sheet', () => {
   it('submits the hidden locations page with the draft', async () => {
     const harness = await shown(
       `${ORG}?gender=coed&locations=2`,
-      onLocationsPage2(sandResults({ gender: ['coed'] })),
+      onLastLocationsPage(sandResults({ gender: ['coed'] })),
     );
     await press(harness, filtersButton(harness));
     const hidden = dialog()?.querySelector<HTMLInputElement>('form input[type="hidden"]');
@@ -347,7 +346,7 @@ describe('a dimension popover', () => {
   it('Show applies the whole draft: other dimensions and locations kept, the leagues page dropped', async () => {
     const harness = await shown(
       `${ORG}?gender=coed&locations=2&leagues=2`,
-      onLocationsPage2(sandResults({ gender: ['coed'], page: 2 })),
+      onLastLocationsPage(sandResults({ gender: ['coed'], page: 2 })),
     );
     const level = button(harness, 'Level');
     await press(harness, level);
