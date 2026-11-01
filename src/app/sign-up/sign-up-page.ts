@@ -25,6 +25,7 @@ import { Checkbox } from '../ui/checkbox';
 // Counted as the server counts (`String.length`), so the page and Better Auth agree on the limits.
 export const MIN_PASSWORD = 15;
 export const MAX_PASSWORD = 128;
+export const MAX_NAME = 100;
 
 /** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
@@ -32,6 +33,7 @@ const EMAIL =
 
 export const MESSAGES = {
   nameEmpty: 'Enter your name.',
+  nameLong: `Use ${MAX_NAME} characters or fewer.`,
   emailEmpty: 'Enter your email address.',
   emailMalformed: 'Enter an email address like name@example.com.',
   passwordEmpty: 'Enter a password.',
@@ -418,9 +420,11 @@ export class SignUpPage {
   private readonly model = signal<SignUpModel>({ name: '', email: '', password: '', adult: false });
   protected readonly fields = form(this.model, (path) => {
     required(path.name, { message: MESSAGES.nameEmpty });
-    validate(path.name, ({ value }) =>
-      value().trim() === '' ? { kind: 'blank', message: MESSAGES.nameEmpty } : undefined,
-    );
+    validate(path.name, ({ value }) => {
+      const name = value().trim();
+      if (name === '') return { kind: 'blank', message: MESSAGES.nameEmpty };
+      return name.length > MAX_NAME ? { kind: 'long', message: MESSAGES.nameLong } : undefined;
+    });
     required(path.email, { message: MESSAGES.emailEmpty });
     validate(path.email, ({ value }) => {
       const email = value().trim();
@@ -520,6 +524,7 @@ export class SignUpPage {
       'password-too-short': ['password', MESSAGES.passwordShort(passwordLength)],
       'password-too-long': ['password', MESSAGES.passwordLong(passwordLength)],
       'adult-required': ['adult', MESSAGES.adult],
+      'name-invalid': ['name', MESSAGES.nameLong],
     };
     const fieldError = onField[failure];
     if (fieldError) {

@@ -659,7 +659,7 @@ describe('AuthService', () => {
       ['400 too long', { status: 400, code: 'PASSWORD_TOO_LONG' }, 'password-too-long'],
       ['400 no 18+', { status: 400, code: 'ADULT_CONFIRMATION_REQUIRED' }, 'adult-required'],
       ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, 'unexpected'],
-      ['400 name invalid', { status: 400, code: 'NAME_INVALID' }, 'unexpected'],
+      ['400 name invalid', { status: 400, code: 'NAME_INVALID' }, 'name-invalid'],
       ['503 auth not configured', { status: 503, code: 'AUTH_NOT_CONFIGURED' }, 'unexpected'],
       ['429', { status: 429 }, 'unexpected'],
       ['500 other', { status: 500, message: 'boom' }, 'unexpected'],

@@ -249,6 +249,39 @@ describe('SignUpPage', () => {
       expect(document.activeElement).toBe(input('password'));
     });
 
+    it('a name over 100 characters: its own message on Name, which takes focus; nothing is sent', async () => {
+      await fill({ name: 'x'.repeat(101) });
+      await submit();
+      expect(error('name')).toBe('Use 100 characters or fewer.');
+      expect(input('name').getAttribute('aria-invalid')).toBe('true');
+      expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
+      expect(error('email')).toBeNull();
+      expect(error('password')).toBeNull();
+      expect(document.activeElement).toBe(input('name'));
+      expect(client.signUps).toEqual([]);
+    });
+
+    it.each([
+      ['100 characters', 'x'.repeat(100)],
+      ['100 characters plus surrounding spaces', `  ${'x'.repeat(100)}   `],
+    ])('a name of %s shows no Name error and signs up', async (_, name) => {
+      await fill({ name });
+      await submit();
+      expect(error('name')).toBeNull();
+      expect(client.signUps).toEqual([
+        { name: 'x'.repeat(100), email: EMAIL, password: PASSWORD, adultConfirmed: true },
+      ]);
+    });
+
+    it('the over-long name error clears once the name is 100 characters or fewer', async () => {
+      await fill({ name: 'x'.repeat(101) });
+      await submit();
+      expect(error('name')).toBe('Use 100 characters or fewer.');
+      await type('name', 'x'.repeat(100));
+      expect(error('name')).toBeNull();
+      expect(input('name').hasAttribute('aria-invalid')).toBe(false);
+    });
+
     it('without the 18+ confirmation: the error is on the checkbox, which takes focus', async () => {
       await fill({ adult: false });
       await submit();
@@ -467,6 +500,33 @@ describe('SignUpPage', () => {
       client.nextSignUpError = null;
       await submit();
       expect(url()).toBe('/app');
+    });
+
+    it('400 NAME_INVALID: the over-long message on Name, which takes focus; no alert; cleared by editing it', async () => {
+      await fill();
+      client.nextSignUpError = { status: 400, code: 'NAME_INVALID' };
+      await submit();
+      expect(error('name')).toBe('Use 100 characters or fewer.');
+      expect(input('name').getAttribute('aria-invalid')).toBe('true');
+      expect(input('name').getAttribute('aria-describedby')).toBe('name-description name-error');
+      expect(alert()).toBeNull();
+      expect(document.activeElement).toBe(input('name'));
+      expect(url()).toBe('/sign-up');
+      await type('name', 'Maya');
+      expect(error('name')).toBeNull();
+    });
+
+    it.each([
+      ['an unknown code', { status: 400, code: 'SOMETHING_ELSE' }],
+      ['AUTH_NOT_CONFIGURED', { status: 503, code: 'AUTH_NOT_CONFIGURED' }],
+    ])('%s: the generic alert, not a field error', async (_, failure) => {
+      await fill();
+      client.nextSignUpError = failure;
+      await submit();
+      expect(alert()?.querySelector('[data-slot="alert-description"]')?.textContent?.trim()).toBe(
+        'Check your connection and try again.',
+      );
+      expect(error('name')).toBeNull();
     });
 
     it('any other failure: the generic alert', async () => {
