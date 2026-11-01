@@ -3,7 +3,7 @@ import type { Doc } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { requireTeamMemberOrOrganizer, requireUser } from './lib/access';
 import { registrationIsOpen } from './lib/registration';
-import { insertTeam } from './lib/rosterWrites';
+import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import { checkTeamName, TEAM_MESSAGES, type RegistrationClosedError } from './lib/teamInput';
 
@@ -31,7 +31,10 @@ export const register = mutation({
     }
     const checked = checkTeamName(name);
     if (!checked.ok) throw new ConvexError({ ...checked.error });
-    const teamId = await insertTeam(ctx, season, { name: checked.name, captainUserId: user._id });
+    const teamId = await insertTeamWithCaptain(ctx, season, {
+      name: checked.name,
+      captainUserId: user._id,
+    });
     return { status: 'registered' as const, teamId };
   },
 });
@@ -54,10 +57,7 @@ const teamForMemberValidator = v.object({
   viewerIsCaptain: v.boolean(),
 });
 
-/**
- * `teamId` is a string so a malformed id answers `null`, as an unknown one does, never a validator error. Open to the team's rostered
- * players and the league's organizers; anyone else gets FORBIDDEN.
- */
+/** `teamId` is a string so a malformed id answers `null`, as an unknown one does, never a validator error. */
 export const getForMember = query({
   args: { teamId: v.string() },
   returns: v.union(v.null(), teamForMemberValidator),
@@ -98,6 +98,9 @@ async function rosterOf(ctx: Pick<QueryCtx, 'db'>, team: Doc<'teams'>, viewer: D
       isViewer: entry.userId === viewer._id,
     });
   }
-  // The captain first, then in the order players joined.
-  return rows.sort((a, b) => Number(b.isCaptain) - Number(a.isCaptain));
+  return rows.sort(captainFirst);
+}
+
+function captainFirst(a: { isCaptain: boolean }, b: { isCaptain: boolean }): number {
+  return Number(b.isCaptain) - Number(a.isCaptain);
 }

@@ -13,7 +13,7 @@ import { normaliseInviteEmail } from './lib/inviteInput';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
-import { addRosterEntry, insertTeam, removeRosterEntry } from './lib/rosterWrites';
+import { addRosterEntry, insertTeamWithCaptain, removeRosterEntry } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { playersPerSideOfSport } from './lib/divisions';
 import type { Sport } from './lib/sports';
@@ -420,7 +420,7 @@ export const seedTeam = internalMutation({
       : null;
     if (!season) throw new Error(`No season has the slug ${JSON.stringify(seasonSlug)}`);
     const captain = await userByEmail(ctx, captainEmail);
-    const teamId = await insertTeam(ctx, season, { name, captainUserId: captain._id });
+    const teamId = await insertTeamWithCaptain(ctx, season, { name, captainUserId: captain._id });
     return { teamId };
   },
 });

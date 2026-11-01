@@ -69,8 +69,7 @@ export interface NewTeam {
   captainUserId: Id<'users'>;
 }
 
-/** Inserts the team with its captain as the first roster entry. */
-export async function insertTeam(
+export async function insertTeamWithCaptain(
   ctx: MutationCtx,
   season: Doc<'seasons'>,
   { name, captainUserId }: NewTeam,
@@ -107,7 +106,6 @@ export interface NewRosterEntry {
   addedByUserId: Id<'users'>;
 }
 
-/** Refuses a user who already has a rostered entry anywhere in the team's season. */
 export async function addRosterEntry(
   ctx: MutationCtx,
   team: Doc<'teams'>,
@@ -171,7 +169,6 @@ async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<numb
   return teams.length;
 }
 
-/** Sets `teamCount` from a recount on each season written before it existed. Returns the seasons changed. */
 export async function backfillSeasonTeamCounts(ctx: MutationCtx): Promise<number> {
   let backfilled = 0;
   for (const season of await ctx.db.query('seasons').take(BACKFILL_TEAM_COUNT_SCAN_LIMIT)) {

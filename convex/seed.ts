@@ -22,7 +22,7 @@ import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
-  insertTeam,
+  insertTeamWithCaptain,
   rosteredEntryInSeason,
   teamWithSortName,
 } from './lib/rosterWrites';
@@ -789,13 +789,11 @@ export const DEMO_ACCOUNTS: Readonly<
     ],
   },
   player: { email: `player@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Player', memberships: [] },
-  // Captains Sand Sharks (`DEMO_TEAMS`).
   captain: { email: `captain@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Captain', memberships: [] },
 };
 
 const ACCOUNT_KEYS = ['admin', 'organizer', 'player', 'captain'] as const;
 
-/** The season the demo teams register in. */
 export const DEMO_TEAM_SEASON = {
   orgSlug: 'gulf-coast-sport-social',
   leagueSlug: 'sunday-reverse-coed-4s',
@@ -1023,7 +1021,6 @@ export const findDemoCredential = internalQuery({
   },
 });
 
-/** Takes only a fictional captain's address, and answers its auth user id. */
 export const findDemoCaptain = internalQuery({
   args: { email: v.string() },
   returns: v.union(v.null(), v.string()),
@@ -1062,7 +1059,7 @@ export const insertDemoTeams = internalMutation({
       if (await rosteredEntryInSeason(ctx, found.season._id, user._id)) continue;
       const season = await ctx.db.get('seasons', found.season._id);
       if (!season) return inserted;
-      await insertTeam(ctx, season, { name: team.name, captainUserId: user._id });
+      await insertTeamWithCaptain(ctx, season, { name: team.name, captainUserId: user._id });
       inserted++;
     }
     return inserted;

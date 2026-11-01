@@ -6,7 +6,6 @@ export interface RosterCount {
 
 const players = (count: number) => `${count} ${count === 1 ? 'player' : 'players'}`;
 
-/** "N of M players" up to the minimum, then "N players". */
 export function rosterCount(rostered: number, minimum: number): RosterCount {
   const met = rostered >= minimum;
   const count = rostered <= minimum ? `${rostered} of ${players(minimum)}` : players(rostered);

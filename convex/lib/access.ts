@@ -86,7 +86,6 @@ export async function organizesLeague(
   return membership !== null && mayOrganizeLeague(membership, league._id);
 }
 
-/** For a team's own pages: its rostered players and the league's organizers. Anyone else gets FORBIDDEN. */
 export async function requireTeamMemberOrOrganizer(
   ctx: Ctx,
   team: Doc<'teams'>,

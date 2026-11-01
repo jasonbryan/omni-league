@@ -7,7 +7,7 @@ import type { MutationCtx } from './_generated/server';
 import {
   addRosterEntry,
   backfillSeasonTeamCounts,
-  insertTeam,
+  insertTeamWithCaptain,
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
@@ -85,7 +85,10 @@ describe('rosterWrites, called directly', () => {
   test('a team starts with its captain as its only rostered entry, and the counters move by one', async () => {
     const s = await setup();
     const teamId = await s.t.run(async (ctx) =>
-      insertTeam(ctx, await seasonOf(ctx, s.summer), { name: 'Sand Sharks', captainUserId: s.ana }),
+      insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+        name: 'Sand Sharks',
+        captainUserId: s.ana,
+      }),
     );
     await s.t.run(async (ctx) => {
       const team = await teamOf(ctx, teamId);
@@ -109,7 +112,7 @@ describe('rosterWrites, called directly', () => {
     const s = await setup();
     const failure = await s.t
       .run(async (ctx) => {
-        const teamId = await insertTeam(ctx, await seasonOf(ctx, s.summer), {
+        const teamId = await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
           name: 'Sand Sharks',
           captainUserId: s.ana,
         });
@@ -133,10 +136,16 @@ describe('rosterWrites, called directly', () => {
   test('refuses a rostered entry on another team of the same season, naming the first team', async () => {
     const s = await setup();
     const teamId = await s.t.run(async (ctx) =>
-      insertTeam(ctx, await seasonOf(ctx, s.summer), { name: 'Sand Sharks', captainUserId: s.ana }),
+      insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+        name: 'Sand Sharks',
+        captainUserId: s.ana,
+      }),
     );
     const other = await s.t.run(async (ctx) =>
-      insertTeam(ctx, await seasonOf(ctx, s.summer), { name: 'Net Results', captainUserId: s.ben }),
+      insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+        name: 'Net Results',
+        captainUserId: s.ben,
+      }),
     );
     await s.t.run(async (ctx) =>
       addRosterEntry(ctx, await teamOf(ctx, teamId), {
@@ -165,11 +174,11 @@ describe('rosterWrites, called directly', () => {
   test('adds the same user to a team of another season', async () => {
     const s = await setup();
     await s.t.run(async (ctx) => {
-      await insertTeam(ctx, await seasonOf(ctx, s.summer), {
+      await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
         name: 'Sand Sharks',
         captainUserId: s.ana,
       });
-      await insertTeam(ctx, await seasonOf(ctx, s.fall), {
+      await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.fall), {
         name: 'Sand Sharks',
         captainUserId: s.ana,
       });
@@ -184,7 +193,10 @@ describe('rosterWrites, called directly', () => {
   test('a removed entry keeps its row, lowers the count, and no longer blocks another team', async () => {
     const s = await setup();
     const teamId = await s.t.run(async (ctx) =>
-      insertTeam(ctx, await seasonOf(ctx, s.summer), { name: 'Sand Sharks', captainUserId: s.ana }),
+      insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+        name: 'Sand Sharks',
+        captainUserId: s.ana,
+      }),
     );
     await s.t.run(async (ctx) => {
       await addRosterEntry(ctx, await teamOf(ctx, teamId), {
@@ -203,7 +215,7 @@ describe('rosterWrites, called directly', () => {
       expect(removed).toMatchObject({ status: 'removed', removedByUserId: s.ana });
       expect(removed?.removedAt).toBeGreaterThan(0);
       expect((await teamOf(ctx, teamId)).rosterCount).toBe(1);
-      await insertTeam(ctx, await seasonOf(ctx, s.summer), {
+      await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
         name: 'Net Results',
         captainUserId: s.cy,
       });
@@ -216,7 +228,7 @@ describe('rosterWrites, called directly', () => {
     await s.t.run(async (ctx) => {
       await ctx.db.patch('seasons', s.summer, { teamCount: undefined });
       await ctx.db.patch('seasons', s.fall, { teamCount: undefined });
-      await insertTeam(ctx, await seasonOf(ctx, s.summer), {
+      await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
         name: 'Sand Sharks',
         captainUserId: s.ana,
       });
