@@ -2,11 +2,13 @@ import type { Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
+import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
 import { overlayPanes } from './support/overlay';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
+import { expectVisibleInFooter } from './support/sticky-footer';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -323,6 +325,148 @@ test.describe('League management: concurrent publishes', () => {
       } finally {
         await second.context().close();
       }
+    },
+  );
+});
+
+const createForm = (page: Page) => page.locator('#create-season form');
+const createdStatus = (page: Page) => createForm(page).locator('[data-slot="created-status"]');
+const footerPublish = (page: Page) =>
+  createdStatus(page).getByRole('button', { name: 'Publish season Fall 2028', exact: true });
+
+async function createFall2028(page: Page) {
+  await page.locator('#name').fill('Fall 2028');
+  await page.locator('#start-date').fill('2028-09-01');
+  await page.locator('#end-date').fill('2028-11-15');
+  await page.locator('#registration-deadline').fill('2028-08-25');
+  await createForm(page)
+    .getByRole('button', { name: /^Create draft season/ })
+    .click();
+  await expect(footerPublish(page)).toBeVisible();
+}
+
+test.describe('League management: publishing the season just created', () => {
+  test('Publish season in the created status opens the dialog for the new season, and Cancel and Escape return focus to it', async ({
+    page,
+  }, testInfo) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await expect(rows(page)).toHaveCount(3);
+    await createFall2028(page);
+    await expect(
+      createForm(page).getByRole('button', { name: /^Create draft season/ }),
+    ).toBeFocused();
+    await expect(footerPublish(page)).toHaveAttribute('aria-haspopup', 'dialog');
+    await expectVisibleInFooter(page, footerPublish(page));
+    await screenshot(page, testInfo, '446-created-publish-season');
+    await expectAccessible(page);
+
+    await footerPublish(page).click();
+    await expect(dialog(page)).toBeVisible();
+    await expect(dialog(page).getByRole('heading')).toHaveText('Publish Fall 2028?');
+    await expect(dialog(page)).toContainText('players can register until Aug 25, 2028');
+    await expect(dialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(footerPublish(page)).toBeFocused();
+
+    await footerPublish(page).click();
+    await expect(dialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(footerPublish(page)).toBeFocused();
+    await expect(status(page, 'Fall 2028')).toHaveText('Draft');
+  });
+
+  test('confirming publishes it: the row is Published, the notice shows in Seasons with focus, and the footer status is gone', async ({
+    page,
+  }) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await createFall2028(page);
+    await footerPublish(page).click();
+    await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(status(page, 'Fall 2028')).toHaveText('Published');
+    await expect(result(page)).toContainText('Fall 2028 is published.');
+    await expect(result(page)).toBeFocused();
+    await expect(result(page).getByRole('link', { name: 'View season page' })).toHaveAttribute(
+      'href',
+      `/organizations/${tenant.slug}/leagues/${COED}/seasons/fall-2028`,
+    );
+    await expect(createdStatus(page)).toBeEmpty();
+  });
+
+  test.describe('when publishing fails', () => {
+    test.use({ expectedConvexErrors: ['seasons:publish'] });
+
+    test('the dialog shows its failure alert with focus, and Cancel returns focus to Publish season', async ({
+      page,
+    }) => {
+      await failMutation(page, 'seasons:publish');
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${COED}`);
+      await createFall2028(page);
+      await footerPublish(page).click();
+      await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+      const alert = dialog(page).getByRole('alert');
+      await expect(alert).toContainText('The season could not be published.');
+      await expect(alert).toBeFocused();
+      await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+      await expect(footerPublish(page)).toBeFocused();
+      await expect(status(page, 'Fall 2028')).toHaveText('Draft');
+    });
+  });
+
+  test('offline, the dialog shows its offline alert', async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await createFall2028(page);
+    await footerPublish(page).click();
+    await expect(dialog(page)).toBeVisible();
+    await page.context().setOffline(true);
+    try {
+      await dialog(page).getByRole('button', { name: 'Publish season' }).click({ force: true });
+      await expect(dialog(page).locator('[data-slot="alert"]')).toContainText(
+        "Fall 2028 is still a draft. Try again when you're connected.",
+      );
+    } finally {
+      await page.context().setOffline(false);
+    }
+  });
+
+  test(
+    'the league organizer opens the dialog from the created status, and confirming publishes',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { base } = await memberOf(page, 'leagueOrganizer');
+      await page.goto(`${base}/leagues/${COED}`);
+      await createFall2028(page);
+      await footerPublish(page).click();
+      await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+      await expect(dialog(page)).toHaveCount(0);
+      await expect(status(page, 'Fall 2028')).toHaveText('Published');
+      await expect(result(page)).toContainText('Fall 2028 is published.');
+    },
+  );
+
+  test(
+    'published from a second page, the created status offers Show it in Seasons in place of Publish season',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${COED}`);
+      await createFall2028(page);
+      const second = await page.context().newPage();
+      await second.goto(`${base}/leagues/${COED}`);
+      await publishButton(second, 'Fall 2028').click();
+      await dialog(second).getByRole('button', { name: 'Publish season' }).click();
+      await expect(status(second, 'Fall 2028')).toHaveText('Published');
+      await expect(footerPublish(page)).toHaveCount(0);
+      await expect(
+        createdStatus(page).getByRole('link', { name: 'Show it in Seasons' }),
+      ).toBeVisible();
     },
   );
 });

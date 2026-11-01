@@ -376,4 +376,118 @@ describe('LeaguePage', () => {
       expect(page.querySelector('#create-season')).toBeNull();
     });
   });
+
+  describe('finding a season by its address', () => {
+    const scrolled = vi.fn();
+    beforeEach(() => {
+      scrolled.mockClear();
+      Element.prototype.scrollIntoView = scrolled;
+    });
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
+
+    const FRAGMENT_URL = `${LEAGUE_URL}#season-summer-2027`;
+    const seasonsHeading = () => page.querySelector<HTMLElement>('#seasons-heading')!;
+    const title = (n: number) => rows()[n].querySelector<HTMLElement>('h3')!;
+
+    it('gives each row an id from its slug and a title that takes focus', async () => {
+      await open(COED, SEASONS);
+      expect(rows().map((row) => row.id)).toEqual(['season-fall-2027', 'season-summer-2027']);
+      expect(title(0).getAttribute('tabindex')).toBe('-1');
+      expect(seasonsHeading().getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('focuses the row title once the list arrives', async () => {
+      await open(COED, undefined, FRAGMENT_URL);
+      expect(document.activeElement).not.toBe(seasonsHeading());
+      o.subscription(LIST_FOR_ORGANIZER)!.emit(SEASONS);
+      await o.flush();
+      expect(document.activeElement).toBe(title(1));
+    });
+
+    it('focuses the Seasons heading for a slug no row has', async () => {
+      await open(COED, SEASONS, `${LEAGUE_URL}#season-nope`);
+      expect(document.activeElement).toBe(seasonsHeading());
+    });
+
+    it('focuses the Seasons heading when the list fails', async () => {
+      await open(COED, undefined, FRAGMENT_URL);
+      o.subscription(LIST_FOR_ORGANIZER)!.fail(new Error('Server Error'));
+      await o.flush();
+      expect(document.activeElement).toBe(seasonsHeading());
+    });
+
+    it('lands once: a later update of the list leaves focus where the user put it', async () => {
+      await open(COED, SEASONS, FRAGMENT_URL);
+      expect(document.activeElement).toBe(title(1));
+      page.querySelector<HTMLInputElement>('#name')!.focus();
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([
+        ...SEASONS,
+        { ...SEASONS[0], seasonId: 'se_x', slug: 'x-2028', name: 'X 2028' },
+      ]);
+      await o.flush();
+      expect(document.activeElement).toBe(page.querySelector('#name'));
+    });
+
+    it.each(['details', 'create-season'])('does not take focus for #%s', async (fragment) => {
+      await open(COED, SEASONS, `${LEAGUE_URL}#${fragment}`);
+      expect(document.activeElement).not.toBe(seasonsHeading());
+      expect(rows().some((row) => row.contains(document.activeElement))).toBe(false);
+    });
+
+    describe('the Show it in Seasons link', () => {
+      async function createdIn(context: unknown, seasons?: unknown[]) {
+        await open(context, seasons);
+        for (const [id, value] of [
+          ['name', 'Summer 2027'],
+          ['start-date', '2027-06-02'],
+          ['end-date', '2027-08-25'],
+          ['registration-deadline', '2027-05-19'],
+        ]) {
+          const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+          input.value = value;
+          input.dispatchEvent(new Event('input'));
+          await o.harness.fixture.whenStable();
+        }
+        page.querySelector<HTMLButtonElement>('#create-season button[type="submit"]')!.click();
+        await o.flush();
+        o.convex.calls[0].resolve({ seasonId: 'se_summer27' });
+        await o.flush();
+      }
+      const link = () => page.querySelector<HTMLAnchorElement>('[data-created-action]')!;
+      const DRAFT = { ...COED, status: 'draft' };
+
+      it('moves focus to the new row’s title', async () => {
+        await createdIn(DRAFT, SEASONS);
+        const scrolled = vi.fn();
+        title(1).scrollIntoView = scrolled;
+        link().click();
+        await o.flush();
+        expect(scrolled).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(title(1));
+      });
+
+      it('moves focus to the Seasons heading while the list is loading, and keeps it there when the rows arrive', async () => {
+        await createdIn(DRAFT);
+        seasonsHeading().scrollIntoView = vi.fn();
+        link().click();
+        await o.flush();
+        expect(document.activeElement).toBe(seasonsHeading());
+        o.subscription(LIST_FOR_ORGANIZER)!.emit(SEASONS);
+        await o.flush();
+        expect(document.activeElement).toBe(seasonsHeading());
+      });
+
+      it('moves focus to the Seasons heading when the list failed', async () => {
+        await createdIn(DRAFT);
+        o.subscription(LIST_FOR_ORGANIZER)!.fail(new Error('Server Error'));
+        await o.flush();
+        seasonsHeading().scrollIntoView = vi.fn();
+        link().click();
+        await o.flush();
+        expect(document.activeElement).toBe(seasonsHeading());
+      });
+    });
+  });
 });
