@@ -13,14 +13,20 @@ import {
 } from '@angular/core';
 import { FormField } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus } from '@ng-icons/lucide';
+import {
+  lucideCheck,
+  lucideCircleAlert,
+  lucideGlobe,
+  lucideLoaderCircle,
+  lucidePlus,
+} from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { formatLabel } from '../../../../convex/lib/divisions';
 import { api, injectMutation, injectOnline } from '../../core/data/convex';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
-import { PRIMARY_BUTTON } from '../admin/button-classes';
+import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { CREATED_STATUS, CREATED_TITLE } from '../admin/footer-status';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
@@ -29,6 +35,18 @@ import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
 
 const NOT_SET = 'Not set yet';
+
+export interface CreatedSeason {
+  seasonId: Id<'seasons'>;
+  name: string;
+  slug: string;
+  registrationDeadline: string;
+}
+
+export interface SeasonShown {
+  event: MouseEvent;
+  slug: string;
+}
 
 const DATE_FIELDS = [
   {
@@ -63,7 +81,9 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 @Component({
   selector: 'app-season-create-form',
   imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, StickyFooter, StickyFooterFocus],
-  providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
+  providers: [
+    provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucideLoaderCircle, lucidePlus }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -287,15 +307,41 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
       }
       <div appStickyFooter>
         <div role="status" data-slot="created-status">
-          @if (created(); as name) {
+          @if (created(); as season) {
             <div [class]="createdClass">
               <ng-icon name="lucideCheck" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
-              <span
-                data-slot="created-title"
-                [class]="createdTitleClass"
-                style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere"
-                >{{ name }} created as a draft.</span
-              >
+              <div class="flex min-w-0 flex-wrap items-center gap-x-3">
+                <span
+                  data-slot="created-title"
+                  [class]="createdTitleClass"
+                  style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere"
+                  >{{ season.name }} created as a draft.</span
+                >
+                @if (publishable()) {
+                  <button
+                    type="button"
+                    data-slot="button"
+                    data-created-action
+                    aria-haspopup="dialog"
+                    [class]="publishClass"
+                    (click)="publishRequested.emit(season)"
+                  >
+                    <ng-icon
+                      name="lucideGlobe"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Publish season<span class="sr-only"> {{ season.name }}</span>
+                  </button>
+                } @else {
+                  <a
+                    data-created-action
+                    [href]="seasonHref(season.slug)"
+                    class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                    (click)="seasonShown.emit({ event: $event, slug: season.slug })"
+                    >Show it in Seasons</a
+                  >
+                }
+              </div>
             </div>
           }
         </div>
@@ -334,6 +380,11 @@ export class SeasonCreateForm {
   readonly division = input<OrganizerLeague['division']>();
   readonly detailsHref = input.required<string>();
   readonly detailsOpened = output<MouseEvent>();
+  readonly leaguePublished = input.required<boolean>();
+  readonly leagueHref = input.required<string>();
+  readonly publishedSeasonIds = input<ReadonlySet<string>>(new Set());
+  readonly publishRequested = output<CreatedSeason>();
+  readonly seasonShown = output<SeasonShown>();
 
   protected readonly online = injectOnline();
   protected readonly form = new SeasonForm();
@@ -366,8 +417,16 @@ export class SeasonCreateForm {
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;
+  protected readonly publishClass = OUTLINE_BUTTON;
 
-  protected readonly created = signal<string | null>(null);
+  protected readonly created = signal<CreatedSeason | null>(null);
+
+  protected readonly publishable = computed(() => {
+    const season = this.created();
+    return (
+      season !== null && this.leaguePublished() && !this.publishedSeasonIds().has(season.seasonId)
+    );
+  });
 
   private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly leagueAlert = viewChild<AdminAlert>('leagueAlert');
@@ -381,6 +440,20 @@ export class SeasonCreateForm {
     const ids = [description, this.form.errors[field]() ? `${errorId}-error` : null];
     const described = ids.filter((id): id is string => id !== null).join(' ');
     return described === '' ? null : described;
+  }
+
+  protected seasonHref(slug: string): string {
+    return `${this.leagueHref()}#season-${slug}`;
+  }
+
+  clearCreated(): void {
+    this.created.set(null);
+  }
+
+  /** Puts focus back on the next step the created status offers, or on Create when the status has gone. */
+  focusNextStep(): void {
+    const action = this.host.nativeElement.querySelector<HTMLElement>('[data-created-action]');
+    (action ?? this.submitButton().nativeElement).focus();
   }
 
   protected edited(): void {
@@ -397,11 +470,14 @@ export class SeasonCreateForm {
     if (this.form.submitting()) return;
     this.created.set(null);
     const leagueId = this.leagueId();
-    const outcome = await this.form.submit(this.online(), (values) =>
-      this.create.run({ leagueId, ...values }),
-    );
-    if (outcome.sent) {
-      this.created.set(outcome.values.name);
+    // `SeasonForm.submit` drops what `send` returns, so the new id is kept here.
+    let seasonId: Id<'seasons'> | undefined;
+    const outcome = await this.form.submit(this.online(), async (values) => {
+      ({ seasonId } = await this.create.run({ leagueId, ...values }));
+    });
+    if (outcome.sent && seasonId !== undefined) {
+      const { name, slug, registrationDeadline } = outcome.values;
+      this.created.set({ seasonId, name, slug, registrationDeadline });
       this.form.clear();
       this.focusAfterRender(() => this.submitButton().nativeElement.focus());
     } else if ('focus' in outcome) {

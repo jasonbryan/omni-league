@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
 import { MAX_SEASON_NAME_LENGTH, SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
-import { PRIMARY_BUTTON } from '../admin/button-classes';
+import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
 import { expectStickyFooterWithFocusFix } from '../admin/testing/sticky-footer-check';
 import { openAdmin, text } from '../admin/testing/admin-harness';
@@ -13,6 +13,7 @@ import {
   LEAGUE_ROUTES,
   LEAGUE_URL,
   LIST_FOR_ORGANIZER,
+  SEASONS,
 } from './testing/league-harness';
 
 const tokens = (value: string) => value.split(' ').sort();
@@ -497,7 +498,9 @@ describe('SeasonCreateForm', () => {
       await open();
       await created();
       const status = createdStatus()!;
-      expect(text(status)).toBe('Fall 2026 created as a draft.');
+      expect(text(status.querySelector('[data-slot="created-title"]'))).toBe(
+        'Fall 2026 created as a draft.',
+      );
       expect(text(form())).not.toContain('Publish it when');
       expect(status.parentElement!.getAttribute('data-slot')).toBe('form-footer');
       expect(status.nextElementSibling).toBe(submitButton());
@@ -669,6 +672,96 @@ describe('SeasonCreateForm', () => {
         expect(error('name')).toBe('Enter the season’s name.');
         expect(form().querySelector('[data-slot="alert"]')).toBeNull();
       });
+    });
+  });
+
+  describe('the next step in the created status', () => {
+    const DRAFT_COED = { ...COED, status: 'draft' };
+
+    async function created(context: unknown = COED) {
+      await open(context);
+      await fill();
+      submitButton().focus();
+      await submit();
+      o.convex.calls[0].resolve({ seasonId: 'se_new' });
+      await o.flush();
+    }
+
+    const status = () => form().querySelector<HTMLElement>('[data-slot="created-status"]')!;
+    const action = () => status().querySelector<HTMLElement>('[data-created-action]');
+
+    it('a published league offers Publish season, named for the season, an outline button that opens a dialog', async () => {
+      await created();
+      const button = action() as HTMLButtonElement;
+      expect(button.tagName).toBe('BUTTON');
+      expect(text(button)).toBe('Publish season Fall 2026');
+      expect(button.querySelector('.sr-only')?.textContent).toBe(' Fall 2026');
+      expect(button.type).toBe('button');
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(tokens(button.className)).toEqual(tokens(OUTLINE_BUTTON));
+      expect(status().querySelector('a')).toBeNull();
+      expect(document.activeElement).toBe(submitButton());
+    });
+
+    it('pressing Publish season opens the publish dialog for the new season, with its deadline', async () => {
+      await created();
+      action()!.click();
+      await o.flush();
+      const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
+      expect(text(dialog.querySelector('h2'))).toBe('Publish Fall 2026?');
+      expect(text(dialog)).toContain('players can register until Aug 25, 2026');
+    });
+
+    it('a draft league offers Show it in Seasons, a link to the new row, and no Publish button', async () => {
+      await created(DRAFT_COED);
+      const link = action() as HTMLAnchorElement;
+      expect(link.tagName).toBe('A');
+      expect(text(link)).toBe('Show it in Seasons');
+      expect(link.getAttribute('href')).toBe(`${LEAGUE_URL}#season-fall-2026`);
+      expect(link.classList.contains('pointer-coarse:min-h-11')).toBe(true);
+      expect(status().querySelector('button')).toBeNull();
+    });
+
+    it('swaps Publish season for the link once the season is published elsewhere', async () => {
+      await created();
+      expect(action()!.tagName).toBe('BUTTON');
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([
+        {
+          ...SEASONS[0],
+          seasonId: 'se_new',
+          name: 'Fall 2026',
+          slug: 'fall-2026',
+          status: 'published',
+        },
+      ]);
+      await o.flush();
+      expect(text(action())).toBe('Show it in Seasons');
+    });
+
+    it('swaps the link for Publish season once the league is published elsewhere', async () => {
+      await created(DRAFT_COED);
+      expect(action()!.tagName).toBe('A');
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+      await o.flush();
+      expect(text(action())).toBe('Publish season Fall 2026');
+    });
+
+    it('goes with the status on the next edit', async () => {
+      await created();
+      input('name').value = 'N';
+      input('name').dispatchEvent(new Event('input', { bubbles: true }));
+      await o.harness.fixture.whenStable();
+      expect(action()).toBeNull();
+    });
+
+    it('keeps the one status region, with no status inside another and the action inside it', async () => {
+      await created();
+      const holding = [...form().querySelectorAll('[role="status"]')].filter((element) =>
+        element.textContent.includes('created as a draft.'),
+      );
+      expect(holding).toEqual([status()]);
+      expect(form().querySelectorAll('[role="status"] [role="status"]')).toHaveLength(0);
+      expect(status().contains(action())).toBe(true);
     });
   });
 });

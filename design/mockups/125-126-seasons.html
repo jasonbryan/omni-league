@@ -185,6 +185,11 @@
                 >23. Draft league, as a league organizer</a
               >
             </li>
+            <li>
+              <a class="text-primary underline underline-offset-4" href="#created-draft-league"
+                >24. Create, done: a draft league</a
+              >
+            </li>
           </ul>
         </nav>
       </header>
@@ -507,7 +512,8 @@
           Spring 2028 joins the list as a draft, in start-date order, and the form clears. The
           confirmation is a status in the footer just above the submit button, where focus stays. On
           a phone the footer sticks to the bottom of the screen, so the status shows without a
-          scroll. The status goes once the form is edited again.
+          scroll. The status also offers the next step: Publish season, which opens the publish
+          confirmation (state 17) for the new season. The status goes once the form is edited again.
         </p>
         <div
           tabindex="0"
@@ -1029,6 +1035,43 @@
           </figure>
         </div>
       </section>
+      <section id="created-draft-league" aria-labelledby="created-draft-league-label" class="mt-12">
+        <h2 id="created-draft-league-label" class="text-lg font-semibold">
+          24. Create, done: a draft league
+        </h2>
+        <p class="mt-1 max-w-3xl text-sm/relaxed text-muted-foreground">
+          A draft league cannot publish a season, so the footer status offers the link to the new
+          item instead: Show it in Seasons, which scrolls to the new row and focuses its title. A
+          published league offers Publish season there (state 9).
+        </p>
+        <div
+          tabindex="0"
+          role="region"
+          aria-label="24. Create, done: a draft league: frames"
+          class="mt-4 flex flex-wrap items-start gap-6 overflow-x-auto pb-2"
+        >
+          <figure>
+            <figcaption class="mb-2 text-xs font-medium text-muted-foreground">360px</figcaption>
+            <iframe
+              src="?state=created-draft-league"
+              title="24. Create, done: a draft league at 360px"
+              width="360"
+              height="800"
+              class="block rounded-lg bg-background ring-1 ring-foreground/10"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption class="mb-2 text-xs font-medium text-muted-foreground">1280px</figcaption>
+            <iframe
+              src="?state=created-draft-league"
+              title="24. Create, done: a draft league at 1280px"
+              width="1280"
+              height="720"
+              class="block rounded-lg bg-background ring-1 ring-foreground/10"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
       <section id="copy" aria-labelledby="copy-heading" class="mt-16">
         <h2 id="copy-heading" class="text-lg font-semibold">Messages and attributes</h2>
         <div
@@ -1204,7 +1247,8 @@
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">Created</th>
                 <td class="px-4 py-2 align-top">
-                  "&lt;season&gt; created as a draft." (up to two lines)
+                  "&lt;season&gt; created as a draft." (up to two lines), then "Publish season" in a
+                  published league or "Show it in Seasons" in a draft league
                 </td>
                 <td class="px-4 py-2 align-top">Status in the footer, above the button</td>
                 <td class="px-4 py-2 align-top">Stays on the submit button</td>
@@ -10943,9 +10987,32 @@
                             >
                               <path d="M20 6 9 17l-5-5"></path></svg
                           ></ng-icon>
-                          <span data-slot="created-title" class="line-clamp-2 min-w-0 font-medium"
-                            >Spring 2028 created as a draft.</span
-                          >
+                          <div class="flex min-w-0 flex-wrap items-center gap-x-3">
+                            <span data-slot="created-title" class="line-clamp-2 min-w-0 font-medium"
+                              >Spring 2028 created as a draft.</span
+                            >
+                            <button
+                              type="button"
+                              aria-haspopup="dialog"
+                              data-slot="button"
+                              class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3"
+                            >
+                              <ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                                ><svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                                >
+                                  <circle cx="12" cy="12" r="10"></circle>
+                                  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                                  <path d="M2 12h20"></path></svg></ng-icon
+                              >Publish season<span class="sr-only"> Spring 2028</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <button
@@ -24808,6 +24875,959 @@
                           <path d="M12 5v14"></path></svg></ng-icon
                       >Create draft season
                     </button>
+                    <p role="status" class="sr-only"></p>
+                  </form>
+                </section>
+              </div>
+            </div>
+          </main>
+        </div></div
+    ></template>
+    <template
+      id="state-created-draft-league"
+      data-title="Tuesday Coed Slow-Pitch | Gulf Coast Sport &amp; Social | Omni League"
+      ><a
+        href="#main"
+        class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+        >Skip to main content</a
+      >
+      <div class="flex min-h-dvh flex-col">
+        <header
+          class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:px-4 lg:px-6 [&,&_*]:scroll-mt-[calc(-4.5rem-var(--offline-note-h,0px))]"
+        >
+          <button
+            type="button"
+            aria-label="Open navigation"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            data-slot="button"
+            class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground size-9 -ms-1.5 lg:hidden"
+          >
+            <ng-icon role="img" aria-hidden="true" class="text-xl"
+              ><svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+              >
+                <path d="M4 5h16"></path>
+                <path d="M4 12h16"></path>
+                <path d="M4 19h16"></path></svg
+            ></ng-icon></button
+          ><a href="/" class="flex items-center gap-2 rounded-md text-base font-semibold"
+            ><span
+              class="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
+              ><ng-icon role="img" aria-hidden="true" class="text-lg"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                >
+                  <path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"></path>
+                  <path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"></path>
+                  <path d="M18 9h1.5a1 1 0 0 0 0-5H18"></path>
+                  <path d="M4 22h16"></path>
+                  <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"></path>
+                  <path d="M6 9H4.5a1 1 0 0 1 0-5H6"></path></svg></ng-icon></span
+            >Omni League</a
+          ><a
+            href="/app"
+            data-slot="button"
+            class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 ms-auto min-w-0 max-w-36 ps-1 md:max-w-64"
+            ><span
+              aria-hidden="true"
+              class="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground"
+              >MO</span
+            ><span class="sr-only">Account: </span><span class="truncate">Maya Okafor</span></a
+          >
+        </header>
+        <div class="flex flex-1">
+          <div class="hidden w-64 shrink-0 border-e border-sidebar-border bg-sidebar lg:block">
+            <div class="sticky top-14 max-h-[calc(100dvh-3.5rem)] overflow-y-auto px-3 py-5">
+              <nav aria-label="Gulf Coast Sport &amp; Social admin" class="flex flex-col gap-6">
+                <div class="flex items-center gap-3 px-2">
+                  <span
+                    aria-hidden="true"
+                    class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground"
+                    >GC</span
+                  >
+                  <div class="min-w-0">
+                    <p class="text-sm/tight font-semibold">Gulf Coast Sport &amp; Social</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Admin area</p>
+                  </div>
+                </div>
+                <ul role="list" class="flex flex-col gap-0.5">
+                  <li>
+                    <a
+                      href="/app/organizations/gulf-coast-sport-social"
+                      class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+                      ><ng-icon
+                        role="img"
+                        aria-hidden="true"
+                        class="shrink-0 text-base text-muted-foreground"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <rect width="7" height="9" x="3" y="3" rx="1"></rect>
+                          <rect width="7" height="5" x="14" y="3" rx="1"></rect>
+                          <rect width="7" height="9" x="14" y="12" rx="1"></rect>
+                          <rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></ng-icon
+                      >Overview</a
+                    >
+                  </li>
+                  <li>
+                    <a
+                      href="/app/organizations/gulf-coast-sport-social/locations"
+                      class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+                      ><ng-icon
+                        role="img"
+                        aria-hidden="true"
+                        class="shrink-0 text-base text-muted-foreground"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <path
+                            d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+                          ></path>
+                          <circle cx="12" cy="10" r="3"></circle></svg></ng-icon
+                      >Locations</a
+                    >
+                  </li>
+                  <li>
+                    <a
+                      href="/app/organizations/gulf-coast-sport-social/leagues"
+                      aria-current="true"
+                      class="flex min-h-8 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm font-medium text-sidebar-accent-foreground"
+                      ><ng-icon role="img" aria-hidden="true" class="shrink-0 text-base"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"></path>
+                          <path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"></path>
+                          <path d="M18 9h1.5a1 1 0 0 0 0-5H18"></path>
+                          <path d="M4 22h16"></path>
+                          <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"></path>
+                          <path d="M6 9H4.5a1 1 0 0 1 0-5H6"></path></svg></ng-icon
+                      >Leagues</a
+                    >
+                  </li>
+                  <li>
+                    <a
+                      href="/app/organizations/gulf-coast-sport-social/staff"
+                      class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+                      ><ng-icon
+                        role="img"
+                        aria-hidden="true"
+                        class="shrink-0 text-base text-muted-foreground"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                          <path d="M16 3.128a4 4 0 0 1 0 7.744"></path>
+                          <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                          <circle cx="9" cy="7" r="4"></circle></svg></ng-icon
+                      >Staff</a
+                    >
+                  </li>
+                </ul>
+                <ul role="list" class="flex flex-col gap-0.5 border-t border-sidebar-border pt-4">
+                  <li>
+                    <a
+                      href="/organizations/gulf-coast-sport-social"
+                      class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+                      ><ng-icon
+                        role="img"
+                        aria-hidden="true"
+                        class="shrink-0 text-base text-muted-foreground"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                          <path d="M2 12h20"></path></svg></ng-icon
+                      >Public page</a
+                    >
+                  </li>
+                  <li>
+                    <a
+                      href="/app"
+                      class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-muted"
+                      ><ng-icon
+                        role="img"
+                        aria-hidden="true"
+                        class="shrink-0 text-base text-muted-foreground"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <path d="m12 19-7-7 7-7"></path>
+                          <path d="M19 12H5"></path></svg></ng-icon
+                      >Your organizations</a
+                    >
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+          <main id="main" tabindex="-1" class="min-w-0 flex-1 focus:outline-none">
+            <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
+              <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-muted-foreground">
+                    Gulf Coast Sport &amp; Social
+                  </p>
+                  <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+                    Tuesday Coed Slow-Pitch
+                  </h1>
+                  <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <span
+                      data-slot="badge"
+                      data-variant="outline"
+                      class="group/badge focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap focus-visible:ring-[3px] [&>ng-icon]:pointer-events-none h-5 gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium transition-all has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&>ng-icon]:text-[length:--spacing(3)] border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground"
+                      ><ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <path d="M10.1 2.182a10 10 0 0 1 3.8 0"></path>
+                          <path d="M13.9 21.818a10 10 0 0 1-3.8 0"></path>
+                          <path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"></path>
+                          <path d="M2.182 13.9a10 10 0 0 1 0-3.8"></path>
+                          <path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"></path>
+                          <path d="M21.818 10.1a10 10 0 0 1 0 3.8"></path>
+                          <path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"></path>
+                          <path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"></path></svg></ng-icon
+                      >Draft</span
+                    ><span
+                      data-slot="badge"
+                      data-variant="secondary"
+                      class="group/badge focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap focus-visible:ring-[3px] [&>ng-icon]:pointer-events-none h-5 gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium transition-all has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&>ng-icon]:text-[length:--spacing(3)] bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80"
+                      >Softball</span
+                    >
+                  </div>
+                  <p class="flex items-start gap-1.5 text-sm text-muted-foreground mt-2">
+                    <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                      ><svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                      >
+                        <path
+                          d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+                        ></path>
+                        <circle cx="12" cy="10" r="3"></circle></svg></ng-icon
+                    ><span><span class="sr-only">Location: </span>Flour Bluff Softball Park</span>
+                  </p>
+                </div>
+                <a
+                  href="#create-season"
+                  data-slot="button"
+                  class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 lg:hidden"
+                  ><ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                    ><svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                    >
+                      <path d="M5 12h14"></path>
+                      <path d="M12 5v14"></path></svg></ng-icon
+                  >Create a season</a
+                >
+              </div>
+              <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
+                <section
+                  aria-labelledby="seasons-heading"
+                  class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 lg:col-span-2"
+                >
+                  <div
+                    class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
+                  >
+                    <h2 id="seasons-heading" class="font-semibold">Seasons</h2>
+                  </div>
+                  <div class="border-b border-border px-4 py-3 md:px-5">
+                    <div
+                      data-slot="alert"
+                      class="group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] bg-card text-card-foreground"
+                    >
+                      <ng-icon role="img" aria-hidden="true"
+                        ><svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                        >
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="M12 16v-4"></path>
+                          <path d="M12 8h.01"></path></svg
+                      ></ng-icon>
+                      <div
+                        data-slot="alert-title"
+                        class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
+                      >
+                        Publish the league first
+                      </div>
+                      <div
+                        data-slot="alert-description"
+                        class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
+                      >
+                        Seasons of a draft league can&rsquo;t be published.
+                        <a href="/app/organizations/gulf-coast-sport-social/leagues"
+                          >Publish Tuesday Coed Slow-Pitch in Leagues</a
+                        >, then come back to publish its seasons.
+                      </div>
+                    </div>
+                  </div>
+                  <ul role="list" class="divide-y divide-border">
+                    <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
+                      <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                          <h3 class="me-1 font-medium">
+                            <a
+                              href="/app/organizations/gulf-coast-sport-social/leagues/tuesday-coed-slow-pitch/seasons/spring-2028"
+                              class="underline underline-offset-4 hover:text-primary"
+                              >Spring 2028</a
+                            >
+                          </h3>
+                          <span
+                            data-slot="badge"
+                            data-variant="outline"
+                            class="group/badge focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap focus-visible:ring-[3px] [&>ng-icon]:pointer-events-none h-5 gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium transition-all has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&>ng-icon]:text-[length:--spacing(3)] border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground"
+                            ><ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M10.1 2.182a10 10 0 0 1 3.8 0"></path>
+                                <path d="M13.9 21.818a10 10 0 0 1-3.8 0"></path>
+                                <path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"></path>
+                                <path d="M2.182 13.9a10 10 0 0 1 0-3.8"></path>
+                                <path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"></path>
+                                <path d="M21.818 10.1a10 10 0 0 1 0 3.8"></path>
+                                <path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"></path>
+                                <path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"></path></svg></ng-icon
+                            >Draft</span
+                          >
+                        </div>
+                        <div class="mt-1.5 flex flex-col gap-1">
+                          <p class="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M8 2v4"></path>
+                                <path d="M16 2v4"></path>
+                                <rect width="18" height="18" x="3" y="4" rx="2"></rect>
+                                <path d="M3 10h18"></path>
+                                <path d="M8 14h.01"></path>
+                                <path d="M12 14h.01"></path>
+                                <path d="M16 14h.01"></path>
+                                <path d="M8 18h.01"></path>
+                                <path d="M12 18h.01"></path>
+                                <path d="M16 18h.01"></path></svg></ng-icon
+                            ><span
+                              ><span class="sr-only">Dates: </span>Mar 1 &ndash; May 10, 2028</span
+                            >
+                          </p>
+                          <p class="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M16 14v2.2l1.6 1"></path>
+                                <path d="M16 2v4"></path>
+                                <path
+                                  d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"
+                                ></path>
+                                <path d="M3 10h5"></path>
+                                <path d="M8 2v4"></path>
+                                <circle cx="16" cy="16" r="6"></circle></svg></ng-icon
+                            ><span>Registration deadline Feb 15, 2028</span>
+                          </p>
+                          <p class="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <path d="M16 3.128a4 4 0 0 1 0 7.744"></path>
+                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <circle cx="9" cy="7" r="4"></circle></svg></ng-icon
+                            ><span>10v10 &middot; at least 10 players</span>
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                    <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
+                      <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                          <h3 class="me-1 font-medium">
+                            <a
+                              href="/app/organizations/gulf-coast-sport-social/leagues/tuesday-coed-slow-pitch/seasons/spring-2027"
+                              class="underline underline-offset-4 hover:text-primary"
+                              >Spring 2027</a
+                            >
+                          </h3>
+                          <span
+                            data-slot="badge"
+                            data-variant="outline"
+                            class="group/badge focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap focus-visible:ring-[3px] [&>ng-icon]:pointer-events-none h-5 gap-1 rounded-4xl border border-transparent px-2 py-0.5 text-xs font-medium transition-all has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&>ng-icon]:text-[length:--spacing(3)] border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground"
+                            ><ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M10.1 2.182a10 10 0 0 1 3.8 0"></path>
+                                <path d="M13.9 21.818a10 10 0 0 1-3.8 0"></path>
+                                <path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"></path>
+                                <path d="M2.182 13.9a10 10 0 0 1 0-3.8"></path>
+                                <path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"></path>
+                                <path d="M21.818 10.1a10 10 0 0 1 0 3.8"></path>
+                                <path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"></path>
+                                <path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"></path></svg></ng-icon
+                            >Draft</span
+                          >
+                        </div>
+                        <div class="mt-1.5 flex flex-col gap-1">
+                          <p class="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M8 2v4"></path>
+                                <path d="M16 2v4"></path>
+                                <rect width="18" height="18" x="3" y="4" rx="2"></rect>
+                                <path d="M3 10h18"></path>
+                                <path d="M8 14h.01"></path>
+                                <path d="M12 14h.01"></path>
+                                <path d="M16 14h.01"></path>
+                                <path d="M8 18h.01"></path>
+                                <path d="M12 18h.01"></path>
+                                <path d="M16 18h.01"></path></svg></ng-icon
+                            ><span
+                              ><span class="sr-only">Dates: </span>Mar 2 &ndash; May 18, 2027</span
+                            >
+                          </p>
+                          <p class="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M16 14v2.2l1.6 1"></path>
+                                <path d="M16 2v4"></path>
+                                <path
+                                  d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"
+                                ></path>
+                                <path d="M3 10h5"></path>
+                                <path d="M8 2v4"></path>
+                                <circle cx="16" cy="16" r="6"></circle></svg></ng-icon
+                            ><span>Registration deadline Feb 16, 2027</span>
+                          </p>
+                          <p class="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                              ><svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                              >
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <path d="M16 3.128a4 4 0 0 1 0 7.744"></path>
+                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <circle cx="9" cy="7" r="4"></circle></svg></ng-icon
+                            ><span>10v10 &middot; at least 12 players</span>
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  </ul>
+                </section>
+                <section
+                  id="create-season"
+                  aria-labelledby="create-season-heading"
+                  class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+                >
+                  <div
+                    class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
+                  >
+                    <h2 id="create-season-heading" class="font-semibold">Create a season</h2>
+                  </div>
+                  <form
+                    novalidate
+                    aria-labelledby="create-season-heading"
+                    aria-describedby="create-season-note"
+                    class="px-4 py-4 md:px-5 md:py-5"
+                  >
+                    <p id="create-season-note" class="mb-5 text-sm text-muted-foreground">
+                      A season is one run of Tuesday Coed Slow-Pitch, with its own dates,
+                      registration, teams, and schedule. It starts as a draft, which only your staff
+                      see.
+                    </p>
+                    <div
+                      data-slot="field-group"
+                      class="group/field-group @container/field-group flex w-full flex-col gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4"
+                    >
+                      <div
+                        role="group"
+                        data-slot="field"
+                        data-orientation="vertical"
+                        class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                      >
+                        <label
+                          for="name"
+                          data-slot="field-label"
+                          class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                          >Name</label
+                        ><input
+                          id="name"
+                          name="name"
+                          type="text"
+                          data-slot="input"
+                          required
+                          autocomplete="off"
+                          aria-describedby="name-description"
+                          class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                        />
+                        <p
+                          data-slot="field-description"
+                          id="name-description"
+                          class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                        >
+                          Up to 100 characters, for example Fall 2027. Players see it with the
+                          league&rsquo;s name.
+                        </p>
+                      </div>
+                      <div
+                        role="group"
+                        data-slot="field"
+                        data-orientation="vertical"
+                        class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                      >
+                        <label
+                          for="slug"
+                          data-slot="field-label"
+                          class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                          >Slug</label
+                        ><input
+                          id="slug"
+                          name="slug"
+                          type="text"
+                          data-slot="input"
+                          required
+                          autocomplete="off"
+                          aria-describedby="slug-description"
+                          spellcheck="false"
+                          autocapitalize="none"
+                          class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                        />
+                        <p
+                          data-slot="field-description"
+                          id="slug-description"
+                          class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                        >
+                          3 to 60 lowercase letters and digits, with single hyphens between them.
+                          Unique within Tuesday Coed Slow-Pitch.
+                        </p>
+                      </div>
+                      <div
+                        role="group"
+                        data-slot="field"
+                        data-orientation="vertical"
+                        class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                      >
+                        <label
+                          for="start-date"
+                          data-slot="field-label"
+                          class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                          >Start date</label
+                        ><input
+                          id="start-date"
+                          name="start-date"
+                          type="date"
+                          data-slot="input"
+                          required
+                          autocomplete="off"
+                          class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                        />
+                      </div>
+                      <div
+                        role="group"
+                        data-slot="field"
+                        data-orientation="vertical"
+                        class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                      >
+                        <label
+                          for="end-date"
+                          data-slot="field-label"
+                          class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                          >End date</label
+                        ><input
+                          id="end-date"
+                          name="end-date"
+                          type="date"
+                          data-slot="input"
+                          required
+                          autocomplete="off"
+                          aria-describedby="end-date-description"
+                          class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                        />
+                        <p
+                          data-slot="field-description"
+                          id="end-date-description"
+                          class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                        >
+                          On or after the start date.
+                        </p>
+                      </div>
+                      <div
+                        role="group"
+                        data-slot="field"
+                        data-orientation="vertical"
+                        class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                      >
+                        <label
+                          for="registration-deadline"
+                          data-slot="field-label"
+                          class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                          >Registration deadline</label
+                        ><input
+                          id="registration-deadline"
+                          name="registration-deadline"
+                          type="date"
+                          data-slot="input"
+                          required
+                          autocomplete="off"
+                          aria-describedby="registration-deadline-description"
+                          class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                        />
+                        <p
+                          data-slot="field-description"
+                          id="registration-deadline-description"
+                          class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                        >
+                          Teams and free agents can register until the end of this day. It must be
+                          before the start date.
+                        </p>
+                      </div>
+                      <fieldset
+                        id="format"
+                        data-slot="field-set"
+                        class="flex flex-col gap-4 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3"
+                      >
+                        <legend
+                          data-slot="field-legend"
+                          data-variant="label"
+                          class="mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base"
+                        >
+                          Format
+                        </legend>
+                        <div data-slot="radio-group" class="grid gap-3">
+                          <div
+                            role="group"
+                            data-slot="field"
+                            data-orientation="horizontal"
+                            data-checked="true"
+                            class="group/field flex w-full flex-row items-center *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                          >
+                            <span
+                              data-slot="radio-group-item"
+                              class="group/radio relative mt-0.5 flex size-4 shrink-0 rounded-full border border-input has-checked:border-primary has-checked:bg-primary has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring"
+                              ><input
+                                type="radio"
+                                id="format-10v10"
+                                name="format"
+                                value="10v10"
+                                checked
+                                aria-describedby="format-10v10-description"
+                                class="absolute inset-0 m-0 size-full cursor-default appearance-none rounded-full opacity-0" /><span
+                                aria-hidden="true"
+                                class="pointer-events-none absolute start-1/2 top-1/2 hidden size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground group-has-checked/radio:block"
+                              ></span
+                            ></span>
+                            <div
+                              data-slot="field-content"
+                              class="group/field-content flex flex-1 flex-col leading-snug gap-0.5"
+                            >
+                              <label
+                                for="format-10v10"
+                                data-slot="field-label"
+                                class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                                >10v10</label
+                              >
+                              <p
+                                data-slot="field-description"
+                                id="format-10v10-description"
+                                class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                              >
+                                At least 10 players
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </fieldset>
+                      <div
+                        role="group"
+                        data-slot="field"
+                        data-orientation="vertical"
+                        class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                      >
+                        <label
+                          for="minimum-roster-size"
+                          data-slot="field-label"
+                          class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                          >Minimum roster size</label
+                        ><input
+                          id="minimum-roster-size"
+                          name="minimum-roster-size"
+                          type="text"
+                          data-slot="input"
+                          required
+                          autocomplete="off"
+                          aria-describedby="minimum-roster-size-description"
+                          value="10"
+                          inputmode="numeric"
+                          class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                        />
+                        <p
+                          data-slot="field-description"
+                          id="minimum-roster-size-description"
+                          class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                        >
+                          At least 10 for 10v10. Raise it if teams need more players.
+                        </p>
+                      </div>
+                      <fieldset
+                        id="limits"
+                        data-slot="field-set"
+                        aria-describedby="limits-description"
+                        class="flex flex-col gap-4 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3"
+                      >
+                        <legend
+                          data-slot="field-legend"
+                          data-variant="label"
+                          class="mb-1.5 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base"
+                        >
+                          Limits
+                        </legend>
+                        <p
+                          data-slot="field-description"
+                          id="limits-description"
+                          class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4 -mt-1.5"
+                        >
+                          Optional. Leave a limit blank for none.
+                        </p>
+                        <div
+                          role="group"
+                          data-slot="field"
+                          data-orientation="vertical"
+                          class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                        >
+                          <label
+                            for="maximum-teams"
+                            data-slot="field-label"
+                            class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                            >Maximum teams</label
+                          ><input
+                            id="maximum-teams"
+                            name="maximum-teams"
+                            type="text"
+                            data-slot="input"
+                            autocomplete="off"
+                            aria-describedby="maximum-teams-description"
+                            inputmode="numeric"
+                            class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                          />
+                          <p
+                            data-slot="field-description"
+                            id="maximum-teams-description"
+                            class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                          >
+                            2 to 200. When it&rsquo;s reached, the season is full.
+                          </p>
+                        </div>
+                        <div
+                          role="group"
+                          data-slot="field"
+                          data-orientation="vertical"
+                          class="group/field flex w-full flex-col *:w-full [&>.sr-only]:w-auto data-[matches-spartan-invalid=true]:text-destructive gap-2"
+                        >
+                          <label
+                            for="maximum-roster-size"
+                            data-slot="field-label"
+                            class="flex items-center select-none group-data-[disabled=true]:pointer-events-none peer-disabled:cursor-not-allowed gap-2 text-sm font-medium group-data-[disabled=true]:opacity-50 peer-disabled:opacity-50 group/field-label peer/field-label w-fit has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border *:data-[slot=field]:p-2.5"
+                            >Maximum roster size</label
+                          ><input
+                            id="maximum-roster-size"
+                            name="maximum-roster-size"
+                            type="text"
+                            data-slot="input"
+                            autocomplete="off"
+                            aria-describedby="maximum-roster-size-description"
+                            inputmode="numeric"
+                            class="file:text-foreground placeholder:text-muted-foreground w-full min-w-0 file:inline-flex file:border-0 file:bg-transparent disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 border-input data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 disabled:bg-input/50 dark:disabled:bg-input/80 h-9 rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors file:h-6 file:text-sm file:font-medium data-[matches-spartan-invalid=true]:ring-3 md:text-sm"
+                          />
+                          <p
+                            data-slot="field-description"
+                            id="maximum-roster-size-description"
+                            class="text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5 leading-normal font-normal group-has-data-horizontal/field:text-balance last:mt-0 nth-last-2:-mt-1 [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4"
+                          >
+                            From the minimum roster size to 99. A full team takes no more players.
+                          </p>
+                        </div>
+                      </fieldset>
+                    </div>
+                    <div
+                      data-slot="form-footer"
+                      class="sticky bottom-0 z-10 -mx-4 -mb-4 mt-6 border-t border-border bg-card px-4 py-3 md:static md:mx-0 md:mb-0 md:mt-6 md:border-0 md:bg-transparent md:p-0"
+                    >
+                      <div role="status" data-slot="created-status">
+                        <div
+                          class="mb-2 flex items-start gap-2 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground"
+                        >
+                          <ng-icon role="img" aria-hidden="true" class="mt-0.5 shrink-0 text-base"
+                            ><svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                            >
+                              <path d="M20 6 9 17l-5-5"></path></svg
+                          ></ng-icon>
+                          <div class="flex min-w-0 flex-wrap items-center gap-x-3">
+                            <span data-slot="created-title" class="line-clamp-2 min-w-0 font-medium"
+                              >Spring 2028 created as a draft.</span
+                            >
+                            <a
+                              href="/app/organizations/gulf-coast-sport-social/leagues/tuesday-coed-slow-pitch#season-spring-2028"
+                              class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                              >Show it in Seasons</a
+                            >
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        data-slot="button"
+                        class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 bg-primary text-primary-foreground [a]:hover:bg-primary/90 h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 w-full"
+                      >
+                        <ng-icon role="img" aria-hidden="true" data-icon="inline-start"
+                          ><svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            style="stroke-width: var(--ng-icon__stroke-width, 2)"
+                          >
+                            <path d="M5 12h14"></path>
+                            <path d="M12 5v14"></path></svg></ng-icon
+                        >Create draft season
+                      </button>
+                    </div>
                     <p role="status" class="sr-only"></p>
                   </form>
                 </section>

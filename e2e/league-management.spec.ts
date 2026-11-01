@@ -1,5 +1,5 @@
 import { MAX_SEASON_NAME_LENGTH } from '../convex/lib/seasonInput';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { checkReflow, REFLOW_WIDTH, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
@@ -13,6 +13,7 @@ import {
   expectStatusOnTopOfButtonInStaticFooter,
   expectVisibleInFooter,
   footerHeight,
+  settleAfterFocusScroll,
   PHONE,
   footerTabWalk,
   underTheFooter,
@@ -711,5 +712,329 @@ test.describe('League management: the page as the league arrives', () => {
     await expect(h1).toBeVisible();
     const heading = await h1.boundingBox();
     expect(Math.abs(heading!.y - headingBar!.y)).toBeLessThanOrEqual(4);
+  });
+});
+
+const createdStatus = (page: Page) => form(page).locator('[data-slot="created-status"]');
+const publishNext = (page: Page, name = 'Fall 2026') =>
+  createdStatus(page).getByRole('button', { name: `Publish season ${name}`, exact: true });
+const showNext = (page: Page) =>
+  createdStatus(page).getByRole('link', { name: 'Show it in Seasons', exact: true });
+const rowTitle = (page: Page, slug: string) => page.locator(`#season-${slug} h3`);
+const seasonsHeading = (page: Page) => page.locator('#seasons-heading');
+
+/** In the viewport, and what is at its centre is inside it, so the top bar and the footer cannot cover it. */
+async function expectOnScreen(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  await settleAfterFocusScroll(page);
+  const place = await target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {
+      inViewport:
+        rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth,
+      unobscured: !!hit && element.contains(hit),
+    };
+  });
+  expect(place).toEqual({ inViewport: true, unobscured: true });
+}
+
+async function createFall2026(page: Page, name = 'Fall 2026') {
+  await fillFall2026(page);
+  await page.locator('#name').fill(name);
+  await page.locator('#slug').fill('fall-2026');
+  await submit(page).click();
+}
+
+async function onCoarseHeight(target: Locator): Promise<number> {
+  return (await target.boundingBox())!.height;
+}
+
+test.describe('League management: the next step in the created status on a phone', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+  });
+
+  async function createIn(page: Page, league: string, name = 'Fall 2026') {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues/${league}`);
+    await form(page).evaluate((element) => element.scrollIntoView({ block: 'end' }));
+    await createFall2026(page, name);
+    await expect(createdStatus(page)).toContainText(`${name} created as a draft.`);
+    return base;
+  }
+
+  test('a published league shows Publish season named for the season, 44px tall, visible in the footer, with Create still focused', async ({
+    page,
+  }, testInfo) => {
+    await createIn(page, COED);
+
+    await expectVisibleInFooter(page, publishNext(page));
+    await expect(publishNext(page)).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(await onCoarseHeight(publishNext(page))).toBeGreaterThanOrEqual(44);
+    await expect(submit(page)).toBeFocused();
+    await expect(showNext(page)).toHaveCount(0);
+    await screenshot(page, testInfo, '446-created-publish-season-phone');
+    await expectAccessible(page);
+  });
+
+  test('a draft league shows Show it in Seasons, 44px tall, visible in the footer, to the new row', async ({
+    page,
+  }, testInfo) => {
+    const base = await createIn(page, SOFTBALL);
+
+    await expectVisibleInFooter(page, showNext(page));
+    await expect(showNext(page)).toHaveAttribute(
+      'href',
+      `${base}/leagues/${SOFTBALL}#season-fall-2026`,
+    );
+    expect(await onCoarseHeight(showNext(page))).toBeGreaterThanOrEqual(44);
+    await expect(createdStatus(page).getByRole('button')).toHaveCount(0);
+    await screenshot(page, testInfo, '446-created-show-in-seasons-phone');
+    await expectAccessible(page);
+  });
+
+  test('pressing Show it in Seasons by tap puts the new row’s title on screen with focus', async ({
+    page,
+  }) => {
+    await createIn(page, SOFTBALL);
+    await showNext(page).click();
+    await expect(rowTitle(page, 'fall-2026')).toBeFocused();
+    await expectOnScreen(page, rowTitle(page, 'fall-2026'));
+  });
+
+  test('pressing Show it in Seasons by Enter puts the new row’s title on screen with focus', async ({
+    page,
+  }) => {
+    await createIn(page, SOFTBALL);
+    await showNext(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(rowTitle(page, 'fall-2026')).toBeFocused();
+    await expectOnScreen(page, rowTitle(page, 'fall-2026'));
+  });
+
+  test('with a 100-character name and either action at 44px, the footer stays within 200px', async ({
+    page,
+  }) => {
+    const name =
+      'Fall 2026: Sunday Coed Sevens at Redfish Flats, with Late Kickoffs, Short Halves, and Long Playoffs.';
+    expect(name).toHaveLength(MAX_SEASON_NAME_LENGTH);
+    await createIn(page, COED, name);
+    await expectVisibleInFooter(page, publishNext(page, name));
+    expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+  });
+
+  test('with a 100-character name and Show it in Seasons, the footer stays within 200px', async ({
+    page,
+  }) => {
+    const name =
+      'Fall 2026: Sunday Coed Sevens at Redfish Flats, with Late Kickoffs, Short Halves, and Long Playoffs.';
+    await createIn(page, SOFTBALL, name);
+    await expectVisibleInFooter(page, showNext(page));
+    expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+  });
+
+  for (const league of [COED, SOFTBALL]) {
+    test(`Tabbing through the cleared form in ${league} with its action shown never leaves a control under the footer`, async ({
+      page,
+    }) => {
+      await createIn(page, league);
+      await page.locator('#name').focus();
+      const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
+      await expect(submit(page)).toBeFocused();
+      expect(controlsInTabOrder(seen)).toEqual([
+        'name',
+        'slug',
+        'start-date',
+        'end-date',
+        'registration-deadline',
+        'A',
+        'BUTTON',
+      ]);
+      expect(underTheFooter(seen)).toEqual([]);
+    });
+  }
+
+  test('the status and its action go once the user types in Name', async ({ page }) => {
+    await createIn(page, COED);
+    await page.locator('#name').pressSequentially('S');
+    await expect(createdStatus(page)).toBeEmpty();
+  });
+
+  test('with either action shown, there is no horizontal scroll at 320px', async ({ page }) => {
+    await createIn(page, SOFTBALL);
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+  });
+});
+
+test.describe('League management: the next step on wider screens', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'each test sets its own width');
+  });
+
+  for (const width of [768, 1280]) {
+    for (const [league, action] of [
+      [COED, publishNext],
+      [SOFTBALL, showNext],
+    ] as const) {
+      test(`at ${width}px the ${league === COED ? 'Publish season button' : 'link'} sits in the footer above Create`, async ({
+        page,
+      }, testInfo) => {
+        const { base } = await memberOf(page, 'orgAdmin');
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${base}/leagues/${league}`);
+        await createFall2026(page);
+        await expect(action(page)).toBeVisible();
+
+        await expectStatusOnTopOfButtonInStaticFooter(
+          form(page),
+          createdStatus(page),
+          submit(page),
+        );
+        await screenshot(page, testInfo, `446-created-next-step-${league}`);
+      });
+    }
+  }
+});
+
+interface QueryChange {
+  type: string;
+  queryId: number;
+  udfPath?: string;
+}
+
+const changesOf = (message: string | Buffer): QueryChange[] =>
+  (JSON.parse(String(message)) as { modifications?: QueryChange[] }).modifications ?? [];
+
+/** Answers every update of the seasons list as a failed query. */
+async function failSeasonsList(page: Page): Promise<void> {
+  await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+    const server = ws.connectToServer();
+    const lists = new Set<number>();
+    ws.onMessage((message) => {
+      for (const change of changesOf(message)) {
+        if (change.type === 'Add' && change.udfPath === 'seasons:listForOrganizer') {
+          lists.add(change.queryId);
+        }
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { modifications?: QueryChange[] };
+      if (!frame.modifications?.some((change) => lists.has(change.queryId))) {
+        ws.send(message);
+        return;
+      }
+      const failed = frame.modifications.map((change) =>
+        lists.has(change.queryId)
+          ? { type: 'QueryFailed', queryId: change.queryId, errorMessage: 'down', logLines: [] }
+          : change,
+      );
+      ws.send(JSON.stringify({ ...frame, modifications: failed }));
+    });
+  });
+}
+
+test.describe('League management: the link to a new season', () => {
+  test.describe('with the list failing', () => {
+    test('pressing Show it in Seasons puts the Seasons heading on screen with focus, and the error shows under it', async ({
+      page,
+    }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await failSeasonsList(page);
+      await page.goto(`${base}/leagues/${SOFTBALL}`);
+      await expect(page.getByText('The seasons could not be loaded.')).toBeVisible();
+      await createFall2026(page);
+      await showNext(page).click();
+      await expect(seasonsHeading(page)).toBeFocused();
+      await expectOnScreen(page, seasonsHeading(page));
+      await expect(page.getByText('The seasons could not be loaded.')).toBeVisible();
+    });
+
+    test('a #season-… address lands on the Seasons heading', async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await failSeasonsList(page);
+      await page.goto(`${base}/leagues/${SOFTBALL}#season-fall-2026`);
+      await expect(page.getByText('The seasons could not be loaded.')).toBeVisible();
+      await expect(seasonsHeading(page)).toBeFocused();
+      await expectOnScreen(page, seasonsHeading(page));
+    });
+  });
+
+  test('a #season-… address opened in a new page lands on the row’s title once the list loads, and a later list update leaves focus where the user put it', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${SOFTBALL}`);
+    await createFall2026(page);
+    await expect(rows(page)).toHaveCount(1);
+
+    const opened = await page.context().newPage();
+    await opened.setViewportSize(page.viewportSize()!);
+    await opened.goto(`${base}/leagues/${SOFTBALL}#season-fall-2026`);
+    await expect(rowTitle(opened, 'fall-2026')).toBeFocused();
+    await expectOnScreen(opened, rowTitle(opened, 'fall-2026'));
+
+    await opened.locator('#name').focus();
+    await page.locator('#name').fill('Fall 2027');
+    await page.locator('#slug').fill('fall-2027');
+    await page.locator('#start-date').fill('2027-09-01');
+    await page.locator('#end-date').fill('2027-11-15');
+    await page.locator('#registration-deadline').fill('2027-08-25');
+    await submit(page).click();
+    await expect(rows(opened)).toHaveCount(2);
+    await expect(opened.locator('#name')).toBeFocused();
+  });
+
+  test('a #season-… address with a slug no row has lands on the Seasons heading', async ({
+    page,
+  }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${SOFTBALL}#season-nope`);
+    await expect(rows(page)).toHaveCount(0);
+    await expect(seasonsHeading(page)).toBeFocused();
+    await expectOnScreen(page, seasonsHeading(page));
+  });
+
+  for (const fragment of ['details', 'create-season']) {
+    test(`#${fragment} opened directly does not move focus to the Seasons heading`, async ({
+      page,
+    }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${COED}#${fragment}`);
+      await expect(page.getByText('No seasons yet')).toBeVisible();
+      await expect(seasonsHeading(page)).not.toBeFocused();
+    });
+  }
+
+  test(
+    'published from a second page, a draft league’s created status offers Publish season in place of Show it in Seasons',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${SOFTBALL}`);
+      await createFall2026(page);
+      await expect(showNext(page)).toBeVisible();
+
+      const second = await page.context().newPage();
+      await second.goto(`${base}/leagues`);
+      await second.getByRole('button', { name: 'Publish Draft Softball' }).click();
+      await second.getByRole('alertdialog').getByRole('button', { name: 'Publish league' }).click();
+      await expect(second.getByRole('alertdialog')).toHaveCount(0);
+
+      await expect(publishNext(page)).toBeVisible();
+      await expect(showNext(page)).toHaveCount(0);
+    },
+  );
+
+  test('every row has an id from its slug', VIEWPORT_AGNOSTIC, async ({ page }) => {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await createFall2026(page);
+    await expect(rows(page)).toHaveCount(1);
+    await expect(rows(page).first()).toHaveAttribute('id', 'season-fall-2026');
   });
 });
