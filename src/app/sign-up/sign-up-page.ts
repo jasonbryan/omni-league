@@ -16,6 +16,7 @@ import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
+import { MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
@@ -25,7 +26,6 @@ import { Checkbox } from '../ui/checkbox';
 // Counted as the server counts (`String.length`), so the page and Better Auth agree on the limits.
 export const MIN_PASSWORD = 15;
 export const MAX_PASSWORD = 128;
-export const MAX_NAME = 100;
 
 /** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
@@ -33,7 +33,7 @@ const EMAIL =
 
 export const MESSAGES = {
   nameEmpty: 'Enter your name.',
-  nameLong: `Use ${MAX_NAME} characters or fewer.`,
+  nameLong: `Use ${MAX_USER_NAME_LENGTH} characters or fewer.`,
   emailEmpty: 'Enter your email address.',
   emailMalformed: 'Enter an email address like name@example.com.',
   passwordEmpty: 'Enter a password.',
@@ -423,7 +423,9 @@ export class SignUpPage {
     validate(path.name, ({ value }) => {
       const name = value().trim();
       if (name === '') return { kind: 'blank', message: MESSAGES.nameEmpty };
-      return name.length > MAX_NAME ? { kind: 'long', message: MESSAGES.nameLong } : undefined;
+      return name.length > MAX_USER_NAME_LENGTH
+        ? { kind: 'long', message: MESSAGES.nameLong }
+        : undefined;
     });
     required(path.email, { message: MESSAGES.emailEmpty });
     validate(path.email, ({ value }) => {

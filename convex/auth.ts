@@ -11,6 +11,7 @@ import authConfig from './auth.config';
 import { trustedOrigins } from './lib/authOrigins';
 import { hashPassword, verifyPassword } from './lib/password';
 import { throttleKey, tooManyAttemptsMessage } from './lib/signInThrottle';
+import { MAX_USER_NAME_LENGTH } from './lib/userName';
 import { deleteUserRecord, insertUserRecord } from './lib/users';
 
 export const ADULT_CONFIRMATION_FIELD = 'adultConfirmed';
@@ -43,8 +44,6 @@ export const authComponent = createClient<DataModel>(components.betterAuth, {
 });
 
 export const { onCreate, onUpdate, onDelete } = authComponent.triggersApi();
-
-export const NAME_MAX_UTF16_UNITS = 100;
 
 export const NAME_INVALID = {
   code: 'NAME_INVALID',
@@ -120,7 +119,7 @@ function requestGuard(configured: boolean, fnCtx: GenericCtx<DataModel>) {
     const fields =
       typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
     const name = typeof fields['name'] === 'string' ? fields['name'].trim() : '';
-    if (name === '' || name.length > NAME_MAX_UTF16_UNITS) {
+    if (name === '' || name.length > MAX_USER_NAME_LENGTH) {
       return Promise.reject(APIError.from('BAD_REQUEST', NAME_INVALID));
     }
     // Better Auth ignores this field itself.
