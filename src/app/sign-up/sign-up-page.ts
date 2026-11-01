@@ -16,7 +16,7 @@ import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
-import { MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
+import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
@@ -421,11 +421,11 @@ export class SignUpPage {
   protected readonly fields = form(this.model, (path) => {
     required(path.name, { message: MESSAGES.nameEmpty });
     validate(path.name, ({ value }) => {
-      const name = value().trim();
-      if (name === '') return { kind: 'blank', message: MESSAGES.nameEmpty };
-      return name.length > MAX_USER_NAME_LENGTH
-        ? { kind: 'long', message: MESSAGES.nameLong }
-        : undefined;
+      const check = checkUserName(value());
+      if (check.ok) return undefined;
+      return check.code === 'empty'
+        ? { kind: 'blank', message: MESSAGES.nameEmpty }
+        : { kind: 'long', message: MESSAGES.nameLong };
     });
     required(path.email, { message: MESSAGES.emailEmpty });
     validate(path.email, ({ value }) => {
