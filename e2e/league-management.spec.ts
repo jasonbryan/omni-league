@@ -1,12 +1,22 @@
+import { MAX_SEASON_NAME_LENGTH } from '../convex/lib/seasonInput';
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { checkReflow, REFLOW_WIDTH, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
-import { controlsInTabOrder, PHONE, footerTabWalk, underTheFooter } from './support/sticky-footer';
+import {
+  controlsInTabOrder,
+  expectAtMostTwoLines,
+  expectStatusOnTopOfButtonInStaticFooter,
+  expectVisibleInFooter,
+  footerHeight,
+  PHONE,
+  footerTabWalk,
+  underTheFooter,
+} from './support/sticky-footer';
 import { seedTenant, type TenantSeed } from './support/tenant';
 import { newUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
@@ -559,6 +569,127 @@ test.describe('League management: the create-season form on a phone', () => {
         'BUTTON',
       ]);
       expect(underTheFooter(seen)).toEqual([]);
+    });
+  }
+});
+
+test.describe('League management: the created status on a phone', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+  });
+
+  const created = (page: Page, name = 'Fall 2026') =>
+    form(page).getByRole('status').getByText(`${name} created as a draft.`);
+
+  async function createFromTheBottom(page: Page, name = 'Fall 2026') {
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.setViewportSize(PHONE);
+    await page.goto(`${base}/leagues/${COED}`);
+    await fillFall2026(page);
+    await page.locator('#name').fill(name);
+    await page.locator('#slug').fill('fall-2026');
+    await form(page).evaluate((element) => element.scrollIntoView({ block: 'end' }));
+    await submit(page).click();
+    await expect(created(page, name)).toBeAttached();
+  }
+
+  test('Create pressed at the bottom of the form shows "<season> created as a draft." next to it, with focus kept on Create', async ({
+    page,
+  }) => {
+    await createFromTheBottom(page);
+
+    await expectVisibleInFooter(page, created(page));
+    await expect(submit(page)).toBeFocused();
+  });
+
+  test('the created status goes once the user types in Name', async ({ page }) => {
+    await createFromTheBottom(page);
+
+    await page.locator('#name').pressSequentially('S');
+
+    await expect(created(page)).toHaveCount(0);
+  });
+
+  test('with a 100-character name the title takes two lines and the footer stays within 200px', async ({
+    page,
+  }) => {
+    const name =
+      'Fall 2026: Sunday Coed Sevens at Redfish Flats, with Late Kickoffs, Short Halves, and Long Playoffs.';
+    expect(name).toHaveLength(MAX_SEASON_NAME_LENGTH);
+    await createFromTheBottom(page, name);
+
+    await expectVisibleInFooter(page, created(page, name));
+    await expectAtMostTwoLines(created(page, name));
+    expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+  });
+
+  test('with a 100-character name holding one 60-character word, the page does not scroll sideways at 320px and the title keeps to two lines', async ({
+    page,
+  }) => {
+    const name = `${'W'.repeat(60)} Session at Redfish Flats, Sundays and Late Kickoffs`.slice(
+      0,
+      MAX_SEASON_NAME_LENGTH,
+    );
+    await createFromTheBottom(page, name);
+
+    expect(await checkReflow(page)).toMatchObject({ passed: true });
+
+    await page.setViewportSize({ width: REFLOW_WIDTH, height: 640 });
+    await expectAtMostTwoLines(form(page).locator('[data-slot="created-title"]'));
+  });
+
+  test('Tabbing through the cleared form from Name with the created status shown never leaves a control under the taller footer (WCAG 2.4.11)', async ({
+    page,
+  }) => {
+    await createFromTheBottom(page);
+    await page.locator('#name').focus();
+
+    const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
+
+    await expect(submit(page)).toBeFocused();
+    await expect(created(page)).toBeVisible();
+    expect(controlsInTabOrder(seen)).toEqual([
+      'name',
+      'slug',
+      'start-date',
+      'end-date',
+      'registration-deadline',
+      'A',
+      'BUTTON',
+    ]);
+    expect(underTheFooter(seen)).toEqual([]);
+  });
+
+  test('with the created status shown, the page passes axe and does not scroll sideways at 320px', async ({
+    page,
+  }, testInfo) => {
+    await createFromTheBottom(page);
+    await screenshot(page, testInfo, '445-league-season-created-phone');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('League management: the created status on wider screens', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'each test sets its own width');
+  });
+
+  for (const width of [768, 1280]) {
+    test(`at ${width}px the created status sits on top of Create in the footer`, async ({
+      page,
+    }, testInfo) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${base}/leagues/${COED}`);
+      await fillFall2026(page);
+      await submit(page).click();
+      const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
+      await expect(status).toBeVisible();
+
+      await expectStatusOnTopOfButtonInStaticFooter(form(page), status, submit(page));
+      await screenshot(page, testInfo, '445-league-season-created');
     });
   }
 });

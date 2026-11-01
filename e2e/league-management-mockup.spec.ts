@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { AXE_TAGS, axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failMutation } from './support/fail-mutation';
 import { expect, test as base } from './support/fixtures';
 import { screenshot } from './support/screenshot';
 import { signUp } from './support/session';
@@ -347,9 +348,11 @@ function normalize(text: string, organization: string): string {
   const kept: string[] = [];
   let skipping = false;
   for (const line of lines) {
-    // The mockup draws Format and Minimum roster size; the app takes both from the league.
+    // The mockup draws Format and Minimum roster size; the app takes both from the league. The
+    // footer, with its created status, follows them.
     if (line === 'Limits' || line === 'Format') skipping = true;
-    if (skipping && /^Creat(e draft|ing) season/.test(line)) skipping = false;
+    if (skipping && / created as a draft\.$|^Creat(e draft|ing) season/.test(line))
+      skipping = false;
     if (!skipping) kept.push(line);
   }
   return kept.join('\n');
@@ -439,27 +442,8 @@ async function openConfirmation(page: Page) {
   await expect(dialog(page)).toBeVisible();
 }
 
-async function failPublish(page: Page) {
-  await page.routeWebSocket(/.*/, (ws) => {
-    const server = ws.connectToServer();
-    ws.onMessage((message) => {
-      if (typeof message === 'string' && message.includes('"seasons:publish"')) {
-        const { requestId } = JSON.parse(message) as { requestId: number };
-        ws.send(
-          JSON.stringify({
-            type: 'MutationResponse',
-            requestId,
-            success: false,
-            result: 'Server Error',
-            logLines: [],
-          }),
-        );
-        return;
-      }
-      server.send(message);
-    });
-    server.onMessage((message) => ws.send(message));
-  });
+function failPublish(page: Page) {
+  return failMutation(page, 'seasons:publish');
 }
 
 const submit = (page: Page) =>

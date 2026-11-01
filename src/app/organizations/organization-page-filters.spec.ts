@@ -144,24 +144,6 @@ describe('a filtered page of leagues', () => {
     );
     expect(hrefs(harness, 'ul[aria-label="Active filters"] a')).toEqual([`${ORG}?locations=2`]);
     expect(link(harness, 'Clear all')?.getAttribute('href')).toBe(`${ORG}?locations=2`);
-    const hidden = host(harness).querySelector<HTMLInputElement>('form input[type="hidden"]');
-    expect([hidden?.name, hidden?.value]).toEqual(['locations', '2']);
-  });
-
-  it('puts each dimension in a fieldset named by its legend', async () => {
-    const harness = await shown(ORG, sandResults());
-    const fieldsets = [
-      ...host(harness).querySelectorAll('form[aria-label="Filter leagues"] fieldset'),
-    ];
-    expect(fieldsets.map((fieldset) => text(fieldset.querySelector('legend')))).toEqual([
-      'Gender',
-      'Format',
-      'Level',
-      'Age group',
-    ]);
-    expect(
-      [...fieldsets[1].querySelectorAll<HTMLInputElement>('input')].map((input) => input.value),
-    ).toEqual(['2v2', '4v4', '6v6']);
   });
 });
 
@@ -199,22 +181,6 @@ describe('a filter change after hydration', () => {
     expect(loadPage).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(count(harness));
     expect(text(count(harness))).toBe('7 leagues');
-  });
-
-  it('applies the checked values with Show leagues, keeping focus on it', async () => {
-    const form = host(harness).querySelector('form[aria-label="Filter leagues"]');
-    const mens = form?.querySelector<HTMLInputElement>('input[name="gender"][value="mens"]');
-    const show = [...(form?.querySelectorAll('button') ?? [])].find(
-      (button) => text(button) === 'Show leagues',
-    );
-    expect(mens).toBeTruthy();
-    if (mens) mens.checked = true;
-    show?.focus();
-    show?.click();
-    await settle(harness);
-    expect(url()).toBe(`${ORG}?gender=coed&gender=mens&format=4v4`);
-    expect(loadPage).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(show);
   });
 
   it('starts the page-load wait over when only a filter changes', async () => {

@@ -15,6 +15,7 @@ import { FormField } from '@angular/forms/signals';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
+  lucideCheck,
   lucideCircleAlert,
   lucideLoaderCircle,
   lucidePlus,
@@ -29,6 +30,7 @@ import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { ChipRadioGroup, type ChipOption } from './chip-radio-group';
+import { CREATED_STATUS, CREATED_TITLE } from './footer-status';
 import {
   DESCRIPTION,
   FIELD,
@@ -66,7 +68,15 @@ export interface LeagueLocationChoice {
     StickyFooter,
     StickyFooterFocus,
   ],
-  providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle, lucidePlus, lucideSparkles })],
+  providers: [
+    provideIcons({
+      lucideCheck,
+      lucideCircleAlert,
+      lucideLoaderCircle,
+      lucidePlus,
+      lucideSparkles,
+    }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -77,16 +87,8 @@ export interface LeagueLocationChoice {
       aria-describedby="create-league-note"
       class="px-4 py-4 md:px-5 md:py-5"
       (submit)="submit($event)"
+      (input)="edited()"
     >
-      @if (created(); as created) {
-        <app-admin-alert
-          kind="success"
-          [title]="created.name + ' created as a draft.'"
-          description="Publish it when it’s ready for players to see."
-          class="mb-5"
-          ><a [routerLink]="leaguePath(created.slug)">Add the first season to {{ created.name }}</a>
-        </app-admin-alert>
-      }
       @if (form.alert(); as kind) {
         @if (kind === 'offline') {
           <app-admin-offline-alert
@@ -282,7 +284,7 @@ export interface LeagueLocationChoice {
                 <app-checkbox
                   [controlId]="'location-' + (i + 1)"
                   [checked]="form.selected().has(location.locationId)"
-                  (checkedChange)="form.toggleLocation(location.locationId, $event)"
+                  (checkedChange)="toggleLocation(location.locationId, $event)"
                   [showInvalid]="!!form.errors.locations()"
                 />
                 <div data-slot="field-content" [class]="contentClass">
@@ -309,6 +311,26 @@ export interface LeagueLocationChoice {
         </fieldset>
       </div>
       <div appStickyFooter>
+        <div role="status" data-slot="created-status">
+          @if (created(); as created) {
+            <div [class]="createdClass">
+              <ng-icon name="lucideCheck" class="mt-0.5 shrink-0 text-base" aria-hidden="true" />
+              <div class="flex min-w-0 flex-wrap items-center gap-x-3">
+                <span
+                  data-slot="created-title"
+                  [class]="createdTitleClass"
+                  style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere"
+                  >{{ created.name }} created as a draft.</span
+                >
+                <a
+                  [routerLink]="leaguePath(created.slug)"
+                  class="inline-flex items-center font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                  >Add the first season</a
+                >
+              </div>
+            </div>
+          }
+        </div>
         <button
           #submitButton
           type="submit"
@@ -362,6 +384,8 @@ export class LeagueCreateForm {
   protected readonly contentClass = FIELD_CONTENT;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full`;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
+  protected readonly createdClass = CREATED_STATUS;
+  protected readonly createdTitleClass = CREATED_TITLE;
 
   protected readonly created = signal<{ name: string; slug: string } | null>(null);
 
@@ -390,6 +414,15 @@ export class LeagueCreateForm {
 
   protected describedBy(field: 'name' | 'slug', description: string): string {
     return this.form.errors[field]() ? `${description} ${field}-error` : description;
+  }
+
+  protected edited(): void {
+    this.created.set(null);
+  }
+
+  protected toggleLocation(locationId: Id<'locations'>, checked: boolean): void {
+    this.edited();
+    this.form.toggleLocation(locationId, checked);
   }
 
   protected nameTyped(event: Event): void {
