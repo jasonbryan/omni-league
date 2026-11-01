@@ -501,3 +501,65 @@ describe('teams.getForMember', () => {
     expect(await s.t.query(api.teams.getForMember, { teamId: 'not-an-id' })).toBeNull();
   });
 });
+
+describe('two registrations at once', () => {
+  test('one caller submitting two names at once gets one team, and the other submit is refused', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    const results = await Promise.allSettled([
+      register(s, 'captain', 'Sand Sharks'),
+      register(s, 'captain', 'Net Results'),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const refused = results.find((result) => result.status === 'rejected');
+    expect(refusalOf(refused?.reason)).toMatchObject({ code: 'alreadyOnAnotherTeam' });
+    const { teams, entries } = await rows(s);
+    expect(teams).toHaveLength(1);
+    expect(entries).toHaveLength(1);
+    await expectCountersMatchRecount(s);
+  });
+
+  test('two callers submitting the same name at once get one team', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    const results = await Promise.allSettled([
+      register(s, 'captain', 'Sand Sharks'),
+      register(s, 'rival', 'sand  sharks'),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const refused = results.find((result) => result.status === 'rejected');
+    expect(refusalOf(refused?.reason)).toMatchObject({ field: 'name', code: 'nameTaken' });
+    expect((await rows(s)).teams).toHaveLength(1);
+    await expectCountersMatchRecount(s);
+  });
+
+  test('the captain submitting the same name again is refused as taken and writes nothing', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    await register(s, 'captain', 'Sand Sharks');
+    const before = await rows(s);
+    expect(await register(s, 'captain', 'Sand Sharks').catch(refusalOf)).toMatchObject({
+      code: 'nameTaken',
+    });
+    expect(await rows(s)).toEqual(before);
+    await expectCountersMatchRecount(s);
+  });
+});
+
+describe('a refused registration leaves the counters alone', () => {
+  test('a closed season, a draft season, and an empty name each leave every counter equal to a recount', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    await register(s, 'captain', 'Sand Sharks');
+    await register(s, 'rival', '').catch(refusalOf);
+    await register(s, 'rival', 'Net Results', { ...SLUGS, seasonSlug: 'draft-season' }).catch(
+      refusalOf,
+    );
+    vi.setSystemTime(Date.parse('2030-05-21T12:00:00Z'));
+    await register(s, 'rival', 'Net Results').catch(refusalOf);
+    const { teams, entries } = await rows(s);
+    expect(teams).toHaveLength(1);
+    expect(entries).toHaveLength(1);
+    await expectCountersMatchRecount(s);
+  });
+});
