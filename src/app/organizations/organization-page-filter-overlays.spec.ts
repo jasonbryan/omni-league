@@ -296,6 +296,44 @@ describe('a dimension popover', () => {
     expect(popover('filter-level')).not.toBeNull();
   });
 
+  it('from the panel itself, which a click on its legend focuses, Tab goes to its first check box and Shift+Tab to Show', async () => {
+    const harness = await shown(ORG, sandResults());
+    await press(harness, button(harness, 'Level'));
+    const panel = popover('filter-level');
+    const first = panel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const show = panel?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    expect(panel?.tabIndex).toBe(-1);
+    const tabFromPanel = (shiftKey: boolean) => {
+      panel?.focus();
+      expect(document.activeElement).toBe(panel);
+      return panel?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }),
+      );
+    };
+
+    expect(tabFromPanel(false)).toBe(false);
+    expect(document.activeElement).toBe(first);
+    expect(tabFromPanel(true)).toBe(false);
+    expect(document.activeElement).toBe(show);
+  });
+
+  it('a click outside that leaves focus on an element out of the tab order closes it with focus back on its button', async () => {
+    const harness = await shown(ORG, sandResults());
+    const level = button(harness, 'Level');
+    await press(harness, level);
+    const heading = document.getElementById('leagues-heading');
+    expect(heading?.tabIndex).toBe(-1);
+    heading?.focus();
+    expect(document.activeElement).toBe(heading);
+
+    heading?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+    heading?.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    await settle(harness);
+    expect(popover('filter-level')).toBeNull();
+    expect(level.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(level);
+  });
+
   it('a second press of its button closes it', async () => {
     const harness = await shown(ORG, sandResults());
     const level = button(harness, 'Level');
