@@ -1100,6 +1100,32 @@ test.describe('League management: the link to a new season', () => {
     });
   }
 
+  for (const [fragment, field] of [
+    ['details', '#league-name'],
+    ['create-season', '#name'],
+  ] as const) {
+    test(`Back from another league lands on #${fragment} again`, async ({ page }) => {
+      const { tenant, base } = await memberOf(page, 'leagueOrganizer', [COED, SOFTBALL]);
+      await page.goto(`${base}/leagues/${COED}#${fragment}`);
+      await expect(page.locator(field)).toBeFocused();
+
+      await page
+        .getByRole('navigation', { name: `${tenant.name} leagues`, includeHidden: true })
+        .first()
+        .getByRole('list', { name: 'Your leagues', includeHidden: true })
+        .getByRole('link', { name: 'Draft Softball', includeHidden: true })
+        .dispatchEvent('click');
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Draft Softball');
+      await expect(page).toHaveURL(`${base}/leagues/${SOFTBALL}`);
+
+      await page.goBack();
+      await expect(page).toHaveURL(`${base}/leagues/${COED}#${fragment}`);
+      await expect(main(page).getByRole('heading', { level: 1 })).toHaveText('Coed 7v7 Rec');
+      await expect(page.locator(field)).toBeFocused();
+      await expectOnScreen(page, page.locator(field));
+    });
+  }
+
   test(
     'published from a second page, a draft league’s created status offers Publish season in place of Show it in Seasons',
     VIEWPORT_AGNOSTIC,
