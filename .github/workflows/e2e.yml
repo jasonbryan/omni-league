@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       webkit:
-        description: Also run the webkit-mobile e2e project
+        description: Run only the webkit-mobile e2e project (Chromium already ran in ci)
         type: boolean
         default: false
 
@@ -89,7 +89,12 @@ jobs:
       - name: e2e
         id: e2e
         if: ${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}
-        run: npm run e2e
+        run: |
+          if [ "$E2E_WEBKIT" = "1" ]; then
+            npm run e2e -- --project=webkit-mobile
+          else
+            npm run e2e
+          fi
       - name: e2e failures
         id: failures
         if: ${{ !cancelled() && github.event_name == 'schedule' && steps.e2e.outcome == 'failure' }}
