@@ -723,7 +723,6 @@ const showNext = (page: Page) =>
 const rowTitle = (page: Page, slug: string) => page.locator(`#season-${slug} h3`);
 const seasonsHeading = (page: Page) => page.locator('#seasons-heading');
 
-/** In the viewport, and what is at its centre is inside it, so the top bar and the footer cannot cover it. */
 async function expectOnScreen(page: Page, target: Locator) {
   await expect(target).toBeVisible();
   await settleAfterFocusScroll(page);
@@ -909,7 +908,6 @@ interface QueryChange {
 const changesOf = (message: string | Buffer): QueryChange[] =>
   (JSON.parse(String(message)) as { modifications?: QueryChange[] }).modifications ?? [];
 
-/** Answers every update of the seasons list as a failed query. */
 async function failSeasonsList(page: Page): Promise<void> {
   await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
     const server = ws.connectToServer();

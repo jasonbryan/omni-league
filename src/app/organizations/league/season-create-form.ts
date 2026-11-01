@@ -450,7 +450,6 @@ export class SeasonCreateForm {
     this.created.set(null);
   }
 
-  /** Puts focus back on the next step the created status offers, or on Create when the status has gone. */
   focusNextStep(): void {
     const action = this.host.nativeElement.querySelector<HTMLElement>('[data-created-action]');
     (action ?? this.submitButton().nativeElement).focus();
@@ -470,7 +469,6 @@ export class SeasonCreateForm {
     if (this.form.submitting()) return;
     this.created.set(null);
     const leagueId = this.leagueId();
-    // `SeasonForm.submit` drops what `send` returns, so the new id is kept here.
     let seasonId: Id<'seasons'> | undefined;
     const outcome = await this.form.submit(this.online(), async (values) => {
       ({ seasonId } = await this.create.run({ leagueId, ...values }));

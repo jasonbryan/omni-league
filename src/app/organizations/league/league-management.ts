@@ -417,14 +417,14 @@ export class LeagueManagement {
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
   constructor() {
-    // A `#season-…` address is a direct open: the rows arrive after the page, so the landing waits
-    // for the list to answer, and happens once.
-    effect(() => {
-      const slug = this.landingSlug();
-      if (slug === null || (this.rows() === undefined && !this.failed())) return;
-      this.landingSlug.set(null);
-      afterNextRender(() => this.land(slug), { injector: this.injector });
-    });
+    effect(() => this.landOnceTheListAnswers());
+  }
+
+  private landOnceTheListAnswers(): void {
+    const slug = this.landingSlug();
+    if (slug === null || (this.rows() === undefined && !this.failed())) return;
+    this.landingSlug.set(null);
+    afterNextRender(() => this.focusSeasonRowOrHeading(slug), { injector: this.injector });
   }
 
   protected publish(
@@ -454,10 +454,7 @@ export class LeagueManagement {
     });
   }
 
-  /**
-   * A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on the button that opened it.
-   * The footer status goes with a season published from it.
-   */
+  /** A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on the button that opened it. */
   protected publishDismissed(outcome: PublishSeasonOutcome): void {
     const fromFooter = this.publishOpener === 'footer';
     if (outcome.published) {
@@ -483,11 +480,10 @@ export class LeagueManagement {
     if (!isPlainClick(event)) return;
     event.preventDefault();
     this.landingSlug.set(null);
-    this.land(slug);
+    this.focusSeasonRowOrHeading(slug);
   }
 
-  /** The row's title, or the Seasons heading while the list is loading or has failed, or has no such row. */
-  private land(slug: string): void {
+  private focusSeasonRowOrHeading(slug: string): void {
     const row = [...this.host.nativeElement.querySelectorAll('#seasons-list > li')].find(
       (item) => item.id === `season-${slug}`,
     );
