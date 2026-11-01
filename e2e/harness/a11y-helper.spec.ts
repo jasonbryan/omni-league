@@ -1,5 +1,11 @@
+import {
+  CHIP_CHOICE_INPUT_CLASSES,
+  CHIP_CHOICE_LABEL_CLASSES,
+  CHIP_CHOICE_WRAPPER_CLASSES,
+} from '../../src/app/ui/chip/chip-classes';
 import { axeScan, checkReflow, expectAccessible, tabWalk } from '../support/a11y';
 import { expect, test } from '../support/fixtures';
+import { KIT_MOCKUP, MOCKUP_KIT_CSS } from '../support/mockup-kit';
 
 const fixture = (body: string, head = ''): string =>
   '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
@@ -246,6 +252,13 @@ test.describe('axe helper checks', () => {
     expect(walk.failures).toEqual([expect.stringMatching(/^2\.1\.2 No keyboard trap: /)]);
   });
 
+  // These fixtures are unstyled, and an unstyled date field has no ring of the app's on WebKit, so
+  // the date field cases check only the trap logic; 2.4.7 on date fields has its own cases.
+  const TRAP_PREFIX = '2.1.2 No keyboard trap: ';
+  const TRAP = /^2\.1\.2 No keyboard trap: /;
+  const trapFailures = (walk: { failures: string[] }): string[] =>
+    walk.failures.filter((failure) => failure.startsWith(TRAP_PREFIX));
+
   test('2.1.2: a native date field takes one Tab press per segment and is not a trap', async ({
     page,
   }) => {
@@ -256,13 +269,12 @@ test.describe('axe helper checks', () => {
       ),
     );
     const walk = await tabWalk(page);
-    expect(walk.failures).toEqual([]);
+    expect(trapFailures(walk)).toEqual([]);
     expect(walk.order).toEqual(['input#d ""', 'button "After"']);
   });
 
   // The date-field allowance must not hide a real trap: each fixture traps focus next to a date
   // field or on it.
-  const TRAP = /^2\.1\.2 No keyboard trap: /;
   const dateAndTrap = (trapScript: string, extra = ''): string =>
     fixture(
       '<h1>Dates and a trap</h1><label for="d">Start</label><input id="d" type="date">' +
@@ -279,7 +291,7 @@ test.describe('axe helper checks', () => {
       ),
     );
     const walk = await tabWalk(page);
-    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+    expect(trapFailures(walk)).toEqual([expect.stringMatching(TRAP)]);
   });
 
   test('2.1.2: a date field that keeps focus on Tab is still a trap', async ({ page }) => {
@@ -289,7 +301,7 @@ test.describe('axe helper checks', () => {
       ),
     );
     const walk = await tabWalk(page);
-    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+    expect(trapFailures(walk)).toEqual([expect.stringMatching(TRAP)]);
   });
 
   test('2.1.2: a date field that takes focus back on blur is still a trap', async ({ page }) => {
@@ -299,7 +311,7 @@ test.describe('axe helper checks', () => {
       ),
     );
     const walk = await tabWalk(page);
-    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+    expect(trapFailures(walk)).toEqual([expect.stringMatching(TRAP)]);
   });
 
   test('2.1.2: two buttons that pass focus back and forth, on a page with a date field, are still a trap', async ({
@@ -316,7 +328,7 @@ test.describe('axe helper checks', () => {
       ),
     );
     const walk = await tabWalk(page);
-    expect(walk.failures).toEqual([expect.stringMatching(TRAP)]);
+    expect(trapFailures(walk)).toEqual([expect.stringMatching(TRAP)]);
   });
 
   test('2.1.2: a trap on a button before the date field is still a trap', async ({ page }) => {
@@ -339,8 +351,77 @@ test.describe('axe helper checks', () => {
       ),
     );
     const walk = await tabWalk(page);
-    expect(walk.failures).toEqual([]);
+    expect(trapFailures(walk)).toEqual([]);
     expect(walk.order).toEqual(['input#a "A"', 'input#b "B"', 'input#c "C"', 'button "After"']);
+  });
+
+  test("2.4.7: a date field with the app's focus CSS shows its ring and passes", async ({
+    page,
+  }) => {
+    expect(MOCKUP_KIT_CSS, `${KIT_MOCKUP} has no inlined mockup kit`).not.toBe('');
+    await page.setContent(
+      fixture(
+        '<h1>Dates</h1><label for="d">Start</label><input id="d" type="date" class="border">' +
+          '<button type="button">After</button>',
+        `<style>${MOCKUP_KIT_CSS}</style>`,
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([]);
+    expect(walk.order).toEqual(['input#d ""', 'button "After"']);
+  });
+
+  test('2.4.7: a date field with outline: none and no app rule fails', async ({ page }) => {
+    await page.setContent(
+      fixture(
+        '<h1>Dates</h1><label for="d">Start</label><input id="d" type="date">' +
+          '<button type="button">After</button>',
+        '<style>input { outline: none; }</style>',
+      ),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(/^2\.4\.7 Focus visible: input#d /)]);
+  });
+
+  const chips = (chipClasses: string): string =>
+    '<h1>Chips</h1><fieldset><legend>Sport</legend>' +
+    ['Soccer', 'Softball']
+      .map(
+        (sport) =>
+          `<label class="${CHIP_CHOICE_WRAPPER_CLASSES}"><input type="radio" name="sport" id="${sport}" ` +
+          `class="${CHIP_CHOICE_INPUT_CLASSES}"><span class="${chipClasses}">${sport}</span></label>`,
+      )
+      .join('') +
+    '</fieldset><button type="button">After</button>';
+
+  test('2.4.7: a chip whose face shows the ring passes', async ({ page }) => {
+    expect(MOCKUP_KIT_CSS, `${KIT_MOCKUP} has no inlined mockup kit`).not.toBe('');
+    await page.setContent(
+      fixture(chips(CHIP_CHOICE_LABEL_CLASSES), `<style>${MOCKUP_KIT_CSS}</style>`),
+    );
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([]);
+    expect(walk.order).toEqual(['input#Soccer ""', 'button "After"']);
+  });
+
+  test('2.4.7: a chip with no ring fails, though its visually hidden radio has an outline', async ({
+    page,
+  }) => {
+    expect(MOCKUP_KIT_CSS, `${KIT_MOCKUP} has no inlined mockup kit`).not.toBe('');
+    await page.setContent(
+      fixture(
+        chips('inline-flex h-9 items-center rounded-full border px-4'),
+        `<style>${MOCKUP_KIT_CSS}</style>`,
+      ),
+    );
+    const radioOutline = async () =>
+      page
+        .locator('#Soccer')
+        .evaluate((radio) => (radio.matches(':focus') ? getComputedStyle(radio).outlineStyle : ''));
+    const walk = await tabWalk(page);
+    expect(walk.failures).toEqual([expect.stringMatching(/^2\.4\.7 Focus visible: input#Soccer /)]);
+    await page.locator('#Soccer').focus();
+    expect(await radioOutline()).toBe('solid');
   });
 
   test('2.4.3: an order different from the expected order fails; the matching order passes', async ({
