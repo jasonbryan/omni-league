@@ -997,14 +997,57 @@ test.describe('League management: the link to a new season', () => {
     await expectOnScreen(page, seasonsHeading(page));
   });
 
-  for (const fragment of ['details', 'create-season']) {
-    test(`#${fragment} opened directly does not move focus to the Seasons heading`, async ({
+  for (const [fragment, field] of [
+    ['details', '#league-name'],
+    ['create-season', '#name'],
+  ] as const) {
+    test(`#${fragment} opened directly lands on its field once the league loads, never on the Seasons heading`, async ({
+      page,
+    }, testInfo) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${COED}#${fragment}`);
+      await expect(page.locator(field)).toBeFocused();
+      await expectOnScreen(page, page.locator(field));
+      await expect(seasonsHeading(page)).not.toBeFocused();
+      await screenshot(page, testInfo, `447-${fragment}-direct`);
+    });
+
+    test(`#${fragment} opened directly lands the same way for a league organizer`, async ({
+      page,
+    }) => {
+      const { base } = await memberOf(page, 'leagueOrganizer');
+      await page.goto(`${base}/leagues/${COED}#${fragment}`);
+      await expect(page.locator(field)).toBeFocused();
+      await expectOnScreen(page, page.locator(field));
+    });
+
+    test(`a user scroll (Page Down) before the league loads cancels the landing on #${fragment}`, async ({
       page,
     }) => {
       const { base } = await memberOf(page, 'orgAdmin');
+      const held = await holdQueries(page, ['leagues:getOrganizerContext']);
       await page.goto(`${base}/leagues/${COED}#${fragment}`);
-      await expect(page.getByText('No seasons yet')).toBeVisible();
-      await expect(seasonsHeading(page)).not.toBeFocused();
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await page.keyboard.press('PageDown');
+      held.release();
+      await expect(page.getByRole('heading', { level: 1, name: 'Coed 7v7 Rec' })).toBeVisible();
+      await expect(page.locator(field)).not.toBeFocused();
+    });
+
+    test(`#${fragment} lands once: a later live update leaves focus where the user put it`, async ({
+      page,
+    }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${SOFTBALL}`);
+      const opened = await page.context().newPage();
+      await opened.setViewportSize(page.viewportSize()!);
+      await opened.goto(`${base}/leagues/${SOFTBALL}#${fragment}`);
+      await expect(opened.locator(field)).toBeFocused();
+
+      await opened.locator(fragment === 'details' ? '#name' : '#league-name').focus();
+      await createFall2026(page);
+      await expect(rows(opened)).toHaveCount(1);
+      await expect(opened.locator(fragment === 'details' ? '#name' : '#league-name')).toBeFocused();
     });
   }
 
