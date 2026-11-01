@@ -968,6 +968,7 @@ describe('convex/lib', () => {
     'sports.ts': 'reached from convex/testing.ts',
     'tenantWrites.ts': 'imported by convex/testing.ts',
     'testOnly.ts': 'imported by convex/testing.ts',
+    'userName.ts': 'imported by convex/auth.ts',
     'users.ts': 'imported by convex/auth.ts',
   };
 

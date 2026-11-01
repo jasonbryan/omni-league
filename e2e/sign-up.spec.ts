@@ -423,6 +423,108 @@ test.describe('sign-up', () => {
     },
   );
 
+  test.describe('a name over 100 characters', () => {
+    // The mockup's pasted email signature: 105 characters.
+    const LONG_NAME =
+      'Maya Okafor, Captain, Thursday Night Coed 2s, North Beach Sand Courts, Corpus Christi, TX, (361) 555-0142';
+    const NAME_LONG = 'Use 100 characters or fewer.';
+
+    async function expectNameTooLong(page: Page): Promise<void> {
+      await expect(fieldError(page, 'name')).toHaveText(NAME_LONG);
+      await expect(field(page, 'name')).toHaveAttribute('aria-invalid', 'true');
+      await expect(field(page, 'name')).toHaveAttribute(
+        'aria-describedby',
+        'name-description name-error',
+      );
+      await expect(field(page, 'name')).toBeFocused();
+      await expect(
+        page.getByRole('alert').filter({ hasText: 'Sign-up could not be completed.' }),
+      ).toHaveCount(0);
+      await expect(page).toHaveURL(`${baseURL}/sign-up`);
+    }
+
+    test('is refused on the page: nothing is sent, the message is on Name, which takes focus', async ({
+      page,
+    }, testInfo) => {
+      expect(LONG_NAME).toHaveLength(105);
+      const sent: string[] = [];
+      page.on('request', (request) => {
+        if (request.url().includes('/api/auth/sign-up/')) sent.push(request.url());
+      });
+      await page.goto('/sign-up');
+      await fillForm(page, { ...newUser('Long'), name: LONG_NAME });
+      await createAccount(page).click();
+      await expectNameTooLong(page);
+      expect(sent).toEqual([]);
+      await screenshot(page, testInfo, '117-sign-up-name-too-long');
+      await expectAccessible(page, { expectedOrder: signUpOrder(page) });
+
+      await field(page, 'name').fill(LONG_NAME.slice(0, 100));
+      await expect(fieldError(page, 'name')).toHaveCount(0);
+      await expect(field(page, 'name')).not.toHaveAttribute('aria-invalid', 'true');
+    });
+
+    test('refuses exactly 101 characters after trimming on the page, and sends nothing', async ({
+      page,
+    }) => {
+      const sent: string[] = [];
+      page.on('request', (request) => {
+        if (request.url().includes('/api/auth/sign-up/')) sent.push(request.url());
+      });
+      await page.goto('/sign-up');
+      await fillForm(page, { ...newUser('Long'), name: `  ${'x'.repeat(101)}  ` });
+      await createAccount(page).click();
+      await expectNameTooLong(page);
+      expect(sent).toEqual([]);
+    });
+
+    test('a name of 50 emoji, 100 characters as the page and server count, signs up', async ({
+      page,
+    }) => {
+      const user = { ...newUser(), name: ` ${'\u{1F3D0}'.repeat(50)} ` };
+      await signUp(page, user);
+      await expect(page).toHaveURL(`${baseURL}/app`);
+      if (!remoteBaseUrl) {
+        expect((await accountByEmail(user.email))?.name).toBe('\u{1F3D0}'.repeat(50));
+      }
+    });
+
+    test.describe('refused by the server with NAME_INVALID', () => {
+      test.use({ expectedFailedRequests: [{ status: 400, path: '/api/auth/sign-up/email' }] });
+
+      test('shows the same message on Name instead of the generic alert', async ({ page }) => {
+        await page.route('**/api/auth/sign-up/email', (route) =>
+          route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              code: 'NAME_INVALID',
+              message: 'Enter a name of 1 to 100 characters.',
+            }),
+          }),
+        );
+        await signUp(page, newUser('Server long'));
+        await expectNameTooLong(page);
+        await expectAccessible(page, { expectedOrder: signUpOrder(page) });
+      });
+
+      test("shows the message on Name for the backend's own NAME_INVALID answer", async ({
+        page,
+      }) => {
+        const user = newUser('Server long');
+        // The page refuses this name itself, so the request is rewritten to reach the backend's rule.
+        await page.route('**/api/auth/sign-up/email', (route) =>
+          route.continue({
+            postData: JSON.stringify({ ...route.request().postDataJSON(), name: 'x'.repeat(101) }),
+          }),
+        );
+        await signUp(page, user);
+        await expectNameTooLong(page);
+        if (!remoteBaseUrl) expect(await accountByEmail(user.email)).toBeNull();
+      });
+    });
+  });
+
   // Better Auth 1.6 refuses a malformed email with 400 VALIDATION_ERROR (convex/auth.test.ts pins
   // the message). The page cannot send one today, so the response is replaced: an email-only
   // refusal shows on Email; one that also names another field is the generic alert.
