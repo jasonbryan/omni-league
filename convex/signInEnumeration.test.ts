@@ -1,8 +1,6 @@
 /// <reference types="vite/client" />
-// Timing uses the real clock. Each known sample is paired with an unknown one taken right next to it,
-// in alternating order, and the median of the pair ratios is compared: load that slows the machine
-// slows both halves of a pair, and a burst that hits one pair cannot move the median. A missing dummy
-// hash (a full scrypt per password check) still shows in every pair.
+// Load slows both halves of an adjacent known/unknown pair alike, while a missing dummy hash (a full
+// scrypt) shows in every pair.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -68,11 +66,11 @@ test('a wrong password for a known address and for an unknown one: same answer, 
   });
   expect(up.status).toBe(200);
   await timed(t, EMAIL); // warm-up: module load, first scrypt
+  let knownFailures = 1;
   await timed(t, 'warm.up@example.com');
 
   const known: Awaited<ReturnType<typeof timed>>[] = [];
   const unknown: Awaited<ReturnType<typeof timed>>[] = [];
-  let knownFailures = 1;
   for (let i = 0; i < PAIRS; i++) {
     if (knownFailures === FREE_FAILURES - 1) {
       // A correct password clears the failure count, so no known sample is throttled.
@@ -97,7 +95,8 @@ test('a wrong password for a known address and for an unknown one: same answer, 
     [...a.response.headers.keys()].filter((name) => name !== 'date').sort();
   expect(names(unknown[0])).toEqual(names(known[0]));
 
-  const ratio = median(known.map((k, i) => k.ms / (unknown[i]?.ms ?? 0)));
+  const pairRatios = known.map((k, i) => k.ms / (unknown[i]?.ms ?? 0));
+  const ratio = median(pairRatios);
   const ms = (answers: typeof known) => answers.map((a) => a.ms.toFixed(0)).join(', ');
   expect(
     Math.max(ratio, 1 / ratio),
