@@ -15,10 +15,17 @@ import {
 import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
+import {
+  lucideCircleAlert,
+  lucideEye,
+  lucideEyeOff,
+  lucideLoaderCircle,
+  lucideWifiOff,
+} from '@ng-icons/lucide';
 import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
+import { injectOfflineTitle, injectOnline } from '../core/data/convex';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
 import { Checkbox } from '../ui/checkbox';
@@ -47,6 +54,7 @@ export const MESSAGES = {
   checkUnavailable: 'Failed to check password. Please try again later.',
   unexpectedTitle: 'Sign-up could not be completed.',
   unexpectedDescription: 'Check your connection and try again.',
+  offlineDescription: "Your details are still here. Try again when you're connected.",
 } as const;
 
 type FieldName = 'name' | 'email' | 'password' | 'adult';
@@ -59,7 +67,7 @@ interface SignUpModel {
   adult: boolean;
 }
 
-type FormAlert = 'check-unavailable' | 'unexpected';
+type FormAlert = 'check-unavailable' | 'unexpected' | 'offline';
 
 // Class strings are the approved mockup's, written as static attributes so Angular sets them before the element is inserted: a `[class]` binding could land after the first style pass, and `transition-all` would then animate it.
 // The buttons carry `buttonVariants` output unmerged, as the mockup draws it, so `border-transparent` stays beside `border-border` and the outline button shows no edge.
@@ -67,7 +75,9 @@ type FormAlert = 'check-unavailable' | 'unexpected';
 @Component({
   selector: 'app-sign-up-page',
   imports: [Checkbox, FormField, NgIcon, RouterLink, PublicLayout],
-  providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle })],
+  providers: [
+    provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle, lucideWifiOff }),
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-public-layout>
@@ -98,13 +108,29 @@ type FormAlert = 'check-unavailable' | 'unexpected';
                 tabindex="-1"
                 class="group/alert relative w-full grid gap-0.5 rounded-lg border px-2.5 py-2 text-start text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pe-18 has-[>ng-icon]:grid-cols-[auto_1fr] has-[>ng-icon]:gap-x-2 *:[ng-icon]:row-span-2 *:[ng-icon]:translate-y-0.5 *:[ng-icon]:text-current *:[ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 mb-5"
               >
-                <ng-icon name="lucideCircleAlert" aria-hidden="true" />
+                <ng-icon
+                  [name]="alert === 'offline' ? 'lucideWifiOff' : 'lucideCircleAlert'"
+                  aria-hidden="true"
+                />
                 @if (alert === 'check-unavailable') {
                   <div
                     data-slot="alert-title"
                     class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
                   >
                     {{ messages.checkUnavailable }}
+                  </div>
+                } @else if (alert === 'offline') {
+                  <div
+                    data-slot="alert-title"
+                    class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
+                  >
+                    {{ offlineTitle() }}
+                  </div>
+                  <div
+                    data-slot="alert-description"
+                    class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
+                  >
+                    {{ messages.offlineDescription }}
                   </div>
                 } @else {
                   <div
@@ -377,7 +403,8 @@ type FormAlert = 'check-unavailable' | 'unexpected';
               type="submit"
               data-slot="button"
               class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 bg-primary text-primary-foreground [a]:hover:bg-primary/90 h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 mt-6 w-full"
-              [attr.aria-disabled]="submitting() ? 'true' : null"
+              [class.opacity-50]="!online() && !submitting()"
+              [attr.aria-disabled]="submitting() || !online() ? 'true' : null"
             >
               @if (submitting()) {
                 <ng-icon
@@ -444,6 +471,8 @@ export class SignUpPage {
     required(path.adult, { message: MESSAGES.adult });
   });
 
+  protected readonly online = injectOnline();
+  protected readonly offlineTitle = injectOfflineTitle();
   protected readonly showPassword = signal(false);
   protected readonly submitting = signal(false);
   protected readonly formAlert = signal<FormAlert | null>(null);
@@ -504,6 +533,12 @@ export class SignUpPage {
     }
     if (firstInvalid) {
       this.focusAfterRender(firstInvalid);
+      return;
+    }
+
+    if (!this.online()) {
+      this.formAlert.set('offline');
+      this.focusAfterRender('alert');
       return;
     }
 
