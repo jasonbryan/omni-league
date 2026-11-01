@@ -10,7 +10,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
@@ -36,6 +36,7 @@ import { publicSeasonPath } from '../public-league/public-league-path';
 import { LeagueBreadcrumb } from './league-breadcrumb';
 import { LeagueContext } from './league-context';
 import { LeagueDetailsForm } from './league-details-form';
+import { LeagueLanding, type LandingTarget } from './league-landing';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
@@ -362,9 +363,7 @@ export class LeagueManagement {
   private readonly context = inject(LeagueContext);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly landingSlug = signal<string | null>(
-    slugOfFragment(inject(ActivatedRoute).snapshot.fragment),
-  );
+  private readonly landing = inject(LeagueLanding);
 
   protected readonly league = this.context.league;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
@@ -407,6 +406,8 @@ export class LeagueManagement {
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
   protected readonly detailsPath = computed(() => `${this.leagueHref()}#details`);
+  private readonly createSectionRef = viewChild<ElementRef<HTMLElement>>('createSection');
+  private readonly detailsSectionRef = viewChild<ElementRef<HTMLElement>>('detailsSection');
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly createForm = viewChild(SeasonCreateForm);
   private publishOpener: 'row' | 'footer' = 'row';
@@ -417,14 +418,24 @@ export class LeagueManagement {
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
   constructor() {
-    effect(() => this.landOnceTheListAnswers());
+    effect(() => this.landOnceItsTargetRenders());
   }
 
-  private landOnceTheListAnswers(): void {
-    const slug = this.landingSlug();
-    if (slug === null || (this.rows() === undefined && !this.failed())) return;
-    this.landingSlug.set(null);
-    afterNextRender(() => this.focusSeasonRowOrHeading(slug), { injector: this.injector });
+  private landOnceItsTargetRenders(): void {
+    const target = this.landing.target();
+    if (target === null || this.league() === null) return;
+    if (target.kind === 'season' && this.rows() === undefined && !this.failed()) return;
+    this.landing.settle();
+    afterNextRender(() => this.land(target), { injector: this.injector });
+  }
+
+  private land(target: LandingTarget): void {
+    if (target.kind === 'season') this.focusSeasonRowOrHeading(target.slug);
+    else {
+      const section =
+        target.kind === 'create-season' ? this.createSectionRef() : this.detailsSectionRef();
+      this.scrollToFieldOf(section?.nativeElement ?? null);
+    }
   }
 
   protected publish(
@@ -479,7 +490,7 @@ export class LeagueManagement {
   protected showSeason({ event, slug }: SeasonShown): void {
     if (!isPlainClick(event)) return;
     event.preventDefault();
-    this.landingSlug.set(null);
+    this.landing.settle();
     this.focusSeasonRowOrHeading(slug);
   }
 
@@ -497,19 +508,11 @@ export class LeagueManagement {
   protected jumpTo(event: MouseEvent, section: HTMLElement): void {
     if (!isPlainClick(event)) return;
     event.preventDefault();
-    section.scrollIntoView();
-    section.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
+    this.scrollToFieldOf(section);
   }
-}
 
-const SEASON_FRAGMENT = 'season-';
-
-function slugOfFragment(fragment: string | null): string | null {
-  if (!fragment?.startsWith(SEASON_FRAGMENT)) return null;
-  const slug = fragment.slice(SEASON_FRAGMENT.length);
-  try {
-    return decodeURIComponent(slug);
-  } catch {
-    return slug;
+  private scrollToFieldOf(section: HTMLElement | null): void {
+    section?.scrollIntoView();
+    section?.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
   }
 }

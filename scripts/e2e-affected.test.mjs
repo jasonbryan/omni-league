@@ -368,6 +368,14 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['e2e/season-page.spec.ts']), want('e2e/season-page.spec.ts'));
   });
 
+  it('maps the later-choice helper to the admin and league management specs, and not to the full suite', () => {
+    const specs = specsFor(['src/app/core/later-choice.ts']);
+    assert.ok(specs.includes('e2e/league-management.spec.ts'));
+    assert.ok(specs.includes('e2e/organization-admin.spec.ts'));
+    assert.ok(!specs.includes('FULL'));
+    assert.deepEqual(specsFor(['src/app/core/later-choice.spec.ts']), want());
+  });
+
   it('maps the not-found and offline views to the league page and season page specs that assert them', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));

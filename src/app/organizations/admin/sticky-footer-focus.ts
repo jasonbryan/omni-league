@@ -40,7 +40,14 @@ export class StickyFooterFocus {
     }
     // A chip's radio is visually hidden inside its label, which is what the user sees.
     const shown = control.closest('label') ?? control;
-    const overlap = shown.getBoundingClientRect().bottom - footer.getBoundingClientRect().top;
-    if (overlap > 0) window.scrollBy({ top: overlap + GAP_ABOVE_FOOTER_PX, behavior: 'instant' });
+    const shownBottom = shown.getBoundingClientRect().bottom;
+    const footerBox = footer.getBoundingClientRect();
+    if (shownBottom <= footerBox.top) return;
+    // Near the form's top, the form holds the footer below where it sticks; the scroll lifts it.
+    const footerTopAfterScroll = Math.min(footerBox.top, window.innerHeight - footerBox.height);
+    window.scrollBy({
+      top: shownBottom - footerTopAfterScroll + GAP_ABOVE_FOOTER_PX,
+      behavior: 'instant',
+    });
   }
 }
