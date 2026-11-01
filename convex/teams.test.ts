@@ -489,6 +489,30 @@ describe('teams.getForMember', () => {
     });
   });
 
+  test('lists the captain first, then the other players in the order they joined', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    const { teamId } = await register(s, 'captain', 'Sand Sharks');
+    await s.t.run(async (ctx) => {
+      for (const userId of [s.stranger, s.player, s.organizer]) {
+        await addRosterEntry(ctx, (await ctx.db.get('teams', teamId))!, {
+          userId,
+          source: 'invite',
+          addedByUserId: s.captain,
+        });
+      }
+      // The last player to join becomes captain, so the captain is not first in join order.
+      await ctx.db.patch('teams', teamId, { captainUserId: s.organizer });
+    });
+    const team = await as(s, 'player').query(api.teams.getForMember, { teamId });
+    expect(team?.roster.map((row) => [row.name, row.isCaptain])).toEqual([
+      ['Name organizer-coed', true],
+      ['Name captain', false],
+      ['Name stranger', false],
+      ['Name player', false],
+    ]);
+  });
+
   test('an unknown id and a malformed id each answer null', async () => {
     const { s, teamId } = await withTeam();
     await s.t.run(async (ctx) => {
