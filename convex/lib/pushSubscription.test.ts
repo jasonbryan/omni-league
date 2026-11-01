@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  base64UrlBytes,
+  unpaddedBase64UrlBytesOrNull,
   isAllowedPushEndpoint,
   isP256PublicKey,
   MAX_ENDPOINT_LENGTH,
@@ -43,13 +43,13 @@ describe('isAllowedPushEndpoint', () => {
   });
 });
 
-describe('base64UrlBytes', () => {
+describe('unpaddedBase64UrlBytesOrNull', () => {
   test('decodes unpadded base64url, including - and _', () => {
-    expect([...(base64UrlBytes('-_8') ?? [])]).toEqual([0xfb, 0xff]);
+    expect([...(unpaddedBase64UrlBytesOrNull('-_8') ?? [])]).toEqual([0xfb, 0xff]);
   });
 
   test.each(['ab+c', 'ab/c', 'abc=', 'a', 'ab c'])('refuses %j', (text) => {
-    expect(base64UrlBytes(text)).toBeNull();
+    expect(unpaddedBase64UrlBytesOrNull(text)).toBeNull();
   });
 });
 

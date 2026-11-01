@@ -5,8 +5,7 @@ export type DevicePermission = NotificationPermission | 'unsupported';
 
 /** The browser facts the notifications page reads. A token, so that tests can give fakes. */
 export interface PushDevice {
-  /** Notifications, a service worker, and the Push API all exist. */
-  readonly supported: boolean;
+  readonly hasPushApis: boolean;
   /** iPhone or iPad in Safari, not the app added to the Home Screen: Web Push works only in the installed app there. */
   readonly needsHomeScreenInstall: boolean;
   readonly permission: Signal<DevicePermission>;
@@ -43,7 +42,7 @@ export class BrowserPushDevice implements PushDevice {
       ? this.window.navigator.serviceWorker
       : null;
 
-  readonly supported =
+  readonly hasPushApis =
     this.notification !== null && this.container !== null && 'PushManager' in (this.window ?? {});
   readonly needsHomeScreenInstall =
     this.window !== null && isIosOrIpadOs(this.window.navigator) && !isStandalone(this.window);

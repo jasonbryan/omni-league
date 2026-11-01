@@ -51,7 +51,7 @@ function fakeSubscription(endpoint: string): PushSubscription {
 }
 
 class FakePushDevice implements PushDevice {
-  supported = true;
+  hasPushApis = true;
   needsHomeScreenInstall = false;
   readonly permission = signal<DevicePermission>('default');
   readonly controlled = signal(true);
@@ -138,6 +138,8 @@ describe('NotificationsPage', () => {
     el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   const badge = () => text(panel().querySelector('[data-slot="badge"]'));
   const button = () => panel().querySelector<HTMLButtonElement>('button');
+  // The result region sits last in the panel, in the page from the first render, so a change is announced.
+  const changeStatus = () => text([...panel().querySelectorAll('[role="status"]')].at(-1));
   const alertBox = () => panel().querySelector<HTMLElement>('[data-slot="alert"]');
 
   async function goOffline() {
@@ -201,7 +203,7 @@ describe('NotificationsPage', () => {
     it.each([
       ['the deployment has no VAPID key', () => undefined, null],
       ['there is no service worker', () => (swPush.isEnabled = false), VAPID_KEY],
-      ['the browser has no Push API', () => (device.supported = false), VAPID_KEY],
+      ['the browser has no Push API', () => (device.hasPushApis = false), VAPID_KEY],
     ])('shows when %s, with no button', async (_case, arrange, key) => {
       arrange();
       await open();
@@ -351,6 +353,10 @@ describe('NotificationsPage', () => {
       convex.calls[0].resolve(null);
       await settle();
       expect(badge()).toBe('On');
+      // The pressed button is gone; focus moves to the one that replaced it, and the result is announced.
+      expect(document.activeElement).toBe(button());
+      expect(text(button())).toBe('Turn off');
+      expect(changeStatus()).toBe('Notifications are on for this device.');
       await emitStatus(true);
       expect(badge()).toBe('On');
       expect(text(button())).toBe('Turn off');
@@ -486,6 +492,21 @@ describe('NotificationsPage', () => {
       expect(swPush.unsubscribes).toBe(1);
       expect(badge()).toBe('Off');
       expect(text(button())).toBe('Turn on notifications');
+      expect(document.activeElement).toBe(button());
+      expect(changeStatus()).toBe('Notifications are off for this device.');
+    });
+
+    it('the result status is empty until a change and again once another press starts', async () => {
+      await openOn();
+      expect(changeStatus()).toBe('');
+      button()!.click();
+      await settle();
+      convex.calls[0].resolve(null);
+      await settle();
+      expect(changeStatus()).toBe('Notifications are off for this device.');
+      button()!.click();
+      await settle();
+      expect(changeStatus()).toBe('');
     });
 
     it('Turn off still ends Off when the browser cannot unsubscribe', async () => {

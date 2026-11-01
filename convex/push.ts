@@ -4,6 +4,7 @@ import { env, mutation, query, type MutationCtx, type QueryCtx } from './_genera
 import { requireUser } from './lib/access';
 import {
   isP256PublicKey,
+  MAX_ENDPOINT_LENGTH,
   MAX_SUBSCRIPTIONS_PER_USER,
   pushSubscriptionProblem,
 } from './lib/pushSubscription';
@@ -24,6 +25,7 @@ async function rowByEndpoint(
   ctx: Pick<QueryCtx, 'db'>,
   endpoint: string,
 ): Promise<Doc<'pushSubscriptions'> | null> {
+  if (endpoint.length > MAX_ENDPOINT_LENGTH) return null;
   return ctx.db
     .query('pushSubscriptions')
     .withIndex('by_endpoint', (q) => q.eq('endpoint', endpoint))

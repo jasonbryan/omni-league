@@ -43,15 +43,14 @@ export function isAllowedPushEndpoint(endpoint: string): boolean {
   return PUSH_SERVICE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
 }
 
-/** `null` for text that is not unpadded base64url. */
-export function base64UrlBytes(text: string): Uint8Array | null {
+export function unpaddedBase64UrlBytesOrNull(text: string): Uint8Array | null {
   if (!/^[A-Za-z0-9_-]*$/.test(text) || text.length % 4 === 1) return null;
   const binary = atob(text.replaceAll('-', '+').replaceAll('_', '/'));
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
 export function isP256PublicKey(text: string): boolean {
-  const bytes = base64UrlBytes(text);
+  const bytes = unpaddedBase64UrlBytesOrNull(text);
   return bytes?.length === P256DH_BYTES && bytes[0] === UNCOMPRESSED_POINT_PREFIX;
 }
 
@@ -60,7 +59,8 @@ export function pushSubscriptionProblem(
 ): PushSubscriptionProblem | null {
   if (!isAllowedPushEndpoint(subscription.endpoint)) return 'endpoint';
   if (!isP256PublicKey(subscription.keys.p256dh)) return 'p256dh';
-  if (base64UrlBytes(subscription.keys.auth)?.length !== AUTH_SECRET_BYTES) return 'auth';
+  if (unpaddedBase64UrlBytesOrNull(subscription.keys.auth)?.length !== AUTH_SECRET_BYTES)
+    return 'auth';
   const { expirationTime } = subscription;
   if (expirationTime != null && !(Number.isFinite(expirationTime) && expirationTime > 0)) {
     return 'expirationTime';

@@ -1,11 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -249,6 +252,7 @@ const STEP_NUMBER =
                   This device gets game reminders, schedule changes, and score updates.
                 </p>
                 <button
+                  #deviceButton
                   type="button"
                   data-slot="button"
                   [class]="offlineAware(outlineButton)"
@@ -282,6 +286,7 @@ const STEP_NUMBER =
                   or a score is confirmed.
                 </p>
                 <button
+                  #deviceButton
                   type="button"
                   data-slot="button"
                   [class]="
@@ -330,6 +335,7 @@ const STEP_NUMBER =
               }
             }
           </div>
+          <p role="status" class="sr-only">{{ changedText(changed()) }}</p>
         </section>
         <p class="mt-4 max-w-xl text-sm text-muted-foreground">
           This setting is for this device only. Turn notifications on in each browser or installed
@@ -360,6 +366,9 @@ export class NotificationsPage {
 
   private readonly offlineAlert = viewChild(AdminOfflineAlert);
   private readonly failedAlert = viewChild(AdminAlert);
+  private readonly deviceButton = viewChild<ElementRef<HTMLButtonElement>>('deviceButton');
+  /** The pressed button is replaced by the other one, so focus follows to it once the new state renders. */
+  private readonly focusButtonIn = signal<'on' | 'off' | null>(null);
 
   /** The status query answers after the save; until then the endpoint just saved counts as on. */
   private readonly savedEndpoint = signal<string | null>(null);
@@ -369,13 +378,24 @@ export class NotificationsPage {
   protected readonly controlled = this.device.controlled;
   protected readonly busy = signal<Busy>('idle');
   protected readonly alert = signal<Alert>(null);
+  protected readonly changed = signal<Change | null>(null);
+
+  constructor() {
+    afterRenderEffect(() => {
+      const wanted = this.focusButtonIn();
+      const button = this.deviceButton();
+      if (!wanted || wanted !== this.state() || !button) return;
+      button.nativeElement.focus();
+      untracked(() => this.focusButtonIn.set(null));
+    });
+  }
 
   protected readonly state = computed<DeviceState>(() => {
     const config = this.config.value();
     if (config === undefined) return this.config.error() ? 'not-available' : 'checking';
     if (config.vapidPublicKey === null) return 'not-available';
     if (this.device.needsHomeScreenInstall) return 'install-first';
-    if (!this.device.supported || !this.swPush.isEnabled || this.unlistedPushService()) {
+    if (!this.device.hasPushApis || !this.swPush.isEnabled || this.unlistedPushService()) {
       return 'not-available';
     }
     if (this.device.permission() === 'denied') return 'blocked';
@@ -402,6 +422,10 @@ export class NotificationsPage {
     return `Notifications are still ${change === 'on' ? 'off' : 'on'}. Try again when you're connected.`;
   }
 
+  protected changedText(change: Change | null): string {
+    return change ? `Notifications are ${change} for this device.` : '';
+  }
+
   protected offlineAware(classes: string): string {
     return this.online() ? classes : `${classes} opacity-50`;
   }
@@ -418,6 +442,7 @@ export class NotificationsPage {
     const permission = this.device.requestPermission();
     this.busy.set('turning-on');
     this.alert.set(null);
+    this.changed.set(null);
     void this.finishTurningOn(permission, key);
   }
 
@@ -430,6 +455,7 @@ export class NotificationsPage {
     }
     this.busy.set('turning-off');
     this.alert.set(null);
+    this.changed.set(null);
     void this.finishTurningOff(endpoint);
   }
 
@@ -459,6 +485,7 @@ export class NotificationsPage {
           keys: { p256dh: keys?.['p256dh'] ?? '', auth: keys?.['auth'] ?? '' },
         });
         this.savedEndpoint.set(subscription.endpoint);
+        this.announceChange('on');
       } catch (error) {
         // No row was saved, so a browser subscription left behind would show On after a reload.
         await this.forgetBrowserSubscription();
@@ -484,6 +511,7 @@ export class NotificationsPage {
       return;
     }
     this.savedEndpoint.set(null);
+    this.announceChange('off');
     // The row is gone, so nothing is sent here even if the browser keeps its subscription.
     await this.forgetBrowserSubscription();
     this.busy.set('idle');
@@ -495,6 +523,11 @@ export class NotificationsPage {
     } catch {
       // Nothing to undo: the page shows what the server holds.
     }
+  }
+
+  private announceChange(change: Change): void {
+    this.changed.set(change);
+    this.focusButtonIn.set(change);
   }
 
   private showAlert(alert: NonNullable<Alert>): void {

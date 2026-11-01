@@ -56,14 +56,14 @@ const IPAD_SAFARI =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15';
 
 describe('BrowserPushDevice', () => {
-  it('is supported only with Notification, a service worker container, and PushManager', () => {
-    expect(create().device.supported).toBe(true);
+  it('has the push APIs only with Notification, a service worker container, and PushManager', () => {
+    expect(create().device.hasPushApis).toBe(true);
     TestBed.resetTestingModule();
-    expect(create({ notification: false }).device.supported).toBe(false);
+    expect(create({ notification: false }).device.hasPushApis).toBe(false);
     TestBed.resetTestingModule();
-    expect(create({ serviceWorker: false }).device.supported).toBe(false);
+    expect(create({ serviceWorker: false }).device.hasPushApis).toBe(false);
     TestBed.resetTestingModule();
-    expect(create({ pushManager: false }).device.supported).toBe(false);
+    expect(create({ pushManager: false }).device.hasPushApis).toBe(false);
   });
 
   it.each([

@@ -3,6 +3,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { MAX_ENDPOINT_LENGTH } from './lib/pushSubscription';
 import { deleteUserRecord } from './lib/users';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -381,6 +382,19 @@ describe('push.getMyDeviceStatus', () => {
     await expect(
       s.t.query(api.push.getMyDeviceStatus, { endpoint: subscription().endpoint }),
     ).rejects.toThrow('Sign in required');
+  });
+});
+
+describe('an endpoint over the length limit', () => {
+  test('unsubscribe and getMyDeviceStatus answer as for an unknown endpoint and change nothing', async () => {
+    const s = await setup();
+    await s.a.mutation(api.push.subscribe, subscription());
+    const before = await s.rows();
+    const endpoint = `https://fcm.googleapis.com/${'a'.repeat(MAX_ENDPOINT_LENGTH)}`;
+
+    expect(await s.a.mutation(api.push.unsubscribe, { endpoint })).toBeNull();
+    expect(await s.a.query(api.push.getMyDeviceStatus, { endpoint })).toBe(false);
+    expect(await s.rows()).toEqual(before);
   });
 });
 
