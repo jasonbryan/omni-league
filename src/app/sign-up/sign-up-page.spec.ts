@@ -273,6 +273,37 @@ describe('SignUpPage', () => {
       ]);
     });
 
+    it.each([
+      ['50 emoji (100 UTF-16 units)', '\u{1F3D0}'.repeat(50)],
+      ['100 accented letters', '\u00e9'.repeat(100)],
+      ['100 CJK characters', '海'.repeat(100)],
+      ['99 letters and an emoji at the edge, trimmed', `\u3000${'x'.repeat(98)}\u{1F3D0}\t`],
+    ])(
+      'a name of %s, counted as String.length after trimming, is accepted and sent trimmed',
+      async (_, name) => {
+        await fill({ name });
+        await submit();
+        expect(error('name')).toBeNull();
+        expect(client.signUps.map((s) => s['name'])).toEqual([name.trim()]);
+      },
+    );
+
+    it.each([
+      ['51 emoji (102 UTF-16 units)', '\u{1F3D0}'.repeat(51)],
+      ['100 letters and one emoji', `${'x'.repeat(100)}\u{1F3D0}`],
+      ['101 accented letters', '\u00e9'.repeat(101)],
+      ['101 letters between no-break and ideographic spaces', `\u00a0${'x'.repeat(101)}\u3000`],
+    ])(
+      'a name of %s, counted as String.length after trimming, is refused and nothing is sent',
+      async (_, name) => {
+        await fill({ name });
+        await submit();
+        expect(error('name')).toBe(MESSAGES.nameLong);
+        expect(document.activeElement).toBe(input('name'));
+        expect(client.signUps).toEqual([]);
+      },
+    );
+
     it('the over-long name error clears once the name is 100 characters or fewer', async () => {
       await fill({ name: 'x'.repeat(101) });
       await submit();
@@ -333,6 +364,14 @@ describe('SignUpPage', () => {
       await submit();
       expect(error('name')).toBe(MESSAGES.nameEmpty);
       expect(error('email')).toBe(MESSAGES.emailEmpty);
+    });
+
+    it('shows the over-long name message once a name over 100 characters is left, not while typing', async () => {
+      await type('name', 'x'.repeat(101));
+      expect(error('name')).toBeNull();
+      await leave('name');
+      expect(error('name')).toBe(MESSAGES.nameLong);
+      expect(input('name').getAttribute('aria-invalid')).toBe('true');
     });
 
     it('clears the error on the keystroke that makes the value valid', async () => {
