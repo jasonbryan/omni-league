@@ -32,7 +32,7 @@ const projects: PlaywrightTestConfig['projects'] = [
   },
 ];
 if (webkitEnabled) {
-  // iOS Safari proxy: release PRs into `production` and `workflow_dispatch` with `webkit: true`.
+  // iOS Safari proxy, run in CI only by the `E2E` `workflow_dispatch` with `webkit: true`.
   projects.push({
     name: 'webkit-mobile',
     use: {

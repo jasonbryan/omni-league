@@ -566,6 +566,14 @@ describe('AdminLeagues', () => {
       await open([]);
       expectStickyFooterWithFocusFix(o.harness.fixture.debugElement, form());
     });
+
+    it('a mouse press on Create leaves focus in the field, so no error shown on leaving it moves the button before the release', async () => {
+      await open([]);
+      input('slug').focus();
+      const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      submitButton().dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(true);
+    });
   });
 
   describe('one location', () => {
