@@ -76,7 +76,6 @@ export const controlsInTabOrder = (seen: FocusedPlace[]): string[] =>
 export const underTheFooter = (seen: FocusedPlace[]): FocusedPlace[] =>
   seen.filter((place) => !place.inViewport || !place.unobscured || !place.aboveFooter);
 
-/** In the viewport, unobscured at its centre, and inside the form's footer. */
 export async function expectVisibleInFooter(page: Page, shown: Locator): Promise<void> {
   await expect(shown).toBeVisible();
   await settleAfterFocusScroll(page);
@@ -98,8 +97,7 @@ export async function footerHeight(form: Locator): Promise<number> {
   return (await form.locator('[data-slot="form-footer"]').boundingBox())!.height;
 }
 
-/** At 768px and wider the footer is in the flow, and the status sits on top of the button. */
-export async function expectStatusOnTopOfButton(
+export async function expectStatusOnTopOfButtonInStaticFooter(
   form: Locator,
   status: Locator,
   button: Locator,

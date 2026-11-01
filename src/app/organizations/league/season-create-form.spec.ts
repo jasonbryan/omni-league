@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
-import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
+import { MAX_SEASON_NAME_LENGTH, SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
@@ -484,8 +484,9 @@ describe('SeasonCreateForm', () => {
 
     const createdStatus = () => form().querySelector<HTMLElement>('[data-slot="created-status"]');
 
-    async function created() {
+    async function created(name?: string) {
       await fill();
+      if (name !== undefined) await type('name', name);
       submitButton().focus();
       await submit();
       o.convex.calls[0].resolve({ seasonId: 'se_new' });
@@ -509,10 +510,14 @@ describe('SeasonCreateForm', () => {
     });
 
     it('holds the whole name in the title, so the region announces it even where the title is clamped', async () => {
+      const name =
+        'Fall 2026: Sunday Coed Sevens at Redfish Flats, with Late Kickoffs, Short Halves, and Long Playoffs.';
+      expect(name).toHaveLength(MAX_SEASON_NAME_LENGTH);
       await open();
-      await created();
-      const title = createdStatus()!.querySelector('[data-slot="created-title"]')!;
-      expect(title.textContent).toBe('Fall 2026 created as a draft.');
+      await created(name);
+      const title = createdStatus()!.querySelector<HTMLElement>('[data-slot="created-title"]')!;
+      expect(title.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+      expect(title.textContent).toBe(`${name} created as a draft.`);
     });
 
     it('announces the result in one status region that was in the footer, empty, before the press, with no status inside another', async () => {
@@ -542,8 +547,6 @@ describe('SeasonCreateForm', () => {
     it('clears the created status when the next create starts', async () => {
       await open();
       await created();
-      await type('name', 'Next One');
-      expect(input('slug').value).toBe('next-one');
       await submit();
       expect(text(createdStatus())).toBe('');
     });

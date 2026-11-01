@@ -9,7 +9,7 @@ import { otherUser, signUp } from './support/session';
 import {
   controlsInTabOrder,
   expectWhollyAboveFooter,
-  expectStatusOnTopOfButton,
+  expectStatusOnTopOfButtonInStaticFooter,
   expectVisibleInFooter,
   footerHeight,
   PHONE,
@@ -90,6 +90,21 @@ const chip = (page: Page, group: string, label: string) =>
   details(page).locator(`#details-${group}`).getByRole('radio', { name: label, exact: true });
 const seasonRow = (page: Page, name: string) =>
   page.locator('#seasons-list > li').filter({ has: page.getByRole('heading', { name }) });
+
+const TOP_BAR_CLEARANCE = 72;
+
+async function scrollNameToTop(page: Page): Promise<void> {
+  await details(page)
+    .locator('label[for="league-name"]')
+    .evaluate(
+      (label, clearance) =>
+        window.scrollBy({
+          top: label.getBoundingClientRect().top - clearance,
+          behavior: 'instant',
+        }),
+      TOP_BAR_CLEARANCE,
+    );
+}
 
 test.describe('League management: league details', () => {
   test('an org admin changes the format to 6v6: draft Fall 2027 follows, published Summer 2027 keeps 4v4, and Undo returns both', async ({
@@ -427,12 +442,8 @@ test.describe('League management: the save status on a phone', () => {
   async function saveFromName(page: Page, press: 'click' | 'Enter' = 'click') {
     await page.setViewportSize(PHONE);
     await openDetails(page);
-    // Name at the top, under the sticky top bar: the status of a save from here is far below.
-    await details(page)
-      .locator('label[for="league-name"]')
-      .evaluate((label) =>
-        window.scrollBy({ top: label.getBoundingClientRect().top - 72, behavior: 'instant' }),
-      );
+    // The status of a save from here is far below.
+    await scrollNameToTop(page);
     await expect(name(page)).toBeInViewport({ ratio: 1 });
     await name(page).fill('Sunday Sand');
     if (press === 'click') {
@@ -560,7 +571,11 @@ test.describe('League management: the save status on wider screens', () => {
       const saved = status(page).getByText('League details saved.');
       await expect(saved).toBeVisible();
 
-      await expectStatusOnTopOfButton(details(page).locator('form'), status(page), save(page));
+      await expectStatusOnTopOfButtonInStaticFooter(
+        details(page).locator('form'),
+        status(page),
+        save(page),
+      );
       await screenshot(page, testInfo, '445-league-details-saved');
     });
   }

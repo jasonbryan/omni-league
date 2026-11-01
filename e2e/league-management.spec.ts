@@ -10,7 +10,7 @@ import { otherUser, signUp } from './support/session';
 import {
   controlsInTabOrder,
   expectAtMostTwoLines,
-  expectStatusOnTopOfButton,
+  expectStatusOnTopOfButtonInStaticFooter,
   expectVisibleInFooter,
   footerHeight,
   PHONE,
@@ -688,7 +688,7 @@ test.describe('League management: the created status on wider screens', () => {
       const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
       await expect(status).toBeVisible();
 
-      await expectStatusOnTopOfButton(form(page), status, submit(page));
+      await expectStatusOnTopOfButtonInStaticFooter(form(page), status, submit(page));
       await screenshot(page, testInfo, '445-league-season-created');
     });
   }

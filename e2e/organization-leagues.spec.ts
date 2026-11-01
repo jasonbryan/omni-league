@@ -13,7 +13,7 @@ import {
   controlsInTabOrder,
   expectWhollyAboveFooter,
   expectAtMostTwoLines,
-  expectStatusOnTopOfButton,
+  expectStatusOnTopOfButtonInStaticFooter,
   expectVisibleInFooter,
   footerHeight,
   PHONE,
@@ -644,7 +644,7 @@ test.describe('Leagues: the created status on wider screens', () => {
       const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
       await expect(status).toBeVisible();
 
-      await expectStatusOnTopOfButton(form(page), status, submit(page));
+      await expectStatusOnTopOfButtonInStaticFooter(form(page), status, submit(page));
       await screenshot(page, testInfo, '445-leagues-created');
     });
   }

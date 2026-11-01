@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { ConvexError } from 'convex/values';
-import { LEAGUE_MESSAGES } from '../../../../convex/lib/leagueInput';
+import { LEAGUE_MESSAGES, MAX_LEAGUE_NAME_LENGTH } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
@@ -922,8 +922,9 @@ describe('AdminLeagues', () => {
 
     const createdStatus = () => form().querySelector<HTMLElement>('[data-slot="created-status"]');
 
-    async function created() {
+    async function created(name?: string) {
       await fill();
+      if (name !== undefined) await type('name', name);
       submitButton().focus();
       await submit();
       o.convex.calls[0].resolve({ leagueId: 'lg_new' });
@@ -951,10 +952,14 @@ describe('AdminLeagues', () => {
     });
 
     it('holds the whole name in the title, so the region announces it even where the title is clamped', async () => {
+      const name =
+        'Sunday Reverse Coed Fours at Pelican Shoals with Late Starts, Short Rallies, and Sand That Stays Hot';
+      expect(name).toHaveLength(MAX_LEAGUE_NAME_LENGTH);
       await open([]);
-      await created();
-      const title = createdStatus()!.querySelector('[data-slot="created-title"]')!;
-      expect(title.textContent).toBe('Sunday Reverse Coed 4s created as a draft.');
+      await created(name);
+      const title = createdStatus()!.querySelector<HTMLElement>('[data-slot="created-title"]')!;
+      expect(title.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+      expect(title.textContent).toBe(`${name} created as a draft.`);
     });
 
     it('announces the result in one status region that was in the footer, empty, before the press, with no status inside another', async () => {
@@ -991,10 +996,6 @@ describe('AdminLeagues', () => {
     it('clears the created status when the next create starts', async () => {
       await open([]);
       await created();
-      await type('name', 'Next One');
-      expect(input('slug').value).toBe('next-one');
-      await chooseSport('beachVolleyball');
-      await toggleLocation(1);
       await submit();
       expect(text(createdStatus())).toBe('');
     });
