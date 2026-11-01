@@ -335,6 +335,7 @@ export interface LeagueLocationChoice {
           #submitButton
           type="submit"
           data-slot="button"
+          (mousedown)="keepFocusOnPress($event)"
           [class]="buttonClass"
           [class.opacity-50]="!online() && !form.submitting()"
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
@@ -414,6 +415,11 @@ export class LeagueCreateForm {
 
   protected describedBy(field: 'name' | 'slug', description: string): string {
     return this.form.errors[field]() ? `${description} ${field}-error` : description;
+  }
+
+  // The error that leaving a field shows can push this button down before the release, losing the click.
+  protected keepFocusOnPress(event: MouseEvent): void {
+    event.preventDefault();
   }
 
   protected edited(): void {
