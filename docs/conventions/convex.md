@@ -29,3 +29,5 @@ Environment variable reads under `convex/` use bracket access, `process.env["NAM
 ## Tests
 
 Every public function has tests covering the happy path, the unauthenticated caller, and a caller from a different league or team. The test library is chosen via `gate:technology`.
+
+In `convex-test`, a test does not run an action that calls `ctx.storage.store` alongside another function, because the stored file can land in the other function's transaction and the store can throw `Write outside of transaction` ([convex/convex-test#151](https://github.com/convex/convex-test/pull/151)).
