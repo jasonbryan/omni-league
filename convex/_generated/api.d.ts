@@ -50,6 +50,7 @@ import type * as lib_slugs from "../lib/slugs.js";
 import type * as lib_sports from "../lib/sports.js";
 import type * as lib_tenantWrites from "../lib/tenantWrites.js";
 import type * as lib_testOnly from "../lib/testOnly.js";
+import type * as lib_userName from "../lib/userName.js";
 import type * as lib_users from "../lib/users.js";
 import type * as locations from "../locations.js";
 import type * as memberships from "../memberships.js";
@@ -111,6 +112,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sports": typeof lib_sports;
   "lib/tenantWrites": typeof lib_tenantWrites;
   "lib/testOnly": typeof lib_testOnly;
+  "lib/userName": typeof lib_userName;
   "lib/users": typeof lib_users;
   locations: typeof locations;
   memberships: typeof memberships;

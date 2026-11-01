@@ -16,6 +16,7 @@ import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
+import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
 import { focusLeftGroup, ShownUntilValid } from '../core/forms/shown-errors';
@@ -32,6 +33,7 @@ const EMAIL =
 
 export const MESSAGES = {
   nameEmpty: 'Enter your name.',
+  nameLong: `Use ${MAX_USER_NAME_LENGTH} characters or fewer.`,
   emailEmpty: 'Enter your email address.',
   emailMalformed: 'Enter an email address like name@example.com.',
   passwordEmpty: 'Enter a password.',
@@ -418,9 +420,13 @@ export class SignUpPage {
   private readonly model = signal<SignUpModel>({ name: '', email: '', password: '', adult: false });
   protected readonly fields = form(this.model, (path) => {
     required(path.name, { message: MESSAGES.nameEmpty });
-    validate(path.name, ({ value }) =>
-      value().trim() === '' ? { kind: 'blank', message: MESSAGES.nameEmpty } : undefined,
-    );
+    validate(path.name, ({ value }) => {
+      const check = checkUserName(value());
+      if (check.ok) return undefined;
+      return check.code === 'empty'
+        ? { kind: 'blank', message: MESSAGES.nameEmpty }
+        : { kind: 'long', message: MESSAGES.nameLong };
+    });
     required(path.email, { message: MESSAGES.emailEmpty });
     validate(path.email, ({ value }) => {
       const email = value().trim();
@@ -520,6 +526,7 @@ export class SignUpPage {
       'password-too-short': ['password', MESSAGES.passwordShort(passwordLength)],
       'password-too-long': ['password', MESSAGES.passwordLong(passwordLength)],
       'adult-required': ['adult', MESSAGES.adult],
+      'name-invalid': ['name', MESSAGES.nameLong],
     };
     const fieldError = onField[failure];
     if (fieldError) {
