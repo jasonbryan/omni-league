@@ -289,7 +289,9 @@ describe('OrganizationPage', () => {
       ]);
       expect(root.querySelector('button[aria-label="Open navigation"]')).toBeNull();
       expect([...root.querySelectorAll('button')].map((button) => text(button))).toEqual([
-        'Show leagues',
+        'Filters',
+        'Gender',
+        'Age group',
       ]);
     });
 

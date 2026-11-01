@@ -1,4 +1,4 @@
-import type { ParamMap, Params } from '@angular/router';
+import { convertToParamMap, type ParamMap, type Params } from '@angular/router';
 import {
   AGE_GROUPS,
   GENDERS,
@@ -63,6 +63,15 @@ export function parseDivisionFilters(params: ParamMap, sport: Sport | undefined)
     level: inOrder(sport === undefined ? ALL_LEVELS : levelsOfSport(sport), known('level')),
     ageGroup: inOrder(AGE_GROUP_KEYS, known('age')),
   };
+}
+
+/** What a submit of `form` would put in the URL, read as the page reads the URL. */
+export function filtersFromForm(form: HTMLFormElement): DivisionFilters {
+  const params: Record<string, string[]> = {};
+  for (const [name, value] of new FormData(form)) {
+    if (typeof value === 'string') (params[name] ??= []).push(value);
+  }
+  return parseDivisionFilters(convertToParamMap(params), undefined);
 }
 
 export interface DivisionFilterArgs {
@@ -153,7 +162,12 @@ export interface FilterOption {
   readonly checked: boolean;
 }
 
+export type FilterParam = 'gender' | 'format' | 'level' | 'age';
+
+export const filterPopoverId = (name: FilterParam) => `filter-${name}`;
+
 export interface FilterGroup {
+  readonly name: FilterParam;
   readonly legend: string;
   readonly options: readonly FilterOption[];
 }
@@ -184,6 +198,7 @@ export function filterGroups(
     }));
   const groups: FilterGroup[] = [
     {
+      name: 'gender',
       legend: 'Gender',
       options: offered(GENDERS, (facet) => facet.gender, filters.gender).map(
         ({ value, checked }) => ({
@@ -198,6 +213,7 @@ export function filterGroups(
       ? []
       : [
           {
+            name: 'format' as const,
             legend: 'Format',
             options: offered(
               playersPerSideOfSport(formatAndLevelSport),
@@ -211,6 +227,7 @@ export function filterGroups(
             })),
           },
           {
+            name: 'level' as const,
             legend: 'Level',
             options: offered(
               levelsOfSport(formatAndLevelSport),
@@ -225,6 +242,7 @@ export function filterGroups(
           },
         ]),
     {
+      name: 'age',
       legend: 'Age group',
       options: offered(AGE_GROUP_KEYS, (facet) => facet.ageGroup, filters.ageGroup).map(
         ({ value, checked }) => ({ name: 'age', value, label: ageGroupLabel(value), checked }),

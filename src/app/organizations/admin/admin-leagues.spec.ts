@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { ConvexError } from 'convex/values';
-import { LEAGUE_MESSAGES } from '../../../../convex/lib/leagueInput';
+import { LEAGUE_MESSAGES, MAX_LEAGUE_NAME_LENGTH } from '../../../../convex/lib/leagueInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
@@ -928,23 +928,28 @@ describe('AdminLeagues', () => {
       expect(o.convex.calls).toHaveLength(1);
     });
 
-    it('on success (state 8): "<league> created as a draft." in a status above the form, the form cleared, focus on the button', async () => {
-      await open([]);
+    const createdStatus = () => form().querySelector<HTMLElement>('[data-slot="created-status"]');
+
+    async function created(name?: string) {
       await fill();
+      if (name !== undefined) await type('name', name);
+      submitButton().focus();
       await submit();
       o.convex.calls[0].resolve({ leagueId: 'lg_new' });
       await o.flush();
-      const status = form().querySelector<HTMLElement>('[data-slot="alert"]')!;
-      expect(status.getAttribute('role')).toBe('status');
-      expect(text(status.querySelector('[data-slot="alert-title"]'))).toBe(
+    }
+
+    it('on success (state 8): "<league> created as a draft." in the footer above the button, the form cleared, focus kept on the button', async () => {
+      await open([]);
+      await created();
+      const status = createdStatus()!;
+      expect(text(status.querySelector('[data-slot="created-title"]'))).toBe(
         'Sunday Reverse Coed 4s created as a draft.',
       );
-      expect(text(status.querySelector('[data-slot="alert-description"]'))).toBe(
-        'Publish it when it’s ready for players to see. Add the first season to Sunday Reverse Coed 4s',
-      );
-      expect(
-        status.compareDocumentPosition(input('name')) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+      expect(text(status.querySelector('a'))).toBe('Add the first season');
+      expect(text(form())).not.toContain('Publish it when');
+      expect(status.parentElement!.getAttribute('data-slot')).toBe('form-footer');
+      expect(status.nextElementSibling).toBe(submitButton());
       expect(input('name').value).toBe('');
       expect(input('slug').value).toBe('');
       expect(sport('beachVolleyball').checked).toBe(false);
@@ -952,23 +957,66 @@ describe('AdminLeagues', () => {
       expect(document.activeElement).toBe(submitButton());
       expect(text(submitButton())).toBe('Create draft league');
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
-      await type('name', 'Next One');
-      expect(input('slug').value).toBe('next-one');
-      await submit();
-      expect(form().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
     });
 
-    it('the success status links "Add the first season to <league>" to the league’s management page', async () => {
+    it('holds the whole name in the title, so the region announces it even where the title is clamped', async () => {
+      const name =
+        'Sunday Reverse Coed Fours at Pelican Shoals with Late Starts, Short Rallies, and Sand That Stays Hot';
+      expect(name).toHaveLength(MAX_LEAGUE_NAME_LENGTH);
       await open([]);
-      await fill();
+      await created(name);
+      const title = createdStatus()!.querySelector<HTMLElement>('[data-slot="created-title"]')!;
+      expect(title.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+      expect(title.textContent).toBe(`${name} created as a draft.`);
+    });
+
+    it('announces the result in one status region that was in the footer, empty, before the press, with no status inside another', async () => {
+      await open([]);
+      const region = createdStatus()!;
+      expect(region.getAttribute('role')).toBe('status');
+      expect(text(region)).toBe('');
+      await created();
+      expect(createdStatus()).toBe(region);
+      const holding = [...form().querySelectorAll('[role="status"]')].filter((element) =>
+        element.textContent.includes('created as a draft.'),
+      );
+      expect(holding).toEqual([region]);
+      expect(form().querySelectorAll('[role="status"] [role="status"]')).toHaveLength(0);
+    });
+
+    it('clears the created status on the next edit of the cleared form', async () => {
+      await open([]);
+      await created();
+      input('name').value = 'N';
+      input('name').dispatchEvent(new Event('input', { bubbles: true }));
+      await o.harness.fixture.whenStable();
+      expect(text(createdStatus())).toBe('');
+      expect(createdStatus()).not.toBeNull();
+    });
+
+    it('clears the created status when a location is ticked or unticked', async () => {
+      await open([]);
+      await created();
+      await toggleLocation(2);
+      expect(text(createdStatus())).toBe('');
+    });
+
+    it('clears the created status when the next create starts', async () => {
+      await open([]);
+      await created();
       await submit();
-      o.convex.calls[0].resolve({ leagueId: 'lg_new' });
-      await o.flush();
-      const link = form().querySelector<HTMLAnchorElement>('[data-slot="alert"] a')!;
-      expect(text(link)).toBe('Add the first season to Sunday Reverse Coed 4s');
+      expect(text(createdStatus())).toBe('');
+    });
+
+    it('the success status links "Add the first season" to the league’s management page, 44px tall on a touch screen', async () => {
+      await open([]);
+      await created();
+      const link = createdStatus()!.querySelector<HTMLAnchorElement>('a')!;
+      expect(text(link)).toBe('Add the first season');
       expect(link.getAttribute('href')).toBe(
         `/app/organizations/${COASTAL.slug}/leagues/sunday-reverse-coed-4s`,
       );
+      expect(tokens(link.className)).toContain('pointer-coarse:min-h-11');
     });
 
     it('the link names the slug as sent, even after the fields were cleared', async () => {
@@ -978,7 +1026,7 @@ describe('AdminLeagues', () => {
       await submit();
       o.convex.calls[0].resolve({ leagueId: 'lg_new' });
       await o.flush();
-      expect(form().querySelector('[data-slot="alert"] a')!.getAttribute('href')).toBe(
+      expect(createdStatus()!.querySelector('a')!.getAttribute('href')).toBe(
         `/app/organizations/${COASTAL.slug}/leagues/sunday-4s`,
       );
     });

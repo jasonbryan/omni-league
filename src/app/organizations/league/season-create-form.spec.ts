@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ConvexError } from 'convex/values';
-import { SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
+import { MAX_SEASON_NAME_LENGTH, SEASON_MESSAGES } from '../../../../convex/lib/seasonInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { PRIMARY_BUTTON } from '../admin/button-classes';
 import { STICKY_FOOTER_CLEARANCE } from '../admin/sticky-footer';
@@ -482,33 +482,73 @@ describe('SeasonCreateForm', () => {
       expect(o.convex.calls).toHaveLength(1);
     });
 
-    it('on success (state 9): "<season> created as a draft." above the fields, the form cleared, focus on the button', async () => {
-      await open();
+    const createdStatus = () => form().querySelector<HTMLElement>('[data-slot="created-status"]');
+
+    async function created(name?: string) {
       await fill();
+      if (name !== undefined) await type('name', name);
+      submitButton().focus();
       await submit();
       o.convex.calls[0].resolve({ seasonId: 'se_new' });
       await o.flush();
-      const status = form().querySelector<HTMLElement>('[data-slot="alert"]')!;
-      expect(status.getAttribute('role')).toBe('status');
-      expect(text(status.querySelector('[data-slot="alert-title"]'))).toBe(
-        'Fall 2026 created as a draft.',
-      );
-      expect(text(status.querySelector('[data-slot="alert-description"]'))).toBe(
-        'Publish it when it’s ready for players to see.',
-      );
-      expect(
-        status.compareDocumentPosition(input('name')) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+    }
+
+    it('on success (state 9): "<season> created as a draft." in the footer above the button, the form cleared, focus kept on the button', async () => {
+      await open();
+      await created();
+      const status = createdStatus()!;
+      expect(text(status)).toBe('Fall 2026 created as a draft.');
+      expect(text(form())).not.toContain('Publish it when');
+      expect(status.parentElement!.getAttribute('data-slot')).toBe('form-footer');
+      expect(status.nextElementSibling).toBe(submitButton());
       for (const id of ['name', 'slug', 'start-date', 'end-date', 'registration-deadline']) {
         expect(input(id).value, id).toBe('');
       }
       expect(document.activeElement).toBe(submitButton());
       expect(text(submitButton())).toBe('Create draft season');
       expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
-      await type('name', 'Next One');
-      expect(input('slug').value).toBe('next-one');
+    });
+
+    it('holds the whole name in the title, so the region announces it even where the title is clamped', async () => {
+      const name =
+        'Fall 2026: Sunday Coed Sevens at Redfish Flats, with Late Kickoffs, Short Halves, and Long Playoffs.';
+      expect(name).toHaveLength(MAX_SEASON_NAME_LENGTH);
+      await open();
+      await created(name);
+      const title = createdStatus()!.querySelector<HTMLElement>('[data-slot="created-title"]')!;
+      expect(title.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+      expect(title.textContent).toBe(`${name} created as a draft.`);
+    });
+
+    it('announces the result in one status region that was in the footer, empty, before the press, with no status inside another', async () => {
+      await open();
+      const region = createdStatus()!;
+      expect(region.getAttribute('role')).toBe('status');
+      expect(text(region)).toBe('');
+      await created();
+      expect(createdStatus()).toBe(region);
+      const holding = [...form().querySelectorAll('[role="status"]')].filter((element) =>
+        element.textContent.includes('created as a draft.'),
+      );
+      expect(holding).toEqual([region]);
+      expect(form().querySelectorAll('[role="status"] [role="status"]')).toHaveLength(0);
+    });
+
+    it('clears the created status on the next edit of the cleared form', async () => {
+      await open();
+      await created();
+      input('name').value = 'N';
+      input('name').dispatchEvent(new Event('input', { bubbles: true }));
+      await o.harness.fixture.whenStable();
+      expect(text(createdStatus())).toBe('');
+      expect(createdStatus()).not.toBeNull();
+    });
+
+    it('clears the created status when the next create starts', async () => {
+      await open();
+      await created();
       await submit();
-      expect(form().querySelector('[data-slot="alert"][role="status"]')).toBeNull();
+      expect(text(createdStatus())).toBe('');
     });
 
     it('the server saying the slug is taken (state 7) shows the message with the slug in bold, and focus on Slug', async () => {

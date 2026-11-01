@@ -9,13 +9,16 @@ import { otherUser, signUp } from './support/session';
 import {
   controlsInTabOrder,
   expectWhollyAboveFooter,
+  expectStatusOnTopOfButtonInStaticFooter,
+  expectVisibleInFooter,
+  footerHeight,
   PHONE,
-  settleAfterFocusScroll,
   footerTabWalk,
   underTheFooter,
 } from './support/sticky-footer';
 import { seedSeasons, seedTenant } from './support/tenant';
 import { newUser } from './support/users';
+import { failMutation } from './support/fail-mutation';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -87,6 +90,21 @@ const chip = (page: Page, group: string, label: string) =>
   details(page).locator(`#details-${group}`).getByRole('radio', { name: label, exact: true });
 const seasonRow = (page: Page, name: string) =>
   page.locator('#seasons-list > li').filter({ has: page.getByRole('heading', { name }) });
+
+const TOP_BAR_CLEARANCE = 72;
+
+async function scrollNameToTop(page: Page): Promise<void> {
+  await details(page)
+    .locator('label[for="league-name"]')
+    .evaluate(
+      (label, clearance) =>
+        window.scrollBy({
+          top: label.getBoundingClientRect().top - clearance,
+          behavior: 'instant',
+        }),
+      TOP_BAR_CLEARANCE,
+    );
+}
 
 test.describe('League management: league details', () => {
   test('an org admin changes the format to 6v6: draft Fall 2027 follows, published Summer 2027 keeps 4v4, and Undo returns both', async ({
@@ -394,61 +412,6 @@ test.describe('League management: league details on a phone', () => {
     });
   }
 
-  const undo = (page: Page) => status(page).getByRole('button', { name: 'Undo' });
-
-  async function saveWithStatusUnderFooter(page: Page) {
-    await page.setViewportSize(PHONE);
-    await openDetails(page);
-    await name(page).fill('Sunday Sand');
-    await save(page).click();
-    await expect(status(page)).toContainText('League details saved.');
-    await statusUnderFooter(page);
-  }
-
-  async function statusUnderFooter(page: Page) {
-    await status(page).evaluate((element) => {
-      const footer = element.closest('form')!.querySelector('[data-slot="form-footer"]')!;
-      const box = element.getBoundingClientRect();
-      const bar = footer.getBoundingClientRect();
-      window.scrollBy({
-        top: (box.top + box.bottom - bar.top - bar.bottom) / 2,
-        behavior: 'instant',
-      });
-    });
-    const place = await status(page).evaluate((element) => {
-      const footer = element.closest('form')!.querySelector('[data-slot="form-footer"]')!;
-      return {
-        box: element.getBoundingClientRect().bottom,
-        bar: footer.getBoundingClientRect().top,
-      };
-    });
-    expect(place.box).toBeGreaterThan(place.bar);
-  }
-
-  test('Undo, reached by Shift+Tab while the save status is behind the sticky button, is above it', async ({
-    page,
-  }) => {
-    await saveWithStatusUnderFooter(page);
-
-    await page.keyboard.press(`Shift+${tabKey(page)}`);
-
-    await expectWhollyAboveFooter(page, undo(page));
-  });
-
-  test('Undo focuses the restored status above the sticky button, even when it was behind it', async ({
-    page,
-  }) => {
-    await saveWithStatusUnderFooter(page);
-    await undo(page).focus();
-    await settleAfterFocusScroll(page);
-    await statusUnderFooter(page);
-
-    await page.keyboard.press('Enter');
-
-    await expect(status(page)).toContainText('Earlier details restored.');
-    await expectWhollyAboveFooter(page, status(page).locator('[tabindex="-1"]'));
-  });
-
   test('Save with a minimum below the format, pressed from the bottom of the form, focuses Minimum roster size above the sticky button', async ({
     page,
   }) => {
@@ -461,4 +424,159 @@ test.describe('League management: league details on a phone', () => {
     await expect(details(page).locator('#details-minimum-roster-size-error')).toBeVisible();
     await expectWhollyAboveFooter(page, minimum(page));
   });
+});
+
+test.describe('League management: the save status on a phone', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+  });
+
+  const name = (page: Page) => details(page).locator('#league-name');
+  const form = (page: Page) => details(page).locator('form');
+  const saved = (page: Page) => status(page).getByText('League details saved.');
+  const undo = (page: Page) => status(page).getByRole('button', { name: 'Undo' });
+  const OFFLINE_UNDO_NOTE = "You're offline. Nothing was undone. Try again when you're connected.";
+  const UNDO_FAILED = 'The earlier details could not be restored. Try again.';
+
+  async function saveFromName(page: Page, press: 'click' | 'Enter' = 'click') {
+    await page.setViewportSize(PHONE);
+    await openDetails(page);
+    // The status of a save from here is far below.
+    await scrollNameToTop(page);
+    await expect(name(page)).toBeInViewport({ ratio: 1 });
+    await name(page).fill('Sunday Sand');
+    if (press === 'click') {
+      await save(page).click();
+    } else {
+      await save(page).focus();
+      await page.keyboard.press('Enter');
+    }
+    await expect(saved(page)).toBeAttached();
+  }
+
+  for (const press of ['click', 'Enter'] as const) {
+    test(`Save pressed by ${press} from the top of the form shows "League details saved." and Undo next to it, with focus kept on Save`, async ({
+      page,
+    }) => {
+      await saveFromName(page, press);
+
+      await expectVisibleInFooter(page, saved(page));
+      await expectVisibleInFooter(page, undo(page));
+      await expect(save(page)).toBeFocused();
+    });
+  }
+
+  test('Undo shows "Earlier details restored." next to Save and focuses it, as the Undo button is gone', async ({
+    page,
+  }) => {
+    await saveFromName(page);
+
+    await undo(page).click();
+
+    const restored = status(page).getByText('Earlier details restored.');
+    await expectVisibleInFooter(page, restored);
+    await expect(status(page).locator('[tabindex="-1"]')).toBeFocused();
+    await expect(undo(page)).toHaveCount(0);
+  });
+
+  test('Undo reached by Shift+Tab from Save and pressed by Enter shows "Earlier details restored." next to Save and focuses it', async ({
+    page,
+  }) => {
+    await saveFromName(page, 'Enter');
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+    await expect(undo(page)).toBeFocused();
+    await expectVisibleInFooter(page, undo(page));
+
+    await page.keyboard.press('Enter');
+
+    const restored = status(page).getByText('Earlier details restored.');
+    await expectVisibleInFooter(page, restored);
+    await expect(status(page).locator('[tabindex="-1"]')).toBeFocused();
+    await expect(undo(page)).toHaveCount(0);
+  });
+
+  test('Undo pressed offline shows the offline note next to it, keeps focus on Undo, and the footer stays within 200px', async ({
+    page,
+  }) => {
+    await saveFromName(page);
+    await page.context().setOffline(true);
+    try {
+      await expect(undo(page)).toHaveAttribute('aria-disabled', 'true');
+
+      await undo(page).click({ force: true });
+
+      await expectVisibleInFooter(page, status(page).getByText(OFFLINE_UNDO_NOTE));
+      await expect(undo(page)).toBeFocused();
+      expect((await undo(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+    } finally {
+      await page.context().setOffline(false);
+    }
+  });
+
+  test.describe('an Undo the server fails', () => {
+    test.use({ expectedConvexErrors: ['leagues:undoUpdate'] });
+
+    test('shows the failure next to Undo, and the footer stays within 200px', async ({ page }) => {
+      await failMutation(page, 'leagues:undoUpdate');
+      await saveFromName(page);
+
+      await undo(page).click();
+
+      await expectVisibleInFooter(page, status(page).getByText(UNDO_FAILED));
+      expect((await undo(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(await footerHeight(form(page))).toBeLessThanOrEqual(200);
+    });
+  });
+
+  test('Tabbing through the form from Name with the saved status shown never leaves a control under the taller footer (WCAG 2.4.11)', async ({
+    page,
+  }) => {
+    await saveFromName(page);
+    await name(page).focus();
+
+    const seen = await footerTabWalk(page, { form: form(page), until: save(page) });
+
+    await expect(save(page)).toBeFocused();
+    await expect(saved(page)).toBeVisible();
+    expect(underTheFooter(seen)).toEqual([]);
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+    await expect(undo(page)).toBeFocused();
+  });
+
+  test('with the saved status shown, the page passes axe and does not scroll sideways at 320px', async ({
+    page,
+  }, testInfo) => {
+    await saveFromName(page);
+    await screenshot(page, testInfo, '445-league-details-saved-phone');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('League management: the save status on wider screens', () => {
+  test.beforeEach(({ page }, testInfo) => {
+    void page;
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'each test sets its own width');
+  });
+
+  for (const width of [768, 1280]) {
+    test(`at ${width}px the saved status sits on top of Save in the footer`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openDetails(page);
+      await details(page).locator('#league-name').fill('Sunday Sand');
+      await save(page).click();
+      const saved = status(page).getByText('League details saved.');
+      await expect(saved).toBeVisible();
+
+      await expectStatusOnTopOfButtonInStaticFooter(
+        details(page).locator('form'),
+        status(page),
+        save(page),
+      );
+      await screenshot(page, testInfo, '445-league-details-saved');
+    });
+  }
 });

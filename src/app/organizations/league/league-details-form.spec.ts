@@ -186,12 +186,32 @@ describe('LeagueDetailsForm', () => {
   });
 
   describe('the sticky footer', () => {
-    it('holds Save in the shared sticky footer, after the save status', async () => {
+    it('holds Save in the shared sticky footer, with the save status in it just above Save', async () => {
       await open();
       const footer = save().parentElement!;
       expect(footer.getAttribute('data-slot')).toBe('form-footer');
       expect(footer.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'bottom-0']));
-      expect(footer.previousElementSibling).toBe(status());
+      expect(status()!.parentElement).toBe(footer);
+      expect(save().previousElementSibling).toBe(status());
+    });
+
+    it('announces a save in one status region that was in the footer, empty, before the press, with no status inside another, and keeps focus on Save', async () => {
+      await open();
+      const region = status()!;
+      expect(region.getAttribute('role')).toBe('status');
+      expect(text(region)).toBe('');
+      await typeName('Sunday Sand');
+      save().focus();
+      await submit();
+      o.convex.calls[0].resolve({ ...EARLIER, draftSeasons: [] });
+      await o.flush();
+      expect(status()).toBe(region);
+      const holding = [...form().querySelectorAll('[role="status"]')].filter((element) =>
+        element.textContent.includes('League details saved.'),
+      );
+      expect(holding).toEqual([region]);
+      expect(form().querySelectorAll('[role="status"] [role="status"]')).toHaveLength(0);
+      expect(document.activeElement).toBe(save());
     });
 
     it('keeps its fields clear of the footer when they take focus (WCAG 2.4.11)', async () => {

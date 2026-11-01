@@ -10,6 +10,7 @@ import schema from './schema';
 import { modules } from './test.setup';
 
 const NOW = Date.UTC(2027, 0, 15, 12);
+const AFTER_SETUP = NOW + 60_000;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -101,6 +102,15 @@ const upload = (t: T, body: Uint8Array, contentType: string | null = 'image/png'
     }
     return storageId;
   });
+
+async function uploadedAt(t: T, id: Id<'_storage'>): Promise<number> {
+  const file = await t.run((ctx) => ctx.db.system.get('_storage', id));
+  if (!file) throw new Error('the file is not stored');
+  return file._creationTime;
+}
+
+// convex-test gives an insert in an already used millisecond a fractional `_creationTime`.
+const lastAcceptedMs = (creationTime: number) => Math.floor(creationTime) + LOGO_UPLOAD_MAX_AGE_MS;
 
 const storedType = (t: T, id: Id<'_storage'>) =>
   t.run(async (ctx) => (await ctx.db.system.get('_storage', id))?.contentType ?? null);
@@ -211,7 +221,7 @@ describe('organizations.setLogo', () => {
     const previous = await upload(t, png());
     await admin.action(api.organizations.setLogo, { organizationId: a, storageId: previous });
     const old = await upload(t, png());
-    vi.setSystemTime(NOW + LOGO_UPLOAD_MAX_AGE_MS + 1);
+    vi.setSystemTime(lastAcceptedMs(await uploadedAt(t, old)) + 1);
     const data = await refusal(
       admin.action(api.organizations.setLogo, { organizationId: a, storageId: old }),
     );
@@ -222,8 +232,11 @@ describe('organizations.setLogo', () => {
 
   test('accepts a file uploaded exactly an hour ago', async () => {
     const { t, a, admin } = await setup();
+    vi.setSystemTime(AFTER_SETUP);
     const storageId = await upload(t, png());
-    vi.setSystemTime(NOW + LOGO_UPLOAD_MAX_AGE_MS);
+    const creationTime = await uploadedAt(t, storageId);
+    expect(Number.isInteger(creationTime)).toBe(true);
+    vi.setSystemTime(lastAcceptedMs(creationTime));
     await admin.action(api.organizations.setLogo, { organizationId: a, storageId });
     expect(await logoOf(t, a)).toBe(storageId);
   });

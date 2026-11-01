@@ -14,6 +14,7 @@ const rootDirectiveUse = (...names) => {
       `<brn-(?:${kebab.join('|')})[\\s>/]`,
       `[\\s\\[]brn(?:${pascal.join('|')})(?=[\\s=\\]>/])`,
       `\\bextends Brn(?:${pascal.join('|')})\\b`,
+      `\\bdirective:\\s*Brn(?:${pascal.join('|')})\\b`,
     ].join('|'),
   );
 };
@@ -78,6 +79,9 @@ describe('overlay hosts', () => {
     ]);
     assert.deepEqual(overlayDefaultProblems('export class HlmSheet extends BrnSheet {}'), [
       'dialog host without provideSpartanOverlay(Dialog, BrnDialogService)',
+    ]);
+    assert.deepEqual(overlayDefaultProblems('hostDirectives: [{ directive: BrnPopover }]'), [
+      'popover host without provideSpartanOverlay(BrnOverlayService)',
     ]);
     assert.deepEqual(
       overlayDefaultProblems('providers: [provideSpartanOverlay()], template: `<div brnSelect>`'),
@@ -144,7 +148,17 @@ describe('overlay hosts', () => {
       ),
       [],
     );
+    assert.deepEqual(
+      overlayDefaultProblems(
+        'providers: [provideSpartanOverlay(BrnOverlayService)], hostDirectives: [{ directive: BrnPopover }]',
+      ),
+      [],
+    );
     assert.deepEqual(overlayDefaultProblems('template: `<div *brnAlertDialogContent>`'), []);
+    assert.deepEqual(
+      overlayDefaultProblems('hostDirectives: [{ directive: BrnPopoverContent }]'),
+      [],
+    );
     assert.deepEqual(
       overlayDefaultProblems('export class HlmSheetClose extends BrnSheetClose {}'),
       [],
