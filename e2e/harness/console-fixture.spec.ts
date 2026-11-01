@@ -539,6 +539,17 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
       await close();
     });
 
+    test('fails after a navigation answered with 204, which never commits', async ({ browser }) => {
+      const { page, guard, close } = await openedPage(browser);
+      await page.route('**/probe-no-content', (route) => route.fulfill({ status: 204, body: '' }));
+      await page.goto('/probe-no-content').catch(() => undefined);
+      webkitFetchError(page, TOKEN);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(/^pageerror: Fetch API cannot load /),
+      ]);
+      await close();
+    });
+
     test('fails for another URL during a navigation', async ({ browser }) => {
       const { page, guard, close } = await openedPage(browser);
       const finish = await heldNavigation(page, '/probe-next');
