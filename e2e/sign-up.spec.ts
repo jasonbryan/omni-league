@@ -320,6 +320,7 @@ test.describe('sign-up', () => {
             ]),
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
+        'main a[href="/app/notifications"]',
       ],
     });
 
