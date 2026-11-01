@@ -7,6 +7,7 @@ import { signUp } from './support/session';
 import { newUser } from './support/users';
 
 const NOTIFICATIONS_PATH = '/app/notifications';
+const TOUCH_TARGET = 44;
 
 test.describe('notifications on this device', () => {
   test.beforeEach(async ({ context }) => {
@@ -30,6 +31,9 @@ test.describe('notifications on this device', () => {
 
     const manage = page.getByRole('link', { name: 'Manage notifications' });
     await expect(manage).toBeVisible();
+    if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) {
+      expect((await manage.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(TOUCH_TARGET);
+    }
     await manage.click();
     await expect(page).toHaveURL(`${baseURL}${NOTIFICATIONS_PATH}`);
     await expect(page).toHaveTitle('Notifications | Omni League');

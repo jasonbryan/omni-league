@@ -16,10 +16,10 @@ import {
   lucideBell,
   lucideBellOff,
   lucideChevronRight,
-  lucideCirclePlus,
   lucideLoaderCircle,
   lucideShare,
   lucideSmartphone,
+  lucideSquarePlus,
 } from '@ng-icons/lucide';
 import { EMPTY } from 'rxjs';
 import { isAllowedPushEndpoint } from '../../../convex/lib/pushSubscription';
@@ -64,10 +64,10 @@ const STEP_NUMBER =
       lucideBell,
       lucideBellOff,
       lucideChevronRight,
-      lucideCirclePlus,
       lucideLoaderCircle,
       lucideShare,
       lucideSmartphone,
+      lucideSquarePlus,
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -205,7 +205,7 @@ const STEP_NUMBER =
                     ><span class="pt-0.5"
                       >Tap Add to Home Screen
                       <ng-icon
-                        name="lucideCirclePlus"
+                        name="lucideSquarePlus"
                         class="translate-y-0.5 text-base"
                         aria-hidden="true"
                       />, then Add.</span

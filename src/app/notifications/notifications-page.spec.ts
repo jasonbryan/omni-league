@@ -243,6 +243,10 @@ describe('NotificationsPage', () => {
       ['2', 'Tap Add to Home Screen , then Add.'],
       ['3', 'Open Omni League from your Home Screen, sign in, and come back to this page.'],
     ]);
+    // Safari's own icons: Share, then Add to Home Screen (a plus in a rounded square).
+    expect(
+      [...panel().querySelectorAll('ol li ng-icon')].map((icon) => icon.getAttribute('name')),
+    ).toEqual(['lucideShare', 'lucideSquarePlus']);
     expect(body).toContain(
       'The Home Screen app keeps its own sign-in, separate from Safari, so you sign in once more there. Needs iOS 16.4 or later.',
     );
