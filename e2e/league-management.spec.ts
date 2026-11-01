@@ -1034,6 +1034,49 @@ test.describe('League management: the link to a new season', () => {
       await expect(page.locator(field)).not.toBeFocused();
     });
 
+    test(`a real mouse wheel before the league loads cancels the landing on #${fragment}`, async ({
+      page,
+      browserName,
+    }) => {
+      test.skip(browserName !== 'chromium', 'the wheel is sent through the Chromium protocol');
+      const { base } = await memberOf(page, 'orgAdmin');
+      const held = await holdQueries(page, ['leagues:getOrganizerContext']);
+      await page.goto(`${base}/leagues/${COED}#${fragment}`);
+      await expect.poll(() => held.isHolding()).toBe(true);
+      await page.evaluate(() => {
+        (window as unknown as { wheels: number }).wheels = 0;
+        document.addEventListener(
+          'wheel',
+          () => (window as unknown as { wheels: number }).wheels++,
+          {
+            capture: true,
+            passive: true,
+          },
+        );
+      });
+      const session = await page.context().newCDPSession(page);
+      await session.send('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: 100,
+        y: 300,
+        deltaX: 0,
+        deltaY: 200,
+      });
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { wheels: number }).wheels))
+        .toBeGreaterThan(0);
+      held.release();
+      await expect(page.getByRole('heading', { level: 1, name: 'Coed 7v7 Rec' })).toBeVisible();
+      await expect(page.locator(field)).not.toBeFocused();
+    });
+
+    test(`#${fragment} landed page has no accessibility violations`, async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${COED}#${fragment}`);
+      await expect(page.locator(field)).toBeFocused();
+      await expectAccessible(page);
+    });
+
     test(`#${fragment} lands once: a later live update leaves focus where the user put it`, async ({
       page,
     }) => {
