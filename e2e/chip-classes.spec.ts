@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { join } from 'node:path';
 import {
   CHIP_CHOICE_INPUT_CLASSES,
   CHIP_CHOICE_LABEL_CLASSES,
@@ -7,7 +8,10 @@ import {
 } from '../src/app/ui/chip/chip-classes';
 import { tabKey } from './support/a11y';
 import { expect, test } from './support/fixtures';
-import { KIT_MOCKUP, MOCKUP_KIT_CSS as KIT_CSS } from './support/mockup-kit';
+import { inlinedKitCss } from './support/mockup-kit';
+
+const MOCKUP = join(process.cwd(), 'design', 'mockups', '300-public-site-league-form.html');
+const KIT_CSS = inlinedKitCss(MOCKUP);
 
 const COARSE_POINTER = '(pointer: coarse)';
 const FINE_POINTER_HEIGHT = 36;
@@ -38,7 +42,7 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8" /><titl
 </body></html>`;
 
 test.beforeEach(async ({ page }) => {
-  expect(KIT_CSS, `${KIT_MOCKUP} has no inlined mockup kit; run npm run design:css`).not.toBe('');
+  expect(KIT_CSS, `${MOCKUP} has no inlined mockup kit; run npm run design:css`).not.toBe('');
   await page.setContent(PAGE);
 });
 

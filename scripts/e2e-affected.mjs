@@ -471,10 +471,10 @@ export const AREAS = [
     specs: ['app-leagues'],
   },
   {
-    // chip-classes.spec.ts takes the kit CSS from this mockup's inlined block.
+    // chip-classes.spec.ts and the harness's a11y-helper.spec.ts take the kit CSS from this mockup's inlined block.
     name: 'chip mockup',
     test: (file) => file === 'design/mockups/300-public-site-league-form.html',
-    specs: ['chip-classes'],
+    specs: ['chip-classes', 'harness/a11y-helper'],
   },
   { name: 'chip classes', test: inDir('src/app/ui/chip/'), specs: ['chip-classes'] },
   // The filter popovers of the organization page and its sport views are the only popovers.

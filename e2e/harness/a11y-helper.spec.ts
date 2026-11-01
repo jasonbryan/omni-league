@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import {
   CHIP_CHOICE_INPUT_CLASSES,
   CHIP_CHOICE_LABEL_CLASSES,
@@ -5,7 +6,10 @@ import {
 } from '../../src/app/ui/chip/chip-classes';
 import { axeScan, checkReflow, expectAccessible, tabWalk } from '../support/a11y';
 import { expect, test } from '../support/fixtures';
-import { KIT_MOCKUP, MOCKUP_KIT_CSS } from '../support/mockup-kit';
+import { inlinedKitCss } from '../support/mockup-kit';
+
+const KIT_MOCKUP = join(process.cwd(), 'design', 'mockups', '300-public-site-league-form.html');
+const MOCKUP_KIT_CSS = inlinedKitCss(KIT_MOCKUP);
 
 const fixture = (body: string, head = ''): string =>
   '<!doctype html><html lang="en"><head><meta charset="utf-8">' +

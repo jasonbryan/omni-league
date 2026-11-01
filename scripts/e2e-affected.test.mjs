@@ -497,13 +497,13 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the chip classes and the mockup whose kit block the chip spec reads to that spec', () => {
+  it('maps the chip classes to the chip spec, and the mockup whose kit block two specs read to both', () => {
     const chipClasses = specsFor(['src/app/ui/chip/chip-classes.ts']);
     assert.ok(chipClasses.includes('e2e/chip-classes.spec.ts'));
     assert.ok(!chipClasses.includes('FULL'));
     assert.deepEqual(
       specsFor(['design/mockups/300-public-site-league-form.html']),
-      want('e2e/chip-classes.spec.ts'),
+      want('e2e/chip-classes.spec.ts', 'e2e/harness/a11y-helper.spec.ts'),
     );
     assert.deepEqual(specsFor(['src/app/ui/chip/chip-classes.spec.ts']), want());
   });
