@@ -612,6 +612,12 @@ export const AREAS = [
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
+    // The cancel rule of the jump on the Leagues page and of the landing on the league management page.
+    name: 'later-choice helper',
+    test: named('src/app/core/', ['later-choice']),
+    specs: [...ADMIN, ...LEAGUE_MANAGEMENT],
+  },
+  {
     // Every form shares this field-error rule: sign-up, sign-in, create organization, the
     // admin forms (locations, leagues, staff invites), and the create-season form.
     name: 'form helper',
