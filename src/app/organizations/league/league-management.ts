@@ -406,6 +406,8 @@ export class LeagueManagement {
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
   protected readonly detailsPath = computed(() => `${this.leagueHref()}#details`);
+  private readonly createSectionRef = viewChild<ElementRef<HTMLElement>>('createSection');
+  private readonly detailsSectionRef = viewChild<ElementRef<HTMLElement>>('detailsSection');
   private readonly publishDialog = viewChild(PublishSeasonDialog);
   private readonly createForm = viewChild(SeasonCreateForm);
   private publishOpener: 'row' | 'footer' = 'row';
@@ -429,8 +431,11 @@ export class LeagueManagement {
 
   private land(target: LandingTarget): void {
     if (target.kind === 'season') this.focusSeasonRowOrHeading(target.slug);
-    else
-      this.scrollToFieldOf(this.host.nativeElement.querySelector<HTMLElement>(`#${target.kind}`));
+    else {
+      const section =
+        target.kind === 'create-season' ? this.createSectionRef() : this.detailsSectionRef();
+      this.scrollToFieldOf(section?.nativeElement ?? null);
+    }
   }
 
   protected publish(

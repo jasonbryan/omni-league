@@ -469,6 +469,24 @@ describe('LeaguePage', () => {
       expect(document.activeElement).toBe(field('create-season'));
     });
 
+    it('lands again when only the league changes and the user comes back to the fragment', async () => {
+      const OTHER = { ...COED, leagueId: 'lg_other', slug: 'other-league', name: 'Other' };
+      await open(COED, SEASONS, url('details'));
+      const first = page;
+      expect(document.activeElement).toBe(field('details'));
+      await o.harness.navigateByUrl(`/app/organizations/${GULF.slug}/leagues/${OTHER.slug}`);
+      expect(o.harness.routeNativeElement).toBe(first);
+      document.body.focus();
+      await o.flush();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(OTHER);
+      await o.flush();
+      expect(document.activeElement).not.toBe(field('details'));
+      await o.harness.navigateByUrl(url('details'));
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+      await o.flush();
+      expect(document.activeElement).toBe(field('details'));
+    });
+
     it('lands after <main> takes focus on an in-app navigation, which is not a later choice', async () => {
       o = await openAdmin(LEAGUE_ROUTES, '/app');
       page = o.page;

@@ -1005,11 +1005,17 @@ test.describe('League management: the link to a new season', () => {
       page,
     }, testInfo) => {
       const { base } = await memberOf(page, 'orgAdmin');
-      await page.goto(`${base}/leagues/${COED}#${fragment}`);
-      await expect(page.locator(field)).toBeFocused();
-      await expectOnScreen(page, page.locator(field));
-      await expect(seasonsHeading(page)).not.toBeFocused();
-      await screenshot(page, testInfo, `447-${fragment}-direct`);
+      await page.goto(`${base}/leagues/${SOFTBALL}`);
+      await createFall2026(page);
+      await expect(rows(page)).toHaveCount(1);
+      const opened = await page.context().newPage();
+      await opened.setViewportSize(page.viewportSize()!);
+      await opened.goto(`${base}/leagues/${SOFTBALL}#${fragment}`);
+      await expect(rows(opened)).toHaveCount(1);
+      await expect(opened.locator(field)).toBeFocused();
+      await expectOnScreen(opened, opened.locator(field));
+      await expect(seasonsHeading(opened)).not.toBeFocused();
+      await screenshot(opened, testInfo, `447-${fragment}-direct`);
     });
 
     test(`#${fragment} opened directly lands the same way for a league organizer`, async ({

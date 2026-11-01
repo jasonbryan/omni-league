@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { onLaterChoiceOrScroll } from '../../core/later-choice';
 
 export type LandingTarget =
@@ -21,29 +22,50 @@ function targetOfFragment(fragment: string | null): LandingTarget | null {
   }
 }
 
+function pathOf(url: string): string {
+  const end = url.search(/[?#]/);
+  return end === -1 ? url : url.slice(0, end);
+}
+
 /**
  * Provided by the league page, so it starts at each arrival and sees a later choice or scroll while the league is still loading,
- * before the management component exists.
+ * before the management component exists. Angular keeps the page when only the league changes, so a navigation to another path arms it again.
  */
 @Injectable()
 export class LeagueLanding {
-  private readonly listening = new AbortController();
-  readonly target = signal<LandingTarget | null>(
-    targetOfFragment(inject(ActivatedRoute).snapshot.fragment),
-  );
+  private readonly document = inject(DOCUMENT);
+  private readonly router = inject(Router);
+  private listening = new AbortController();
+  private shownPath: string | null = null;
+  readonly target = signal<LandingTarget | null>(null);
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.listening.abort());
-    if (this.target() === null) return;
-    onLaterChoiceOrScroll(
-      inject(DOCUMENT),
-      { isOwnFocus: (element) => element.id === 'main', signal: this.listening.signal },
-      () => this.settle(),
-    );
+    this.arm(inject(ActivatedRoute).snapshot.fragment);
+    this.router.events.pipe(takeUntilDestroyed()).subscribe((event) => {
+      if (!(event instanceof NavigationEnd)) return;
+      const path = pathOf(event.urlAfterRedirects);
+      const arrived = this.shownPath !== null && path !== this.shownPath;
+      this.shownPath = path;
+      if (arrived) this.arm(this.router.parseUrl(event.urlAfterRedirects).fragment);
+    });
   }
 
   settle(): void {
     this.target.set(null);
     this.listening.abort();
+  }
+
+  private arm(fragment: string | null): void {
+    this.listening.abort();
+    this.listening = new AbortController();
+    const target = targetOfFragment(fragment);
+    this.target.set(target);
+    if (target === null) return;
+    onLaterChoiceOrScroll(
+      this.document,
+      { isOwnFocus: (element) => element.id === 'main', signal: this.listening.signal },
+      () => this.settle(),
+    );
   }
 }
