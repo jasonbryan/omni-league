@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
+import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -24,7 +25,7 @@ async function openLeagues(page: Page) {
     role: 'orgAdmin',
   });
   await page.goto(`/app/organizations/${tenant.slug}/leagues`);
-  await page.getByRole('radio', { name: 'Beach volleyball', exact: true }).check({ force: true });
+  await chooseChip(chipLabel(page, 'Beach volleyball'));
 }
 
 const form = (page: Page) => page.locator('#create-league form');
@@ -59,7 +60,7 @@ test.describe('Leagues: a custom level', () => {
     await expectAccessible(page);
 
     await page.locator('#name').fill('Sunday Night Sand');
-    await form(page).getByRole('radio', { name: '4v4', exact: true }).check({ force: true });
+    await chooseChip(chipLabel(form(page), '4v4'));
     await form(page)
       .getByRole('button', { name: /^Create draft league/ })
       .click();
@@ -87,7 +88,7 @@ test.describe('Leagues: a custom level', () => {
 
   test('Undo deletes the level and puts the earlier level back', async ({ page }) => {
     await openLeagues(page);
-    await level(page, 'BB').check({ force: true });
+    await chooseChip(chipLabel(form(page).locator('#level'), 'BB'));
     await addGold(page);
     await expect(level(page, 'Gold')).toBeChecked();
 
@@ -105,7 +106,7 @@ test.describe('Leagues: a custom level', () => {
     await expect(level(page, 'Gold')).toBeChecked();
     await addLink(page).click();
 
-    await form(page).getByRole('radio', { name: 'Soccer', exact: true }).check({ force: true });
+    await chooseChip(chipLabel(form(page), 'Soccer'));
     await expect(panel(page)).toHaveCount(0);
     await expect(level(page, 'Gold')).toHaveCount(0);
     await expect(level(page, 'Rec')).toBeChecked();

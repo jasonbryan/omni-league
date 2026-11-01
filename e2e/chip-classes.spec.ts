@@ -7,6 +7,8 @@ import {
   CHIP_CHOICE_WRAPPER_CLASSES,
   chipLinkClasses,
 } from '../src/app/ui/chip/chip-classes';
+import { tabKey } from './support/a11y';
+import { chipLabel, chooseChip } from './support/chip';
 import { expect, test } from './support/fixtures';
 
 const MOCKUP = join(process.cwd(), 'design', 'mockups', '300-public-site-league-form.html');
@@ -65,7 +67,7 @@ test.describe('chip classes in the mockup kit', () => {
     page,
   }) => {
     const radios = page.getByRole('radio');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radios.nth(0)).toBeFocused();
 
     await page.keyboard.press('ArrowRight');
@@ -80,8 +82,8 @@ test.describe('chip classes in the mockup kit', () => {
     page,
   }) => {
     const checkbox = page.getByRole('checkbox');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
+    await page.keyboard.press(tabKey(page));
     await expect(checkbox).toBeFocused();
     expect((await outline(chipOf(checkbox))).style).not.toBe('none');
 
@@ -132,7 +134,7 @@ test.describe('chip classes in the mockup kit', () => {
     );
     expect(unchecked).not.toBe(foreground);
 
-    await page.getByRole('radio').nth(0).check({ force: true });
+    await chooseChip(chipLabel(page, SPORTS[0]));
     const checked = chipOf(page.getByRole('radio').nth(0));
     await expect(checked).toHaveCSS('background-color', foreground);
     await expect(page.getByRole('link', { name: 'All sports' })).toHaveCSS(
@@ -151,7 +153,7 @@ test.describe('chip classes in the mockup kit', () => {
     const background = (chip: Locator) =>
       chip.evaluate((element) => getComputedStyle(element).backgroundColor);
     const radios = page.getByRole('radio');
-    await radios.nth(0).check({ force: true });
+    await chooseChip(chipLabel(page, SPORTS[0]));
     const checked = chipOf(radios.nth(0));
     const other = chipOf(radios.nth(1));
     const checkedBefore = await background(checked);
@@ -167,7 +169,7 @@ test.describe('chip classes in the mockup kit', () => {
     page,
   }) => {
     await page.emulateMedia({ forcedColors: 'active' });
-    await page.getByRole('radio').nth(1).check({ force: true });
+    await chooseChip(chipLabel(page, SPORTS[1]));
 
     const checked = chipOf(page.getByRole('radio').nth(1));
     const unchecked = chipOf(page.getByRole('radio').nth(0));
@@ -193,7 +195,7 @@ test.describe('chip classes in the mockup kit', () => {
     const checked = chipOf(radios.nth(0));
     expect((await outline(checked)).style).toBe('none');
 
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radios.nth(0)).toBeFocused();
     expect(await outline(checked)).toEqual({ style: 'solid', width: '2px' });
     const offset = await checked.evaluate((element) => getComputedStyle(element).outlineOffset);
@@ -201,8 +203,8 @@ test.describe('chip classes in the mockup kit', () => {
 
     const current = page.getByRole('link', { name: 'All sports' });
     expect((await outline(current)).style).toBe('none');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
+    await page.keyboard.press(tabKey(page));
     await expect(current).toBeFocused();
     expect((await outline(current)).style).toBe('solid');
   });

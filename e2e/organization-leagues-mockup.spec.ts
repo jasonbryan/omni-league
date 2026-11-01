@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { AXE_TAGS, axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -121,7 +122,7 @@ async function appText(page: Page, organization: string): Promise<string> {
 
 async function fill(page: Page, league: { name: string }) {
   await page.locator('#name').fill(league.name);
-  await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
+  await chooseChip(chipLabel(page, 'Beach volleyball'));
   await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
 }
 

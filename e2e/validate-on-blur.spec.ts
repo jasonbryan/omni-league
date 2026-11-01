@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
+import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -113,27 +114,27 @@ test.describe('a field is checked when the user leaves it', () => {
     const form = page.locator('#create-league form');
 
     await field(page, 'name').focus();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(field(page, 'slug')).toBeFocused();
     await expect(fieldError(page, 'name')).toHaveCount(0);
     await page.keyboard.type('Bad-Slug');
     await expect(fieldError(page, 'slug')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(fieldError(page, 'slug')).toHaveText(SLUG_MESSAGE);
     await expectLinked(page, 'slug', 'slug-description slug-error');
 
     await expect(page.locator('#sport input[type="radio"]').first()).toBeFocused();
     await expect(fieldError(page, 'sport')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(fieldError(page, 'sport')).toHaveCount(0);
 
     const first = page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' });
     await first.click();
     await first.click();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(page.getByRole('checkbox', { name: 'Redfish Flats Fields' })).toBeFocused();
     await expect(fieldError(page, 'locations')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(fieldError(page, 'locations')).toHaveText('Choose at least one location.');
     await expect(form.locator('fieldset', { hasText: 'Locations' })).toHaveAttribute(
       'aria-describedby',
@@ -147,7 +148,7 @@ test.describe('a field is checked when the user leaves it', () => {
     await expect(field(page, 'name')).toBeFocused();
     await expectAccessible(page);
 
-    await page.getByRole('radio', { name: 'Soccer' }).check({ force: true });
+    await chooseChip(chipLabel(page, 'Soccer'));
     await expect(fieldError(page, 'sport')).toHaveCount(0);
   });
 
@@ -211,8 +212,8 @@ test.describe('a field is checked when the user leaves it', () => {
     await page.goto(`${base}/leagues`);
     const form = page.locator('#create-league form');
     await field(page, 'name').fill('Friday Night Fours');
-    await page.getByRole('radio', { name: 'Beach volleyball' }).check({ force: true });
-    await page.getByRole('radio', { name: '4v4' }).check({ force: true });
+    await chooseChip(chipLabel(page, 'Beach volleyball'));
+    await chooseChip(chipLabel(page, '4v4'));
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await form.getByRole('button', { name: /^Create draft league/ }).click();
     await expect(form.getByRole('status').filter({ hasText: 'created as a draft' })).toBeVisible();
@@ -252,7 +253,7 @@ test.describe('a field is checked when the user leaves it', () => {
     await field(page, 'email').focus();
     await page.keyboard.type('not-an-email');
     await expect(fieldError(page, 'email')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(fieldError(page, 'email')).toHaveText(
       'Enter an email address like name@example.com.',
     );
@@ -261,10 +262,10 @@ test.describe('a field is checked when the user leaves it', () => {
     const coed = page.getByRole('checkbox', { name: 'Coed 7v7 Rec' });
     await coed.click();
     await coed.click();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(page.getByRole('checkbox', { name: 'Sand 2s' })).toBeFocused();
     await expect(fieldError(page, 'leagues')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(fieldError(page, 'leagues')).toBeVisible();
     await expectAccessible(page);
 
