@@ -72,6 +72,13 @@ export const routes: Routes = [
           import('./account/account-settings-page').then((m) => m.AccountSettingsPage),
       },
       {
+        path: 'notifications',
+        title: 'Notifications | Omni League',
+        canActivate: [requireSignedIn],
+        loadComponent: () =>
+          import('./notifications/notifications-page').then((m) => m.NotificationsPage),
+      },
+      {
         // Ahead of the admin area's `organizations/:slug`; the reserved slug `new` keeps the two apart.
         path: 'organizations/new',
         title: 'Create an organization | Omni League',

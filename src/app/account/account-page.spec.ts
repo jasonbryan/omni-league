@@ -62,6 +62,21 @@ describe('AccountPage', () => {
     expect(page.querySelector('main')?.textContent).not.toContain('Signed in as');
   });
 
+  it('links to the notifications page from a Notifications panel, named Manage notifications', async () => {
+    const page = await open();
+    TestBed.inject(AuthService).onChange(true);
+    TestBed.tick();
+    await harness.fixture.whenStable();
+
+    const panel = page.querySelector('section[aria-labelledby="app-notifications-heading"]');
+    expect(panel?.querySelector('h2')?.textContent?.trim()).toBe('Notifications');
+    expect(panel?.textContent).toContain('Game reminders, schedule changes, and score updates.');
+    const link = panel?.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/app/notifications');
+    expect(link?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Manage notifications');
+    expect(link?.querySelector('.sr-only')?.textContent).toBe(' notifications');
+  });
+
   it('shows "Your organizations"', async () => {
     const page = await open();
     TestBed.inject(AuthService).onChange(true);
@@ -81,6 +96,7 @@ describe('AccountPage', () => {
     const sections = [...page.querySelectorAll('main section')];
     expect(sections.map((s) => s.getAttribute('aria-labelledby'))).toEqual([
       'organizations-heading',
+      'app-notifications-heading',
     ]);
     expect(sections[0]?.querySelector('h3')?.textContent?.trim()).toBe('Coastal Bend Rec Club');
   });
