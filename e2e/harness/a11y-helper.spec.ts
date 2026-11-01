@@ -135,6 +135,9 @@ test.describe('axe helper checks', () => {
     ]);
   });
 
+  // The label's face draws the ring of a visually hidden radio, so these fixtures carry one and
+  // check only 2.4.11.
+  const FACE_RING = '<style>input:focus + span { outline: 2px solid #00f; }</style>';
   const hiddenRadioChip =
     '<label style="position:relative;display:inline-flex">' +
     '<input type="radio" name="g" style="position:absolute;width:1px;height:1px;margin:-1px;' +
@@ -145,7 +148,7 @@ test.describe('axe helper checks', () => {
   test('2.4.11: a visually hidden radio drawn by its own label is not obscured by that label', async ({
     page,
   }) => {
-    await page.setContent(fixture(hiddenRadioChip));
+    await page.setContent(fixture(hiddenRadioChip, FACE_RING));
     expect((await tabWalk(page)).failures).toEqual([]);
   });
 
@@ -156,6 +159,7 @@ test.describe('axe helper checks', () => {
       fixture(
         '<div style="position:sticky;top:0;height:60px;background:#fff;z-index:1">Banner</div>' +
           `<div style="position:relative;top:-50px">${hiddenRadioChip}</div>`,
+        FACE_RING,
       ),
     );
     const walk = await tabWalk(page);
@@ -174,6 +178,7 @@ test.describe('axe helper checks', () => {
       fixture(
         `<div style="display:flex">${chip('a', 'First')}</div>` +
           `<div style="position:relative;top:-36px;display:flex">${chip('b', 'Second')}</div>`,
+        FACE_RING,
       ),
     );
     const walk = await tabWalk(page);
@@ -384,7 +389,7 @@ test.describe('axe helper checks', () => {
   });
 
   const chips = (chipClasses: string): string =>
-    '<h1>Chips</h1><fieldset><legend>Sport</legend>' +
+    '<div class="p-4"><h1>Chips</h1><fieldset><legend>Sport</legend>' +
     ['Soccer', 'Softball']
       .map(
         (sport) =>
@@ -392,7 +397,7 @@ test.describe('axe helper checks', () => {
           `class="${CHIP_CHOICE_INPUT_CLASSES}"><span class="${chipClasses}">${sport}</span></label>`,
       )
       .join('') +
-    '</fieldset><button type="button">After</button>';
+    '</fieldset><button type="button">After</button></div>';
 
   test('2.4.7: a chip whose face shows the ring passes', async ({ page }) => {
     expect(MOCKUP_KIT_CSS, `${KIT_MOCKUP} has no inlined mockup kit`).not.toBe('');
