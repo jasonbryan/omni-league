@@ -307,7 +307,15 @@ describe('the e2e job', () => {
   it('runs every spec, with no selection', () => {
     assert.ok(!names.includes('e2e specs'), names.join(', '));
     const e2e = /^ {6}- name: e2e\n([\s\S]*?)(?=^ {6}- name:)/m.exec(workflow)?.[1] ?? '';
-    assert.match(e2e, /^ {8}run: npm run e2e$/m);
+    assert.match(e2e, /^ {12}npm run e2e$/m);
+  });
+
+  it('runs only webkit-mobile on a WebKit dispatch, and the plain command otherwise', () => {
+    const run = e2eSteps().find((candidate) => candidate.name === 'e2e')?.run ?? '';
+    assert.equal(
+      run,
+      'if [ "$E2E_WEBKIT" = "1" ]; then\n  npm run e2e -- --project=webkit-mobile\nelse\n  npm run e2e\nfi\n',
+    );
   });
 
   it('runs e2e after a drift failure, but only once the backend is up', () => {
