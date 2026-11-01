@@ -581,4 +581,68 @@ describe('SignUpPage', () => {
       expect(document.activeElement).toBe(alert());
     });
   });
+
+  describe('offline', () => {
+    beforeEach(() => open());
+    afterEach(() => vi.restoreAllMocks());
+
+    const goOffline = async () => {
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await harness.fixture.whenStable();
+    };
+
+    it('while offline the submit button looks disabled but stays focusable', async () => {
+      expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
+      expect(submitButton().classList.contains('opacity-50')).toBe(false);
+      await goOffline();
+      expect(submitButton().getAttribute('aria-disabled')).toBe('true');
+      expect(submitButton().classList.contains('opacity-50')).toBe(true);
+      expect(submitButton().hasAttribute('disabled')).toBe(false);
+      expect(submitButton().textContent?.trim()).toBe('Create account');
+      submitButton().focus();
+      expect(document.activeElement).toBe(submitButton());
+    });
+
+    it('pressing it shows the offline alert with focus, sends nothing, and keeps the values', async () => {
+      await fill();
+      await goOffline();
+      await submit();
+      expect(client.signUps).toEqual([]);
+      const box = alert();
+      expect(box?.querySelector('[data-slot="alert-title"]')?.textContent?.trim()).toBe(
+        "You're offline. Nothing was sent.",
+      );
+      expect(box?.querySelector('[data-slot="alert-description"]')?.textContent?.trim()).toBe(
+        "Your details are still here. Try again when you're connected.",
+      );
+      expect(document.activeElement).toBe(box);
+      expect(input('name').value).toBe(NAME);
+      expect(input('email').value).toBe(EMAIL);
+      expect(input('password').value).toBe(PASSWORD);
+      expect(checkbox().getAttribute('aria-checked')).toBe('true');
+      expect(page.querySelector('[aria-invalid="true"]')).toBeNull();
+    });
+
+    it('back online, the next press sends the form', async () => {
+      await fill();
+      await goOffline();
+      await submit();
+      vi.restoreAllMocks();
+      window.dispatchEvent(new Event('online'));
+      TestBed.tick();
+      await harness.fixture.whenStable();
+      expect(submitButton().hasAttribute('aria-disabled')).toBe(false);
+      await submit();
+      expect(client.signUps).toHaveLength(1);
+    });
+
+    it('validation comes first: an empty form offline shows the field errors, not the alert', async () => {
+      await goOffline();
+      await submit();
+      expect(error('email')).not.toBeNull();
+      expect(alert()).toBeNull();
+    });
+  });
 });

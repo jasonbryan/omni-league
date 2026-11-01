@@ -6,12 +6,24 @@ const MINUTE_MS = 60 * 1000;
 
 export const MAX_WAIT_MS = 60 * MINUTE_MS;
 
+// Four free guesses a day stays under the steady 24 a day that a throttled address allows.
+export const IDLE_ROW_LIFETIME_MS = 24 * 60 * MINUTE_MS;
+
 // Better Auth's `z.email()` has no length bound, so a longer address is hashed.
 const MAX_KEY_LENGTH = 254;
 
 export function waitAfterFailures(failures: number): number {
   if (failures < FREE_FAILURES) return 0;
   return Math.min(MAX_WAIT_MS, MINUTE_MS * 2 ** (failures - FREE_FAILURES));
+}
+
+/**
+ * A row below the threshold waits for nothing, so its `blockedUntil` is its last attempt. A row at the
+ * threshold or past it never expires, so the hard limit still counts every failure since the last sign-in.
+ */
+export function idleRowExpiresAt(row: { failures: number; blockedUntil: number }): number | null {
+  if (row.failures >= FREE_FAILURES) return null;
+  return row.blockedUntil + IDLE_ROW_LIFETIME_MS;
 }
 
 export function retryMinutes(seconds: number): number {
