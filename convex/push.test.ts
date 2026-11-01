@@ -224,7 +224,107 @@ describe('push.subscribe', () => {
   });
 });
 
+describe('push.subscribe edge cases', () => {
+  test('signed out with an invalid subscription: fails with Sign in required, not a validation error', async () => {
+    const s = await setup();
+    await expect(
+      s.t.mutation(api.push.subscribe, { ...subscription('http://evil.example/x') }),
+    ).rejects.toThrow('Sign in required');
+    expect(await s.rows()).toEqual([]);
+  });
+
+  test.each([
+    ['endpoint', { endpoint: 'https://fcm.googleapis.com@evil.example/x' }],
+    ['p256dh', { keys: { p256dh: base64Url(new Uint8Array(65)), auth: AUTH } }],
+    ['auth', { keys: { p256dh: P256DH, auth: `${AUTH}==` } }],
+  ])('names the refused field %s in a pushSubscriptionInvalid error', async (field, change) => {
+    const s = await setup();
+    const error: unknown = await s.a
+      .mutation(api.push.subscribe, { ...subscription(), ...change })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ data: { code: 'pushSubscriptionInvalid', field } });
+    expect(await s.rows()).toEqual([]);
+  });
+
+  test('a refused subscription for A’s endpoint, sent by B, leaves A’s row with A', async () => {
+    const s = await setup();
+    await s.a.mutation(api.push.subscribe, subscription());
+    await expect(
+      s.b.mutation(api.push.subscribe, {
+        ...subscription(),
+        keys: { p256dh: base64Url(new Uint8Array(64)), auth: AUTH },
+      }),
+    ).rejects.toThrow();
+    expect((await s.rows()).map((row) => row.userId)).toEqual([s.users.a]);
+  });
+
+  test('A and B subscribing the same endpoint at once leave exactly one row', async () => {
+    const s = await setup();
+    await Promise.all([
+      s.a.mutation(api.push.subscribe, subscription()),
+      s.b.mutation(api.push.subscribe, subscription()),
+      s.a.mutation(api.push.subscribe, subscription()),
+    ]);
+    expect(await s.rows()).toHaveLength(1);
+  });
+
+  test('eleven subscriptions at once leave the user ten rows', async () => {
+    const s = await setup();
+    await Promise.all(
+      Array.from({ length: 11 }, (_, i) =>
+        s.a.mutation(
+          api.push.subscribe,
+          subscription(`https://fcm.googleapis.com/fcm/send/p-${String(i)}`),
+        ),
+      ),
+    );
+    expect(await s.rows()).toHaveLength(10);
+  });
+
+  test('moving the endpoint to B at B’s cap replaces B’s least recently seen, and A loses only that row', async () => {
+    const s = await setup();
+    await s.a.mutation(api.push.subscribe, subscription('https://fcm.googleapis.com/fcm/send/a-0'));
+    await s.a.mutation(api.push.subscribe, subscription('https://fcm.googleapis.com/fcm/send/a-1'));
+    for (let i = 0; i < 10; i++) {
+      vi.setSystemTime(NOW + (i + 1) * 1000);
+      await s.b.mutation(
+        api.push.subscribe,
+        subscription(`https://fcm.googleapis.com/fcm/send/b-${String(i)}`),
+      );
+    }
+    vi.setSystemTime(NOW + 60_000);
+    await s.b.mutation(api.push.subscribe, subscription('https://fcm.googleapis.com/fcm/send/a-0'));
+
+    const rows = await s.rows();
+    const endpointsOf = (userId: Id<'users'>) =>
+      rows
+        .filter((row) => row.userId === userId)
+        .map((row) => row.endpoint.split('/').pop())
+        .sort();
+    expect(endpointsOf(s.users.a)).toEqual(['a-1']);
+    expect(endpointsOf(s.users.b)).toHaveLength(10);
+    expect(endpointsOf(s.users.b)).toContain('a-0');
+    expect(endpointsOf(s.users.b)).not.toContain('b-0');
+  });
+});
+
 describe('push.unsubscribe', () => {
+  test('removes only the caller’s row for that endpoint, leaving the caller’s others and other users’', async () => {
+    const s = await setup();
+    await s.a.mutation(api.push.subscribe, subscription('https://fcm.googleapis.com/fcm/send/a-1'));
+    await s.a.mutation(api.push.subscribe, subscription('https://fcm.googleapis.com/fcm/send/a-2'));
+    await s.b.mutation(api.push.subscribe, subscription('https://fcm.googleapis.com/fcm/send/b-1'));
+
+    await s.a.mutation(api.push.unsubscribe, {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/a-1',
+    });
+
+    expect((await s.rows()).map((row) => row.endpoint.split('/').pop()).sort()).toEqual([
+      'a-2',
+      'b-1',
+    ]);
+  });
+
   test('deletes the caller’s own row', async () => {
     const s = await setup();
     await s.a.mutation(api.push.subscribe, subscription());
