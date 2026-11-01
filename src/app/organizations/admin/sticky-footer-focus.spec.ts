@@ -93,9 +93,10 @@ describe('StickyFooterFocus', () => {
     vi.stubGlobal('innerHeight', 640);
     const footerHeight = 69;
     const stuckTop = 640 - footerHeight;
-    // The form's top holds the footer below the viewport's bottom until the page scrolls 57px.
+    const scrollToStick = 57;
+    const heldTop = stuckTop + scrollToStick;
     footer().getBoundingClientRect = () => {
-      const top = Math.max(stuckTop, 628 - scrollY);
+      const top = Math.max(stuckTop, heldTop - scrollY);
       return rect(top, top + footerHeight);
     };
     field().focus();

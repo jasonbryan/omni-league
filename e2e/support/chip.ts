@@ -1,8 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect } from './fixtures';
 
-/** The visible label of the chip whose radio is named `name`; the radio inside it is `sr-only`. */
-export function chip(scope: Page | Locator, name: string): Locator {
+/** The label of the chip whose radio is named `name`. */
+export function chipLabel(scope: Page | Locator, name: string): Locator {
   const page = 'goto' in scope ? scope : scope.page();
   return scope.locator('label').filter({ has: page.getByRole('radio', { name, exact: true }) });
 }

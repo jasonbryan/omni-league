@@ -2,7 +2,7 @@ import { MAX_LEAGUE_NAME_LENGTH } from '../convex/lib/leagueInput';
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { checkReflow, REFLOW_WIDTH, expectAccessible, tabKey } from './support/a11y';
-import { chip, chooseChip } from './support/chip';
+import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -71,8 +71,8 @@ async function createDraft(
 ) {
   await page.locator('#name').fill(league.name);
   if (league.slug !== undefined) await page.locator('#slug').fill(league.slug);
-  await chooseChip(chip(page, league.sport));
-  await chooseChip(chip(page, DEFAULT_FORMAT[league.sport]));
+  await chooseChip(chipLabel(page, league.sport));
+  await chooseChip(chipLabel(page, DEFAULT_FORMAT[league.sport]));
   for (const location of league.locations) {
     await page.getByRole('checkbox', { name: location }).click();
   }
@@ -92,7 +92,7 @@ test.describe('Leagues: creating a draft', () => {
     await expectAccessible(page);
 
     await page.locator('#name').fill('  Sunday Reverse Coed 4s ');
-    await chooseChip(chip(page, 'Beach volleyball'));
+    await chooseChip(chipLabel(page, 'Beach volleyball'));
     await expect(page.getByRole('radio', { name: '4v4' })).toBeChecked();
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await screenshot(page, testInfo, '66-leagues-filled');
@@ -194,11 +194,11 @@ test.describe('Leagues: creating a draft', () => {
     await submit(page).click();
     await expect(page.locator('#name-error')).toHaveCount(0);
     await expect(page.locator('#sport-error')).toBeVisible();
-    await chooseChip(chip(page, 'Soccer'));
+    await chooseChip(chipLabel(page, 'Soccer'));
     await submit(page).click();
     await expect(page.locator('#format-error')).toBeVisible();
     await expect(page.getByRole('radio', { name: '4v4' })).toBeFocused();
-    await chooseChip(chip(page, '7v7'));
+    await chooseChip(chipLabel(page, '7v7'));
     await submit(page).click();
     await expect(page.locator('#locations-error')).toBeVisible();
     await expect(page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' })).toBeFocused();
@@ -209,7 +209,7 @@ test.describe('Leagues: creating a draft', () => {
     const { base } = await memberOf(page, 'orgAdmin', { locations: LOCATIONS });
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Fine');
-    await chooseChip(chip(page, 'Soccer'));
+    await chooseChip(chipLabel(page, 'Soccer'));
     await page.getByRole('checkbox', { name: 'Redfish Flats Fields' }).click();
     for (const slug of ['Bad Slug', 'ab', 'new']) {
       await page.locator('#slug').fill(slug);
@@ -342,7 +342,7 @@ test.describe('Leagues: defaults and the next step', () => {
 
     // Name and Sport are enough: the location needs no tick.
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
-    await chooseChip(chip(page, 'Beach volleyball'));
+    await chooseChip(chipLabel(page, 'Beach volleyball'));
     await submit(page).click();
 
     const status = form(page).getByRole('status').filter({ hasText: 'created as a draft' });
@@ -450,8 +450,8 @@ test.describe('Leagues: the create form on a phone', () => {
     await page.setViewportSize(PHONE);
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
-    await chooseChip(chip(page, 'Beach volleyball'));
-    await chooseChip(chip(page, DEFAULT_FORMAT['Beach volleyball']));
+    await chooseChip(chipLabel(page, 'Beach volleyball'));
+    await chooseChip(chipLabel(page, DEFAULT_FORMAT['Beach volleyball']));
     await expect(page.locator('#slug')).toHaveValue('sunday-reverse-coed-4s');
     for (const box of await page.getByRole('checkbox', { name: /^Location/ }).all()) {
       await expect(box).not.toBeChecked();
@@ -548,14 +548,6 @@ test.describe('Leagues: the create form on a phone', () => {
 });
 
 test.describe('Leagues: the created status on a phone', () => {
-  test.beforeEach(({ page }, testInfo) => {
-    void page;
-    test.skip(
-      testInfo.project.name === 'chromium-desktop',
-      'the phone layout needs a touch screen',
-    );
-  });
-
   const SUNDAY = {
     name: 'Sunday Reverse Coed 4s',
     sport: 'Beach volleyball',
@@ -572,8 +564,8 @@ test.describe('Leagues: the created status on a phone', () => {
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill(league.name);
     await page.locator('#slug').fill('sunday-reverse-coed-4s');
-    await chooseChip(chip(page, league.sport));
-    await chooseChip(chip(page, DEFAULT_FORMAT[league.sport]));
+    await chooseChip(chipLabel(page, league.sport));
+    await chooseChip(chipLabel(page, DEFAULT_FORMAT[league.sport]));
     for (const location of league.locations) {
       await page.getByRole('checkbox', { name: location }).click();
     }
@@ -605,7 +597,11 @@ test.describe('Leagues: the created status on a phone', () => {
 
   test('with a 100-character name the title takes two lines, the footer stays within 200px, and "Add the first season" is 44px tall', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'chromium-desktop',
+      'the 44px touch-target height applies to a coarse pointer',
+    );
     const name =
       'Sunday Reverse Coed Fours at Pelican Shoals with Late Starts, Short Rallies, and Sand That Stays Hot';
     expect(name).toHaveLength(MAX_LEAGUE_NAME_LENGTH);
