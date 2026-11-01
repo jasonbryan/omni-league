@@ -443,4 +443,89 @@ describe('LeagueManagement: publishing a season', () => {
       ).toBeNull();
     });
   });
+
+  describe('from the created status', () => {
+    const NEW_SEASON = {
+      ...SPRING_DRAFT,
+      seasonId: 'se_new',
+      name: 'Fall 2028',
+      slug: 'fall-2028',
+      registrationDeadline: '2028-08-25',
+    };
+    const footerButton = () =>
+      page.querySelector<HTMLButtonElement>('[data-slot="created-status"] button')!;
+
+    async function createSeason() {
+      for (const [id, value] of [
+        ['name', 'Fall 2028'],
+        ['start-date', '2028-09-01'],
+        ['end-date', '2028-11-15'],
+        ['registration-deadline', '2028-08-25'],
+      ]) {
+        const input = page.querySelector<HTMLInputElement>(`#${id}`)!;
+        input.value = value;
+        input.dispatchEvent(new Event('input'));
+        await o.harness.fixture.whenStable();
+      }
+      const create = page.querySelector<HTMLButtonElement>('#create-season button[type="submit"]')!;
+      create.focus();
+      create.click();
+      await o.flush();
+      o.convex.calls[0].resolve({ seasonId: 'se_new' });
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([...LIST, NEW_SEASON]);
+      await o.flush();
+      o.convex.calls.length = 0;
+    }
+
+    it('Cancel and Escape return focus to the footer button, not to the row’s Publish button', async () => {
+      await open();
+      await createSeason();
+      footerButton().click();
+      await o.flush();
+      expect(text(dialog()!.querySelector('h2'))).toBe('Publish Fall 2028?');
+      dialogButton('Cancel').click();
+      await o.flush();
+      expect(document.activeElement).toBe(footerButton());
+      footerButton().click();
+      await o.flush();
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await o.flush();
+      expect(dialog()).toBeNull();
+      expect(document.activeElement).toBe(footerButton());
+      expect(calls()).toEqual([]);
+    });
+
+    it('confirming publishes the new season, clears the footer status, and focuses the published notice', async () => {
+      await open();
+      await createSeason();
+      footerButton().click();
+      await o.flush();
+      dialogButton('Publish season').click();
+      await o.flush();
+      expect(calls()).toEqual([[PUBLISH_SEASON, { seasonId: 'se_new' }]]);
+      o.convex.calls[0].resolve(null);
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([...LIST, { ...NEW_SEASON, status: 'published' }]);
+      await o.flush();
+      expect(text(notice()!.querySelector('[data-slot="alert-title"]'))).toBe(
+        'Fall 2028 is published.',
+      );
+      expect(notice()!.querySelector('a')!.getAttribute('href')).toBe(
+        '/organizations/gulf-coast-sport-social/leagues/coed-7v7-rec/seasons/fall-2028',
+      );
+      expect(page.querySelector('[data-slot="created-status"]')!.textContent.trim()).toBe('');
+      expect(document.activeElement).toBe(notice());
+    });
+
+    it('opens the dialog for the league organizer, and confirming publishes', async () => {
+      await open(COED_AS_ORGANIZER);
+      await createSeason();
+      footerButton().click();
+      await o.flush();
+      dialogButton('Publish season').click();
+      await o.flush();
+      expect(calls()).toEqual([[PUBLISH_SEASON, { seasonId: 'se_new' }]]);
+    });
+  });
 });
