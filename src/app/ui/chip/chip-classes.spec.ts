@@ -106,6 +106,18 @@ describe('choice chip classes', () => {
     );
   });
 
+  it('shows the ring on any focus of the hidden input in WebKit only, where an arrow key gives no :focus-visible', () => {
+    const webkit = 'supports-[-webkit-backdrop-filter:none]';
+    expect(label).toEqual(
+      expect.arrayContaining([
+        `${webkit}:peer-focus:outline-2`,
+        `${webkit}:peer-focus:outline-offset-2`,
+        `${webkit}:peer-focus:outline-ring`,
+      ]),
+    );
+    expect(label.filter((name) => name.startsWith('peer-focus:'))).toEqual([]);
+  });
+
   it('keeps the checked state visible in forced colors as a Highlight fill', () => {
     for (const fill of FORCED_COLORS_FILL)
       expect(label).toContain(`peer-checked:forced-colors:${fill}`);
