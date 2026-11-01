@@ -276,6 +276,7 @@ const STATES = [
   'errors-rules',
   'errors-slug',
   'created',
+  'created-draft-league',
   'creating',
   'organizer',
   'no-access',
@@ -577,6 +578,25 @@ for (const width of WIDTHS) {
       ).toBeVisible();
       await expect(page.locator('#seasons-list > li')).toHaveCount(5);
       await mockupMatches(page, browser, tenant.name, 'created', width, testInfo);
+    });
+
+    test('create, done: a draft league', async ({ page, browser, world }, testInfo) => {
+      const tenant = await seed(
+        [{ user: seeded(world).accounts.orgAdmin.user, role: 'orgAdmin' }],
+        {
+          [SLOW_PITCH]: SLOW_PITCH_SEASONS,
+        },
+      );
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/app/organizations/${tenant.slug}/leagues/${SLOW_PITCH}`);
+      await expect(page.locator('#seasons-list > li')).toHaveCount(1);
+      await fill(page, SPRING_2028);
+      await submit(page).click();
+      await expect(
+        page.getByRole('status').filter({ hasText: 'created as a draft' }),
+      ).toBeVisible();
+      await expect(page.locator('#seasons-list > li')).toHaveCount(2);
+      await mockupMatches(page, browser, tenant.name, 'created-draft-league', width, testInfo);
     });
 
     test('create, saving', async ({ page, browser, world }, testInfo) => {

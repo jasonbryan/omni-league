@@ -5,11 +5,12 @@ import {
   Injector,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarClock,
@@ -38,7 +39,7 @@ import { LeagueDetailsForm } from './league-details-form';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
-import { SeasonCreateForm } from './season-create-form';
+import { SeasonCreateForm, type CreatedSeason, type SeasonShown } from './season-create-form';
 
 interface PublishedSeason {
   seasonId: Id<'seasons'>;
@@ -155,7 +156,7 @@ interface PublishedSeason {
           <div
             class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
           >
-            <h2 id="seasons-heading" class="font-semibold">Seasons</h2>
+            <h2 id="seasons-heading" tabindex="-1" class="font-semibold">Seasons</h2>
           </div>
           @if (league.status !== 'published') {
             <div class="border-b border-border px-4 py-3 md:px-5">
@@ -199,10 +200,13 @@ interface PublishedSeason {
             @if (rows.length > 0) {
               <ul id="seasons-list" role="list" class="divide-y divide-border">
                 @for (row of rows; track row.seasonId) {
-                  <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
+                  <li
+                    [id]="'season-' + row.slug"
+                    class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5"
+                  >
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <h3 class="me-1 font-medium">{{ row.name }}</h3>
+                        <h3 tabindex="-1" class="me-1 font-medium">{{ row.name }}</h3>
                         @if (row.status === 'published') {
                           <span data-slot="badge" data-variant="default" [class]="defaultBadge"
                             ><ng-icon
@@ -329,6 +333,11 @@ interface PublishedSeason {
             [division]="league.division"
             [detailsHref]="detailsPath()"
             (detailsOpened)="jumpTo($event, detailsSection)"
+            [leaguePublished]="league.status === 'published'"
+            [leagueHref]="leagueHref()"
+            [publishedSeasonIds]="publishedSeasonIds()"
+            (publishRequested)="publishCreated($event, league.name)"
+            (seasonShown)="showSeason($event)"
           />
         </section>
       </div>
@@ -353,6 +362,9 @@ export class LeagueManagement {
   private readonly context = inject(LeagueContext);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly landingSlug = signal<string | null>(
+    slugOfFragment(inject(ActivatedRoute).snapshot.fragment),
+  );
 
   protected readonly league = this.context.league;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
@@ -375,8 +387,15 @@ export class LeagueManagement {
     const league = this.context.league();
     return league ? sportName(league.sport) : '';
   });
-  protected readonly createPath = computed(
-    () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#create-season`,
+  protected readonly leagueHref = computed(() =>
+    leaguePath(this.context.orgSlug(), this.context.leagueSlug()),
+  );
+  protected readonly createPath = computed(() => `${this.leagueHref()}#create-season`);
+  protected readonly publishedSeasonIds = computed<ReadonlySet<string>>(
+    () =>
+      new Set(
+        (this.rows() ?? []).filter((row) => row.status === 'published').map((row) => row.seasonId),
+      ),
   );
 
   protected readonly publishedSeasonPath = computed(() => {
@@ -387,20 +406,32 @@ export class LeagueManagement {
   });
 
   protected readonly leaguesPath = computed(() => adminPath(this.context.orgSlug(), 'leagues'));
-  protected readonly detailsPath = computed(
-    () => `${leaguePath(this.context.orgSlug(), this.context.leagueSlug())}#details`,
-  );
+  protected readonly detailsPath = computed(() => `${this.leagueHref()}#details`);
   private readonly publishDialog = viewChild(PublishSeasonDialog);
+  private readonly createForm = viewChild(SeasonCreateForm);
+  private publishOpener: 'row' | 'footer' = 'row';
   private readonly publishedNotice = viewChild<AdminAlert>('publishedNotice');
 
   protected readonly published = signal<PublishedSeason | null>(null);
   private publishing: PublishedSeason | null = null;
   protected readonly publishOpen = computed(() => this.publishDialog()?.isOpen() ?? false);
 
+  constructor() {
+    effect(() => this.landOnceTheListAnswers());
+  }
+
+  private landOnceTheListAnswers(): void {
+    const slug = this.landingSlug();
+    if (slug === null || (this.rows() === undefined && !this.failed())) return;
+    this.landingSlug.set(null);
+    afterNextRender(() => this.focusSeasonRowOrHeading(slug), { injector: this.injector });
+  }
+
   protected publish(
     row: PublishedSeason & { registrationDeadline: string },
     leagueName: string,
   ): void {
+    this.publishOpener = 'row';
     this.published.set(null);
     this.publishing = { seasonId: row.seasonId, name: row.name, slug: row.slug };
     this.publishDialog()?.open({
@@ -411,11 +442,29 @@ export class LeagueManagement {
     });
   }
 
-  /** A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on that row's Publish button. */
+  protected publishCreated(season: CreatedSeason, leagueName: string): void {
+    this.publishOpener = 'footer';
+    this.published.set(null);
+    this.publishing = { seasonId: season.seasonId, name: season.name, slug: season.slug };
+    this.publishDialog()?.open({
+      seasonId: season.seasonId,
+      name: season.name,
+      registrationDeadline: season.registrationDeadline,
+      leagueName,
+    });
+  }
+
+  /** A published season moves focus to the status, because the button that had it is gone; a dialog that was cancelled puts focus back on the button that opened it. */
   protected publishDismissed(outcome: PublishSeasonOutcome): void {
+    const fromFooter = this.publishOpener === 'footer';
     if (outcome.published) {
       this.published.set(this.publishing);
+      if (fromFooter) this.createForm()?.clearCreated();
       afterNextRender(() => this.publishedNotice()?.focus(), { injector: this.injector });
+      return;
+    }
+    if (fromFooter) {
+      afterNextRender(() => this.createForm()?.focusNextStep(), { injector: this.injector });
       return;
     }
     afterNextRender(
@@ -427,10 +476,40 @@ export class LeagueManagement {
     );
   }
 
+  protected showSeason({ event, slug }: SeasonShown): void {
+    if (!isPlainClick(event)) return;
+    event.preventDefault();
+    this.landingSlug.set(null);
+    this.focusSeasonRowOrHeading(slug);
+  }
+
+  private focusSeasonRowOrHeading(slug: string): void {
+    const row = [...this.host.nativeElement.querySelectorAll('#seasons-list > li')].find(
+      (item) => item.id === `season-${slug}`,
+    );
+    const target =
+      row?.querySelector<HTMLElement>('h3') ??
+      this.host.nativeElement.querySelector<HTMLElement>('#seasons-heading');
+    target?.scrollIntoView();
+    target?.focus({ preventScroll: true });
+  }
+
   protected jumpTo(event: MouseEvent, section: HTMLElement): void {
     if (!isPlainClick(event)) return;
     event.preventDefault();
     section.scrollIntoView();
     section.querySelector<HTMLElement>('input')?.focus({ preventScroll: true });
+  }
+}
+
+const SEASON_FRAGMENT = 'season-';
+
+function slugOfFragment(fragment: string | null): string | null {
+  if (!fragment?.startsWith(SEASON_FRAGMENT)) return null;
+  const slug = fragment.slice(SEASON_FRAGMENT.length);
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
   }
 }

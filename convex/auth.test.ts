@@ -633,6 +633,22 @@ describe('name bounds and refusal, edge cases', () => {
     expect(long.json['code']).toBe('NAME_INVALID');
   }, 30_000);
 
+  test('the length is String.length after trim(): 100 accented letters or 98 letters and an emoji between Unicode spaces pass; 101 accented letters or 100 letters and an emoji do not', async () => {
+    const t = setup();
+    const accented = await signUp(t, { ...valid(), name: 'é'.repeat(100) });
+    expect(accented.status, JSON.stringify(accented.json)).toBe(200);
+    const edge = await signUp(t, {
+      ...valid('b@example.com'),
+      name: `\u3000${'x'.repeat(98)}\u{1F3D0}\t`,
+    });
+    expect(edge.status, JSON.stringify(edge.json)).toBe(200);
+    for (const name of ['é'.repeat(101), `${'x'.repeat(100)}\u{1F3D0}`]) {
+      const long = await signUp(t, { ...valid('c@example.com'), name });
+      expect(long.status).toBe(400);
+      expect(long.json['code']).toBe('NAME_INVALID');
+    }
+  }, 30_000);
+
   test('trimming keeps inner whitespace', async () => {
     const t = setup();
     expect((await signUp(t, { ...valid(), name: ' \tAda  Lovelace\n ' })).status).toBe(200);

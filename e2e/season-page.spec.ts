@@ -284,11 +284,16 @@ test.describe('public season page: registration card and details in the raw serv
       expect(order.every((position) => position > 0)).toBe(true);
       expect(order).toEqual([...order].sort((a, b) => a - b));
 
-      const card = spacedText(registrationCard(html));
-      expect(card).toContain('Registration open');
+      const card = registrationCard(html);
+      expect(spacedText(card)).toContain('Registration open');
       const closes = formatDate(OPEN_SEASON.registrationDeadline ?? '');
-      expect(card).toContain(`Registration open · closes ${closes}`);
-      expect(card).toContain('Captains register a team, then invite their players.');
+      expect(spacedText(card)).toContain(`Registration open · closes ${closes}`);
+      expect(spacedText(card)).toContain('Captains register a team, then invite their players.');
+      expect(spacedText(html)).toContain(`Registration closes ${closes}`);
+      const register = /<a\b[^>]*>[\s\S]*?Register\s+a team<\/a>/.exec(card ?? '')?.[0] ?? '';
+      expect(register).toContain(
+        `href="/app/register/${tenant.slug}/${LEAGUE_SLUG}/fall-open/team"`,
+      );
       expect(spacedText(html.slice(html.indexOf('id="how-heading"')))).toContain(
         'Teams need at least 4 players before registration closes. 3 Play Games start',
       );
@@ -307,6 +312,8 @@ test.describe('public season page: registration card and details in the raw serv
       expect(card).toContain(`href="${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open"`);
       expect(closed.html).not.toContain('id="how-heading"');
       expect(spacedText(card)).not.toContain('Captains register a team');
+      expect(spacedText(card)).not.toContain('Register a team');
+      expect(closed.html).not.toContain('/app/register/');
 
       const none = await fetchRawHtml(
         request,

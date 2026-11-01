@@ -11,6 +11,7 @@ export type SignUpFailure =
   | 'password-too-short'
   | 'password-too-long'
   | 'adult-required'
+  | 'name-invalid'
   | 'unexpected';
 
 export type SignUpResult = { ok: true } | { ok: false; error: SignUpFailure };
@@ -57,6 +58,7 @@ const FAILURE_BY_CODE: Record<string, SignUpFailure> = {
   PASSWORD_TOO_SHORT: 'password-too-short',
   PASSWORD_TOO_LONG: 'password-too-long',
   ADULT_CONFIRMATION_REQUIRED: 'adult-required',
+  NAME_INVALID: 'name-invalid',
 };
 
 @Injectable({ providedIn: 'root' })

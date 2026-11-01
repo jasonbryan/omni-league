@@ -32,6 +32,8 @@ import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatLabel } from './lib/divisions';
 import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
+import { rosteredEntryInSeason } from './lib/rosterWrites';
+import { getCurrentUser } from './lib/users';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
 
@@ -259,5 +261,56 @@ export const listOpenForOrganization = query({
       });
     }
     return cards;
+  },
+});
+
+const registrationTeamValidator = v.object({
+  teamId: v.id('teams'),
+  name: v.string(),
+  isCaptain: v.boolean(),
+});
+
+const getForRegistrationReturns = v.union(
+  v.null(),
+  v.object({
+    organizationName: v.string(),
+    leagueName: v.string(),
+    seasonName: v.string(),
+    startDate: v.string(),
+    endDate: v.string(),
+    registrationDeadline: v.string(),
+    formatName: v.string(),
+    minimumRosterSize: v.number(),
+    team: v.union(v.null(), registrationTeamValidator),
+  }),
+);
+
+/** The register routes' one query. It returns no season id: `teams.register` finds the season from the same slugs. */
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: a published season's public fields, plus the caller's own team found from ctx.auth (getCurrentUser); an anonymous caller gets `team: null`.
+export const getForRegistration = query({
+  args: seasonSlugsValidator.fields,
+  returns: getForRegistrationReturns,
+  handler: async (ctx, args) => {
+    const found = await findSeasonBySlugs(ctx, args);
+    // A draft answers like an unknown season, so nothing says whether its slug exists.
+    if (found?.league.status !== 'published' || found.season.status !== 'published') return null;
+    const { organization, league, season } = found;
+    const user = await getCurrentUser(ctx);
+    const entry = user ? await rosteredEntryInSeason(ctx, season._id, user._id) : null;
+    const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
+    return {
+      organizationName: organization.name,
+      leagueName: league.name,
+      seasonName: season.name,
+      startDate: season.startDate,
+      endDate: season.endDate,
+      registrationDeadline: season.registrationDeadline,
+      formatName: formatLabel(seasonPlayersPerSide(season)),
+      minimumRosterSize: season.minimumRosterSize,
+      team:
+        team && user
+          ? { teamId: team._id, name: team.name, isCaptain: team.captainUserId === user._id }
+          : null,
+    };
   },
 });

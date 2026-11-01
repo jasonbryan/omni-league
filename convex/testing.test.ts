@@ -137,8 +137,10 @@ describe('convex/testing.ts exports', () => {
       'addLeague',
       'addLeagueOrganizer',
       'addMembership',
+      'addToTeam',
       'assignForeignLeague',
       'ping',
+      'removeFromTeam',
       'reset',
       'resetAuthBatch',
       'resetFilesBatch',
@@ -148,6 +150,7 @@ describe('convex/testing.ts exports', () => {
       'seedSeason',
       'seedSeasons',
       'seedSignInFailures',
+      'seedTeam',
       'seedTenant',
     ]);
     for (const [name, fn] of exports) {

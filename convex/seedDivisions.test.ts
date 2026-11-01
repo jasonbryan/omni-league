@@ -23,6 +23,7 @@ const ZERO_BACKFILL = {
   leagues: 0,
   seasons: 0,
   leagueDivisions: 0,
+  teamCounts: 0,
 };
 
 beforeEach(() => {

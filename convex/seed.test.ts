@@ -22,7 +22,14 @@ function setup() {
 type T = ReturnType<typeof setup>;
 
 const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 6 };
-const NONE = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
+const NONE = {
+  organizations: 0,
+  locations: 0,
+  leagues: 0,
+  seasons: 0,
+  leagueDivisions: 0,
+  teamCounts: 0,
+};
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
 
@@ -777,7 +784,14 @@ describe('seed:demo', () => {
       customLevels: ROWS.customLevels,
       leagues: ROWS.leagues,
       seasons: ROWS.seasons,
-      backfilled: { organizations: 2, locations: 3, leagues: 2, seasons: 0, leagueDivisions: 2 },
+      backfilled: {
+        organizations: 2,
+        locations: 3,
+        leagues: 2,
+        seasons: 0,
+        leagueDivisions: 2,
+        teamCounts: 0,
+      },
       updated: { organizations: 1 },
     });
 
@@ -955,21 +969,29 @@ describe('seed:demo', () => {
       DEMO_RUN_SEASONS,
       DEMO_ACCOUNTS,
       DEMO_ACCOUNT_DOMAIN,
+      DEMO_TEAM_SEASON,
+      DEMO_CAPTAINS,
+      DEMO_TEAMS,
       ...functions
     } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
-    expect(Object.keys(DEMO_ACCOUNTS)).toEqual(['admin', 'organizer', 'player']);
+    expect(Object.keys(DEMO_ACCOUNTS)).toEqual(['admin', 'organizer', 'player', 'captain']);
     expect(DEMO_ACCOUNT_DOMAIN).toBe('demo.omni-league.test');
+    expect(DEMO_TEAM_SEASON.seasonSlug).toBe('summer-2027');
+    expect(DEMO_CAPTAINS).toHaveLength(3);
+    expect(DEMO_TEAMS).toHaveLength(4);
     const exports = Object.entries(functions);
     expect(exports.map(([name]) => name).sort()).toEqual([
       'demo',
       'demoLogoNeeded',
+      'findDemoCaptain',
       'findDemoCredential',
       'grantDemoMemberships',
       'insertDemoData',
       'insertDemoInvite',
+      'insertDemoTeams',
       'setDemoLogo',
     ]);
     for (const [name, fn] of exports) {
@@ -1050,6 +1072,7 @@ describe('seed:demo backfill against a recount', () => {
       leagues: 2,
       seasons: 0,
       leagueDivisions: 2,
+      teamCounts: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({
