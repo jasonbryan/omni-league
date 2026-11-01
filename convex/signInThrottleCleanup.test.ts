@@ -160,3 +160,76 @@ describe('the scheduled expiry runs on its own', () => {
     expect(await pendingExpiries(t)).toHaveLength(0);
   });
 });
+
+describe('expiry jobs over a run of failures', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(START);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const allExpiries = (t: T) =>
+    t.run(async (ctx) =>
+      (await ctx.db.system.query('_scheduled_functions').collect()).filter((job) =>
+        job.name.includes('expire'),
+      ),
+    );
+
+  const runDueJobs = async (t: T, ms: number) => {
+    vi.advanceTimersByTime(ms);
+    await t.finishInProgressScheduledFunctions();
+  };
+
+  test('thirty failures on one address, waits included, schedule one expiry in all', async () => {
+    const t = setup();
+    for (let i = 0; i < 30; i++) {
+      const answer = await begin(t);
+      if (answer.status === 'throttled') {
+        vi.setSystemTime(Date.now() + (answer.retryAfterSeconds + 1) * 1000);
+        expect(await begin(t)).toEqual({ status: 'allowed' });
+      }
+    }
+    expect(await allExpiries(t)).toHaveLength(1);
+    expect(await pendingExpiries(t)).toHaveLength(1);
+  });
+
+  test('a row that reaches the threshold within its day outlives its expiry, which stops', async () => {
+    const t = setup();
+    for (let i = 0; i < FREE_FAILURES; i++) await begin(t);
+    await runDueJobs(t, IDLE_ROW_LIFETIME_MS);
+    await runDueJobs(t, 30 * IDLE_ROW_LIFETIME_MS);
+    expect(await rows(t)).toMatchObject([{ failures: FREE_FAILURES }]);
+    expect(await pendingExpiries(t)).toHaveLength(0);
+    expect(await allExpiries(t)).toHaveLength(1);
+  });
+
+  test('attempts 23 hours apart keep one pending expiry and reach the throttle', async () => {
+    const t = setup();
+    for (let i = 0; i < FREE_FAILURES; i++) {
+      if (i > 0) await runDueJobs(t, 23 * HOUR);
+      expect(await rows(t)).toHaveLength(i === 0 ? 0 : 1);
+      expect(await begin(t)).toEqual({ status: 'allowed' });
+      expect(await pendingExpiries(t)).toHaveLength(1);
+    }
+    expect(await rows(t)).toMatchObject([{ failures: FREE_FAILURES }]);
+    expect(await begin(t)).toMatchObject({ status: 'throttled' });
+    await runDueJobs(t, 3 * IDLE_ROW_LIFETIME_MS);
+    expect(await rows(t)).toMatchObject([{ failures: FREE_FAILURES }]);
+    expect(await pendingExpiries(t)).toHaveLength(0);
+  });
+
+  test('an address kept below the threshold gets four unthrottled attempts a day, not more', async () => {
+    const t = setup();
+    for (let day = 0; day < 3; day++) {
+      for (let i = 1; i < FREE_FAILURES; i++) expect(await begin(t)).toEqual({ status: 'allowed' });
+      await runDueJobs(t, IDLE_ROW_LIFETIME_MS - 1);
+      expect(await rows(t)).toMatchObject([{ failures: FREE_FAILURES - 1 }]);
+      await runDueJobs(t, 1000);
+      expect(await rows(t)).toEqual([]);
+    }
+    expect(await allExpiries(t)).toHaveLength(3);
+  });
+});
