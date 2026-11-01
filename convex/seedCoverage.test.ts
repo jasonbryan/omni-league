@@ -10,6 +10,8 @@ import { modules } from './test.setup';
 
 export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
   signInFailures: 'Throttle state from failed sign-ins, not demo content.',
+  pushSubscriptions:
+    'Only a browser can create a push subscription; a seeded endpoint would be fake and every send to it would fail.',
 };
 
 export function missingSeedTables(

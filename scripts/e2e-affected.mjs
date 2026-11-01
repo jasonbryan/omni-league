@@ -89,6 +89,7 @@ export const ROUTE_SPECS = {
   app: ['auth-session'],
   'app/': ['after-sign-in', 'auth-session', 'app-leagues'],
   'app/account': ['account-settings', 'after-sign-in'],
+  'app/notifications': ['notifications', 'after-sign-in'],
   'app/organizations/new': ['create-organization', 'after-sign-in'],
   'app/organizations/:orgSlug/leagues/:leagueSlug': [
     'league-management',
@@ -625,6 +626,7 @@ export const AREAS = [
     specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
+  { name: 'notifications page', test: inDir('src/app/notifications/'), specs: ['notifications'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
   { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: [SESSION] },
   {
@@ -813,6 +815,12 @@ export const AREAS = [
     specs: ADMIN,
   },
   { name: 'convex users', test: named('convex/', ['users']), specs: [SESSION] },
+  {
+    name: 'convex push',
+    test: (file) =>
+      named('convex/', ['push'])(file) || named('convex/lib/', ['pushSubscription'])(file),
+    specs: ['notifications'],
+  },
   {
     name: 'convex teams and roster writes',
     test: (file) =>

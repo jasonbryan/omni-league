@@ -46,3 +46,4 @@ const BADGE =
 export const BADGE_DEFAULT = `${BADGE} bg-primary text-primary-foreground [a]:hover:bg-primary/80`;
 export const BADGE_SECONDARY = `${BADGE} bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80`;
 export const BADGE_OUTLINE = `${BADGE} border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground`;
+export const BADGE_DESTRUCTIVE = `${BADGE} bg-destructive/10 [a]:hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive dark:bg-destructive/20`;

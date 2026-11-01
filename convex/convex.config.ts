@@ -14,6 +14,8 @@ const app = defineApp({
     // variable. Secret; read only by `seed:demo`, never logged, and never on production
     // (scripts/check-deploy-env.mjs production fails when it is set).
     DEMO_ACCOUNT_PASSWORD: v.optional(v.string()),
+    // Public by design: push.getConfig hands it to every browser that subscribes.
+    VAPID_PUBLIC_KEY: v.optional(v.string()),
   },
 });
 

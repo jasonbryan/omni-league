@@ -64,6 +64,7 @@ test.describe('create an organization', () => {
         ...tabOrderBeforeMain(),
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
+        'main a[href="/app/notifications"]',
       ],
     });
     await organizations(page).getByRole('link', { name: 'Create an organization' }).click();
