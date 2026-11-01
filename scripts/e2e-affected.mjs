@@ -472,6 +472,12 @@ export const AREAS = [
     specs: ['chip-classes'],
   },
   { name: 'chip classes', test: inDir('src/app/ui/chip/'), specs: ['chip-classes'] },
+  // The filter popovers of the organization page and its sport views are the only popovers.
+  {
+    name: 'helm popover',
+    test: inDir('src/app/ui/popover/'),
+    specs: ['organization-filters', 'sport-view'],
+  },
   { name: 'design files', test: inDir('design/'), specs: [] },
 
   // The harness probes run inside console-fixture.spec.ts.
@@ -554,7 +560,9 @@ export const AREAS = [
       'organization-skeleton',
       'organization-path',
       'division-filters',
+      'filter-draft',
       'league-filters',
+      'league-filter-overlays',
       'sport-list',
       'sport-chips',
       'initials',

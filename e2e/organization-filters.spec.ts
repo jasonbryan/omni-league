@@ -1,8 +1,9 @@
 import type { Page, TestInfo } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
+import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import {
@@ -20,6 +21,7 @@ const ORIGIN = new URL(baseURL).origin;
 const isDesktop = (testInfo: TestInfo) => testInfo.project.name === 'chromium-desktop';
 
 const LOCATIONS = numberedLocations(6);
+const SAVED_PAGE_QUERIES = 5;
 
 const beach = (
   name: string,
@@ -275,6 +277,15 @@ test.describe('organization filters in the browser', () => {
     page.getByRole('search', { name: 'Filter leagues' }).getByRole('status');
   const pills = (page: Page) =>
     page.getByRole('list', { name: 'Active filters' }).getByRole('link');
+  const filtersButton = (page: Page) =>
+    page.getByRole('search', { name: 'Filter leagues' }).getByRole('button', { name: /^Filters/ });
+  const dimensionButton = (page: Page, name: string) =>
+    page.getByRole('search', { name: 'Filter leagues' }).getByRole('button', { name, exact: true });
+  const sheet = (page: Page) => page.getByRole('dialog', { name: 'Filters' });
+  // The dialog element is the CDK container, which has no box of its own; the sheet is its content.
+  const sheetContent = (page: Page) => sheet(page).locator('[data-slot="sheet-content"]');
+  const levelPanel = (page: Page) => page.getByRole('dialog', { name: 'Level' });
+  const genderPanel = (page: Page) => page.getByRole('dialog', { name: 'Gender' });
 
   test('a pill and Clear all change the URL without a page load and move focus to the count', async ({
     page,
@@ -325,22 +336,26 @@ test.describe('organization filters in the browser', () => {
     await expect(page.locator('#leagues [aria-busy="true"]')).toHaveCount(0);
   });
 
-  test('from page 2, the keyboard opens Filters, checks Coed, and Show leagues loads page 1 of the result with focus kept', async ({
+  test('from page 2, the keyboard opens the filters, checks Coed, and Show loads page 1 of the result with focus back on the button', async ({
     page,
     consoleGuard,
-  }) => {
+  }, testInfo) => {
     const tenant = await filterTenant();
     await page.goto(`${tenant.path}?format=4v4&format=6v6&leagues=2`);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    const form = page.getByRole('search', { name: 'Filter leagues' });
-    await form.locator('summary').focus();
+    const opener = isDesktop(testInfo) ? dimensionButton(page, 'Gender') : filtersButton(page);
+    await opener.focus();
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Tab');
-    const coed = form.getByRole('checkbox', { name: 'Coed' });
+    const overlay = isDesktop(testInfo) ? genderPanel(page) : sheet(page);
+    if (!isDesktop(testInfo)) {
+      await expect(overlay.getByRole('button', { name: 'Close filters' })).toBeFocused();
+      await page.keyboard.press('Tab');
+    }
+    const coed = overlay.getByRole('checkbox', { name: 'Coed' });
     await expect(coed).toBeFocused();
     await page.keyboard.press('Space');
     await expect(coed).toBeChecked();
-    const show = form.getByRole('button', { name: 'Show leagues' });
+    const show = overlay.getByRole('button', { name: 'Show 4 leagues' });
     for (let presses = 0; presses < 20; presses++) {
       if (await show.evaluate((button) => button === document.activeElement)) break;
       await page.keyboard.press('Tab');
@@ -349,7 +364,9 @@ test.describe('organization filters in the browser', () => {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=coed&format=4v4&format=6v6`);
     await expect(count(page)).toHaveText('4 of 7 leagues');
-    await expect(show).toBeFocused();
+    await expect(
+      isDesktop(testInfo) ? dimensionButton(page, 'Gender: Coed') : filtersButton(page),
+    ).toBeFocused();
   });
 
   test('the Locations page links keep gender=coed, and a filter change keeps locations=2', async ({
@@ -395,21 +412,440 @@ test.describe('organization filters in the browser', () => {
     held.release();
   });
 
-  test('the open filters pass the axe helper, with each dimension in a fieldset', async ({
+  test('the filtered page with its filter buttons passes the axe helper', async ({
     page,
     consoleGuard,
   }) => {
     const tenant = await filterTenant();
     await page.goto(`${tenant.path}?gender=coed&format=4v4`);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
-    await page.getByRole('search', { name: 'Filter leagues' }).getByText('Filters').click();
-    const fieldsets = page.getByRole('search', { name: 'Filter leagues' }).locator('fieldset');
-    await expect(fieldsets).toHaveCount(4);
-    for (const name of ['Gender', 'Format', 'Level', 'Age group']) {
-      await expect(page.getByRole('group', { name })).toBeVisible();
-    }
-    await expect(page.getByRole('checkbox', { name: 'Coed' })).toBeChecked();
+    await expect(page.locator('[data-filter-buttons]')).toBeVisible();
     await expectAccessible(page);
+  });
+
+  test("the Leagues heading's top is the same before and after hydration", async ({
+    page,
+    consoleGuard,
+  }) => {
+    const tenant = await filterTenant();
+    let releaseScripts!: () => void;
+    const scriptsHeld = new Promise<void>((resolve) => {
+      releaseScripts = resolve;
+    });
+    await page.route(/\.js(\?|$)/, async (route) => {
+      await scriptsHeld;
+      await route.fallback();
+    });
+    const heading = page.locator('#leagues-heading');
+    await page.goto(`${tenant.path}?gender=coed&format=4v4`, { waitUntil: 'commit' });
+    await expect(page.locator('main details summary')).toBeVisible();
+    const before = (await heading.boundingBox())?.y;
+    releaseScripts();
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(page.locator('[data-filter-buttons]')).toBeVisible();
+    await expect(page.locator('main details')).toHaveCount(0);
+    expect(before).toBeDefined();
+    expect((await heading.boundingBox())?.y).toBe(before);
+  });
+
+  test('the page makes no request for the overlay chunk until a filter button is pressed', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    const scripts: string[] = [];
+    page.on('request', (request) => {
+      if (request.resourceType() === 'script' && !request.serviceWorker()) {
+        scripts.push(request.url());
+      }
+    });
+    await page.goto(tenant.path, { waitUntil: 'networkidle' });
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    const beforePress = [...scripts];
+    if (isDesktop(testInfo)) {
+      await dimensionButton(page, 'Level').click();
+      await expect(levelPanel(page)).toBeVisible();
+    } else {
+      await filtersButton(page).click();
+      await expect(sheetContent(page)).toBeVisible();
+    }
+    const loadedByPress = scripts.slice(beforePress.length);
+    expect(loadedByPress.length).toBeGreaterThan(0);
+    for (const url of loadedByPress) expect(beforePress).not.toContain(url);
+  });
+
+  test('an open overlay and its unapplied draft leave the URL, canonical link, and saved copies unchanged', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await page.goto(`${tenant.path}?gender=coed&locations=2`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await expect(count(page)).toHaveText('4 of 7 leagues');
+    const pageState = () =>
+      page.evaluate(() => ({
+        url: location.href,
+        canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href'),
+        savedCopies: Object.keys(localStorage)
+          .filter((key) => key.startsWith('cvx-saved:'))
+          .sort(),
+      }));
+    await expect.poll(async () => (await pageState()).savedCopies.length).toBe(SAVED_PAGE_QUERIES);
+    const before = await pageState();
+
+    const overlay = isDesktop(testInfo)
+      ? page.getByRole('dialog', { name: 'Format' })
+      : sheet(page);
+    await (isDesktop(testInfo) ? dimensionButton(page, 'Format') : filtersButton(page)).click();
+    await overlay.getByText('6v6', { exact: true }).click();
+    await expect(overlay.getByRole('button', { name: 'Show 2 leagues' })).toBeVisible();
+    expect(await pageState()).toEqual(before);
+
+    await page.keyboard.press('Escape');
+    await expect(overlay).toHaveCount(0);
+    expect(await pageState()).toEqual(before);
+  });
+
+  test.describe('the phone sheet', () => {
+    test.skip(({ isMobile }) => !isMobile, 'the sheet runs at phone widths only');
+
+    test('a modal Filters dialog whose live count applies Coed and 4v4 without a page load, with focus back on Filters', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
+      const filters = filtersButton(page);
+      await expect(filters).toHaveAttribute('aria-haspopup', 'dialog');
+      await expect(filters).toHaveAttribute('aria-expanded', 'false');
+
+      await filters.click();
+      await expect(sheetContent(page)).toBeVisible();
+      // The modal hides the page from the accessibility tree, so the button is found by its markup.
+      await expect(
+        page.locator('[data-filter-buttons] button', { hasText: 'Filters' }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      await expect(sheet(page)).toHaveAttribute('aria-modal', 'true');
+      await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();
+      await expect(page.locator('app-root')).toHaveAttribute('aria-hidden', 'true');
+      expect(await overlayPanes(page)).toEqual([{ inContainer: true, inPopover: false }]);
+
+      await sheet(page).getByText('Coed', { exact: true }).click();
+      await sheet(page).getByText('4v4', { exact: true }).click();
+      const show = sheet(page).getByRole('button', { name: 'Show 2 leagues' });
+      await expect(show).toBeVisible();
+      await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+      await show.click();
+      await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=coed&format=4v4`);
+      await expect(sheet(page)).toHaveCount(0);
+      await expect(filters).toBeFocused();
+      await expect(filters).toHaveAttribute('aria-expanded', 'false');
+      await expect(count(page)).toHaveText('2 of 7 leagues');
+      expect(await page.evaluate(() => (window as Window & { e2eMarker?: number }).e2eMarker)).toBe(
+        1,
+      );
+    });
+
+    test('at 360 by 640 with every dimension offered, Show is in view without scrolling the sheet', async ({
+      page,
+      consoleGuard,
+    }) => {
+      await page.setViewportSize({ width: 360, height: 640 });
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await filtersButton(page).click();
+      await expect(sheet(page).getByRole('group')).toHaveCount(4);
+      const show = sheet(page).getByRole('button', { name: 'Show 7 leagues' });
+      await expect(show).toBeInViewport({ ratio: 1 });
+      await expect(sheet(page).getByRole('link', { name: 'Clear all' })).toBeInViewport({
+        ratio: 1,
+      });
+    });
+
+    test('Escape closes it with focus back on Filters, and Clear all clears without a page load and focuses the count', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
+      const filters = filtersButton(page);
+      await filters.click();
+      await expect(sheetContent(page)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(sheet(page)).toHaveCount(0);
+      await expect(filters).toBeFocused();
+
+      await filters.click();
+      await sheet(page).getByRole('link', { name: 'Clear all' }).click();
+      await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+      await expect(sheet(page)).toHaveCount(0);
+      await expect(count(page)).toHaveText('7 leagues');
+      await expect(count(page)).toBeFocused();
+      expect(await page.evaluate(() => (window as Window & { e2eMarker?: number }).e2eMarker)).toBe(
+        1,
+      );
+    });
+
+    test('the open sheet passes axe, with 44px chips and buttons', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await filtersButton(page).click();
+      await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();
+      await sheet(page).evaluate((element) =>
+        Promise.all(element.getAnimations({ subtree: true }).map((a) => a.finished)),
+      );
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+      const controls = sheet(page).locator('label span, button, a');
+      for (const box of await controls.evaluateAll((elements) =>
+        elements.map((element) => element.getBoundingClientRect().height),
+      )) {
+        expect(box).toBeGreaterThanOrEqual(44);
+      }
+    });
+
+    test('Tab and Shift+Tab never leave the open sheet for the page behind', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await filtersButton(page).click();
+      await expect(sheet(page).getByRole('button', { name: 'Close filters' })).toBeFocused();
+      const focusInSheet = () =>
+        page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+      const tabStops = await sheet(page).locator('button, a, input').count();
+      for (const key of ['Tab', 'Shift+Tab']) {
+        for (let press = 0; press <= tabStops; press++) {
+          await page.keyboard.press(key);
+          expect(await focusInSheet(), `${key} press ${String(press + 1)}`).toBe(true);
+        }
+      }
+    });
+
+    for (const width of [320, 360]) {
+      test(`the sheet's fieldsets sit 24px apart at ${String(width)}px, as the approved mockup draws them`, async ({
+        page,
+        consoleGuard,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        const tenant = await filterTenant();
+        await page.goto(tenant.path);
+        await expect.poll(() => consoleGuard.hydrated).toBe(true);
+        await filtersButton(page).click();
+        await expect(sheet(page).getByRole('group')).toHaveCount(4);
+        const gaps = await sheet(page)
+          .getByRole('group')
+          .evaluateAll((fieldsets) =>
+            fieldsets
+              .slice(1)
+              .map((fieldset, i) =>
+                Math.round(
+                  fieldset.getBoundingClientRect().top -
+                    fieldsets[i].getBoundingClientRect().bottom,
+                ),
+              ),
+          );
+        expect(gaps).toEqual([24, 24, 24]);
+      });
+    }
+  });
+
+  test.describe('the desktop popovers', () => {
+    test.skip(({ isMobile }) => isMobile, 'the popovers run from 768px');
+
+    test('the Level popover sits in the overlay container, and Escape and a click outside each close it with focus back on Level', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const level = dimensionButton(page, 'Level');
+      await expect(level).toHaveAttribute('aria-expanded', 'false');
+
+      await level.click();
+      await expect(levelPanel(page)).toBeVisible();
+      await expect(level).toHaveAttribute('aria-expanded', 'true');
+      await expect(level).toHaveAttribute('aria-controls', 'filter-level');
+      expect(await overlayPanes(page)).toEqual([{ inContainer: true, inPopover: false }]);
+      await page.keyboard.press('Escape');
+      await expect(levelPanel(page)).toHaveCount(0);
+      await expect(level).toHaveAttribute('aria-expanded', 'false');
+      await expect(level).toBeFocused();
+
+      await level.click();
+      await expect(levelPanel(page)).toBeVisible();
+      await page.mouse.click(1200, 680);
+      await expect(levelPanel(page)).toHaveCount(0);
+      await expect(level).toHaveAttribute('aria-expanded', 'false');
+      await expect(level).toBeFocused();
+    });
+
+    test('Show in the Level popover applies the whole draft, keeps locations, and drops the leagues page', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed&locations=2&leagues=2`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const level = dimensionButton(page, 'Level');
+      await level.click();
+      await levelPanel(page).getByText('BB', { exact: true }).click();
+      await levelPanel(page).getByRole('button', { name: 'Show 1 league' }).click();
+      await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=coed&level=bb&locations=2`);
+      await expect(levelPanel(page)).toHaveCount(0);
+      await expect(dimensionButton(page, 'Level: BB')).toBeFocused();
+    });
+
+    test('Clear gender in the Gender popover removes gender without a page load and focuses the count', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await page.evaluate(() => ((window as Window & { e2eMarker?: number }).e2eMarker = 1));
+      await dimensionButton(page, 'Gender: Coed').click();
+      await genderPanel(page).getByRole('link', { name: 'Clear gender' }).click();
+      await expect(page).toHaveURL(`${baseURL}${tenant.path}?format=4v4`);
+      await expect(genderPanel(page)).toHaveCount(0);
+      await expect(count(page)).toHaveText('3 of 7 leagues');
+      await expect(count(page)).toBeFocused();
+      expect(await page.evaluate(() => (window as Window & { e2eMarker?: number }).e2eMarker)).toBe(
+        1,
+      );
+    });
+
+    test('the open popover passes axe', async ({ page, consoleGuard }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed&format=4v4`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await dimensionButton(page, 'Level').click();
+      await expect(levelPanel(page)).toBeVisible();
+      await levelPanel(page).evaluate((element) =>
+        Promise.all(element.getAnimations({ subtree: true }).map((a) => a.finished)),
+      );
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    });
+
+    test('Tab past either end of the open Level popover keeps it next to Level in the focus order', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const focusState = () =>
+        page.evaluate(() => {
+          const active = document.activeElement;
+          return {
+            inPopover: !!active?.closest('[data-slot="popover-content"]'),
+            popoverOpen: document.querySelector('[data-slot="popover-content"]') !== null,
+            focused:
+              !active || active === document.body
+                ? 'the page itself'
+                : (active.getAttribute('aria-label') ?? active.textContent ?? '').trim(),
+          };
+        });
+      const adjacent = (state: Awaited<ReturnType<typeof focusState>>, neighbour: string) =>
+        state.inPopover || (!state.popoverOpen && state.focused === neighbour);
+
+      await dimensionButton(page, 'Level').click();
+      await levelPanel(page).getByRole('button', { name: 'Show 4 leagues' }).focus();
+      await page.keyboard.press('Tab');
+      const afterLast = await focusState();
+      expect.soft(adjacent(afterLast, 'Age group'), JSON.stringify(afterLast)).toBe(true);
+
+      await page.keyboard.press('Escape');
+      await dimensionButton(page, 'Level').click();
+      await levelPanel(page).getByRole('checkbox', { name: 'Rec' }).focus();
+      await page.keyboard.press('Shift+Tab');
+      const beforeFirst = await focusState();
+      expect(adjacent(beforeFirst, 'Level'), JSON.stringify(beforeFirst)).toBe(true);
+    });
+
+    test('pressing Gender while the Level popover is open leaves focus on the first Gender check box once Level has closed', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const level = dimensionButton(page, 'Level');
+      await level.focus();
+      await page.keyboard.press('Enter');
+      await expect(levelPanel(page).getByRole('checkbox').first()).toBeFocused();
+
+      await dimensionButton(page, 'Gender').click();
+      await expect(levelPanel(page)).toHaveCount(0);
+      await expect(level).toHaveAttribute('aria-expanded', 'false');
+      const coed = genderPanel(page).getByRole('checkbox', { name: 'Coed' });
+      await expect(coed).toBeFocused();
+      await genderPanel(page).evaluate((element) =>
+        Promise.all(element.getAnimations({ subtree: true }).map((a) => a.finished)),
+      );
+      await expect(coed).toBeFocused();
+      await expect(dimensionButton(page, 'Gender')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('a click on page text outside the open Level popover closes it with focus back on Level', async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(tenant.path);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      const level = dimensionButton(page, 'Level');
+      const outside = {
+        'the Leagues heading': page.getByRole('heading', { name: 'Leagues', exact: true }),
+        'the organization summary': page.getByText('7 leagues at 6 locations'),
+      };
+      for (const [name, target] of Object.entries(outside)) {
+        await level.click();
+        await expect(levelPanel(page)).toBeVisible();
+        await target.click();
+        await expect(levelPanel(page)).toHaveCount(0);
+        await expect(level, `after a click on ${name}`).toBeFocused();
+      }
+    });
+
+    test("Shift+Tab after a click on the open Level popover's legend keeps focus next to Level", async ({
+      page,
+      consoleGuard,
+    }) => {
+      const tenant = await filterTenant();
+      await page.goto(`${tenant.path}?gender=coed`);
+      await expect.poll(() => consoleGuard.hydrated).toBe(true);
+      await dimensionButton(page, 'Level').click();
+      await expect(levelPanel(page)).toBeVisible();
+      await levelPanel(page).locator('legend').click();
+      await page.keyboard.press('Shift+Tab');
+      const state = await page.evaluate(() => {
+        const active = document.activeElement;
+        return {
+          inPopover: !!active?.closest('[data-slot="popover-content"]'),
+          popoverOpen: document.querySelector('[data-slot="popover-content"]') !== null,
+          focused:
+            !active || active === document.body
+              ? 'the page itself'
+              : (active.getAttribute('aria-label') ?? active.textContent ?? '').trim(),
+        };
+      });
+      expect(
+        state.inPopover || (!state.popoverOpen && state.focused === 'Level'),
+        JSON.stringify(state),
+      ).toBe(true);
+    });
   });
 
   test.describe('with JavaScript disabled', () => {
@@ -433,6 +869,32 @@ test.describe('organization filters in the browser', () => {
   });
 });
 
+test.describe('organization filters on the sport view in the browser', () => {
+  test.skip(remoteBaseUrl !== undefined, NO_SEED);
+
+  test('6v6 in the Format popover reads Show 3 leagues, and Show loads the sport view with no page', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    test.skip(!isDesktop(testInfo), 'the popovers run from 768px');
+    const tenant = await filterTenant();
+    const sportPath = `${tenant.path}/sports/beach-volleyball`;
+    await page.goto(`${sportPath}?page=2`);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await page
+      .getByRole('search', { name: 'Filter leagues' })
+      .getByRole('button', { name: 'Format', exact: true })
+      .click();
+    const panel = page.getByRole('dialog', { name: 'Format' });
+    await panel.getByText('6v6', { exact: true }).click();
+    await panel.getByRole('button', { name: 'Show 3 leagues' }).click();
+    await expect(page).toHaveURL(`${baseURL}${sportPath}?format=6v6`);
+    await expect(
+      page.getByRole('search', { name: 'Filter leagues' }).getByRole('status'),
+    ).toHaveText('3 of 7 leagues');
+  });
+});
+
 test.describe('organization filters offline', () => {
   test.skip(remoteBaseUrl !== undefined, NO_SEED);
 
@@ -446,7 +908,15 @@ test.describe('organization filters offline', () => {
     await page.goto(`${tenant.path}?gender=coed`);
     await expect.poll(() => consoleGuard.hydrated).toBe(true);
     const form = page.getByRole('search', { name: 'Filter leagues' });
+    const filters = form.getByRole('button', { name: /^Filters/ });
+    const sheet = page.getByRole('dialog', { name: 'Filters' });
+    const sheetContent = sheet.locator('[data-slot="sheet-content"]');
     await expect(count(page)).toHaveText('4 of 7 leagues');
+    // The first press loads the sheet's chunk while online: the e2e build has no service worker to serve it offline.
+    await filters.click();
+    await expect(sheetContent).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
     await form.getByRole('link', { name: 'Clear all' }).click();
     await expect(count(page)).toHaveText('7 leagues');
 
@@ -456,9 +926,10 @@ test.describe('organization filters offline', () => {
     await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=coed`);
     await expect(page.locator('app-saved-copy-note')).toBeVisible();
     await expect(count(page)).toHaveText('4 of 7 leagues');
-    await form.getByText('Filters').click();
-    await expect(page.getByRole('group', { name: 'Gender' })).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: 'Coed' })).toBeChecked();
+    await filters.click();
+    await expect(sheet.getByRole('group', { name: 'Gender' })).toBeVisible();
+    await expect(sheet.getByRole('checkbox', { name: 'Coed' })).toBeChecked();
+    await expect(sheet.getByRole('button', { name: 'Show 4 leagues' })).toBeVisible();
     await context.setOffline(false);
   });
 
