@@ -1,10 +1,12 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect } from './fixtures';
 
-/** The label of the chip whose radio is named `name`. */
-export function chipLabel(scope: Page | Locator, name: string): Locator {
+// The radio is `sr-only`, so the label is what a user sees and clicks.
+export function chipLabel(scope: Page | Locator, radioName: string): Locator {
   const page = 'goto' in scope ? scope : scope.page();
-  return scope.locator('label').filter({ has: page.getByRole('radio', { name, exact: true }) });
+  return scope
+    .locator('label')
+    .filter({ has: page.getByRole('radio', { name: radioName, exact: true }) });
 }
 
 /**
