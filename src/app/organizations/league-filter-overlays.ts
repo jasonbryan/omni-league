@@ -80,9 +80,17 @@ function wrapTabInside(event: KeyboardEvent): void {
   const first = stops.item(0);
   const last = stops.item(stops.length - 1);
   const active = panel.ownerDocument.activeElement;
-  if (!first || !last || active !== (event.shiftKey ? first : last)) return;
+  if (!first || !last || (active !== panel && active !== (event.shiftKey ? first : last))) return;
   event.preventDefault();
   (event.shiftKey ? last : first).focus();
+}
+
+function outsideTabOrder(element: Element | null | undefined): boolean {
+  return (
+    !(element instanceof HTMLElement) ||
+    element === element.ownerDocument.body ||
+    element.tabIndex < 0
+  );
 }
 
 function plainClick(event: MouseEvent): boolean {
@@ -217,6 +225,7 @@ export class FilterFieldset {
           *hlmPopoverPortal
           class="w-80"
           role="dialog"
+          tabindex="-1"
           [id]="popoverId(group.name)"
           [attr.aria-label]="group.legend"
           (keydown)="wrapTab($event)"
@@ -401,7 +410,7 @@ export class LeagueFilterOverlays {
   protected popoverClosed(name: FilterParam): void {
     const trigger = this.triggers.get(name);
     const active = trigger?.ownerDocument.activeElement;
-    if (trigger?.isConnected && (!active || active === trigger.ownerDocument.body)) {
+    if (trigger?.isConnected && outsideTabOrder(active)) {
       trigger.focus({ preventScroll: true });
     }
     this.navigatePending();
