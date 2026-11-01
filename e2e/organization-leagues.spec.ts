@@ -550,7 +550,10 @@ test.describe('Leagues: the create form on a phone', () => {
 test.describe('Leagues: the created status on a phone', () => {
   test.beforeEach(({ page }, testInfo) => {
     void page;
-    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+    test.skip(
+      testInfo.project.name === 'chromium-desktop',
+      'the phone layout needs a touch screen',
+    );
   });
 
   const SUNDAY = {
@@ -569,8 +572,8 @@ test.describe('Leagues: the created status on a phone', () => {
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill(league.name);
     await page.locator('#slug').fill('sunday-reverse-coed-4s');
-    await page.getByRole('radio', { name: league.sport }).check({ force: true });
-    await page.getByRole('radio', { name: DEFAULT_FORMAT[league.sport] }).check({ force: true });
+    await chooseChip(chip(page, league.sport));
+    await chooseChip(chip(page, DEFAULT_FORMAT[league.sport]));
     for (const location of league.locations) {
       await page.getByRole('checkbox', { name: location }).click();
     }
