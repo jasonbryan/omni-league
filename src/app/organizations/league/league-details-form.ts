@@ -44,6 +44,7 @@ import {
   type DivisionField,
   type OwnCustomLevel,
 } from '../admin/league-division-fields';
+import { FOOTER_STATUS } from '../admin/footer-status';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import type { OrganizerLeague } from './league-context';
@@ -206,39 +207,35 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
           />
         </fieldset>
       </div>
-      <div role="status" data-slot="save-status">
-        @if (shownStatus(); as status) {
-          <div
-            #statusBox
-            tabindex="-1"
-            class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground"
-          >
-            <ng-icon name="lucideCheck" class="shrink-0 text-base" aria-hidden="true" />
-            @if (status.kind === 'saved') {
-              <span class="font-medium">League details saved.</span>
-              @if (undoOffered()) {
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
-                  [class.opacity-50]="!online() && !undoing()"
-                  [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
-                  (click)="undo(status.earlier)"
-                >
-                  <ng-icon name="lucideUndo2" class="text-base" aria-hidden="true" />{{
-                    undoing() ? 'Undoing…' : 'Undo'
-                  }}
-                </button>
-              }
-              @if (undoNote(); as note) {
-                <span class="basis-full">{{ note }}</span>
-              }
-            } @else {
-              <span class="font-medium">Earlier details restored.</span>
-            }
-          </div>
-        }
-      </div>
       <div appStickyFooter>
+        <div role="status" data-slot="save-status">
+          @if (shownStatus(); as status) {
+            <div #statusBox tabindex="-1" [class]="statusClass">
+              <ng-icon name="lucideCheck" class="shrink-0 text-base" aria-hidden="true" />
+              @if (status.kind === 'saved') {
+                <span class="font-medium">League details saved.</span>
+                @if (undoOffered()) {
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
+                    [class.opacity-50]="!online() && !undoing()"
+                    [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
+                    (click)="undo(status.earlier)"
+                  >
+                    <ng-icon name="lucideUndo2" class="text-base" aria-hidden="true" />{{
+                      undoing() ? 'Undoing…' : 'Undo'
+                    }}
+                  </button>
+                }
+                @if (undoNote(); as note) {
+                  <span class="basis-full">{{ note }}</span>
+                }
+              } @else {
+                <span class="font-medium">Earlier details restored.</span>
+              }
+            </div>
+          }
+        </div>
         <button
           #submitButton
           type="submit"
@@ -291,6 +288,7 @@ export class LeagueDetailsForm implements OnInit {
   protected readonly errorClass = FIELD_ERROR;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly clearanceClass = STICKY_FOOTER_CLEARANCE;
+  protected readonly statusClass = `${FOOTER_STATUS} flex flex-wrap items-center gap-x-3 gap-y-1`;
 
   protected readonly status = signal<Status | null>(null);
   protected readonly undoing = signal(false);
