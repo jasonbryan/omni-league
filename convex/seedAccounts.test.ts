@@ -8,6 +8,7 @@ import { authUserIdByEmail } from './lib/authUsers';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
 import seedSource from './seed.ts?raw';
+import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import { modules } from './test.setup';
 
 const SITE_URL = 'http://localhost:4000';
@@ -153,6 +154,32 @@ async function membershipsOf(t: T, email: string) {
 }
 
 const ALL = (code: string) => ({ admin: code, organizer: code, player: code });
+
+// An action's storage write can land in another function's transaction in convex-test: https://github.com/convex/convex-test/pull/151
+async function seedDataWithLogo(t: T) {
+  await t.mutation(internal.seed.insertDemoData, {});
+  return t.run(async (ctx) => {
+    const id = await ctx.storage.store(new Blob([demoLogoBytes().slice()], { type: 'image/png' }));
+    const organization = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', DEMO_LOGO_ORGANIZATION_SLUG))
+      .unique();
+    await ctx.db.patch('organizations', organization!._id, { logoStorageId: id });
+    return id;
+  });
+}
+
+async function logoFiles(t: T) {
+  return t.run(async (ctx) => {
+    const organization = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', DEMO_LOGO_ORGANIZATION_SLUG))
+      .unique();
+    const files = await ctx.db.system.query('_storage').collect();
+    return { files: files.map((file) => file._id), logo: organization?.logoStorageId };
+  });
+}
+
 const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 6 };
 const NO_BACKFILL = { organizations: 0, locations: 0, leagues: 0, seasons: 0, leagueDivisions: 0 };
 
@@ -619,12 +646,16 @@ describe('seed:demo accounts: two runs at once', () => {
     'neither throws, and the final rows are one per address and one membership and invite each',
     async () => {
       const t = setup();
+      const logo = await seedDataWithLogo(t);
+      expect(await authRows(t, 'user')).toEqual([]);
       const results = await Promise.all([run(t), run(t)]);
       for (const result of results) {
+        expect(result.logos).toBe(0);
         for (const code of Object.values(result.accounts)) {
           expect(['created', 'exists', 'conflict']).toContain(code);
         }
       }
+      expect(await logoFiles(t)).toEqual({ files: [logo], logo });
       const users = await authRows(t, 'user');
       const accounts = await authRows(t, 'account');
       for (const email of Object.values(EMAILS)) {
@@ -804,12 +835,16 @@ describe('seed:demo accounts: three runs at once', () => {
     'none throws, and the rows end one per address, membership, and invite',
     async () => {
       const t = setup();
+      const logo = await seedDataWithLogo(t);
+      expect(await authRows(t, 'user')).toEqual([]);
       const results = await Promise.all([run(t), run(t), run(t)]);
       for (const result of results) {
+        expect(result.logos).toBe(0);
         for (const code of Object.values(result.accounts)) {
           expect(['created', 'exists', 'conflict']).toContain(code);
         }
       }
+      expect(await logoFiles(t)).toEqual({ files: [logo], logo });
       const users = await authRows(t, 'user');
       const accounts = await authRows(t, 'account');
       for (const email of Object.values(EMAILS)) {
