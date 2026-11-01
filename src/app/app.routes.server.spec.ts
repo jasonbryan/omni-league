@@ -7,6 +7,7 @@ import { AcceptInvitePage } from './invites/accept-invite-page';
 import { captureInviteToken } from './invites/capture-invite-token';
 import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
+import { PAGE_UNAVAILABLE_PATH } from './core/page-load-failure';
 import { serverRoutes } from './app.routes.server';
 import { AppNotFoundPage } from './not-found/app-not-found-page';
 import { RegisterTeamPage } from './teams/register-team-page';
@@ -24,6 +25,7 @@ import { OrganizationPage } from './organizations/organization-page';
 import { PublicLeaguePage } from './organizations/public-league/public-league-page';
 import { PublicSeasonPage } from './organizations/public-season/public-season-page';
 import { Placeholder } from './placeholder/placeholder';
+import { PageUnavailablePage } from './server-error/page-unavailable-page';
 import { SignInPage } from './sign-in/sign-in-page';
 import { SignUpPage } from './sign-up/sign-up-page';
 
@@ -128,7 +130,7 @@ describe('Route tables', () => {
     ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, sign-up, sign-in, invites/accept, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, sign-up, sign-in, invites/accept, app, the page-unavailable page, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'leagues',
@@ -140,6 +142,7 @@ describe('Route tables', () => {
       'sign-in',
       'invites/accept',
       'app',
+      'page-unavailable',
       '**',
     ]);
     const [home] = routes;
@@ -215,6 +218,13 @@ describe('Route tables', () => {
     const invite = serverRoutes.find((r) => r.path === 'invites/accept');
     const headers = new Headers(invite?.renderMode === RenderMode.Client ? invite.headers : {});
     expect(headers.get('Referrer-Policy')).toBe('no-referrer');
+  });
+
+  it('the page-unavailable page lazy-loads in the public layout, only for a navigation the router starts', async () => {
+    const unavailable = routes.find((r) => r.path === PAGE_UNAVAILABLE_PATH);
+    expect(unavailable?.component).toBeUndefined();
+    expect(unavailable?.canMatch).toHaveLength(1);
+    expect(await unavailable?.loadComponent?.()).toBe(PageUnavailablePage);
   });
 
   it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded admin area, the unguarded register route, the guarded team page, and its own not-found route', async () => {

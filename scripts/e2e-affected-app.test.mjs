@@ -642,6 +642,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/data/convex/server-query-loader.ts': MAIN_SERVER,
     'src/app/core/data/convex/transfer.ts': MAIN_SERVER,
     'src/app/core/focus-main.ts': MAIN_SERVER,
+    'src/app/core/page-load-failure.ts': MAIN_SERVER,
     'src/app/core/service-worker/app-updates.ts': MAIN_SERVER,
     'src/app/core/service-worker/page-safety.ts': MAIN_SERVER,
     'src/app/core/service-worker/reload-guard.ts': MAIN_SERVER,

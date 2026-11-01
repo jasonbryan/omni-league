@@ -1,4 +1,4 @@
-import type { ConsoleMessage, Page } from '@playwright/test';
+import type { ConsoleMessage, Page, Request } from '@playwright/test';
 
 export type ExpectedDocumentStatus = 404;
 
@@ -26,6 +26,13 @@ export interface VerifyOptions {
 const DOCUMENT_404_PREFIX = 'Failed to load resource: the server responded with a status of 404';
 const FAILED_RESOURCE = /^Failed to load resource: the server responded with a status of (\d{3})\b/;
 const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
+/**
+ * WebKit logs an auth fetch it cancels for a leaving document as an access-control failure, which
+ * Playwright reports as a page error; the app catches the failed fetch. The same text with no
+ * navigation in flight is a real refusal (a trusted-origins mistake), so it still fails.
+ */
+const CANCELLED_AUTH_FETCH =
+  /^Fetch API cannot load https?:\/\/[^/\s]+\/api\/auth\/(?:convex\/token|get-session) due to access control checks\.$/;
 
 function withoutFragment(url: string): string {
   const hash = url.indexOf('#');
@@ -64,7 +71,11 @@ export class ConsoleGuard {
   }
 
   attach(page: Page): void {
+    const leaving = this.trackLeaving(page);
     page.on('pageerror', (error) => {
+      // Playwright's WebKit backend keeps the logged text only as the stack's first line.
+      const text = error.stack?.split('\n', 1)[0] ?? '';
+      if (leaving() && CANCELLED_AUTH_FETCH.test(text)) return;
       this.failures.push(`pageerror: ${error.stack ?? error.message}`);
     });
     page.on('console', (message) => this.onConsole(page, message));
@@ -77,6 +88,27 @@ export class ConsoleGuard {
         });
       }
     });
+  }
+
+  /**
+   * True from a main-frame navigation request until the main frame commits that navigation's URL.
+   * A same-document `history.replaceState` on the old document also fires `framenavigated`, so the
+   * URL must match.
+   */
+  private trackLeaving(page: Page): () => boolean {
+    let pending: string | null = null;
+    const isMainNavigation = (request: Request) =>
+      request.isNavigationRequest() && request.frame() === page.mainFrame();
+    page.on('request', (request) => {
+      if (isMainNavigation(request)) pending = withoutFragment(request.url());
+    });
+    page.on('requestfailed', (request) => {
+      if (isMainNavigation(request) && withoutFragment(request.url()) === pending) pending = null;
+    });
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame() && withoutFragment(frame.url()) === pending) pending = null;
+    });
+    return () => pending !== null;
   }
 
   get logMessages(): readonly string[] {
