@@ -6,6 +6,7 @@
 - **Date:** 2026-10-08 (accepted by the owner, who chose Better Auth after asking for Convex Auth to be re-analysed. Proposed 2026-10-07, revised the same day for the owner's email + password answer, and again to re-run Option A, Convex Auth, at the owner's request)
 - **Amended:** 2026-10-09, by #62 (PR #102): `returnTo` is validated on the parsed path, and a skipped test is exempt from the unused-allowance check. See "Amendment: return-to parsed path (2026-10-09)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-10, by #63: the per-address throttle counts an attempt when it starts, not when it ends, and the hard limit has its own answer. See "Amendment: sign-in throttle (2026-10-10)" at the end.
+- **Amended:** 2026-11-01, by #163: on Convex cloud, `cf-connecting-ip` is the caller's address and a client cannot set it. See "Amendment: client-IP probe (2026-11-01)" at the end.
 
 ## Context
 
@@ -667,3 +668,13 @@ The #62 tester found that ADR 0008's `returnTo` rule, which checks the raw input
 **Reset.** `testing:reset` clears `signInFailures` with the other tables of `convex/schema.ts`. `testing:seedSignInFailures` (internal, `IS_TEST` only) sets one row, so an e2e test reaches the hard limit without 100 attempts.
 
 **Not yet done.** The per-IP limiter ships off (`rateLimit.enabled: false`), as #62 shipped it, until the `cf-connecting-ip` probe of #163 shows that the header is the caller's address. Rows for addresses with fewer than 5 failures are never deleted except by a successful sign-in; a cleanup job is a later issue.
+
+## Amendment: client-IP probe (2026-11-01)
+
+#163 ran the `cf-connecting-ip` check of "Rate limits and lockout" on PR #478's preview (`*.convex.site`, Convex cloud). Browser auth requests go straight to `*.convex.site` (ADR 0010), so Netlify is not on the path.
+
+- **Method.** A temporary wrapper around the auth handler, on previews only, answered `/sign-in/email` and `/sign-up/email` with an `x-ip-probe` header: the raw `cf-connecting-ip` value and the address `getIp` (`better-auth/api`) resolves from it. The answer replaced a log line, because reading a preview's Convex logs needs a dashboard login or deploy key that no agent holds. The probe is removed in the same PR.
+- **The header is the caller's address.** Without a forged header, sign-in (401) and sign-up (400, no account made) both carried `cf-connecting-ip` equal to the address Cloudflare's own trace endpoint saw for the same client, and Better Auth resolved the same address.
+- **A client cannot set it.** Every request that sent its own `cf-connecting-ip` (IPv4 or IPv6 value, any letter case, HTTP/1.1 and HTTP/2) got Cloudflare's `403` `error code: 1000` and never reached the HTTP action.
+- **Not shown.** Two different real client addresses (the test machine's IPv4 and IPv6 paths reached Cloudflare as one address). `convex-test` covers separate buckets per address.
+- **Still off.** The probe removes the reason in "Not yet done" above. The limiter stays `enabled: false` until sign-in and sign-up handle its answer: Better Auth's `429` carries no `code` (`{"message":"Too many requests. Please try again later."}` and `X-Retry-After`), which both pages show today as an unexpected error.

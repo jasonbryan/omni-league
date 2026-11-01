@@ -327,8 +327,7 @@ describe('only internal functions read or write signInFailures', () => {
 });
 
 describe('per-IP limiter', () => {
-  test('the limiter ships off until the header is known to be the caller’s address', () => {
-    // Off: a shared bucket would block every user after three sign-ins in ten seconds.
+  test('the limiter ships off, keyed on cf-connecting-ip once it is on', () => {
     const options = createAuth({} as GenericCtx<DataModel>).options;
     expect(options.rateLimit).toEqual({ enabled: false, storage: 'database' });
     expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(['cf-connecting-ip']);

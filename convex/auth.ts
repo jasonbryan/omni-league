@@ -174,8 +174,7 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
     },
     account: { accountLinking: { enabled: true, trustedProviders: [] } },
     user: { deleteUser: { enabled: true } },
-    // A shared bucket would block everyone after three sign-ups in 10 s until the header is known to
-    // carry the caller's address.
+    // Off: its 429 carries no code, so sign-in and sign-up would show it as an unexpected error.
     rateLimit: { enabled: false, storage: 'database' },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
