@@ -119,6 +119,18 @@ export const routes: Routes = [
         ],
       },
       {
+        // No guard: an unknown season shows the not-found view before any sign-in, and the page sends a signed-out visitor to sign in.
+        path: 'register/:orgSlug/:leagueSlug/:seasonSlug/team',
+        title: 'Register a team | Omni League',
+        loadComponent: () => import('./teams/register-team-page').then((m) => m.RegisterTeamPage),
+      },
+      {
+        path: 'teams/:teamId',
+        title: 'Team | Omni League',
+        canActivate: [requireSignedIn],
+        loadComponent: () => import('./teams/team-page').then((m) => m.TeamPage),
+      },
+      {
         path: '**',
         loadComponent: () =>
           import('./not-found/app-not-found-page').then((m) => m.AppNotFoundPage),

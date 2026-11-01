@@ -57,6 +57,8 @@ const SPORT_VIEW = ['sport-view', 'cache-key'];
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
+// The season page's registration card links to the register route, and the register route opens the team page.
+const TEAM_REGISTRATION = ['team-registration'];
 // cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
 const FIND_PAGE = ['find-a-league', 'find-organizations', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
@@ -101,6 +103,8 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/leagues': ['organization-leagues'],
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
+  'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
+  'app/teams/:teamId': [...TEAM_REGISTRATION, 'after-sign-in'],
   'app/**': ['not-found'],
   '**': ['not-found'],
 };
@@ -579,7 +583,18 @@ export const AREAS = [
   {
     name: 'public season page',
     test: inDir('src/app/organizations/public-season/'),
-    specs: SEASON_PAGE,
+    specs: [...SEASON_PAGE, ...TEAM_REGISTRATION],
+  },
+  {
+    // The season page imports the register route's path from here.
+    name: 'team pages',
+    test: inDir('src/app/teams/'),
+    specs: [...TEAM_REGISTRATION, 'season-page'],
+  },
+  {
+    name: 'helm input and field',
+    test: inDir('src/app/ui/input/', 'src/app/ui/field/'),
+    specs: TEAM_REGISTRATION,
   },
   {
     name: 'find a league page',
@@ -783,7 +798,7 @@ export const AREAS = [
   {
     name: 'convex seasons',
     test: named('convex/', ['seasons']),
-    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...LEAGUE_MANAGEMENT],
+    specs: [...LEAGUE_PAGE, ...SEASON_PAGE, ...LEAGUE_MANAGEMENT, ...TEAM_REGISTRATION],
   },
   { name: 'convex invites', test: named('convex/', ['invites']), specs: [...ADMIN, ...STAFF] },
   {
@@ -792,6 +807,13 @@ export const AREAS = [
     specs: ADMIN,
   },
   { name: 'convex users', test: named('convex/', ['users']), specs: [SESSION] },
+  {
+    name: 'convex teams and roster writes',
+    test: (file) =>
+      named('convex/', ['teams'])(file) ||
+      named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput'])(file),
+    specs: [...TEAM_REGISTRATION, 'season-page'],
+  },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];
 

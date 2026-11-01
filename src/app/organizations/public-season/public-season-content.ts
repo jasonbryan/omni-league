@@ -7,11 +7,13 @@ import {
   lucideChevronRight,
   lucideClock,
   lucideMapPin,
+  lucideShirt,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
-import { BUTTON_BASE } from '../../ui/button/button-classes';
+import { BUTTON_BASE, PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
+import { registerTeamPath } from '../../teams/team-paths';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
@@ -39,6 +41,7 @@ const FACT_ICON =
       lucideChevronRight,
       lucideClock,
       lucideMapPin,
+      lucideShirt,
       lucideUsers,
     }),
   ],
@@ -100,6 +103,15 @@ const FACT_ICON =
                 <p class="text-lg font-semibold tracking-tight">
                   Registration open &middot; closes {{ card.closes }}
                 </p>
+                <div class="mt-5 flex flex-col gap-2">
+                  <a [routerLink]="registerTeamHref()" data-slot="button" [class]="registerButton"
+                    ><ng-icon
+                      name="lucideShirt"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Register a team</a
+                  >
+                </div>
                 <p class="mt-4 text-sm text-muted-foreground">
                   Captains register a team, then invite their players. Without a team? Register as a
                   free agent, and an organizer places you on one.
@@ -221,6 +233,7 @@ export class PublicSeasonContent {
   protected readonly openBadge = OPEN_BADGE;
   protected readonly phaseLabel = (phase: SeasonPhase) => BADGE_TEXT[phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
+  protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
   protected readonly fact = FACT;
@@ -281,6 +294,14 @@ export class PublicSeasonContent {
   );
   protected readonly seasonHref = computed(() =>
     publicSeasonPath(
+      this.season().organization.slug,
+      this.season().league.slug,
+      this.season().slug,
+    ),
+  );
+
+  protected readonly registerTeamHref = computed(() =>
+    registerTeamPath(
       this.season().organization.slug,
       this.season().league.slug,
       this.season().slug,

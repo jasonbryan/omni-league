@@ -8,6 +8,8 @@ import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
 import { AppNotFoundPage } from './not-found/app-not-found-page';
+import { RegisterTeamPage } from './teams/register-team-page';
+import { TeamPage } from './teams/team-page';
 import { NotFoundPage } from './not-found/not-found-page';
 import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
@@ -214,12 +216,13 @@ describe('Route tables', () => {
     expect(headers.get('Referrer-Policy')).toBe('no-referrer');
   });
 
-  it('app has the guarded home page, the guarded account settings page, the guarded create-organization page, the guarded league management page, the guarded admin area, and its own not-found route', async () => {
+  it('app has the guarded home page, the guarded account settings page, the guarded create-organization page, the guarded league management page, the guarded admin area, the unguarded register route, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
     expect(app?.canActivate).toBeUndefined();
-    const [account, settings, create, league, admin, notFound, ...rest] = app?.children ?? [];
+    const [account, settings, create, league, admin, register, team, notFound, ...rest] =
+      app?.children ?? [];
     expect(rest).toEqual([]);
     expect(settings?.path).toBe('account');
     expect(settings?.title).toBe('Account settings | Omni League');
@@ -252,6 +255,13 @@ describe('Route tables', () => {
     expect(account?.title).toBe('Home | Omni League');
     expect(account?.canActivate).toEqual([requireSignedIn]);
     expect(await account?.loadComponent?.()).toBe(AccountPage);
+    // The page itself sends a signed-out visitor to sign in, after it has shown an unknown season as not found.
+    expect(register?.path).toBe('register/:orgSlug/:leagueSlug/:seasonSlug/team');
+    expect(register?.canActivate).toBeUndefined();
+    expect(await register?.loadComponent?.()).toBe(RegisterTeamPage);
+    expect(team?.path).toBe('teams/:teamId');
+    expect(team?.canActivate).toEqual([requireSignedIn]);
+    expect(await team?.loadComponent?.()).toBe(TeamPage);
     expect(notFound?.path).toBe('**');
     expect(notFound?.canActivate).toBeUndefined();
     expect(await notFound?.loadComponent?.()).toBe(AppNotFoundPage);

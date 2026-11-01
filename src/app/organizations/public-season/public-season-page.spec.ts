@@ -200,7 +200,7 @@ describe('PublicSeasonPage populated', () => {
     ]);
   });
 
-  it('shows an open card with the deadline and the line about teams and free agents', () => {
+  it('shows an open card with the deadline, Register a team, and the line about teams and free agents', () => {
     const open = card(harness);
     expect(text(open?.querySelector('h2'))).toBe('Registration');
     expect(spaced(open)).toContain('Registration open');
@@ -208,7 +208,13 @@ describe('PublicSeasonPage populated', () => {
     expect(spaced(open)).toContain(
       'Captains register a team, then invite their players. Without a team? Register as a free agent, and an organizer places you on one.',
     );
-    expect(open?.querySelector('a')).toBeNull();
+    const links = [...(open?.querySelectorAll('a') ?? [])];
+    expect(links.map((link) => [text(link), link.getAttribute('href')])).toEqual([
+      [
+        'Register a team',
+        '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/team',
+      ],
+    ]);
   });
 
   it('explains how registration works in three numbered steps', () => {
@@ -417,6 +423,7 @@ describe('PublicSeasonPage registration card', () => {
     expect(spaced(card(harness))).toContain('Registration closed');
     expect(card(harness)?.querySelector('a')).toBeNull();
     expect(spaced(card(harness))).not.toContain('Registration is open for');
+    expect(spaced(card(harness))).not.toContain('Register a team');
   });
 
   it('shows the open card, then the closed card once the deadline passes, with no new result', async () => {

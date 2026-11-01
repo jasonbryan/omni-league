@@ -325,7 +325,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public season page, its content, and its paths to the season page, layout shift, and cache-key specs', () => {
+  it('maps the public season page, its content, and its paths to the season page, layout shift, cache-key, and team registration specs', () => {
     for (const file of [
       'src/app/organizations/public-season/public-season-page.ts',
       'src/app/organizations/public-season/public-season-content.ts',
@@ -337,6 +337,7 @@ describe('selectSpecs: mapped areas', () => {
           'e2e/cache-key.spec.ts',
           'e2e/public-page-layout-shift.spec.ts',
           'e2e/season-page.spec.ts',
+          'e2e/team-registration.spec.ts',
         ),
         file,
       );
@@ -389,6 +390,25 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['src/app/core/focus-main.ts', 'src/app/core/page-meta.ts']), [
       'FULL',
     ]);
+  });
+
+  it('maps the team pages, the helm input and field, and the Convex team code to the team registration and season page specs', () => {
+    for (const file of [
+      'src/app/teams/register-team-page.ts',
+      'src/app/teams/team-page.ts',
+      'src/app/teams/team-paths.ts',
+      'convex/teams.ts',
+      'convex/lib/rosterWrites.ts',
+      'convex/lib/teamInput.ts',
+    ]) {
+      const specs = specsFor([file]);
+      assert.ok(!specs.includes('FULL'), file);
+      assert.ok(specs.includes('e2e/team-registration.spec.ts'), file);
+    }
+    assert.ok(specsFor(['src/app/teams/team-paths.ts']).includes('e2e/season-page.spec.ts'));
+    for (const file of ['src/app/ui/input/hlm-input.ts', 'src/app/ui/field/hlm-field.ts']) {
+      assert.ok(specsFor([file]).includes('e2e/team-registration.spec.ts'), file);
+    }
   });
 
   it('maps convex/seasons.ts to the league page and league management specs', () => {
