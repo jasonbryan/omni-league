@@ -18,8 +18,9 @@ export function waitAfterFailures(failures: number): number {
 }
 
 /**
- * A row below the threshold waits for nothing, so its `blockedUntil` is its last attempt. A row at the
- * threshold or past it never expires, so the hard limit still counts every failure since the last sign-in.
+ * A row below the threshold waits for nothing, so its `blockedUntil` is its last attempt. A row that reaches
+ * the threshold before it expires keeps counting toward the hard limit until a sign-in; a count below the
+ * threshold is forgotten after a day.
  */
 export function idleRowExpiresAt(row: { failures: number; blockedUntil: number }): number | null {
   if (row.failures >= FREE_FAILURES) return null;
