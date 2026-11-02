@@ -15,6 +15,7 @@ import { FormField, form, required, validate } from '@angular/forms/signals';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle } from '@ng-icons/lucide';
+import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { tooManyAttemptsMessage } from '../../../convex/lib/signInThrottle';
 import { AuthService, type SignInResult } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
@@ -36,6 +37,8 @@ export const MESSAGES = {
   lockedTitle: 'Password sign-in is locked for this email address.',
   lockedDescription:
     'There have been too many incorrect attempts. Contact the Omni League team to unlock it.',
+  rateLimitedTitle: ipLimitTitle,
+  rateLimitedDescription: 'Several sign-ins came from this network in a short time.',
   unexpectedTitle: 'Sign-in could not be completed.',
   unexpectedDescription: 'Check your connection and try again.',
 } as const;
@@ -370,6 +373,12 @@ export class SignInPage {
         this.formAlert.set({
           title: MESSAGES.lockedTitle,
           description: MESSAGES.lockedDescription,
+        });
+        break;
+      case 'rate-limited':
+        this.formAlert.set({
+          title: MESSAGES.rateLimitedTitle,
+          description: MESSAGES.rateLimitedDescription,
         });
         break;
       case 'unexpected':

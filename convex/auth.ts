@@ -1,6 +1,7 @@
 import { type AuthFunctions, createClient, type GenericCtx } from '@convex-dev/better-auth';
 import type { GenericActionCtx } from 'convex/server';
 import { convex, crossDomain } from '@convex-dev/better-auth/plugins';
+import type { BetterAuthOptions } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { betterAuth } from 'better-auth/minimal';
 import { haveIBeenPwned } from 'better-auth/plugins/haveibeenpwned';
@@ -9,6 +10,7 @@ import type { DataModel } from './_generated/dataModel';
 import { env } from './_generated/server';
 import authConfig from './auth.config';
 import { trustedOrigins } from './lib/authOrigins';
+import { IP_LIMIT_MAX, IP_LIMIT_WINDOW_SECONDS } from './lib/ipRateLimit';
 import { hashPassword, verifyPassword } from './lib/password';
 import { throttleKey, tooManyAttemptsMessage } from './lib/signInThrottle';
 import { checkUserName } from './lib/userName';
@@ -75,13 +77,39 @@ function emailOf(body: unknown): string | null {
   return typeof email === 'string' ? email : null;
 }
 
-// Sign-in is served by an HTTP action, whose context can run a mutation. A query context cannot, and
-// the throttle must not be skipped.
+// Sign-in and sign-up are served by an HTTP action, whose context can run a mutation. A query
+// context cannot, and neither the throttle nor the per-IP limit may be skipped.
 function mutationRunner(ctx: GenericCtx<DataModel>): GenericActionCtx<DataModel> {
   if (!('runMutation' in ctx)) {
-    throw new Error('The sign-in throttle needs a context with runMutation');
+    throw new Error('Sign-in and sign-up need a context with runMutation');
   }
   return ctx as GenericActionCtx<DataModel>;
+}
+
+type RateLimitStorage = NonNullable<NonNullable<BetterAuthOptions['rateLimit']>['customStorage']>;
+
+const IP_LIMIT_RULE = { window: IP_LIMIT_WINDOW_SECONDS, max: IP_LIMIT_MAX };
+
+function ipLimitStorage(ctx: GenericCtx<DataModel>): RateLimitStorage {
+  // Better Auth calls only `consume` when a store has it; its `get`/`set` path is not atomic.
+  const notAtomic = () =>
+    Promise.reject(new Error('The per-IP limit is counted only through consume'));
+  return {
+    get: notAtomic,
+    set: notAtomic,
+    consume: async (key, rule) => {
+      try {
+        return await mutationRunner(ctx).runMutation(internal.ipRateLimits.consume, {
+          key,
+          ...rule,
+        });
+      } catch (error) {
+        // Fails closed, and as a 429 Response, which keeps the CORS headers a thrown error loses.
+        console.error('The per-IP limit could not be counted, so the request is refused', error);
+        return { allowed: false, retryAfter: rule.window };
+      }
+    },
+  };
 }
 
 async function beginSignIn(ctx: GenericCtx<DataModel>, body: unknown): Promise<void> {
@@ -173,8 +201,14 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
     },
     account: { accountLinking: { enabled: true, trustedProviders: [] } },
     user: { deleteUser: { enabled: true } },
-    // Off: its 429 carries no code, so sign-in and sign-up would show it as an unexpected error.
-    rateLimit: { enabled: false, storage: 'database' },
+    rateLimit: {
+      // Off under IS_TEST, because local e2e has no client address.
+      enabled: !isTest,
+      customStorage: ipLimitStorage(ctx),
+      // The first matching key wins, so every other auth path is exempt: a shared address must
+      // never make a signed-in user look signed out.
+      customRules: { '/sign-in/*': IP_LIMIT_RULE, '/sign-up/*': IP_LIMIT_RULE, '/**': false },
+    },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
       // Explicit, because Better Auth skips the origin check by default whenever NODE_ENV is

@@ -41,15 +41,28 @@ interface SignUpBody {
   adultConfirmed?: unknown;
 }
 
+let addresses = 0;
+
+// The per-IP limit is on here (IS_TEST unset), so each sign-up comes from its own address unless a
+// test says otherwise.
+function freshAddress(): string {
+  addresses += 1;
+  return `10.${(addresses >> 16) & 255}.${(addresses >> 8) & 255}.${addresses & 255}`;
+}
+
 async function signUp(
   t: T,
   body: SignUpBody,
-  { origin = SITE_URL }: { origin?: string | null } = {},
+  {
+    origin = SITE_URL,
+    address = freshAddress(),
+  }: { origin?: string | null; address?: string } = {},
 ): Promise<{ status: number; json: Record<string, unknown>; headers: Headers }> {
   const response = await t.fetch('/api/auth/sign-up/email', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'cf-connecting-ip': address,
       ...(origin === null ? {} : { origin }),
     },
     body: JSON.stringify(body),
