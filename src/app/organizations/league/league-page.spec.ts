@@ -13,6 +13,7 @@ import {
   LIST_FOR_ORGANIZER,
   SEASONS,
 } from './testing/league-harness';
+import { LeagueLanding } from './league-landing';
 
 const tokens = (value: string) => value.split(' ').sort();
 
@@ -628,15 +629,112 @@ describe('LeaguePage', () => {
         expect(document.activeElement).toBe(title(1));
       });
 
-      it('moves focus to the Seasons heading while the list is loading, and keeps it there when the rows arrive', async () => {
+      const pressWhileLoading = async () => {
         await createdIn(DRAFT);
         seasonsHeading().scrollIntoView = vi.fn();
         link().click();
         await o.flush();
         expect(document.activeElement).toBe(seasonsHeading());
-        o.subscription(LIST_FOR_ORGANIZER)!.emit(SEASONS);
+      };
+      const arrive = async (seasons: unknown[] = SEASONS) => {
+        o.subscription(LIST_FOR_ORGANIZER)!.emit(seasons);
         await o.flush();
+      };
+
+      it('moves focus to the Seasons heading while the list is loading, and to the new row when the rows arrive', async () => {
+        await pressWhileLoading();
+        await arrive();
+        expect(document.activeElement).toBe(title(1));
+        expect(scrolled).toHaveBeenCalledTimes(1);
+      });
+
+      const choices = {
+        'focusing a field': () => page.querySelector<HTMLInputElement>('#name')!.focus(),
+        'pressing a control': () => page.querySelector<HTMLButtonElement>('button')!.click(),
+        Tab: () =>
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })),
+      };
+      for (const [name, choose] of Object.entries(choices)) {
+        it(`${name} before the rows arrive leaves focus where the user put it`, async () => {
+          await pressWhileLoading();
+          choose();
+          const focused = document.activeElement;
+          scrolled.mockClear();
+          await arrive();
+          expect(document.activeElement).toBe(focused);
+          expect(scrolled).not.toHaveBeenCalled();
+        });
+      }
+
+      const scrolls = {
+        'the wheel': () => new WheelEvent('wheel', { bubbles: true }),
+        'a touch scroll': () => new Event('touchmove', { bubbles: true }),
+        'Page Down': () => new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }),
+      };
+      for (const [name, scroll] of Object.entries(scrolls)) {
+        it(`${name} before the rows arrive moves neither scroll nor focus`, async () => {
+          await pressWhileLoading();
+          document.body.dispatchEvent(scroll());
+          scrolled.mockClear();
+          await arrive();
+          expect(document.activeElement).toBe(seasonsHeading());
+          expect(scrolled).not.toHaveBeenCalled();
+        });
+      }
+
+      it('keeps focus on the Seasons heading when the rows arrive without the slug', async () => {
+        await pressWhileLoading();
+        await arrive([SEASONS[0]]);
         expect(document.activeElement).toBe(seasonsHeading());
+      });
+
+      it('does not move focus for a later update of the list once it has landed', async () => {
+        await pressWhileLoading();
+        await arrive();
+        page.querySelector<HTMLInputElement>('#name')!.focus();
+        await arrive([
+          ...SEASONS,
+          { ...SEASONS[0], seasonId: 'se_x', slug: 'x-2028', name: 'X 2028' },
+        ]);
+        expect(document.activeElement).toBe(page.querySelector('#name'));
+      });
+
+      it('does not move focus for a later update of the list after it was cancelled', async () => {
+        await pressWhileLoading();
+        page.querySelector<HTMLInputElement>('#name')!.focus();
+        await arrive();
+        await arrive([
+          ...SEASONS,
+          { ...SEASONS[0], seasonId: 'se_x', slug: 'x-2028', name: 'X 2028' },
+        ]);
+        expect(document.activeElement).toBe(page.querySelector('#name'));
+      });
+
+      it('lands on the pressed season, not an earlier target', async () => {
+        await createdIn(DRAFT);
+        o.harness.routeDebugElement!.injector.get(LeagueLanding).land({
+          kind: 'season',
+          slug: 'fall-2027',
+        });
+        seasonsHeading().scrollIntoView = vi.fn();
+        link().click();
+        await o.flush();
+        await arrive();
+        expect(document.activeElement).toBe(title(1));
+        expect(scrolled).toHaveBeenCalledTimes(1);
+      });
+
+      it('never lands the pressed slug on another league after an in-app navigation', async () => {
+        const OTHER = { ...COED, leagueId: 'lg_other', slug: 'other-league', name: 'Other' };
+        await pressWhileLoading();
+        await o.harness.navigateByUrl(`/app/organizations/${GULF.slug}/leagues/${OTHER.slug}`);
+        document.body.focus();
+        o.subscription(GET_ORGANIZER_CONTEXT)!.emit(OTHER);
+        await o.flush();
+        scrolled.mockClear();
+        await arrive();
+        expect(rows().some((row) => row.contains(document.activeElement))).toBe(false);
+        expect(scrolled).not.toHaveBeenCalled();
       });
 
       it('moves focus to the Seasons heading when the list failed', async () => {

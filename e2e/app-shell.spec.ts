@@ -285,6 +285,10 @@ test.describe('the app shell', () => {
       for (const [path, heading] of targets) {
         await page.goto(path);
         await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+        // The Tab walk snapshots the focusable elements once, so wait for the controls that render after the h1.
+        await expect(
+          page.locator('[role="status"]').filter({ hasText: /^\s*Loading/ }),
+        ).toHaveCount(0);
         await expectAccessible(page);
 
         const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
