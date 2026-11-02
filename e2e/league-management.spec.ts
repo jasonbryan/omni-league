@@ -1,6 +1,6 @@
 import { MAX_SEASON_NAME_LENGTH } from '../convex/lib/seasonInput';
 import type { Locator, Page } from '@playwright/test';
-import { checkReflow, REFLOW_WIDTH, expectAccessible } from './support/a11y';
+import { checkReflow, REFLOW_WIDTH, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -12,6 +12,7 @@ import {
   expectAtMostTwoLines,
   expectStatusOnTopOfButtonInStaticFooter,
   expectVisibleInFooter,
+  expectWhollyAboveFooter,
   footerHeight,
   settleAfterFocusScroll,
   PHONE,
@@ -105,6 +106,7 @@ async function memberOf(
 const main = (page: Page) => page.getByRole('main');
 const breadcrumb = (page: Page) => main(page).getByRole('navigation', { name: 'Breadcrumb' });
 const form = (page: Page) => page.locator('#create-season form');
+const isFocused = (element: Element) => element === document.activeElement;
 const submit = (page: Page) => form(page).getByRole('button', { name: /^Create draft season/ });
 const rows = (page: Page) => page.locator('#seasons-list > li');
 const fromLeague = (page: Page) => page.locator('section[aria-labelledby="from-league-heading"]');
@@ -577,7 +579,10 @@ test.describe('League management: the create-season form on a phone', () => {
 test.describe('League management: the created status on a phone', () => {
   test.beforeEach(({ page }, testInfo) => {
     void page;
-    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+    test.skip(
+      !['chromium-mobile', 'webkit-mobile'].includes(testInfo.project.name),
+      'phone layout with a coarse pointer',
+    );
   });
 
   const created = (page: Page, name = 'Fall 2026') =>
@@ -660,6 +665,36 @@ test.describe('League management: the created status on a phone', () => {
       'BUTTON',
     ]);
     expect(underTheFooter(seen)).toEqual([]);
+  });
+
+  test('Tabbing to Start date, End date and Registration deadline with the created status shown leaves every Tab stop in each wholly above the footer', async ({
+    page,
+  }) => {
+    // The project's own 360 x 800 viewport, and a walk from the top of the page as the axe helper walks.
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await fillFall2026(page);
+    await submit(page).click();
+    await expect(created(page)).toBeAttached();
+    await expect(page.locator('#name')).toHaveValue('');
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+
+    const dateFields = ['start-date', 'end-date', 'registration-deadline'];
+    const reached = new Set<string>();
+    const tab = tabKey(page);
+    for (let press = 0; press < 60 && !(await submit(page).evaluate(isFocused)); press++) {
+      await page.keyboard.press(tab);
+      const id = await page.evaluate(() => document.activeElement?.id ?? '');
+      if (!dateFields.includes(id)) continue;
+      reached.add(id);
+      await expectWhollyAboveFooter(page, page.locator(`#${id}`));
+    }
+
+    await expect(submit(page)).toBeFocused();
+    expect([...reached]).toEqual(dateFields);
   });
 
   test('with the created status shown, the page passes axe and does not scroll sideways at 320px', async ({

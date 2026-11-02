@@ -9,15 +9,16 @@ export const GAP_ABOVE_FOOTER_PX = 16;
  * stays. The fix scrolls the window, the scroller of every page form, so a footer in a scrolling sheet
  * or dialog would not be covered.
  */
-@Directive({
-  selector: 'form[appStickyFooterFocus]',
-  host: { '(focusin)': 'checkAfterFocusScroll()' },
-})
+@Directive({ selector: 'form[appStickyFooterFocus]' })
 export class StickyFooterFocus {
   private readonly form = inject<ElementRef<HTMLFormElement>>(ElementRef).nativeElement;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
+    // `focus` in the capture phase, not `focusin`: WebKit fires no `focusin` for a date input.
+    const onFocus = () => this.checkAfterFocusScroll();
+    this.form.addEventListener('focus', onFocus, true);
+    destroyRef.onDestroy(() => this.form.removeEventListener('focus', onFocus, true));
     afterNextRender(() => {
       // Every supported browser has ResizeObserver; jsdom (unit tests) does not.
       if (typeof ResizeObserver === 'undefined') return;
@@ -27,7 +28,7 @@ export class StickyFooterFocus {
     });
   }
 
-  protected checkAfterFocusScroll(): void {
+  private checkAfterFocusScroll(): void {
     requestAnimationFrame(() => this.keepFocusClear());
   }
 
