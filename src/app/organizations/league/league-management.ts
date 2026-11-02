@@ -492,6 +492,7 @@ export class LeagueManagement {
     event.preventDefault();
     this.landing.settle();
     this.focusSeasonRowOrHeading(slug);
+    if (this.rows() === undefined && !this.failed()) this.landing.land({ kind: 'season', slug });
   }
 
   private focusSeasonRowOrHeading(slug: string): void {
