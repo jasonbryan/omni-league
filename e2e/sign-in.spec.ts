@@ -365,6 +365,46 @@ test.describe('sign-in', () => {
     });
   });
 
+  test.describe('the per-IP limit', () => {
+    test.use({ expectedFailedRequests: [{ status: 429, path: SIGN_IN_PATH }] });
+
+    // The e2e backend runs under IS_TEST, where the limit is off, so its answer is replayed here.
+    test('a code-less 429 shows the network alert, keeps the form, and retries nothing', async ({
+      page,
+    }, testInfo) => {
+      let requests = 0;
+      await page.route(`**${SIGN_IN_PATH}`, (route) => {
+        requests += 1;
+        return route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: { 'X-Retry-After': '7' },
+          body: JSON.stringify({ message: 'Too many requests. Please try again later.' }),
+        });
+      });
+      await page.goto('/sign-in');
+      await expect(heading(page)).toBeVisible();
+      await fillForm(page, 'maya.okafor@example.com', 'sandbar sunset spike 2026');
+      await submit(page).click();
+      await expect(alert(page)).toHaveAttribute('role', 'alert');
+      await expect(alert(page)).toContainText('Too many attempts. Try again in 10 seconds.');
+      await expect(alert(page)).toContainText(
+        'Several sign-ins came from this network in a short time.',
+      );
+      await expect(alert(page)).toBeFocused();
+      await expect(field(page, 'email')).toHaveValue('maya.okafor@example.com');
+      await expect(field(page, 'password')).toHaveValue('sandbar sunset spike 2026');
+      for (const id of ['email', 'password']) {
+        await expect(field(page, id)).not.toHaveAttribute('aria-invalid');
+        await expect(fieldError(page, id)).toHaveCount(0);
+      }
+      await expect(submit(page)).toHaveText('Sign in');
+      await screenshot(page, testInfo, '481-sign-in-rate-limited');
+      await expectAccessible(page, { expectedOrder: signInOrder(page) });
+      expect(requests).toBe(1);
+    });
+  });
+
   test.describe('a server error', () => {
     test.use({ expectedFailedRequests: [{ status: 500, path: SIGN_IN_PATH }] });
 

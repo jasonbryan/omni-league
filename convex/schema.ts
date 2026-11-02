@@ -23,6 +23,15 @@ export default defineSchema({
     blockedUntil: v.number(),
   }).index('by_email', ['email']),
 
+  ipRateLimits: defineTable({
+    key: v.string(),
+    count: v.number(),
+    lastRequest: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_key', ['key'])
+    .index('by_expiresAt', ['expiresAt']),
+
   organizations: defineTable({
     name: v.string(),
     slug: v.string(),
