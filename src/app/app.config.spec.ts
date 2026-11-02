@@ -1,6 +1,6 @@
 import { Component, viewChild } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, UrlSerializer } from '@angular/router';
+import { NavigationError, Router, UrlSerializer } from '@angular/router';
 import { SwRegistrationOptions, SwUpdate } from '@angular/service-worker';
 import { App } from './app';
 import { appConfig } from './app.config';
@@ -102,5 +102,23 @@ describe('appConfig with no Convex URL', () => {
     );
     expect(warn.mock.calls.filter((args) => !isTestOnlyHydrationWarning(args))).toEqual([]);
     warn.mockRestore();
+  });
+
+  it('settles a navigation to a page that fails to load as false, with the page and address kept', async () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+    const router = TestBed.inject(Router);
+    router.resetConfig([
+      { path: '', children: [] },
+      { path: 'broken', loadComponent: () => Promise.reject(new TypeError('Load failed')) },
+    ]);
+    await router.navigateByUrl('/');
+    const failures: NavigationError[] = [];
+    router.events.subscribe((event) => {
+      if (event instanceof NavigationError) failures.push(event);
+    });
+
+    await expect(router.navigateByUrl('/broken')).resolves.toBe(false);
+    expect(failures).toHaveLength(1);
+    expect(router.url).toBe('/');
   });
 });

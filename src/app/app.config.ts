@@ -10,13 +10,14 @@ import {
   serviceWorkerRegistration,
 } from './core/service-worker/service-worker-build';
 import { provideFocusMainAfterNavigation } from './core/focus-main';
+import { withQuietNavigationFailure } from './core/navigation-failure';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 import { provideUpdatePrompt } from './shell/update-prompt';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    provideRouter(routes, ...withQuietNavigationFailure()),
     provideFocusMainAfterNavigation(),
     // A query string the router cannot decode (`?ref=%`) is dropped, as the server handler drops it, so hydration keeps the page instead of navigating to `/`.
     { provide: UrlSerializer, useClass: QueryTolerantUrlSerializer },

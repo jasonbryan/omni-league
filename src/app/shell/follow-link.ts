@@ -1,6 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, InjectionToken, inject } from '@angular/core';
-import { Router, UrlTree } from '@angular/router';
+import { NavigationError, Router, UrlTree } from '@angular/router';
 
 /** A token so unit tests can observe it. */
 export const LOAD_PAGE = new InjectionToken<(url: string) => void>('LOAD_PAGE', {
@@ -60,15 +60,19 @@ export class FollowLink {
     }
     const fragment = decodeFragment(url.hash.slice(1));
     // A URL the client router cannot reach loads as a full page, as the link itself would have.
-    // The `**` route matches every primary path, but the router still rejects a chunk that fails to load and an auxiliary outlet no route matches (`/(//evil.com)`).
-    this.router.navigateByUrl(this.target(url)).then(
-      () => {
-        if (fragment) this.document.getElementById(fragment)?.scrollIntoView();
-      },
-      () => {
-        this.loadPage(url.href);
-      },
-    );
+    // The `**` route matches every primary path, but a chunk that fails to load still fails the navigation. The router rejects it, or with the app's config settles it as `false`, as it does a cancelled one.
+    let failed = false;
+    const failures = this.router.events.subscribe((event) => {
+      if (event instanceof NavigationError) failed = true;
+    });
+    void this.router
+      .navigateByUrl(this.target(url))
+      .catch(() => (failed = true))
+      .then(() => {
+        failures.unsubscribe();
+        if (failed) this.loadPage(url.href);
+        else if (fragment) this.document.getElementById(fragment)?.scrollIntoView();
+      });
   }
 
   private isCurrentPath(url: URL): boolean {
