@@ -31,6 +31,15 @@ const routes: Routes = [
     canActivate: [() => inject(Router).parseUrl('/broken')],
     component: StartTestPage,
   },
+  {
+    path: 'throwing',
+    canActivate: [
+      () => {
+        throw new Error('guard failed');
+      },
+    ],
+    component: StartTestPage,
+  },
 ];
 
 let handleError: ReturnType<typeof vi.fn>;
@@ -104,6 +113,21 @@ describe('withQuietNavigationFailure', () => {
       expect(TestBed.inject(Location).path()).toBe('/start');
       expect(handleError).not.toHaveBeenCalled();
       expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it('logs a navigation that fails for another reason, such as a guard that throws, with no unhandled rejection', async () => {
+      configure();
+      const harness = await RouterTestingHarness.create('/start');
+
+      const navigated = await TestBed.inject(Router).navigateByUrl('/throwing');
+      await settle(harness);
+
+      expect(navigated).toBe(false);
+      expect(handleError).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ message: 'guard failed' }),
+      );
+      expect(TestBed.inject(Location).path()).toBe('/start');
+      expect(rejections).toEqual([]);
     });
 
     it('returns to the page shown when Back or Forward leads to a page that fails to load, and logs nothing', async () => {
