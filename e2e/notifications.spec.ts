@@ -20,6 +20,8 @@ test.describe('notifications on this device', () => {
     let permissionRequests = 0;
     await page.exposeFunction('countPermissionRequest', () => permissionRequests++);
     await page.addInitScript(() => {
+      // Playwright WebKit on Linux has no Notification global.
+      if (!('Notification' in window)) return;
       const request = Notification.requestPermission.bind(Notification);
       Notification.requestPermission = (...args) => {
         void (window as unknown as { countPermissionRequest: () => void }).countPermissionRequest();

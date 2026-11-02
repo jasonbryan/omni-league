@@ -98,13 +98,13 @@ describe('NotificationsPage', () => {
     };
   }
 
-  async function open() {
+  async function open({ realDevice = false } = {}) {
     TestBed.configureTestingModule({
       providers: [
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
         { provide: SwPush, useValue: swPush },
-        { provide: PUSH_DEVICE, useValue: device },
+        ...(realDevice ? [] : [{ provide: PUSH_DEVICE, useValue: device }]),
         provideRouter([{ path: 'app/notifications', component: NotificationsPage }]),
       ],
     });
@@ -211,6 +211,30 @@ describe('NotificationsPage', () => {
       expect(badge()).toBe('Not available');
       expect(text(panel())).toContain(NOT_AVAILABLE);
       expect(button()).toBeNull();
+    });
+
+    it('shows with the real device when the Notification global is absent, with no button', async () => {
+      const win = window as unknown as Record<string, unknown>;
+      const navigatorWithWorker = navigator as unknown as Record<string, unknown>;
+      const notification = Object.getOwnPropertyDescriptor(window, 'Notification');
+      delete win['Notification'];
+      expect('Notification' in window).toBe(false);
+      vi.stubGlobal('PushManager', class {});
+      Object.defineProperty(navigatorWithWorker, 'serviceWorker', {
+        value: new EventTarget(),
+        configurable: true,
+      });
+      try {
+        await open({ realDevice: true });
+        await emitConfig(VAPID_KEY);
+        expect(badge()).toBe('Not available');
+        expect(text(panel())).toContain(NOT_AVAILABLE);
+        expect(button()).toBeNull();
+      } finally {
+        delete navigatorWithWorker['serviceWorker'];
+        vi.unstubAllGlobals();
+        if (notification) Object.defineProperty(window, 'Notification', notification);
+      }
     });
 
     it('shows when the browser’s push service is outside the allow-list, removing that subscription', async () => {
