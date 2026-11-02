@@ -48,6 +48,7 @@ import { StickyFooterFocus } from './sticky-footer-focus';
 import { filledFromNameMessage } from './league-division';
 import { LeagueDivisionFields } from './league-division-fields';
 import { LEAGUE_FORM_ALERTS, LeagueForm, type LeagueField } from './league-form';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 export interface LeagueLocationChoice {
   locationId: Id<'locations'>;
@@ -57,6 +58,7 @@ export interface LeagueLocationChoice {
 @Component({
   selector: 'app-league-create-form',
   imports: [
+    MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
     Checkbox,
@@ -335,7 +337,7 @@ export interface LeagueLocationChoice {
           #submitButton
           type="submit"
           data-slot="button"
-          (mousedown)="keepFocusOnPress($event)"
+          appMousePressKeepsFocus
           [class]="buttonClass"
           [class.opacity-50]="!online() && !form.submitting()"
           [attr.aria-disabled]="form.submitting() || !online() ? 'true' : null"
@@ -415,11 +417,6 @@ export class LeagueCreateForm {
 
   protected describedBy(field: 'name' | 'slug', description: string): string {
     return this.form.errors[field]() ? `${description} ${field}-error` : description;
-  }
-
-  // The error that leaving a field shows can push this button down before the release, losing the click.
-  protected keepFocusOnPress(event: MouseEvent): void {
-    event.preventDefault();
   }
 
   protected edited(): void {

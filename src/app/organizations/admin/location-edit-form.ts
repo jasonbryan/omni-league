@@ -19,6 +19,7 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 export interface AdminLocation {
   locationId: Id<'locations'>;
@@ -28,7 +29,7 @@ export interface AdminLocation {
 
 @Component({
   selector: 'app-location-edit-form',
-  imports: [AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
+  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
   providers: [provideIcons({ lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -69,6 +70,7 @@ export interface AdminLocation {
       <div class="mt-5 flex flex-wrap gap-2">
         <button
           type="submit"
+          appMousePressKeepsFocus
           data-slot="button"
           [class]="primaryButton"
           [class.opacity-50]="!online() && !form.submitting()"
@@ -85,7 +87,13 @@ export interface AdminLocation {
             Save changes
           }
         </button>
-        <button type="button" data-slot="button" [class]="outlineButton" (click)="cancel()">
+        <button
+          type="button"
+          appMousePressKeepsFocus
+          data-slot="button"
+          [class]="outlineButton"
+          (click)="cancel()"
+        >
           Cancel
         </button>
       </div>

@@ -36,6 +36,7 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import type { AlertTexts } from './alert-text';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, INPUT, LABEL } from './field-classes';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 export interface AddedCustomLevel {
   customLevelId: Id<'customLevels'>;
@@ -76,7 +77,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
 /** Sits inside the create form's `<form>`, so its buttons are `type="button"`. */
 @Component({
   selector: 'app-custom-level-panel',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon],
+  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, NgIcon],
   providers: [provideIcons({ lucideCheck, lucideCircleAlert, lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -263,6 +264,7 @@ function refusalOf(failure: unknown): CustomLevelInputError | null {
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
+            appMousePressKeepsFocus
             data-slot="button"
             [class]="addClass"
             [class.opacity-50]="!online() && !submitting()"

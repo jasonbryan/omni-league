@@ -46,6 +46,7 @@ import {
 } from './field-classes';
 import { INVITE_FORM_ALERTS, InviteForm, type InviteField } from './invite-form';
 import { formatDay } from './format-day';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
@@ -66,7 +67,7 @@ const TEXTAREA =
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-staff-invite-panel',
-  imports: [AdminAlert, AdminOfflineAlert, Checkbox, FormField, NgIcon],
+  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, Checkbox, FormField, NgIcon],
   providers: [
     provideIcons({
       lucideCheck,
@@ -413,6 +414,7 @@ const TEXTAREA =
             <button
               #submitButton
               type="submit"
+              appMousePressKeepsFocus
               data-slot="button"
               [class]="primaryButton + ' mt-6 w-full'"
               [class.opacity-50]="!online() && !form.submitting()"

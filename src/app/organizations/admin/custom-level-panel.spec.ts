@@ -101,6 +101,12 @@ describe('The custom level panel in the create form', () => {
     await o.flush();
   }
 
+  it('carries the directive that keeps a mouse press from losing the click on Add level', async () => {
+    await withBeachVolleyball();
+    await press(toggle());
+    expect(buttonNamed('Add level').hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('opening it', () => {
     it('offers a link under Level and no panel until it is pressed', async () => {
       await withBeachVolleyball();

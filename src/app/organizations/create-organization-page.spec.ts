@@ -67,6 +67,11 @@ describe('CreateOrganizationPage', () => {
     await flush();
   }
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await open();
+    expect(submitButton().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('the form (mockup states 5 and 6, "Create-organization field attributes")', () => {
     beforeEach(() => open());
 

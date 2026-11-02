@@ -20,6 +20,7 @@ import { AuthService, type SignInResult } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 import { PublicLayout } from '../public-layout/public-layout';
+import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
 
 /** An email address as Better Auth's server checks it (zod 4 `z.email()`), so the page refuses exactly what the server would. */
 const EMAIL =
@@ -59,7 +60,7 @@ interface FormAlert {
 /** A wrong password and an address with no account get the same alert, with neither field marked invalid, so the page reveals nothing about which addresses exist. */
 @Component({
   selector: 'app-sign-in-page',
-  imports: [FormField, NgIcon, RouterLink, PublicLayout],
+  imports: [MousePressKeepsFocus, FormField, NgIcon, RouterLink, PublicLayout],
   providers: [provideIcons({ lucideCircleAlert, lucideEye, lucideEyeOff, lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -232,6 +233,7 @@ interface FormAlert {
             </div>
             <button
               type="submit"
+              appMousePressKeepsFocus
               data-slot="button"
               class="data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-lg border border-transparent bg-clip-padding text-sm font-medium active:not-aria-[haspopup]:translate-y-px data-[matches-spartan-invalid=true]:ring-3 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)] group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0 bg-primary text-primary-foreground [a]:hover:bg-primary/90 h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3 mt-6 w-full"
               [attr.aria-disabled]="submitting() ? 'true' : null"

@@ -61,6 +61,11 @@ describe('AdminLocations', () => {
     await flushNow();
   }
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await open([]);
+    expect(addSubmit().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('the page (states 7 and 8)', () => {
     it('asks locations.listForAdmin with the organization id, after the context says ready', async () => {
       await open();
@@ -534,6 +539,13 @@ describe('AdminLocations', () => {
       expect(tokens(cancel().className)).toEqual(tokens(OUTLINE_BUTTON));
       expect(document.activeElement).toBe(input('edit-name'));
       expect(text(rows()[0].querySelector('h3'))).toBe('Pelican Shoals Sand Courts');
+    });
+
+    it('Save changes and Cancel carry the directive that keeps a mouse press from losing the click', async () => {
+      await open(COASTAL_LOCATIONS);
+      await startEdit();
+      expect(editSave().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+      expect(cancel().hasAttribute('appMousePressKeepsFocus')).toBe(true);
     });
 
     it('Cancel restores the row, drops the changes, and returns focus to Edit', async () => {

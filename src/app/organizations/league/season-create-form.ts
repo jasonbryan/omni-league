@@ -33,6 +33,7 @@ import { StickyFooterFocus } from '../admin/sticky-footer-focus';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
 import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 const NOT_SET = 'Not set yet';
 
@@ -80,7 +81,15 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
 
 @Component({
   selector: 'app-season-create-form',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, NgIcon, StickyFooter, StickyFooterFocus],
+  imports: [
+    MousePressKeepsFocus,
+    AdminAlert,
+    AdminOfflineAlert,
+    FormField,
+    NgIcon,
+    StickyFooter,
+    StickyFooterFocus,
+  ],
   providers: [
     provideIcons({ lucideCheck, lucideCircleAlert, lucideGlobe, lucideLoaderCircle, lucidePlus }),
   ],
@@ -348,6 +357,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
         <button
           #submitButton
           type="submit"
+          appMousePressKeepsFocus
           data-slot="button"
           [class]="buttonClass"
           [class.opacity-50]="!online() && !form.submitting()"

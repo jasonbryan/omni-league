@@ -612,11 +612,11 @@ export const AREAS = [
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
-    // Every form shares this field-error rule: sign-up, sign-in, create organization, the
-    // admin forms (locations, leagues, staff invites), and the create-season form.
+    // Every form shares this field-error rule and the mouse-press directive: sign-up, sign-in, create
+    // organization, the admin forms (locations, leagues, staff invites), and the season and league forms.
     name: 'form helper',
-    test: named('src/app/core/forms/', ['shown-errors']),
-    specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT],
+    test: named('src/app/core/forms/', ['shown-errors', 'mouse-press-keeps-focus']),
+    specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT, 'mouse-press-keeps-focus'],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },

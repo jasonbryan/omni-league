@@ -56,6 +56,7 @@ import {
   type SavedDetails,
 } from './league-details-state';
 import { formatHint, publishedSeasonsEarliestFirst } from './league-format-hint';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 type Earlier = FunctionReturnType<typeof api.leagues.update>;
 
@@ -88,6 +89,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
 @Component({
   selector: 'app-league-details-form',
   imports: [
+    MousePressKeepsFocus,
     AdminAlert,
     AdminOfflineAlert,
     FieldNoteText,
@@ -217,6 +219,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
                 @if (undoOffered()) {
                   <button
                     type="button"
+                    appMousePressKeepsFocus
                     class="inline-flex items-center gap-1 rounded-md font-medium underline underline-offset-4 pointer-coarse:min-h-11"
                     [class.opacity-50]="!online() && !undoing()"
                     [attr.aria-disabled]="undoing() || !online() ? 'true' : null"
@@ -239,6 +242,7 @@ function savedFromEarlier({ league }: Earlier): SavedDetails {
         <button
           #submitButton
           type="submit"
+          appMousePressKeepsFocus
           data-slot="button"
           [class]="buttonClass"
           [class.opacity-50]="!online() && !details.submitting()"
