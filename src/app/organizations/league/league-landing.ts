@@ -56,10 +56,9 @@ export class LeagueLanding {
     this.listening.abort();
   }
 
-  private arm(fragment: string | null): void {
+  land(target: LandingTarget | null): void {
     this.listening.abort();
     this.listening = new AbortController();
-    const target = targetOfFragment(fragment);
     this.target.set(target);
     if (target === null) return;
     onLaterChoiceOrScroll(
@@ -67,5 +66,9 @@ export class LeagueLanding {
       { isOwnFocus: (element) => element.id === 'main', signal: this.listening.signal },
       () => this.settle(),
     );
+  }
+
+  private arm(fragment: string | null): void {
+    this.land(targetOfFragment(fragment));
   }
 }
