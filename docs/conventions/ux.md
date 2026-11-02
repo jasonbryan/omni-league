@@ -32,6 +32,7 @@ Every screen designs, builds, and tests each of these states that applies: **emp
 
 - The user always knows where they are: a breadcrumb on any page more than one level deep, and `aria-current` on the current sidebar or breadcrumb item.
 - Every state a user might share or return to has a URL (page numbers, sections, the jump to a form). Back returns to the previous state; a finished one-time form (sign-in, sign-up, create) is replaced in history, not left behind it.
+- On the league management page, `#season-<slug>`, `#create-season` and `#details` opened directly (a page load or a route change) land once their target renders: the page scrolls to it and focuses it (`LeagueLanding`). A later choice or a user scroll since the arrival cancels the landing (`onLaterChoiceOrScroll`, `src/app/core/later-choice.ts`), and `<main>`'s own navigation focus is not a choice.
 - After a route change, focus moves to `<main>` (`provideFocusMainAfterNavigation`, registered once in `app.config.ts`; a change of query string or fragment only does not move it); after an in-page change, focus follows the Feedback rule in [Task flows](#task-flows). When a view that holds focus (the server-error or not-saved view, on its heading or Try again) gives way to the content, focus moves to `<main>`, as after a route change.
 
 ## Content

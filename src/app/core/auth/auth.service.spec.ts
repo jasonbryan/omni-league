@@ -661,7 +661,13 @@ describe('AuthService', () => {
       ['403 origin', { status: 403, code: 'INVALID_ORIGIN' }, 'unexpected'],
       ['400 name invalid', { status: 400, code: 'NAME_INVALID' }, 'name-invalid'],
       ['503 auth not configured', { status: 503, code: 'AUTH_NOT_CONFIGURED' }, 'unexpected'],
-      ['429', { status: 429 }, 'unexpected'],
+      [
+        '429 from the per-IP limit',
+        { status: 429, message: 'Too many requests. Please try again later.' },
+        'rate-limited',
+      ],
+      ['429 without a body', { status: 429 }, 'rate-limited'],
+      ['429 with a code', { status: 429, code: 'TOO_MANY_ATTEMPTS' }, 'rate-limited'],
       ['500 other', { status: 500, message: 'boom' }, 'unexpected'],
     ])('maps %s to %s', async (_, error, expected) => {
       const auth = configure();
@@ -747,7 +753,17 @@ describe('AuthService', () => {
         { status: 429, code: 'SIGN_IN_LOCKED' },
         { ok: false, error: 'locked' },
       ],
-      ['429 from the per-IP limiter', { status: 429 }, { ok: false, error: 'unexpected' }],
+      [
+        '429 from the per-IP limit',
+        { status: 429, message: 'Too many requests. Please try again later.' },
+        { ok: false, error: 'rate-limited' },
+      ],
+      ['429 without a body', { status: 429 }, { ok: false, error: 'rate-limited' }],
+      [
+        '429 with another code',
+        { status: 429, code: 'SOMETHING_ELSE' },
+        { ok: false, error: 'rate-limited' },
+      ],
       [
         '400 invalid email',
         { status: 400, code: 'INVALID_EMAIL' },

@@ -7,6 +7,11 @@ const FORCED_COLORS_CHECKED_FILL =
   'peer-checked:forced-colors:forced-color-adjust-none peer-checked:forced-colors:bg-[Highlight] peer-checked:forced-colors:text-[HighlightText]';
 const FORCED_COLORS_CHOICE_FOCUS = 'peer-focus-visible:forced-colors:outline-[CanvasText]';
 
+// WebKit gives a radio that an arrow key focuses no :focus-visible, and never focuses a radio on a
+// click or tap, so there :focus is keyboard focus. Only WebKit supports -webkit-backdrop-filter.
+const WEBKIT_CHOICE_FOCUS =
+  'supports-[-webkit-backdrop-filter:none]:peer-focus:outline-2 supports-[-webkit-backdrop-filter:none]:peer-focus:outline-offset-2 supports-[-webkit-backdrop-filter:none]:peer-focus:outline-ring';
+
 const CHIP =
   'inline-flex h-9 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:justify-center';
 
@@ -24,6 +29,7 @@ export const CHIP_CHOICE_LABEL_CLASSES = [
   'cursor-pointer border-input select-none not-peer-checked:hover:bg-muted',
   'peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background',
   'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring',
+  WEBKIT_CHOICE_FOCUS,
   FORCED_COLORS_CHECKED_FILL,
   FORCED_COLORS_CHOICE_FOCUS,
 ].join(' ');

@@ -92,10 +92,22 @@ async function as(t: T, email: string) {
   return t.withIdentity(identity(authUserId));
 }
 
+let addresses = 0;
+
+// IS_TEST is unset, so the per-IP limit is on; each request comes from its own address.
+function freshAddress(): string {
+  addresses += 1;
+  return `10.${(addresses >> 16) & 255}.${(addresses >> 8) & 255}.${addresses & 255}`;
+}
+
 async function post(t: T, path: string, body: unknown) {
   const response = await t.fetch(`/api/auth/${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', origin: SITE_URL },
+    headers: {
+      'content-type': 'application/json',
+      origin: SITE_URL,
+      'cf-connecting-ip': freshAddress(),
+    },
     body: JSON.stringify(body),
   });
   const text = await response.text();

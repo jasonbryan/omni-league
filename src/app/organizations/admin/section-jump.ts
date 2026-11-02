@@ -1,6 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { DestroyRef, Injector, afterEveryRender, inject } from '@angular/core';
-import { onLaterChoiceOrScroll } from './later-choice';
+import { onLaterChoiceOrScroll } from '../../core/later-choice';
 
 export interface SectionJump {
   /** The section needs `tabindex="-1"`: it holds focus until its target renders. */
@@ -35,7 +35,11 @@ export function injectSectionJump(
       cancelPending = null;
     };
     cancelPending = cancel;
-    onLaterChoiceOrScroll(document, { exclude: [section], signal: listening.signal }, cancel);
+    onLaterChoiceOrScroll(
+      document,
+      { isOwnFocus: (element) => element === section, signal: listening.signal },
+      cancel,
+    );
   }
 
   return {

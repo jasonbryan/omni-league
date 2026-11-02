@@ -13,7 +13,12 @@ const SECRET = {
   PREVIEW_ORIGIN_PATTERN: '^sentinel-pattern-5e8b$',
   DEMO_ACCOUNT_PASSWORD: 'sentinel-demo-password-3c7d',
   AUTH_EMAIL_DISABLED_WRONG: 'sentinel-yes-2a6f',
+  VAPID_PUBLIC_KEY: 'sentinel-vapid-public-8e1d',
+  VAPID_PRIVATE_KEY: 'sentinel-vapid-private-6b4a',
+  VAPID_SUBJECT: 'mailto:sentinel-vapid-subject@example.test',
 };
+
+const VAPID_NAMES = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'];
 
 function stubReader(vars) {
   const reads = [];
@@ -37,6 +42,9 @@ const ALLOWED_PREVIEW = {
 const ALLOWED_PRODUCTION = {
   SITE_URL: SECRET.SITE_URL,
   BETTER_AUTH_SECRET: SECRET.BETTER_AUTH_SECRET,
+  VAPID_PUBLIC_KEY: SECRET.VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY: SECRET.VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT: SECRET.VAPID_SUBJECT,
 };
 
 async function run(mode, vars) {
@@ -186,6 +194,41 @@ describe('checkDeployEnv, production mode', () => {
       assert.match(failures[0], /^AUTH_EMAIL_DISABLED /);
     });
   }
+});
+
+describe('checkDeployEnv, Web Push variables', () => {
+  for (const name of VAPID_NAMES) {
+    it(`production fails naming ${name} when it is not set, without reading any value`, async () => {
+      const vars = { ...ALLOWED_PRODUCTION };
+      delete vars[name];
+      const reader = stubReader(vars);
+      const failures = await checkDeployEnv('production', reader);
+      assert.equal(failures.length, 1);
+      assert.match(failures[0], new RegExp(`^${name} is not set`));
+      assert.deepEqual(reader.reads, []);
+      const result = await run('production', vars);
+      assert.equal(result.code, 1);
+      assertNoValue(result);
+    });
+  }
+
+  it('production reports all three when none is set', async () => {
+    const vars = { SITE_URL: SECRET.SITE_URL, BETTER_AUTH_SECRET: SECRET.BETTER_AUTH_SECRET };
+    const failures = await checkDeployEnv('production', stubReader(vars));
+    assert.deepEqual(
+      failures.map((line) => line.split(' ')[0]),
+      VAPID_NAMES,
+    );
+  });
+
+  it('preview needs none of them: the preview pair is optional', async () => {
+    assert.deepEqual(await checkDeployEnv('preview', stubReader(ALLOWED_PREVIEW)), []);
+    const withPair = { ...ALLOWED_PREVIEW };
+    for (const name of VAPID_NAMES) withPair[name] = SECRET[name];
+    const reader = stubReader(withPair);
+    assert.deepEqual(await checkDeployEnv('preview', reader), []);
+    assert.deepEqual(reader.reads, ['AUTH_EMAIL_DISABLED']);
+  });
 });
 
 // A deployment with no BETTER_AUTH_SECRET would sign with Better Auth's public default

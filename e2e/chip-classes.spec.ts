@@ -1,5 +1,4 @@
 import type { Locator, Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CHIP_CHOICE_INPUT_CLASSES,
@@ -10,10 +9,10 @@ import {
 import { tabKey } from './support/a11y';
 import { chipLabel, chooseChip } from './support/chip';
 import { expect, test } from './support/fixtures';
+import { inlinedKitCss } from './support/mockup-kit';
 
 const MOCKUP = join(process.cwd(), 'design', 'mockups', '300-public-site-league-form.html');
-const KIT_BLOCK = /<style id="mockup-kit">([\s\S]*?)<\/style>/;
-const KIT_CSS = KIT_BLOCK.exec(readFileSync(MOCKUP, 'utf8'))?.[1] ?? '';
+const KIT_CSS = inlinedKitCss(MOCKUP);
 
 const COARSE_POINTER = '(pointer: coarse)';
 const FINE_POINTER_HEIGHT = 36;
