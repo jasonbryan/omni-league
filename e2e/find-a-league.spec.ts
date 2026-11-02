@@ -225,9 +225,9 @@ test.describe('find a league: raw server HTML', () => {
     RAW_HTTP,
     async ({ request }) => {
       const { id } = await seed();
-      const { html } = await raw(request, url(`coed 4s ${id} austin`));
+      const { html } = await raw(request, url(`coed 4s ${id} zz${id}`));
       const section = resultsSection(html);
-      expect(plainText(section)).toContain(`No leagues match “coed 4s ${id} austin”`);
+      expect(plainText(section)).toContain(`No leagues match “coed 4s ${id} zz${id}”`);
       expect(plainText(section)).toContain('Try fewer words:');
       expect(resultNames(html)).toEqual([]);
       const links = [
@@ -497,7 +497,7 @@ test.describe('find a league: in the browser', () => {
     await screenshot(page, testInfo, '300-find-none');
     await expectAccessible(page);
 
-    await submit(page, `coed 4s ${id} austin`);
+    await submit(page, `coed 4s ${id} zz${id}`);
     const fewer = results(page).getByRole('list', { name: 'Try fewer words:' });
     await expect(fewer.getByRole('link')).toHaveText([`coed 4s ${id}`]);
     await screenshot(page, testInfo, '300-find-fewer-words');
@@ -520,7 +520,7 @@ test.describe('find a league: in the browser', () => {
     consoleGuard,
   }) => {
     const { id } = await seed();
-    await page.goto(url(`coed 4s ${id} austin`));
+    await page.goto(url(`coed 4s ${id} zz${id}`));
     await hydrated(consoleGuard);
     await results(page)
       .getByRole('link', { name: `coed 4s ${id}` })
@@ -552,11 +552,11 @@ test.describe('find a league: in the browser', () => {
     consoleGuard,
   }) => {
     const { id } = await seed();
-    await page.goto(url(`coed 4s ${id} austin`));
+    await page.goto(url(`coed 4s ${id} zz${id}`));
     await hydrated(consoleGuard);
     const link = results(page).getByRole('link', { name: `coed 4s ${id}` });
     await link.click({ modifiers: ['ControlOrMeta'] });
-    await expect(page).toHaveURL(`${baseURL}${url(`coed 4s ${id} austin`)}`);
+    await expect(page).toHaveURL(`${baseURL}${url(`coed 4s ${id} zz${id}`)}`);
     await expect(field(page)).not.toBeFocused();
     await expect(results(page).getByRole('status')).not.toBeFocused();
   });
@@ -636,7 +636,7 @@ test.describe('find a league: in the browser', () => {
     test('each suggestion link is at least 44px tall', async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium-desktop', 'one project covers the wide screen');
       const { id } = await seed();
-      await page.goto(url(`coed 4s ${id} austin`));
+      await page.goto(url(`coed 4s ${id} zz${id}`));
       const link = results(page).getByRole('list', { name: 'Try fewer words:' }).getByRole('link');
       await expect(link).toBeVisible();
       expect((await link.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
@@ -654,7 +654,7 @@ test.describe('find a league: in the browser', () => {
         'one project covers the narrow screen',
       );
       const { id } = await seed();
-      await page.goto(url(`coed 4s ${id} austin`));
+      await page.goto(url(`coed 4s ${id} zz${id}`));
       await expect(results(page).getByRole('link', { name: `coed 4s ${id}` })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         320,
