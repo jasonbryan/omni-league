@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 import {
   FREE_FAILURES,
   HARD_LIMIT,
+  IDLE_ROW_LIFETIME_MS,
   MAX_WAIT_MS,
+  idleRowExpiresAt,
   retryMinutes,
   throttleKey,
   tooManyAttemptsMessage,
@@ -22,6 +24,30 @@ describe('waitAfterFailures', () => {
   test('the hard limit is 100 consecutive failures', () => {
     expect(HARD_LIMIT).toBe(100);
   });
+});
+
+describe('idleRowExpiresAt', () => {
+  const lastAttempt = Date.parse('2026-11-01T12:00:00Z');
+
+  test('a row a day old counts no more', () => {
+    expect(IDLE_ROW_LIFETIME_MS).toBe(24 * 60 * MINUTE);
+  });
+
+  test.each([1, 2, FREE_FAILURES - 1])(
+    'a row with %i failures expires a day after its last attempt',
+    (failures) => {
+      expect(idleRowExpiresAt({ failures, blockedUntil: lastAttempt })).toBe(
+        lastAttempt + IDLE_ROW_LIFETIME_MS,
+      );
+    },
+  );
+
+  test.each([FREE_FAILURES, FREE_FAILURES + 6, HARD_LIMIT - 1, HARD_LIMIT])(
+    'a row with %i failures never expires, so the throttle and the hard limit hold',
+    (failures) => {
+      expect(idleRowExpiresAt({ failures, blockedUntil: lastAttempt })).toBeNull();
+    },
+  );
 });
 
 describe('retryMinutes', () => {
