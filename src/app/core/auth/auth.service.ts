@@ -12,6 +12,7 @@ export type SignUpFailure =
   | 'password-too-long'
   | 'adult-required'
   | 'name-invalid'
+  | 'rate-limited'
   | 'unexpected';
 
 export type SignUpResult = { ok: true } | { ok: false; error: SignUpFailure };
@@ -23,7 +24,8 @@ export interface SignUpInput {
 }
 
 /** `incorrect` covers a wrong password and an email with no account alike, so the answer does not reveal which emails have accounts. */
-export type SignInFailure = 'incorrect' | 'throttled' | 'locked' | 'invalid-email' | 'unexpected';
+export type SignInFailure =
+  'incorrect' | 'throttled' | 'locked' | 'invalid-email' | 'rate-limited' | 'unexpected';
 
 export type SignInResult =
   | { ok: true }
@@ -265,6 +267,8 @@ function signInFailureOf(error: AuthError): SignInResult {
           : DEFAULT_RETRY_AFTER_SECONDS,
     };
   }
+  // The per-IP limit answers before any route runs, so its 429 has no code.
+  if (error.status === 429) return { ok: false, error: 'rate-limited' };
   if (
     error.code === 'INVALID_EMAIL' ||
     (error.code === 'VALIDATION_ERROR' && isEmailValidationError(error.message))
@@ -275,6 +279,7 @@ function signInFailureOf(error: AuthError): SignInResult {
 }
 
 function failureOf(error: AuthError): SignUpFailure {
+  if (error.status === 429) return 'rate-limited';
   const byCode = error.code === undefined ? undefined : FAILURE_BY_CODE[error.code];
   if (byCode) return byCode;
   if (error.code === 'VALIDATION_ERROR' && isEmailValidationError(error.message)) {

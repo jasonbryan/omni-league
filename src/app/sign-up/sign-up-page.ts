@@ -22,6 +22,7 @@ import {
   lucideLoaderCircle,
   lucideWifiOff,
 } from '@ng-icons/lucide';
+import { ipLimitTitle } from '../../../convex/lib/ipRateLimit';
 import { checkUserName, MAX_USER_NAME_LENGTH } from '../../../convex/lib/userName';
 import { AuthService, type SignUpFailure } from '../core/auth/auth.service';
 import { returnToOrApp } from '../core/auth/return-to';
@@ -52,6 +53,9 @@ export const MESSAGES = {
   breached:
     'This password has appeared in a data breach, so it is not safe to use. Choose a different one.',
   checkUnavailable: 'Failed to check password. Please try again later.',
+  rateLimitedTitle: ipLimitTitle,
+  rateLimitedDescription:
+    'Several sign-ups came from this network in a short time. No account was created.',
   unexpectedTitle: 'Sign-up could not be completed.',
   unexpectedDescription: 'Check your connection and try again.',
   offlineDescription: "Your details are still here. Try again when you're connected.",
@@ -67,7 +71,7 @@ interface SignUpModel {
   adult: boolean;
 }
 
-type FormAlert = 'check-unavailable' | 'unexpected' | 'offline';
+type FormAlert = 'check-unavailable' | 'rate-limited' | 'unexpected' | 'offline';
 
 // Class strings are the approved mockup's, written as static attributes so Angular sets them before the element is inserted: a `[class]` binding could land after the first style pass, and `transition-all` would then animate it.
 // The buttons carry `buttonVariants` output unmerged, as the mockup draws it, so `border-transparent` stays beside `border-border` and the outline button shows no edge.
@@ -131,6 +135,19 @@ type FormAlert = 'check-unavailable' | 'unexpected' | 'offline';
                     class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
                   >
                     {{ messages.offlineDescription }}
+                  </div>
+                } @else if (alert === 'rate-limited') {
+                  <div
+                    data-slot="alert-title"
+                    class="font-medium group-has-[>ng-icon]/alert:col-start-2 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
+                  >
+                    {{ messages.rateLimitedTitle }}
+                  </div>
+                  <div
+                    data-slot="alert-description"
+                    class="text-muted-foreground text-sm text-balance md:text-pretty [&_p:not(:last-child)]:mb-4 [&_a]:hover:text-foreground [&_a]:underline [&_a]:underline-offset-3"
+                  >
+                    {{ messages.rateLimitedDescription }}
                   </div>
                 } @else {
                   <div
@@ -570,7 +587,9 @@ export class SignUpPage {
       this.focusAfterRender(field);
       return;
     }
-    this.formAlert.set(failure === 'check-unavailable' ? 'check-unavailable' : 'unexpected');
+    this.formAlert.set(
+      failure === 'check-unavailable' || failure === 'rate-limited' ? failure : 'unexpected',
+    );
     this.focusAfterRender('alert');
   }
 

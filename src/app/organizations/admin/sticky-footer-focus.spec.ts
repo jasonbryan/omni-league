@@ -88,6 +88,24 @@ describe('StickyFooterFocus', () => {
     expect(field().getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
   });
 
+  it('clears the footer once it rises to the bottom of the viewport, when the page is scrolled too little for it to stick', async () => {
+    await render();
+    vi.stubGlobal('innerHeight', 640);
+    const footerHeight = 69;
+    const stuckTop = 640 - footerHeight;
+    const scrollToStick = 57;
+    const heldTop = stuckTop + scrollToStick;
+    footer().getBoundingClientRect = () => {
+      const top = Math.max(stuckTop, heldTop - scrollY);
+      return rect(top, top + footerHeight);
+    };
+    field().focus();
+    placeOnPage(field(), 691, 735);
+    FakeResizeObserver.last!.callback();
+    expect(footerTop()).toBe(stuckTop);
+    expect(field().getBoundingClientRect().bottom).toBe(stuckTop - GAP_ABOVE_FOOTER_PX);
+  });
+
   it('brings a focused element with tabindex="-1" from under the footer to wholly above it', async () => {
     await render();
     placeOnPage(status(), 590, 630);

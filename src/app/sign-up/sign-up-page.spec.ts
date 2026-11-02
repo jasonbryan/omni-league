@@ -568,6 +568,56 @@ describe('SignUpPage', () => {
       expect(error('name')).toBeNull();
     });
 
+    describe('429 from the per-IP limit', () => {
+      const LIMITED = { status: 429, message: 'Too many requests. Please try again later.' };
+      const alertText = (slot: string) =>
+        alert()?.querySelector(`[data-slot="alert-${slot}"]`)?.textContent?.trim() ?? null;
+
+      it('shows the network alert, which takes focus, and keeps the form as it was', async () => {
+        await fill();
+        client.nextSignUpError = LIMITED;
+        await submit();
+        expect(alert()?.getAttribute('role')).toBe('alert');
+        expect(alertText('title')).toBe('Too many attempts. Try again in 10 seconds.');
+        expect(alertText('description')).toBe(
+          'Several sign-ups came from this network in a short time. No account was created.',
+        );
+        expect(document.activeElement).toBe(alert());
+        expect(input('name').value).toBe(NAME);
+        expect(input('email').value).toBe(EMAIL);
+        expect(input('password').value).toBe(PASSWORD);
+        expect(checkbox().getAttribute('aria-checked')).toBe('true');
+        for (const id of ['name', 'email', 'password']) {
+          expect(input(id).hasAttribute('aria-invalid'), id).toBe(false);
+          expect(error(id), id).toBeNull();
+        }
+        expect(checkbox().hasAttribute('aria-invalid')).toBe(false);
+        expect(error('adult')).toBeNull();
+        expect(submitButton().textContent?.trim()).toBe('Create account');
+        expect(submitButton().getAttribute('aria-disabled')).toBeNull();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await harness.fixture.whenStable();
+        expect(client.signUps).toHaveLength(1);
+      });
+
+      it('a new press clears the alert, shows "Creating account…", and sends one request', async () => {
+        await fill();
+        client.nextSignUpError = LIMITED;
+        await submit();
+        expect(alert()).not.toBeNull();
+        client.nextSignUpError = null;
+        client.holdSignUp = true;
+        await submit();
+        expect(alert()).toBeNull();
+        expect(submitButton().textContent?.trim()).toBe('Creating account…');
+        expect(client.signUps).toHaveLength(2);
+        client.releaseSignUp();
+        await submit();
+        expect(client.signUps).toHaveLength(2);
+        expect(url()).toBe('/app');
+      });
+    });
+
     it('any other failure: the generic alert', async () => {
       await fill();
       client.signUpThrows = new TypeError('Failed to fetch');

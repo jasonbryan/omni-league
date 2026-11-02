@@ -17,7 +17,11 @@ describe('onLaterChoiceOrScroll', () => {
     excluded = root.querySelector('section')!;
     listening = new AbortController();
     onChoice = vi.fn<() => void>();
-    onLaterChoiceOrScroll(document, { exclude: [excluded], signal: listening.signal }, onChoice);
+    onLaterChoiceOrScroll(
+      document,
+      { isOwnFocus: (element) => element === excluded, signal: listening.signal },
+      onChoice,
+    );
   });
 
   afterEach(() => {

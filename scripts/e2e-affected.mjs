@@ -89,6 +89,7 @@ export const ROUTE_SPECS = {
   app: ['auth-session'],
   'app/': ['after-sign-in', 'auth-session', 'app-leagues'],
   'app/account': ['account-settings', 'after-sign-in'],
+  'app/notifications': ['notifications', 'after-sign-in'],
   'app/organizations/new': ['create-organization', 'after-sign-in'],
   'app/organizations/:orgSlug/leagues/:leagueSlug': [
     'league-management',
@@ -470,10 +471,10 @@ export const AREAS = [
     specs: ['app-leagues'],
   },
   {
-    // chip-classes.spec.ts takes the kit CSS from this mockup's inlined block.
+    // chip-classes.spec.ts and the harness's a11y-helper.spec.ts take the kit CSS from this mockup's inlined block.
     name: 'chip mockup',
     test: (file) => file === 'design/mockups/300-public-site-league-form.html',
-    specs: ['chip-classes'],
+    specs: ['chip-classes', 'harness/a11y-helper'],
   },
   { name: 'chip classes', test: inDir('src/app/ui/chip/'), specs: ['chip-classes'] },
   // The filter popovers of the organization page and its sport views are the only popovers.
@@ -612,6 +613,12 @@ export const AREAS = [
     specs: [...LEAGUE_PAGE, ...SPORT_VIEW, ...FIND_PAGE, 'page-control-widths'],
   },
   {
+    // The cancel rule of the jump on the Leagues page and of the landing on the league management page.
+    name: 'later-choice helper',
+    test: named('src/app/core/', ['later-choice']),
+    specs: [...ADMIN, ...LEAGUE_MANAGEMENT],
+  },
+  {
     // Every form shares this field-error rule: sign-up, sign-in, create organization, the
     // admin forms (locations, leagues, staff invites), and the create-season form.
     name: 'form helper',
@@ -619,6 +626,7 @@ export const AREAS = [
     specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
+  { name: 'notifications page', test: inDir('src/app/notifications/'), specs: ['notifications'] },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
   { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: [SESSION] },
   {
@@ -807,6 +815,12 @@ export const AREAS = [
     specs: ADMIN,
   },
   { name: 'convex users', test: named('convex/', ['users']), specs: [SESSION] },
+  {
+    name: 'convex push',
+    test: (file) =>
+      named('convex/', ['push'])(file) || named('convex/lib/', ['pushSubscription'])(file),
+    specs: ['notifications'],
+  },
   {
     name: 'convex teams and roster writes',
     test: (file) =>

@@ -50,6 +50,13 @@ export async function checkDeployEnv(mode, reader) {
         'DEMO_ACCOUNT_PASSWORD is set; it must not be set on production (it is the shared password of the demo accounts).',
       );
     }
+    for (const name of ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT']) {
+      if (!names.has(name)) {
+        failures.push(
+          `${name} is not set; it must be set on production, or push notifications cannot be turned on or sent.`,
+        );
+      }
+    }
   } else {
     throw new Error(USAGE);
   }

@@ -1,17 +1,19 @@
 /// <reference types="vite/client" />
-// Timing is measured with the real clock, on medians of interleaved samples, so a missing dummy hash
-// (about 0.4 s of scrypt per password check) shows as a large ratio while scheduler noise does not.
+// Load slows both halves of an adjacent known/unknown pair alike, while a missing dummy hash (a full
+// scrypt) shows in every pair.
 import betterAuthTest from '@convex-dev/better-auth/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import schema from './schema';
+import { FREE_FAILURES } from './lib/signInThrottle';
 import { modules } from './test.setup';
 
 const SITE_URL = 'http://localhost:4000';
 const EMAIL = 'maya.okafor@example.com';
 const PASSWORD = 'sandbar sunset spike 2026';
 const WRONG = 'not the password at all';
-const SAMPLES = 4;
+const PAIRS = 11;
+const MAX_RATIO = 1.5;
 
 function setup() {
   const t = convexTest(schema, modules);
@@ -64,14 +66,28 @@ test('a wrong password for a known address and for an unknown one: same answer, 
   });
   expect(up.status).toBe(200);
   await timed(t, EMAIL); // warm-up: module load, first scrypt
+  let knownFailures = 1;
   await timed(t, 'warm.up@example.com');
 
   const known: Awaited<ReturnType<typeof timed>>[] = [];
   const unknown: Awaited<ReturnType<typeof timed>>[] = [];
-  for (let i = 0; i < SAMPLES - 1; i++) {
-    // Each unknown address is new, so no sample is throttled; the known address stays below 5.
-    unknown.push(await timed(t, `nobody.${i}@example.com`));
-    known.push(await timed(t, EMAIL));
+  for (let i = 0; i < PAIRS; i++) {
+    if (knownFailures === FREE_FAILURES - 1) {
+      // A correct password clears the failure count, so no known sample is throttled.
+      const signedIn = await post(t, 'sign-in/email', { email: EMAIL, password: PASSWORD });
+      expect(signedIn.status).toBe(200);
+      knownFailures = 0;
+    }
+    // Each unknown address is new, so no unknown sample is throttled.
+    const nobody = `nobody.${i}@example.com`;
+    if (i % 2 === 0) {
+      unknown.push(await timed(t, nobody));
+      known.push(await timed(t, EMAIL));
+    } else {
+      known.push(await timed(t, EMAIL));
+      unknown.push(await timed(t, nobody));
+    }
+    knownFailures++;
   }
   for (const answer of [...known, ...unknown]) expect(answer.status).toBe(401);
   expect(new Set([...known, ...unknown].map((a) => a.text)).size).toBe(1);
@@ -79,7 +95,11 @@ test('a wrong password for a known address and for an unknown one: same answer, 
     [...a.response.headers.keys()].filter((name) => name !== 'date').sort();
   expect(names(unknown[0])).toEqual(names(known[0]));
 
-  const [k, u] = [median(known.map((a) => a.ms)), median(unknown.map((a) => a.ms))];
-  const ratio = Math.max(k, u) / Math.min(k, u);
-  expect(ratio, `known ${k.toFixed(0)} ms, unknown ${u.toFixed(0)} ms`).toBeLessThan(1.5);
+  const pairRatios = known.map((k, i) => k.ms / (unknown[i]?.ms ?? 0));
+  const ratio = median(pairRatios);
+  const ms = (answers: typeof known) => answers.map((a) => a.ms.toFixed(0)).join(', ');
+  expect(
+    Math.max(ratio, 1 / ratio),
+    `known/unknown per pair, median ${ratio.toFixed(2)}; known ${ms(known)} ms; unknown ${ms(unknown)} ms`,
+  ).toBeLessThan(MAX_RATIO);
 }, 120_000);

@@ -407,6 +407,47 @@ describe('SignInPage', () => {
       expect(input('password').value).toBe(PASSWORD);
     });
 
+    describe('429 from the per-IP limit (no code)', () => {
+      const LIMITED = { status: 429, message: 'Too many requests. Please try again later.' };
+
+      it('shows the network alert, which takes focus, and keeps the form as it was', async () => {
+        await fill();
+        client.nextSignInError = LIMITED;
+        await submit();
+        expect(alertTitle()).toBe('Too many attempts. Try again in 10 seconds.');
+        expect(alertDescription()).toBe('Several sign-ins came from this network in a short time.');
+        expect(document.activeElement).toBe(alert());
+        expect(input('email').value).toBe(EMAIL);
+        expect(input('password').value).toBe(PASSWORD);
+        for (const id of ['email', 'password']) {
+          expect(input(id).hasAttribute('aria-invalid'), id).toBe(false);
+          expect(error(id), id).toBeNull();
+        }
+        expect(submitButton().textContent?.trim()).toBe('Sign in');
+        expect(submitButton().getAttribute('aria-disabled')).toBeNull();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await harness.fixture.whenStable();
+        expect(client.signIns).toHaveLength(1);
+      });
+
+      it('a new press clears the alert, shows "Signing in…", and sends one request', async () => {
+        await fill();
+        client.nextSignInError = LIMITED;
+        await submit();
+        expect(alert()).not.toBeNull();
+        client.nextSignInError = null;
+        client.holdSignIn = true;
+        await submit();
+        expect(alert()).toBeNull();
+        expect(submitButton().textContent?.trim()).toBe('Signing in…');
+        expect(client.signIns).toHaveLength(2);
+        client.releaseSignIn();
+        await submit();
+        expect(client.signIns).toHaveLength(2);
+        expect(url()).toBe('/app');
+      });
+    });
+
     it('400 invalid email: on the Email field, which takes focus', async () => {
       await fill();
       client.nextSignInError = { status: 400, code: 'INVALID_EMAIL' };

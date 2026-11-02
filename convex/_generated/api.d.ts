@@ -9,10 +9,12 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as customLevels from "../customLevels.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
+import type * as ipRateLimits from "../ipRateLimits.js";
 import type * as leagues from "../leagues.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_authOrigins from "../lib/authOrigins.js";
@@ -24,6 +26,7 @@ import type * as lib_inviteInput from "../lib/inviteInput.js";
 import type * as lib_inviteLookup from "../lib/inviteLookup.js";
 import type * as lib_inviteStatus from "../lib/inviteStatus.js";
 import type * as lib_inviteToken from "../lib/inviteToken.js";
+import type * as lib_ipRateLimit from "../lib/ipRateLimit.js";
 import type * as lib_leagueDivision from "../lib/leagueDivision.js";
 import type * as lib_leagueFilters from "../lib/leagueFilters.js";
 import type * as lib_leagueInput from "../lib/leagueInput.js";
@@ -39,6 +42,7 @@ import type * as lib_publicLeague from "../lib/publicLeague.js";
 import type * as lib_publicList from "../lib/publicList.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
 import type * as lib_publicSeason from "../lib/publicSeason.js";
+import type * as lib_pushSubscription from "../lib/pushSubscription.js";
 import type * as lib_registration from "../lib/registration.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_rosterEntry from "../lib/rosterEntry.js";
@@ -58,6 +62,7 @@ import type * as lib_users from "../lib/users.js";
 import type * as locations from "../locations.js";
 import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
+import type * as push from "../push.js";
 import type * as search from "../search.js";
 import type * as seasons from "../seasons.js";
 import type * as seed from "../seed.js";
@@ -75,10 +80,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  crons: typeof crons;
   customLevels: typeof customLevels;
   health: typeof health;
   http: typeof http;
   invites: typeof invites;
+  ipRateLimits: typeof ipRateLimits;
   leagues: typeof leagues;
   "lib/access": typeof lib_access;
   "lib/authOrigins": typeof lib_authOrigins;
@@ -90,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inviteLookup": typeof lib_inviteLookup;
   "lib/inviteStatus": typeof lib_inviteStatus;
   "lib/inviteToken": typeof lib_inviteToken;
+  "lib/ipRateLimit": typeof lib_ipRateLimit;
   "lib/leagueDivision": typeof lib_leagueDivision;
   "lib/leagueFilters": typeof lib_leagueFilters;
   "lib/leagueInput": typeof lib_leagueInput;
@@ -105,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicList": typeof lib_publicList;
   "lib/publicPage": typeof lib_publicPage;
   "lib/publicSeason": typeof lib_publicSeason;
+  "lib/pushSubscription": typeof lib_pushSubscription;
   "lib/registration": typeof lib_registration;
   "lib/roles": typeof lib_roles;
   "lib/rosterEntry": typeof lib_rosterEntry;
@@ -124,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   locations: typeof locations;
   memberships: typeof memberships;
   organizations: typeof organizations;
+  push: typeof push;
   search: typeof search;
   seasons: typeof seasons;
   seed: typeof seed;

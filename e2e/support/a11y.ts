@@ -87,6 +87,7 @@ interface WalkState {
   elements: Element[];
   unfocused: string[];
   sentinel: HTMLElement;
+  focusStyle: (el: Element) => string;
 }
 
 type WalkWindow = Window & { [WALK_KEY]?: WalkState };
@@ -118,9 +119,22 @@ function setUpWalk(key: string): string[] {
       .replace(/\s+/g, ' ');
     return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} "${name.slice(0, 40)}"`;
   };
-  const focusStyle = (el: Element): string => {
+  const ownFocusStyle = (el: Element): string => {
     const s = getComputedStyle(el);
     return `outline: ${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}; box-shadow: ${s.boxShadow}`;
+  };
+  // A visually hidden control (a chip's radio) is drawn by its label, so a ring on the control
+  // itself is not seen: the ring must be on the label or inside it.
+  const focusStyle = (el: Element): string => {
+    const box = el.getBoundingClientRect();
+    const hidden = box.width <= 1 && box.height <= 1;
+    const labels = hidden && el instanceof HTMLInputElement ? Array.from(el.labels ?? []) : [];
+    if (labels.length === 0) return ownFocusStyle(el);
+    return labels
+      .flatMap((label) => [label, ...Array.from(label.querySelectorAll('*'))])
+      .filter((part) => part !== el)
+      .map(ownFocusStyle)
+      .join(' | ');
   };
   const rendered = (el: Element): boolean =>
     typeof el.checkVisibility === 'function'
@@ -168,7 +182,7 @@ function setUpWalk(key: string): string[] {
   document.body.prepend(sentinel);
   window.scrollTo(0, 0);
   sentinel.focus({ preventScroll: true });
-  (window as WalkWindow)[key as typeof WALK_KEY] = { elements, unfocused, sentinel };
+  (window as WalkWindow)[key as typeof WALK_KEY] = { elements, unfocused, sentinel, focusStyle };
   return elements.map(describe);
 }
 
@@ -210,8 +224,7 @@ async function readStep(key: string): Promise<StepInfo> {
     };
   }
   const index = state.elements.indexOf(active);
-  const s = getComputedStyle(active);
-  const now = `outline: ${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}; box-shadow: ${s.boxShadow}`;
+  const now = state.focusStyle(active);
   const rect = active.getBoundingClientRect();
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;

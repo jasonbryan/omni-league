@@ -368,6 +368,14 @@ describe('selectSpecs: mapped areas', () => {
     assert.deepEqual(specsFor(['e2e/season-page.spec.ts']), want('e2e/season-page.spec.ts'));
   });
 
+  it('maps the later-choice helper to the admin and league management specs, and not to the full suite', () => {
+    const specs = specsFor(['src/app/core/later-choice.ts']);
+    assert.ok(specs.includes('e2e/league-management.spec.ts'));
+    assert.ok(specs.includes('e2e/organization-admin.spec.ts'));
+    assert.ok(!specs.includes('FULL'));
+    assert.deepEqual(specsFor(['src/app/core/later-choice.spec.ts']), want());
+  });
+
   it('maps the not-found and offline views to the league page and season page specs that assert them', () => {
     const notFound = specsFor(['src/app/not-found/not-found-view.ts']);
     assert.ok(notFound.includes('e2e/league-page.spec.ts'));
@@ -489,13 +497,13 @@ describe('selectSpecs: mapped areas', () => {
     );
   });
 
-  it('maps the chip classes and the mockup whose kit block the chip spec reads to that spec', () => {
+  it('maps the chip classes to the chip spec, and the mockup whose kit block two specs read to both', () => {
     const chipClasses = specsFor(['src/app/ui/chip/chip-classes.ts']);
     assert.ok(chipClasses.includes('e2e/chip-classes.spec.ts'));
     assert.ok(!chipClasses.includes('FULL'));
     assert.deepEqual(
       specsFor(['design/mockups/300-public-site-league-form.html']),
-      want('e2e/chip-classes.spec.ts'),
+      want('e2e/chip-classes.spec.ts', 'e2e/harness/a11y-helper.spec.ts'),
     );
     assert.deepEqual(specsFor(['src/app/ui/chip/chip-classes.spec.ts']), want());
   });

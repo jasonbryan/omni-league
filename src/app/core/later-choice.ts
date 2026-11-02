@@ -12,21 +12,21 @@ const SCROLL_KEYS = new Set([
 const CONTROL = 'a[href], button, input, select, textarea, label, summary';
 
 export interface LaterChoiceOptions {
-  /** Focus moving to one of these is the page's own doing, not the user's. */
-  readonly exclude: readonly Element[];
+  /** Focus moving to an element this accepts is the page's own doing, not the user's. */
+  readonly isOwnFocus: (element: Element) => boolean;
   readonly signal: AbortSignal;
 }
 
 export function onLaterChoiceOrScroll(
   document: Document,
-  { exclude, signal }: LaterChoiceOptions,
+  { isOwnFocus, signal }: LaterChoiceOptions,
   onChoice: () => void,
 ): void {
   const options = { capture: true, passive: true, signal };
   document.addEventListener(
     'focusin',
     (event) => {
-      if (!exclude.includes(event.target as Element)) onChoice();
+      if (!isOwnFocus(event.target as Element)) onChoice();
     },
     options,
   );
