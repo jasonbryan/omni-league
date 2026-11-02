@@ -111,6 +111,28 @@ describe('BrowserPushDevice', () => {
     expect(create({ notification: false }).device.permission()).toBe('unsupported');
   });
 
+  it('has no push APIs and is unsupported on the real document when the Notification global is absent', () => {
+    const win = window as unknown as Record<string, unknown>;
+    const navigatorWithWorker = navigator as unknown as Record<string, unknown>;
+    const notification = Object.getOwnPropertyDescriptor(window, 'Notification');
+    delete win['Notification'];
+    expect('Notification' in window).toBe(false);
+    vi.stubGlobal('PushManager', class {});
+    Object.defineProperty(navigatorWithWorker, 'serviceWorker', {
+      value: new EventTarget(),
+      configurable: true,
+    });
+    try {
+      const device = TestBed.inject(BrowserPushDevice);
+      expect(device.hasPushApis).toBe(false);
+      expect(device.permission()).toBe('unsupported');
+    } finally {
+      delete navigatorWithWorker['serviceWorker'];
+      vi.unstubAllGlobals();
+      if (notification) Object.defineProperty(window, 'Notification', notification);
+    }
+  });
+
   it('follows controllerchange for whether a worker controls the page', () => {
     const { device, container } = create({ controlled: false });
     expect(device.controlled()).toBe(false);
