@@ -523,4 +523,57 @@ describe('per-IP limiter', () => {
     );
     expect(await limitRows(t)).toEqual([]);
   }, 30_000);
+
+  // Two rows for one key make the store's `unique()` read throw on the real sign-in and sign-up paths.
+  test.each([
+    ['sign-in/email', { email: EMAIL, password: PASSWORD }],
+    [
+      'sign-up/email',
+      { name: 'Maya Okafor', email: 'new@example.com', password: PASSWORD, adultConfirmed: true },
+    ],
+  ])(
+    'when the store throws on /%s, the request gets 429 with CORS headers, is logged, and reaches no route',
+    async (path, body) => {
+      const t = setup();
+      if (path === 'sign-in/email') await signUp(t);
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const key = `203.0.113.9|/${path}`;
+      await t.run(async (ctx) => {
+        for (let i = 0; i < 2; i++) {
+          await ctx.db.insert('ipRateLimits', {
+            key,
+            count: 1,
+            lastRequest: Date.now(),
+            expiresAt: Date.now() + 10 * SECOND,
+          });
+        }
+      });
+      const usersBefore = await authUserEmails(t);
+      const answer = await post(t, path, body, ADDRESS);
+      expect(answer.status).toBe(429);
+      expect(answer.json).toEqual({ message: 'Too many requests. Please try again later.' });
+      expect(answer.headers.get('x-retry-after')).toBe('10');
+      expect(answer.headers.get('access-control-allow-origin')).toBe(SITE_URL);
+      expect(errors).toHaveBeenCalledWith(
+        'The per-IP limit could not be counted, so the request is refused',
+        expect.any(Error),
+      );
+      expect(await authUserEmails(t)).toEqual(usersBefore);
+      expect(await rows(t)).toEqual([]);
+      expect(await sessionCount(t)).toBe(path === 'sign-in/email' ? 1 : 0);
+    },
+    60_000,
+  );
+
+  test('/sign-in/social shares the sign-in rule, and /sign-out is not limited', async () => {
+    const t = setup();
+    for (let i = 0; i < 3; i++) {
+      const answer = await post(t, 'sign-in/social', { provider: 'google' }, ADDRESS);
+      expect(answer.status, `social ${i + 1}`).not.toBe(429);
+    }
+    expect((await post(t, 'sign-in/social', { provider: 'google' }, ADDRESS)).status).toBe(429);
+    for (let i = 0; i < 5; i++)
+      expect((await post(t, 'sign-out', {}, ADDRESS)).status).not.toBe(429);
+    expect((await limitRows(t)).map((row) => row.key)).toEqual(['203.0.113.9|/sign-in/social']);
+  }, 60_000);
 });
