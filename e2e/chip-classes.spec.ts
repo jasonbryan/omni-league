@@ -169,6 +169,7 @@ test.describe('chip classes in the mockup kit', () => {
   }) => {
     await page.emulateMedia({ forcedColors: 'active' });
     await chooseChip(chipLabel(page, SPORTS[1]));
+    await page.getByRole('radio').nth(1).blur();
 
     const checked = chipOf(page.getByRole('radio').nth(1));
     const unchecked = chipOf(page.getByRole('radio').nth(0));
