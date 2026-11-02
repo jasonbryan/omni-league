@@ -320,6 +320,7 @@ test.describe('sign-up', () => {
             ]),
         'main a[href="/app/organizations/new"]',
         'main a[href="/leagues"]',
+        'main a[href="/app/notifications"]',
       ],
     });
 
@@ -566,6 +567,48 @@ test.describe('sign-up', () => {
         await expect(page).toHaveURL(`${baseURL}/sign-up`);
       });
     }
+  });
+
+  test.describe('the per-IP limit', () => {
+    test.use({ expectedFailedRequests: [{ status: 429, path: '/api/auth/sign-up/email' }] });
+
+    // The e2e backend runs under IS_TEST, where the limit is off, so its answer is replayed here.
+    test('a 429 shows the network alert, keeps the form, and retries nothing', async ({
+      page,
+    }, testInfo) => {
+      let requests = 0;
+      await page.route('**/api/auth/sign-up/email', (route) => {
+        requests += 1;
+        return route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: { 'X-Retry-After': '7' },
+          body: JSON.stringify({ message: 'Too many requests. Please try again later.' }),
+        });
+      });
+      const user = newUser('Limited');
+      await signUp(page, user);
+      const alert = page.locator('#form-error');
+      await expect(alert).toHaveAttribute('role', 'alert');
+      await expect(alert).toContainText('Too many attempts. Try again in 10 seconds.');
+      await expect(alert).toContainText(
+        'Several sign-ups came from this network in a short time. No account was created.',
+      );
+      await expect(alert).toBeFocused();
+      await expect(field(page, 'name')).toHaveValue(user.name);
+      await expect(field(page, 'email')).toHaveValue(user.email);
+      await expect(password(page)).toHaveValue(user.password);
+      await expect(adult(page)).toBeChecked();
+      for (const id of ['name', 'email', 'password', 'adult']) {
+        await expect(field(page, id)).not.toHaveAttribute('aria-invalid', 'true');
+        await expect(fieldError(page, id)).toHaveCount(0);
+      }
+      await expect(createAccount(page)).toHaveText('Create account');
+      await expect(page).toHaveURL(`${baseURL}/sign-up`);
+      await screenshot(page, testInfo, '481-sign-up-rate-limited');
+      await expectAccessible(page, { expectedOrder: signUpOrder(page) });
+      expect(requests).toBe(1);
+    });
   });
 
   test.describe('an email that already has an account', () => {

@@ -62,6 +62,9 @@ Every preview deployment (`pr-<n>` and the staging slots `staging-a` and `stagin
 | `BETTER_AUTH_SECRET`     | a preview-only value (never the production one)    | yes    |
 | `AUTH_EMAIL_DISABLED`    | `true`                                             | no     |
 | `DEMO_ACCOUNT_PASSWORD`  | the owner's passphrase for the demo accounts       | yes    |
+| `VAPID_PUBLIC_KEY`       | the public key of the preview-only VAPID pair      | no     |
+| `VAPID_PRIVATE_KEY`      | the private key of that pair                       | yes    |
+| `VAPID_SUBJECT`          | a `mailto:` or `https:` contact                    | no     |
 
 **Changing a default.** Convex applies the defaults when it creates a deployment. Every staging build creates its slot afresh, so a changed default reaches staging on the next merge, and a PR preview on its next push. The [deploy check](#deploy-environment-check) reads names only, so it catches a missing variable but not a changed `SITE_URL` or `PREVIEW_ORIGIN_PATTERN` value. The Convex dashboard flags deployments whose variables differ from the defaults.
 
@@ -74,6 +77,8 @@ Every preview deployment (`pr-<n>` and the staging slots `staging-a` and `stagin
 ```
 
 `DEMO_ACCOUNT_PASSWORD` is optional: without it the demo accounts are not created ([Demo data](#demo-data)), and the [deploy check](#deploy-environment-check) does not require it. It must not be set on production.
+
+The three `VAPID_*` variables are optional on previews: without them the notifications page shows "Not available" ([Web Push keys](#web-push-keys)). The owner sets them once, from a pair made with `scripts/vapid-keys.mjs`.
 
 **Deliberately not set on previews:** `IS_TEST` (it turns on test-only functions and turns off the breached-password check and per-IP limiter), `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and `RESEND_API_KEY` (previews send no email).
 
@@ -138,14 +143,30 @@ Anyone holding the password can sign in to any preview or staging backend as a d
 
 **Every change keeps the seed current (#230).** An issue that adds or changes a table, a field, or a user-visible feature has a Demo data criterion, and its PR updates `convex/seed.ts` to deliver it ([dev cycle](dev-cycle.md), Phases 1, 4, 5, and 6). `convex/seedCoverage.test.ts` runs `seed:demo` on an empty `convex-test` backend, with the Better Auth component registered, throwaway auth variables, and a mocked breach check, and fails when a schema table has no rows and is not in its `SEED_EXCEPTIONS` map (table name to reason), when an exception names no table, or when a second run changes any table's row count or `_id`s. An exception needs a reason the reviewer accepts. It runs in `test:convex`, so `ci` needs no extra step.
 
+## Web Push keys
+
+Each deployment that sends push notifications has its own VAPID key pair ([ADR 0013](../decisions/0013-pwa-stack.md) section 6):
+
+| Deployment           | Keys                                                              | Who sets them                                   |
+| -------------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| Local e2e            | none; the notifications page shows "Not available"                | nobody                                          |
+| Developer dev        | the developer's own throwaway pair                                | the developer, on their own local backend       |
+| Previews and staging | one preview-only pair, as [preview variables](#preview-variables) | the owner, once                                 |
+| Production           | the production pair, never used elsewhere                         | the owner only, at the first production release |
+
+- `VAPID_PUBLIC_KEY` is base64url, a 65-byte uncompressed P-256 point; `VAPID_PRIVATE_KEY` is base64url, the 32-byte private scalar; `VAPID_SUBJECT` is `mailto:` or `https:` (Apple refuses anything else). Production uses `mailto:support@<domain>`.
+- `node scripts/vapid-keys.mjs --out <file>` writes a new pair to a new file, created with mode 600. It refuses an existing file or a path inside the repository, and prints only the public key and the path, so the private key never reaches a terminal, a log, or a transcript. Set both keys from the file, then the subject: `npx convex env set --from-file <file>` for a local backend, or the Convex dashboard for previews and production. Delete the file afterwards. No key goes in the repository, GitHub, or Netlify.
+- The browser reads the public key from the public query `push.getConfig`, never from the build, so a new pair needs no rebuild. A new pair ends every existing subscription.
+- `check-deploy-env.mjs production` fails while any of the three names is unset ([Deploy environment check](#deploy-environment-check)).
+
 ## Deploy environment check
 
 `scripts/check-deploy-env.mjs` fails the Netlify build, so nothing is published, when a Convex deployment has the wrong variables. It reads variable names only (`npx convex env list --names-only`), plus the value of `AUTH_EMAIL_DISABLED` in preview mode, which it compares in memory. It never prints a value, and it prints the name of the deployment it checked.
 
-| Mode         | Fails when                                                                                                                                                                                                                                                       |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `preview`    | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is not exactly `true`; `RESEND_API_KEY` is set; `BETTER_AUTH_SECRET` or `SITE_URL` is not set                                                                                                                            |
-| `production` | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is set; `PREVIEW_ORIGIN_PATTERN` is set (it makes Better Auth trust preview origins, #62, and lets `seed:demo` write) (the email slice adds the ADR 0011 presence checks); `BETTER_AUTH_SECRET` or `SITE_URL` is not set |
+| Mode         | Fails when                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preview`    | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is not exactly `true`; `RESEND_API_KEY` is set; `BETTER_AUTH_SECRET` or `SITE_URL` is not set                                                                                                                                                                                                                                                                      |
+| `production` | `IS_TEST` is set; `AUTH_EMAIL_DISABLED` is set; `PREVIEW_ORIGIN_PATTERN` is set (it makes Better Auth trust preview origins, #62, and lets `seed:demo` write) (the email slice adds the ADR 0011 presence checks); `DEMO_ACCOUNT_PASSWORD` is set; `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, or `VAPID_SUBJECT` is not set ([Web Push keys](#web-push-keys)); `BETTER_AUTH_SECRET` or `SITE_URL` is not set |
 
 **Required variables (#111).** Both modes also fail when `BETTER_AUTH_SECRET` or `SITE_URL` is not set, from the names alone. Production fails until the owner sets both on the production deployment (ADR 0008 already requires them before the first production release); previews and staging already have both. An empty value is invisible to `--names-only`, so `convex/auth.ts` refuses every auth request with 503 `AUTH_NOT_CONFIGURED` while the secret is unset or empty.
 

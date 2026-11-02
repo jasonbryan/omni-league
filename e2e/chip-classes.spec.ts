@@ -1,5 +1,4 @@
 import type { Locator, Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CHIP_CHOICE_INPUT_CLASSES,
@@ -7,11 +6,12 @@ import {
   CHIP_CHOICE_WRAPPER_CLASSES,
   chipLinkClasses,
 } from '../src/app/ui/chip/chip-classes';
+import { tabKey } from './support/a11y';
 import { expect, test } from './support/fixtures';
+import { inlinedKitCss } from './support/mockup-kit';
 
 const MOCKUP = join(process.cwd(), 'design', 'mockups', '300-public-site-league-form.html');
-const KIT_BLOCK = /<style id="mockup-kit">([\s\S]*?)<\/style>/;
-const KIT_CSS = KIT_BLOCK.exec(readFileSync(MOCKUP, 'utf8'))?.[1] ?? '';
+const KIT_CSS = inlinedKitCss(MOCKUP);
 
 const COARSE_POINTER = '(pointer: coarse)';
 const FINE_POINTER_HEIGHT = 36;
@@ -65,7 +65,7 @@ test.describe('chip classes in the mockup kit', () => {
     page,
   }) => {
     const radios = page.getByRole('radio');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radios.nth(0)).toBeFocused();
 
     await page.keyboard.press('ArrowRight');
@@ -80,8 +80,8 @@ test.describe('chip classes in the mockup kit', () => {
     page,
   }) => {
     const checkbox = page.getByRole('checkbox');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
+    await page.keyboard.press(tabKey(page));
     await expect(checkbox).toBeFocused();
     expect((await outline(chipOf(checkbox))).style).not.toBe('none');
 
@@ -193,7 +193,7 @@ test.describe('chip classes in the mockup kit', () => {
     const checked = chipOf(radios.nth(0));
     expect((await outline(checked)).style).toBe('none');
 
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radios.nth(0)).toBeFocused();
     expect(await outline(checked)).toEqual({ style: 'solid', width: '2px' });
     const offset = await checked.evaluate((element) => getComputedStyle(element).outlineOffset);
@@ -201,8 +201,8 @@ test.describe('chip classes in the mockup kit', () => {
 
     const current = page.getByRole('link', { name: 'All sports' });
     expect((await outline(current)).style).toBe('none');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
+    await page.keyboard.press(tabKey(page));
     await expect(current).toBeFocused();
     expect((await outline(current)).style).toBe('solid');
   });

@@ -4,6 +4,7 @@ import { ServerErrorView } from '../../server-error/server-error-view';
 import { Shell, ShellSidebar } from '../../shell';
 import { AdminSidebar } from '../admin/admin-sidebar';
 import { LeagueContext } from './league-context';
+import { LeagueLanding } from './league-landing';
 import { LeagueLoading } from './league-loading';
 import { LeagueManagement } from './league-management';
 import { LeagueNoAccess } from './league-no-access';
@@ -23,7 +24,7 @@ import { LeagueSidebar } from './league-sidebar';
     Shell,
     ShellSidebar,
   ],
-  providers: [LeagueContext],
+  providers: [LeagueContext, LeagueLanding],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-shell [sidebarPending]="context.state() === 'loading'">
@@ -64,6 +65,11 @@ import { LeagueSidebar } from './league-sidebar';
 })
 export class LeaguePage {
   protected readonly context = inject(LeagueContext);
+
+  constructor() {
+    // Providers are created on first use; the landing must listen from the arrival, not from when the league loads.
+    inject(LeagueLanding);
+  }
 
   protected readonly path = computed(() =>
     leaguePath(this.context.orgSlug(), this.context.leagueSlug()),

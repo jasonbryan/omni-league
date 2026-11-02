@@ -377,6 +377,172 @@ describe('LeaguePage', () => {
     });
   });
 
+  describe('landing at the section a fragment names', () => {
+    const scrolled = vi.fn();
+    beforeEach(() => {
+      scrolled.mockClear();
+      Element.prototype.scrollIntoView = scrolled;
+    });
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
+
+    const FIELDS = { details: '#league-name', 'create-season': '#name' } as const;
+    const url = (fragment: string) => `${LEAGUE_URL}#${fragment}`;
+    const field = (fragment: keyof typeof FIELDS) =>
+      page.querySelector<HTMLElement>(FIELDS[fragment])!;
+    const scrolledTo = () => (scrolled.mock.contexts as HTMLElement[]).map((element) => element.id);
+
+    async function openPending(target: string) {
+      o = await openAdmin(LEAGUE_ROUTES, target);
+      page = o.page;
+      o.acceptToken();
+      await o.flush();
+    }
+    const league = async (context: unknown = COED) => {
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(context);
+      await o.flush();
+    };
+    const choices = {
+      'a focusin on another control': () => {
+        const button = document.createElement('button');
+        document.body.append(button);
+        button.focus();
+        button.remove();
+      },
+      'a press on a link that takes no focus': () => {
+        const link = document.createElement('a');
+        link.href = '/elsewhere';
+        link.addEventListener('click', (event) => event.preventDefault());
+        document.body.append(link);
+        link.click();
+        link.remove();
+      },
+      'the wheel': () => document.body.dispatchEvent(new WheelEvent('wheel', { bubbles: true })),
+      'a touch scroll': () =>
+        document.body.dispatchEvent(new Event('touchmove', { bubbles: true })),
+      'Page Down': () =>
+        document.body.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }),
+        ),
+    };
+
+    it.each(Object.keys(FIELDS) as (keyof typeof FIELDS)[])(
+      'focuses the field of #%s once the league loads, and scrolls to its section',
+      async (fragment) => {
+        await openPending(url(fragment));
+        expect(document.activeElement).toBe(document.body);
+        await league();
+        await o.flush();
+        expect(document.activeElement).toBe(field(fragment));
+        expect(scrolledTo()).toEqual([fragment]);
+      },
+    );
+
+    it.each(Object.keys(FIELDS) as (keyof typeof FIELDS)[])(
+      'lands the same way for a league organizer on #%s, and never on the Seasons heading',
+      async (fragment) => {
+        await open(COED_AS_ORGANIZER, SEASONS, url(fragment));
+        expect(document.activeElement).toBe(field(fragment));
+        expect(page.querySelector('#seasons-heading')).not.toBe(document.activeElement);
+        expect(rows().some((row) => row.contains(document.activeElement))).toBe(false);
+      },
+    );
+
+    it('lands once: a later update of the league or the list leaves focus where the user put it', async () => {
+      await open(COED, SEASONS, url('details'));
+      expect(document.activeElement).toBe(field('details'));
+      field('create-season').focus();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit({ ...COED, name: 'Renamed' });
+      o.subscription(LIST_FOR_ORGANIZER)!.emit([...SEASONS]);
+      await o.flush();
+      expect(document.activeElement).toBe(field('create-season'));
+    });
+
+    it('lands again on the next arrival at the page', async () => {
+      await open(COED, SEASONS, url('details'));
+      await o.harness.navigateByUrl('/app');
+      await o.harness.navigateByUrl(url('create-season'));
+      page = o.harness.routeNativeElement!;
+      await league();
+      await o.flush();
+      expect(document.activeElement).toBe(field('create-season'));
+    });
+
+    it('lands again when only the league changes and the user comes back to the fragment', async () => {
+      const OTHER = { ...COED, leagueId: 'lg_other', slug: 'other-league', name: 'Other' };
+      await open(COED, SEASONS, url('details'));
+      const first = page;
+      expect(document.activeElement).toBe(field('details'));
+      await o.harness.navigateByUrl(`/app/organizations/${GULF.slug}/leagues/${OTHER.slug}`);
+      expect(o.harness.routeNativeElement).toBe(first);
+      document.body.focus();
+      await o.flush();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(OTHER);
+      await o.flush();
+      expect(document.activeElement).not.toBe(field('details'));
+      await o.harness.navigateByUrl(url('details'));
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+      await o.flush();
+      expect(document.activeElement).toBe(field('details'));
+    });
+
+    it('lands after <main> takes focus on an in-app navigation, which is not a later choice', async () => {
+      o = await openAdmin(LEAGUE_ROUTES, '/app');
+      page = o.page;
+      o.acceptToken();
+      await o.harness.navigateByUrl(url('details'));
+      page = o.harness.routeNativeElement!;
+      const main = document.getElementById('main')!;
+      main.focus();
+      expect(document.activeElement).toBe(main);
+      await league();
+      await o.flush();
+      expect(document.activeElement).toBe(field('details'));
+    });
+
+    for (const [name, choose] of Object.entries(choices)) {
+      it.each(Object.keys(FIELDS) as (keyof typeof FIELDS)[])(
+        `${name} before the league loads cancels the landing on #%s`,
+        async (fragment) => {
+          await openPending(url(fragment));
+          choose();
+          const focused = document.activeElement;
+          await league();
+          await o.flush();
+          expect(document.activeElement).toBe(focused);
+          expect(scrolled).not.toHaveBeenCalled();
+        },
+      );
+      it(`${name} before the list arrives cancels the landing on #season-…`, async () => {
+        await open(COED, undefined, url('season-summer-2027'));
+        choose();
+        const focused = document.activeElement;
+        o.subscription(LIST_FOR_ORGANIZER)!.emit(SEASONS);
+        await o.flush();
+        expect(document.activeElement).toBe(focused);
+        expect(scrolled).not.toHaveBeenCalled();
+      });
+    }
+
+    it.each(['nothing', 'season', 'seasons-list'])(
+      'leaves the page as it is for a fragment it does not know, #%s',
+      async (fragment) => {
+        await open(COED, SEASONS, url(fragment));
+        expect(document.activeElement).toBe(document.body);
+        expect(scrolled).not.toHaveBeenCalled();
+      },
+    );
+
+    it('shows the no-access view as before, with a fragment', async () => {
+      await openPending(url('details'));
+      o.subscription(GET_ORGANIZER_CONTEXT)!.fail(forbiddenError());
+      await o.flush();
+      expect(page.querySelector('app-league-no-access')).not.toBeNull();
+      expect(document.activeElement).toBe(document.body);
+    });
+  });
+
   describe('finding a season by its address', () => {
     const scrolled = vi.fn();
     beforeEach(() => {
@@ -428,12 +594,6 @@ describe('LeaguePage', () => {
       ]);
       await o.flush();
       expect(document.activeElement).toBe(page.querySelector('#name'));
-    });
-
-    it.each(['details', 'create-season'])('does not take focus for #%s', async (fragment) => {
-      await open(COED, SEASONS, `${LEAGUE_URL}#${fragment}`);
-      expect(document.activeElement).not.toBe(seasonsHeading());
-      expect(rows().some((row) => row.contains(document.activeElement))).toBe(false);
     });
 
     describe('the Show it in Seasons link', () => {

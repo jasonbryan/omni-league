@@ -228,7 +228,8 @@ async function readMockup(browser: Browser, width: number): Promise<Map<State, s
 }
 
 /**
- * The lines from "Your organizations" down: the account card above it names the test's own user.
+ * The lines from "Your organizations" to the Notifications panel: the account card above it names
+ * the test's own user, and the panel below it belongs to the notifications page.
  */
 function organizationsText(text: string, tenants: { tenant: Tenant; mockupName: string }[]) {
   let result = text;
@@ -237,7 +238,9 @@ function organizationsText(text: string, tenants: { tenant: Tenant; mockupName: 
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
-  return lines.slice(lines.indexOf('Your organizations')).join('\n');
+  const start = lines.indexOf('Your organizations');
+  const end = lines.indexOf('Notifications', start);
+  return lines.slice(start, end === -1 ? undefined : end).join('\n');
 }
 
 async function matchesMockup(

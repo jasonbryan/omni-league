@@ -22,6 +22,17 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }
+  /* WebKit focuses a date field's inner segment, so the field itself never matches :focus-visible.
+     Chromium matches it on any focus of these fields, so any focus shows the ring. */
+  :is(
+    input[type='date'],
+    input[type='month'],
+    input[type='week'],
+    input[type='time'],
+    input[type='datetime-local']
+  ):focus {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
 }
 
 /* Unlayered, so it beats the `h-9`/`size-8` utilities that templates repeat inline. */
