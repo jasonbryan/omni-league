@@ -670,7 +670,6 @@ test.describe('League management: the created status on a phone', () => {
   test('Tabbing to Start date, End date and Registration deadline with the created status shown leaves every Tab stop in each wholly above the footer', async ({
     page,
   }) => {
-    // The project's own 360 x 800 viewport, and a walk from the top of the page as the axe helper walks.
     const { base } = await memberOf(page, 'orgAdmin');
     await page.goto(`${base}/leagues/${COED}`);
     await fillFall2026(page);
