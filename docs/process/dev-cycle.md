@@ -149,7 +149,7 @@ Returns `PASS` or `FAIL` with reproduction steps. On `FAIL`, the implementer fix
 
 #### Low-risk PRs
 
-The orchestrator classifies the PR's head SHA from `git fetch origin pull/<n>/head && git diff --no-renames --name-only origin/main...FETCH_HEAD`, so a rename counts both its old and its new path, as in `scripts/ci-scope.mjs`. A PR is low-risk when one of these holds:
+The orchestrator classifies the PR's head SHA from `git fetch origin pull/<n>/head && git diff --no-renames --name-only origin/main...FETCH_HEAD`, so a rename counts both its old and its new path, as in `scripts/ci-scope.mjs`. The fix push case below is the exception: it reads its own diff, from the last `Test: PASS` SHA to the head. Otherwise a PR is low-risk when one of these holds:
 
 - **Tests and docs only.** Every changed file is a test file or a docs file:
   - a test file is `*.spec.ts`, `*.test.ts`, `*.test.mjs`, or any file under `e2e/`, `scripts/fixtures/`, or a `testing/` directory under `src/`. A file under `src/**/testing/` counts only while no non-test `src/` file imports one: `git grep -lE "/testing/" -- 'src/' ':!*.spec.ts' ':!src/**/testing/**'` prints nothing;
@@ -159,7 +159,7 @@ The orchestrator classifies the PR's head SHA from `git fetch origin pull/<n>/he
 
 - **Fix push with no behaviour change.** A fix push on a PR that already has `Test: PASS` is low-risk for that round when the cumulative diff from the last `Test: PASS` SHA to the new head (not each push alone) is only safe changes: code comments (not directive comments such as `@ts-`, `eslint-`, `prettier-ignore`), `*.md` docs, and test titles. In a code file, "comment-only" means every added or removed line is a comment line. A rename of an export, a Convex function, a test id, a route, or a CSS class, and a reworded visible string, are behaviour changes. The stand-in for the tester run is all local checks plus the own specs run on that exact head; evidence marked stale cannot stand in.
 
-Any other changed file brings the tester back, including:
+Any other changed file (in the `origin/main` diff; the fix push case reads its own diff) brings the tester back, including:
 
 - any non-test file under `src/`, `convex/` (`convex/testing.ts` included), `public/`, `design/`, `.github/` (`.github/pull_request_template.md` included), or `scripts/`. The one exception is a file under `.github/` on a GitHub Actions Dependabot PR;
 - root config files such as `playwright.config.ts`, `angular.json`, `tsconfig*`, `netlify.toml`, and `ngsw-config.json`.
@@ -170,7 +170,7 @@ A low-risk PR goes from the implementer straight to Phase 6. The orchestrator fi
 
 The PR reviewer reads the full diff against the issue and the conventions files, and returns `APPROVE` or `CHANGES` with file:line findings ranked by severity. Focus: correctness, Convex authorization and argument validation, Stripe safety, Angular conventions, visible changes that break the design system, test quality, and scope creep beyond the issue.
 
-It checks that the latest own-specs run on the head SHA under review, in the PR Evidence block or the tester's `Test: PASS` Evidence (a tester push moves the head), lists the [own e2e specs](#own-e2e-specs) and passed. On a PR with a `Test: skipped` record, it re-checks the [low-risk](#low-risk-prs) classification against the file list and, for a bump, the version diff its rule reads (`package.json`, or `package-lock.json` on a lockfile-only Dependabot PR). A classification that does not hold is a **blocking** finding.
+It checks that the latest own-specs run on the head SHA under review, in the PR Evidence block or the tester's `Test: PASS` Evidence (a tester push moves the head), lists the [own e2e specs](#own-e2e-specs) and passed. On a PR with a `Test: skipped` record, it re-checks the [low-risk](#low-risk-prs) classification against the file list and, for a bump, the version diff its rule reads (`package.json`, or `package-lock.json` on a lockfile-only Dependabot PR). For a `low-risk fix push` record, it re-checks that `git diff <last Test: PASS sha> <head>` is only safe changes, and that the stand-in checks and own-specs run are on that head. A classification that does not hold is a **blocking** finding.
 
 It compares the PR's seed change with the issue's own Demo data criterion. A PR that does not deliver it is a **blocking** finding. So is a PR that changes `convex/schema.ts` with no seed change, where the issue has no such criterion and the PR states no reason.
 
@@ -197,7 +197,7 @@ The orchestrator then merges it, one PR at a time, so a single `ci` run checks t
    - For `convex/_generated/`, run `node scripts/e2e-convex.mjs push` on the new head (anonymous local backend, which runs codegen), then the drift check from [CI, E2E steps](ci.md#e2e-steps): `git diff --exit-code convex/_generated` and `git status --porcelain --untracked-files=all -- convex/_generated` must print nothing.
    - Post `Update: own changes unchanged, old <old head sha>, new <new head sha>` so the reviewer can repeat the check.
 2. **Mark ready.** `gh pr ready <n>` starts the `ci` run.
-3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then run `gh run list --workflow CI --commit <head sha> --json databaseId,status,conclusion,createdAt` and take the newest run. Wait with `gh run watch <id>`, then read the `ci` job's `conclusion` from `gh run view <id> --json jobs`. `ci` passes only on `success`. A `cancelled` job (CI has `cancel-in-progress`), `skipping`, or a missing run is not a pass. The `gh pr checks` list is not the source.
+3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then run `gh run list --workflow CI --commit <head sha> --json databaseId,status,conclusion,createdAt` and take the newest run created after `gh pr ready`; if there is none, list again until one appears. Wait with `gh run watch <id>`, then read the `ci` job's `conclusion` from `gh run view <id> --json jobs`. `ci` passes only on `success`. A `cancelled` job (CI has `cancel-in-progress`), `skipped` (the draft-time run), or a missing run is not a pass. The `gh pr checks` list is not the source.
 4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
 5. **On failure.** If `ci` fails, `gh pr ready <n> --undo` and send the PR back to the implementer.
 
@@ -270,7 +270,7 @@ Each report follows [AGENTS.md, Writing on GitHub](../../AGENTS.md#writing-on-gi
 
 The orchestrator may run several issues at once when none of them blocks another. Issues that change the Convex schema (`convex/schema.ts`) or shared design tokens run one at a time to avoid conflicting migrations and merges. Each implementer gets its own worktree.
 
-**Open-PR limit.** The orchestrator starts no new frontier issue while 5 or more non-Dependabot PRs are open. It first moves each open PR to its next phase. Not counted: PRs labelled `gate:*` or carrying `Needs owner: merge` (everything in the owner-merge scope), and PRs whose linked issue is labelled `status:blocked` (this covers the three-round cap). Exempt from the limit: the fix-forward or revert issue during a [batch run](#batch-run) regression, and work the owner names in chat. Count with `gh pr list --state open --json number,author,labels`, excluding author `app/dependabot` and the PRs above.
+**Open-PR limit.** The orchestrator starts no new frontier issue while 5 or more non-Dependabot PRs are open. It first moves each open PR to its next phase. Not counted: PRs labelled `gate:*` or carrying `Needs owner: merge` (everything in the owner-merge scope), and PRs whose linked issue is labelled `status:blocked` (this covers the three-round cap). Exempt from the limit: the fix-forward or revert issue during a [batch run](#batch-run) regression, and work the owner names in chat. Count with `gh pr list --state open --json number,author,labels,body,closingIssuesReferences` and `gh issue list --state open --label status:blocked --json number`, excluding author `app/dependabot` and the PRs above.
 
 ### Local processes
 
