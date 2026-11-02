@@ -171,11 +171,40 @@ describe('StickyFooterFocus', () => {
     expect(field().getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
   });
 
+  it('checks a control that takes focus without a focusin event, as a date input does in WebKit', async () => {
+    await render();
+    element.addEventListener('focusin', (event) => event.stopPropagation(), true);
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    placeOnPage(field(), 572, 592);
+    field().focus();
+    frames.forEach((callback) => callback(0));
+    expect(scrolled).toHaveBeenCalledOnce();
+    expect(field().getBoundingClientRect().bottom).toBe(footerTop() - GAP_ABOVE_FOOTER_PX);
+  });
+
   it('stops observing when the form goes away', async () => {
     const fixture = await render();
     const observer = FakeResizeObserver.last!;
     host.shown.set(false);
     await fixture.whenStable();
     expect(observer.disconnected).toBe(true);
+  });
+
+  it('stops listening for focus when the form goes away', async () => {
+    const fixture = await render();
+    const form = element.querySelector('form')!;
+    host.shown.set(false);
+    await fixture.whenStable();
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    form.dispatchEvent(new FocusEvent('focus'));
+    expect(frames).toEqual([]);
   });
 });
