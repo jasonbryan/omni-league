@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { failMutation } from './support/fail-mutation';
@@ -125,11 +125,11 @@ test.describe('League management: publishing a season', () => {
     // The modal holds focus, so the page-wide Tab walk (which expects to leave the page) does not
     // apply: axe, and a Tab that cycles inside the dialog.
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(dialog(page).getByRole('button', { name: 'Publish season' })).toBeFocused();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(dialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
     await expect(dialog(page).getByRole('button', { name: 'Publish season' })).toBeFocused();
 
     await dialog(page).getByRole('button', { name: 'Publish season' }).click();
