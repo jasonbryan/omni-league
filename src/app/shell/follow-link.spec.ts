@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
+import { withQuietNavigationFailure } from '../core/navigation-failure';
 import { FollowLink, LOAD_PAGE } from './follow-link';
 
 @Component({ selector: 'app-blank', template: '', changeDetection: ChangeDetectionStrategy.OnPush })
@@ -10,7 +11,17 @@ async function setup(url: string) {
   const loadPage = vi.fn<(url: string) => void>();
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([{ path: '**', component: Blank }]),
+      provideRouter(
+        [
+          {
+            path: 'broken',
+            loadComponent: () => Promise.reject(new TypeError('Importing a module script failed.')),
+          },
+          { path: 'refused', canActivate: [() => false], component: Blank },
+          { path: '**', component: Blank },
+        ],
+        ...withQuietNavigationFailure(),
+      ),
       { provide: LOAD_PAGE, useValue: loadPage },
     ],
   });
@@ -49,14 +60,19 @@ describe('FollowLink.follow', () => {
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/?utm_source=x#top');
   });
 
-  it('falls back to a page load, of the same origin, when the router rejects the URL', async () => {
-    const { followLink, router, loadPage, origin } = await setup('/organizations/a?utm_source=x');
-    vi.spyOn(router, 'navigateByUrl').mockRejectedValue(new Error('no route'));
-    followLink.follow(`${origin}/(//evil.example)#row`);
+  it('falls back to a page load, of the same origin, when the page fails to load', async () => {
+    const { followLink, loadPage, origin } = await setup('/organizations/a');
+    followLink.follow(`${origin}/broken?own=1`);
     await vi.waitFor(() => {
-      expect(loadPage).toHaveBeenCalledTimes(1);
+      expect(loadPage).toHaveBeenCalledExactlyOnceWith(`${origin}/broken?own=1`);
     });
-    expect(new URL(loadPage.mock.calls[0][0]).origin).toBe(origin);
+  });
+
+  it('loads no page when a guard refuses the navigation', async () => {
+    const { followLink, navigate, loadPage, origin } = await setup('/organizations/a');
+    followLink.follow(`${origin}/refused`);
+    await expect(navigate.mock.results[0].value).resolves.toBe(false);
+    expect(loadPage).not.toHaveBeenCalled();
   });
 
   it('keeps a link to another path on the site as it is, with its own query string and fragment', async () => {
