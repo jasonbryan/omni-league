@@ -327,17 +327,200 @@ describe('only internal functions read or write signInFailures', () => {
 });
 
 describe('per-IP limiter', () => {
-  test('the limiter ships off, keyed on cf-connecting-ip once it is on', () => {
-    const options = createAuth({} as GenericCtx<DataModel>).options;
-    expect(options.rateLimit).toEqual({ enabled: false, storage: 'database' });
-    expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(['cf-connecting-ip']);
+  const ADDRESS = { 'cf-connecting-ip': '203.0.113.9' };
+  const OTHER = { 'cf-connecting-ip': '198.51.100.7' };
+  const SECOND = 1000;
+
+  const limitRows = (t: T) => t.run((ctx) => ctx.db.query('ipRateLimits').collect());
+
+  async function windowStart(t: T, key: string): Promise<number> {
+    const row = (await limitRows(t)).find((r) => r.key === key);
+    if (!row) throw new Error(`no per-IP limit row for ${key}`);
+    return row.lastRequest;
+  }
+
+  const signUpAs = (t: T, email: string, headers: Record<string, string>) =>
+    post(
+      t,
+      'sign-up/email',
+      { name: 'Maya Okafor', email, password: PASSWORD, adultConfirmed: true },
+      headers,
+    );
+
+  async function get(t: T, path: string, headers: Record<string, string>): Promise<number> {
+    const response = await t.fetch(`/api/auth/${path}`, {
+      headers: { origin: SITE_URL, ...headers },
+    });
+    await response.text();
+    return response.status;
+  }
+
+  async function authUserEmails(t: T): Promise<string[]> {
+    return t.run(async (ctx) => {
+      const { page } = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+        model: 'user',
+        paginationOpts: { numItems: 100, cursor: null },
+      })) as { page: { email: string }[] };
+      return page.map((user) => user.email).sort();
+    });
+  }
+
+  beforeEach(() => {
+    // The limit is off under IS_TEST. With it unset the breached-password check is on, so its range
+    // request is answered here.
+    vi.stubEnv('IS_TEST', undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('0018A45C4D1DEF81644B54AB7F969B88D65:0'))),
+    );
   });
 
-  test('no number of sign-ins from one address is limited per IP', async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test('is on outside IS_TEST for sign-in and sign-up only, counted in the project store, keyed on cf-connecting-ip', () => {
+    const { rateLimit, advanced } = createAuth({} as GenericCtx<DataModel>).options;
+    expect(rateLimit?.enabled).toBe(true);
+    expect(rateLimit?.customStorage?.consume).toEqual(expect.any(Function));
+    expect(Object.entries(rateLimit?.customRules ?? {})).toEqual([
+      ['/sign-in/*', { window: 10, max: 3 }],
+      ['/sign-up/*', { window: 10, max: 3 }],
+      ['/**', false],
+    ]);
+    expect(advanced?.ipAddress).toEqual({ ipAddressHeaders: ['cf-connecting-ip'] });
+  });
+
+  test('is off under IS_TEST', () => {
+    vi.stubEnv('IS_TEST', 'true');
+    expect(createAuth({} as GenericCtx<DataModel>).options.rateLimit?.enabled).toBe(false);
+  });
+
+  test('the 4th sign-in from one address within 10 s gets 429 with the wait; another address still signs in', async () => {
     const t = setup();
     await signUp(t);
-    const headers = { 'cf-connecting-ip': '203.0.113.9' };
-    for (let i = 0; i < 4; i++)
-      expect((await signIn(t, EMAIL, PASSWORD, headers)).status).toBe(200);
+    for (let i = 0; i < 3; i++) {
+      const answer = await signIn(t, EMAIL, PASSWORD, ADDRESS);
+      expect(answer.status, `sign-in ${i + 1}`).toBe(200);
+      advance(2 * SECOND);
+    }
+    const fourth = await signIn(t, EMAIL, PASSWORD, ADDRESS);
+    expect(fourth.status).toBe(429);
+    expect(fourth.json).toEqual({ message: 'Too many requests. Please try again later.' });
+    const retryAfter = Number(fourth.headers.get('x-retry-after'));
+    expect(retryAfter).toBeGreaterThanOrEqual(1);
+    expect(retryAfter).toBeLessThanOrEqual(10);
+    expect(fourth.headers.get('access-control-allow-origin')).toBe(SITE_URL);
+    expect((await signIn(t, EMAIL, PASSWORD, OTHER)).status).toBe(200);
   }, 60_000);
+
+  test('the 4th sign-up from one address within 10 s gets 429 and creates no user', async () => {
+    const t = setup();
+    for (let i = 1; i <= 3; i++) {
+      const answer = await signUpAs(t, `new${i}@example.com`, ADDRESS);
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    }
+    const fourth = await signUpAs(t, 'new4@example.com', ADDRESS);
+    expect(fourth.status).toBe(429);
+    expect(await authUserEmails(t)).toEqual([
+      'new1@example.com',
+      'new2@example.com',
+      'new3@example.com',
+    ]);
+    expect(
+      await t.run((ctx) => ctx.db.query('users').collect()).then((users) => users.length),
+    ).toBe(3);
+  }, 60_000);
+
+  test('9 sign-ins at once from one address: at most 3 get their normal answer, the rest 429', async () => {
+    const t = setup();
+    await signUp(t);
+    const answers = await Promise.all(
+      Array.from({ length: 9 }, () => signIn(t, EMAIL, PASSWORD, ADDRESS)),
+    );
+    const statuses = answers.map((a) => a.status);
+    expect(statuses.filter((s) => s === 200).length).toBeLessThanOrEqual(3);
+    expect(statuses.filter((s) => s !== 200).every((s) => s === 429)).toBe(true);
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(6);
+    const row = (await limitRows(t)).find((r) => r.key === '203.0.113.9|/sign-in/email');
+    expect(row?.count).toBe(3);
+  }, 120_000);
+
+  test('refused at +5 s, +9 s and exactly +10 s after the 3rd sign-in, then allowed at +10.001 s', async () => {
+    const t = setup();
+    await signUp(t);
+    for (let i = 0; i < 3; i++)
+      expect((await signIn(t, EMAIL, PASSWORD, ADDRESS)).status).toBe(200);
+    const start = await windowStart(t, '203.0.113.9|/sign-in/email');
+    for (const ms of [5 * SECOND, 9 * SECOND, 10 * SECOND]) {
+      vi.setSystemTime(new Date(start + ms));
+      const refused = await signIn(t, EMAIL, PASSWORD, ADDRESS);
+      expect(refused.status, `at +${ms} ms`).toBe(429);
+      expect(refused.headers.get('x-retry-after')).toBe(String(10 - ms / SECOND));
+    }
+    expect(await windowStart(t, '203.0.113.9|/sign-in/email')).toBe(start);
+    vi.setSystemTime(new Date(start + 10 * SECOND + 1));
+    expect((await signIn(t, EMAIL, PASSWORD, ADDRESS)).status).toBe(200);
+  }, 60_000);
+
+  test('101 /get-session and 101 /convex/token requests from one address in 10 s all get their normal answer', async () => {
+    const t = setup();
+    for (const path of ['get-session', 'convex/token']) {
+      const first = await get(t, path, ADDRESS);
+      expect(first, path).not.toBe(429);
+      for (let i = 1; i < 101; i++)
+        expect(await get(t, path, ADDRESS), `${path} ${i + 1}`).toBe(first);
+    }
+    expect(await limitRows(t)).toEqual([]);
+  }, 120_000);
+
+  test('a sign-in the per-IP limit refuses leaves the sign-in throttle row unchanged', async () => {
+    const t = setup();
+    await signUp(t);
+    for (let i = 0; i < 3; i++) expect((await signIn(t, EMAIL, WRONG, ADDRESS)).status).toBe(401);
+    const before = await rows(t);
+    expect(before).toMatchObject([{ email: EMAIL, failures: 3 }]);
+    expect((await signIn(t, EMAIL, WRONG, ADDRESS)).status).toBe(429);
+    expect(await rows(t)).toEqual(before);
+  }, 60_000);
+
+  test('a missing, malformed, or comma-separated cf-connecting-ip shares one bucket', async () => {
+    const t = setup();
+    await signUp(t);
+    const headers: Record<string, string>[] = [
+      {},
+      { 'cf-connecting-ip': 'not-an-ip' },
+      { 'cf-connecting-ip': '203.0.113.9, 198.51.100.7' },
+    ];
+    for (const [i, h] of headers.entries()) {
+      expect((await signIn(t, EMAIL, PASSWORD, h)).status, `request ${i + 1}`).toBe(200);
+    }
+    expect((await signIn(t, EMAIL, PASSWORD, {})).status).toBe(429);
+    // Better Auth keys a request with no usable address as 127.0.0.1 when NODE_ENV is "test" (Vitest)
+    // or "development", and as `no-trusted-ip` on a deployment.
+    const signInKeys = (await limitRows(t))
+      .map((row) => row.key)
+      .filter((key) => key.endsWith('/sign-in/email'));
+    expect(signInKeys).toEqual(['127.0.0.1|/sign-in/email']);
+  }, 60_000);
+
+  test('when the count cannot be stored, the request gets 429 and the error is logged', async () => {
+    const t = setup();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // The store refuses a key over 300 characters, as it would any failed write.
+    const answer = await post(
+      t,
+      `sign-in/${'x'.repeat(300)}`,
+      { email: EMAIL, password: PASSWORD },
+      ADDRESS,
+    );
+    expect(answer.status).toBe(429);
+    expect(answer.headers.get('x-retry-after')).toBe('10');
+    expect(answer.headers.get('access-control-allow-origin')).toBe(SITE_URL);
+    expect(errors).toHaveBeenCalledWith(
+      'The per-IP limit could not be counted, so the request is refused',
+      expect.any(Error),
+    );
+    expect(await limitRows(t)).toEqual([]);
+  }, 30_000);
 });
