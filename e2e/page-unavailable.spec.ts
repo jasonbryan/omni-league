@@ -5,8 +5,8 @@ import { expect, test } from './support/fixtures';
 const CHUNK = /^\/chunk-[\w-]+\.js$/;
 
 /**
- * The page-unavailable view loads once the app is stable. Its chunk names the view's selector, so the
- * response that carries it shows the view is on the device.
+ * The page-unavailable view loads after the first page, once the app is stable. Its chunk names the
+ * view's selector, so the response that carries it shows the view is on the device.
  */
 function viewLoaded(page: Page) {
   return page.waitForResponse(
@@ -16,31 +16,15 @@ function viewLoaded(page: Page) {
   );
 }
 
-/**
- * `context.setOffline` makes the browser log each refused chunk as a network error, which the
- * console fixture cannot allow, so the browser reports offline while every chunk answers 503.
- */
-async function goOffline(page: Page): Promise<void> {
-  await page.route(
-    (url) => CHUNK.test(url.pathname),
-    (route) => route.fulfill({ status: 503, body: '' }),
-  );
-  await page.evaluate(() => {
-    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
-    window.dispatchEvent(new Event('offline'));
-  });
-}
-
 test.describe('a page that cannot load', () => {
-  test.use({ expectedFailedRequests: [{ status: 503, path: CHUNK }] });
-
   test('offline, a link to a page not on the device shows the not-saved view at that address', async ({
     page,
+    context,
   }) => {
     const loaded = viewLoaded(page);
     await page.goto('/');
     await loaded;
-    await goOffline(page);
+    await context.setOffline(true);
 
     await page.getByRole('contentinfo').getByRole('link', { name: 'Find a league' }).click();
 
@@ -56,5 +40,6 @@ test.describe('a page that cannot load', () => {
       '/leagues',
     );
     await expectAccessible(page);
+    await context.setOffline(false);
   });
 });

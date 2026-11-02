@@ -31,8 +31,28 @@ const HYDRATED_LOG = /Angular hydrated \d+ component\(s\)/;
  * Playwright reports as a page error; the app catches the failed fetch. The same text with no
  * navigation in flight is a real refusal (a trusted-origins mistake), so it still fails.
  */
+/**
+ * Offline, a lazy page that is not on the device cannot load: the app shows the not-saved view, which
+ * the tests assert, and also loads that view's chunk once after startup, which a test that goes offline
+ * at once can cut off. Allowed only for a chunk, and only with the text each engine logs for a request
+ * the offline browser refused (Chromium) or dropped (WebKit).
+ */
+const OFFLINE_CHUNK_REFUSAL = new Set([
+  'Failed to load resource: net::ERR_INTERNET_DISCONNECTED',
+  'Failed to load resource: WebKit encountered an internal error',
+]);
+const CHUNK_PATH = /^\/chunk-[\w-]+\.js$/;
 const CANCELLED_AUTH_FETCH =
   /^Fetch API cannot load https?:\/\/[^/\s]+\/api\/auth\/(?:convex\/token|get-session) due to access control checks\.$/;
+
+function isOfflineChunkRefusal(text: string, url: string): boolean {
+  if (!OFFLINE_CHUNK_REFUSAL.has(text) || !url) return false;
+  try {
+    return CHUNK_PATH.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
 
 function withoutFragment(url: string): string {
   const hash = url.indexOf('#');
@@ -187,6 +207,7 @@ export class ConsoleGuard {
     if (this.isExpectedDocument404(page, message, text)) return;
     if (this.matchConvexAllowance(text)) return;
     if (this.matchRequestAllowance(text, url)) return;
+    if (isOfflineChunkRefusal(text, url)) return;
     this.failures.push(`console.error: ${text}${at}`);
   }
 

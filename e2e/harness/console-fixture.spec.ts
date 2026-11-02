@@ -452,6 +452,46 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
     });
   });
 
+  test.describe('a chunk refused while the browser is offline', () => {
+    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+
+    async function offlinePage(browser: Browser) {
+      const guarded = await guardedPage(browser);
+      await guarded.page.route('**/probe-online', (route) =>
+        route.fulfill({ status: 200, contentType: 'text/html', body: '<p>probe page</p>' }),
+      );
+      await guarded.page.goto('/probe-online');
+      await guarded.page.context().setOffline(true);
+      return guarded;
+    }
+
+    test('passes: offline, a page that is not on the device cannot load, which the app shows', async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await offlinePage(browser);
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate((src) => import(src).catch(() => undefined), '/chunk-probe-offline.js'),
+      ]);
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    test('fails for a refused request that is not a chunk', async ({ browser }) => {
+      const { page, guard, close } = await offlinePage(browser);
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate(() => fetch('/probe-offline.png').catch(() => undefined)),
+      ]);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(
+          /^console\.error: Failed to load resource: .*\/probe-offline\.png\)$/,
+        ),
+      ]);
+      await close();
+    });
+  });
+
   // Chromium never logs WebKit's text, so each test hands the guard the page error that Playwright's
   // WebKit backend builds from it: the logged text is the stack's first line. The navigations are real.
   test.describe('a cancelled auth fetch while the page leaves (WebKit)', () => {
