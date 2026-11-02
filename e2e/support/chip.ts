@@ -9,10 +9,7 @@ export function chipLabel(scope: Page | Locator, radioName: string): Locator {
     .filter({ has: page.getByRole('radio', { name: radioName, exact: true }) });
 }
 
-/**
- * Chooses a chip as a user does, by clicking its label. `check({ force: true })` on the hidden radio
- * does not change its state on WebKit.
- */
+// `check({ force: true })` on the hidden radio does not change its state on WebKit.
 export async function chooseChip(label: Locator): Promise<void> {
   await label.click();
   await expect(label.getByRole('radio')).toBeChecked();
