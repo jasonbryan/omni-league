@@ -1,6 +1,10 @@
 import { Routes } from '@angular/router';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
+import { pageUnavailableRoute } from './core/page-load-failure';
 import { captureInviteToken } from './invites/capture-invite-token';
+
+export const loadPageUnavailablePage = () =>
+  import('./server-error/page-unavailable-page').then((m) => m.PageUnavailablePage);
 
 export const routes: Routes = [
   {
@@ -144,6 +148,7 @@ export const routes: Routes = [
       },
     ],
   },
+  pageUnavailableRoute(loadPageUnavailablePage),
   {
     path: '**',
     loadComponent: () => import('./not-found/not-found-page').then((m) => m.NotFoundPage),

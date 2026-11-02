@@ -1,7 +1,7 @@
 import { ApplicationConfig, isDevMode, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter, UrlSerializer } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
-import { routes } from './app.routes';
+import { loadPageUnavailablePage, routes } from './app.routes';
 import { provideClientHydration } from '@angular/platform-browser';
 import { AuthService } from './core/auth/auth.service';
 import { provideConvex, provideConvexAuth } from './core/data/convex';
@@ -10,13 +10,15 @@ import {
   serviceWorkerRegistration,
 } from './core/service-worker/service-worker-build';
 import { provideFocusMainAfterNavigation } from './core/focus-main';
+import { providePageLeaveTracking, withPageLoadFailureView } from './core/page-load-failure';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 import { provideUpdatePrompt } from './shell/update-prompt';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    provideRouter(routes, ...withPageLoadFailureView()),
+    providePageLeaveTracking(loadPageUnavailablePage),
     provideFocusMainAfterNavigation(),
     // A query string the router cannot decode (`?ref=%`) is dropped, as the server handler drops it, so hydration keeps the page instead of navigating to `/`.
     { provide: UrlSerializer, useClass: QueryTolerantUrlSerializer },

@@ -667,6 +667,13 @@ export const AREAS = [
     specs: ['not-found', 'organization-page', 'sport-view', 'league-page', 'season-page', ...ADMIN],
   },
   {
+    // The router shows these only after a page fails to load, which page-unavailable causes. not-found opens the same layouts with a
+    // view in place of the page, and navigation-focus the focus move after a route change.
+    name: 'page-unavailable pages',
+    test: named('src/app/server-error/', ['page-unavailable-page', 'page-unavailable-view']),
+    specs: ['page-unavailable', 'not-found', 'navigation-focus'],
+  },
+  {
     name: 'offline views',
     test: inDir('src/app/offline/'),
     specs: [

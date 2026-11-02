@@ -451,6 +451,180 @@ test.describe('console fixture rules', VIEWPORT_AGNOSTIC, () => {
       await close();
     });
   });
+
+  test.describe('a chunk refused while the browser is offline', () => {
+    test.skip(!!remoteBaseUrl, LOCAL_BUILD_ONLY);
+
+    async function offlinePage(browser: Browser) {
+      const guarded = await guardedPage(browser);
+      await guarded.page.route('**/probe-online', (route) =>
+        route.fulfill({ status: 200, contentType: 'text/html', body: '<p>probe page</p>' }),
+      );
+      await guarded.page.goto('/probe-online');
+      await guarded.page.context().setOffline(true);
+      return guarded;
+    }
+
+    test('passes: offline, a page that is not on the device cannot load, which the app shows', async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await offlinePage(browser);
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate((src) => import(src).catch(() => undefined), '/chunk-probe-offline.js'),
+      ]);
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    test('fails for a refused request that is not a chunk', async ({ browser }) => {
+      const { page, guard, close } = await offlinePage(browser);
+      await Promise.all([
+        page.waitForEvent('console', (m) => m.type() === 'error'),
+        page.evaluate(() => fetch('/probe-offline.png').catch(() => undefined)),
+      ]);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(
+          /^console\.error: Failed to load resource: .*\/probe-offline\.png\)$/,
+        ),
+      ]);
+      await close();
+    });
+  });
+
+  // Chromium never logs WebKit's text, so each test hands the guard the page error that Playwright's
+  // WebKit backend builds from it: the logged text is the stack's first line. The navigations are real.
+  test.describe('a cancelled auth fetch while the page leaves (WebKit)', () => {
+    const TOKEN = 'http://127.0.0.1:3211/api/auth/convex/token';
+    const SESSION = 'http://127.0.0.1:3211/api/auth/get-session';
+    const SIGN_IN = 'http://127.0.0.1:3211/api/auth/sign-in/email';
+    const HTML = { status: 200, contentType: 'text/html', body: '<p>probe page</p>' };
+
+    function webkitFetchError(page: Page, url: string): void {
+      const text = `Fetch API cannot load ${url} due to access control checks.`;
+      const error = new Error(text.slice(text.indexOf(':') + 2));
+      error.name = text.slice(0, text.indexOf(':'));
+      error.stack = `${text}\n    at unknown (http://localhost/chunk-probe.js:1:1)`;
+      (page as unknown as { emit(event: 'pageerror', error: Error): void }).emit(
+        'pageerror',
+        error,
+      );
+    }
+
+    async function heldNavigation(page: Page, path: string) {
+      let release!: () => Promise<void>;
+      const routed = new Promise<void>((resolve) => {
+        void page.route(`**${path}`, (route) => {
+          release = () => route.fulfill(HTML);
+          resolve();
+        });
+      });
+      const requested = page.waitForEvent('request', (r) => r.isNavigationRequest());
+      const navigation = page.goto(path);
+      await Promise.all([routed, requested]);
+      return async () => {
+        await release();
+        await navigation;
+      };
+    }
+
+    async function openedPage(browser: Browser) {
+      const guarded = await guardedPage(browser);
+      await guarded.page.route('**/probe-start', (route) => route.fulfill(HTML));
+      await guarded.page.goto('/probe-start');
+      return guarded;
+    }
+
+    for (const url of [TOKEN, SESSION]) {
+      test(`passes for ${new URL(url).pathname} during a main-frame navigation`, async ({
+        browser,
+      }) => {
+        const { page, guard, close } = await openedPage(browser);
+        const finish = await heldNavigation(page, '/probe-next');
+        webkitFetchError(page, url);
+        await finish();
+        expect(guard.problems()).toEqual([]);
+        await close();
+      });
+    }
+
+    test("passes after the old document's same-document URL change, before the commit", async ({
+      browser,
+      browserName,
+    }) => {
+      test.skip(
+        browserName !== 'webkit',
+        'Chromium cancels a pending navigation when the old document calls history.replaceState, so only WebKit reaches this order',
+      );
+      const { page, guard, close } = await openedPage(browser);
+      const finish = await heldNavigation(page, '/probe-next');
+      await Promise.all([
+        page.waitForEvent('framenavigated'),
+        page.evaluate(() => history.replaceState(null, '', '/')),
+      ]);
+      webkitFetchError(page, TOKEN);
+      await finish();
+      expect(guard.problems()).toEqual([]);
+      await close();
+    });
+
+    test('fails with no navigation in flight, as a real refusal of the token endpoint', async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await openedPage(browser);
+      webkitFetchError(page, TOKEN);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(/^pageerror: Fetch API cannot load .*\/api\/auth\/convex\/token /),
+      ]);
+      await close();
+    });
+
+    test('fails after a navigation answered with 204, which never commits', async ({ browser }) => {
+      const { page, guard, close } = await openedPage(browser);
+      await page.route('**/probe-no-content', (route) => route.fulfill({ status: 204, body: '' }));
+      await page.goto('/probe-no-content').catch(() => undefined);
+      webkitFetchError(page, TOKEN);
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(/^pageerror: Fetch API cannot load /),
+      ]);
+      await close();
+    });
+
+    test('fails for another URL during a navigation', async ({ browser }) => {
+      const { page, guard, close } = await openedPage(browser);
+      const finish = await heldNavigation(page, '/probe-next');
+      webkitFetchError(page, SIGN_IN);
+      await finish();
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(/^pageerror: Fetch API cannot load .*\/api\/auth\/sign-in\/email /),
+      ]);
+      await close();
+    });
+
+    test("fails after the new document commits, before its load (the new document's own fetch)", async ({
+      browser,
+    }) => {
+      const { page, guard, close } = await openedPage(browser);
+      let releaseImage!: () => Promise<void>;
+      const imageRequested = new Promise<void>((resolve) => {
+        void page.route('**/probe-slow.png', (route) => {
+          releaseImage = () => route.fulfill({ status: 204, body: '' });
+          resolve();
+        });
+      });
+      await page.route('**/probe-next', (route) =>
+        route.fulfill({ ...HTML, body: '<p>probe page</p><img src="/probe-slow.png" alt="">' }),
+      );
+      const committed = page.goto('/probe-next', { waitUntil: 'commit' });
+      await Promise.all([committed, imageRequested]);
+      webkitFetchError(page, TOKEN);
+      await releaseImage();
+      expect(guard.problems()).toEqual([
+        expect.stringMatching(/^pageerror: Fetch API cannot load /),
+      ]);
+      await close();
+    });
+  });
 });
 
 test.describe('console fixture wiring (real fixture)', VIEWPORT_AGNOSTIC, () => {
