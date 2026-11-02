@@ -56,7 +56,8 @@ const FRAMES = 2;
  * no longer under the pointer.
  */
 async function pressThenRelease(page: Page, button: Locator): Promise<void> {
-  await button.scrollIntoViewIfNeeded();
+  // Centred, so the sticky Create footer on a phone does not cover the button.
+  await button.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = (await button.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + 4);
   await page.mouse.down();
@@ -74,8 +75,6 @@ async function pressThenRelease(page: Page, button: Locator): Promise<void> {
 
 interface PressCase {
   name: string;
-  /** Why the press test skips WebKit, where the focus after the press differs from Chromium's. */
-  webkitSkip?: string;
   /** Opens the form and leaves an invalid value in a field that keeps focus. */
   prepare: (page: Page) => Promise<void>;
   button: (page: Page) => Locator;
@@ -128,9 +127,13 @@ const CASES: PressCase[] = [
     },
     button: (page) => createLeagueForm(page).getByRole('button', { name: /^Create draft league/ }),
     expectActed: (page) => shownOn(page, 'slug'),
-    fix: (page) => field(page, 'slug').fill('fine-league'),
+    async fix(page) {
+      await field(page, 'slug').fill('fine-league');
+      await chooseChip(chipLabel(page, '11v11'));
+    },
     async expectDone(page) {
-      await expect(page.locator('#leagues-list > li')).toHaveCount(1);
+      await expect(createLeagueForm(page)).toContainText('Fine created as a draft.');
+      await expect(page.locator('#leagues-list > li')).toHaveCount(2);
       await expect(
         createLeagueForm(page).getByRole('button', { name: /^Create draft league/ }),
       ).toBeFocused();
@@ -250,7 +253,6 @@ const CASES: PressCase[] = [
   },
   {
     name: 'Add level on the custom level panel',
-    webkitSkip: 'WebKit moves focus to the league Name after the refused Add level',
     async prepare(page) {
       const { base } = await orgAdmin(page);
       await page.goto(`${base}/leagues`);
@@ -284,8 +286,7 @@ const CASES: PressCase[] = [
 
 test.describe('a mouse press is not lost when leaving a field shows its error', () => {
   for (const press of CASES) {
-    test(`${press.name}: a press held across two frames still acts`, async ({ page }, testInfo) => {
-      test.skip(testInfo.project.name === 'webkit-mobile' && !!press.webkitSkip, press.webkitSkip);
+    test(`${press.name}: a press held across two frames still acts`, async ({ page }) => {
       await press.prepare(page);
       await pressThenRelease(page, press.button(page));
       await press.expectActed(page);
@@ -295,11 +296,7 @@ test.describe('a mouse press is not lost when leaving a field shows its error', 
     const { fix, expectDone } = press;
     test(`${press.name}: a press on a valid value acts and ends on the target`, async ({
       page,
-    }, testInfo) => {
-      test.skip(
-        testInfo.project.name === 'webkit-mobile' && press.name === 'Create league',
-        'WebKit focuses the Format chip after the league is created',
-      );
+    }) => {
       await press.prepare(page);
       await fix(page);
       await pressThenRelease(page, press.button(page));
@@ -335,12 +332,14 @@ test.describe('a tap on a phone', () => {
     await page.goto(`${base}/leagues`);
     await field(page, 'name').fill('Tapped');
     await chooseChip(chipLabel(page, 'Soccer'));
+    await chooseChip(chipLabel(page, '11v11'));
     await page.getByRole('checkbox', { name: 'Redfish Flats Fields' }).click();
     await field(page, 'slug').fill('tapped');
     await createLeagueForm(page)
       .getByRole('button', { name: /^Create draft league/ })
       .tap();
-    await expect(page.locator('#leagues-list > li')).toHaveCount(1);
+    await expect(createLeagueForm(page)).toContainText('Tapped created as a draft.');
+    await expect(page.locator('#leagues-list > li')).toHaveCount(2);
     await expect(field(page, 'slug')).not.toBeFocused();
   });
 
