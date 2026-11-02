@@ -75,14 +75,11 @@ async function pressThenRelease(page: Page, button: Locator): Promise<void> {
 
 interface PressCase {
   name: string;
-  /** Opens the form and leaves an invalid value in a field that keeps focus. */
+  /** Ends with focus in the invalid field, so the press is what leaves it. */
   prepare: (page: Page) => Promise<void>;
   button: (page: Page) => Locator;
-  /** What the press does on the invalid value. */
   expectActed: (page: Page) => Promise<void>;
-  /** Replaces the invalid value with a valid one, in the same focused field. */
   fix?: (page: Page) => Promise<void>;
-  /** What the press does on the valid value, with focus on the target. */
   expectDone?: (page: Page) => Promise<void>;
 }
 
