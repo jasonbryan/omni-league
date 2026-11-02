@@ -27,6 +27,7 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from './field-classes';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from './sticky-footer';
 import { StickyFooterFocus } from './sticky-footer-focus';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 type Notice =
   | { kind: 'saved'; previous: string | null }
@@ -51,6 +52,7 @@ function cityStateRefusal(failure: unknown): string | null {
 @Component({
   selector: 'app-admin-details',
   imports: [
+    MousePressKeepsFocus,
     AdminAlert,
     AdminLogo,
     AdminOfflineAlert,
@@ -215,6 +217,7 @@ function cityStateRefusal(failure: unknown): string | null {
           <div appStickyFooter>
             <button
               type="submit"
+              appMousePressKeepsFocus
               data-slot="button"
               [class]="saveClass"
               [class.opacity-50]="!online() && !saving()"

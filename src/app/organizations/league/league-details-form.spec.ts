@@ -125,6 +125,11 @@ describe('LeagueDetailsForm', () => {
     await o.flush();
   }
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await open();
+    expect(save().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('the section', () => {
     it('is the League details form with the name, division, and Save changes', async () => {
       await open();

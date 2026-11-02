@@ -190,6 +190,11 @@ describe('AdminStaff', () => {
   const copyStatus = () => page.querySelector<HTMLElement>('#copy-status')!;
   const expectedLink = () => `${window.location.origin}/invites/accept#${TOKEN}`;
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await openFull();
+    expect(submitButton().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('the page (states 1 and 2)', () => {
     it('asks the staff, pending, and league lists with the organization id, only after the context says ready', async () => {
       await open();

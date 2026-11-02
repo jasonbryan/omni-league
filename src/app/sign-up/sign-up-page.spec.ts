@@ -83,6 +83,11 @@ describe('SignUpPage', () => {
     expect(page.querySelector('button[aria-label="Open navigation"]')).toBeNull();
   });
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await open();
+    expect(submitButton().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('fields (mockup "Sign-up field attributes")', () => {
     beforeEach(() => open());
 

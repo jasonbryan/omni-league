@@ -68,6 +68,11 @@ describe('SeasonCreateForm', () => {
     registrationDeadline: '2026-08-25',
   };
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await open();
+    expect(submitButton().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('the sticky footer', () => {
     it('holds the submit button in the shared sticky footer, below the fields, and the card clips instead of hiding overflow', async () => {
       await open();

@@ -301,10 +301,30 @@ describe('selectSpecs: mapped areas', () => {
       'organization-leagues',
       'organization-staff',
       'league-management',
+      'mouse-press-keeps-focus',
     ]) {
       assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
     }
     assert.deepEqual(specsFor(['src/app/core/forms/shown-errors.spec.ts']), want());
+  });
+
+  it('maps the mouse-press directive to the specs of every form that uses it, and its unit spec to none', () => {
+    const specs = specsFor(['src/app/core/forms/mouse-press-keeps-focus.ts']);
+    assert.ok(!specs.includes('FULL'));
+    for (const name of [
+      'sign-in',
+      'create-organization',
+      'organization-admin',
+      'organization-details',
+      'organization-leagues',
+      'organization-staff',
+      'league-management',
+      'league-management-details',
+      'mouse-press-keeps-focus',
+    ]) {
+      assert.ok(specs.includes(`e2e/${name}.spec.ts`), name);
+    }
+    assert.deepEqual(specsFor(['src/app/core/forms/mouse-press-keeps-focus.spec.ts']), want());
   });
 
   it('runs the full suite for the focus handler, which moves focus after every route change', () => {

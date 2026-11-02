@@ -18,10 +18,11 @@ import { AdminOfflineAlert } from './admin-offline-alert';
 import { PRIMARY_BUTTON } from './button-classes';
 import { FORM_ALERTS, LocationForm } from './location-form';
 import { LocationFields } from './location-fields';
+import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 
 @Component({
   selector: 'app-add-location-form',
-  imports: [AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
+  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, LocationFields, NgIcon],
   providers: [provideIcons({ lucideLoaderCircle, lucidePlus })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
@@ -68,6 +69,7 @@ import { LocationFields } from './location-fields';
       <button
         #submitButton
         type="submit"
+        appMousePressKeepsFocus
         data-slot="button"
         [class]="buttonClass"
         [class.opacity-50]="!online() && !form.submitting()"

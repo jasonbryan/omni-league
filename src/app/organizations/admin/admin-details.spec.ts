@@ -63,6 +63,11 @@ describe('AdminDetails', () => {
     await o.flush();
   }
 
+  it('carries the directive that keeps a mouse press from losing the click', async () => {
+    await open();
+    expect(save().hasAttribute('appMousePressKeepsFocus')).toBe(true);
+  });
+
   describe('the page', () => {
     it('has the organization, the h1, a sentence, and the title', async () => {
       await open('Corpus Christi, TX');
