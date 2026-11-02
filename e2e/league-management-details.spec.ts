@@ -1,5 +1,6 @@
 import type { Browser, Page } from '@playwright/test';
 import { expectAccessible, tabKey } from './support/a11y';
+import { chipLabel, chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -121,7 +122,7 @@ test.describe('League management: league details', () => {
     await screenshot(page, testInfo, '237-league-details');
     await expectAccessible(page);
 
-    await chip(page, 'format', '6v6').check({ force: true });
+    await chooseChip(chipLabel(details(page).locator('#details-format'), '6v6'));
     await save(page).click();
 
     await expect(status(page)).toContainText('League details saved.');
@@ -164,7 +165,7 @@ test.describe('League management: league details', () => {
     page,
   }) => {
     await openDetails(page);
-    await chip(page, 'format', '6v6').check({ force: true });
+    await chooseChip(chipLabel(details(page).locator('#details-format'), '6v6'));
     await details(page).getByLabel('Name').fill('');
     await save(page).click();
     await expect(page.locator('#league-name-error')).toHaveText('Enter the league’s name.');
@@ -206,7 +207,7 @@ test.describe('League management: league details', () => {
         held.holdNextAnswer();
 
         await adminPage.goto(path);
-        await chip(adminPage, 'format', '6v6').check({ force: true });
+        await chooseChip(chipLabel(details(adminPage).locator('#details-format'), '6v6'));
         await save(adminPage).click();
         await expect(status(adminPage)).toContainText('League details saved.');
         await expect.poll(() => held.isHolding()).toBe(true);
@@ -268,7 +269,7 @@ test.describe('League management: league details', () => {
     }
 
     async function adminSavesSixes(adminPage: Page) {
-      await chip(adminPage, 'format', '6v6').check({ force: true });
+      await chooseChip(chipLabel(details(adminPage).locator('#details-format'), '6v6'));
       await save(adminPage).click();
       await expect(status(adminPage)).toContainText('League details saved.');
     }
