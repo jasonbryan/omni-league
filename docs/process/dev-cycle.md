@@ -32,7 +32,7 @@ Each role agent's frontmatter (`model:` and `effort:` in `.claude/agents/<agent>
 | `pr-reviewer`   | `opus`   | `high`   |
 | `deployer`      | `sonnet` | `medium` |
 
-The orchestrator may override both per dispatch: lighter for mechanical or docs-only tasks, at least `opus`/`high` for security, payments, auth, and server-rendering work, and `fable`/`xhigh` only for escalations: the final fix or review round after earlier rounds found defects, and the hardest security, payments, auth, and SSR tasks. When several rules match, the highest model and the highest effort among them apply. The rules are in the [dev-cycle skill, Model and effort](../../.claude/skills/dev-cycle/SKILL.md#model-and-effort), and every phase comment records the model and effort used.
+The orchestrator may override both per dispatch: lighter for mechanical or docs-only tasks, at least `opus`/`high` for security, payments, auth, and server-rendering work, and `fable`/`xhigh` only for escalations: the final fix or review round after earlier rounds found defects, and the hardest security, payments, auth, and SSR tasks. A fix, test, or review round whose push is a safe change (code comments other than directive comments, `*.md` docs, test titles) uses `sonnet`/`medium`, unless the security, payments, auth, and SSR rule or the escalation round applies. When several rules match, the highest model and the highest effort among them apply. The rules are in the [dev-cycle skill, Model and effort](../../.claude/skills/dev-cycle/SKILL.md#model-and-effort), and every phase comment records the model and effort used.
 
 ## Issue state machine
 
@@ -107,7 +107,8 @@ The implementer works in an isolated worktree on branch `<type>/<issue>-<slug>` 
 - Use only accepted technology. Needing anything new stops the work: the implementer reports it, and the orchestrator sends the issue back to Phase 3.
 - Update `convex/seed.ts` to match the issue's Demo data criterion. New tables get demo rows, changed fields are set on the demo rows, and a feature for a role shows on that role's demo account (#98; `hosting.md` Demo data once #98 merges). The seed must still pass on a fresh deployment: `convex/seedCoverage.test.ts` fails when a schema table has no demo rows and no listed exception, and `test:convex` runs it.
 - Commits follow Conventional Commits (`feat(roster): add player to team`).
-- Run the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`, not the full suite, which runs once per [batch](#batch-run) on `main`. Put the command and its result for the head SHA in the PR Evidence block, or the empty list when the PR has no own specs.
+- Run the PR's [own e2e specs](#own-e2e-specs) with `npm run e2e -- <files>`, not the full suite, which runs once per [batch](#batch-run) on `main`. Put the command and its result in the PR Evidence block, or the empty list when the PR has no own specs. The result is for the head SHA pushed last, including after a review fix: a push after the run means the run is repeated or the evidence is marked stale.
+- Before opening or updating the PR, re-read every added or changed comment against [AGENTS.md, Code comments](../../AGENTS.md#code-comments) and fix what-comments. The PR Evidence block says `Comments re-read against AGENTS.md`.
 - A new route, or a new source directory under `src/app/` whose files would run the full suite, still adds its rule in `scripts/e2e-affected.mjs` in the same PR, and `npm run test:scripts` fails until it does ([CI, Affected e2e specs](ci.md#affected-e2e-specs-and-the-nightly-run)). `npm run e2e:affected` is an on-demand tool, not the per-PR run.
 - Open a **draft** PR from `.github/pull_request_template.md` with `Closes #<issue>`, and move the issue to `status:in-review`.
 - Stop local processes as in [Local processes](#local-processes).
@@ -156,12 +157,14 @@ The orchestrator classifies the PR's head SHA from `git fetch origin pull/<n>/he
 - **Dependency bump only.** The changed files are exactly `package.json` and `package-lock.json`, and `git diff origin/main...FETCH_HEAD -- package.json` changes only the version strings of existing entries in `dependencies`, `devDependencies`, and `overrides`. Each changed version keeps its major: for `>=1.0.0` the first number; for `0.y.z` the first two (`^0.12` to `^0.13` is a major); for `0.0.z` any change is a major. A package added or removed, or a change to any other field (`devEngines`, `engines`, `allowScripts`, `scripts`, and the rest), brings the tester back.
 - **Dependabot.** An npm Dependabot PR (groups included) is low-risk only when it meets the dependency bump rule, read from its `package.json` diff, not from Dependabot's label or group: Dependabot calls `convex-test` `0.0.60` to `0.0.66` a patch and `@convex-dev/better-auth` `0.12` to `0.13` a minor, and both are majors here. It records `dependency bump`. A Dependabot PR that changes only `package-lock.json` (a transitive security update) is low-risk only when every package whose version changes in `git diff origin/main...FETCH_HEAD -- package-lock.json` keeps its major by the same rule and no package entry is added or removed, and it also records `dependency bump`. The entry check is `git diff origin/main...FETCH_HEAD -- package-lock.json | grep -E '^[+-] +"node_modules/'`, which prints nothing for a low-risk PR; a printed line means an entry was added or removed, and the PR goes to the tester. An npm Dependabot PR that is not low-risk, such as one that moves a 0.x major, goes to the tester. It has no linked issue, so the tester runs the full `npm run e2e` on the head SHA, and that run is the `Test: PASS` or `FAIL`. This "major" sets only the tester path: the `gate:technology` rule for npm majors ([CI, Merge procedure](ci.md#merge-procedure), `AGENTS.md`) stays as it is. A GitHub Actions Dependabot PR is low-risk while every changed file is under `.github/`, and records `Dependabot github-actions`; the reviewer still reads the action's release notes.
 
+- **Fix push with no behaviour change.** A fix push on a PR that already has `Test: PASS` is low-risk for that round when the cumulative diff from the last `Test: PASS` SHA to the new head (not each push alone) is only safe changes: code comments (not directive comments such as `@ts-`, `eslint-`, `prettier-ignore`), `*.md` docs, and test titles. In a code file, "comment-only" means every added or removed line is a comment line. A rename of an export, a Convex function, a test id, a route, or a CSS class, and a reworded visible string, are behaviour changes. The stand-in for the tester run is all local checks plus the own specs run on that exact head; evidence marked stale cannot stand in.
+
 Any other changed file brings the tester back, including:
 
 - any non-test file under `src/`, `convex/` (`convex/testing.ts` included), `public/`, `design/`, `.github/` (`.github/pull_request_template.md` included), or `scripts/`. The one exception is a file under `.github/` on a GitHub Actions Dependabot PR;
 - root config files such as `playwright.config.ts`, `angular.json`, `tsconfig*`, `netlify.toml`, and `ngsw-config.json`.
 
-A low-risk PR goes from the implementer straight to Phase 6. The orchestrator first posts `Test: skipped (low-risk: <tests and docs only | dependency bump | Dependabot github-actions>) at <head SHA>` on the PR. It re-classifies on every push: a push that adds a file outside these rules sends the PR to the tester, and a push that keeps the PR low-risk gets a new record for the new head SHA. A clean `gh pr update-branch` keeps the record, as it keeps `PASS`. `ci` still gates the merge in Phase 7. The implementer's PR Evidence block still carries the own-specs command and its result for the head SHA.
+A low-risk PR goes from the implementer straight to Phase 6. The orchestrator first posts `Test: skipped (low-risk: <tests and docs only | dependency bump | Dependabot github-actions>) at <head SHA>` on the PR; for the fix push case it posts `Test: skipped (low-risk fix push: <reason>) at <sha>`. It re-classifies on every push: a push that adds a file outside these rules sends the PR to the tester, and a push that keeps the PR low-risk gets a new record for the new head SHA. An update from `main` keeps the record when the PR's own changes are unchanged ([Phase 7, step 1](#7-merge)). `ci` still gates the merge in Phase 7. The implementer's PR Evidence block still carries the own-specs command and its result for the head SHA.
 
 ### 6. PR review
 
@@ -173,22 +176,28 @@ It compares the PR's seed change with the issue's own Demo data criterion. A PR 
 
 On `CHANGES`, the implementer fixes it, the orchestrator re-classifies the new head SHA ([Low-risk PRs](#low-risk-prs)), the tester re-runs unless the PR is still low-risk, and the reviewer re-reviews. Implement → test → review loops are capped at three rounds; after that the PR goes to `status:blocked` with a summary for the owner.
 
+**Fix before merge.** A reviewer whose only remaining findings are safe changes (code comments other than directive comments, `*.md` docs, test titles) may post `Review: APPROVE (fix before merge: <n>)`, listing each fix as `path:line` with the exact old and new text. The implementer applies exactly those replacements. The orchestrator checks that the fix diff is exactly the listed replacements and posts `Fix before merge: applied as listed at <sha>`, then merges without another review round. Anything else in the diff sends the PR back to review. An `APPROVE (fix before merge)` is not a round for the three-round cap. A change to a name, a Convex function, a test id, a route, a CSS class, or a visible string is not a safe change.
+
 **Done when:** `APPROVE` is recorded as a PR review comment.
 
 ### 7. Merge
 
 A PR may merge when all of these hold:
 
-- On the SHA that merges, it has tester `PASS`, or a `Test: skipped (low-risk: <tests and docs only | dependency bump | Dependabot github-actions>) at <sha>` record and still meets [Low-risk PRs](#low-risk-prs). A push that adds a file outside those rules brings the tester back.
-- Reviewer `APPROVE` is on its latest commit.
+- On the SHA that merges, it has tester `PASS`, or a `Test: skipped (low-risk: <tests and docs only | dependency bump | Dependabot github-actions>) at <sha>` record, or a `Test: skipped (low-risk fix push: <reason>) at <sha>` record, and still meets [Low-risk PRs](#low-risk-prs). A push that adds a file outside those rules brings the tester back.
+- Reviewer `APPROVE` is on its latest commit. Reviewer `APPROVE (fix before merge)` on the previous head, plus the `Fix before merge: applied as listed at <sha>` record, counts as `APPROVE` on the latest commit; the fix head carries the fix push record above, or a new `Test: skipped (low-risk: ...)` record when the PR is still low-risk.
 - It has no `gate:*` label, it is outside the owner-merge scope ([Who merges](#who-merges)), and every gate on the linked issue is approved.
 - No [batch run](#batch-run) regression holds merges, or the PR is ci-scope `docs` or the fix or revert PR for it.
 
 The orchestrator then merges it, one PR at a time, so a single `ci` run checks the exact tree that lands ([ADR 0009](../decisions/0009-ci-pipeline.md)):
 
-1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A clean update (no conflicts, none of the PR's own files changed) keeps `PASS`, a `Test: skipped` record, and `APPROVE`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again.
+1. **Update while draft.** If the branch is behind `main`, run `gh pr update-branch <n>`. A conflicted update sends the PR back to the implementer, and Phases 5 and 6 run again. An update that merges without conflict keeps `PASS`, a `Test: skipped` record, and `APPROVE` when the PR's own changes are unchanged:
+   - Before `gh pr update-branch`, record `<old head>` and `git merge-base origin/main <old head>`.
+   - After the update, run `git fetch`, then on the new head: `diff <(git diff <old merge-base> <old head> -- . ':!convex/_generated') <(git diff origin/main <new head> -- . ':!convex/_generated')`. The output is raw, with index lines kept, so a `main` change to a file the PR also changes shows up. Output that is not empty drops the records, and the tester and reviewer run again.
+   - For `convex/_generated/`, run `node scripts/e2e-convex.mjs push` on the new head (anonymous local backend, which runs codegen), then the drift check from [CI, E2E steps](ci.md#e2e-steps): `git diff --exit-code convex/_generated` and `git status --porcelain --untracked-files=all -- convex/_generated` must print nothing.
+   - Post `Update: own changes unchanged, old <old head sha>, new <new head sha>` so the reviewer can repeat the check.
 2. **Mark ready.** `gh pr ready <n>` starts the `ci` run.
-3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then `gh pr checks <n> --watch` until `ci` passes. `skipping` is not a pass.
+3. **Wait for `ci`.** Note the head SHA (`gh pr view <n> --json headRefOid`), then run `gh run list --workflow CI --commit <head sha> --json databaseId,status,conclusion,createdAt` and take the newest run. Wait with `gh run watch <id>`, then read the `ci` job's `conclusion` from `gh run view <id> --json jobs`. `ci` passes only on `success`. A `cancelled` job (CI has `cancel-in-progress`), `skipping`, or a missing run is not a pass. The `gh pr checks` list is not the source.
 4. **Merge.** `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. If GitHub refuses because `main` moved, go back to step 1.
 5. **On failure.** If `ci` fails, `gh pr ready <n> --undo` and send the PR back to the implementer.
 
@@ -243,7 +252,7 @@ The owner merges only:
 
 The owner may also tell the orchestrator in chat to merge one of these PRs; the orchestrator then merges it and comments the owner's words on it, quoted exactly, as the record of approval. Only the owner's own chat message counts; no agent's message is an approval.
 
-Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` (or a low-risk `Test: skipped` record) and `APPROVE` where those phases apply and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
+Every other PR, including changes to this file, `.claude/`, the rest of `AGENTS.md`, other process docs, and design mockups, merges like any reviewed PR: the orchestrator merges it in [Phase 7](#7-merge) once it has `PASS` (or a low-risk `Test: skipped` record) and `APPROVE` (or `APPROVE (fix before merge)` on the previous head plus the `Fix before merge: applied as listed at <sha>` record, as in [Phase 7](#7-merge)) where those phases apply and `ci` is green. A PR that touches the owner-merge scope plus other files is owner-merged as a whole. Its author says so in the PR body (`Needs owner: merge`), and the orchestrator holds the PR for the owner.
 
 ## Reporting to the owner
 
@@ -260,6 +269,8 @@ Each report follows [AGENTS.md, Writing on GitHub](../../AGENTS.md#writing-on-gi
 ## Parallel work
 
 The orchestrator may run several issues at once when none of them blocks another. Issues that change the Convex schema (`convex/schema.ts`) or shared design tokens run one at a time to avoid conflicting migrations and merges. Each implementer gets its own worktree.
+
+**Open-PR limit.** The orchestrator starts no new frontier issue while 5 or more non-Dependabot PRs are open. It first moves each open PR to its next phase. Not counted: PRs labelled `gate:*` or carrying `Needs owner: merge` (everything in the owner-merge scope), and PRs whose linked issue is labelled `status:blocked` (this covers the three-round cap). Exempt from the limit: the fix-forward or revert issue during a [batch run](#batch-run) regression, and work the owner names in chat. Count with `gh pr list --state open --json number,author,labels`, excluding author `app/dependabot` and the PRs above.
 
 ### Local processes
 
