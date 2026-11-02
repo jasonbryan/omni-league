@@ -10,6 +10,7 @@ import {
   type Type,
 } from '@angular/core';
 import {
+  NavigationEnd,
   RedirectCommand,
   Router,
   withNavigationErrorHandler,
@@ -33,9 +34,11 @@ const SHOW_PAGE_UNAVAILABLE = Symbol();
 const PAGE_LEAVING = new InjectionToken('', {
   factory: () => {
     const leave = { leaving: false };
+    let wait: ReturnType<typeof setTimeout>;
     inject(DOCUMENT).defaultView?.addEventListener('beforeunload', () => {
       leave.leaving = true;
-      setTimeout(() => (leave.leaving = false), UNLOAD_COMMIT_WAIT_MS);
+      clearTimeout(wait);
+      wait = setTimeout(() => (leave.leaving = false), UNLOAD_COMMIT_WAIT_MS);
     });
     return leave;
   },
@@ -77,16 +80,21 @@ export function withPageLoadFailureView(): RouterFeatures[] {
 
 /**
  * Starts listening for `beforeunload` at bootstrap, so a failure that follows it is known to be part of
- * leaving. Once the app is stable it loads the page-unavailable view, which offline could not load when
- * a failure needs it.
+ * leaving. After the first page has loaded and the app is stable, it loads the page-unavailable view,
+ * which offline could not load when a failure needs it; earlier it would compete with the first page.
  */
 export function providePageLeaveTracking(loadView: () => Promise<unknown>): EnvironmentProviders {
   return provideEnvironmentInitializer(() => {
     inject(PAGE_LEAVING);
     if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
-    void inject(ApplicationRef)
-      .whenStable()
-      .then(loadView)
-      .catch(() => undefined);
+    const appRef = inject(ApplicationRef);
+    const firstPage = inject(Router).events.subscribe((event) => {
+      if (!(event instanceof NavigationEnd)) return;
+      firstPage.unsubscribe();
+      void appRef
+        .whenStable()
+        .then(loadView)
+        .catch(() => undefined);
+    });
   });
 }

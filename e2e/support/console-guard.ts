@@ -92,8 +92,8 @@ export class ConsoleGuard {
 
   /**
    * True from a main-frame navigation request until the main frame commits that navigation's URL, or
-   * the navigation fails or answers with no content. A same-document `history.replaceState` on the old document also fires `framenavigated`, so the
-   * URL must match.
+   * the navigation fails or answers with no content. A same-document `history.replaceState` on the
+   * old document also fires `framenavigated`, so the URL must match.
    */
   private trackLeaving(page: Page): () => boolean {
     let pending: string | null = null;

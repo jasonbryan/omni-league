@@ -121,6 +121,22 @@ describe('withPageLoadFailureView', () => {
       expect(TestBed.inject(Location).path()).toBe('/app/broken');
     });
 
+    it('switches to the app shell when a page under /app fails right after a public one', async () => {
+      configure();
+      const harness = await RouterTestingHarness.create('/start');
+      await settle(harness);
+      const router = TestBed.inject(Router);
+
+      await router.navigateByUrl('/broken');
+      await settle(harness);
+      expect(host(harness).querySelector('app-shell')).toBeNull();
+
+      await router.navigateByUrl('/app/broken');
+      await settle(harness);
+      expect(host(harness).querySelector('app-shell')).not.toBeNull();
+      expect(tryAgain(harness)?.getAttribute('href')).toBe('/app/broken');
+    });
+
     it('leaves no unhandled rejection when a guard redirects to a page whose load fails', async () => {
       configure();
       const harness = await RouterTestingHarness.create('/start');
@@ -188,11 +204,20 @@ describe('withPageLoadFailureView', () => {
     vi.restoreAllMocks();
   });
 
-  it('loads the view once the app is stable, so it is on the device before a failure offline', async () => {
-    configure();
-    const harness = await RouterTestingHarness.create('/start');
-    await settle(harness);
+  it('loads the view only after the first page has loaded and the app is stable, so it is on the device before a failure offline', async () => {
+    let finishLoad!: (page: typeof StartTestPage) => void;
+    const slowPage = new Promise<typeof StartTestPage>((resolve) => (finishLoad = resolve));
+    configure([{ path: 'slow', loadComponent: () => slowPage }, ...routes]);
+    const harness = await RouterTestingHarness.create();
+    await new Promise((resolve) => setTimeout(resolve));
 
+    const navigation = TestBed.inject(Router).navigateByUrl('/slow');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(loadView).not.toHaveBeenCalled();
+
+    finishLoad(StartTestPage);
+    await navigation;
+    await settle(harness);
     expect(loadView).toHaveBeenCalledOnce();
   });
 
@@ -240,6 +265,24 @@ describe('withPageLoadFailureView', () => {
 
       expect(text(heading(harness))).toBe('This page is temporarily unavailable');
       expect(handleError).toHaveBeenCalledOnce();
+    });
+
+    it('restarts the wait on a second beforeunload', async () => {
+      configure();
+      const harness = await RouterTestingHarness.create('/start');
+      await settle(harness);
+
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      window.dispatchEvent(new Event('beforeunload'));
+      vi.advanceTimersByTime(UNLOAD_COMMIT_WAIT_MS * 0.6);
+      window.dispatchEvent(new Event('beforeunload'));
+      vi.advanceTimersByTime(UNLOAD_COMMIT_WAIT_MS * 0.6);
+      vi.useRealTimers();
+      await TestBed.inject(Router).navigateByUrl('/broken');
+      await settle(harness);
+
+      expect(text(heading(harness))).toBe('Start page');
+      expect(handleError).not.toHaveBeenCalled();
     });
   });
 });
