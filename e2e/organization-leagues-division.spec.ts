@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
+import { chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -48,7 +49,7 @@ test.describe('Leagues: the division', () => {
     await openLeagues(page);
     await expect(form(page)).toContainText('Choose a sport to see its formats and levels.');
 
-    await radio(page, 'Beach volleyball').check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
     await expect(radio(page, 'Coed')).toBeChecked();
     await expect(form(page).locator('#format input[type="radio"]')).toHaveCount(5);
     await expect(form(page).locator('#format input:checked')).toHaveCount(0);
@@ -58,7 +59,7 @@ test.describe('Leagues: the division', () => {
     await screenshot(page, testInfo, '300-league-form-defaults');
     await expectAccessible(page);
 
-    await radio(page, 'Soccer').check({ force: true });
+    await chooseChip(chip(page, 'Soccer'));
     await expect(form(page).locator('#format input[type="radio"]')).toHaveCount(8);
     await expect(form(page).locator('#level input[type="radio"]')).toHaveCount(3);
   });
@@ -67,7 +68,7 @@ test.describe('Leagues: the division', () => {
     page,
   }, testInfo) => {
     await openLeagues(page);
-    await radio(page, 'Beach volleyball').check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
     await page.locator('#name').fill('Wednesday Women’s 2s BB');
     await page.locator('#name').blur();
     await expect(radio(page, "Women's")).toBeChecked();
@@ -77,7 +78,7 @@ test.describe('Leagues: the division', () => {
     await screenshot(page, testInfo, '300-league-form-filled-from-name');
     await expectAccessible(page);
 
-    await radio(page, 'Coed').check({ force: true });
+    await chooseChip(chip(page, 'Coed'));
     await page.locator('#name').fill('Thursday Men’s 3s A');
     await page.locator('#name').blur();
     await expect(radio(page, 'Coed')).toBeChecked();
@@ -90,7 +91,7 @@ test.describe('Leagues: the division', () => {
   }, testInfo) => {
     await openLeagues(page);
     await page.locator('#name').fill('Sunday Night Sand');
-    await radio(page, 'Beach volleyball').check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
     await page.getByRole('checkbox', { name: 'Pelican Shoals Sand Courts' }).click();
     await submit(page).click();
     await expect(page.locator('#format-error')).toHaveText(
@@ -101,7 +102,7 @@ test.describe('Leagues: the division', () => {
     await screenshot(page, testInfo, '300-league-form-no-format');
     await expectAccessible(page);
 
-    await radio(page, '4v4').check({ force: true });
+    await chooseChip(chip(page, '4v4'));
     await expect(page.locator('#format-error')).toHaveCount(0);
   });
 
@@ -109,8 +110,8 @@ test.describe('Leagues: the division', () => {
     page,
   }) => {
     await openLeagues(page);
-    await radio(page, 'Beach volleyball').check({ force: true });
-    await radio(page, '4v4').check({ force: true });
+    await chooseChip(chip(page, 'Beach volleyball'));
+    await chooseChip(chip(page, '4v4'));
     await page.getByRole('button', { name: 'Raise the minimum roster size' }).click();
     const minimum = page.getByLabel('Minimum roster size');
     await expect(minimum).toBeFocused();
@@ -167,7 +168,7 @@ test.describe('Leagues: the division chips', () => {
   }) => {
     await openLeagues(page);
     await page.locator('#slug').focus();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radio(page, 'Beach volleyball')).toBeFocused();
     await page.keyboard.press('Space');
     await expect(radio(page, 'Beach volleyball')).toBeChecked();
@@ -179,7 +180,7 @@ test.describe('Leagues: the division chips', () => {
     await page.keyboard.press('ArrowLeft');
     await expect(radio(page, 'Beach volleyball')).toBeChecked();
 
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radio(page, 'Coed')).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(radio(page, "Men's")).toBeChecked();
@@ -187,7 +188,7 @@ test.describe('Leagues: the division chips', () => {
     await expect(radio(page, "Women's")).toBeChecked();
 
     // None is chosen in Format, so Tab lands on its first chip and Space chooses it.
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radio(page, '2v2')).toBeFocused();
     await expect(radio(page, '2v2')).not.toBeChecked();
     await page.keyboard.press('Space');
@@ -195,17 +196,17 @@ test.describe('Leagues: the division chips', () => {
     await page.keyboard.press('ArrowRight');
     await expect(radio(page, '3v3')).toBeChecked();
 
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(
       form(page).getByRole('button', { name: 'Raise the minimum roster size' }),
     ).toBeFocused();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(radio(page, 'Rec')).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(radio(page, 'B')).toBeChecked();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(form(page).getByRole('button', { name: 'Add a custom level' })).toBeFocused();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(form(page).getByLabel('Age group')).toBeFocused();
   });
 
