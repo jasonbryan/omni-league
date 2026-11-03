@@ -446,7 +446,7 @@ export class TeamPage {
     this.removeDialog()?.open({ rosterEntryId: player.rosterEntryId, name: player.name });
   }
 
-  /** A removal moves focus to the status, because the row and its button are gone; a cancel puts focus back on the row's Remove, or on the first remaining one or the heading when the row is gone. */
+  /** A removal focuses the status, because the row and its Remove are gone. */
   protected removeDismissed({ rosterEntryId, name, removed }: RemovePlayerOutcome): void {
     if (removed) {
       this.removedNotice.set(removedText(name, this.team()?.name ?? ''));
