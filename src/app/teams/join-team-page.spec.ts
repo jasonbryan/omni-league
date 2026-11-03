@@ -424,6 +424,9 @@ describe('JoinTeamPage', () => {
         'Sand Sharks is full.',
         'Nothing was added. If you chose two entries, there may be room for one; otherwise ask the captain whether a place opens.',
       ]);
+      expect(page.querySelector('[role="alert"] ng-icon')?.innerHTML).toContain(
+        '<circle cx="9" cy="7" r="4"',
+      );
       expect(document.activeElement).toBe(page.querySelector('[role="alert"]'));
       expect(checkbox(page, 'join-self').getAttribute('aria-checked')).toBe('true');
       expect(checkbox(page, 'join-self').disabled).toBe(false);

@@ -791,7 +791,7 @@ export class JoinTeamPage {
         };
       case 'teamFull':
         return {
-          alert: 'info',
+          alert: 'full',
           title: `${teamName} is full.`,
           description:
             'Nothing was added. If you chose two entries, there may be room for one; otherwise ask the captain whether a place opens.',

@@ -405,6 +405,7 @@ const getForRegistrationReturns = v.union(
     minimumRosterSize: v.number(),
     isFull: v.boolean(),
     maxTeams: v.optional(v.number()),
+    maxRosterSize: v.optional(v.number()),
     team: v.union(v.null(), registrationTeamValidator),
     freeAgent: v.union(
       v.null(),
@@ -438,6 +439,7 @@ export const getForRegistration = query({
       minimumRosterSize: season.minimumRosterSize,
       isFull: seasonIsFull(season),
       ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
+      ...(season.maxRosterSize !== undefined && { maxRosterSize: season.maxRosterSize }),
       team:
         team && user
           ? {

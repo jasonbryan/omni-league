@@ -428,7 +428,7 @@ describe('seasons.setMaxRosterSize', () => {
 });
 
 describe('the maximum in the views', () => {
-  test('the organizer view has the maximum and the largest roster; the team page has the maximum', async () => {
+  test('the organizer view has the maximum and the largest roster; the team page and the register query have the maximum', async () => {
     const s = await setup({ full: true });
     const view = await s.as(s.adminA).query(api.seasons.getOrganizerView, SLUGS);
     expect(view?.maxRosterSize).toBe(4);
@@ -436,13 +436,18 @@ describe('the maximum in the views', () => {
     const team = await s.as(s.captain).query(api.teams.getForMember, { teamId: s.sharks });
     expect(team?.maxRosterSize).toBe(4);
     expect(team?.rosterCount).toBe(4);
+    const registration = await s.t.query(api.seasons.getForRegistration, SLUGS);
+    expect(registration).toMatchObject({ minimumRosterSize: 4, maxRosterSize: 4 });
   });
 
-  test('without a limit neither view has a maximum', async () => {
+  test('without a limit no view has a maximum', async () => {
     const s = await setup({ maxRosterSize: null });
     const view = await s.as(s.adminA).query(api.seasons.getOrganizerView, SLUGS);
     expect(view).not.toHaveProperty('maxRosterSize');
     const team = await s.as(s.captain).query(api.teams.getForMember, { teamId: s.sharks });
     expect(team).not.toHaveProperty('maxRosterSize');
+    const registration = await s.t.query(api.seasons.getForRegistration, SLUGS);
+    expect(registration).not.toBeNull();
+    expect(registration).not.toHaveProperty('maxRosterSize');
   });
 });

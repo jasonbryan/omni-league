@@ -26,6 +26,7 @@ export type LeagueInputCode =
   | 'minimumRosterSizeLow'
   | 'minimumRosterSizeInvalid'
   | 'draftSeasonsTooMany'
+  | 'draftSeasonMaxRosterSizeLow'
   | 'changedSince'
   | 'locationsEmpty';
 
@@ -56,6 +57,8 @@ export const LEAGUE_MESSAGES = {
     `Enter a whole number from ${playersPerSide} to ${ROSTER_SIZE_INPUT_MAX}.`,
   draftSeasonsTooMany:
     'This league has too many draft seasons to update. Publish or remove some first.',
+  draftSeasonMaxRosterSizeLow: (seasonName: string, maxRosterSize: number, minimum: number) =>
+    `${seasonName} takes at most ${maxRosterSize} players per team, fewer than the minimum of ${minimum}. Raise its maximum roster size first.`,
   changedSince: 'The league details changed since this save, so it cannot be undone.',
   changedWhileEditing:
     'Someone else changed this league while you were editing. Check the details and save again.',

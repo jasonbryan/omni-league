@@ -523,6 +523,24 @@ describe('LeagueDetailsForm', () => {
       expect(text(status())).toContain(LEAGUE_MESSAGES.changedSince);
     });
 
+    it('shows the server’s reason when a draft season’s maximum roster size is too low', async () => {
+      await saved();
+      undoButton()!.click();
+      await o.flush();
+      o.convex.calls[1].reject(
+        new ConvexError({
+          field: 'format',
+          code: 'draftSeasonMaxRosterSizeLow',
+          message: LEAGUE_MESSAGES.draftSeasonMaxRosterSizeLow('Fall 2027', 6, 8),
+        }),
+      );
+      await o.flush();
+      expect(text(status())).toContain(
+        'Fall 2027 takes at most 6 players per team, fewer than the minimum of 8. Raise its maximum roster size first.',
+      );
+      expect(text(undoButton())).toBe('Undo');
+    });
+
     it('stays while the league shows what the save wrote', async () => {
       await saved();
       o.subscription(GET_ORGANIZER_CONTEXT)!.emit({
@@ -1184,6 +1202,25 @@ describe('LeagueDetailsForm', () => {
       await o.flush();
       expect(text(page.querySelector('#details-format-error'))).toBe(
         'This league has too many draft seasons to update. Publish or remove some first.',
+      );
+      expect(chip('format', '6').checked).toBe(true);
+      expect(page.querySelector('[data-slot="alert"]')).toBeNull();
+    });
+
+    it('shows a draft season’s too-low maximum roster size under the format, and keeps the input', async () => {
+      await open();
+      await choose('format', '6');
+      await submit();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'format',
+          code: 'draftSeasonMaxRosterSizeLow',
+          message: LEAGUE_MESSAGES.draftSeasonMaxRosterSizeLow('Fall 2027', 5, 6),
+        }),
+      );
+      await o.flush();
+      expect(text(page.querySelector('#details-format-error'))).toBe(
+        'Fall 2027 takes at most 5 players per team, fewer than the minimum of 6. Raise its maximum roster size first.',
       );
       expect(chip('format', '6').checked).toBe(true);
       expect(page.querySelector('[data-slot="alert"]')).toBeNull();

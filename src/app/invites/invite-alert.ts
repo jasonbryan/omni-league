@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideCircleAlert, lucideInfo } from '@ng-icons/lucide';
+import { lucideCircleAlert, lucideInfo, lucideUsers } from '@ng-icons/lucide';
 import {
   ALERT_DESCRIPTION,
   ALERT_DESTRUCTIVE,
@@ -15,14 +15,14 @@ import {
   ALERT_TITLE,
 } from '../organizations/admin/admin-alert';
 
-/** `notice` is a refusal the user resolves themselves, such as signing in with another account: neutral, with the alert icon. */
-export type InviteAlertKind = 'error' | 'notice' | 'info';
+/** `notice` is a refusal the user resolves themselves, such as signing in with another account: neutral, with the alert icon. `full` is a refusal because the team has no room. */
+export type InviteAlertKind = 'error' | 'notice' | 'info' | 'full';
 
 /** Takes focus through `focus()` and shows the focus ring the mockup draws, because focus moves to it from a button that has just gone. */
 @Component({
   selector: 'app-invite-alert',
   imports: [NgIcon],
-  providers: [provideIcons({ lucideCircleAlert, lucideInfo })],
+  providers: [provideIcons({ lucideCircleAlert, lucideInfo, lucideUsers })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
   template: `
@@ -52,6 +52,7 @@ export class InviteAlert {
       error: 'lucideCircleAlert',
       notice: 'lucideCircleAlert',
       info: 'lucideInfo',
+      full: 'lucideUsers',
     } as const;
     return icons[this.kind()];
   });

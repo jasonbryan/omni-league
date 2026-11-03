@@ -253,6 +253,15 @@ describe('RegisterTeamPage', () => {
     });
   });
 
+  it('open with a maximum roster size: the roster row gives the range', async () => {
+    await open();
+    await answer({ ...SUMMER, maxRosterSize: 6 });
+    const roster = [...page.querySelectorAll('main dl > div')].find(
+      (row) => text(row.querySelector('dt')) === 'Roster',
+    );
+    expect(text(roster?.querySelector('dd'))).toBe('4 to 6 players');
+  });
+
   describe('the form', () => {
     beforeEach(async () => {
       await open();
