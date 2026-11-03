@@ -38,6 +38,16 @@ export interface AlreadyPlacedRefusal {
   message: string;
 }
 
+export interface CaptainRequiredRefusal {
+  code: 'captainRequired';
+  message: string;
+}
+
+export interface NotRosteredRefusal {
+  code: 'notRostered';
+  message: string;
+}
+
 export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
 
 export const TEAM_MESSAGES = {
@@ -53,6 +63,8 @@ export const TEAM_MESSAGES = {
     "You're registered as a free agent in this season. An organizer places free agents on teams.",
   alreadyFreeAgent: 'Already registered as a free agent in this season.',
   alreadyPlaced: 'Already placed on a team.',
+  captainRequired: 'A team needs its captain.',
+  notRostered: 'No longer on the team.',
 } as const;
 
 export function normalizeTeamName(name: string): string {

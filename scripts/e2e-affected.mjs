@@ -846,7 +846,7 @@ export const AREAS = [
   {
     name: 'convex teams, free agents, and roster writes',
     test: (file) =>
-      named('convex/', ['teams', 'teamInvites', 'freeAgents'])(file) ||
+      named('convex/', ['teams', 'teamInvites', 'freeAgents', 'rosterEntries'])(file) ||
       named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput', 'teamInviteInput'])(file),
     specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, ...TEAM_JOIN, 'season-page', 'app-teams'],
   },

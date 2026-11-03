@@ -1,12 +1,12 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
 import { otherUser, signUp } from './support/session';
 import { screenshot } from './support/screenshot';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
-import { newUser, type TestUser } from './support/users';
+import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -274,5 +274,214 @@ test.describe('team page', () => {
     ).toBeVisible();
     await expectAccessible(page);
     await screenshot(page, testInfo, '129-team-no-access');
+  });
+});
+
+const rosterRows = (page: Page) => page.locator('section[aria-labelledby="roster-heading"] li');
+const removeFor = (page: Page, name: string, team: string) =>
+  page.getByRole('button', { name: `Remove ${name} from ${team}` });
+const removeDialog = (page: Page) => page.getByRole('alertdialog');
+const rosterStatus = (page: Page) =>
+  page.locator('section[aria-labelledby="roster-heading"] [role="status"]');
+
+/** The viewer is the captain unless `organizer` is set; `firstPlayerPage` is a signed-in page for the first player, whose context the caller closes. */
+async function rosterOfThree(
+  page: Page,
+  {
+    organizer = false,
+    firstPlayerSignedIn = false,
+    beforeOpen,
+  }: { organizer?: boolean; firstPlayerSignedIn?: boolean; beforeOpen?: () => Promise<void> } = {},
+) {
+  const tenant = await seed();
+  const captain = newUser('Captain');
+  const viewer = organizer ? newUser('Organizer') : captain;
+  await signUp(page, viewer);
+  if (organizer) await seedUser(captain);
+  const marcus = newUser('Marcus');
+  const firstPlayerPage = firstPlayerSignedIn
+    ? await otherUser(page.context().browser()!, marcus)
+    : (await seedUser(marcus), null);
+  const players = [marcus, await seedUser(newUser('Elena'))];
+  const { teamId } = await seedTeam(tenant, OPEN, 'Sand Sharks', captain);
+  for (const player of players) {
+    await convexRun('testing:addToTeam', { teamId, email: player.email });
+  }
+  if (organizer) {
+    await convexRun('testing:addLeagueOrganizer', {
+      organizationSlug: tenant.slug,
+      email: viewer.email,
+      leagueSlugs: [LEAGUE_SLUG],
+    });
+  }
+  await beforeOpen?.();
+  await page.goto(`/app/teams/${teamId}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Sand Sharks' })).toBeVisible();
+  await expect(rosterRows(page)).toHaveCount(3);
+  return { teamId, captain, players, firstPlayerPage };
+}
+
+test.describe('team page: removing a player', () => {
+  test('the captain removes a player after confirming: the row leaves, the count falls by 1, and the status takes focus; the player loses the page', async ({
+    page,
+  }, testInfo) => {
+    const { teamId, captain, players, firstPlayerPage } = await rosterOfThree(page, {
+      firstPlayerSignedIn: true,
+    });
+    const marcusPage = firstPlayerPage!;
+    const [marcus] = players;
+    await expect(page.getByTestId('roster-count')).toHaveText('3 of 4 players');
+    await expect(
+      rosterRows(page).filter({ hasText: captain.name }).getByRole('button'),
+    ).toHaveCount(0);
+    await expect(removeFor(page, marcus.name, 'Sand Sharks')).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    );
+    await screenshot(page, testInfo, '137-remove-captain-row');
+    await expectAccessible(page);
+
+    await removeFor(page, marcus.name, 'Sand Sharks').click();
+    const dialog = removeDialog(page);
+    await expect(
+      dialog.getByRole('heading', { name: `Remove ${marcus.name} from Sand Sharks?` }),
+    ).toBeVisible();
+    await expect(dialog).toContainText(
+      'They’ll lose access to the team page. You can invite them again later.',
+    );
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    // The modal holds focus, so the page-wide Tab walk (which expects to leave the page) does not
+    // apply: axe, and a Tab that cycles inside the dialog.
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await page.keyboard.press(tabKey(page));
+    await expect(dialog.getByRole('button', { name: 'Remove player' })).toBeFocused();
+    await page.keyboard.press(`Shift+${tabKey(page)}`);
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await screenshot(page, testInfo, '137-remove-confirm');
+
+    await dialog.getByRole('button', { name: 'Remove player' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(rosterStatus(page)).toContainText(`${marcus.name} was removed from Sand Sharks.`);
+    await expect(rosterStatus(page)).toContainText(
+      'They can no longer open this page. You can invite them again.',
+    );
+    await expect(rosterStatus(page)).toBeFocused();
+    await expect(rosterRows(page)).toHaveCount(2);
+    await expect(rosterRows(page).filter({ hasText: marcus.name })).toHaveCount(0);
+    await expect(page.getByTestId('roster-count')).toHaveText('2 of 4 players');
+    await expect(page.getByTestId('roster-note')).toHaveText(
+      '2 more needed to reach the minimum of 4 players.',
+    );
+    await screenshot(page, testInfo, '137-remove-removed');
+    await expectAccessible(page);
+
+    try {
+      await marcusPage.goto(`/app/teams/${teamId}`);
+      await expect(
+        marcusPage.getByRole('heading', { level: 1, name: 'You can’t open this team page' }),
+      ).toBeVisible();
+    } finally {
+      await marcusPage.context().close();
+    }
+  });
+
+  test('Cancel and Escape write nothing and return focus to that row’s Remove', async ({
+    page,
+  }) => {
+    const { players } = await rosterOfThree(page);
+    const elena = removeFor(page, players[1].name, 'Sand Sharks');
+
+    await elena.click();
+    await removeDialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(removeDialog(page)).toHaveCount(0);
+    await expect(elena).toBeFocused();
+
+    await elena.click();
+    await expect(removeDialog(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(removeDialog(page)).toHaveCount(0);
+    await expect(elena).toBeFocused();
+
+    await expect(rosterRows(page)).toHaveCount(3);
+    await expect(page.getByTestId('roster-count')).toHaveText('3 of 4 players');
+    await expect(rosterStatus(page)).toHaveCount(0);
+  });
+
+  test('an organizer of the league removes a player on the team page', async ({
+    page,
+  }, testInfo) => {
+    const { players } = await rosterOfThree(page, { organizer: true });
+    await expect(
+      page.getByText(`You’re an organizer of ${LEAGUE}, so you can manage this team’s roster.`),
+    ).toBeVisible();
+    await removeFor(page, players[0].name, 'Sand Sharks').click();
+    await removeDialog(page).getByRole('button', { name: 'Remove player' }).click();
+    await expect(rosterStatus(page)).toBeFocused();
+    await expect(rosterRows(page)).toHaveCount(2);
+    await expect(page.getByTestId('roster-count')).toHaveText('2 of 4 players');
+    await screenshot(page, testInfo, '137-remove-organizer');
+    await expectAccessible(page);
+  });
+});
+
+test.describe('team page: removing a player, while the removal is held', () => {
+  test('the Removing… button is disabled and the dialog stays accessible', async ({
+    page,
+  }, testInfo) => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { players } = await rosterOfThree(page, {
+      beforeOpen: () =>
+        page.routeWebSocket(/.*/, (ws) => {
+          const server = ws.connectToServer();
+          ws.onMessage(async (message) => {
+            if (typeof message === 'string' && message.includes('"Mutation"')) await held;
+            server.send(message);
+          });
+          server.onMessage((message) => ws.send(message));
+        }),
+    });
+    await removeFor(page, players[0].name, 'Sand Sharks').click();
+    const dialog = removeDialog(page);
+    await dialog.getByRole('button', { name: 'Remove player' }).click();
+    const removing = dialog.getByRole('button', { name: 'Removing…' });
+    await expect(removing).toHaveAttribute('aria-disabled', 'true');
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '137-remove-removing');
+    release();
+    await expect(dialog).toHaveCount(0);
+    await expect(rosterRows(page)).toHaveCount(2);
+  });
+});
+
+test.describe('team page: removing a player someone else removed', () => {
+  test.use({ expectedConvexErrors: ['rosterEntries:remove'] });
+
+  test('the dialog says so with focus on the alert, and Cancel returns focus to the next Remove', async ({
+    page,
+  }, testInfo) => {
+    const { teamId, players } = await rosterOfThree(page);
+    const [marcus, elena] = players;
+    await removeFor(page, marcus.name, 'Sand Sharks').click();
+    const dialog = removeDialog(page);
+    await convexRun('testing:removeFromTeam', { teamId, email: marcus.email });
+    await expect(page.getByTestId('roster-count')).toHaveText('2 of 4 players');
+
+    await dialog.getByRole('button', { name: 'Remove player' }).click();
+    const alert = dialog.getByRole('alert');
+    await expect(alert).toContainText(`${marcus.name} could not be removed.`);
+    await expect(alert).toContainText('They’re no longer on the team.');
+    await expect(alert).toBeFocused();
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '137-remove-error');
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(removeFor(page, elena.name, 'Sand Sharks')).toBeFocused();
+    await expect(rosterStatus(page)).toHaveCount(0);
   });
 });
