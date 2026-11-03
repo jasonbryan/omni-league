@@ -37,9 +37,13 @@ import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
-import { registrationCard, teamCard, type ViewerTeam } from './public-season-registration';
+import {
+  registrationCard,
+  teamCard,
+  type RegistrationCard,
+  type ViewerTeam,
+} from './public-season-registration';
 import { BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
-import type { SeasonPhase } from '../../../../convex/lib/registration';
 import type { PublicSeasonView } from './public-season-view';
 
 const SEE_SEASON_BUTTON = `${BUTTON_BASE} border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 mt-5 h-11 w-full gap-2 px-5 has-data-[icon=inline-end]:pe-4`;
@@ -52,11 +56,14 @@ const REGISTRATION_CARD =
 /**
  * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration. The signed-out card
  * stays in the card behind the team card, so the card is never shorter than it; these floors cover the team card when it is the taller one.
+ * A full season is still open for registration, so a captain below the minimum gets the open team card.
  */
 const RESERVED_HEIGHT = {
   open: 'min-h-66 sm:min-h-58',
+  full: 'min-h-66 sm:min-h-58',
   closed: 'min-h-47 md:min-h-49',
 } as const;
+const FULL_BADGE_TEXT = 'Full';
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
 
@@ -107,9 +114,7 @@ const FACT_ICON =
       <div class="mt-4 flex flex-wrap items-center gap-2 md:mt-6">
         <span data-slot="badge" [class]="openBadge">{{ season().league.sportName }}</span>
         @if (card(); as card) {
-          <span data-testid="season-phase" [class]="phaseBadge()">{{
-            phaseLabel(card.phase)
-          }}</span>
+          <span data-testid="season-phase" [class]="phaseBadge()">{{ phaseLabel(card) }}</span>
         }
       </div>
       <h1 class="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-5xl">
@@ -165,6 +170,21 @@ const FACT_ICON =
                       Captains register a team, then invite their players. Without a team? Register
                       as a free agent, and an organizer places you on one.
                     </p>
+                  } @else if (card.kind === 'full') {
+                    <p class="text-lg font-semibold tracking-tight">This season is full</p>
+                    <p class="mt-2 text-sm text-muted-foreground">{{ card.note }}</p>
+                    <div class="mt-5 flex flex-col gap-2">
+                      <a
+                        [routerLink]="registerFreeAgentHref()"
+                        data-slot="button"
+                        [class]="freeAgentButton"
+                        ><ng-icon
+                          name="lucideUserPlus"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />Register as a free agent</a
+                      >
+                    </div>
                   } @else {
                     <p class="text-lg font-semibold tracking-tight">
                       Registration closed on {{ card.closedOn }}
@@ -388,7 +408,8 @@ export class PublicSeasonContent {
   readonly viewerTeam = input<ViewerTeam | undefined>(undefined);
 
   protected readonly openBadge = OPEN_BADGE;
-  protected readonly phaseLabel = (phase: SeasonPhase) => BADGE_TEXT[phase];
+  protected readonly phaseLabel = (card: RegistrationCard) =>
+    card.kind === 'full' ? FULL_BADGE_TEXT : BADGE_TEXT[card.phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
   protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
@@ -420,7 +441,7 @@ export class PublicSeasonContent {
     return team && teamCard(team, this.season(), this.now());
   });
   protected readonly phaseBadge = computed(() =>
-    this.card()?.phase === 'registrationOpen' ? OPEN_BADGE : MUTED_BADGE,
+    this.card()?.kind === 'open' ? OPEN_BADGE : MUTED_BADGE,
   );
   protected readonly dates = computed(() =>
     seasonDateParts(this.season().startDate, this.season().endDate),

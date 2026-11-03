@@ -4,6 +4,7 @@ import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
 import { otherUser, signUp } from './support/session';
+import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
@@ -484,5 +485,102 @@ test.describe('team page: removing a player someone else removed', () => {
     await expect(dialog).toHaveCount(0);
     await expect(removeFor(page, elena.name, 'Sand Sharks')).toBeFocused();
     await expect(rosterStatus(page)).toHaveCount(0);
+  });
+});
+
+test.describe('a full season', () => {
+  const FULL = 'full-season';
+  const FULL_CLOSED = 'full-closed';
+
+  async function seedFull(tenant: Tenant, slug: string, deadlineFromToday: number) {
+    await convexRun('testing:seedSeason', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      name: slug === FULL ? 'Full Season' : 'Full Closed',
+      slug,
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(100),
+      registrationDeadline: dateFromToday(deadlineFromToday),
+      minimumRosterSize: 4,
+      maxTeams: 2,
+      status: 'published',
+    });
+    for (const name of ['Pair of Aces', 'Two Tall']) {
+      await seedTeam(tenant, slug, name, await seedUser(newUser('Captain')));
+    }
+  }
+
+  const seasonPagePath = (tenant: Tenant, season: string) =>
+    `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${season}`;
+
+  test('the season page says the season is full and offers only the free-agent route', async ({
+    page,
+    request,
+  }, testInfo) => {
+    const tenant = await seed();
+    await seedFull(tenant, FULL, 20);
+    const path = seasonPagePath(tenant, FULL);
+    if (testInfo.project.name === 'chromium-desktop') {
+      const { html } = await fetchRawHtml(request, path);
+      expect(html).toContain('This season is full');
+      expect(html).not.toContain(`href="${registerPath(tenant, FULL)}"`);
+      expect(html).toContain(
+        `href="/app/register/${tenant.slug}/${LEAGUE_SLUG}/${FULL}/free-agent"`,
+      );
+    }
+    await page.goto(path);
+    const card = page.locator('#registration');
+    await expect(card).toContainText('This season is full');
+    await expect(card).toContainText(
+      'It takes 2 teams, and every place is taken. Free agents can still register until',
+    );
+    await expect(card.getByRole('link', { name: 'Register a team' })).toHaveCount(0);
+    await expect(card.getByRole('link', { name: 'Register as a free agent' })).toBeVisible();
+    await expect(page.getByTestId('season-phase')).toHaveText('Full');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '143-season-full');
+  });
+
+  test('the register route shows the full state with the free-agent link, and registers nothing', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seed();
+    await seedFull(tenant, FULL, 20);
+    await signUp(page, newUser('Late'));
+    const sent: string[] = [];
+    page.on('websocket', (socket) => {
+      socket.on('framesent', (frame) => sent.push(String(frame.payload)));
+    });
+    await page.goto(registerPath(tenant, FULL));
+    const card = page.locator('main [data-slot="alert"]');
+    await expect(card).toContainText('This season is full.');
+    await expect(card).toContainText(
+      `${LEAGUE} takes 2 teams in Full Season, and every place is taken.`,
+    );
+    await expect(teamName(page)).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Register as a free agent' })).toHaveAttribute(
+      'href',
+      `/app/register/${tenant.slug}/${LEAGUE_SLUG}/${FULL}/free-agent`,
+    );
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '143-register-full');
+    expect(sent.filter((frame) => frame.includes('teams:register'))).toEqual([]);
+  });
+
+  test('a full season whose registration closed shows the closed state on the page and the route', async ({
+    page,
+  }) => {
+    const tenant = await seed();
+    await seedFull(tenant, FULL_CLOSED, -5);
+    await page.goto(seasonPagePath(tenant, FULL_CLOSED));
+    const card = page.locator('#registration');
+    await expect(card).toContainText('Registration closed on');
+    await expect(card).not.toContainText('This season is full');
+
+    await signUp(page, newUser('Closed'));
+    await page.goto(registerPath(tenant, FULL_CLOSED));
+    const alert = page.locator('main [data-slot="alert"]');
+    await expect(alert).toContainText('Registration for this season is closed.');
+    await expect(alert).not.toContainText('This season is full.');
   });
 });

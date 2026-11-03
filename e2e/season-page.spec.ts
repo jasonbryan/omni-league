@@ -968,11 +968,18 @@ test.describe('public season page: signed in and on a team', () => {
   const LONG_SPACED_NAME_58 = 'The Sand Sharks Beach Volleyball Club of Corpus Christi Tx';
   const LONG_UNBROKEN_NAME = 'W'.repeat(60);
   const NO_SHIFT_WIDTHS = [320, 360, 640, 768, 1000, 1280];
-  const NO_SHIFT_CASES = [
+  const FULL_SEASON = 'full-season';
+  const NO_SHIFT_CASES: { title: string; season: string; teamName: string; maxTeams?: number }[] = [
     {
       title: 'an open season and a long team name',
       season: 'fall-open',
       teamName: LONG_SPACED_NAME,
+    },
+    {
+      title: 'a full season and a captain below the minimum',
+      season: FULL_SEASON,
+      teamName: 'Sand Sharks',
+      maxTeams: 1,
     },
     {
       title: 'a closed season and a 58-character name with spaces',
@@ -991,7 +998,7 @@ test.describe('public season page: signed in and on a team', () => {
     },
   ];
 
-  for (const { title, season, teamName } of NO_SHIFT_CASES) {
+  for (const { title, season, teamName, maxTeams } of NO_SHIFT_CASES) {
     test(`the details do not move when the team card replaces the signed-out card in ${title}`, async ({
       page,
       consoleGuard,
@@ -1000,6 +1007,20 @@ test.describe('public season page: signed in and on a team', () => {
       const { tenant } = await seed();
       const captain = newUser('Captain');
       await signUp(page, captain);
+      if (maxTeams !== undefined) {
+        await convexRun('testing:seedSeason', {
+          organizationSlug: tenant.slug,
+          leagueSlug: LEAGUE_SLUG,
+          name: 'Full Season',
+          slug: season,
+          startDate: OPEN_SEASON.startDate,
+          endDate: OPEN_SEASON.endDate,
+          registrationDeadline: OPEN_SEASON.registrationDeadline,
+          minimumRosterSize: 4,
+          maxTeams,
+          status: 'published',
+        });
+      }
       await convexRun('testing:seedTeam', {
         organizationSlug: tenant.slug,
         leagueSlug: LEAGUE_SLUG,

@@ -30,9 +30,11 @@ const SUMMER = {
   registrationDeadline: '2027-05-23',
   formatName: '4v4',
   minimumRosterSize: 4,
+  isFull: false,
   team: null,
   freeAgent: null,
 };
+const FULL = { ...SUMMER, isFull: true, maxTeams: 8 };
 const WAITING = {
   ...SUMMER,
   freeAgent: { status: 'waiting', registeredAt: Date.parse('2027-05-01T00:00:00Z') },
@@ -193,6 +195,42 @@ describe('RegisterTeamPage', () => {
       );
     });
 
+    it('full: says so with a link to the free-agent route, no form, and calls no mutation', async () => {
+      await open();
+      await answer(FULL);
+      const card = page.querySelector('[data-slot="alert"]');
+      expect(card?.getAttribute('role')).toBe('status');
+      expect(text(card)).toBe(
+        'This season is full. Sunday Reverse Coed 4s takes 8 teams in Summer 2027, and every place is taken. You can still register as a free agent, and an organizer may place you on a team.',
+      );
+      const link = [...page.querySelectorAll('main a')].find(
+        (a) => text(a) === 'Register as a free agent',
+      );
+      expect(link?.getAttribute('href')).toBe(
+        `/app/register/${SLUGS.orgSlug}/${SLUGS.leagueSlug}/${SLUGS.seasonSlug}/free-agent`,
+      );
+      expect(page.querySelector('form')).toBeNull();
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('full and on a team: "You’re on <team>" wins over full', async () => {
+      await open();
+      await answer({ ...FULL, team: ON_TEAM.team });
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain(
+        'You’re on Sand Sharks in this season.',
+      );
+      expect(page.textContent).not.toContain('This season is full.');
+    });
+
+    it('full and closed: closed wins over full', async () => {
+      await open({ now: '2027-05-24T12:00:00Z' });
+      await answer(FULL);
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain(
+        'Registration for this season is closed.',
+      );
+      expect(page.textContent).not.toContain('This season is full.');
+    });
+
     it('open: the form with the season’s facts and the title', async () => {
       await open();
       await answer(SUMMER);
@@ -286,6 +324,22 @@ describe('RegisterTeamPage', () => {
       const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
       expect(alert?.getAttribute('role')).toBe('alert');
       expect(text(alert)).toContain('Registration for this season is closed.');
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('a refusal as full shows the full card, whose alert takes focus', async () => {
+      await type('Sand Sharks');
+      await submit();
+      registers()[0].reject(
+        new ConvexError({ code: 'seasonFull', message: 'This season is full.' }),
+      );
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toBe(
+        'This season is full. Every place in Summer 2027 is taken. You can still register as a free agent, and an organizer may place you on a team.',
+      );
+      expect(page.querySelector('form')).toBeNull();
       expect(document.activeElement).toBe(alert);
     });
 

@@ -10,9 +10,11 @@ const OPEN: NonNullable<RegistrationAnswer> = {
   registrationDeadline: '2027-05-23',
   formatName: '4v4',
   minimumRosterSize: 4,
+  isFull: false,
   team: null,
   freeAgent: null,
 };
+const FULL: RegistrationAnswer = { ...OPEN, isFull: true, maxTeams: 2 };
 const ON_TEAM: RegistrationAnswer = {
   ...OPEN,
   team: { teamId: 'team-a' as Id<'teams'>, name: 'Sand Sharks', isCaptain: true, rosterCount: 1 },
@@ -44,6 +46,23 @@ describe('registerTeamState: the first state that applies', () => {
     ['a waiting free agent, signed out', WAITING, false, AFTER_DEADLINE, 'signed-out'],
     ['on no team after the deadline', OPEN, true, AFTER_DEADLINE, 'closed'],
     ['on no team while open', OPEN, true, BEFORE_DEADLINE, 'form'],
+    ['a full season while open', FULL, true, BEFORE_DEADLINE, 'full'],
+    ['a full season after the deadline', FULL, true, AFTER_DEADLINE, 'closed'],
+    [
+      'on a team in a full season',
+      { ...FULL, team: ON_TEAM.team },
+      true,
+      BEFORE_DEADLINE,
+      'on-team',
+    ],
+    [
+      'a waiting free agent in a full season',
+      { ...FULL, freeAgent: WAITING.freeAgent },
+      true,
+      BEFORE_DEADLINE,
+      'waiting',
+    ],
+    ['a full season, signed out', FULL, false, BEFORE_DEADLINE, 'signed-out'],
   ])('%s: %s', (_label, answer, signedIn, nowMs, state) => {
     expect(registerTeamState({ answer, signedIn, nowMs })).toBe(state);
   });

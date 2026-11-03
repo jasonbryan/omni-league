@@ -16,6 +16,7 @@ export interface NextOpenSeason {
 
 export type RegistrationCard =
   | { kind: 'open'; phase: 'registrationOpen'; closes: string }
+  | { kind: 'full'; phase: 'registrationOpen'; closes: string; note: string }
   | {
       kind: 'closed';
       phase: Exclude<SeasonPhase, 'registrationOpen'>;
@@ -52,7 +53,15 @@ export function registrationCard(
   if (registrationDeadline === undefined) return undefined;
   const phase = seasonPhase({ ...season, registrationDeadline }, nowMs);
   const closes = formatCalendarDate(registrationDeadline);
-  if (phase === 'registrationOpen') return { kind: 'open', phase, closes };
+  if (phase === 'registrationOpen') {
+    if (!season.isFull) return { kind: 'open', phase, closes };
+    const taken =
+      season.maxTeams === undefined
+        ? 'Every place is taken.'
+        : `It takes ${season.maxTeams} teams, and every place is taken.`;
+    const note = `${taken} Free agents can still register until ${closes}, and an organizer places them on teams.`;
+    return { kind: 'full', phase, closes, note };
+  }
   const note =
     phase === 'inProgress'
       ? 'This season is underway.'

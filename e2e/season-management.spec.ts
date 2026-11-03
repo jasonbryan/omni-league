@@ -514,3 +514,123 @@ test.describe('Season management: callers who may not open it', () => {
     }
   });
 });
+
+test.describe('Season management: maximum teams', () => {
+  const FULL = 'full-open';
+  const limits = (page: Page) => page.locator('section[aria-labelledby="limits-heading"]');
+  const summary = (page: Page) => page.getByTestId('max-teams-summary');
+  const field = (page: Page) => page.locator('#edit-maximum-teams');
+  const saveButton = (page: Page) => limits(page).getByRole('button', { name: 'Save changes' });
+
+  async function seedFullSeason(tenant: Tenant): Promise<void> {
+    await convexRun('testing:seedSeason', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      name: 'Full Open',
+      slug: FULL,
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(100),
+      registrationDeadline: dateFromToday(20),
+      minimumRosterSize: 4,
+      maxTeams: 2,
+      status: 'published',
+    });
+    await addTeam(tenant, 'Pair of Aces');
+    await addTeam(tenant, 'Two Tall');
+  }
+
+  async function addTeam(tenant: Tenant, name: string): Promise<void> {
+    const captain = newUser('Captain');
+    await seedUsers([captain]);
+    await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug: FULL,
+      name,
+      captainEmail: captain.email,
+    });
+  }
+
+  test('the create form takes Maximum teams, refuses one out of range, and the new season shows it', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await asOrgAdmin(page);
+    await page.goto(`/app/organizations/${tenant.slug}/leagues/${LEAGUE_SLUG}`);
+    const create = page.locator('#create-season form');
+    await page.locator('#name').fill('Winter Cap');
+    await page.locator('#start-date').fill(dateFromToday(60));
+    await page.locator('#end-date').fill(dateFromToday(120));
+    await page.locator('#registration-deadline').fill(dateFromToday(30));
+    await page.locator('#maximum-teams').fill('201');
+    await create.getByRole('button', { name: /^Create draft season/ }).click();
+    await expect(page.locator('#maximum-teams-error')).toHaveText(
+      'Enter a whole number from 2 to 200, or leave it blank.',
+    );
+    await expect(page.locator('#maximum-teams')).toBeFocused();
+    await page.locator('#maximum-teams').scrollIntoViewIfNeeded();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '143-create-maximum-teams-error');
+
+    await page.locator('#maximum-teams').fill('8');
+    await create.getByRole('button', { name: /^Create draft season/ }).click();
+    await expect(create.locator('[data-slot="created-title"]')).toHaveText(
+      'Winter Cap created as a draft.',
+    );
+    await page.goto(seasonPath(tenant, 'winter-cap'));
+    await expect(summary(page)).toHaveText('8 teams · 0 registered');
+    await expect(page.getByTestId('team-count')).toHaveText('0 of 8');
+  });
+
+  test.describe('editing', () => {
+    test.use({ expectedConvexErrors: ['seasons:setMaxTeams'] });
+
+    test('a full season shows 2 of 2 teams; the limit is raised, refused below the count, and removed', async ({
+      page,
+    }, testInfo) => {
+      const tenant = await asOrgAdmin(page);
+      await seedFullSeason(tenant);
+      await page.goto(seasonPath(tenant, FULL));
+      await expect(page.getByTestId('team-count')).toHaveText('2 of 2');
+      await expect(summary(page)).toHaveText('2 teams · 2 registered, so the season is full');
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '143-organizer-full');
+
+      await limits(page).getByRole('button', { name: 'Edit maximum teams' }).click();
+      await expect(field(page)).toBeFocused();
+      await expect(field(page)).toHaveValue('2');
+      await expect(page.locator('#edit-maximum-teams-description')).toHaveText(
+        '2 to 200, or blank for no limit. At least the 2 teams already registered.',
+      );
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '143-edit-maximum-teams');
+
+      await field(page).fill('3');
+      await saveButton(page).click();
+      const status = limits(page).getByRole('status');
+      await expect(status).toHaveText('Maximum teams saved. The season takes up to 3 teams.');
+      await expect(status).toBeFocused();
+      await expect(page.getByTestId('team-count')).toHaveText('2 of 3');
+      await expect(summary(page)).toHaveText('3 teams · 2 registered');
+
+      await addTeam(tenant, 'Third Wheel');
+      await expect(page.getByTestId('team-count')).toHaveText('3 of 3');
+      await limits(page).getByRole('button', { name: 'Edit maximum teams' }).click();
+      await field(page).fill('2');
+      await saveButton(page).click();
+      await expect(page.locator('#edit-maximum-teams-error')).toHaveText(
+        '3 teams are already registered. Enter 3 or more, or leave it blank.',
+      );
+      await expect(field(page)).toBeFocused();
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '143-edit-maximum-teams-error');
+
+      await field(page).fill('');
+      await saveButton(page).click();
+      await expect(limits(page).getByRole('status')).toHaveText(
+        'Maximum teams removed. There’s no limit now.',
+      );
+      await expect(summary(page)).toHaveText('No limit · 3 registered');
+      await expect(page.getByTestId('team-count')).toHaveText('3');
+    });
+  });
+});

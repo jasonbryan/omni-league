@@ -31,6 +31,7 @@ const SUMMER = {
   registrationDeadline: '2027-05-23',
   formatName: '4v4',
   minimumRosterSize: 4,
+  isFull: false,
   team: null,
   freeAgent: null,
 };
@@ -171,6 +172,12 @@ describe('RegisterFreeAgentPage', () => {
       );
       expect(text(page.querySelector('button[type="submit"]'))).toBe('Register as a free agent');
       expect(document.title).toBe('Register as a free agent | Summer 2027 | Omni League');
+    });
+
+    it('a full season still offers the form: the maximum limits teams, not free agents', async () => {
+      await open();
+      await answer({ ...SUMMER, isFull: true, maxTeams: 2 });
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Register as a free agent');
     });
   });
 

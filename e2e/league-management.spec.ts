@@ -569,6 +569,7 @@ test.describe('League management: the create-season form on a phone', () => {
         'end-date',
         'registration-deadline',
         'A',
+        'maximum-teams',
         'BUTTON',
       ]);
       expect(underTheFooter(seen)).toEqual([]);
@@ -662,6 +663,7 @@ test.describe('League management: the created status on a phone', () => {
       'end-date',
       'registration-deadline',
       'A',
+      'maximum-teams',
       'BUTTON',
     ]);
     expect(underTheFooter(seen)).toEqual([]);
@@ -877,6 +879,8 @@ test.describe('League management: the next step in the created status on a phone
       await page.locator('#name').focus();
       const seen = await footerTabWalk(page, { form: form(page), until: submit(page) });
       await expect(submit(page)).toBeFocused();
+      // The created action is "Publish season" (a button) in a published league and "Show it in Seasons" (a link) in a draft one.
+      const action = league === COED ? [] : ['A'];
       expect(controlsInTabOrder(seen)).toEqual([
         'name',
         'slug',
@@ -884,6 +888,8 @@ test.describe('League management: the next step in the created status on a phone
         'end-date',
         'registration-deadline',
         'A',
+        'maximum-teams',
+        ...action,
         'BUTTON',
       ]);
       expect(underTheFooter(seen)).toEqual([]);

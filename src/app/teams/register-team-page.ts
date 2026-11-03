@@ -70,13 +70,22 @@ export const REGISTER_MESSAGES = {
   onTeamDescription:
     'Each person plays on one team per season, so there’s nothing to register here.',
   closedTitle: 'Registration for this season is closed.',
+  fullTitle: TEAM_MESSAGES.seasonFull,
+  fullDescription: (league: string, season: string, maxTeams: number | undefined) => {
+    const taken =
+      maxTeams === undefined
+        ? `Every place in ${season} is taken`
+        : `${league} takes ${maxTeams} teams in ${season}, and every place is taken`;
+    return `${taken}. You can still register as a free agent, and an organizer may place you on a team.`;
+  },
+  fullLink: 'Register as a free agent',
   waitingTitle: 'You’re waiting to be placed on a team.',
   waitingDescription: TEAM_MESSAGES.waitingFreeAgent,
   waitingLink: 'View your free-agent registration',
 } as const;
 
 /** What the page shows after a refused submit, before the query catches up. */
-type Refusal = 'closed' | 'onTeam' | 'waiting';
+type Refusal = 'closed' | 'full' | 'onTeam' | 'waiting';
 
 type FormAlert = 'offline' | 'failed';
 
@@ -221,6 +230,36 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                       aria-hidden="true"
                     />Back to the season page</a
                   >
+                }
+                @case ('full') {
+                  <div
+                    #cardAlert
+                    data-slot="alert"
+                    [attr.role]="refused() ? 'alert' : 'status'"
+                    tabindex="-1"
+                    [class]="neutralAlert"
+                  >
+                    <ng-icon name="lucideUsers" aria-hidden="true" />
+                    <div data-slot="alert-title" [class]="alertTitle">
+                      {{ messages.fullTitle }}
+                    </div>
+                    <div data-slot="alert-description" [class]="alertDescription">
+                      {{
+                        messages.fullDescription(
+                          season.leagueName,
+                          season.seasonName,
+                          season.maxTeams
+                        )
+                      }}
+                    </div>
+                  </div>
+                  <a
+                    [routerLink]="freeAgentHref()"
+                    data-slot="button"
+                    [class]="primaryButton + ' mt-4 w-full'"
+                    >{{ messages.fullLink
+                    }}<ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
+                  /></a>
                 }
                 @default {
                   <form novalidate aria-labelledby="register-heading" (submit)="submit($event)">
@@ -388,8 +427,9 @@ export class RegisterTeamPage {
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';
     if (state !== 'form') return state;
-    if (this.refusal() === 'waiting') return 'waiting';
-    return this.refusal() === 'closed' ? 'closed' : state;
+    const refusal = this.refusal();
+    if (refusal === 'waiting' || refusal === 'closed' || refusal === 'full') return refusal;
+    return state;
   });
 
   protected readonly closedLine = computed(() => {
@@ -497,6 +537,10 @@ export class RegisterTeamPage {
     const code = data?.['code'];
     if (code === 'registrationClosed') {
       this.refuse('closed');
+      return;
+    }
+    if (code === 'seasonFull') {
+      this.refuse('full');
       return;
     }
     if (code === 'waitingFreeAgent') {

@@ -37,6 +37,7 @@ import {
   teamWithSortName,
 } from './lib/rosterWrites';
 import { findLeagueBySlugs, findSeasonBySlugs } from './lib/seasonLookup';
+import { seasonIsFull } from './lib/seasonInput';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import type { Sport } from './lib/sports';
@@ -551,6 +552,21 @@ export const DEMO_SEASONS: readonly {
     },
     status: 'published',
   },
+  {
+    organizationSlug: 'gulf-coast-sport-social',
+    leagueSlug: 'thursday-night-coed-2s',
+    season: {
+      name: 'Summer 2027',
+      slug: 'summer-2027',
+      startDate: '2027-06-03',
+      endDate: '2027-08-26',
+      registrationDeadline: '2027-05-20',
+      playersPerSide: 2,
+      minimumRosterSize: 2,
+      maxTeams: 2,
+    },
+    status: 'published',
+  },
 ];
 
 interface RunSeason {
@@ -877,6 +893,19 @@ export const DEMO_FREE_AGENTS: readonly {
   },
 ];
 
+/** Its demo teams fill its `maxTeams`, so it shows a full season. */
+export const DEMO_FULL_SEASON = {
+  orgSlug: 'gulf-coast-sport-social',
+  leagueSlug: 'thursday-night-coed-2s',
+  seasonSlug: 'summer-2027',
+} as const;
+
+/** Each team is inserted by name in `DEMO_FULL_SEASON`, once its captain's account exists. */
+export const DEMO_FULL_SEASON_TEAMS: readonly { name: string; captainEmail: string }[] = [
+  { name: 'Pair of Aces', captainEmail: DEMO_CAPTAINS[0].email },
+  { name: 'Two Tall', captainEmail: DEMO_CAPTAINS[1].email },
+];
+
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
   { name: 'Net Results', captainEmail: DEMO_CAPTAINS[0].email },
@@ -1138,7 +1167,7 @@ export const findFictionalDemoUser = internalQuery({
 
 /**
  * Inserts each demo team whose captain is in `captains` (auth user ids by address) and is on no team
- * in the season yet, through the roster writer. Returns the teams inserted.
+ * in its season yet, through the roster writer. Returns the teams inserted.
  */
 export const insertDemoTeams = internalMutation({
   args: { captains: v.array(v.object({ email: v.string(), authUserId: v.string() })) },
@@ -1147,28 +1176,40 @@ export const insertDemoTeams = internalMutation({
     assertPreviewDeployment();
     const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
     if (!found) return 0;
-    let inserted = 0;
-    for (const team of DEMO_TEAMS) {
-      const authUserId = captains.find(
-        (captain) => captain.email === team.captainEmail,
-      )?.authUserId;
-      if (authUserId === undefined) continue;
-      if (await teamWithSortName(ctx, found.season._id, team.name)) continue;
-      const user = await ctx.db
-        .query('users')
-        .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
-        .unique();
-      if (!user) continue;
-      if (await adultEntryInSeason(ctx, found.season._id, user._id)) continue;
-      const season = await ctx.db.get('seasons', found.season._id);
-      if (!season) return inserted;
-      await insertTeamWithCaptain(ctx, season, { name: team.name, captainUserId: user._id });
-      inserted++;
-    }
+    let inserted = await insertSeasonTeams(ctx, found.season._id, DEMO_TEAMS, captains);
     await insertDemoRemovedPlayer(ctx, captains);
+    const full = await findSeasonBySlugs(ctx, DEMO_FULL_SEASON);
+    if (full) {
+      inserted += await insertSeasonTeams(ctx, full.season._id, DEMO_FULL_SEASON_TEAMS, captains);
+    }
     return inserted;
   },
 });
+
+async function insertSeasonTeams(
+  ctx: MutationCtx,
+  seasonId: Id<'seasons'>,
+  teams: readonly { name: string; captainEmail: string }[],
+  captains: readonly { email: string; authUserId: string }[],
+): Promise<number> {
+  let inserted = 0;
+  for (const team of teams) {
+    const authUserId = captains.find((captain) => captain.email === team.captainEmail)?.authUserId;
+    if (authUserId === undefined) continue;
+    if (await teamWithSortName(ctx, seasonId, team.name)) continue;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user) continue;
+    if (await adultEntryInSeason(ctx, seasonId, user._id)) continue;
+    const season = await ctx.db.get('seasons', seasonId);
+    if (!season || seasonIsFull(season)) return inserted;
+    await insertTeamWithCaptain(ctx, season, { name: team.name, captainUserId: user._id });
+    inserted++;
+  }
+  return inserted;
+}
 
 /** Once: any entry of the person in the season, removed included, means it was seeded already. */
 async function insertDemoRemovedPlayer(

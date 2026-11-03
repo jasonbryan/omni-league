@@ -7,7 +7,9 @@ import {
   requireUser,
 } from './lib/access';
 import {
+  checkMaxTeams,
   checkSeasonFields,
+  seasonIsFull,
   firstSeasonError,
   SEASON_MESSAGES,
   type LeagueFormatMissingError,
@@ -37,7 +39,7 @@ import { formatLabel } from './lib/divisions';
 import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 import { freeAgentStatusValidator } from './lib/freeAgent';
-import { freeAgentInSeason, adultEntryInSeason } from './lib/rosterWrites';
+import { freeAgentInSeason, adultEntryInSeason, setSeasonMaxTeams } from './lib/rosterWrites';
 import { getCurrentUser } from './lib/users';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
@@ -59,6 +61,7 @@ export const create = mutation({
     startDate: v.string(),
     endDate: v.string(),
     registrationDeadline: v.string(),
+    maxTeams: v.optional(v.number()),
   },
   returns: v.object({ seasonId: v.id('seasons') }),
   handler: async (ctx, args) => {
@@ -86,8 +89,25 @@ export const create = mutation({
       registrationDeadline: args.registrationDeadline,
       playersPerSide: league.playersPerSide,
       minimumRosterSize: league.minimumRosterSize ?? league.playersPerSide,
+      ...(args.maxTeams !== undefined && { maxTeams: args.maxTeams }),
     });
     return { seasonId };
+  },
+});
+
+export const setMaxTeams = mutation({
+  args: { seasonId: v.id('seasons'), maxTeams: v.union(v.number(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, { seasonId, maxTeams }) => {
+    // Signed in first, so an unknown season and another organization's season look alike.
+    await requireUser(ctx);
+    const season = await ctx.db.get('seasons', seasonId);
+    if (!season) throw new Error('Not allowed');
+    await requireLeagueOrganizer(ctx, season.leagueId);
+    const refusal = checkMaxTeams(maxTeams ?? undefined);
+    if (refusal) refuse(refusal);
+    await setSeasonMaxTeams(ctx, seasonId, maxTeams);
+    return null;
   },
 });
 
@@ -168,6 +188,7 @@ export const getOrganizerView = query({
       minimumRosterSize: v.number(),
       teams: v.array(organizerTeamValidator),
       teamCount: v.number(),
+      maxTeams: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, slugs) => {
@@ -202,6 +223,7 @@ export const getOrganizerView = query({
       minimumRosterSize: season.minimumRosterSize,
       teams: rows,
       teamCount: season.teamCount ?? 0,
+      ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
     };
   },
 });
@@ -270,6 +292,8 @@ export const getPublicPage = query({
       registrationDeadline: season.registrationDeadline,
       formatName: formatLabel(seasonPlayersPerSide(season)),
       minimumRosterSize: season.minimumRosterSize,
+      isFull: seasonIsFull(season),
+      ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
     };
   },
 });
@@ -351,6 +375,8 @@ const getForRegistrationReturns = v.union(
     registrationDeadline: v.string(),
     formatName: v.string(),
     minimumRosterSize: v.number(),
+    isFull: v.boolean(),
+    maxTeams: v.optional(v.number()),
     team: v.union(v.null(), registrationTeamValidator),
     freeAgent: v.union(
       v.null(),
@@ -382,6 +408,8 @@ export const getForRegistration = query({
       registrationDeadline: season.registrationDeadline,
       formatName: formatLabel(seasonPlayersPerSide(season)),
       minimumRosterSize: season.minimumRosterSize,
+      isFull: seasonIsFull(season),
+      ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
       team:
         team && user
           ? {

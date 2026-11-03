@@ -122,7 +122,7 @@ describe('SeasonCreateForm', () => {
       expect(text(formStatus())).toBe('');
     });
 
-    it('has Name, Slug, and three native date fields, in focus order', async () => {
+    it('has Name, Slug, three native date fields, and Maximum teams, in focus order', async () => {
       await open();
       const fields = [
         ['name', 'Name', 'text'],
@@ -146,6 +146,7 @@ describe('SeasonCreateForm', () => {
         'start-date',
         'end-date',
         'registration-deadline',
+        'maximum-teams',
       ]);
     });
 
@@ -174,10 +175,21 @@ describe('SeasonCreateForm', () => {
       expect(text(form())).not.toContain('Minimum roster size:');
     });
 
-    it('has no limits fieldset: the maximum teams and roster size come later', async () => {
+    it('has an optional Limits fieldset with Maximum teams', async () => {
       await open();
-      expect(page.querySelector('fieldset#limits')).toBeNull();
-      expect(page.querySelector('#maximum-teams')).toBeNull();
+      const limits = page.querySelector('fieldset#limits')!;
+      expect(text(limits.querySelector('legend'))).toBe('Limits');
+      expect(limits.getAttribute('aria-describedby')).toBe('limits-description');
+      expect(text(page.querySelector('#limits-description'))).toBe(
+        'Optional. Leave a limit blank for none.',
+      );
+      const field = input('maximum-teams');
+      expect(text(page.querySelector('label[for="maximum-teams"]'))).toBe('Maximum teams');
+      expect([field.type, field.required, field.inputMode]).toEqual(['text', false, 'numeric']);
+      expect(field.getAttribute('aria-describedby')).toBe('maximum-teams-description');
+      expect(text(page.querySelector('#maximum-teams-description'))).toBe(
+        '2 to 200. When it’s reached, the season is full.',
+      );
     });
 
     it('typing a name fills Slug with slugify(name) until Slug is edited', async () => {
@@ -426,6 +438,32 @@ describe('SeasonCreateForm', () => {
       await submit();
       expect(calls()).toEqual([[CREATE_SEASON, FALL_2026]]);
     });
+
+    it('sends Maximum teams as a number when it is filled', async () => {
+      await open();
+      await fill();
+      await type('maximum-teams', ' 8 ');
+      await submit();
+      expect(calls()).toEqual([[CREATE_SEASON, { ...FALL_2026, maxTeams: 8 }]]);
+    });
+
+    it.each(['1', '201', '7.5', 'ten'])(
+      'refuses Maximum teams %s with its message, focused, and sends nothing',
+      async (value) => {
+        await open();
+        await fill();
+        await type('maximum-teams', value);
+        await submit();
+        expect(error('maximum-teams')).toBe(
+          'Enter a whole number from 2 to 200, or leave it blank.',
+        );
+        expect(input('maximum-teams').getAttribute('aria-describedby')).toBe(
+          'maximum-teams-description maximum-teams-error',
+        );
+        expect(document.activeElement).toBe(input('maximum-teams'));
+        expect(calls()).toEqual([]);
+      },
+    );
 
     describe('a league with no format yet', () => {
       const refuse = () =>

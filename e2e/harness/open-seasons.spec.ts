@@ -8,6 +8,7 @@ test.describe('expected Registration open cards from the demo data', VIEWPORT_AG
   test('lists the published Summer 2027 seasons by soonest deadline on 2026-10-30', () => {
     expect(expectedOpenCards(GULF_COAST, Date.parse('2026-10-30T17:00:00Z'))).toEqual([
       { leagueName: 'Coed 7v7 Rec', seasonName: 'Summer 2027' },
+      { leagueName: 'Thursday Night Coed 2s', seasonName: 'Summer 2027' },
       { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
     ]);
   });
@@ -15,9 +16,10 @@ test.describe('expected Registration open cards from the demo data', VIEWPORT_AG
   test('keeps a season open through its deadline date and drops it the day after', () => {
     expect(expectedOpenCards(GULF_COAST, Date.parse('2027-05-20T11:59:00Z'))).toEqual([
       { leagueName: 'Coed 7v7 Rec', seasonName: 'Summer 2027' },
+      { leagueName: 'Thursday Night Coed 2s', seasonName: 'Summer 2027' },
       { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
     ]);
-    expect(expectedOpenCards(GULF_COAST, Date.parse('2027-05-20T12:00:00Z'))).toEqual([
+    expect(expectedOpenCards(GULF_COAST, Date.parse('2027-05-21T12:00:00Z'))).toEqual([
       { leagueName: 'Sunday Reverse Coed 4s', seasonName: 'Summer 2027' },
     ]);
   });

@@ -367,6 +367,7 @@ describe('seed:demo divisions on an empty deployment', () => {
     await t.mutation(internal.seed.insertDemoData, {});
     const seasons = await t.run((ctx) => ctx.db.query('seasons').collect());
     expect(seasons.map((row) => formatLabel(row.playersPerSide!)).sort()).toEqual([
+      '2v2',
       '4v4',
       '4v4',
       '4v4',

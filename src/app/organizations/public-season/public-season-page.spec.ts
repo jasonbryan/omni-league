@@ -437,6 +437,35 @@ describe('PublicSeasonPage registration card', () => {
     expect(spaced(closed)).not.toContain('Captains register a team');
   });
 
+  it('shows the full card with the free-agent link only, and a Full badge, while registration is open', async () => {
+    vi.setSystemTime(at('2027-05-01'));
+    const harness = await open();
+    emit(seasonQueryResults({ season: { ...SUMMER_2027, isFull: true, maxTeams: 2 } }));
+    await settle(harness);
+    const full = card(harness);
+    expect(spaced(full)).toContain('This season is full');
+    expect(spaced(full)).toContain(
+      'It takes 2 teams, and every place is taken. Free agents can still register until May 23, 2027, and an organizer places them on teams.',
+    );
+    const links = [...(full?.querySelectorAll('a') ?? [])];
+    expect(links.map((link) => [text(link), link.getAttribute('href')])).toEqual([
+      [
+        'Register as a free agent',
+        '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/free-agent',
+      ],
+    ]);
+    expect(text(host(harness).querySelector('[data-testid="season-phase"]'))).toBe('Full');
+  });
+
+  it('shows the closed card, not the full one, once a full season’s registration closes', async () => {
+    vi.setSystemTime(at('2027-05-30'));
+    const harness = await open();
+    emit(seasonQueryResults({ season: { ...SUMMER_2027, isFull: true, maxTeams: 2 } }));
+    await settle(harness);
+    expect(spaced(card(harness))).toContain('Registration closed on May 23, 2027');
+    expect(spaced(card(harness))).not.toContain('This season is full');
+  });
+
   it('shows the closed card with no link when the league has no other open season', async () => {
     vi.setSystemTime(at('2027-07-01'));
     const harness = await open();

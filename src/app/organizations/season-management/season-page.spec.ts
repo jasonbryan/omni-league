@@ -505,4 +505,130 @@ describe('SeasonPage', () => {
       );
     });
   });
+
+  describe('maximum teams', () => {
+    const SET_MAX = 'seasons:setMaxTeams';
+    const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
+    const summary = () => text(page.querySelector('[data-testid="max-teams-summary"]'));
+    const editButton = () =>
+      [...page.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => text(button) === 'Edit maximum teams',
+      );
+    const field = () => page.querySelector<HTMLInputElement>('#edit-maximum-teams');
+
+    async function edit(value: string) {
+      editButton()!.click();
+      await o.flush();
+      field()!.value = value;
+      field()!.dispatchEvent(new Event('input'));
+      await o.flush();
+    }
+
+    async function save() {
+      [...page.querySelectorAll<HTMLButtonElement>('button[type="submit"]')]
+        .find((button) => text(button) === 'Save changes')!
+        .click();
+      await o.flush();
+    }
+
+    it('shows the limit, how many registered, that the season is full, and the tile against the limit', async () => {
+      await open(COED, { ...VIEW, maxTeams: 3 }, FREE_AGENTS);
+      expect(text(page.querySelector('#limits-heading'))).toBe('Limits');
+      expect(summary()).toBe('3 teams · 3 registered, so the season is full');
+      expect(text(page.querySelector('[data-testid="team-count"]'))).toBe('3 of 3');
+    });
+
+    it('says there is no limit, and the tile shows the count alone', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      expect(summary()).toBe('No limit · 3 registered');
+      expect(text(page.querySelector('[data-testid="team-count"]'))).toBe('3');
+    });
+
+    it('Edit opens the form on the field with the limit, and Cancel returns focus to Edit', async () => {
+      await open(COED, { ...VIEW, maxTeams: 4 }, FREE_AGENTS);
+      editButton()!.click();
+      await o.flush();
+      expect(field()?.value).toBe('4');
+      expect(document.activeElement).toBe(field());
+      expect(text(page.querySelector('#edit-maximum-teams-description'))).toBe(
+        '2 to 200, or blank for no limit. At least the 3 teams already registered.',
+      );
+      [...page.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => text(button) === 'Cancel')!
+        .click();
+      await o.flush();
+      expect(field()).toBeNull();
+      expect(document.activeElement).toBe(editButton());
+    });
+
+    it('a value out of range shows the field error and sends nothing', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      await edit('7.5');
+      await save();
+      expect(text(page.querySelector('#edit-maximum-teams-error'))).toBe(
+        'Enter a whole number from 2 to 200, or leave it blank.',
+      );
+      expect(field()?.getAttribute('aria-invalid')).toBe('true');
+      expect(document.activeElement).toBe(field());
+      expect(calls()).toEqual([]);
+    });
+
+    it('sends the number, then shows the saved status, focused', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      await edit('6');
+      await save();
+      expect(calls()).toEqual([[SET_MAX, { seasonId: 'se_summer27', maxTeams: 6 }]]);
+      o.convex.calls[0].resolve(null);
+      await o.flush();
+      const status = page.querySelector<HTMLElement>(
+        'section[aria-labelledby="limits-heading"] [role="status"]',
+      );
+      expect(text(status)).toBe('Maximum teams saved. The season takes up to 6 teams.');
+      expect(document.activeElement).toBe(status);
+      expect(field()).toBeNull();
+    });
+
+    it('blank removes the limit', async () => {
+      await open(COED, { ...VIEW, maxTeams: 4 }, FREE_AGENTS);
+      await edit('');
+      await save();
+      expect(calls()).toEqual([[SET_MAX, { seasonId: 'se_summer27', maxTeams: null }]]);
+      o.convex.calls[0].resolve(null);
+      await o.flush();
+      expect(
+        text(page.querySelector('section[aria-labelledby="limits-heading"] [role="status"]')),
+      ).toBe('Maximum teams removed. There’s no limit now.');
+    });
+
+    it('a refusal below the registered teams shows the server message under the field', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      await edit('2');
+      await save();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'maxTeams',
+          code: 'maxTeamsBelowCount',
+          message: '3 teams are already registered. Enter 3 or more, or leave it blank.',
+        }),
+      );
+      await o.flush();
+      expect(text(page.querySelector('#edit-maximum-teams-error'))).toBe(
+        '3 teams are already registered. Enter 3 or more, or leave it blank.',
+      );
+      expect(document.activeElement).toBe(field());
+    });
+
+    it('any other failure shows the form alert, focused', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      await edit('8');
+      await save();
+      o.convex.calls[0].reject(new Error('network'));
+      await o.flush();
+      const alert = page.querySelector<HTMLElement>('form [data-slot="alert"]');
+      expect(text(alert)).toBe(
+        'The limit could not be saved. Check your connection and try again.',
+      );
+      expect(document.activeElement).toBe(alert);
+    });
+  });
 });

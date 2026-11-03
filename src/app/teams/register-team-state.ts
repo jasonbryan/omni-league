@@ -6,11 +6,12 @@ import { formatCalendarDate } from '../../../convex/lib/seasonInput';
 export type RegistrationAnswer = FunctionReturnType<typeof api.seasons.getForRegistration>;
 
 export type RegisterTeamState =
-  'loading' | 'not-found' | 'signed-out' | 'on-team' | 'waiting' | 'closed' | 'form';
+  'loading' | 'not-found' | 'signed-out' | 'on-team' | 'waiting' | 'closed' | 'full' | 'form';
 
 /**
  * The first state that applies, in the order every register route shares. "On a team" and "waiting" come before "closed", so a rostered
- * player still reaches their team, and a waiting free agent still sees their own state, after the deadline.
+ * player still reaches their team, and a waiting free agent still sees their own state, after the deadline. "Full" limits teams only, so
+ * the free-agent route treats it as the form.
  */
 export function registerTeamState({
   answer,
@@ -26,7 +27,8 @@ export function registerTeamState({
   if (!signedIn) return 'signed-out';
   if (answer.team) return 'on-team';
   if (answer.freeAgent?.status === 'waiting') return 'waiting';
-  return registrationIsOpen(answer, nowMs) ? 'form' : 'closed';
+  if (!registrationIsOpen(answer, nowMs)) return 'closed';
+  return answer.isFull ? 'full' : 'form';
 }
 
 /** Registration also closes when the season starts, so a deadline on or after the start date is not the day it closed. */
