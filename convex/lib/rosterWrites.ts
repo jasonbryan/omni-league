@@ -1,12 +1,19 @@
-// The only writer of `teams`, `rosterEntries`, `teamInvites`, `teams.rosterCount`,
-// `teams.pendingInviteCount`, and `seasons.teamCount`, so the counters, the one-team-per-season rule,
+// The only writer of `teams`, `rosterEntries`, `teamInvites`, `freeAgents`, `teams.rosterCount`,
+// `teams.pendingInviteCount`, and `seasons.teamCount`, so the counters, the one-place-per-season rule,
 // and one pending invite per address hold for every way onto a roster.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { RosterEntrySource } from './rosterEntry';
 import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
-import { TEAM_MESSAGES, teamSortName, type RosterRefusal, type TeamNameError } from './teamInput';
+import {
+  TEAM_MESSAGES,
+  teamSortName,
+  type AlreadyFreeAgentRefusal,
+  type RosterRefusal,
+  type TeamNameError,
+  type WaitingFreeAgentRefusal,
+} from './teamInput';
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
 
@@ -40,7 +47,25 @@ export async function teamWithSortName(
     .first();
 }
 
-function refuse(refusal: RosterRefusal | TeamNameError | TeamInviteInputError): never {
+export async function freeAgentInSeason(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  userId: Id<'users'>,
+): Promise<Doc<'freeAgents'> | null> {
+  return ctx.db
+    .query('freeAgents')
+    .withIndex('by_seasonId_and_userId', (q) => q.eq('seasonId', seasonId).eq('userId', userId))
+    .unique();
+}
+
+type Refusal =
+  | RosterRefusal
+  | TeamNameError
+  | TeamInviteInputError
+  | WaitingFreeAgentRefusal
+  | AlreadyFreeAgentRefusal;
+
+function refuse(refusal: Refusal): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...refusal });
 }
@@ -65,6 +90,16 @@ async function assertNotRostered(
   });
 }
 
+async function assertNotWaitingFreeAgent(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  userId: Id<'users'>,
+): Promise<void> {
+  const freeAgent = await freeAgentInSeason(ctx, seasonId, userId);
+  if (freeAgent?.status !== 'waiting') return;
+  refuse({ code: 'waitingFreeAgent', message: TEAM_MESSAGES.waitingFreeAgent });
+}
+
 export interface NewTeam {
   /** Already checked with `checkTeamName`. */
   name: string;
@@ -81,6 +116,7 @@ export async function insertTeamWithCaptain(
     refuse({ field: 'name', code: 'nameTaken', message: TEAM_MESSAGES.nameTaken(taken.name) });
   }
   await assertNotRostered(ctx, season._id, captainUserId, null);
+  await assertNotWaitingFreeAgent(ctx, season._id, captainUserId);
   const teamId = await ctx.db.insert('teams', {
     organizationId: season.organizationId,
     leagueId: season.leagueId,
@@ -115,6 +151,10 @@ export async function addRosterEntry(
   entry: NewRosterEntry,
 ): Promise<Id<'rosterEntries'>> {
   await assertNotRostered(ctx, team.seasonId, entry.userId, team._id);
+  // Placement is how a waiting free agent gets onto a roster.
+  if (entry.source !== 'placement') {
+    await assertNotWaitingFreeAgent(ctx, team.seasonId, entry.userId);
+  }
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
     seasonId: team.seasonId,
@@ -127,6 +167,27 @@ export async function addRosterEntry(
   });
   await changeRosterCount(ctx, team._id, 1);
   return entryId;
+}
+
+export async function insertFreeAgent(
+  ctx: MutationCtx,
+  season: Doc<'seasons'>,
+  userId: Id<'users'>,
+): Promise<Doc<'freeAgents'>> {
+  if (await freeAgentInSeason(ctx, season._id, userId)) {
+    refuse({ code: 'alreadyFreeAgent', message: TEAM_MESSAGES.alreadyFreeAgent });
+  }
+  await assertNotRostered(ctx, season._id, userId, null);
+  const freeAgentId = await ctx.db.insert('freeAgents', {
+    organizationId: season.organizationId,
+    seasonId: season._id,
+    userId,
+    status: 'waiting',
+    registeredAt: Date.now(),
+  });
+  const freeAgent = await ctx.db.get('freeAgents', freeAgentId);
+  if (!freeAgent) throw new Error('No free agent has this id');
+  return freeAgent;
 }
 
 export async function removeRosterEntry(

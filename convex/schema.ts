@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 import { ageGroupValidator, genderValidator, standardLevelValidator } from './lib/divisions';
+import { freeAgentStatusValidator } from './lib/freeAgent';
 import { inviteStatusValidator } from './lib/inviteStatus';
 import { leagueStatusValidator } from './lib/leagueStatus';
 import { roleValidator } from './lib/roles';
@@ -217,6 +218,21 @@ export default defineSchema({
     .index('by_teamId_and_status', ['teamId', 'status'])
     .index('by_teamId_and_email', ['teamId', 'email'])
     .index('by_tokenHash', ['tokenHash']),
+
+  // Written only through `convex/lib/rosterWrites.ts`, which keeps one place per person per season:
+  // a free agent is not a roster entry until placement adds one.
+  freeAgents: defineTable({
+    organizationId: v.id('organizations'),
+    seasonId: v.id('seasons'),
+    userId: v.id('users'),
+    status: freeAgentStatusValidator,
+    registeredAt: v.number(),
+    placedTeamId: v.optional(v.id('teams')),
+    placedAt: v.optional(v.number()),
+  })
+    .index('by_seasonId_and_status_and_registeredAt', ['seasonId', 'status', 'registeredAt'])
+    .index('by_seasonId_and_userId', ['seasonId', 'userId'])
+    .index('by_userId_and_status', ['userId', 'status']),
 
   // An endpoint is an unguessable capability URL only its browser holds, so presenting it is proof
   // enough to move its row to the caller.

@@ -7,7 +7,7 @@ import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
-import { addRosterEntry, insertTeamWithCaptain } from './lib/rosterWrites';
+import { addRosterEntry, insertFreeAgent, insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -132,6 +132,7 @@ async function snapshot(s: Setup) {
     teams: await ctx.db.query('teams').collect(),
     entries: await ctx.db.query('rosterEntries').collect(),
     invites: await ctx.db.query('teamInvites').collect(),
+    freeAgents: await ctx.db.query('freeAgents').collect(),
   }));
 }
 
@@ -328,6 +329,23 @@ describe('teamInvites.accept', () => {
     });
     expect(await snapshot(s)).toEqual(before);
     expect(before.invites.find((row) => row._id === inviteId)?.status).toBe('pending');
+  });
+
+  test('refuses a waiting free agent of the season, and writes nothing', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) =>
+      insertFreeAgent(ctx, (await ctx.db.get('seasons', s.summerId))!, s.newcomer.userId),
+    );
+    const { token, inviteId } = await invite(s, 'newcomer@example.test');
+    const before = await snapshot(s);
+    expect(await accept(s, s.newcomer, token).catch(refusalOf)).toEqual({
+      code: 'waitingFreeAgent',
+      message:
+        "You're registered as a free agent in this season. An organizer places free agents on teams.",
+    });
+    expect(await snapshot(s)).toEqual(before);
+    expect(before.invites.find((row) => row._id === inviteId)?.status).toBe('pending');
+    expect(await teamRow(s)).toMatchObject({ rosterCount: 2, pendingInviteCount: 1 });
   });
 
   test('accepts someone rostered on a team in another season', async () => {

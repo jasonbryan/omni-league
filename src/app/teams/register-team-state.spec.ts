@@ -11,6 +11,7 @@ const OPEN: NonNullable<RegistrationAnswer> = {
   formatName: '4v4',
   minimumRosterSize: 4,
   team: null,
+  freeAgent: null,
 };
 const ON_TEAM: RegistrationAnswer = {
   ...OPEN,

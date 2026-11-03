@@ -15,6 +15,7 @@ import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 import {
   addRosterEntry,
+  insertFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
   removeRosterEntry,
@@ -408,25 +409,52 @@ export const seedTeam = internalMutation({
   returns: v.object({ teamId: v.id('teams') }),
   handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, name, captainEmail }) => {
     assertTestDeployment();
-    const organization = await organizationBySlug(ctx, organizationSlug);
-    const league = await ctx.db
-      .query('leagues')
-      .withIndex('by_organizationId_and_slug', (q) =>
-        q.eq('organizationId', organization._id).eq('slug', leagueSlug),
-      )
-      .unique();
-    const season = league
-      ? await ctx.db
-          .query('seasons')
-          .withIndex('by_leagueId_and_slug', (q) =>
-            q.eq('leagueId', league._id).eq('slug', seasonSlug),
-          )
-          .unique()
-      : null;
-    if (!season) throw new Error(`No season has the slug ${JSON.stringify(seasonSlug)}`);
+    const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
     const captain = await userByEmail(ctx, captainEmail);
     const teamId = await insertTeamWithCaptain(ctx, season, { name, captainUserId: captain._id });
     return { teamId };
+  },
+});
+
+/**
+ * A waiting free agent through the roster writer, skipping the registration window. With `placedTeamId`, a placed one: the roster entry
+ * is written first, because the writer refuses a waiting free agent any entry but a placement.
+ */
+export const seedFreeAgent = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    leagueSlug: v.string(),
+    seasonSlug: v.string(),
+    email: v.string(),
+    placedTeamId: v.optional(v.id('teams')),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, email, placedTeamId }) => {
+    assertTestDeployment();
+    const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
+    const user = await userByEmail(ctx, email);
+    if (placedTeamId === undefined) {
+      await insertFreeAgent(ctx, season, user._id);
+      return null;
+    }
+    const team = await ctx.db.get('teams', placedTeamId);
+    if (team?.seasonId !== season._id) throw new Error('The team is not in this season');
+    await addRosterEntry(ctx, team, {
+      userId: user._id,
+      source: 'placement',
+      addedByUserId: team.captainUserId,
+    });
+    const placedAt = Date.now();
+    await ctx.db.insert('freeAgents', {
+      organizationId: season.organizationId,
+      seasonId: season._id,
+      userId: user._id,
+      status: 'placed',
+      registeredAt: placedAt,
+      placedTeamId,
+      placedAt,
+    });
+    return null;
   },
 });
 
@@ -499,6 +527,31 @@ async function organizationBySlug(
     .unique();
   if (!organization) throw new Error(`No organization has the slug ${JSON.stringify(slug)}`);
   return organization;
+}
+
+async function seasonBySlugs(
+  ctx: Pick<MutationCtx, 'db'>,
+  organizationSlug: string,
+  leagueSlug: string,
+  seasonSlug: string,
+): Promise<Doc<'seasons'>> {
+  const organization = await organizationBySlug(ctx, organizationSlug);
+  const league = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_slug', (q) =>
+      q.eq('organizationId', organization._id).eq('slug', leagueSlug),
+    )
+    .unique();
+  const season = league
+    ? await ctx.db
+        .query('seasons')
+        .withIndex('by_leagueId_and_slug', (q) =>
+          q.eq('leagueId', league._id).eq('slug', seasonSlug),
+        )
+        .unique()
+    : null;
+  if (!season) throw new Error(`No season has the slug ${JSON.stringify(seasonSlug)}`);
+  return season;
 }
 
 async function userByEmail(ctx: MutationCtx, email: string): Promise<Doc<'users'>> {

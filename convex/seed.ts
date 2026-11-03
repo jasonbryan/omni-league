@@ -24,6 +24,8 @@ import {
   backfillSeasonTeamCounts,
   acceptTeamInvite,
   backfillTeamPendingInviteCounts,
+  freeAgentInSeason,
+  insertFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
   pendingTeamInvite,
@@ -816,6 +818,37 @@ export const DEMO_CAPTAINS = [
   { email: `priya.patel@${DEMO_ACCOUNT_DOMAIN}`, name: 'Priya Patel' },
 ] as const;
 
+/**
+ * Fictional free agents, waiting in `DEMO_TEAM_SEASON` and signed up as the captains are. An address is
+ * the person's identity, so an entry is never renamed or removed.
+ */
+export const DEMO_FREE_AGENT_PEOPLE = [
+  { email: `sam.okoye@${DEMO_ACCOUNT_DOMAIN}`, name: 'Sam Okoye' },
+  { email: `lena.ortiz@${DEMO_ACCOUNT_DOMAIN}`, name: 'Lena Ortiz' },
+  { email: `theo.grant@${DEMO_ACCOUNT_DOMAIN}`, name: 'Theo Grant' },
+] as const;
+
+const FICTIONAL_PEOPLE: readonly { email: string; name: string }[] = [
+  ...DEMO_CAPTAINS,
+  ...DEMO_FREE_AGENT_PEOPLE,
+];
+
+/** player@ waits in another season than its team's, so the one-place rule holds. */
+export const DEMO_FREE_AGENTS: readonly {
+  email: string;
+  season: { orgSlug: string; leagueSlug: string; seasonSlug: string };
+}[] = [
+  ...DEMO_FREE_AGENT_PEOPLE.map(({ email }) => ({ email, season: DEMO_TEAM_SEASON })),
+  {
+    email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+    season: {
+      orgSlug: 'gulf-coast-sport-social',
+      leagueSlug: 'coed-7v7-rec',
+      seasonSlug: 'summer-2027',
+    },
+  },
+];
+
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
   { name: 'Net Results', captainEmail: DEMO_CAPTAINS[0].email },
@@ -879,6 +912,7 @@ const demoResultValidator = v.object({
   invites: v.number(),
   teams: v.number(),
   teamInvites: v.number(),
+  freeAgents: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
@@ -1051,13 +1085,13 @@ export const findDemoCredential = internalQuery({
   },
 });
 
-export const findDemoCaptain = internalQuery({
+export const findFictionalDemoUser = internalQuery({
   args: { email: v.string() },
   returns: v.union(v.null(), v.string()),
   handler: async (ctx, { email }) => {
     assertPreviewDeployment();
-    if (!DEMO_CAPTAINS.some((captain) => captain.email === email)) {
-      throw new Error('seed:demo looked up an address that is not a fictional demo captain');
+    if (!FICTIONAL_PEOPLE.some((person) => person.email === email)) {
+      throw new Error('seed:demo looked up an address that is not a fictional demo user');
     }
     return authUserIdByEmail(ctx, email);
   },
@@ -1158,6 +1192,36 @@ export const insertDemoTeamPlayer = internalMutation({
   },
 });
 
+/**
+ * Inserts each demo free agent whose account is in `people` (auth user ids by address) and who has no
+ * free-agent row and no roster entry in its season yet, through the roster writer. Returns the free
+ * agents inserted.
+ */
+export const insertDemoFreeAgents = internalMutation({
+  args: { people: v.array(v.object({ email: v.string(), authUserId: v.string() })) },
+  returns: v.number(),
+  handler: async (ctx, { people }) => {
+    assertPreviewDeployment();
+    let inserted = 0;
+    for (const freeAgent of DEMO_FREE_AGENTS) {
+      const authUserId = people.find((person) => person.email === freeAgent.email)?.authUserId;
+      if (authUserId === undefined) continue;
+      const found = await findSeasonBySlugs(ctx, freeAgent.season);
+      if (!found) continue;
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+        .unique();
+      if (!user) continue;
+      if (await freeAgentInSeason(ctx, found.season._id, user._id)) continue;
+      if (await rosteredEntryInSeason(ctx, found.season._id, user._id)) continue;
+      await insertFreeAgent(ctx, found.season, user._id);
+      inserted++;
+    }
+    return inserted;
+  },
+});
+
 interface AccountOutcome {
   code: AccountCode;
   authUserId?: string;
@@ -1254,20 +1318,20 @@ async function ensureAccount(
   return verifyExistingAccount(again, password);
 }
 
-/** Answers the captain's auth user id, or `null` when sign-up refused it this run (a later run tries again). */
-async function ensureFictionalCaptain(
+/** Answers the person's auth user id, or `null` when sign-up refused it this run (a later run tries again). */
+async function ensureFictionalUser(
   ctx: ActionCtx,
   auth: ReturnType<typeof createAuth>,
-  captain: (typeof DEMO_CAPTAINS)[number],
+  person: { email: string; name: string },
 ): Promise<string | null> {
-  const existing = await ctx.runQuery(internal.seed.findDemoCaptain, { email: captain.email });
+  const existing = await ctx.runQuery(internal.seed.findFictionalDemoUser, { email: person.email });
   if (existing !== null) return existing;
   // Made here and discarded, so the account has no usable password.
-  const signedUp = await signUp(auth, captain, generateInviteToken(), 'fictional captain');
+  const signedUp = await signUp(auth, person, generateInviteToken(), 'fictional user');
   if (signedUp.kind === 'created') return signedUp.authUserId;
   if (signedUp.kind === 'rejected') return null;
   // Another run took the address between the lookup and the create.
-  return ctx.runQuery(internal.seed.findDemoCaptain, { email: captain.email });
+  return ctx.runQuery(internal.seed.findFictionalDemoUser, { email: person.email });
 }
 
 /**
@@ -1297,14 +1361,15 @@ export const demo = internalAction({
     let memberships = 0;
     let teams = 0;
     let teamInvites = 0;
+    let freeAgents = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
-      const captains: { email: string; authUserId: string }[] = [];
+      const people: { email: string; authUserId: string }[] = [];
       for (const key of ACCOUNT_KEYS) {
         const outcome = await ensureAccount(ctx, auth, key, password);
         accounts[key] = outcome.code;
         if (outcome.authUserId !== undefined) {
-          captains.push({ email: DEMO_ACCOUNTS[key].email, authUserId: outcome.authUserId });
+          people.push({ email: DEMO_ACCOUNTS[key].email, authUserId: outcome.authUserId });
           memberships += await ctx.runMutation(internal.seed.grantDemoMemberships, {
             authUserId: outcome.authUserId,
             account: key,
@@ -1312,21 +1377,22 @@ export const demo = internalAction({
         }
       }
       // The demo teams are data for the demo accounts to see, so none is seeded while no account exists.
-      if (captains.length > 0) {
-        for (const captain of DEMO_CAPTAINS) {
-          const authUserId = await ensureFictionalCaptain(ctx, auth, captain);
-          if (authUserId !== null) captains.push({ email: captain.email, authUserId });
+      if (people.length > 0) {
+        for (const person of FICTIONAL_PEOPLE) {
+          const authUserId = await ensureFictionalUser(ctx, auth, person);
+          if (authUserId !== null) people.push({ email: person.email, authUserId });
         }
-        teams = await ctx.runMutation(internal.seed.insertDemoTeams, { captains });
+        teams = await ctx.runMutation(internal.seed.insertDemoTeams, { captains: people });
         teamInvites = await ctx.runMutation(internal.seed.insertDemoTeamInvites, {});
-        const player = captains.find((account) => account.email === DEMO_TEAM_PLAYER.email);
+        const player = people.find((account) => account.email === DEMO_TEAM_PLAYER.email);
         if (player) {
           await ctx.runMutation(internal.seed.insertDemoTeamPlayer, {
             authUserId: player.authUserId,
           });
         }
+        freeAgents = await ctx.runMutation(internal.seed.insertDemoFreeAgents, { people });
       }
     }
-    return { ...data, logos, memberships, invites, teams, teamInvites, accounts };
+    return { ...data, logos, memberships, invites, teams, teamInvites, freeAgents, accounts };
   },
 });

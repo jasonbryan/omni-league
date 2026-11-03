@@ -140,6 +140,13 @@ export const routes: Routes = [
         loadComponent: () => import('./teams/register-team-page').then((m) => m.RegisterTeamPage),
       },
       {
+        // No guard: an unknown season shows the not-found view before any sign-in, and the page sends a signed-out visitor to sign in.
+        path: 'register/:orgSlug/:leagueSlug/:seasonSlug/free-agent',
+        title: 'Register as a free agent | Omni League',
+        loadComponent: () =>
+          import('./teams/register-free-agent-page').then((m) => m.RegisterFreeAgentPage),
+      },
+      {
         path: 'teams/:teamId',
         title: 'Team | Omni League',
         canActivate: [requireSignedIn],

@@ -974,6 +974,8 @@ describe('seed:demo', () => {
       DEMO_TEAM_SEASON,
       DEMO_CAPTAINS,
       DEMO_TEAMS,
+      DEMO_FREE_AGENT_PEOPLE,
+      DEMO_FREE_AGENTS,
       ...functions
     } = seed;
     expect(Array.isArray(DEMO)).toBe(true);
@@ -984,14 +986,17 @@ describe('seed:demo', () => {
     expect(DEMO_TEAM_SEASON.seasonSlug).toBe('summer-2027');
     expect(DEMO_CAPTAINS).toHaveLength(3);
     expect(DEMO_TEAMS).toHaveLength(4);
+    expect(DEMO_FREE_AGENT_PEOPLE).toHaveLength(3);
+    expect(DEMO_FREE_AGENTS).toHaveLength(4);
     const exports = Object.entries(functions);
     expect(exports.map(([name]) => name).sort()).toEqual([
       'demo',
       'demoLogoNeeded',
-      'findDemoCaptain',
       'findDemoCredential',
+      'findFictionalDemoUser',
       'grantDemoMemberships',
       'insertDemoData',
+      'insertDemoFreeAgents',
       'insertDemoInvite',
       'insertDemoTeamInvites',
       'insertDemoTeamPlayer',

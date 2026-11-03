@@ -32,7 +32,8 @@ import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatLabel } from './lib/divisions';
 import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
-import { rosteredEntryInSeason } from './lib/rosterWrites';
+import { freeAgentStatusValidator } from './lib/freeAgent';
+import { freeAgentInSeason, rosteredEntryInSeason } from './lib/rosterWrites';
 import { getCurrentUser } from './lib/users';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
@@ -283,11 +284,15 @@ const getForRegistrationReturns = v.union(
     formatName: v.string(),
     minimumRosterSize: v.number(),
     team: v.union(v.null(), registrationTeamValidator),
+    freeAgent: v.union(
+      v.null(),
+      v.object({ status: freeAgentStatusValidator, registeredAt: v.number() }),
+    ),
   }),
 );
 
 /** The register routes' one query. It returns no season id: `teams.register` finds the season from the same slugs. */
-// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: a published season's public fields, plus the caller's own team found from ctx.auth (getCurrentUser); an anonymous caller gets `team: null`.
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: a published season's public fields, plus the caller's own team and free-agent registration found from ctx.auth (getCurrentUser); an anonymous caller gets `team: null` and `freeAgent: null`.
 export const getForRegistration = query({
   args: seasonSlugsValidator.fields,
   returns: getForRegistrationReturns,
@@ -299,6 +304,7 @@ export const getForRegistration = query({
     const user = await getCurrentUser(ctx);
     const entry = user ? await rosteredEntryInSeason(ctx, season._id, user._id) : null;
     const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
+    const freeAgent = user ? await freeAgentInSeason(ctx, season._id, user._id) : null;
     return {
       organizationName: organization.name,
       leagueName: league.name,
@@ -317,6 +323,10 @@ export const getForRegistration = query({
               rosterCount: team.rosterCount,
             }
           : null,
+      freeAgent: freeAgent && {
+        status: freeAgent.status,
+        registeredAt: freeAgent.registeredAt,
+      },
     };
   },
 });

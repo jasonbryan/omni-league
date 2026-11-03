@@ -1,6 +1,7 @@
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '../../../convex/_generated/api';
 import { registrationIsOpen } from '../../../convex/lib/registration';
+import { formatCalendarDate } from '../../../convex/lib/seasonInput';
 
 export type RegistrationAnswer = FunctionReturnType<typeof api.seasons.getForRegistration>;
 
@@ -25,4 +26,13 @@ export function registerTeamState({
   if (!signedIn) return 'signed-out';
   if (answer.team) return 'on-team';
   return registrationIsOpen(answer, nowMs) ? 'form' : 'closed';
+}
+
+/** Registration also closes when the season starts, so a deadline on or after the start date is not the day it closed. */
+export function registrationClosedLine(
+  season: Pick<NonNullable<RegistrationAnswer>, 'registrationDeadline' | 'startDate'>,
+): string {
+  return season.registrationDeadline < season.startDate
+    ? `It closed on ${formatCalendarDate(season.registrationDeadline)}.`
+    : `It closed when the season started on ${formatCalendarDate(season.startDate)}.`;
 }

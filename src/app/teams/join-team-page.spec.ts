@@ -307,6 +307,24 @@ describe('JoinTeamPage', () => {
       expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
     });
 
+    it('a waiting free agent of the season: says an organizer places them, links to your teams, no Accept', async () => {
+      const { page } = await refuse(
+        new ConvexError({
+          code: 'waitingFreeAgent',
+          message:
+            "You're registered as a free agent in this season. An organizer places free agents on teams.",
+        }),
+      );
+      const { title, description } = alertOf(page);
+      expect([title, description]).toEqual([
+        'You’re registered as a free agent in this season.',
+        'Organizers place free agents on teams. Ask an organizer of Sunday Reverse Coed 4s to place you on Sand Sharks.',
+      ]);
+      expect(page.querySelector('button')).toBeNull();
+      expect(links(page)).toEqual([['Go to your teams', '/app']]);
+      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
+    });
+
     it('the invite became invalid: the invalid view, and the token is deleted', async () => {
       const { page } = await refuse(new ConvexError({ code: 'invalid' }));
       expect(text(page.querySelector('h1'))).toBe('This invite link can’t be used');

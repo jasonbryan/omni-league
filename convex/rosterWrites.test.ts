@@ -7,9 +7,11 @@ import type { MutationCtx } from './_generated/server';
 import {
   addRosterEntry,
   backfillSeasonTeamCounts,
+  insertFreeAgent,
   insertTeamWithCaptain,
   removeRosterEntry,
 } from './lib/rosterWrites';
+import { TEAM_MESSAGES } from './lib/teamInput';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -235,6 +237,94 @@ describe('rosterWrites, called directly', () => {
     });
     expect(await s.t.run((ctx) => backfillSeasonTeamCounts(ctx))).toBe(1);
     expect(await s.t.run((ctx) => backfillSeasonTeamCounts(ctx))).toBe(0);
+    await expectCountersMatchRecount(s);
+  });
+});
+
+describe('rosterWrites: one place per person per season, free agents included', () => {
+  const WAITING = { code: 'waitingFreeAgent', message: TEAM_MESSAGES.waitingFreeAgent };
+
+  async function withTeamAndWaitingFreeAgent(s: Setup) {
+    return s.t.run(async (ctx) => {
+      const teamId = await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+        name: 'Sand Sharks',
+        captainUserId: s.ana,
+      });
+      await insertFreeAgent(ctx, await seasonOf(ctx, s.summer), s.ben);
+      return teamId;
+    });
+  }
+
+  test.each(['captain', 'invite'] as const)(
+    'refuses a waiting free agent an entry with source %s, and writes nothing',
+    async (source) => {
+      const s = await setup();
+      const teamId = await withTeamAndWaitingFreeAgent(s);
+      const failure = await s.t
+        .run(async (ctx) =>
+          addRosterEntry(ctx, await teamOf(ctx, teamId), {
+            userId: s.ben,
+            source,
+            addedByUserId: s.ana,
+          }),
+        )
+        .catch((error: unknown) => error);
+      expect(refusalOf(failure)).toEqual(WAITING);
+      await s.t.run(async (ctx) => {
+        expect(await ctx.db.query('rosterEntries').collect()).toHaveLength(1);
+        expect((await teamOf(ctx, teamId)).rosterCount).toBe(1);
+      });
+    },
+  );
+
+  test('refuses a waiting free agent a team of their own, and writes no team', async () => {
+    const s = await setup();
+    await withTeamAndWaitingFreeAgent(s);
+    const failure = await s.t
+      .run(async (ctx) =>
+        insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+          name: 'Net Results',
+          captainUserId: s.ben,
+        }),
+      )
+      .catch((error: unknown) => error);
+    expect(refusalOf(failure)).toEqual(WAITING);
+    await s.t.run(async (ctx) => {
+      expect(await ctx.db.query('teams').collect()).toHaveLength(1);
+      expect((await seasonOf(ctx, s.summer)).teamCount).toBe(1);
+    });
+    await expectCountersMatchRecount(s);
+  });
+
+  test('a placement adds the waiting free agent, and another season is not blocked', async () => {
+    const s = await setup();
+    const teamId = await withTeamAndWaitingFreeAgent(s);
+    await s.t.run(async (ctx) => {
+      await addRosterEntry(ctx, await teamOf(ctx, teamId), {
+        userId: s.ben,
+        source: 'placement',
+        addedByUserId: s.ana,
+      });
+      await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.fall), {
+        name: 'Fall Team',
+        captainUserId: s.ben,
+      });
+    });
+    await expectCountersMatchRecount(s);
+  });
+
+  test('a free agent is no roster entry and changes no count', async () => {
+    const s = await setup();
+    const teamId = await withTeamAndWaitingFreeAgent(s);
+    await s.t.run(async (ctx) => {
+      const freeAgents = await ctx.db.query('freeAgents').collect();
+      expect(freeAgents).toEqual([
+        expect.objectContaining({ seasonId: s.summer, userId: s.ben, status: 'waiting' }),
+      ]);
+      const entries = await ctx.db.query('rosterEntries').collect();
+      expect(entries.map((entry) => entry.userId)).toEqual([s.ana]);
+      expect((await teamOf(ctx, teamId)).rosterCount).toBe(1);
+    });
     await expectCountersMatchRecount(s);
   });
 });
