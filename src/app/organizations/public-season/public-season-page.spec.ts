@@ -8,11 +8,20 @@ import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../../core/data/convex/testing/fake-convex-client';
+import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
-import { seasonQueryResults, SUMMER_2027, without } from './testing/season-data';
+import {
+  NO_TEAMS,
+  seasonQueryResults,
+  SUMMER_2027,
+  TEAM_NAMES,
+  teamsPage,
+  without,
+} from './testing/season-data';
 
 const SEASON = 'seasons:getPublicPage';
+const TEAMS = 'teams:listPublic';
 const LEAGUE_PATH = '/organizations/gulf-coast-sport-social/leagues/sunday-reverse-coed-4s';
 const PATH = `${LEAGUE_PATH}/seasons/summer-2027`;
 
@@ -97,7 +106,7 @@ afterEach(() => {
 });
 
 describe('PublicSeasonPage queries', () => {
-  it("asks for the season with the route's slugs only", async () => {
+  it("asks for the season with the route's slugs only, and its teams' page 1", async () => {
     await open(`${PATH}?ott=SECRET&utm_source=x#details`);
     expect(
       client.activeSubscriptions
@@ -112,6 +121,15 @@ describe('PublicSeasonPage queries', () => {
           seasonSlug: 'summer-2027',
         },
       },
+      {
+        name: TEAMS,
+        args: {
+          orgSlug: 'gulf-coast-sport-social',
+          leagueSlug: 'sunday-reverse-coed-4s',
+          seasonSlug: 'summer-2027',
+          page: 1,
+        },
+      },
     ]);
   });
 
@@ -124,7 +142,7 @@ describe('PublicSeasonPage queries', () => {
     expect(text(skeleton?.querySelector('[role="status"]'))).toBe('Loading the season.');
     expect(skeleton?.querySelector('[role="status"]')?.classList).toContain('sr-only');
     expect(skeleton?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
-    subscription(SEASON).emit(SUMMER_2027);
+    emit();
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe(
       'Sunday Reverse Coed 4s · Summer 2027',
@@ -466,7 +484,7 @@ describe('PublicSeasonPage not found and failures', () => {
     expect(head().querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
   });
 
-  it.each([SEASON])('shows the server-error view when %s fails', async (failing) => {
+  it.each([SEASON, TEAMS])('shows the server-error view when %s fails', async (failing) => {
     const harness = await open(`${PATH}?x=1`);
     for (const [name, value] of Object.entries(seasonQueryResults())) {
       if (name === failing) subscription(name).fail(new Error('connect ECONNREFUSED internal-db'));
@@ -477,5 +495,100 @@ describe('PublicSeasonPage not found and failures', () => {
     expect(host(harness).querySelector('main a')?.getAttribute('href')).toBe(PATH);
     expect(host(harness).textContent).not.toContain('internal-db');
     expect(host(harness).querySelector('main nav')).toBeNull();
+  });
+});
+
+const panel = (harness: RouterTestingHarness) => host(harness).querySelector('main section#teams');
+const teamNames = (harness: RouterTestingHarness) =>
+  [...(panel(harness)?.querySelectorAll(':scope > ul > li > span') ?? [])].map(text);
+
+describe('PublicSeasonPage teams', () => {
+  it.each([
+    ['?page=2', 2],
+    ['?page=0', 1],
+    ['?page=abc', 1],
+    ['?page=2&page=3', 1],
+  ])('%s asks for teams page %s', async (query, page) => {
+    await open(`${PATH}${query}`);
+    expect(subscription(TEAMS).args).toEqual({
+      orgSlug: 'gulf-coast-sport-social',
+      leagueSlug: 'sunday-reverse-coed-4s',
+      seasonSlug: 'summer-2027',
+      page,
+    });
+  });
+
+  it('keeps the loading view until both the season and its teams arrive, then shows the panel', async () => {
+    const harness = await open();
+    subscription(SEASON).emit(SUMMER_2027);
+    await settle(harness);
+    expect(host(harness).querySelector('main h1')).toBeNull();
+    expect(host(harness).querySelector('app-public-season-skeleton')).not.toBeNull();
+    subscription(TEAMS).emit(teamsPage(1));
+    await settle(harness);
+    expect(text(host(harness).querySelector('main h1'))).toBe(
+      'Sunday Reverse Coed 4s · Summer 2027',
+    );
+    expect(teamNames(harness)).toEqual(TEAM_NAMES.slice(0, 5));
+  });
+
+  it('falls back to the error view when the teams never answer', async () => {
+    const harness = await open();
+    subscription(SEASON).emit(SUMMER_2027);
+    vi.advanceTimersByTime(PAGE_LOAD_WAIT_MS);
+    await settle(harness);
+    expect(host(harness).querySelector('app-server-error-view')).not.toBeNull();
+    expect(host(harness).querySelector('main h1')?.textContent).not.toContain('Summer 2027');
+  });
+
+  it('updates the names and the total in place when a team registers', async () => {
+    const harness = await open();
+    emit(seasonQueryResults({ teams: teamsPage(1, TEAM_NAMES.slice(0, 2)) }));
+    await settle(harness);
+    const shown = panel(harness);
+    expect(text(shown?.querySelector(':scope > p'))).toBe('2 teams');
+
+    subscription(TEAMS).emit(teamsPage(1, ['Aardvarks', ...TEAM_NAMES.slice(0, 2)]));
+    await settle(harness);
+    expect(panel(harness)).toBe(shown);
+    expect(teamNames(harness)).toEqual(['Aardvarks', ...TEAM_NAMES.slice(0, 2)]);
+    expect(text(panel(harness)?.querySelector(':scope > p'))).toBe('3 teams');
+
+    subscription(TEAMS).emit(teamsPage(1, ['Aardvarks', ...TEAM_NAMES]));
+    await settle(harness);
+    expect(text(panel(harness)?.querySelector('nav p'))).toBe('1–5 of 8 teams');
+  });
+
+  it('shows the empty state before any team registers, then the first team in place', async () => {
+    const harness = await open();
+    emit(seasonQueryResults({ teams: NO_TEAMS }));
+    await settle(harness);
+    expect(spaced(panel(harness))).toBe('Teams No teams yet Teams appear here once they register.');
+    subscription(TEAMS).emit(teamsPage(1, ['Block Party']));
+    await settle(harness);
+    expect(teamNames(harness)).toEqual(['Block Party']);
+    expect(text(panel(harness)?.querySelector(':scope > p'))).toBe('1 team');
+  });
+
+  it('Next keeps page 1 shown and busy until page 2 arrives, then focuses the Teams heading and sets the canonical', async () => {
+    const harness = await open();
+    emit();
+    await settle(harness);
+    const next = [...(panel(harness)?.querySelectorAll('nav a') ?? [])].find((a) =>
+      text(a).startsWith('Next'),
+    ) as HTMLAnchorElement;
+    next.click();
+    await settle(harness);
+    expect(teamNames(harness)).toEqual(TEAM_NAMES.slice(0, 5));
+    expect(panel(harness)?.querySelector('ul')?.getAttribute('aria-busy')).toBe('true');
+
+    const page2 = client.activeSubscriptions.filter((s) => s.name === TEAMS).at(-1)!;
+    expect(page2.args).toMatchObject({ page: 2 });
+    page2.emit(teamsPage(2));
+    await settle(harness);
+    expect(teamNames(harness)).toEqual(TEAM_NAMES.slice(5));
+    expect(panel(harness)?.querySelector('ul')?.getAttribute('aria-busy')).toBeNull();
+    expect(TestBed.inject(DOCUMENT).activeElement?.id).toBe('teams-heading');
+    expect(canonical()).toMatch(/\/seasons\/summer-2027\?page=2$/);
   });
 });

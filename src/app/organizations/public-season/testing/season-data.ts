@@ -1,5 +1,5 @@
 import { ORGANIZATION } from '../../public-league/testing/league-data';
-import type { PublicSeasonData, PublicSeasonView } from '../public-season-view';
+import type { PublicSeasonData, PublicSeasonTeams, PublicSeasonView } from '../public-season-view';
 
 export { ORGANIZATION };
 
@@ -32,16 +32,41 @@ export const SUMMER_2027: PublicSeasonData = {
   minimumRosterSize: 4,
 };
 
+/** Invented names, in the order `sortName` gives. */
+export const TEAM_NAMES = [
+  'Block Party',
+  'Bump Set Sunburn',
+  'Dig Deep',
+  'Net Gains',
+  'Pier Pressure',
+  'Sand Sharks',
+  'Spike Lee',
+];
+
+export function teamsPage(page: number, names: readonly string[] = TEAM_NAMES): PublicSeasonTeams {
+  const total = names.length;
+  return {
+    rows: names.slice((page - 1) * 5, page * 5).map((name) => ({ name })),
+    page,
+    pageCount: Math.ceil(total / 5),
+    total,
+  };
+}
+
+export const NO_TEAMS: PublicSeasonTeams = { rows: [], page: 1, pageCount: 0, total: 0 };
+
 export function seasonQueryResults(
-  options: { season?: PublicSeasonData | null } = {},
+  options: { season?: PublicSeasonData | null; teams?: PublicSeasonTeams } = {},
 ): Record<string, unknown> {
   return {
     'seasons:getPublicPage': options.season === undefined ? SUMMER_2027 : options.season,
+    'teams:listPublic': options.teams ?? teamsPage(1),
   };
 }
 
 export const SUMMER_2027_VIEW: PublicSeasonView = {
   season: SUMMER_2027,
+  teams: teamsPage(1),
 };
 
 /** A saved copy made before the field existed lacks it. */

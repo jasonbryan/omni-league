@@ -31,3 +31,14 @@ export function publicLeagueCanonicalPath(
   const path = publicLeaguePath(orgSlug, leagueSlug);
   return page > 1 ? `${path}?page=${page}` : path;
 }
+
+/** Built from the query result's page number, an integer, never the request's query string. */
+export function publicSeasonCanonicalPath(
+  orgSlug: string,
+  leagueSlug: string,
+  seasonSlug: string,
+  page: number,
+): string {
+  const path = publicSeasonPath(orgSlug, leagueSlug, seasonSlug);
+  return page > 1 ? `${path}?page=${page}` : path;
+}

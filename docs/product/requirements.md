@@ -64,6 +64,10 @@ Owner decision, 2026-10-27 (chat, "Sounds good", accepting option A of leagues v
 - **Public pages lead with what's open now:** the season with registration open and the way to register come first, as in "Sunday Coed 4s · Fall 2027 · Registration open · Register" (#245, #246, #325).
 - **Registration stays part of each season:** team registration, joining a team, and free agent registration (see Registration), at the season's team and player prices (#288).
 
+Owner decision, 2026-10-10 (merging the mockup PR #151, which accepted #142's proposal):
+
+- **Public team names:** visitors see the names of a season's registered teams on its public page. Rosters stay visible only to the teams in the season and its organizers.
+
 ## Registration
 
 Three ways to take part, all needed (owner answer, 2026-10-09):

@@ -179,6 +179,11 @@ export const publicSeasonPageValidator = v.object({
 
 export type PublicSeasonPage = Infer<typeof publicSeasonPageValidator>;
 
+// Names only: a season's rosters stay visible to its teams and organizers, never on a public page.
+export const publicTeamsValidator = publicListValidator(v.object({ name: v.string() }));
+
+export type PublicTeams = Infer<typeof publicTeamsValidator>;
+
 export const getSeasonPublicPageReturns = v.union(v.null(), publicSeasonPageValidator);
 
 const publicOpenSeasonValidator = v.object({

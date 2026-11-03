@@ -20,7 +20,13 @@ import {
 } from '../../core/data/convex';
 import { snapshotDomGlobals } from '../../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../../public-layout/testing/frame';
-import { seasonQueryResults, SUMMER_2027 } from './testing/season-data';
+import {
+  NO_TEAMS,
+  seasonQueryResults,
+  SUMMER_2027,
+  TEAM_NAMES,
+  teamsPage,
+} from './testing/season-data';
 
 // renderApplication swaps jsdom's DOM classes for domino's on the global; put them back after each test.
 let restoreDomGlobals: () => void;
@@ -153,6 +159,7 @@ describe('PublicSeasonPage server render', () => {
 
     expect([...queries].sort((a, b) => (a.name < b.name ? -1 : 1))).toEqual([
       { name: 'seasons:getPublicPage', args: slugs },
+      { name: 'teams:listPublic', args: { ...slugs, page: 1 } },
     ]);
     expect(responseInit.status).toBeUndefined();
     expect(responseInit.headers.get('Cache-Control')).toBe(PUBLIC_PAGE_CACHE);
@@ -301,7 +308,7 @@ describe('PublicSeasonPage server render', () => {
     expect(text(body.querySelector('main h1'))).toBe(SERVER_ERROR);
   });
 
-  for (const failing of ['seasons:getPublicPage']) {
+  for (const failing of ['seasons:getPublicPage', 'teams:listPublic']) {
     it(`renders the server-error view with 503 and no-store when ${failing} fails`, async () => {
       const { html, body, head, responseInit } = await render(
         `${SEASON_PATH}?ott=SECRET`,
@@ -330,6 +337,86 @@ describe('PublicSeasonPage server render', () => {
       expect(publicFrame(body)).toEqual(PUBLIC_FRAME);
     });
   }
+
+  it('renders the Teams panel after the details, with the first 5 names, the range, and the page links', async () => {
+    const { html, body } = await render(SEASON_PATH, answer());
+    const panel = body.querySelector('main section#teams');
+    expect(text(panel?.querySelector('h2'))).toBe('Teams');
+    expect([...(panel?.querySelectorAll(':scope > ul > li > span') ?? [])].map(text)).toEqual(
+      TEAM_NAMES.slice(0, 5),
+    );
+    const nav = panel?.querySelector('nav[aria-label="Teams pages"]');
+    expect(text(nav?.querySelector('p'))).toBe('1–5 of 7 teams');
+    expect([...(nav?.querySelectorAll('a') ?? [])].map((a) => href(a))).toEqual([
+      `${SEASON_PATH}#teams`,
+      `${SEASON_PATH}?page=2#teams`,
+      `${SEASON_PATH}?page=2#teams`,
+    ]);
+    expect(html.indexOf('id="details-heading"')).toBeLessThan(html.indexOf('id="teams"'));
+  });
+
+  it('?page=2 asks for page 2 and writes names 6 and 7, the range, and a canonical and og:url ending ?page=2', async () => {
+    const { body, head, queries } = await render(
+      `${SEASON_PATH}?page=2`,
+      answer({ teams: teamsPage(2) }),
+    );
+    expect(queries.find((q) => q.name === 'teams:listPublic')?.args).toEqual({ ...slugs, page: 2 });
+    const panel = body.querySelector('main section#teams');
+    expect([...(panel?.querySelectorAll(':scope > ul > li > span') ?? [])].map(text)).toEqual(
+      TEAM_NAMES.slice(5),
+    );
+    expect(text(panel?.querySelector('nav p'))).toBe('6–7 of 7 teams');
+    expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${ORIGIN}${SEASON_PATH}?page=2`,
+    );
+    expect(meta(head, 'og:url')).toBe(`${ORIGIN}${SEASON_PATH}?page=2`);
+  });
+
+  // `?page=9` is a whole number, so the query gets it and answers page 1 (`teams.listPublic`'s Convex test).
+  it.each([
+    ['?page=0', 1],
+    ['?page=9', 9],
+    ['?page=abc', 1],
+    ['?page=CANARY7f3a91c2', 1],
+    ['?page=2&page=CANARY7f3a91c2', 1],
+  ])(
+    '%s asks for page %s, renders page 1, and holds none of the raw value',
+    async (query, asked) => {
+      const { html, head, queries, responseInit } = await render(
+        `${SEASON_PATH}${query}`,
+        answer(),
+      );
+      expect(responseInit.status).toBeUndefined();
+      expect(queries.find((q) => q.name === 'teams:listPublic')?.args).toEqual({
+        ...slugs,
+        page: asked,
+      });
+      expect(head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+        `${ORIGIN}${SEASON_PATH}`,
+      );
+      expect(html).not.toContain('CANARY');
+      expect(html).not.toContain('page=0');
+      expect(html).not.toContain('page=9');
+      expect(html).not.toContain('page=abc');
+    },
+  );
+
+  it('a season of 2 teams writes the count and no page links', async () => {
+    const { body } = await render(
+      SEASON_PATH,
+      answer({ teams: teamsPage(1, TEAM_NAMES.slice(0, 2)) }),
+    );
+    const panel = body.querySelector('main section#teams');
+    expect(panel?.querySelector('nav')).toBeNull();
+    expect(text(panel?.querySelector(':scope > p'))).toBe('2 teams');
+  });
+
+  it('a season with no team writes the empty state', async () => {
+    const { body } = await render(SEASON_PATH, answer({ teams: NO_TEAMS }));
+    const panel = body.querySelector('main section#teams');
+    expect(panel?.querySelector('ul')).toBeNull();
+    expect(text(panel)).toBe('Teams No teams yet Teams appear here once they register.');
+  });
 
   it('writes the same dates whatever the server’s time zone: from the stored text, not an instant', async () => {
     // 2027-01-01 parsed as UTC midnight reads as 31 Dec 2026 west of UTC.

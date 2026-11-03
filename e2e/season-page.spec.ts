@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
@@ -19,6 +20,7 @@ import {
   type SeasonSeed,
   type Tenant,
 } from './support/tenant';
+import { newUser, seedUser, type TestUser } from './support/users';
 import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -118,6 +120,58 @@ async function seed(): Promise<SeededSeason> {
     ]),
   ]);
   return { tenant, path: `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/summer-2027` };
+}
+
+/** Invented names, inserted out of order; the panel lists them by name ignoring case. */
+const SEVEN_TEAMS = [
+  'Spike Lee',
+  'block party',
+  'Pier Pressure',
+  'Dig Deep',
+  'Sand Sharks',
+  'Bump Set Sunburn',
+  'Net Gains',
+];
+const TEAMS_BY_NAME = [
+  'block party',
+  'Bump Set Sunburn',
+  'Dig Deep',
+  'Net Gains',
+  'Pier Pressure',
+  'Sand Sharks',
+  'Spike Lee',
+];
+
+/** One captain per team (a person is on one team a season), plus a player on the first team. */
+async function seedTeams(
+  tenant: Tenant,
+  seasonSlug: string,
+  names: readonly string[],
+): Promise<{ captains: TestUser[]; player: TestUser }> {
+  const captains = await Promise.all(names.map(() => seedUser(newUser('Captain'))));
+  const player = await seedUser(newUser('Player'));
+  const teamIds: string[] = [];
+  for (const [index, name] of names.entries()) {
+    const { teamId } = (await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug,
+      name,
+      captainEmail: captains[index].email,
+    })) as { teamId: string };
+    teamIds.push(teamId);
+  }
+  if (teamIds[0]) await convexRun('testing:addToTeam', { teamId: teamIds[0], email: player.email });
+  return { captains, player };
+}
+
+function teamsPanel(html: string): string | undefined {
+  return /<section\b[^>]*id="teams"[^>]*>[\s\S]*?<\/section>/.exec(html)?.[0];
+}
+
+function teamNamesIn(panel: string | undefined): string[] {
+  const list = /<ul\b[^>]*>([\s\S]*?)<\/ul>/.exec(panel ?? '')?.[1] ?? '';
+  return [...list.matchAll(/<span\b[^>]*>([^<]*)<\/span>/g)].map(([, name]) => name.trim());
 }
 
 function metaContent(html: string, property: string): string | undefined {
@@ -385,6 +439,60 @@ test.describe('public season page: dates and locations in the raw server HTML', 
   );
 });
 
+test.describe('public season page: Teams panel in the raw server HTML', () => {
+  test(
+    '?page=2 of a season with 7 teams: names 6 and 7, the range, no captain or player name, 200, the public Cache-Control, and a canonical ending ?page=2',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant, path } = await seed();
+      const { captains, player } = await seedTeams(tenant, SUMMER.slug, SEVEN_TEAMS);
+      const { status, headers, html } = await fetchRawHtml(request, `${path}?page=2`);
+      expect(status).toBe(200);
+      expect(noSpaces(headers['cache-control'])).toBe(noSpaces(PUBLIC_PAGE_CACHE));
+      const panel = teamsPanel(html);
+      expect(teamNamesIn(panel)).toEqual(TEAMS_BY_NAME.slice(5));
+      expect(spacedText(panel)).toContain('6–7 of 7 teams');
+      expect(panel).toContain(`href="${path}#teams"`);
+      for (const person of [...captains, player]) {
+        expect(html).not.toContain(person.name);
+        expect(html).not.toContain(person.email);
+      }
+      expect(canonicalHrefs(html)).toHaveLength(1);
+      expect(canonicalHrefs(html)[0].endsWith(`${path}?page=2`)).toBe(true);
+      expect(metaContent(html, 'og:url')?.endsWith(`${path}?page=2`)).toBe(true);
+
+      const first = await fetchRawHtml(request, path);
+      expect(teamNamesIn(teamsPanel(first.html))).toEqual(TEAMS_BY_NAME.slice(0, 5));
+      expect(spacedText(teamsPanel(first.html))).toContain('1–5 of 7 teams');
+      expect(canonicalHrefs(first.html)[0].endsWith(path)).toBe(true);
+    },
+  );
+
+  test(
+    '?page=0, 9, abc, a canary, and page=2 beside a canary each render page 1 with 200, no Location, and none of the raw value',
+    RAW_HTTP,
+    async ({ request }) => {
+      const { tenant, path } = await seed();
+      await seedTeams(tenant, SUMMER.slug, SEVEN_TEAMS);
+      const canary = 'CANARY7f3a91c2';
+      for (const [query, raw] of [
+        ['?page=0', 'page=0'],
+        ['?page=9', 'page=9'],
+        ['?page=abc', 'page=abc'],
+        [`?page=${canary}`, canary],
+        [`?page=2&page=${canary}`, canary],
+      ]) {
+        const { status, headers, html } = await fetchRawHtml(request, `${path}${query}`);
+        expect(status, query).toBe(200);
+        expect(headers['location'], query).toBeUndefined();
+        expect(html, query).not.toContain(raw);
+        expect(teamNamesIn(teamsPanel(html)), query).toEqual(TEAMS_BY_NAME.slice(0, 5));
+        expect(canonicalHrefs(html)[0].endsWith(path), query).toBe(true);
+      }
+    },
+  );
+});
+
 test.describe('public season page in the browser', () => {
   test('hydrates with no console error and passes the axe helper', async ({
     page,
@@ -527,6 +635,69 @@ test.describe('public season page in the browser', () => {
     );
   });
 
+  test('a season with no team shows the Teams empty state and passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { path } = await seed();
+    await page.goto(path);
+    await hydrated(consoleGuard);
+    const panel = page.locator('main section#teams');
+    await expect(panel.getByRole('heading', { level: 2, name: 'Teams' })).toBeVisible();
+    await expect(panel).toContainText('No teams yet');
+    await expect(panel).toContainText('Teams appear here once they register.');
+    await expect(panel.getByRole('list')).toHaveCount(0);
+    await screenshot(page, testInfo, '142-teams-empty');
+    await expectAccessible(page);
+  });
+
+  test('the Teams panel lists 5 names a page; Next shows page 2 with focus on the Teams heading and ?page=2#teams; both pages pass the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant, path } = await seed();
+    await seedTeams(tenant, SUMMER.slug, SEVEN_TEAMS);
+    await page.goto(path);
+    await hydrated(consoleGuard);
+    const panel = page.locator('main section#teams');
+    const names = panel.locator(':scope > ul > li');
+    await expect(names).toHaveText(TEAMS_BY_NAME.slice(0, 5));
+    await expect(panel.getByRole('navigation', { name: 'Teams pages' })).toContainText(
+      '1–5 of 7 teams',
+    );
+    await screenshot(page, testInfo, '142-teams-page-1');
+    await expectAccessible(page);
+
+    await panel.getByRole('link', { name: 'Next page' }).click();
+    await expect(names).toHaveText(TEAMS_BY_NAME.slice(5));
+    await expect(page.locator('#teams-heading')).toBeFocused();
+    const url = new URL(page.url());
+    expect(url.search + url.hash).toBe('?page=2#teams');
+    await expect(panel.getByRole('navigation', { name: 'Teams pages' })).toContainText(
+      '6–7 of 7 teams',
+    );
+    await screenshot(page, testInfo, '142-teams-page-2');
+    await expectAccessible(page);
+
+    await page.goBack();
+    await expect(names).toHaveText(TEAMS_BY_NAME.slice(0, 5));
+  });
+
+  test('a season of 2 teams shows the count and no page links', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    await seedTeams(tenant, OPEN_SEASON.slug, ['Two Tall', 'Pair of Aces']);
+    await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${OPEN_SEASON.slug}`);
+    await hydrated(consoleGuard);
+    const panel = page.locator('main section#teams');
+    await expect(panel.locator(':scope > ul > li')).toHaveText(['Pair of Aces', 'Two Tall']);
+    await expect(panel.locator(':scope > p')).toHaveText('2 teams');
+    await expect(panel.getByRole('navigation')).toHaveCount(0);
+    await screenshot(page, testInfo, '142-teams-two');
+  });
+
   test('a season row on the league page opens the season page, with focus on main', async ({
     page,
     consoleGuard,
@@ -597,6 +768,7 @@ test.describe('public season page offline', () => {
     await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
     await expect(dates.locator('time')).toHaveText(['Dec 1, 2027', 'Feb 20, 2028']);
     await expect(note).toBeVisible();
+    await expect(page.locator('main section#teams')).toContainText('No teams yet');
     await expect(page.locator('app-not-saved-view')).toHaveCount(0);
 
     await crumbs.getByRole('link', { name: 'Offline League' }).click();
