@@ -13,7 +13,12 @@ import { normaliseInviteEmail } from './lib/inviteInput';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
-import { addRosterEntry, insertTeamWithCaptain, removeRosterEntry } from './lib/rosterWrites';
+import {
+  addRosterEntry,
+  insertTeamInvite,
+  insertTeamWithCaptain,
+  removeRosterEntry,
+} from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { playersPerSideOfSport } from './lib/divisions';
 import type { Sport } from './lib/sports';
@@ -437,6 +442,24 @@ export const addToTeam = internalMutation({
       userId: user._id,
       source: 'invite',
       addedByUserId: team.captainUserId,
+    });
+    return null;
+  },
+});
+
+/** A pending invite whose token nobody holds; `expiresAt` in the past makes an expired one. */
+export const addTeamInvite = internalMutation({
+  args: { teamId: v.id('teams'), email: v.string(), expiresAt: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { teamId, email, expiresAt }) => {
+    assertTestDeployment();
+    const team = await ctx.db.get('teams', teamId);
+    if (!team) throw new Error('No team has this id');
+    await insertTeamInvite(ctx, team, {
+      email: normaliseInviteEmail(email),
+      tokenHash: await hashInviteToken(generateInviteToken()),
+      expiresAt,
+      invitedByUserId: team.captainUserId,
     });
     return null;
   },

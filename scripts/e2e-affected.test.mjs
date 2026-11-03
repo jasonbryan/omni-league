@@ -420,18 +420,22 @@ describe('selectSpecs: mapped areas', () => {
     ]);
   });
 
-  it('maps the team pages, the helm input and field, and the Convex team code to the team registration and season page specs', () => {
+  it('maps the team pages, the helm input and field, and the Convex team code to the team registration, team invite, and season page specs', () => {
     for (const file of [
       'src/app/teams/register-team-page.ts',
       'src/app/teams/team-page.ts',
       'src/app/teams/team-paths.ts',
+      'src/app/teams/team-invite-panel.ts',
       'convex/teams.ts',
+      'convex/teamInvites.ts',
       'convex/lib/rosterWrites.ts',
       'convex/lib/teamInput.ts',
+      'convex/lib/teamInviteInput.ts',
     ]) {
       const specs = specsFor([file]);
       assert.ok(!specs.includes('FULL'), file);
       assert.ok(specs.includes('e2e/team-registration.spec.ts'), file);
+      assert.ok(specs.includes('e2e/team-invites.spec.ts'), file);
     }
     assert.ok(specsFor(['src/app/teams/team-paths.ts']).includes('e2e/season-page.spec.ts'));
     for (const file of ['src/app/ui/input/hlm-input.ts', 'src/app/ui/field/hlm-field.ts']) {

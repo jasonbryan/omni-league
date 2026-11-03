@@ -438,6 +438,7 @@ describe('teams.getForMember', () => {
         },
       ],
       viewerIsCaptain: true,
+      viewerCanManage: true,
     });
     expect(JSON.stringify(team)).not.toContain('@');
   });

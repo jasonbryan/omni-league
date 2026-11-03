@@ -233,6 +233,7 @@ describe('a league written before the backfill, then the backfill', () => {
         seasons: 0,
         leagueDivisions: 0,
         teamCounts: 0,
+        pendingInviteCounts: 0,
       },
       updated: { organizations: 0 },
     });

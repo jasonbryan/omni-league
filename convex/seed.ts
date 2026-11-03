@@ -22,7 +22,10 @@ import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
+  backfillTeamPendingInviteCounts,
+  insertTeamInvite,
   insertTeamWithCaptain,
+  pendingTeamInvite,
   rosteredEntryInSeason,
   teamWithSortName,
 } from './lib/rosterWrites';
@@ -601,6 +604,7 @@ const resultValidator = v.object({
     ...backfilledValidator.fields,
     ...divisionBackfilledValidator.fields,
     teamCounts: v.number(),
+    pendingInviteCounts: v.number(),
   }),
   updated: v.object({ organizations: v.number() }),
 });
@@ -674,6 +678,7 @@ export const insertDemoData = internalMutation({
       ...(await backfillTenantFields(ctx)),
       ...divisionBackfilled,
       teamCounts: await backfillSeasonTeamCounts(ctx),
+      pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
     };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
@@ -818,6 +823,19 @@ export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
   { name: 'Sand Sharks', captainEmail: `captain@${DEMO_ACCOUNT_DOMAIN}` },
 ];
 
+/**
+ * The pending invites on the captain@ account's team. Each `tokenHash` is a marker that no SHA-256
+ * hex digest can equal, so no token opens it; no token is made in a mutation, whose randomness is
+ * seeded.
+ */
+const DEMO_TEAM_INVITES = {
+  teamName: 'Sand Sharks',
+  invites: [
+    { email: `devon.park@${DEMO_ACCOUNT_DOMAIN}`, tokenHash: 'demo-invite-1' },
+    { email: `kai.nakamura@${DEMO_ACCOUNT_DOMAIN}`, tokenHash: 'demo-invite-2' },
+  ],
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -849,6 +867,7 @@ const demoResultValidator = v.object({
   memberships: v.number(),
   invites: v.number(),
   teams: v.number(),
+  teamInvites: v.number(),
   accounts: v.object({
     admin: accountCodeValidator,
     organizer: accountCodeValidator,
@@ -1066,6 +1085,37 @@ export const insertDemoTeams = internalMutation({
   },
 });
 
+/** Each demo invite is inserted once, by its marker, even after it is revoked. */
+export const insertDemoTeamInvites = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    assertPreviewDeployment();
+    const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
+    const team = found
+      ? await teamWithSortName(ctx, found.season._id, DEMO_TEAM_INVITES.teamName)
+      : null;
+    if (!team) return 0;
+    let inserted = 0;
+    for (const invite of DEMO_TEAM_INVITES.invites) {
+      const marked = await ctx.db
+        .query('teamInvites')
+        .withIndex('by_tokenHash', (q) => q.eq('tokenHash', invite.tokenHash))
+        .first();
+      if (marked || (await pendingTeamInvite(ctx, team._id, invite.email))) continue;
+      const current = await ctx.db.get('teams', team._id);
+      if (!current) return inserted;
+      await insertTeamInvite(ctx, current, {
+        ...invite,
+        expiresAt: Date.now() + INVITE_LIFETIME_MS,
+        invitedByUserId: current.captainUserId,
+      });
+      inserted++;
+    }
+    return inserted;
+  },
+});
+
 interface AccountOutcome {
   code: AccountCode;
   authUserId?: string;
@@ -1204,6 +1254,7 @@ export const demo = internalAction({
     };
     let memberships = 0;
     let teams = 0;
+    let teamInvites = 0;
     if (password !== undefined && password !== '') {
       const auth = createAuth(ctx);
       const captains: { email: string; authUserId: string }[] = [];
@@ -1225,8 +1276,9 @@ export const demo = internalAction({
           if (authUserId !== null) captains.push({ email: captain.email, authUserId });
         }
         teams = await ctx.runMutation(internal.seed.insertDemoTeams, { captains });
+        teamInvites = await ctx.runMutation(internal.seed.insertDemoTeamInvites, {});
       }
     }
-    return { ...data, logos, memberships, invites, teams, accounts };
+    return { ...data, logos, memberships, invites, teams, teamInvites, accounts };
   },
 });
