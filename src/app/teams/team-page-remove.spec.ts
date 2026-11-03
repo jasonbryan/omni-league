@@ -11,10 +11,32 @@ const REMOVE = 'rosterEntries:remove';
 const URL = '/app/teams/team_sharks';
 const ROUTES = [{ path: 'app/teams/:teamId', component: TeamPage }];
 
+const ROW = { minor: null, viewerCanRename: false };
 const ROSTER = [
-  { rosterEntryId: 're_1', name: 'Tasha Greene', isCaptain: true, isViewer: true },
-  { rosterEntryId: 're_2', name: 'Marcus Bell', isCaptain: false, isViewer: false },
-  { rosterEntryId: 're_3', name: 'Elena Ruiz', isCaptain: false, isViewer: false },
+  {
+    ...ROW,
+    rosterEntryId: 're_1',
+    name: 'Tasha Greene',
+    isCaptain: true,
+    isViewer: true,
+    viewerCanRemove: false,
+  },
+  {
+    ...ROW,
+    rosterEntryId: 're_2',
+    name: 'Marcus Bell',
+    isCaptain: false,
+    isViewer: false,
+    viewerCanRemove: true,
+  },
+  {
+    ...ROW,
+    rosterEntryId: 're_3',
+    name: 'Elena Ruiz',
+    isCaptain: false,
+    isViewer: false,
+    viewerCanRemove: true,
+  },
 ];
 const SHARKS = {
   name: 'Sand Sharks',
@@ -26,6 +48,8 @@ const SHARKS = {
   roster: ROSTER,
   viewerIsCaptain: true,
   viewerCanManage: true,
+  viewerOnTeam: true,
+  viewerTeamName: 'Sand Sharks',
 };
 
 describe('TeamPage: removing a player', () => {
@@ -80,7 +104,12 @@ describe('TeamPage: removing a player', () => {
   });
 
   it('a member who cannot manage the team gets no Remove', async () => {
-    await open({ ...SHARKS, viewerIsCaptain: false, viewerCanManage: false });
+    await open({
+      ...SHARKS,
+      viewerIsCaptain: false,
+      viewerCanManage: false,
+      roster: ROSTER.map((player) => ({ ...player, viewerCanRemove: false })),
+    });
     expect(main().querySelectorAll('button[data-roster-entry-id]')).toHaveLength(0);
   });
 

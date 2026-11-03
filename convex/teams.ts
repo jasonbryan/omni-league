@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values';
-import type { Doc } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import {
   canManageTeam,
@@ -7,10 +7,11 @@ import {
   requireUser,
   type TeamReader,
 } from './lib/access';
+import { shortMinorName } from './lib/minorName';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
 import { registrationIsOpen } from './lib/registration';
-import { insertTeamWithCaptain } from './lib/rosterWrites';
+import { insertTeamWithCaptain, isMinorEntry } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import {
   checkTeamName,
@@ -91,8 +92,10 @@ const myTeamValidator = v.object({
   seasonName: v.string(),
   leagueName: v.string(),
   organizationName: v.string(),
-  role: v.union(v.literal('captain'), v.literal('player')),
+  role: v.union(v.literal('captain'), v.literal('player'), v.literal('guardian')),
 });
+
+type MyTeamRole = 'captain' | 'player' | 'guardian';
 
 // eslint-disable-next-line @convex-dev/require-access-control -- the caller's own roster entries only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
 export const listMine = query({
@@ -106,9 +109,14 @@ export const listMine = query({
       .withIndex('by_userId_and_status', (q) => q.eq('userId', user._id).eq('status', 'rostered'))
       .order('desc')
       .take(TEAMS_LIST_MINE_LIMIT);
-    const rows = [];
+    const roles = new Map<Id<'teams'>, MyTeamRole>();
     for (const entry of entries) {
-      const team = await ctx.db.get('teams', entry.teamId);
+      if (!isMinorEntry(entry)) roles.set(entry.teamId, 'player');
+      else if (!roles.has(entry.teamId)) roles.set(entry.teamId, 'guardian');
+    }
+    const rows = [];
+    for (const [teamId, entryRole] of roles) {
+      const team = await ctx.db.get('teams', teamId);
       if (!team) continue;
       const [season, league, organization] = await Promise.all([
         ctx.db.get('seasons', team.seasonId),
@@ -124,7 +132,7 @@ export const listMine = query({
           seasonName: season.name,
           leagueName: league.name,
           organizationName: organization.name,
-          role: team.captainUserId === user._id ? ('captain' as const) : ('player' as const),
+          role: entryRole === 'player' && team.captainUserId === user._id ? 'captain' : entryRole,
         },
       });
     }
@@ -138,9 +146,13 @@ function newestSeasonFirst(a: { startDate: string }, b: { startDate: string }): 
 
 const rosterRowValidator = v.object({
   rosterEntryId: v.id('rosterEntries'),
+  /** A minor's name reaches players on other teams only shortened, and their row is not marked as a minor's. */
   name: v.string(),
   isCaptain: v.boolean(),
   isViewer: v.boolean(),
+  minor: v.union(v.null(), v.object({ guardianName: v.string() })),
+  viewerCanRename: v.boolean(),
+  viewerCanRemove: v.boolean(),
 });
 
 const teamForMemberValidator = v.object({
@@ -153,6 +165,8 @@ const teamForMemberValidator = v.object({
   roster: v.array(rosterRowValidator),
   viewerIsCaptain: v.boolean(),
   viewerCanManage: v.boolean(),
+  /** The caller has their own entry or a minor's entry on this team. */
+  viewerOnTeam: v.boolean(),
   viewerTeamName: v.union(v.null(), v.string()),
 });
 
@@ -181,6 +195,7 @@ export const getForMember = query({
     const season = await ctx.db.get('seasons', team.seasonId);
     const organization = await ctx.db.get('organizations', team.organizationId);
     if (!season || !organization) return null;
+    const viewerCanManage = await canManageTeam(ctx, user._id, team, league);
     return {
       name: team.name,
       organization: { name: organization.name, slug: organization.slug },
@@ -188,9 +203,10 @@ export const getForMember = query({
       season: { name: season.name, slug: season.slug },
       minimumRosterSize: season.minimumRosterSize,
       rosterCount: team.rosterCount,
-      roster: await rosterOf(ctx, team, user),
+      roster: await rosterOf(ctx, team, reader, viewerCanManage),
       viewerIsCaptain: team.captainUserId === user._id,
-      viewerCanManage: await canManageTeam(ctx, user._id, team, league),
+      viewerCanManage,
+      viewerOnTeam: reader.rosteredTeamIds.has(team._id),
       viewerTeamName: await ownTeamName(ctx, reader),
     };
   },
@@ -208,7 +224,7 @@ export const listForSeasonMember = query({
     const found = await teamAndLeague(ctx, args.teamId);
     if (!found) return null;
     const { team, league } = found;
-    const { ownTeamId } = await requireSeasonMemberOrOrganizer(ctx, team, league);
+    const { rosteredTeamIds } = await requireSeasonMemberOrOrganizer(ctx, team, league);
     const season = await ctx.db.get('seasons', team.seasonId);
     if (!season) return null;
     const teams = await ctx.db
@@ -219,26 +235,52 @@ export const listForSeasonMember = query({
       rows: teams.map((row) => ({
         teamId: row._id,
         name: row.name,
-        isViewerTeam: row._id === ownTeamId,
+        isViewerTeam: rosteredTeamIds.has(row._id),
       })),
       total: season.teamCount ?? teams.length,
     };
   },
 });
 
-async function rosterOf(ctx: Pick<QueryCtx, 'db'>, team: Doc<'teams'>, viewer: Doc<'users'>) {
+async function rosterOf(
+  ctx: Pick<QueryCtx, 'db'>,
+  team: Doc<'teams'>,
+  reader: TeamReader,
+  viewerCanManage: boolean,
+) {
+  const viewerId = reader.user._id;
+  // Owner (chat, 2026-10-10): players on other teams see a minor's first name and last initial.
+  const seesMinors = reader.organizes || reader.rosteredTeamIds.has(team._id);
   const entries = await ctx.db
     .query('rosterEntries')
     .withIndex('by_teamId_and_status', (q) => q.eq('teamId', team._id).eq('status', 'rostered'))
     .take(ROSTER_READ_LIMIT);
   const rows = [];
   for (const entry of entries) {
+    if (entry.minorName !== undefined) {
+      const isGuardian = entry.userId === viewerId;
+      const guardian = seesMinors ? await ctx.db.get('users', entry.userId) : null;
+      rows.push({
+        rosterEntryId: entry._id,
+        name: seesMinors ? entry.minorName : shortMinorName(entry.minorName),
+        isCaptain: false,
+        isViewer: false,
+        minor: seesMinors ? { guardianName: guardian?.name ?? '' } : null,
+        viewerCanRename: isGuardian || reader.organizes,
+        viewerCanRemove: isGuardian || viewerCanManage,
+      });
+      continue;
+    }
     const player = await ctx.db.get('users', entry.userId);
+    const isCaptain = entry.userId === team.captainUserId;
     rows.push({
       rosterEntryId: entry._id,
       name: player?.name ?? '',
-      isCaptain: entry.userId === team.captainUserId,
-      isViewer: entry.userId === viewer._id,
+      isCaptain,
+      isViewer: entry.userId === viewerId,
+      minor: null,
+      viewerCanRename: false,
+      viewerCanRemove: viewerCanManage && !isCaptain,
     });
   }
   return rows.sort(captainFirst);

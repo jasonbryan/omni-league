@@ -22,6 +22,7 @@ import {
   lucideEye,
   lucideInfo,
   lucideLock,
+  lucidePencil,
   lucideShieldCheck,
   lucideUserMinus,
   lucideUserPlus,
@@ -31,11 +32,10 @@ import { map } from 'rxjs';
 import { isForbidden } from '../../../convex/lib/forbidden';
 import { AuthService } from '../core/auth/auth.service';
 import type { Id } from '../../../convex/_generated/dataModel';
-import type { AlertText } from '../organizations/admin/alert-text';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { NotFoundView } from '../not-found/not-found-view';
 import { AdminAlert } from '../organizations/admin/admin-alert';
-import { BADGE_SECONDARY } from '../organizations/admin/field-classes';
+import { BADGE_OUTLINE, BADGE_SECONDARY } from '../organizations/admin/field-classes';
 import { organizationPath } from '../organizations/organization-path';
 import {
   publicLeaguePath,
@@ -46,15 +46,22 @@ import { Shell } from '../shell';
 import { isPlainClick } from '../shell/follow-link';
 import { initialsOf } from '../shell/initials';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { AddMinorPanel } from './add-minor-panel';
 import { RemovePlayerDialog, type RemovePlayerOutcome } from './remove-player-dialog';
 import { removedText } from './remove-player-text';
 import { rosterCount } from './roster-count';
 import { SeasonTeamsPanel } from './season-teams-panel';
+import { RenameMinorForm, type RenameMinorOutcome } from './rename-minor-form';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
 import { TeamPendingInvites } from './team-pending-invites';
 
 type TeamState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
+
+interface RosterNotice {
+  title: string;
+  description?: string;
+}
 
 const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
 const PANEL =
@@ -71,10 +78,12 @@ export interface TeamPageNavigationState {
 @Component({
   selector: 'app-team-page',
   imports: [
+    AddMinorPanel,
     AdminAlert,
     NgIcon,
     NotFoundView,
     RemovePlayerDialog,
+    RenameMinorForm,
     RouterLink,
     SeasonTeamsPanel,
     ServerErrorView,
@@ -90,6 +99,7 @@ export interface TeamPageNavigationState {
       lucideEye,
       lucideInfo,
       lucideLock,
+      lucidePencil,
       lucideShieldCheck,
       lucideUserMinus,
       lucideUserPlus,
@@ -255,10 +265,10 @@ export interface TeamPageNavigationState {
                         }
                       </p>
                     </div>
-                    @if (removedNotice(); as notice) {
+                    @if (rosterNotice(); as notice) {
                       <div class="border-b border-border px-4 py-3 md:px-5">
                         <app-admin-alert
-                          #removedStatus
+                          #rosterStatus
                           kind="success"
                           [title]="notice.title"
                           [description]="notice.description"
@@ -277,52 +287,95 @@ export interface TeamPageNavigationState {
                     </p>
                     <ul role="list" class="divide-y divide-border">
                       @for (player of team.roster; track player.rosterEntryId) {
-                        <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
-                          <span
-                            aria-hidden="true"
-                            class="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground"
-                            >{{ initials(player.name) }}</span
+                        @if (renaming() === player.rosterEntryId) {
+                          <li class="px-4 py-4 md:px-5">
+                            <app-rename-minor-form
+                              [rosterEntryId]="player.rosterEntryId"
+                              [currentName]="player.name"
+                              (done)="renameDone($event)"
+                            />
+                          </li>
+                        } @else {
+                          <li
+                            class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5"
                           >
-                          <div class="min-w-0 flex-1">
-                            <h3 class="font-medium break-words">
-                              {{ player.name }}
-                              @if (player.isViewer) {
-                                <span class="text-sm font-normal text-muted-foreground">(you)</span>
+                            <span
+                              aria-hidden="true"
+                              class="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground"
+                              >{{ initials(player.name) }}</span
+                            >
+                            <div class="min-w-0 flex-1">
+                              <h3 class="font-medium break-words">
+                                {{ player.name }}
+                                @if (player.isViewer) {
+                                  <span class="text-sm font-normal text-muted-foreground"
+                                    >(you)</span
+                                  >
+                                }
+                              </h3>
+                              @if (player.isCaptain) {
+                                <p
+                                  class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+                                >
+                                  <span data-slot="badge" [class]="captainBadge"
+                                    ><ng-icon
+                                      name="lucideCrown"
+                                      data-icon="inline-start"
+                                      aria-hidden="true"
+                                    />Captain</span
+                                  >
+                                </p>
                               }
-                            </h3>
-                            @if (player.isCaptain) {
-                              <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                                <span data-slot="badge" [class]="captainBadge"
-                                  ><ng-icon
-                                    name="lucideCrown"
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                  />Captain</span
+                              @if (player.minor; as minor) {
+                                <p
+                                  class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
                                 >
-                              </p>
-                            }
-                          </div>
-                          @if (team.viewerCanManage && !player.isCaptain) {
-                            <div class="flex w-full flex-wrap gap-2 ps-12 sm:w-auto sm:ps-0">
-                              <button
-                                type="button"
-                                aria-haspopup="dialog"
-                                data-slot="button"
-                                [attr.data-roster-entry-id]="player.rosterEntryId"
-                                [class]="destructiveButton"
-                                (click)="openRemove(player)"
-                              >
-                                <ng-icon
-                                  name="lucideUserMinus"
-                                  data-icon="inline-start"
-                                  aria-hidden="true"
-                                />Remove<span class="sr-only">
-                                  {{ player.name }} from {{ team.name }}</span
-                                >
-                              </button>
+                                  <span data-slot="badge" [class]="minorBadge">Minor</span>
+                                </p>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                  Guardian: {{ minor.guardianName }}
+                                </p>
+                              }
                             </div>
-                          }
-                        </li>
+                            @if (player.viewerCanRename || player.viewerCanRemove) {
+                              <div class="flex w-full flex-wrap gap-2 ps-12 sm:w-auto sm:ps-0">
+                                @if (player.viewerCanRename) {
+                                  <button
+                                    type="button"
+                                    data-slot="button"
+                                    [attr.data-rename-entry-id]="player.rosterEntryId"
+                                    [class]="outlineButton"
+                                    (click)="openRename(player.rosterEntryId)"
+                                  >
+                                    <ng-icon
+                                      name="lucidePencil"
+                                      data-icon="inline-start"
+                                      aria-hidden="true"
+                                    />Rename<span class="sr-only"> {{ player.name }}</span>
+                                  </button>
+                                }
+                                @if (player.viewerCanRemove) {
+                                  <button
+                                    type="button"
+                                    aria-haspopup="dialog"
+                                    data-slot="button"
+                                    [attr.data-roster-entry-id]="player.rosterEntryId"
+                                    [class]="destructiveButton"
+                                    (click)="openRemove(player)"
+                                  >
+                                    <ng-icon
+                                      name="lucideUserMinus"
+                                      data-icon="inline-start"
+                                      aria-hidden="true"
+                                    />Remove<span class="sr-only">
+                                      {{ player.name }} from {{ team.name }}</span
+                                    >
+                                  </button>
+                                }
+                              </div>
+                            }
+                          </li>
+                        }
                       }
                     </ul>
                   </section>
@@ -338,6 +391,9 @@ export interface TeamPageNavigationState {
                   @if (team.viewerCanManage && teamIdOf(); as id) {
                     <app-team-invite-panel [teamId]="id" />
                   }
+                  @if (team.viewerOnTeam && teamIdOf(); as id) {
+                    <app-add-minor-panel [teamId]="id" [teamName]="team.name" />
+                  }
                   <app-season-teams-panel
                     [rows]="seasonTeams.value()?.rows"
                     [total]="seasonTeams.value()?.total"
@@ -347,7 +403,7 @@ export interface TeamPageNavigationState {
                 </div>
               </div>
             </div>
-            @if (team.viewerCanManage) {
+            @if (canRemoveAny()) {
               <app-remove-player-dialog
                 [teamName]="team.name"
                 (dismissed)="removeDismissed($event)"
@@ -368,6 +424,8 @@ export class TeamPage {
   protected readonly skeletonRows = [0, 1, 2];
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly destructiveButton = DESTRUCTIVE_BUTTON;
+  protected readonly outlineButton = OUTLINE_BUTTON;
+  protected readonly minorBadge = BADGE_OUTLINE;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly backLink = BACK_LINK;
   protected readonly inlineLink = INLINE_LINK;
@@ -425,6 +483,9 @@ export class TeamPage {
           : 'You’re on this team.',
       };
     }
+    if (team.viewerOnTeam) {
+      return { icon: 'lucideUsers', text: 'You’re the guardian of a minor on this team.' };
+    }
     if (team.viewerTeamName === null) return null;
     return {
       icon: 'lucideEye',
@@ -476,11 +537,18 @@ export class TeamPage {
   private readonly invitePanel = viewChild(TeamInvitePanel);
   private readonly statusFocused = signal(false);
   private readonly removeDialog = viewChild(RemovePlayerDialog);
-  private readonly removedStatus = viewChild<AdminAlert>('removedStatus');
-  protected readonly removedNotice = linkedSignal<string, AlertText | null>({
+  private readonly rosterStatus = viewChild<AdminAlert>('rosterStatus');
+  protected readonly rosterNotice = linkedSignal<string, RosterNotice | null>({
     source: this.teamId,
     computation: () => null,
   });
+  protected readonly renaming = linkedSignal<string, Id<'rosterEntries'> | null>({
+    source: this.teamId,
+    computation: () => null,
+  });
+  protected readonly canRemoveAny = computed(
+    () => this.team()?.roster.some((player) => player.viewerCanRemove) ?? false,
+  );
 
   constructor() {
     // The not-found and server-error views set their own title.
@@ -498,16 +566,38 @@ export class TeamPage {
     });
   }
 
+  protected openRename(rosterEntryId: Id<'rosterEntries'>): void {
+    this.rosterNotice.set(null);
+    this.renaming.set(rosterEntryId);
+  }
+
+  /** A rename focuses the status, because the form is gone; Cancel returns focus to the row's Rename. */
+  protected renameDone({ rosterEntryId, renamed }: RenameMinorOutcome): void {
+    this.renaming.set(null);
+    if (renamed !== null) {
+      this.rosterNotice.set({ title: `Renamed to ${renamed}.` });
+      afterNextRender(() => this.rosterStatus()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLElement>(`button[data-rename-entry-id="${rosterEntryId}"]`)
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
   protected openRemove(player: { rosterEntryId: Id<'rosterEntries'>; name: string }): void {
-    this.removedNotice.set(null);
+    this.rosterNotice.set(null);
     this.removeDialog()?.open({ rosterEntryId: player.rosterEntryId, name: player.name });
   }
 
   /** A removal focuses the status, because the row and its Remove are gone. */
   protected removeDismissed({ rosterEntryId, name, removed }: RemovePlayerOutcome): void {
     if (removed) {
-      this.removedNotice.set(removedText(name, this.team()?.name ?? ''));
-      afterNextRender(() => this.removedStatus()?.focus(), { injector: this.injector });
+      this.rosterNotice.set(removedText(name, this.team()?.name ?? ''));
+      afterNextRender(() => this.rosterStatus()?.focus(), { injector: this.injector });
       return;
     }
     afterNextRender(

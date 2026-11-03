@@ -8,6 +8,7 @@ export const rosterEntrySourceValidator = v.union(
   v.literal('captain'),
   v.literal('invite'),
   v.literal('placement'),
+  v.literal('guardian'),
 );
 
 export type RosterEntrySource = Infer<typeof rosterEntrySourceValidator>;

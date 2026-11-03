@@ -460,16 +460,23 @@ describe('teams.getForMember', () => {
           name: 'Name captain',
           isCaptain: true,
           isViewer: true,
+          minor: null,
+          viewerCanRename: false,
+          viewerCanRemove: false,
         },
         {
           rosterEntryId: playerEntry?._id,
           name: 'Name player',
           isCaptain: false,
           isViewer: false,
+          minor: null,
+          viewerCanRename: false,
+          viewerCanRemove: true,
         },
       ],
       viewerIsCaptain: true,
       viewerCanManage: true,
+      viewerOnTeam: true,
       viewerTeamName: 'Sand Sharks',
     });
     expect(JSON.stringify(team)).not.toContain('@');

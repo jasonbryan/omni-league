@@ -119,6 +119,18 @@ async function signInWith(page: Page, user: TestUser) {
   await tokens;
 }
 
+async function expectOnlyMinorOffered(page: Page, reason: string) {
+  const self = main(page).getByRole('checkbox', { name: 'Join the roster myself' });
+  await expect(self).toBeDisabled();
+  await expect(self).not.toBeChecked();
+  await expect(main(page).locator('#join-self-description')).toHaveText(reason);
+  await expect(
+    main(page).getByRole('checkbox', { name: 'Add a minor I’m responsible for' }),
+  ).toBeChecked();
+  await expect(main(page).locator('#minor-name')).toBeVisible();
+  await expect(acceptButton(page)).toBeVisible();
+}
+
 async function expectJoined(page: Page, teamId: string) {
   await expect(heading(page)).toHaveText('You’re on Sand Sharks');
   await expect(heading(page)).toBeFocused();
@@ -246,7 +258,7 @@ test.describe('Join a team: refusals', () => {
     urls.expectNone(token);
   });
 
-  test('someone on another team of the season is refused, naming that team, and the invite stays pending', async ({
+  test('someone on another team of the season is refused, naming that team, may still add a minor, and the invite stays pending', async ({
     page,
   }, testInfo) => {
     const captain = await seedUser(newUser('Captain'));
@@ -261,15 +273,11 @@ test.describe('Join a team: refusals', () => {
     const alert = main(page).getByRole('alert');
     await expect(alert).toContainText('You’re already on Net Results in this season.');
     await expect(alert).toContainText(
-      'Each person plays on one team per season, so you can’t join Sand Sharks.',
+      'Each person plays on one team per season, so you can’t join Sand Sharks yourself. You can still add a minor you’re responsible for.',
     );
     await expect(alert).toBeFocused();
-    await expect(acceptButton(page)).toHaveCount(0);
-    await expect(main(page).getByRole('link', { name: 'Go to your teams' })).toHaveAttribute(
-      'href',
-      '/app',
-    );
-    expect(await stored(page, TEAM_KEY)).toBeNull();
+    await expectOnlyMinorOffered(page, 'Not available: you’re on Net Results in this season.');
+    expect(await stored(page, TEAM_KEY)).toBe(token);
     await screenshot(page, testInfo, '132-other-team');
     await expectAccessible(page);
 
@@ -278,7 +286,7 @@ test.describe('Join a team: refusals', () => {
     await expect(heading(page)).toHaveText('Join Sand Sharks');
   });
 
-  test('a waiting free agent of the season is refused, told an organizer places them, and the invite stays pending', async ({
+  test('a waiting free agent of the season is refused, told an organizer places them, may still add a minor, and the invite stays pending', async ({
     page,
   }, testInfo) => {
     const captain = await seedUser(newUser('Captain'));
@@ -298,15 +306,11 @@ test.describe('Join a team: refusals', () => {
     const alert = main(page).getByRole('alert');
     await expect(alert).toContainText('You’re registered as a free agent in this season.');
     await expect(alert).toContainText(
-      `Organizers place free agents on teams. Ask an organizer of ${LEAGUE} to place you on Sand Sharks.`,
+      `Organizers place free agents on teams. Ask an organizer of ${LEAGUE} to place you on Sand Sharks. You can still add a minor you’re responsible for.`,
     );
     await expect(alert).toBeFocused();
-    await expect(acceptButton(page)).toHaveCount(0);
-    await expect(main(page).getByRole('link', { name: 'Go to your teams' })).toHaveAttribute(
-      'href',
-      '/app',
-    );
-    expect(await stored(page, TEAM_KEY)).toBeNull();
+    await expectOnlyMinorOffered(page, 'Not available: an organizer places free agents.');
+    expect(await stored(page, TEAM_KEY)).toBe(token);
     await screenshot(page, testInfo, '133-join-free-agent');
     await expectAccessible(page);
 

@@ -14,6 +14,7 @@ import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 import {
+  addMinorEntry,
   addRosterEntry,
   insertFreeAgent,
   insertPlacedFreeAgent,
@@ -496,6 +497,25 @@ export const addToTeam = internalMutation({
     const user = await userByEmail(ctx, email);
     await addRosterEntry(ctx, team, {
       userId: user._id,
+      source: 'invite',
+      addedByUserId: team.captainUserId,
+    });
+    return null;
+  },
+});
+
+/** A minor's entry under the guardian, as an accepted invite writes it. */
+export const addMinorToTeam = internalMutation({
+  args: { teamId: v.id('teams'), guardianEmail: v.string(), minorName: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { teamId, guardianEmail, minorName }) => {
+    assertTestDeployment();
+    const team = await ctx.db.get('teams', teamId);
+    if (!team) throw new Error('No team has this id');
+    const guardian = await userByEmail(ctx, guardianEmail);
+    await addMinorEntry(ctx, team, {
+      guardianUserId: guardian._id,
+      minorName,
       source: 'invite',
       addedByUserId: team.captainUserId,
     });

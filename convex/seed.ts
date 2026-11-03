@@ -23,7 +23,9 @@ import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
   acceptTeamInvite,
+  addMinorEntry,
   addRosterEntry,
+  adultEntryInSeason,
   backfillTeamPendingInviteCounts,
   freeAgentInSeason,
   insertFreeAgent,
@@ -32,7 +34,6 @@ import {
   insertTeamWithCaptain,
   pendingTeamInvite,
   removeRosterEntry,
-  rosteredEntryInSeason,
   teamWithSortName,
 } from './lib/rosterWrites';
 import { findLeagueBySlugs, findSeasonBySlugs } from './lib/seasonLookup';
@@ -754,6 +755,7 @@ const accountKeyValidator = v.union(
   v.literal('organizer'),
   v.literal('player'),
   v.literal('captain'),
+  v.literal('guardian'),
 );
 
 type AccountKey = Infer<typeof accountKeyValidator>;
@@ -801,9 +803,10 @@ export const DEMO_ACCOUNTS: Readonly<
   },
   player: { email: `player@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Player', memberships: [] },
   captain: { email: `captain@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Captain', memberships: [] },
+  guardian: { email: `guardian@${DEMO_ACCOUNT_DOMAIN}`, name: 'Demo Guardian', memberships: [] },
 };
 
-const ACCOUNT_KEYS = ['admin', 'organizer', 'player', 'captain'] as const;
+const ACCOUNT_KEYS = ['admin', 'organizer', 'player', 'captain', 'guardian'] as const;
 
 export const DEMO_TEAM_SEASON = {
   orgSlug: 'gulf-coast-sport-social',
@@ -905,6 +908,16 @@ const DEMO_TEAM_PLAYER = {
   tokenHash: 'demo-invite-player',
 } as const;
 
+/**
+ * guardian@'s minor on a team the captain@ and player@ accounts play against, so they see the
+ * shortened name. Inserted once: any entry of guardian@ in the season, removed included, means it was.
+ */
+const DEMO_MINOR = {
+  teamName: 'Block Party',
+  guardianEmail: `guardian@${DEMO_ACCOUNT_DOMAIN}`,
+  minorName: 'Ava Lane',
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -943,6 +956,7 @@ const demoResultValidator = v.object({
     organizer: accountCodeValidator,
     player: accountCodeValidator,
     captain: accountCodeValidator,
+    guardian: accountCodeValidator,
   }),
 });
 
@@ -1145,7 +1159,7 @@ export const insertDemoTeams = internalMutation({
         .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
         .unique();
       if (!user) continue;
-      if (await rosteredEntryInSeason(ctx, found.season._id, user._id)) continue;
+      if (await adultEntryInSeason(ctx, found.season._id, user._id)) continue;
       const season = await ctx.db.get('seasons', found.season._id);
       if (!season) return inserted;
       await insertTeamWithCaptain(ctx, season, { name: team.name, captainUserId: user._id });
@@ -1241,7 +1255,7 @@ export const insertDemoTeamPlayer = internalMutation({
       .query('users')
       .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
       .unique();
-    if (!user || (await rosteredEntryInSeason(ctx, team.seasonId, user._id))) return false;
+    if (!user || (await adultEntryInSeason(ctx, team.seasonId, user._id))) return false;
     const inviteId = await insertTeamInvite(ctx, team, {
       email: DEMO_TEAM_PLAYER.email,
       tokenHash: DEMO_TEAM_PLAYER.tokenHash,
@@ -1249,6 +1263,36 @@ export const insertDemoTeamPlayer = internalMutation({
       invitedByUserId: team.captainUserId,
     });
     await acceptTeamInvite(ctx, inviteId, user._id);
+    return true;
+  },
+});
+
+export const insertDemoMinor = internalMutation({
+  args: { authUserId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { authUserId }) => {
+    assertPreviewDeployment();
+    const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
+    const team = found ? await teamWithSortName(ctx, found.season._id, DEMO_MINOR.teamName) : null;
+    if (!team) return false;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user) return false;
+    const seeded = await ctx.db
+      .query('rosterEntries')
+      .withIndex('by_seasonId_and_userId', (q) =>
+        q.eq('seasonId', team.seasonId).eq('userId', user._id),
+      )
+      .first();
+    if (seeded) return false;
+    await addMinorEntry(ctx, team, {
+      guardianUserId: user._id,
+      minorName: DEMO_MINOR.minorName,
+      source: 'invite',
+      addedByUserId: team.captainUserId,
+    });
     return true;
   },
 });
@@ -1275,7 +1319,7 @@ export const insertDemoFreeAgents = internalMutation({
         .unique();
       if (!user) continue;
       if (await freeAgentInSeason(ctx, found.season._id, user._id)) continue;
-      if (await rosteredEntryInSeason(ctx, found.season._id, user._id)) continue;
+      if (await adultEntryInSeason(ctx, found.season._id, user._id)) continue;
       await insertFreeAgent(ctx, found.season, user._id);
       inserted++;
     }
@@ -1303,7 +1347,7 @@ async function insertDemoPlacedFreeAgent(
     .unique();
   if (!user) return false;
   if (await freeAgentInSeason(ctx, team.seasonId, user._id)) return false;
-  if (await rosteredEntryInSeason(ctx, team.seasonId, user._id)) return false;
+  if (await adultEntryInSeason(ctx, team.seasonId, user._id)) return false;
   await insertPlacedFreeAgent(ctx, team, user._id);
   return true;
 }
@@ -1443,6 +1487,7 @@ export const demo = internalAction({
       organizer: 'skipped:unset',
       player: 'skipped:unset',
       captain: 'skipped:unset',
+      guardian: 'skipped:unset',
     };
     let memberships = 0;
     let teams = 0;
@@ -1477,6 +1522,12 @@ export const demo = internalAction({
           });
         }
         freeAgents = await ctx.runMutation(internal.seed.insertDemoFreeAgents, { people });
+        const guardian = people.find((account) => account.email === DEMO_MINOR.guardianEmail);
+        if (guardian) {
+          await ctx.runMutation(internal.seed.insertDemoMinor, {
+            authUserId: guardian.authUserId,
+          });
+        }
       }
     }
     return { ...data, logos, memberships, invites, teams, teamInvites, freeAgents, accounts };

@@ -4,6 +4,12 @@
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
+import {
+  MINOR_MESSAGES,
+  minorNameKey,
+  type MinorInSeasonRefusal,
+  type NothingChosenRefusal,
+} from './minorName';
 import type { RosterEntrySource } from './rosterEntry';
 import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
 import {
@@ -23,16 +29,30 @@ const ENTRIES_PER_USER_IN_SEASON_LIMIT = 100;
 
 export const BACKFILL_TEAM_COUNT_SCAN_LIMIT = 1000;
 
-export async function rosteredEntryInSeason(
+export async function rosteredEntriesInSeason(
   ctx: ReadCtx,
   seasonId: Id<'seasons'>,
   userId: Id<'users'>,
-): Promise<Doc<'rosterEntries'> | null> {
+): Promise<Doc<'rosterEntries'>[]> {
   const entries = await ctx.db
     .query('rosterEntries')
     .withIndex('by_seasonId_and_userId', (q) => q.eq('seasonId', seasonId).eq('userId', userId))
     .take(ENTRIES_PER_USER_IN_SEASON_LIMIT);
-  return entries.find((entry) => entry.status === 'rostered') ?? null;
+  return entries.filter((entry) => entry.status === 'rostered');
+}
+
+export function isMinorEntry(entry: Doc<'rosterEntries'>): boolean {
+  return entry.minorName !== undefined;
+}
+
+/** A minor's entry carries the guardian's user id, so only an entry without `minorName` places the person themself. */
+export async function adultEntryInSeason(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'> | null> {
+  const entries = await rosteredEntriesInSeason(ctx, seasonId, userId);
+  return entries.find((entry) => !isMinorEntry(entry)) ?? null;
 }
 
 export async function teamWithSortName(
@@ -65,7 +85,9 @@ type Refusal =
   | TeamInviteInputError
   | WaitingFreeAgentRefusal
   | AlreadyFreeAgentRefusal
-  | AlreadyPlacedRefusal;
+  | AlreadyPlacedRefusal
+  | MinorInSeasonRefusal
+  | NothingChosenRefusal;
 
 function refuse(refusal: Refusal): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -78,7 +100,7 @@ async function assertNotRostered(
   userId: Id<'users'>,
   teamId: Id<'teams'> | null,
 ): Promise<void> {
-  const existing = await rosteredEntryInSeason(ctx, seasonId, userId);
+  const existing = await adultEntryInSeason(ctx, seasonId, userId);
   if (!existing) return;
   const team = await ctx.db.get('teams', existing.teamId);
   const teamName = team?.name ?? '';
@@ -171,6 +193,77 @@ export async function addRosterEntry(
   return entryId;
 }
 
+export interface NewMinorEntry {
+  guardianUserId: Id<'users'>;
+  /** Already checked with `checkMinorName`. */
+  minorName: string;
+  source: RosterEntrySource;
+  addedByUserId: Id<'users'>;
+}
+
+// A minor has no identity beyond its guardian and name, so the check cannot match minors across guardians.
+async function assertMinorNotInSeason(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  guardianUserId: Id<'users'>,
+  minorName: string,
+  renamedEntryId: Id<'rosterEntries'> | null,
+): Promise<void> {
+  const key = minorNameKey(minorName);
+  const entries = await rosteredEntriesInSeason(ctx, seasonId, guardianUserId);
+  const same = entries.find(
+    (entry) =>
+      entry._id !== renamedEntryId &&
+      entry.minorName !== undefined &&
+      minorNameKey(entry.minorName) === key,
+  );
+  if (!same?.minorName) return;
+  const team = await ctx.db.get('teams', same.teamId);
+  const teamName = team?.name ?? '';
+  refuse({
+    field: 'minorName',
+    code: 'minorInSeason',
+    minorName: same.minorName,
+    teamName,
+    message: MINOR_MESSAGES.minorInSeason(same.minorName, teamName),
+  });
+}
+
+/** The one-team and free-agent rules cover the guardian's own entry only, so neither applies here. */
+export async function addMinorEntry(
+  ctx: MutationCtx,
+  team: Doc<'teams'>,
+  entry: NewMinorEntry,
+): Promise<Id<'rosterEntries'>> {
+  await assertMinorNotInSeason(ctx, team.seasonId, entry.guardianUserId, entry.minorName, null);
+  const entryId = await ctx.db.insert('rosterEntries', {
+    organizationId: team.organizationId,
+    seasonId: team.seasonId,
+    teamId: team._id,
+    userId: entry.guardianUserId,
+    minorName: entry.minorName,
+    status: 'rostered',
+    source: entry.source,
+    addedAt: Date.now(),
+    addedByUserId: entry.addedByUserId,
+  });
+  await changeRosterCount(ctx, team._id, 1);
+  return entryId;
+}
+
+export async function renameMinorEntry(
+  ctx: MutationCtx,
+  entry: Doc<'rosterEntries'>,
+  /** Already checked with `checkMinorName`. */
+  minorName: string,
+): Promise<void> {
+  if (!isMinorEntry(entry) || entry.status !== 'rostered') {
+    throw new Error('Only a rostered minor can be renamed');
+  }
+  await assertMinorNotInSeason(ctx, entry.seasonId, entry.userId, minorName, entry._id);
+  await ctx.db.patch('rosterEntries', entry._id, { minorName });
+}
+
 export async function insertFreeAgent(
   ctx: MutationCtx,
   season: Doc<'seasons'>,
@@ -254,6 +347,8 @@ export async function removeRosterEntry(
     removedByUserId,
   });
   await changeRosterCount(ctx, entry.teamId, -1);
+  // A minor's entry carries the guardian's id, and the guardian's own placement is not the minor's.
+  if (isMinorEntry(entry)) return;
   const freeAgent = await freeAgentInSeason(ctx, entry.seasonId, entry.userId);
   if (freeAgent?.status === 'placed' && freeAgent.placedTeamId === entry.teamId) {
     await ctx.db.patch('freeAgents', freeAgent._id, {
@@ -324,24 +419,43 @@ export async function revokeTeamInvite(
   await changePendingInviteCount(ctx, invite.teamId, -1);
 }
 
-/** A refused roster entry throws before anything is written, so the invite stays pending. */
+export interface InviteChoices {
+  joinSelf: boolean;
+  /** Already checked with `checkMinorName`. */
+  minorName: string | null;
+}
+
+/** A refused roster entry throws, and a mutation that throws writes nothing, so the invite stays pending. */
 export async function acceptTeamInvite(
   ctx: MutationCtx,
   inviteId: Id<'teamInvites'>,
   userId: Id<'users'>,
-): Promise<Id<'rosterEntries'>> {
+  { joinSelf, minorName }: InviteChoices = { joinSelf: true, minorName: null },
+): Promise<void> {
+  if (!joinSelf && minorName === null) {
+    refuse({ code: 'nothingChosen', message: MINOR_MESSAGES.nothingChosen });
+  }
   const invite = await ctx.db.get('teamInvites', inviteId);
   if (invite?.status !== 'pending') throw new Error('Only a pending invite can be accepted');
   const team = await ctx.db.get('teams', invite.teamId);
   if (!team) throw new Error('No team has this id');
-  const entryId = await addRosterEntry(ctx, team, {
-    userId,
-    source: 'invite',
-    addedByUserId: invite.invitedByUserId,
-  });
+  if (joinSelf) {
+    await addRosterEntry(ctx, team, {
+      userId,
+      source: 'invite',
+      addedByUserId: invite.invitedByUserId,
+    });
+  }
+  if (minorName !== null) {
+    await addMinorEntry(ctx, team, {
+      guardianUserId: userId,
+      minorName,
+      source: 'invite',
+      addedByUserId: invite.invitedByUserId,
+    });
+  }
   await ctx.db.patch('teamInvites', inviteId, { status: 'accepted' });
   await changePendingInviteCount(ctx, team._id, -1);
-  return entryId;
 }
 
 // Read fresh so a stale `Doc` cannot lose a count.

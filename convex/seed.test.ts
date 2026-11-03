@@ -981,7 +981,13 @@ describe('seed:demo', () => {
     expect(Array.isArray(DEMO)).toBe(true);
     expect(Array.isArray(DEMO_SEASONS)).toBe(true);
     expect(Array.isArray(DEMO_RUN_SEASONS)).toBe(true);
-    expect(Object.keys(DEMO_ACCOUNTS)).toEqual(['admin', 'organizer', 'player', 'captain']);
+    expect(Object.keys(DEMO_ACCOUNTS)).toEqual([
+      'admin',
+      'organizer',
+      'player',
+      'captain',
+      'guardian',
+    ]);
     expect(DEMO_ACCOUNT_DOMAIN).toBe('demo.omni-league.test');
     expect(DEMO_TEAM_SEASON.seasonSlug).toBe('summer-2027');
     expect(DEMO_CAPTAINS).toHaveLength(3);
@@ -998,6 +1004,7 @@ describe('seed:demo', () => {
       'insertDemoData',
       'insertDemoFreeAgents',
       'insertDemoInvite',
+      'insertDemoMinor',
       'insertDemoTeamInvites',
       'insertDemoTeamPlayer',
       'insertDemoTeams',

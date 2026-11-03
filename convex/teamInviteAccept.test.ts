@@ -230,6 +230,8 @@ describe('teamInvites.accept', () => {
       teamName: 'Sand Sharks',
       seasonName: 'Summer 2030',
       captainName: 'Tasha Greene',
+      joinedSelf: true,
+      minorName: null,
     });
 
     const { entries, invites } = await snapshot(s);

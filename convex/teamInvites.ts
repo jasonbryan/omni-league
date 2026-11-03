@@ -14,11 +14,12 @@ import { authEmailOf, authUserIdByEmail } from './lib/authUsers';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
 import { findUsableTeamInvite } from './lib/inviteLookup';
 import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
+import { checkMinorName } from './lib/minorName';
 import {
   acceptTeamInvite,
+  adultEntryInSeason,
   insertTeamInvite,
   revokeTeamInvite,
-  rosteredEntryInSeason,
 } from './lib/rosterWrites';
 import {
   checkTeamInviteEmail,
@@ -77,7 +78,7 @@ async function isOnTeam(
     .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
     .unique();
   if (!user) return false;
-  const entry = await rosteredEntryInSeason(ctx, team.seasonId, user._id);
+  const entry = await adultEntryInSeason(ctx, team.seasonId, user._id);
   return entry?.teamId === team._id;
 }
 
@@ -193,16 +194,25 @@ function refuseAccept(code: Extract<TeamInviteAcceptCode, 'invalid' | 'emailMism
   throw new ConvexError({ code });
 }
 
+/** `joinSelf` and `minorName` are optional, so a frontend that sends only `token` keeps joining the caller. */
 export const accept = mutation({
-  args: { token: v.string() },
+  args: { token: v.string(), joinSelf: v.optional(v.boolean()), minorName: v.optional(v.string()) },
   returns: v.object({
     teamId: v.id('teams'),
     teamName: v.string(),
     seasonName: v.string(),
     captainName: v.string(),
+    joinedSelf: v.boolean(),
+    minorName: v.union(v.null(), v.string()),
   }),
-  handler: async (ctx, { token }) => {
+  handler: async (ctx, { token, joinSelf = true, minorName: enteredMinorName }) => {
     const user = await requireUser(ctx);
+    let minorName: string | null = null;
+    if (enteredMinorName !== undefined) {
+      const checked = checkMinorName(enteredMinorName);
+      if (!checked.ok) throw new ConvexError({ ...checked.error });
+      minorName = checked.name;
+    }
     const found = await findUsableTeamInvite(ctx, token, Date.now());
     if (!found) refuseAccept('invalid');
     const { invite, team, season } = found;
@@ -214,7 +224,7 @@ export const accept = mutation({
 
     // The writer refuses this too; here the refusal also carries the id, so the page links to the
     // caller's own team.
-    const entry = await rosteredEntryInSeason(ctx, team.seasonId, user._id);
+    const entry = joinSelf ? await adultEntryInSeason(ctx, team.seasonId, user._id) : null;
     if (entry?.teamId === team._id) {
       throw new ConvexError({
         code: 'alreadyOnTeam' satisfies TeamInviteAcceptCode,
@@ -223,13 +233,15 @@ export const accept = mutation({
       });
     }
 
-    await acceptTeamInvite(ctx, invite._id, user._id);
+    await acceptTeamInvite(ctx, invite._id, user._id, { joinSelf, minorName });
     const captain = await ctx.db.get('users', team.captainUserId);
     return {
       teamId: team._id,
       teamName: team.name,
       seasonName: season.name,
       captainName: captain?.name ?? '',
+      joinedSelf: joinSelf,
+      minorName,
     };
   },
 });

@@ -11,12 +11,14 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { FormField } from '@angular/forms/signals';
 import { Title } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideArrowRight,
   lucideCheck,
+  lucideCircleAlert,
   lucideCircleCheck,
   lucideHouse,
   lucideLink2Off,
@@ -27,6 +29,8 @@ import {
 import { ConvexError } from 'convex/values';
 import type { TeamInviteAcceptCode } from '../../../convex/lib/teamInviteInput';
 import { AuthService } from '../core/auth/auth.service';
+import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { ShownUntilValid } from '../core/forms/shown-errors';
 import {
   api,
   ConvexOfflineError,
@@ -40,11 +44,25 @@ import { InviteAlert, type InviteAlertKind } from '../invites/invite-alert';
 import { InviteOfflineAlert } from '../invites/invite-offline-alert';
 import { TeamInviteTokenStore } from '../invites/invite-token-store';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../organizations/admin/button-classes';
+import {
+  DESCRIPTION,
+  FIELD,
+  FIELD_CONTENT,
+  FIELD_ERROR,
+  FIELD_HORIZONTAL,
+  FIELD_SET,
+  INPUT,
+  LABEL,
+  LEGEND,
+} from '../organizations/admin/field-classes';
 import { formatDay } from '../organizations/admin/format-day';
 import { PageLoadStatus } from '../public-layout/page-load-status';
 import { injectPageLoadWait } from '../public-layout/page-load-wait';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
+import { Checkbox } from '../ui/checkbox';
+import { MinorNameErrorText } from './minor-name-error-text';
+import { MinorNameForm, minorNameRefusalOf, type MinorNameError } from './minor-name-form';
 
 interface TeamInviteSummary {
   teamName: string;
@@ -59,6 +77,8 @@ interface JoinedTeam {
   teamName: string;
   seasonName: string;
   captainName: string;
+  joinedSelf: boolean;
+  minorName: string | null;
 }
 
 type View = 'checking' | 'loadFailed' | 'invalid' | 'signedOut' | 'ready' | 'accepted';
@@ -68,6 +88,7 @@ type Refusal =
   | { kind: 'alreadyOnTeam'; teamId: string }
   | { kind: 'alreadyOnAnotherTeam'; teamName: string }
   | { kind: 'waitingFreeAgent' }
+  | { kind: 'minorName'; error: MinorNameError }
   | { kind: 'failed' }
   | { kind: 'offline' };
 
@@ -77,18 +98,19 @@ interface RefusalText {
   description: string;
 }
 
-/** The roster refusals leave the invite pending but nothing to press here. */
-const SETTLED: ReadonlySet<Refusal['kind']> = new Set([
-  'alreadyOnTeam',
-  'alreadyOnAnotherTeam',
-  'waitingFreeAgent',
-]);
+/** This refusal leaves the invite pending but nothing to press here. */
+const SETTLED: ReadonlySet<Refusal['kind']> = new Set(['alreadyOnTeam']);
+
+/** The one-team and free-agent rules stop only the person's own entry, so a minor can still be added. */
+type SelfBlocked = { kind: 'otherTeam'; teamName: string } | { kind: 'freeAgent' };
 
 const OFFLINE_DESCRIPTION = "The invite is still waiting. Try again when you're connected.";
 
 function refusalOf(failure: unknown): Refusal | 'invalid' {
   if (failure instanceof ConvexOfflineError) return { kind: 'offline' };
   if (!(failure instanceof ConvexError)) return { kind: 'failed' };
+  const minorName = minorNameRefusalOf(failure);
+  if (minorName) return { kind: 'minorName', error: minorName };
   const data: unknown = failure.data;
   const fields = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
   const code = fields['code'] as TeamInviteAcceptCode | undefined;
@@ -116,8 +138,12 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
 @Component({
   selector: 'app-join-team-page',
   imports: [
+    Checkbox,
+    FormField,
     InviteAlert,
     InviteOfflineAlert,
+    MinorNameErrorText,
+    MousePressKeepsFocus,
     NgIcon,
     PageLoadStatus,
     PublicLayout,
@@ -128,6 +154,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
     provideIcons({
       lucideArrowRight,
       lucideCheck,
+      lucideCircleAlert,
       lucideCircleCheck,
       lucideHouse,
       lucideLink2Off,
@@ -232,7 +259,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                     tabindex="-1"
                     class="mt-6 rounded-md text-2xl font-semibold tracking-tight text-balance md:text-3xl focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                   >
-                    You’re on {{ team.teamName }}
+                    {{ joinedHeading() }}
                   </h1>
                   <p class="mt-3 text-balance text-muted-foreground">{{ joinedLine() }}</p>
                   <a
@@ -298,14 +325,8 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                         >Sign in</a
                       >
                     } @else {
-                      @if (refusal(); as refusal) {
-                        @if (refusal.kind === 'offline') {
-                          <app-invite-offline-alert
-                            #alert
-                            [description]="offlineDescription"
-                            class="mb-4"
-                          />
-                        } @else if (refusalText(); as text) {
+                      @if (settledLink(); as link) {
+                        @if (refusalText(); as text) {
                           <app-invite-alert
                             #alert
                             [kind]="text.alert"
@@ -314,37 +335,238 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                             class="mb-4"
                           />
                         }
-                      }
-                      @if (settledLink(); as link) {
                         <a
                           [routerLink]="link.route"
                           data-slot="button"
                           [class]="outlineButton + ' w-full'"
                           >{{ link.label }}</a
                         >
-                      } @else {
+                      } @else if (refusal()?.kind === 'emailMismatch') {
+                        @if (refusalText(); as text) {
+                          <app-invite-alert
+                            #alert
+                            [kind]="text.alert"
+                            [title]="text.title"
+                            [description]="text.description"
+                            class="mb-4"
+                          />
+                        }
                         <p class="text-sm text-muted-foreground">
                           Signed in{{ name() ? ' as ' : ''
                           }}<span class="font-medium text-foreground">{{ name() }}</span
                           >.
                         </p>
-                        @if (refusal()?.kind === 'emailMismatch') {
-                          <button
-                            type="button"
-                            data-slot="button"
-                            [class]="primaryButton + ' mt-4 w-full'"
-                            [attr.aria-disabled]="switching() ? 'true' : null"
-                            (click)="switchAccount()"
+                        <button
+                          type="button"
+                          data-slot="button"
+                          [class]="primaryButton + ' mt-4 w-full'"
+                          [attr.aria-disabled]="switching() ? 'true' : null"
+                          (click)="switchAccount()"
+                        >
+                          <ng-icon
+                            name="lucideLogOut"
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                          />Sign in with a different account
+                        </button>
+                      } @else {
+                        <form novalidate aria-label="Accept the invite" (submit)="accept($event)">
+                          @if (refusal()?.kind === 'offline') {
+                            <app-invite-offline-alert
+                              #alert
+                              [description]="offlineDescription"
+                              class="mb-4"
+                            />
+                          } @else if (refusalText(); as text) {
+                            <app-invite-alert
+                              #alert
+                              [kind]="text.alert"
+                              [title]="text.title"
+                              [description]="text.description"
+                              class="mb-4"
+                            />
+                          }
+                          <p class="text-sm text-muted-foreground">
+                            Signed in{{ name() ? ' as ' : ''
+                            }}<span class="font-medium text-foreground">{{ name() }}</span
+                            >.
+                          </p>
+                          <fieldset
+                            id="choices"
+                            data-slot="field-set"
+                            [attr.aria-describedby]="
+                              choiceError()
+                                ? 'choices-description choices-error'
+                                : 'choices-description'
+                            "
+                            [attr.data-invalid]="choiceError() ? 'true' : null"
+                            [class]="fieldSetClass + ' mt-4'"
                           >
-                            <ng-icon
-                              name="lucideLogOut"
-                              data-icon="inline-start"
-                              aria-hidden="true"
-                            />Sign in with a different account
-                          </button>
-                        } @else {
+                            <legend
+                              data-slot="field-legend"
+                              data-variant="label"
+                              [class]="legendClass + (choiceError() ? ' text-destructive' : '')"
+                            >
+                              Who’s joining?
+                            </legend>
+                            <p
+                              data-slot="field-description"
+                              id="choices-description"
+                              [class]="descriptionClass + ' -mt-1.5'"
+                            >
+                              Choose one or both.
+                            </p>
+                            <div data-slot="checkbox-group" class="grid gap-3">
+                              <div
+                                role="group"
+                                data-slot="field"
+                                data-orientation="horizontal"
+                                [attr.data-disabled]="selfBlocked() ? 'true' : null"
+                                [attr.data-matches-spartan-invalid]="choiceError() ? 'true' : null"
+                                [class]="fieldHorizontalClass"
+                              >
+                                <app-checkbox
+                                  #joinSelfBox
+                                  controlId="join-self"
+                                  describedBy="join-self-description"
+                                  [checked]="joinSelfChosen()"
+                                  (checkedChange)="joinSelf.set($event)"
+                                  [disabled]="selfBlocked() !== null"
+                                  [showInvalid]="choiceError()"
+                                />
+                                <div data-slot="field-content" [class]="contentClass">
+                                  <label
+                                    for="join-self"
+                                    data-slot="field-label"
+                                    [class]="labelClass"
+                                    >Join the roster myself</label
+                                  >
+                                  <p
+                                    data-slot="field-description"
+                                    id="join-self-description"
+                                    [class]="descriptionClass"
+                                  >
+                                    {{ joinSelfDescription() }}
+                                  </p>
+                                </div>
+                              </div>
+                              <div
+                                role="group"
+                                data-slot="field"
+                                data-orientation="horizontal"
+                                [attr.data-matches-spartan-invalid]="choiceError() ? 'true' : null"
+                                [class]="fieldHorizontalClass"
+                              >
+                                <app-checkbox
+                                  #addMinorBox
+                                  controlId="join-minor"
+                                  describedBy="join-minor-description"
+                                  [checked]="addMinor()"
+                                  (checkedChange)="addMinor.set($event)"
+                                  [showInvalid]="choiceError()"
+                                />
+                                <div data-slot="field-content" [class]="contentClass">
+                                  <label
+                                    for="join-minor"
+                                    data-slot="field-label"
+                                    [class]="labelClass"
+                                    >Add a minor I’m responsible for</label
+                                  >
+                                  <p
+                                    data-slot="field-description"
+                                    id="join-minor-description"
+                                    [class]="descriptionClass"
+                                  >
+                                    For a child who plays. Only their name is stored.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            @if (choiceError()) {
+                              <div
+                                role="alert"
+                                data-slot="field-error"
+                                id="choices-error"
+                                [class]="errorClass"
+                              >
+                                <ng-icon
+                                  name="lucideCircleAlert"
+                                  class="mt-0.5 shrink-0 text-base"
+                                  aria-hidden="true"
+                                />
+                                <span
+                                  >Choose at least one: join yourself, add a minor, or both.</span
+                                >
+                              </div>
+                            }
+                            @if (addMinor()) {
+                              <div class="ps-6">
+                                <div
+                                  role="group"
+                                  data-slot="field"
+                                  data-orientation="vertical"
+                                  [attr.data-matches-spartan-invalid]="
+                                    minor.error() ? 'true' : null
+                                  "
+                                  [attr.data-invalid]="minor.error() ? 'true' : null"
+                                  [class]="fieldClass"
+                                >
+                                  <label
+                                    for="minor-name"
+                                    data-slot="field-label"
+                                    [class]="labelClass"
+                                    >Minor’s name</label
+                                  >
+                                  <input
+                                    #minorInput
+                                    id="minor-name"
+                                    type="text"
+                                    data-slot="input"
+                                    autocomplete="off"
+                                    [formField]="minor.fields.name"
+                                    (blur)="minor.left()"
+                                    [attr.aria-describedby]="
+                                      minor.error()
+                                        ? 'minor-name-description minor-name-error'
+                                        : 'minor-name-description'
+                                    "
+                                    [attr.aria-invalid]="minor.error() ? 'true' : null"
+                                    [attr.data-invalid]="minor.error() ? 'true' : null"
+                                    [attr.data-matches-spartan-invalid]="
+                                      minor.error() ? 'true' : null
+                                    "
+                                    [class]="inputClass"
+                                  />
+                                  <p
+                                    data-slot="field-description"
+                                    id="minor-name-description"
+                                    [class]="descriptionClass"
+                                  >
+                                    Up to 60 characters. Players on other teams see their first name
+                                    and last initial.
+                                  </p>
+                                  @if (minor.error(); as error) {
+                                    <div
+                                      role="alert"
+                                      data-slot="field-error"
+                                      id="minor-name-error"
+                                      [class]="errorClass"
+                                    >
+                                      <ng-icon
+                                        name="lucideCircleAlert"
+                                        class="mt-0.5 shrink-0 text-base"
+                                        aria-hidden="true"
+                                      />
+                                      <app-minor-name-error-text [error]="error" />
+                                    </div>
+                                  }
+                                </div>
+                              </div>
+                            }
+                          </fieldset>
                           <button
-                            type="button"
+                            type="submit"
+                            appMousePressKeepsFocus
                             data-slot="button"
                             [class]="
                               online()
@@ -352,7 +574,6 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                                 : primaryButton + ' mt-4 w-full opacity-50'
                             "
                             [attr.aria-disabled]="accepting() || !online() ? 'true' : null"
-                            (click)="accept()"
                           >
                             @if (accepting()) {
                               <ng-icon
@@ -372,7 +593,7 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
                           <p role="status" class="sr-only">
                             {{ accepting() ? 'Accepting the invite.' : '' }}
                           </p>
-                        }
+                        </form>
                       }
                     }
                   </div>
@@ -399,6 +620,15 @@ export class JoinTeamPage {
   protected readonly returnToParams = { returnTo: JOIN_TEAM_PATH };
   protected readonly path = JOIN_TEAM_PATH;
   protected readonly offlineDescription = OFFLINE_DESCRIPTION;
+  protected readonly fieldSetClass = FIELD_SET;
+  protected readonly legendClass = LEGEND;
+  protected readonly fieldClass = FIELD;
+  protected readonly fieldHorizontalClass = FIELD_HORIZONTAL;
+  protected readonly contentClass = FIELD_CONTENT;
+  protected readonly labelClass = LABEL;
+  protected readonly descriptionClass = DESCRIPTION;
+  protected readonly inputClass = INPUT;
+  protected readonly errorClass = FIELD_ERROR;
 
   /** Read again only when the guard captures another link while the page is open; a new token starts the page over. */
   private readonly token = linkedSignal({
@@ -431,6 +661,37 @@ export class JoinTeamPage {
   protected readonly joined = linkedSignal<string | null, JoinedTeam | null>({
     source: this.token,
     computation: () => null,
+  });
+
+  /** "Join the roster myself" starts checked, so a player who is not a guardian only presses Accept. */
+  protected readonly joinSelf = linkedSignal<string | null, boolean>({
+    source: this.token,
+    computation: () => true,
+  });
+  protected readonly addMinor = linkedSignal<string | null, boolean>({
+    source: this.token,
+    computation: () => false,
+  });
+  protected readonly selfBlocked = linkedSignal<string | null, SelfBlocked | null>({
+    source: this.token,
+    computation: () => null,
+  });
+  protected readonly joinSelfChosen = computed(() => this.joinSelf() && !this.selfBlocked());
+  private readonly nothingChosen = computed(() => !this.joinSelfChosen() && !this.addMinor());
+  private readonly choiceShown = new ShownUntilValid(
+    () => this.nothingChosen(),
+    () => false,
+  );
+  protected readonly choiceError = this.choiceShown.shown;
+  protected readonly minor = new MinorNameForm();
+
+  protected readonly joinSelfDescription = computed(() => {
+    const blocked = this.selfBlocked();
+    if (blocked?.kind === 'otherTeam') {
+      return `Not available: you’re on ${blocked.teamName} in this season.`;
+    }
+    if (blocked?.kind === 'freeAgent') return 'Not available: an organizer places free agents.';
+    return 'You play on this team.';
   });
 
   protected readonly name = computed(() => this.me.value()?.name ?? null);
@@ -479,11 +740,21 @@ export class JoinTeamPage {
     ];
   });
 
+  protected readonly joinedHeading = computed(() => {
+    const team = this.joined();
+    if (!team) return '';
+    return !team.joinedSelf && team.minorName
+      ? `${team.minorName} is on ${team.teamName}`
+      : `You’re on ${team.teamName}`;
+  });
+
   protected readonly joinedLine = computed(() => {
     const team = this.joined();
     if (!team) return '';
     const captain = team.captainName ? ` ${team.captainName} is the captain.` : '';
-    return `You’re on the roster for ${team.seasonName}.${captain}`;
+    if (team.minorName === null) return `You’re on the roster for ${team.seasonName}.${captain}`;
+    const who = team.joinedSelf ? `You and ${team.minorName} are` : `${team.minorName} is`;
+    return `${who} on the roster for ${team.seasonName}.${captain}`;
   });
 
   protected readonly refusalText = computed<RefusalText | null>(() => {
@@ -507,13 +778,13 @@ export class JoinTeamPage {
         return {
           alert: 'info',
           title: `You’re already on ${refusal.teamName} in this season.`,
-          description: `Each person plays on one team per season, so you can’t join ${teamName}.`,
+          description: `Each person plays on one team per season, so you can’t join ${teamName} yourself. You can still add a minor you’re responsible for.`,
         };
       case 'waitingFreeAgent':
         return {
           alert: 'info',
           title: 'You’re registered as a free agent in this season.',
-          description: `Organizers place free agents on teams. Ask an organizer of ${leagueName} to place you on ${teamName}.`,
+          description: `Organizers place free agents on teams. Ask an organizer of ${leagueName} to place you on ${teamName}. You can still add a minor you’re responsible for.`,
         };
       case 'failed':
         return {
@@ -540,6 +811,9 @@ export class JoinTeamPage {
   });
 
   private readonly alert = viewChild<InviteAlert | InviteOfflineAlert>('alert');
+  private readonly joinSelfBox = viewChild<Checkbox>('joinSelfBox');
+  private readonly addMinorBox = viewChild<Checkbox>('addMinorBox');
+  private readonly minorInput = viewChild<ElementRef<HTMLInputElement>>('minorInput');
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   constructor() {
@@ -563,9 +837,25 @@ export class JoinTeamPage {
     });
   }
 
-  protected async accept(): Promise<void> {
+  protected async accept(event: Event): Promise<void> {
+    event.preventDefault();
     const token = this.token();
     if (this.accepting() || !token) return;
+    this.choiceShown.submitted();
+    if (this.nothingChosen()) {
+      this.focusAfterRender('choices');
+      return;
+    }
+    const joinSelf = this.joinSelfChosen();
+    let minorName: string | undefined;
+    if (this.addMinor()) {
+      const checked = this.minor.check();
+      if (checked === null) {
+        this.focusAfterRender('minor');
+        return;
+      }
+      minorName = checked;
+    }
     // Offline, the button looks disabled but stays focusable: a press explains and sends nothing.
     if (!this.online()) {
       this.refusal.set({ kind: 'offline' });
@@ -575,7 +865,9 @@ export class JoinTeamPage {
     this.refusal.set(null);
     this.accepting.set(true);
     try {
-      const result = await this.acceptInvite.run({ token });
+      const result = await this.acceptInvite.run(
+        minorName === undefined ? { token, joinSelf } : { token, joinSelf, minorName },
+      );
       this.store.clear();
       this.joined.set(result);
       this.focusAfterRender('heading');
@@ -583,7 +875,11 @@ export class JoinTeamPage {
       const refusal = refusalOf(failure);
       if (refusal === 'invalid') {
         this.refusedAsInvalid.set(true);
+      } else if (refusal.kind === 'minorName') {
+        this.minor.showRefusal(refusal.error);
+        this.focusAfterRender('minor');
       } else {
+        this.blockSelf(refusal);
         if (SETTLED.has(refusal.kind)) this.store.clear();
         this.refusal.set(refusal);
         this.focusAfterRender('alert');
@@ -605,11 +901,25 @@ export class JoinTeamPage {
     }
   }
 
-  private focusAfterRender(target: 'alert' | 'heading'): void {
+  private blockSelf(refusal: Refusal): void {
+    if (refusal.kind === 'alreadyOnAnotherTeam') {
+      this.selfBlocked.set({ kind: 'otherTeam', teamName: refusal.teamName });
+    } else if (refusal.kind === 'waitingFreeAgent') {
+      this.selfBlocked.set({ kind: 'freeAgent' });
+    } else {
+      return;
+    }
+    this.addMinor.set(true);
+  }
+
+  private focusAfterRender(target: 'alert' | 'heading' | 'choices' | 'minor'): void {
     afterNextRender(
       () => {
         if (target === 'alert') this.alert()?.focus();
-        else this.heading()?.nativeElement.focus();
+        else if (target === 'heading') this.heading()?.nativeElement.focus();
+        else if (target === 'minor') this.minorInput()?.nativeElement.focus();
+        else if (this.selfBlocked()) this.addMinorBox()?.focus();
+        else this.joinSelfBox()?.focus();
       },
       { injector: this.injector },
     );

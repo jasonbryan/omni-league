@@ -188,7 +188,10 @@ export default defineSchema({
     organizationId: v.id('organizations'),
     seasonId: v.id('seasons'),
     teamId: v.id('teams'),
+    /** The guardian's, when the entry is a minor's. */
     userId: v.id('users'),
+    /** Set only on a minor's entry, which has no account (requirements, Accounts). */
+    minorName: v.optional(v.string()),
     status: rosterEntryStatusValidator,
     source: rosterEntrySourceValidator,
     addedAt: v.number(),

@@ -137,6 +137,7 @@ describe('convex/testing.ts exports', () => {
       'addLeague',
       'addLeagueOrganizer',
       'addMembership',
+      'addMinorToTeam',
       'addTeamInvite',
       'addToTeam',
       'assignForeignLeague',
