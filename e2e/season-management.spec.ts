@@ -705,8 +705,6 @@ test.describe('Season management: maximum roster size', () => {
   });
 
   test.describe('editing', () => {
-    test.use({ expectedConvexErrors: ['seasons:setMaxRosterSize'] });
-
     test('the limit is refused below the largest roster, naming the team, then raised and removed', async ({
       page,
     }, testInfo) => {
