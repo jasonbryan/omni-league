@@ -154,6 +154,7 @@ describe('convex/testing.ts exports', () => {
       'seedSignInFailures',
       'seedTeam',
       'seedTenant',
+      'seedWaitingFreeAgents',
     ]);
     for (const [name, fn] of exports) {
       const markers = fn as FunctionRegistrationMarkers;

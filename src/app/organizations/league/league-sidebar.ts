@@ -48,7 +48,7 @@ const compareNames = (x: string, y: string) => {
             <li>
               <a
                 [routerLink]="item.path"
-                [attr.aria-current]="item.isCurrent ? 'page' : null"
+                [attr.aria-current]="item.isCurrent ? current() : null"
                 [class]="item.isCurrent ? currentRow : row"
                 ><ng-icon
                   name="lucideTrophy"
@@ -75,6 +75,8 @@ const compareNames = (x: string, y: string) => {
 })
 export class LeagueSidebar {
   readonly league = input.required<OrganizerLeague>();
+  /** `true` on a page inside the league, such as a season's, where the league's row is not the page itself. */
+  readonly current = input<'page' | 'true'>('page');
 
   private readonly auth = inject(AuthService);
 

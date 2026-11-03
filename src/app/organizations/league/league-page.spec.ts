@@ -280,12 +280,20 @@ describe('LeaguePage', () => {
       expect(rows()[0].querySelector('.sr-only')?.textContent).toBe('Dates: ');
     });
 
-    it('has a Publish button on the Draft row only, and no link in a row: the season page comes later', async () => {
+    it('has a Publish button on the Draft row only', async () => {
       await open(COED, SEASONS);
       expect([...page.querySelectorAll('#seasons-list button')].map((b) => text(b))).toEqual([
         'Publish Fall 2027',
       ]);
-      expect(page.querySelector('#seasons-list a')).toBeNull();
+    });
+
+    it('links each season’s name to its season management page', async () => {
+      await open(COED, SEASONS);
+      const links = [...page.querySelectorAll('#seasons-list h3 a')];
+      expect(links.map((a) => [text(a), a.getAttribute('href')])).toEqual([
+        ['Fall 2027', `${LEAGUE_URL}/seasons/fall-2027`],
+        ['Summer 2027', `${LEAGUE_URL}/seasons/summer-2027`],
+      ]);
     });
 
     it('a failed list shows the destructive alert, never the error message', async () => {

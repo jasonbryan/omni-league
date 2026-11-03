@@ -116,16 +116,37 @@ export async function requireTeamManager(ctx: Ctx, team: Doc<'teams'>): Promise<
   return user;
 }
 
-export async function requireLeagueOrganizerOrForbidden(
+async function organizerOrForbidden(
   ctx: Ctx,
   league: Doc<'leagues'>,
+  isDraft: boolean,
 ): Promise<Authorized | null> {
   const user = await getCurrentUser(ctx);
   const membership = user ? await membershipOf(ctx, user._id, league.organizationId) : null;
   // A draft answers null to anyone outside the staff, so nobody learns that its slug exists.
-  if (league.status !== 'published' && !membership) return null;
+  if (isDraft && !membership) return null;
   if (!user || !membership || !mayOrganizeLeague(membership, league._id)) throw forbidden();
   return { user, membership };
+}
+
+export async function requireLeagueOrganizerOrForbidden(
+  ctx: Ctx,
+  league: Doc<'leagues'>,
+): Promise<Authorized | null> {
+  return organizerOrForbidden(ctx, league, league.status !== 'published');
+}
+
+/** As `requireLeagueOrganizerOrForbidden`, with a draft season of a published league kept from outsiders too. */
+export async function requireSeasonOrganizerOrForbidden(
+  ctx: Ctx,
+  league: Doc<'leagues'>,
+  season: Doc<'seasons'>,
+): Promise<Authorized | null> {
+  return organizerOrForbidden(
+    ctx,
+    league,
+    league.status !== 'published' || season.status !== 'published',
+  );
 }
 
 export async function requireLeagueOrganizer(

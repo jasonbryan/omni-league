@@ -6,11 +6,11 @@ import { adminPath } from '../admin/admin-path';
 import type { OrganizerLeague } from './league-context';
 import { leaguePath } from './league-path';
 
-const CRUMB_LINK =
+export const CRUMB_LINK =
   'inline-flex max-w-full items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
-const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
+export const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 
-const NAME_CRUMB = 'flex min-w-11';
+export const NAME_CRUMB = 'flex min-w-11';
 const FIXED_LABEL_CRUMB = 'flex shrink-0';
 
 interface Crumb {

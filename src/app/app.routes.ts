@@ -101,6 +101,12 @@ export const routes: Routes = [
         loadComponent: () => import('./organizations/league/league-page').then((m) => m.LeaguePage),
       },
       {
+        path: 'organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug',
+        canActivate: [requireSignedIn],
+        loadComponent: () =>
+          import('./organizations/season-management/season-page').then((m) => m.SeasonPage),
+      },
+      {
         path: 'organizations/:slug',
         canActivate: [requireSignedIn],
         loadComponent: () => import('./organizations/admin/admin-area').then((m) => m.AdminArea),

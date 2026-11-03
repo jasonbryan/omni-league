@@ -18,6 +18,7 @@ import { AdminArea } from './organizations/admin/admin-area';
 import { AdminLeagues } from './organizations/admin/admin-leagues';
 import { AdminStaff } from './organizations/admin/admin-staff';
 import { AdminDetails } from './organizations/admin/admin-details';
+import { SeasonPage } from './organizations/season-management/season-page';
 import { LeaguePage } from './organizations/league/league-page';
 import { AdminLocations } from './organizations/admin/admin-locations';
 import { AdminOverview } from './organizations/admin/admin-overview';
@@ -235,7 +236,7 @@ describe('Route tables', () => {
     expect(route?.canActivate).toEqual([captureTeamInviteToken]);
   });
 
-  it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
+  it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
@@ -246,6 +247,7 @@ describe('Route tables', () => {
       notifications,
       create,
       league,
+      season,
       admin,
       register,
       registerFreeAgent,
@@ -269,6 +271,9 @@ describe('Route tables', () => {
     expect(league?.path).toBe('organizations/:orgSlug/leagues/:leagueSlug');
     expect(league?.canActivate).toEqual([requireSignedIn]);
     expect(await league?.loadComponent?.()).toBe(LeaguePage);
+    expect(season?.path).toBe('organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug');
+    expect(season?.canActivate).toEqual([requireSignedIn]);
+    expect(await season?.loadComponent?.()).toBe(SeasonPage);
     expect(admin?.path).toBe('organizations/:slug');
     expect(admin?.canActivate).toEqual([requireSignedIn]);
     expect(await admin?.loadComponent?.()).toBe(AdminArea);
