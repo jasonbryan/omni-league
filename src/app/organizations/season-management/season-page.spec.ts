@@ -387,6 +387,39 @@ describe('SeasonPage', () => {
       expect(calls()).toEqual([]);
     });
 
+    it('a full team stays in the list, described as full, and cannot be chosen; focus goes to the first team with room', async () => {
+      await open(COED, { ...VIEW, maxRosterSize: 6 }, FREE_AGENTS);
+      placeButton(0).click();
+      await o.flush();
+      const box = dialog()!;
+      expect(
+        radios().map((radio) => [
+          text(box.querySelector(`label[for="${radio.id}"]`)),
+          text(box.querySelector(`#${radio.getAttribute('aria-describedby')}`)),
+          radio.disabled,
+        ]),
+      ).toEqual([
+        ['Block Party', 'Full: 6 of 6 players', true],
+        ['Dig Deep', '2 of 4 players · 2 more needed', false],
+        ['Sand Sharks', '4 of 4 players', false],
+      ]);
+      expect(document.activeElement).toBe(radios()[1]);
+      dialogButton('Place on team').click();
+      await o.flush();
+      expect(document.activeElement).toBe(radios()[1]);
+      expect(calls()).toEqual([]);
+    });
+
+    it('a team that filled meanwhile is refused with "The team is full."', async () => {
+      await openDialog();
+      await chooseAndPlace(1);
+      o.convex.calls[0].reject(new ConvexError({ code: 'teamFull', message: 'The team is full.' }));
+      await o.flush();
+      expect(text(dialog()!.querySelector('[data-slot="alert"]'))).toBe(
+        'Player 0 could not be placed. The team is full.',
+      );
+    });
+
     it('preselects the only team of a season with one', async () => {
       await open(COED, { ...VIEW, teams: [VIEW.teams[1]], teamCount: 1 }, FREE_AGENTS);
       placeButton(0).click();
@@ -629,6 +662,115 @@ describe('SeasonPage', () => {
         'The limit could not be saved. Check your connection and try again.',
       );
       expect(document.activeElement).toBe(alert);
+    });
+  });
+
+  describe('maximum roster size', () => {
+    const SET_MAX = 'seasons:setMaxRosterSize';
+    const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
+    const summary = () => text(page.querySelector('[data-testid="max-roster-size-summary"]'));
+    const editButton = () =>
+      [...page.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => text(button) === 'Edit maximum roster size',
+      );
+    const field = () => page.querySelector<HTMLInputElement>('#edit-maximum-roster-size');
+    const LARGEST = { name: 'Block Party', rosterCount: 6 };
+
+    async function edit(value: string) {
+      editButton()!.click();
+      await o.flush();
+      field()!.value = value;
+      field()!.dispatchEvent(new Event('input'));
+      await o.flush();
+    }
+
+    async function save() {
+      [...page.querySelectorAll<HTMLButtonElement>('button[type="submit"]')]
+        .find((button) => text(button) === 'Save changes')!
+        .click();
+      await o.flush();
+    }
+
+    it('shows the limit per team', async () => {
+      await open(COED, { ...VIEW, maxRosterSize: 6, largestRoster: LARGEST }, FREE_AGENTS);
+      expect(summary()).toBe('6 players per team');
+    });
+
+    it('says there is no limit', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      expect(summary()).toBe('No limit');
+    });
+
+    it('Edit opens the form with the limit and the range, naming the largest roster; Cancel returns focus to its Edit', async () => {
+      await open(COED, { ...VIEW, maxRosterSize: 6, largestRoster: LARGEST }, FREE_AGENTS);
+      editButton()!.click();
+      await o.flush();
+      expect(text(page.querySelector('#edit-maximum-roster-size-heading'))).toBe(
+        'Edit maximum roster size',
+      );
+      expect(field()?.value).toBe('6');
+      expect(document.activeElement).toBe(field());
+      expect(text(page.querySelector('#edit-maximum-roster-size-description'))).toBe(
+        'From the minimum roster size (4) to 99, or blank for no limit. At least the largest roster (Block Party, 6 players).',
+      );
+      [...page.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => text(button) === 'Cancel')!
+        .click();
+      await o.flush();
+      expect(field()).toBeNull();
+      expect(document.activeElement).toBe(editButton());
+    });
+
+    it.each([
+      ['7.5', 'Enter a whole number from 4 to 99, or leave it blank.'],
+      ['100', 'Enter a whole number from 4 to 99, or leave it blank.'],
+      ['3', 'Block Party already has 6 players. Enter 6 or more, or leave it blank.'],
+      ['5', 'Block Party already has 6 players. Enter 6 or more, or leave it blank.'],
+    ])('%s shows the field error and sends nothing', async (value, message) => {
+      await open(COED, { ...VIEW, largestRoster: LARGEST }, FREE_AGENTS);
+      await edit(value);
+      await save();
+      expect(text(page.querySelector('#edit-maximum-roster-size-error'))).toBe(message);
+      expect(document.activeElement).toBe(field());
+      expect(calls()).toEqual([]);
+    });
+
+    it('sends the number, then shows the saved status, focused; blank removes the limit', async () => {
+      await open(COED, { ...VIEW, largestRoster: LARGEST }, FREE_AGENTS);
+      await edit('8');
+      await save();
+      expect(calls()).toEqual([[SET_MAX, { seasonId: 'se_summer27', maxRosterSize: 8 }]]);
+      o.convex.calls[0].resolve(null);
+      await o.flush();
+      const status = () =>
+        page.querySelector<HTMLElement>(
+          'section[aria-labelledby="limits-heading"] [role="status"]',
+        );
+      expect(text(status())).toBe('Maximum roster size saved. Teams can have up to 8 players.');
+      expect(document.activeElement).toBe(status());
+      await edit('');
+      await save();
+      expect(calls()[1]).toEqual([SET_MAX, { seasonId: 'se_summer27', maxRosterSize: null }]);
+      o.convex.calls[1].resolve(null);
+      await o.flush();
+      expect(text(status())).toBe('Maximum roster size removed. There’s no limit now.');
+    });
+
+    it('a refusal from the server shows its message under the field', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      await edit('6');
+      await save();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          field: 'maxRosterSize',
+          code: 'maxRosterSizeBelowRoster',
+          message: 'Block Party already has 7 players. Enter 7 or more, or leave it blank.',
+        }),
+      );
+      await o.flush();
+      expect(text(page.querySelector('#edit-maximum-roster-size-error'))).toBe(
+        'Block Party already has 7 players. Enter 7 or more, or leave it blank.',
+      );
     });
   });
 });

@@ -157,6 +157,8 @@ export default defineSchema({
     teamCount: v.optional(v.number()),
     /** Absent means no limit. */
     maxTeams: v.optional(v.number()),
+    /** Absent means no limit; when set it is at least `minimumRosterSize`. */
+    maxRosterSize: v.optional(v.number()),
   })
     .index('by_leagueId_and_slug', ['leagueId', 'slug'])
     .index('by_leagueId_and_startDate', ['leagueId', 'startDate'])
@@ -183,6 +185,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
+    .index('by_seasonId_and_rosterCount', ['seasonId', 'rosterCount'])
     .index('by_captainUserId', ['captainUserId']),
 
   // A removed entry keeps its row, with status `removed`, so records that point at it stay valid.

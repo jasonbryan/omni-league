@@ -570,6 +570,7 @@ test.describe('League management: the create-season form on a phone', () => {
         'registration-deadline',
         'A',
         'maximum-teams',
+        'maximum-roster-size',
         'BUTTON',
       ]);
       expect(underTheFooter(seen)).toEqual([]);
@@ -664,6 +665,7 @@ test.describe('League management: the created status on a phone', () => {
       'registration-deadline',
       'A',
       'maximum-teams',
+      'maximum-roster-size',
       'BUTTON',
     ]);
     expect(underTheFooter(seen)).toEqual([]);
@@ -889,6 +891,7 @@ test.describe('League management: the next step in the created status on a phone
         'registration-deadline',
         'A',
         'maximum-teams',
+        'maximum-roster-size',
         ...action,
         'BUTTON',
       ]);

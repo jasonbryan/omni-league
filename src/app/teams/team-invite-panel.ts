@@ -177,8 +177,8 @@ const TEXTAREA =
               <app-admin-alert
                 #failureAlert
                 kind="error"
-                [title]="alerts.failed.title"
-                [description]="alerts.failed.description"
+                [title]="alerts[kind].title"
+                [description]="alerts[kind].description"
                 class="mb-5"
               />
             }

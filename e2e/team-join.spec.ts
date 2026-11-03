@@ -319,6 +319,69 @@ test.describe('Join a team: refusals', () => {
   });
 });
 
+test.describe('Join a team: a full team', () => {
+  test.use({ expectedConvexErrors: ['teamInvites:accept'] });
+
+  test('an invite from before the team filled is refused as a whole, says nothing was added, and stays pending', async ({
+    page,
+  }, testInfo) => {
+    const captain = await seedUser(newUser('Captain'));
+    const { tenant } = await seedTeam(captain);
+    await convexRun('testing:seedSeason', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      name: 'Roster Cap',
+      slug: 'roster-cap',
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(100),
+      registrationDeadline: dateFromToday(20),
+      minimumRosterSize: 4,
+      maxRosterSize: 4,
+      status: 'published',
+    });
+    const fullCaptain = await seedUser(newUser('Captain'));
+    const { teamId } = (await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug: 'roster-cap',
+      name: 'Sand Sharks',
+      captainEmail: fullCaptain.email,
+    })) as { teamId: string };
+    for (const player of [await seedUser(newUser('Player')), await seedUser(newUser('Player'))]) {
+      await convexRun('testing:addToTeam', { teamId, email: player.email });
+    }
+    const joiner = newUser('Joiner');
+    await signUp(page, joiner);
+    const token = await seedInvite(teamId, joiner.email);
+    await convexRun('testing:addMinorToTeam', {
+      teamId,
+      guardianEmail: fullCaptain.email,
+      minorName: 'Theo Bell',
+    });
+
+    await openLink(page, token);
+    await main(page).getByRole('checkbox', { name: 'Add a minor I’m responsible for' }).click();
+    await main(page).locator('#minor-name').fill('Lily Park');
+    await acceptButton(page).click();
+    const alert = main(page).getByRole('alert');
+    await expect(alert).toContainText('Sand Sharks is full.');
+    await expect(alert).toContainText(
+      'Nothing was added. If you chose two entries, there may be room for one; otherwise ask the captain whether a place opens.',
+    );
+    await expect(alert).toBeFocused();
+    await expect(
+      main(page).getByRole('checkbox', { name: 'Join the roster myself' }),
+    ).toBeChecked();
+    await expect(main(page).locator('#minor-name')).toHaveValue('Lily Park');
+    expect(await stored(page, TEAM_KEY)).toBe(token);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '144-join-team-full');
+
+    await openLink(page, token);
+    await expect(heading(page)).toHaveText('Join Sand Sharks');
+  });
+});
+
 test.describe('Join a team: links that cannot be used', () => {
   test('with no fragment and nothing stored, the invalid view shows and getByToken is never asked', async ({
     page,

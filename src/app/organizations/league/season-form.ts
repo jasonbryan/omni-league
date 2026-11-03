@@ -3,7 +3,7 @@ import { form, required, type FieldTree } from '@angular/forms/signals';
 import { ConvexError } from 'convex/values';
 import {
   checkSeasonFields,
-  maxTeamsFromText,
+  limitFromText,
   SEASON_FIELDS,
   type SeasonField,
   type SeasonInputError,
@@ -23,6 +23,7 @@ export interface SeasonTextModel {
   endDate: string;
   registrationDeadline: string;
   maxTeams: string;
+  maxRosterSize: string;
 }
 
 export interface SeasonValues {
@@ -33,6 +34,8 @@ export interface SeasonValues {
   registrationDeadline: string;
   /** Left out for no limit. */
   maxTeams?: number;
+  /** Left out for no limit. */
+  maxRosterSize?: number;
 }
 
 export type SeasonFormAlertKind = 'offline' | 'failed';
@@ -89,6 +92,7 @@ const EMPTY: SeasonTextModel = {
   endDate: '',
   registrationDeadline: '',
   maxTeams: '',
+  maxRosterSize: '',
 };
 
 /** The rules and messages are `convex/lib/seasonInput.ts`, which `seasons.create` applies again. */
@@ -109,7 +113,11 @@ export class SeasonForm {
 
   readonly reservedParts: Signal<{ before: string; after: string } | null>;
 
-  constructor() {
+  private readonly minimumRosterSize: () => number | undefined;
+
+  /** `minimumRosterSize` is the league's; `undefined` while the league has no format, which `seasons.create` refuses. */
+  constructor(minimumRosterSize: () => number | undefined = () => undefined) {
+    this.minimumRosterSize = minimumRosterSize;
     // `required` puts the attribute on the inputs; the messages are ours (`seasonInput.ts`), so the
     // form and `seasons.create` agree.
     this.fields = form(this.model, (path) => {
@@ -127,7 +135,9 @@ export class SeasonForm {
         startDate: m.startDate,
         endDate: m.endDate,
         registrationDeadline: m.registrationDeadline,
-        maxTeams: maxTeamsFromText(m.maxTeams),
+        maxTeams: limitFromText(m.maxTeams),
+        maxRosterSize: limitFromText(m.maxRosterSize),
+        minimumRosterSize: this.minimumRosterSize(),
       });
     });
     const sources: Record<SeasonField, () => unknown> = {
@@ -137,6 +147,7 @@ export class SeasonForm {
       endDate: () => this.model().endDate,
       registrationDeadline: () => this.model().registrationDeadline,
       maxTeams: () => this.model().maxTeams,
+      maxRosterSize: () => this.model().maxRosterSize,
     };
     const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
     const changed: Record<SeasonField, () => boolean> = {
@@ -146,6 +157,7 @@ export class SeasonForm {
       endDate: () => this.fields.endDate().dirty(),
       registrationDeadline: () => this.fields.registrationDeadline().dirty(),
       maxTeams: () => this.fields.maxTeams().dirty(),
+      maxRosterSize: () => this.fields.maxRosterSize().dirty(),
     };
     this.shown = Object.fromEntries(
       SEASON_FIELDS.map((field) => [
@@ -203,7 +215,8 @@ export class SeasonForm {
     if (pressedOffline) return this.showAlert('offline');
 
     const m = this.model();
-    const maxTeams = maxTeamsFromText(m.maxTeams);
+    const maxTeams = limitFromText(m.maxTeams);
+    const maxRosterSize = limitFromText(m.maxRosterSize);
     const values: SeasonValues = {
       name: m.name.trim(),
       slug: m.slug,
@@ -211,6 +224,7 @@ export class SeasonForm {
       endDate: m.endDate,
       registrationDeadline: m.registrationDeadline,
       ...(maxTeams !== undefined && { maxTeams }),
+      ...(maxRosterSize !== undefined && { maxRosterSize }),
     };
     this.submitting.set(true);
     try {

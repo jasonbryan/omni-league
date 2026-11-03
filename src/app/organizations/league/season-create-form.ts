@@ -87,6 +87,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
   endDate: '#end-date',
   registrationDeadline: '#registration-deadline',
   maxTeams: '#maximum-teams',
+  maxRosterSize: '#maximum-roster-size',
 };
 
 @Component({
@@ -377,6 +378,60 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
               </div>
             }
           </div>
+          <div
+            role="group"
+            data-slot="field"
+            data-orientation="vertical"
+            [attr.data-matches-spartan-invalid]="form.errors.maxRosterSize() ? 'true' : null"
+            [attr.data-invalid]="form.errors.maxRosterSize() ? 'true' : null"
+            [class]="fieldClass"
+          >
+            <label for="maximum-roster-size" data-slot="field-label" [class]="labelClass"
+              >Maximum roster size</label
+            >
+            <input
+              id="maximum-roster-size"
+              type="text"
+              inputmode="numeric"
+              data-slot="input"
+              autocomplete="off"
+              [formField]="form.fields.maxRosterSize"
+              (blur)="form.left('maxRosterSize')"
+              [attr.aria-describedby]="
+                describedBy(
+                  'maxRosterSize',
+                  'maximum-roster-size-description',
+                  'maximum-roster-size'
+                )
+              "
+              [attr.aria-invalid]="form.errors.maxRosterSize() ? 'true' : null"
+              [attr.data-invalid]="form.errors.maxRosterSize() ? 'true' : null"
+              [attr.data-matches-spartan-invalid]="form.errors.maxRosterSize() ? 'true' : null"
+              [class]="inputClass"
+            />
+            <p
+              data-slot="field-description"
+              id="maximum-roster-size-description"
+              [class]="descriptionClass"
+            >
+              From the minimum roster size to 99. A full team takes no more players.
+            </p>
+            @if (form.errors.maxRosterSize(); as error) {
+              <div
+                role="alert"
+                data-slot="field-error"
+                id="maximum-roster-size-error"
+                [class]="errorClass"
+              >
+                <ng-icon
+                  name="lucideCircleAlert"
+                  class="mt-0.5 shrink-0 text-base"
+                  aria-hidden="true"
+                />
+                <span>{{ error }}</span>
+              </div>
+            }
+          </div>
         </fieldset>
       </div>
       @if (divisionMissing()) {
@@ -470,7 +525,11 @@ export class SeasonCreateForm {
   readonly seasonShown = output<SeasonShown>();
 
   protected readonly online = injectOnline();
-  protected readonly form = new SeasonForm();
+  private readonly minimumRosterSize = computed(() => {
+    const division = this.division();
+    return division ? (division.minimumRosterSize ?? division.playersPerSide) : undefined;
+  });
+  protected readonly form = new SeasonForm(() => this.minimumRosterSize());
   protected readonly alerts = SEASON_FORM_ALERTS;
   protected readonly dateFields = DATE_FIELDS;
   protected readonly leagueFormatMissingMessage = SEASON_MESSAGES.leagueFormatMissing;

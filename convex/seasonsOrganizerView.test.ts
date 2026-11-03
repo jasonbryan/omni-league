@@ -247,6 +247,7 @@ describe('seasons.getOrganizerView', () => {
         },
       ],
       teamCount: 3,
+      largestRoster: { name: 'Sand Sharks', rosterCount: 4 },
     });
   });
 

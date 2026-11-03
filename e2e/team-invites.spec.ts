@@ -206,3 +206,79 @@ test.describe('team invites: refusals', () => {
     await expect(pendingList(page)).toContainText('kai@example.com');
   });
 });
+
+test.describe('team invites: a full team', () => {
+  const FULL = 'roster-cap';
+
+  async function seedFullTeam(captain: TestUser, member: TestUser): Promise<string> {
+    const { tenant } = await seedTeam(captain);
+    await convexRun('testing:seedSeason', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      name: 'Roster Cap',
+      slug: FULL,
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(100),
+      registrationDeadline: dateFromToday(20),
+      minimumRosterSize: 4,
+      maxRosterSize: 4,
+      status: 'published',
+    });
+    const { teamId } = (await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug: FULL,
+      name: 'Sand Sharks',
+      captainEmail: captain.email,
+    })) as { teamId: string };
+    const other = await seedUser(newUser('Player'));
+    await convexRun('testing:addToTeam', { teamId, email: member.email });
+    await convexRun('testing:addToTeam', { teamId, email: other.email });
+    await addInvite(teamId, 'before@example.com');
+    await convexRun('testing:addMinorToTeam', {
+      teamId,
+      guardianEmail: member.email,
+      minorName: 'Theo Bell',
+    });
+    return teamId;
+  }
+
+  test('the captain sees 4 of 4 players, the full note, and no invite form; the pending invite stays listed', async ({
+    page,
+  }, testInfo) => {
+    const captain = newUser('Captain');
+    await signUp(page, captain);
+    const member = await seedUser(newUser('Member'));
+    const teamId = await seedFullTeam(captain, member);
+    await openTeam(page, teamId);
+    await expect(page.getByTestId('roster-count')).toHaveText('4 of 4 players');
+    await expect(page.getByTestId('roster-note')).toHaveText(
+      'The team is full: 4 players is this season’s maximum.',
+    );
+    await expect(email(page)).toHaveCount(0);
+    await expect(page.locator('#minor-name')).toHaveCount(0);
+    const full = page.getByTestId('team-full');
+    await expect(full.getByRole('heading', { name: 'Invite players' })).toBeVisible();
+    await expect(full).toContainText(
+      'Sand Sharks has 4 players, this season’s maximum. Remove a player to invite someone else or add a minor.',
+    );
+    await expect(pendingList(page)).toContainText('before@example.com');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '144-team-full');
+  });
+
+  test('a teammate sees Add a minor give way to the full note', async ({ page }, testInfo) => {
+    const captain = await seedUser(newUser('Captain'));
+    const member = newUser('Member');
+    await signUp(page, member);
+    const teamId = await seedFullTeam(captain, member);
+    await openTeam(page, teamId);
+    await expect(page.getByTestId('roster-count')).toHaveText('4 of 4 players');
+    await expect(page.locator('#minor-name')).toHaveCount(0);
+    const full = page.getByTestId('team-full');
+    await expect(full.getByRole('heading', { name: 'Add a minor' })).toBeVisible();
+    await expect(full).toContainText('Ask the captain to remove a player first.');
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '144-team-full-teammate');
+  });
+});

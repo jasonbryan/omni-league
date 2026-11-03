@@ -572,6 +572,7 @@ export interface NewSeason {
   playersPerSide: number;
   minimumRosterSize: number;
   maxTeams?: number;
+  maxRosterSize?: number;
 }
 
 // Values are validated in `seasons.create`, not here, so a seed can hold a deadline on or after the
@@ -595,6 +596,7 @@ export async function insertSeason(
     status,
     teamCount: 0,
     ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
+    ...(season.maxRosterSize !== undefined && { maxRosterSize: season.maxRosterSize }),
   });
   if (status === 'published') await countPublishedSeason(ctx, league._id);
   return seasonId;

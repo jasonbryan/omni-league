@@ -415,6 +415,22 @@ describe('JoinTeamPage', () => {
       expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TOKEN);
     });
 
+    it('a full team: says nothing was added, keeps the form and both choices, and keeps the invite', async () => {
+      const { page, accept } = await refuse(
+        new ConvexError({ code: 'teamFull', message: 'The team is full.' }),
+      );
+      const { title, description } = alertOf(page);
+      expect([title, description]).toEqual([
+        'Sand Sharks is full.',
+        'Nothing was added. If you chose two entries, there may be room for one; otherwise ask the captain whether a place opens.',
+      ]);
+      expect(document.activeElement).toBe(page.querySelector('[role="alert"]'));
+      expect(checkbox(page, 'join-self').getAttribute('aria-checked')).toBe('true');
+      expect(checkbox(page, 'join-self').disabled).toBe(false);
+      expect(accept()).not.toBeNull();
+      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TOKEN);
+    });
+
     it('after the one-team refusal, a minor alone is sent and accepted', async () => {
       const { page, flush, convex, accept } = await refuse(
         new ConvexError({ code: 'alreadyOnAnotherTeam', teamName: 'Net Results' }),

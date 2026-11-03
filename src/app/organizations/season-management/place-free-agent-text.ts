@@ -5,6 +5,7 @@ export type PlaceFailure =
   | { kind: 'offline' }
   | { kind: 'onTeam'; teamName: string }
   | { kind: 'alreadyPlaced' }
+  | { kind: 'teamFull' }
   | { kind: 'failed' };
 
 export type PlaceAlertView =
@@ -25,6 +26,7 @@ export function placeFailureOf(error: unknown): PlaceFailure {
     return { kind: 'onTeam', teamName };
   }
   if (code === 'alreadyPlaced') return { kind: 'alreadyPlaced' };
+  if (code === 'teamFull') return { kind: 'teamFull' };
   return { kind: 'failed' };
 }
 
@@ -44,6 +46,8 @@ export function placeFailureText(failure: PlaceFailure, name: string): PlaceAler
       };
     case 'alreadyPlaced':
       return { kind: 'failed', title, description: 'They’ve already been placed on a team.' };
+    case 'teamFull':
+      return { kind: 'failed', title, description: 'The team is full.' };
     case 'failed':
       return { kind: 'failed', title, description: 'Check your connection and try again.' };
   }

@@ -175,6 +175,9 @@ function localDay(ms: number): string {
           [seasonId]="season.seasonId"
           [maxTeams]="season.maxTeams"
           [teamCount]="season.teamCount"
+          [maxRosterSize]="season.maxRosterSize"
+          [minimumRosterSize]="season.minimumRosterSize"
+          [largestRoster]="season.largestRoster"
         />
         <dl class="mt-6 grid grid-cols-2 gap-3 md:gap-4">
           <div [class]="tile">
@@ -378,6 +381,7 @@ function localDay(ms: number): string {
         <app-place-free-agent-dialog
           [teams]="teams()"
           [minimumRosterSize]="season.minimumRosterSize"
+          [maxRosterSize]="season.maxRosterSize"
           (dismissed)="placeDismissed($event)"
         />
       }

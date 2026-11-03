@@ -122,7 +122,7 @@ describe('SeasonCreateForm', () => {
       expect(text(formStatus())).toBe('');
     });
 
-    it('has Name, Slug, three native date fields, and Maximum teams, in focus order', async () => {
+    it('has Name, Slug, three native date fields, Maximum teams, and Maximum roster size, in focus order', async () => {
       await open();
       const fields = [
         ['name', 'Name', 'text'],
@@ -147,6 +147,7 @@ describe('SeasonCreateForm', () => {
         'end-date',
         'registration-deadline',
         'maximum-teams',
+        'maximum-roster-size',
       ]);
     });
 
@@ -189,6 +190,15 @@ describe('SeasonCreateForm', () => {
       expect(field.getAttribute('aria-describedby')).toBe('maximum-teams-description');
       expect(text(page.querySelector('#maximum-teams-description'))).toBe(
         '2 to 200. When it’s reached, the season is full.',
+      );
+      const roster = input('maximum-roster-size');
+      expect(text(page.querySelector('label[for="maximum-roster-size"]'))).toBe(
+        'Maximum roster size',
+      );
+      expect([roster.type, roster.required, roster.inputMode]).toEqual(['text', false, 'numeric']);
+      expect(roster.getAttribute('aria-describedby')).toBe('maximum-roster-size-description');
+      expect(text(page.querySelector('#maximum-roster-size-description'))).toBe(
+        'From the minimum roster size to 99. A full team takes no more players.',
       );
     });
 
@@ -461,6 +471,32 @@ describe('SeasonCreateForm', () => {
           'maximum-teams-description maximum-teams-error',
         );
         expect(document.activeElement).toBe(input('maximum-teams'));
+        expect(calls()).toEqual([]);
+      },
+    );
+
+    it('sends Maximum roster size as a number when it is at least the minimum', async () => {
+      await open();
+      await fill();
+      await type('maximum-roster-size', '7');
+      await submit();
+      expect(calls()).toEqual([[CREATE_SEASON, { ...FALL_2026, maxRosterSize: 7 }]]);
+    });
+
+    it.each(['6', '100', '7.5'])(
+      'with a minimum of 7, refuses Maximum roster size %s with its message, focused, and sends nothing',
+      async (value) => {
+        await open();
+        await fill();
+        await type('maximum-roster-size', value);
+        await submit();
+        expect(error('maximum-roster-size')).toBe(
+          'Enter a whole number from 7 to 99, or leave it blank.',
+        );
+        expect(input('maximum-roster-size').getAttribute('aria-describedby')).toBe(
+          'maximum-roster-size-description maximum-roster-size-error',
+        );
+        expect(document.activeElement).toBe(input('maximum-roster-size'));
         expect(calls()).toEqual([]);
       },
     );

@@ -280,7 +280,7 @@ export interface TeamPageNavigationState {
                       class="flex items-start gap-1.5 border-b border-border px-4 py-3 text-sm text-muted-foreground md:px-5"
                     >
                       <ng-icon
-                        [name]="count().met ? 'lucideCircleCheck' : 'lucideInfo'"
+                        [name]="count().met || count().full ? 'lucideCircleCheck' : 'lucideInfo'"
                         class="mt-0.5 shrink-0 text-base"
                         aria-hidden="true"
                       /><span>{{ count().note }}</span>
@@ -388,11 +388,36 @@ export interface TeamPageNavigationState {
                   }
                 </div>
                 <div class="flex flex-col gap-4 md:gap-6">
-                  @if (team.viewerCanManage && teamIdOf(); as id) {
-                    <app-team-invite-panel [teamId]="id" />
-                  }
-                  @if (team.viewerOnTeam && teamIdOf(); as id) {
-                    <app-add-minor-panel [teamId]="id" [teamName]="team.name" />
+                  @if (fullPanel(); as full) {
+                    <section
+                      [id]="full.id"
+                      aria-labelledby="team-full-heading"
+                      class="${PANEL}"
+                      data-testid="team-full"
+                    >
+                      <div
+                        class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
+                      >
+                        <h2 id="team-full-heading" class="font-semibold">{{ full.heading }}</h2>
+                      </div>
+                      <div class="flex flex-col items-center px-6 py-10 text-center">
+                        <span
+                          class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                          ><ng-icon name="lucideUsers" class="text-xl" aria-hidden="true"
+                        /></span>
+                        <p class="mt-4 font-medium">The team is full</p>
+                        <p class="mt-1 max-w-xs text-sm text-balance text-muted-foreground">
+                          {{ full.text }}
+                        </p>
+                      </div>
+                    </section>
+                  } @else {
+                    @if (team.viewerCanManage && teamIdOf(); as id) {
+                      <app-team-invite-panel [teamId]="id" />
+                    }
+                    @if (team.viewerOnTeam && teamIdOf(); as id) {
+                      <app-add-minor-panel [teamId]="id" [teamName]="team.name" />
+                    }
                   }
                   <app-season-teams-panel
                     [rows]="seasonTeams.value()?.rows"
@@ -515,7 +540,25 @@ export class TeamPage {
 
   protected readonly count = computed(() => {
     const team = this.team();
-    return rosterCount(team?.rosterCount ?? 0, team?.minimumRosterSize ?? 0);
+    return rosterCount(team?.rosterCount ?? 0, team?.minimumRosterSize ?? 0, team?.maxRosterSize);
+  });
+
+  /** One note replaces the invite form and Add a minor, because minors take places too. */
+  protected readonly fullPanel = computed(() => {
+    const team = this.team();
+    if (!team || !this.count().full || !(team.viewerCanManage || team.viewerOnTeam)) return null;
+    const players = `${team.name} has ${team.rosterCount} players, this season’s maximum.`;
+    return team.viewerCanManage
+      ? {
+          id: 'invite',
+          heading: 'Invite players',
+          text: `${players} Remove a player to invite someone else or add a minor.`,
+        }
+      : {
+          id: 'add-minor',
+          heading: 'Add a minor',
+          text: `${players} Ask the captain to remove a player first.`,
+        };
   });
 
   protected readonly seasonHref = computed(() => {

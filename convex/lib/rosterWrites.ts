@@ -1,7 +1,7 @@
 // The only writer of `teams`, `rosterEntries`, `teamInvites`, `freeAgents`, `teams.rosterCount`,
-// `teams.pendingInviteCount`, `seasons.teamCount`, and `seasons.maxTeams` once the season exists, so the
-// counters, the team limit, the one-place-per-season rule, and one pending invite per address hold for
-// every way onto a roster.
+// `teams.pendingInviteCount`, `seasons.teamCount`, `seasons.maxTeams`, and `seasons.maxRosterSize` once the
+// season exists, so the counters, the team and roster limits, the one-place-per-season rule, and one
+// pending invite per address hold for every way onto a roster.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
@@ -14,7 +14,13 @@ import {
   type NothingChosenRefusal,
 } from './minorName';
 import type { RosterEntrySource } from './rosterEntry';
-import { SEASON_MESSAGES, seasonIsFull, type SeasonInputError } from './seasonInput';
+import {
+  checkMaxRosterSizeFor,
+  SEASON_MESSAGES,
+  seasonIsFull,
+  teamIsFull,
+  type SeasonInputError,
+} from './seasonInput';
 import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
 import {
   TEAM_MESSAGES,
@@ -23,6 +29,7 @@ import {
   type AlreadyPlacedRefusal,
   type RosterRefusal,
   type SeasonFullRefusal,
+  type TeamFullRefusal,
   type TeamNameError,
   type WaitingFreeAgentRefusal,
 } from './teamInput';
@@ -104,6 +111,7 @@ export async function freeAgentInSeason(
 
 type Refusal =
   | SeasonFullRefusal
+  | TeamFullRefusal
   | SeasonInputError
   | RosterRefusal
   | TeamNameError
@@ -148,6 +156,17 @@ async function assertNotWaitingFreeAgent(
   const freeAgent = await freeAgentInSeason(ctx, seasonId, userId);
   if (freeAgent?.status !== 'waiting') return;
   refuse({ code: 'waitingFreeAgent', message: TEAM_MESSAGES.waitingFreeAgent });
+}
+
+/** Read fresh: within one mutation an earlier entry has already raised the count, and concurrent writers conflict on this read and retry. */
+async function assertTeamHasRoom(ctx: ReadCtx, teamId: Id<'teams'>): Promise<void> {
+  const team = await ctx.db.get('teams', teamId);
+  if (!team) throw new Error('No team has this id');
+  const season = await ctx.db.get('seasons', team.seasonId);
+  if (!season) throw new Error('No season has this id');
+  if (teamIsFull(team.rosterCount, season.maxRosterSize)) {
+    refuse({ code: 'teamFull', message: TEAM_MESSAGES.teamFull });
+  }
 }
 
 export interface NewTeam {
@@ -209,6 +228,7 @@ export async function addRosterEntry(
   if (entry.source !== 'placement') {
     await assertNotWaitingFreeAgent(ctx, team.seasonId, entry.userId);
   }
+  await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
     seasonId: team.seasonId,
@@ -270,6 +290,7 @@ export async function addMinorEntry(
   if (minors.length >= MAX_MINORS_PER_GUARDIAN_IN_SEASON) {
     refuse({ field: 'minorName', code: 'minorLimit', message: MINOR_MESSAGES.minorLimit });
   }
+  await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
     seasonId: team.seasonId,
@@ -416,12 +437,13 @@ export interface NewTeamInvite {
   invitedByUserId: Id<'users'>;
 }
 
-/** An expired invite still counts as pending, so it blocks the address until it is revoked. */
+/** An expired invite still counts as pending, so it blocks the address until it is revoked. Pending invites take no place on a full team's roster, so accepting one can still be refused. */
 export async function insertTeamInvite(
   ctx: MutationCtx,
   team: Doc<'teams'>,
   invite: NewTeamInvite,
 ): Promise<Id<'teamInvites'>> {
+  await assertTeamHasRoom(ctx, team._id);
   if (await pendingTeamInvite(ctx, team._id, invite.email)) {
     refuse({
       field: 'email',
@@ -543,6 +565,35 @@ export async function setSeasonMaxTeams(
     });
   }
   await ctx.db.patch('seasons', seasonId, { maxTeams: maxTeams ?? undefined });
+}
+
+/** `null` removes the limit. */
+export async function setSeasonMaxRosterSize(
+  ctx: MutationCtx,
+  season: Doc<'seasons'>,
+  maxRosterSize: number | null,
+): Promise<void> {
+  if (maxRosterSize !== null) {
+    const largest = await largestRoster(ctx, season._id);
+    const refusal = checkMaxRosterSizeFor(
+      maxRosterSize,
+      season.minimumRosterSize,
+      largest && { name: largest.name, rosterCount: largest.rosterCount },
+    );
+    if (refusal) refuse(refusal);
+  }
+  await ctx.db.patch('seasons', season._id, { maxRosterSize: maxRosterSize ?? undefined });
+}
+
+export async function largestRoster(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+): Promise<Doc<'teams'> | null> {
+  return ctx.db
+    .query('teams')
+    .withIndex('by_seasonId_and_rosterCount', (q) => q.eq('seasonId', seasonId))
+    .order('desc')
+    .first();
 }
 
 async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {
