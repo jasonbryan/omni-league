@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
+import { ConvexError } from 'convex/values';
 import { Title } from '@angular/platform-browser';
 import type { Routes } from '@angular/router';
+import { ConvexOfflineError } from '../../core/data/convex';
 import { Elsewhere, forbiddenError, openAdmin, text } from '../admin/testing/admin-harness';
 import {
   COED,
@@ -8,6 +10,7 @@ import {
   GET_ORGANIZER_CONTEXT,
   GULF,
 } from '../league/testing/league-harness';
+import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { SeasonPage } from './season-page';
 
 const GET_VIEW = 'seasons:getOrganizerView';
@@ -62,6 +65,7 @@ const freeAgent = (i: number) => ({
 });
 
 const FREE_AGENTS = { rows: [freeAgent(0), freeAgent(1)], hasMore: false };
+const tokens = (value: string) => value.split(' ').sort();
 
 describe('SeasonPage', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
@@ -174,8 +178,18 @@ describe('SeasonPage', () => {
       expect(time.getAttribute('datetime')).toMatch(/^2026-09-2[89]$/);
     });
 
-    it('offers no placement here', () => {
-      expect(page.querySelector('#free-agents button')).toBeNull();
+    it('gives each free agent a Place on team button that opens a dialog, named for them', () => {
+      const buttons = freeAgentRows().map((row) => row.querySelector('button')!);
+      expect(buttons.map((button) => [text(button), button.getAttribute('aria-label')])).toEqual([
+        ['Place on team', 'Place on team: Player 0'],
+        ['Place on team', 'Place on team: Player 1'],
+      ]);
+      expect(buttons[0].getAttribute('aria-haspopup')).toBe('dialog');
+      expect(buttons[0].type).toBe('button');
+      expect(tokens(buttons[0].className)).toEqual(tokens(OUTLINE_BUTTON));
+      expect(text(page.querySelector('#free-agents'))).not.toContain(
+        'No team to place them on yet',
+      );
     });
 
     it('says nothing about a cap when every row is shown', () => {
@@ -209,6 +223,27 @@ describe('SeasonPage', () => {
       const teams = page.querySelector('section[aria-labelledby="teams-heading"]');
       expect(text(teams)).toContain('No teams yet');
       expect(text(teams)).toContain('Teams appear here when captains register them.');
+    });
+
+    it('free agents and no team: no Place on team, and a note above the list says why', async () => {
+      await open(COED, { ...VIEW, teams: [], teamCount: 0 }, FREE_AGENTS);
+      expect(page.querySelector('#free-agents button')).toBeNull();
+      const note = page.querySelector('#free-agents [data-slot="alert"]')!;
+      expect(text(note.querySelector('[data-slot="alert-title"]'))).toBe(
+        'No team to place them on yet',
+      );
+      expect(text(note.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Place free agents once a team registers.',
+      );
+      const list = page.querySelector('#free-agents-list')!;
+      expect(note.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('no team and no free agents: no note', async () => {
+      await open(COED, { ...VIEW, teams: [], teamCount: 0 }, { rows: [], hasMore: false });
+      expect(text(page.querySelector('#free-agents'))).not.toContain(
+        'No team to place them on yet',
+      );
     });
 
     it('a draft season shows no teams and links to the league to publish it', async () => {
@@ -295,6 +330,179 @@ describe('SeasonPage', () => {
       o.subscription(GET_VIEW)!.fail(new Error('network'));
       await o.flush();
       expect(page.querySelector('app-server-error-view')).not.toBeNull();
+    });
+  });
+
+  describe('placing a free agent', () => {
+    const PLACE = 'freeAgents:place';
+    const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+    const dialogButton = (label: string) =>
+      [...dialog()!.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        text(b)?.startsWith(label),
+      )!;
+    const radios = () => [...dialog()!.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    const placeButton = (n: number) =>
+      freeAgentRows()[n].querySelector<HTMLButtonElement>('button')!;
+    const status = () => page.querySelector<HTMLElement>('#free-agents [role="status"]');
+    const calls = () => o.convex.calls.map((c) => [c.name, c.args]);
+
+    afterEach(() => vi.restoreAllMocks());
+
+    async function openDialog(n = 0) {
+      await open(COED, VIEW, FREE_AGENTS);
+      placeButton(n).click();
+      await o.flush();
+    }
+
+    async function chooseAndPlace(n: number) {
+      radios()[n].click();
+      await o.flush();
+      dialogButton('Place on team').click();
+      await o.flush();
+    }
+
+    it('opens a dialog titled for the free agent, with each team and its roster, and focus on the first team', async () => {
+      await openDialog();
+      const box = dialog()!;
+      expect(box.getAttribute('aria-modal')).toBe('true');
+      expect(text(box.querySelector('h2'))).toBe('Place Player 0 on a team');
+      expect(box.getAttribute('aria-labelledby')).toBe(box.querySelector('h2')!.id);
+      expect(text(box.querySelector('[data-slot="alert-dialog-description"]'))).toBe(
+        'They join the team’s roster and can open its page. A person can be on one team in a season.',
+      );
+      expect(text(box.querySelector('legend'))).toBe('Team');
+      expect(
+        radios().map((radio) => [
+          text(box.querySelector(`label[for="${radio.id}"]`)),
+          text(box.querySelector(`#${radio.getAttribute('aria-describedby')}`)),
+          radio.checked,
+        ]),
+      ).toEqual([
+        ['Block Party', '6 players · minimum 4', false],
+        ['Dig Deep', '2 of 4 players · 2 more needed', false],
+        ['Sand Sharks', '4 of 4 players', false],
+      ]);
+      expect(document.activeElement).toBe(radios()[0]);
+      expect(page.querySelector('app-season-management')?.hasAttribute('inert')).toBe(true);
+      expect(calls()).toEqual([]);
+    });
+
+    it('preselects the only team of a season with one', async () => {
+      await open(COED, { ...VIEW, teams: [VIEW.teams[1]], teamCount: 1 }, FREE_AGENTS);
+      placeButton(0).click();
+      await o.flush();
+      expect(radios().map((radio) => radio.checked)).toEqual([true]);
+      dialogButton('Place on team').click();
+      await o.flush();
+      expect(calls()).toEqual([[PLACE, { freeAgentId: 'fa_0', teamId: 'tm_dig' }]]);
+    });
+
+    it('Place on team with no team chosen says to choose one, focuses the first team, and sends nothing', async () => {
+      await openDialog();
+      dialogButton('Place on team').click();
+      await o.flush();
+      expect(text(dialog()!.querySelector('[data-slot="field-error"]'))).toBe('Choose a team.');
+      expect(document.activeElement).toBe(radios()[0]);
+      expect(calls()).toEqual([]);
+      radios()[1].click();
+      await o.flush();
+      expect(dialog()!.querySelector('[data-slot="field-error"]')).toBeNull();
+    });
+
+    it('places on the chosen team: "Placing…" while it runs, then a status naming the team and its new count, with focus on it', async () => {
+      await openDialog();
+      await chooseAndPlace(1);
+      expect(calls()).toEqual([[PLACE, { freeAgentId: 'fa_0', teamId: 'tm_dig' }]]);
+      const busy = dialogButton('Placing');
+      expect(text(busy)).toBe('Placing…');
+      expect(busy.getAttribute('aria-disabled')).toBe('true');
+      expect(dialogButton('Cancel').getAttribute('aria-disabled')).toBe('true');
+      o.convex.calls[0].resolve(null);
+      await o.flush();
+      expect(dialog()).toBeNull();
+      const region = status()!;
+      expect(text(region.querySelector('[data-slot="alert-title"]'))).toBe(
+        'Player 0 is on Dig Deep now.',
+      );
+      expect(text(region.querySelector('[data-slot="alert-description"]'))).toBe(
+        'Dig Deep has 3 of 4 players.',
+      );
+      expect(document.activeElement).toBe(region);
+      expect(page.querySelector('app-season-management')?.hasAttribute('inert')).toBe(false);
+    });
+
+    it('Cancel closes it, sends nothing, and returns focus to the row’s button', async () => {
+      await openDialog(1);
+      dialogButton('Cancel').click();
+      await o.flush();
+      expect(dialog()).toBeNull();
+      expect(calls()).toEqual([]);
+      expect(document.activeElement).toBe(placeButton(1));
+    });
+
+    it('Escape closes it the same way', async () => {
+      await openDialog(1);
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+      await o.flush();
+      expect(dialog()).toBeNull();
+      expect(document.activeElement).toBe(placeButton(1));
+    });
+
+    it.each([
+      [
+        new ConvexError({ code: 'alreadyOnAnotherTeam', teamName: 'Sand Sharks', message: 'x' }),
+        'They’re already on Sand Sharks in this season.',
+      ],
+      [
+        new ConvexError({ code: 'alreadyPlaced', message: 'x' }),
+        'They’ve already been placed on a team.',
+      ],
+      [new Error('Server Error: secret'), 'Check your connection and try again.'],
+    ])(
+      'a refusal or failure shows its alert in the dialog, with focus on it',
+      async (error, line) => {
+        await openDialog();
+        await chooseAndPlace(0);
+        o.convex.calls[0].reject(error);
+        await o.flush();
+        const alert = dialog()!.querySelector<HTMLElement>('[role="alert"]')!;
+        expect(text(alert)).toBe(`Player 0 could not be placed. ${line}`);
+        expect(document.activeElement).toBe(alert);
+        expect(text(dialog())).not.toContain('secret');
+        expect(status()).toBeNull();
+      },
+    );
+
+    it('offline: the button looks disabled but stays focusable; a press shows the offline alert and sends nothing', async () => {
+      await openDialog();
+      radios()[0].click();
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await o.harness.fixture.whenStable();
+      const button = dialogButton('Place on team');
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.classList.contains('opacity-50')).toBe(true);
+      button.click();
+      await o.flush();
+      const alert = dialog()!.querySelector<HTMLElement>('[role="alert"]')!;
+      expect(text(alert)).toBe(
+        "You're offline. Nothing was sent. Player 0 is still waiting. Try again when you’re connected.",
+      );
+      expect(document.activeElement).toBe(alert);
+      expect(calls()).toEqual([]);
+    });
+
+    it('a refusal from the adapter at call time shows the offline alert', async () => {
+      await openDialog();
+      await chooseAndPlace(0);
+      o.convex.calls[0].reject(new ConvexOfflineError());
+      await o.flush();
+      expect(text(dialog()!.querySelector('[role="alert"]'))).toContain(
+        'Player 0 is still waiting.',
+      );
     });
   });
 });

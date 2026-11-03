@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -9,6 +19,7 @@ import {
   lucideCircleDashed,
   lucideMail,
   lucideTriangleAlert,
+  lucideUserPlus,
   lucideUserRound,
   lucideUsers,
   lucideUsersRound,
@@ -17,6 +28,8 @@ import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { sportName } from '../../../../convex/lib/sports';
 import { teamPath } from '../../teams/team-paths';
 import { AdminAlert } from '../admin/admin-alert';
+import type { AlertText } from '../admin/alert-text';
+import { OUTLINE_BUTTON } from '../admin/button-classes';
 import {
   BADGE_DEFAULT,
   BADGE_OUTLINE,
@@ -28,7 +41,9 @@ import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { CURRENT_CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
 import { leaguePath } from '../league/league-path';
 import { seasonDates } from '../league/season-dates';
-import { SeasonContext } from './season-context';
+import { PlaceFreeAgentDialog, type PlaceFreeAgentOutcome } from './place-free-agent-dialog';
+import { placedText } from './place-free-agent-text';
+import { SeasonContext, type SeasonFreeAgents } from './season-context';
 import { seasonManagementPath } from './season-management-path';
 import { teamRowLines } from './team-row-lines';
 
@@ -48,8 +63,11 @@ const EMPTY_ICON =
   'flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground';
 const EMPTY_TEXT = 'mt-1 max-w-xs text-sm text-balance text-muted-foreground';
 const CAP_NOTE = 'border-t border-border px-4 py-3 text-sm text-muted-foreground md:px-5';
+const PANEL_NOTE = 'border-b border-border px-4 py-3 md:px-5';
 const EMAIL_LINK =
   'inline-flex items-center break-all underline underline-offset-4 hover:text-foreground pointer-coarse:min-h-11';
+
+type SeasonFreeAgentId = SeasonFreeAgents['rows'][number]['freeAgentId'];
 
 const twoDigits = (n: number) => String(n).padStart(2, '0');
 
@@ -61,7 +79,7 @@ function localDay(ms: number): string {
 
 @Component({
   selector: 'app-season-management',
-  imports: [AdminAlert, NgIcon, RouterLink],
+  imports: [AdminAlert, NgIcon, PlaceFreeAgentDialog, RouterLink],
   providers: [
     provideIcons({
       lucideCalendarClock,
@@ -71,13 +89,17 @@ function localDay(ms: number): string {
       lucideCircleDashed,
       lucideMail,
       lucideTriangleAlert,
+      lucideUserPlus,
       lucideUserRound,
       lucideUsers,
       lucideUsersRound,
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8' },
+  host: {
+    class: 'block mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8',
+    '[attr.inert]': 'placeOpen() ? "" : null',
+  },
   template: `
     @if (league(); as league) {
       @if (season(); as season) {
@@ -245,10 +267,29 @@ function localDay(ms: number): string {
           </section>
           <section id="free-agents" aria-labelledby="free-agents-heading" [class]="panel">
             <div [class]="panelHead">
-              <h2 id="free-agents-heading" class="font-semibold">Free agents</h2>
+              <h2 id="free-agents-heading" tabindex="-1" class="font-semibold">Free agents</h2>
             </div>
+            @if (placed(); as placed) {
+              <div [class]="panelNote">
+                <app-admin-alert
+                  #placedNotice
+                  kind="success"
+                  [title]="placed.title"
+                  [description]="placed.description"
+                />
+              </div>
+            }
             @if (freeAgents(); as freeAgents) {
               @if (freeAgents.rows.length > 0) {
+                @if (teams().length === 0) {
+                  <div [class]="panelNote">
+                    <app-admin-alert
+                      kind="info"
+                      title="No team to place them on yet"
+                      description="Place free agents once a team registers."
+                    />
+                  </div>
+                }
                 <ul id="free-agents-list" role="list" class="divide-y divide-border">
                   @for (row of freeAgentRows(); track row.freeAgentId) {
                     <li class="px-4 py-3.5 md:px-5">
@@ -271,6 +312,25 @@ function localDay(ms: number): string {
                           >
                         </p>
                       </div>
+                      @if (teams().length > 0) {
+                        <div class="mt-3">
+                          <button
+                            type="button"
+                            aria-haspopup="dialog"
+                            data-slot="button"
+                            [attr.data-free-agent-id]="row.freeAgentId"
+                            [attr.aria-label]="'Place on team: ' + row.name"
+                            [class]="outlineButton"
+                            (click)="openPlace(row)"
+                          >
+                            <ng-icon
+                              name="lucideUserPlus"
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />Place on team
+                          </button>
+                        </div>
+                      }
                     </li>
                   }
                 </ul>
@@ -302,12 +362,19 @@ function localDay(ms: number): string {
             }
           </section>
         </div>
+        <app-place-free-agent-dialog
+          [teams]="teams()"
+          [minimumRosterSize]="season.minimumRosterSize"
+          (dismissed)="placeDismissed($event)"
+        />
       }
     }
   `,
 })
 export class SeasonManagement {
   private readonly context = inject(SeasonContext);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly league = this.context.league;
   protected readonly season = this.context.season;
@@ -334,6 +401,8 @@ export class SeasonManagement {
   protected readonly capNote = CAP_NOTE;
   protected readonly rowLink = ROW_TITLE_LINK;
   protected readonly emailLink = EMAIL_LINK;
+  protected readonly panelNote = PANEL_NOTE;
+  protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly dates = seasonDates;
   protected readonly day = formatCalendarDate;
 
@@ -370,6 +439,37 @@ export class SeasonManagement {
       datetime: localDay(row.registeredAt),
     })),
   );
+
+  private readonly placeDialog = viewChild(PlaceFreeAgentDialog);
+  private readonly placedNotice = viewChild<AdminAlert>('placedNotice');
+  protected readonly placeOpen = computed(() => this.placeDialog()?.isOpen() ?? false);
+  protected readonly placed = signal<AlertText | null>(null);
+
+  protected openPlace(row: { freeAgentId: SeasonFreeAgentId; name: string }): void {
+    this.placed.set(null);
+    this.placeDialog()?.open({ freeAgentId: row.freeAgentId, name: row.name });
+  }
+
+  /** A placement moves focus to the status, because the row and its button are gone; a cancel puts focus back on the row's button, or on the first remaining button or the heading when the row is gone. */
+  protected placeDismissed({ freeAgentId, name, placedOn }: PlaceFreeAgentOutcome): void {
+    if (placedOn) {
+      const minimum = this.season()?.minimumRosterSize ?? 0;
+      this.placed.set(placedText(name, placedOn.teamName, placedOn.rosterCount, minimum));
+      afterNextRender(() => this.placedNotice()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(
+      () => {
+        const host: HTMLElement = this.host.nativeElement;
+        const target =
+          host.querySelector<HTMLElement>(`button[data-free-agent-id="${freeAgentId}"]`) ??
+          host.querySelector<HTMLElement>('#free-agents-list button[data-free-agent-id]') ??
+          host.querySelector<HTMLElement>('#free-agents-heading');
+        target?.focus();
+      },
+      { injector: this.injector },
+    );
+  }
 
   protected readonly freeAgentCount = computed(() => {
     const freeAgents = this.freeAgents();

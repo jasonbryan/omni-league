@@ -10,6 +10,7 @@ import {
   TEAM_MESSAGES,
   teamSortName,
   type AlreadyFreeAgentRefusal,
+  type AlreadyPlacedRefusal,
   type RosterRefusal,
   type TeamNameError,
   type WaitingFreeAgentRefusal,
@@ -63,7 +64,8 @@ type Refusal =
   | TeamNameError
   | TeamInviteInputError
   | WaitingFreeAgentRefusal
-  | AlreadyFreeAgentRefusal;
+  | AlreadyFreeAgentRefusal
+  | AlreadyPlacedRefusal;
 
 function refuse(refusal: Refusal): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -216,6 +218,29 @@ export async function insertPlacedFreeAgent(
   });
 }
 
+export async function placeFreeAgent(
+  ctx: MutationCtx,
+  freeAgent: Doc<'freeAgents'>,
+  team: Doc<'teams'>,
+  placedByUserId: Id<'users'>,
+): Promise<void> {
+  if (team.seasonId !== freeAgent.seasonId) throw new Error('The team is not in this season');
+  if (freeAgent.status !== 'waiting') {
+    refuse({ code: 'alreadyPlaced', message: TEAM_MESSAGES.alreadyPlaced });
+  }
+  await addRosterEntry(ctx, team, {
+    userId: freeAgent.userId,
+    source: 'placement',
+    addedByUserId: placedByUserId,
+  });
+  await ctx.db.patch('freeAgents', freeAgent._id, {
+    status: 'placed',
+    placedTeamId: team._id,
+    placedAt: Date.now(),
+  });
+}
+
+/** A free agent placed on the entry's team waits again, so an organizer can place them on another. */
 export async function removeRosterEntry(
   ctx: MutationCtx,
   entry: Doc<'rosterEntries'>,
@@ -229,6 +254,14 @@ export async function removeRosterEntry(
     removedByUserId,
   });
   await changeRosterCount(ctx, entry.teamId, -1);
+  const freeAgent = await freeAgentInSeason(ctx, entry.seasonId, entry.userId);
+  if (freeAgent?.status === 'placed' && freeAgent.placedTeamId === entry.teamId) {
+    await ctx.db.patch('freeAgents', freeAgent._id, {
+      status: 'waiting',
+      placedTeamId: undefined,
+      placedAt: undefined,
+    });
+  }
 }
 
 /** At most one invite to an address is pending, and it is the newest, since no other could be made after it. */
