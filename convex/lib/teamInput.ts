@@ -23,6 +23,18 @@ export interface RosterRefusal {
   message: string;
 }
 
+export interface WaitingFreeAgentRefusal {
+  code: 'waitingFreeAgent';
+  message: string;
+}
+
+export interface AlreadyFreeAgentRefusal {
+  code: 'alreadyFreeAgent';
+  message: string;
+}
+
+export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
+
 export const TEAM_MESSAGES = {
   nameEmpty: 'Enter a team name.',
   nameTooLong: (length: number) =>
@@ -32,6 +44,9 @@ export const TEAM_MESSAGES = {
   registrationClosed: 'Registration for this season is closed.',
   alreadyOnTeam: 'Already on the team.',
   alreadyOnAnotherTeam: (teamName: string) => `Already on ${teamName} in this season.`,
+  waitingFreeAgent:
+    "You're registered as a free agent in this season. An organizer places free agents on teams.",
+  alreadyFreeAgent: 'Already registered as a free agent in this season.',
 } as const;
 
 export function normalizeTeamName(name: string): string {

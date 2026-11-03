@@ -333,6 +333,7 @@ describe('seasons.getForRegistration', () => {
     registrationDeadline: '2030-05-20',
     formatName: '4v4',
     minimumRosterSize: 4,
+    freeAgent: null,
   };
 
   test('an unauthenticated caller gets the season with no team', async () => {

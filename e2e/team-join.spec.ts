@@ -277,6 +277,42 @@ test.describe('Join a team: refusals', () => {
     await openLink(page, token);
     await expect(heading(page)).toHaveText('Join Sand Sharks');
   });
+
+  test('a waiting free agent of the season is refused, told an organizer places them, and the invite stays pending', async ({
+    page,
+  }, testInfo) => {
+    const captain = await seedUser(newUser('Captain'));
+    const { tenant, teamId } = await seedTeam(captain);
+    const freeAgent = newUser('FreeAgent');
+    await signUp(page, freeAgent);
+    await convexRun('testing:seedFreeAgent', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug: SEASON,
+      email: freeAgent.email,
+    });
+    const token = await seedInvite(teamId, freeAgent.email);
+
+    await openLink(page, token);
+    await acceptButton(page).click();
+    const alert = main(page).getByRole('alert');
+    await expect(alert).toContainText('You’re registered as a free agent in this season.');
+    await expect(alert).toContainText(
+      `Organizers place free agents on teams. Ask an organizer of ${LEAGUE} to place you on Sand Sharks.`,
+    );
+    await expect(alert).toBeFocused();
+    await expect(acceptButton(page)).toHaveCount(0);
+    await expect(main(page).getByRole('link', { name: 'Go to your teams' })).toHaveAttribute(
+      'href',
+      '/app',
+    );
+    expect(await stored(page, TEAM_KEY)).toBeNull();
+    await screenshot(page, testInfo, '133-join-free-agent');
+    await expectAccessible(page);
+
+    await openLink(page, token);
+    await expect(heading(page)).toHaveText('Join Sand Sharks');
+  });
 });
 
 test.describe('Join a team: links that cannot be used', () => {

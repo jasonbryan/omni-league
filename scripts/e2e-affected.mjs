@@ -57,8 +57,8 @@ const SPORT_VIEW = ['sport-view', 'cache-key'];
 const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-shift', 'cache-key'];
 // cache-key samples the season route.
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
-// The season page's registration card links to the register route, and the register route opens the team page.
-const TEAM_REGISTRATION = ['team-registration'];
+// The season page's registration card links to the register routes, and the register routes open the team page.
+const TEAM_REGISTRATION = ['team-registration', 'free-agent'];
 // The team page holds the team invite form, link, and pending list.
 const TEAM_INVITES = ['team-invites'];
 // The team invite link opens the join route, which links to the team page.
@@ -110,6 +110,7 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
+  'app/register/:orgSlug/:leagueSlug/:seasonSlug/free-agent': TEAM_REGISTRATION,
   'app/teams/:teamId': [...TEAM_REGISTRATION, ...TEAM_INVITES, 'after-sign-in'],
   'app/**': ['not-found'],
   '**': ['not-found'],
@@ -833,9 +834,9 @@ export const AREAS = [
     specs: ['notifications'],
   },
   {
-    name: 'convex teams and roster writes',
+    name: 'convex teams, free agents, and roster writes',
     test: (file) =>
-      named('convex/', ['teams', 'teamInvites'])(file) ||
+      named('convex/', ['teams', 'teamInvites', 'freeAgents'])(file) ||
       named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput', 'teamInviteInput'])(file),
     specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, ...TEAM_JOIN, 'season-page', 'app-teams'],
   },

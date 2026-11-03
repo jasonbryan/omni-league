@@ -67,6 +67,7 @@ type Refusal =
   | { kind: 'emailMismatch' }
   | { kind: 'alreadyOnTeam'; teamId: string }
   | { kind: 'alreadyOnAnotherTeam'; teamName: string }
+  | { kind: 'waitingFreeAgent' }
   | { kind: 'failed' }
   | { kind: 'offline' };
 
@@ -77,7 +78,11 @@ interface RefusalText {
 }
 
 /** The roster refusals leave the invite pending but nothing to press here. */
-const SETTLED: ReadonlySet<Refusal['kind']> = new Set(['alreadyOnTeam', 'alreadyOnAnotherTeam']);
+const SETTLED: ReadonlySet<Refusal['kind']> = new Set([
+  'alreadyOnTeam',
+  'alreadyOnAnotherTeam',
+  'waitingFreeAgent',
+]);
 
 const OFFLINE_DESCRIPTION = "The invite is still waiting. Try again when you're connected.";
 
@@ -97,6 +102,8 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
       return { kind: 'alreadyOnTeam', teamId: text('teamId') };
     case 'alreadyOnAnotherTeam':
       return { kind: 'alreadyOnAnotherTeam', teamName: text('teamName') };
+    case 'waitingFreeAgent':
+      return { kind: 'waitingFreeAgent' };
     default:
       return { kind: 'failed' };
   }
@@ -482,6 +489,7 @@ export class JoinTeamPage {
   protected readonly refusalText = computed<RefusalText | null>(() => {
     const refusal = this.refusal();
     const teamName = this.summary()?.teamName ?? '';
+    const leagueName = this.summary()?.leagueName ?? '';
     switch (refusal?.kind) {
       case 'emailMismatch':
         return {
@@ -500,6 +508,12 @@ export class JoinTeamPage {
           alert: 'info',
           title: `You’re already on ${refusal.teamName} in this season.`,
           description: `Each person plays on one team per season, so you can’t join ${teamName}.`,
+        };
+      case 'waitingFreeAgent':
+        return {
+          alert: 'info',
+          title: 'You’re registered as a free agent in this season.',
+          description: `Organizers place free agents on teams. Ask an organizer of ${leagueName} to place you on ${teamName}.`,
         };
       case 'failed':
         return {

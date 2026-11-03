@@ -951,6 +951,7 @@ describe('convex/lib', () => {
   const CONVEX_LIB_FULL = {
     'authOrigins.ts': 'imported by convex/auth.ts',
     'divisions.ts': 'reached from convex/testing.ts',
+    'freeAgent.ts': 'imported by convex/schema.ts',
     'inviteInput.ts': 'imported by convex/testing.ts',
     'inviteStatus.ts': 'imported by convex/schema.ts',
     'inviteToken.ts': 'imported by convex/testing.ts',

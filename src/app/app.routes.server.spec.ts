@@ -10,6 +10,7 @@ import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
 import { AppNotFoundPage } from './not-found/app-not-found-page';
 import { JoinTeamPage } from './teams/join-team-page';
+import { RegisterFreeAgentPage } from './teams/register-free-agent-page';
 import { RegisterTeamPage } from './teams/register-team-page';
 import { TeamPage } from './teams/team-page';
 import { NotFoundPage } from './not-found/not-found-page';
@@ -234,7 +235,7 @@ describe('Route tables', () => {
     expect(route?.canActivate).toEqual([captureTeamInviteToken]);
   });
 
-  it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded admin area, the unguarded register route, the guarded team page, and its own not-found route', async () => {
+  it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
@@ -247,6 +248,7 @@ describe('Route tables', () => {
       league,
       admin,
       register,
+      registerFreeAgent,
       team,
       notFound,
       ...rest
@@ -291,6 +293,10 @@ describe('Route tables', () => {
     expect(register?.path).toBe('register/:orgSlug/:leagueSlug/:seasonSlug/team');
     expect(register?.canActivate).toBeUndefined();
     expect(await register?.loadComponent?.()).toBe(RegisterTeamPage);
+    expect(registerFreeAgent?.path).toBe('register/:orgSlug/:leagueSlug/:seasonSlug/free-agent');
+    expect(registerFreeAgent?.title).toBe('Register as a free agent | Omni League');
+    expect(registerFreeAgent?.canActivate).toBeUndefined();
+    expect(await registerFreeAgent?.loadComponent?.()).toBe(RegisterFreeAgentPage);
     expect(team?.path).toBe('teams/:teamId');
     expect(team?.canActivate).toEqual([requireSignedIn]);
     expect(await team?.loadComponent?.()).toBe(TeamPage);

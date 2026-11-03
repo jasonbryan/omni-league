@@ -21,13 +21,18 @@ import {
   lucideClock,
   lucideMapPin,
   lucideShirt,
+  lucideUserPlus,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
-import { BUTTON_BASE, PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
-import { registerTeamPath, teamPath } from '../../teams/team-paths';
+import {
+  BUTTON_BASE,
+  OUTLINE_BUTTON_LARGE,
+  PRIMARY_BUTTON_LARGE,
+} from '../../ui/button/button-classes';
+import { registerFreeAgentPath, registerTeamPath, teamPath } from '../../teams/team-paths';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
@@ -68,6 +73,7 @@ const FACT_ICON =
       lucideClock,
       lucideMapPin,
       lucideShirt,
+      lucideUserPlus,
       lucideUsers,
     }),
   ],
@@ -144,6 +150,15 @@ const FACT_ICON =
                           data-icon="inline-start"
                           aria-hidden="true"
                         />Register a team</a
+                      ><a
+                        [routerLink]="registerFreeAgentHref()"
+                        data-slot="button"
+                        [class]="freeAgentButton"
+                        ><ng-icon
+                          name="lucideUserPlus"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />Register as a free agent</a
                       >
                     </div>
                     <p class="mt-4 text-sm text-muted-foreground">
@@ -376,6 +391,7 @@ export class PublicSeasonContent {
   protected readonly phaseLabel = (phase: SeasonPhase) => BADGE_TEXT[phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
+  protected readonly freeAgentButton = `${OUTLINE_BUTTON_LARGE} w-full`;
   protected readonly openTeamButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
@@ -464,6 +480,14 @@ export class PublicSeasonContent {
 
   protected readonly registerTeamHref = computed(() =>
     registerTeamPath(
+      this.season().organization.slug,
+      this.season().league.slug,
+      this.season().slug,
+    ),
+  );
+
+  protected readonly registerFreeAgentHref = computed(() =>
+    registerFreeAgentPath(
       this.season().organization.slug,
       this.season().league.slug,
       this.season().slug,

@@ -176,6 +176,30 @@ test.describe('register a team', () => {
     await screenshot(page, testInfo, '129-register-on-team');
   });
 
+  test('a waiting free agent: says so with a link to the free-agent route and no form', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seed();
+    const waiting = newUser('Waiting');
+    await signUp(page, waiting);
+    await convexRun('testing:seedFreeAgent', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug: OPEN,
+      email: waiting.email,
+    });
+    await page.goto(registerPath(tenant, OPEN));
+    await expect(page.locator('main [data-slot="alert"]')).toContainText(
+      'You’re waiting to be placed on a team.',
+    );
+    await expect(teamName(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: 'View your free-agent registration' }),
+    ).toHaveAttribute('href', `/app/register/${tenant.slug}/${LEAGUE_SLUG}/${OPEN}/free-agent`);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '133-team-route-waiting');
+  });
+
   test('not found: an unknown slug, a draft season, and another league’s path show the not-found view and no form', async ({
     page,
   }, testInfo) => {

@@ -349,6 +349,11 @@ test.describe('public season page: registration card and details in the raw serv
       expect(register).toContain(
         `href="/app/register/${tenant.slug}/${LEAGUE_SLUG}/fall-open/team"`,
       );
+      const freeAgent =
+        /<a\b[^>]*>[\s\S]*?Register\s+as\s+a\s+free\s+agent<\/a>/.exec(card ?? '')?.[0] ?? '';
+      expect(freeAgent).toContain(
+        `href="/app/register/${tenant.slug}/${LEAGUE_SLUG}/fall-open/free-agent"`,
+      );
       expect(spacedText(html.slice(html.indexOf('id="how-heading"')))).toContain(
         'Teams need at least 4 players before registration closes. 3 Play Games start',
       );
@@ -368,6 +373,7 @@ test.describe('public season page: registration card and details in the raw serv
       expect(closed.html).not.toContain('id="how-heading"');
       expect(spacedText(card)).not.toContain('Captains register a team');
       expect(spacedText(card)).not.toContain('Register a team');
+      expect(spacedText(closed.html)).not.toContain('Register as a free agent');
       expect(closed.html).not.toContain('/app/register/');
 
       const none = await fetchRawHtml(

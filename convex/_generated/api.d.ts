@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as customLevels from "../customLevels.js";
+import type * as freeAgents from "../freeAgents.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
@@ -22,6 +23,7 @@ import type * as lib_authUsers from "../lib/authUsers.js";
 import type * as lib_customLevelInput from "../lib/customLevelInput.js";
 import type * as lib_divisions from "../lib/divisions.js";
 import type * as lib_forbidden from "../lib/forbidden.js";
+import type * as lib_freeAgent from "../lib/freeAgent.js";
 import type * as lib_inviteInput from "../lib/inviteInput.js";
 import type * as lib_inviteLookup from "../lib/inviteLookup.js";
 import type * as lib_inviteStatus from "../lib/inviteStatus.js";
@@ -84,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   crons: typeof crons;
   customLevels: typeof customLevels;
+  freeAgents: typeof freeAgents;
   health: typeof health;
   http: typeof http;
   invites: typeof invites;
@@ -95,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   "lib/customLevelInput": typeof lib_customLevelInput;
   "lib/divisions": typeof lib_divisions;
   "lib/forbidden": typeof lib_forbidden;
+  "lib/freeAgent": typeof lib_freeAgent;
   "lib/inviteInput": typeof lib_inviteInput;
   "lib/inviteLookup": typeof lib_inviteLookup;
   "lib/inviteStatus": typeof lib_inviteStatus;

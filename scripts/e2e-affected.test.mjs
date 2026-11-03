@@ -345,7 +345,7 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
-  it('maps the public season page, its content, and its paths to the season page, layout shift, cache-key, and team registration specs', () => {
+  it('maps the public season page, its content, and its paths to the season page, layout shift, cache-key, and both register routes’ specs', () => {
     for (const file of [
       'src/app/organizations/public-season/public-season-page.ts',
       'src/app/organizations/public-season/public-season-content.ts',
@@ -355,6 +355,7 @@ describe('selectSpecs: mapped areas', () => {
         specsFor([file]),
         want(
           'e2e/cache-key.spec.ts',
+          'e2e/free-agent.spec.ts',
           'e2e/public-page-layout-shift.spec.ts',
           'e2e/season-page.spec.ts',
           'e2e/team-registration.spec.ts',

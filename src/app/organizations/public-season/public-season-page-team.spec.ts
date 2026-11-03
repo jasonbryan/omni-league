@@ -21,8 +21,16 @@ const SLUGS = {
   leagueSlug: 'sunday-reverse-coed-4s',
   seasonSlug: 'summer-2027',
 };
-const REGISTER_HREF =
-  '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/team';
+const REGISTER_LINKS = [
+  [
+    'Register a team',
+    '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/team',
+  ],
+  [
+    'Register as a free agent',
+    '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/free-agent',
+  ],
+];
 
 function answer(team: unknown) {
   return {
@@ -127,7 +135,7 @@ describe("PublicSeasonPage the viewer's team", () => {
   it('opens no getForRegistration subscription for a signed-out visitor, and shows the register actions', async () => {
     const harness = await open();
     expect(registrations()).toHaveLength(0);
-    expect(links(harness)).toEqual([['Register a team', REGISTER_HREF]]);
+    expect(links(harness)).toEqual(REGISTER_LINKS);
   });
 
   it("asks once Convex has accepted the sign-in, with the route's slugs only", async () => {
@@ -140,13 +148,13 @@ describe("PublicSeasonPage the viewer's team", () => {
   it('keeps the register actions while the answer is loading', async () => {
     const harness = await open();
     await signIn(harness);
-    expect(links(harness)).toEqual([['Register a team', REGISTER_HREF]]);
+    expect(links(harness)).toEqual(REGISTER_LINKS);
   });
 
   it('keeps the register actions for a signed-in visitor on no team', async () => {
     const harness = await showTeam(null);
     expect(spaced(card(harness))).toContain('Registration open · closes May 23, 2027');
-    expect(links(harness)).toEqual([['Register a team', REGISTER_HREF]]);
+    expect(links(harness)).toEqual(REGISTER_LINKS);
     expect(spaced(card(harness))).not.toContain('registered');
   });
 
@@ -193,7 +201,7 @@ describe("PublicSeasonPage the viewer's team", () => {
     TestBed.inject(AuthService).onChange(false);
     await settle(harness);
     expect(registrations()).toHaveLength(0);
-    expect(links(harness)).toEqual([['Register a team', REGISTER_HREF]]);
+    expect(links(harness)).toEqual(REGISTER_LINKS);
   });
 
   it('keeps the register actions when the answer fails, and the rest of the page shows', async () => {
@@ -201,7 +209,7 @@ describe("PublicSeasonPage the viewer's team", () => {
     await signIn(harness);
     subscription(REGISTRATION).fail(new Error('connect ECONNREFUSED internal-db'));
     await settle(harness);
-    expect(links(harness)).toEqual([['Register a team', REGISTER_HREF]]);
+    expect(links(harness)).toEqual(REGISTER_LINKS);
     expect((harness.fixture.nativeElement as HTMLElement).querySelector('main h1')).not.toBeNull();
   });
 

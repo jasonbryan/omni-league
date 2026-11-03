@@ -218,7 +218,7 @@ describe('PublicSeasonPage populated', () => {
     ]);
   });
 
-  it('shows an open card with the deadline, Register a team, and the line about teams and free agents', () => {
+  it('shows an open card with the deadline, both register links, and the line about teams and free agents', () => {
     const open = card(harness);
     expect(text(open?.querySelector('h2'))).toBe('Registration');
     expect(spaced(open)).toContain('Registration open');
@@ -231,6 +231,10 @@ describe('PublicSeasonPage populated', () => {
       [
         'Register a team',
         '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/team',
+      ],
+      [
+        'Register as a free agent',
+        '/app/register/gulf-coast-sport-social/sunday-reverse-coed-4s/summer-2027/free-agent',
       ],
     ]);
   });
