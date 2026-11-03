@@ -7,6 +7,5 @@ export type PublicSeasonTeams = PublicTeams;
 
 export interface PublicSeasonView {
   season: PublicSeasonData;
-  /** Absent until the teams query answers, and offline, where it has no saved copy. */
-  teams?: PublicSeasonTeams;
+  teams: PublicSeasonTeams;
 }

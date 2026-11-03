@@ -11,6 +11,7 @@ import {
   publicLocationsValidator,
   publicOpenSeasonsValidator,
   publicSeasonsValidator,
+  publicTeamsValidator,
   searchLeaguesValidator,
   searchOrganizationsValidator,
 } from '../../../../../convex/lib/publicPage';
@@ -81,6 +82,7 @@ describe('ConvexSavedCopies', () => {
       ['leagues:getPublicPage', getLeaguePublicPageReturns],
       ['seasons:listPublic', publicSeasonsValidator],
       ['seasons:getPublicPage', getSeasonPublicPageReturns],
+      ['teams:listPublic', publicTeamsValidator],
       ['search:leagues', searchLeaguesValidator],
       ['search:organizations', searchOrganizationsValidator],
     ]);

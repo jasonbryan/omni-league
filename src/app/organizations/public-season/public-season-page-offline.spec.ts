@@ -16,7 +16,7 @@ import { formatSavedTime } from '../../offline/saved-time';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PublicSeasonPage } from './public-season-page';
-import { seasonQueryResults, SUMMER_2027, without } from './testing/season-data';
+import { seasonQueryResults, SUMMER_2027, teamsPage, without } from './testing/season-data';
 
 const NOW = Date.UTC(2026, 9, 10, 14, 30);
 const SAVED_AT = Date.UTC(2026, 9, 10, 2, 14);
@@ -27,12 +27,18 @@ const PATH = `/organizations/${ORG_SLUG}/leagues/${LEAGUE_SLUG}/seasons/summer-2
 let client: FakeConvexClient;
 
 const SEASON = 'seasons:getPublicPage';
+const TEAMS = 'teams:listPublic';
 
 const queries = [
   {
     fn: api.seasons.getPublicPage,
     name: SEASON,
     args: { orgSlug: ORG_SLUG, leagueSlug: LEAGUE_SLUG, seasonSlug: 'summer-2027' },
+  },
+  {
+    fn: api.teams.listPublic,
+    name: TEAMS,
+    args: { orgSlug: ORG_SLUG, leagueSlug: LEAGUE_SLUG, seasonSlug: 'summer-2027', page: 1 },
   },
 ];
 
@@ -126,11 +132,12 @@ describe('PublicSeasonPage offline', () => {
       );
     });
 
-    it('shows no Teams panel: team names are never saved', () => {
-      const listed = new Set(OFFLINE_SAVED_QUERIES.map((entry) => getFunctionName(entry.query)));
-      expect(listed.has('teams:listPublic')).toBe(false);
-      expect(host(harness).querySelector('main h1')).not.toBeNull();
-      expect(host(harness).querySelector('main #teams')).toBeNull();
+    it('shows the Teams panel with the saved names and page control', () => {
+      const panel = host(harness).querySelector('main section#teams');
+      expect(
+        [...(panel?.querySelectorAll(':scope > ul > li > span') ?? [])].map((el) => text(el)),
+      ).toEqual(teamsPage(1).rows.map((row) => row.name));
+      expect(text(panel?.querySelector('nav p'))).toBe('1–5 of 7 teams');
     });
 
     it('shows the saved-copy note right under the h1, with the saved time', () => {
@@ -161,6 +168,16 @@ describe('PublicSeasonPage offline', () => {
         savedAt: NOW,
       });
     });
+  });
+
+  it('dates the note by the oldest saved copy on screen', async () => {
+    const older = SAVED_AT - 3 * 60 * 60 * 1000;
+    plant();
+    const teams = queries.find((q) => q.name === TEAMS)!;
+    plantSavedCopy(teams.fn, teams.args, seasonQueryResults()[TEAMS], older);
+    stubOnLine(false);
+    const harness = await open(PATH, { socket: 'down' });
+    expect(text(note(harness))).toContain(formatSavedTime(older, NOW).text);
   });
 
   it('online before the first live result: shows the saved copy with no note', async () => {
@@ -211,6 +228,16 @@ describe('PublicSeasonPage offline', () => {
       expect(TestBed.inject(Title).getTitle()).toBe('Not saved on this device | Omni League');
     });
 
+    it('offline with the teams page not saved: shows the not-saved view, not the season alone', async () => {
+      plant();
+      const query = queries.find((q) => q.name === TEAMS)!;
+      localStorage.removeItem(savedCopyKey(query.fn, query.args));
+      stubOnLine(false);
+      const harness = await open(PATH, { socket: 'down' });
+      expect(host(harness).querySelector('app-not-saved-view')).not.toBeNull();
+      expect(host(harness).querySelector('main h1')?.textContent).not.toContain('Summer 2027');
+    });
+
     it('offline with the season not saved: shows the not-saved view', async () => {
       plant();
       const query = queries.find((q) => q.name === SEASON)!;
@@ -225,6 +252,7 @@ describe('PublicSeasonPage offline', () => {
       [SEASON, { name: 'Shape Only' }],
       [SEASON, { ...SUMMER_2027, minimumRosterSize: '4' }],
       [SEASON, 42],
+      [TEAMS, { rows: 'Aardvarks', page: 1, pageCount: 1, total: 1 }],
     ])(
       'offline with an unusable saved copy (%s): shows the not-saved view and removes it',
       async (name, value) => {

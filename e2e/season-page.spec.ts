@@ -647,8 +647,8 @@ test.describe('public season page in the browser', () => {
     await expect(panel).toContainText('No teams yet');
     await expect(panel).toContainText('Teams appear here once they register.');
     await expect(panel.getByRole('list')).toHaveCount(0);
-    await expectAccessible(page);
     await screenshot(page, testInfo, '142-teams-empty');
+    await expectAccessible(page);
   });
 
   test('the Teams panel lists 5 names a page; Next shows page 2 with focus on the Teams heading and ?page=2#teams; both pages pass the axe helper', async ({
@@ -665,8 +665,8 @@ test.describe('public season page in the browser', () => {
     await expect(panel.getByRole('navigation', { name: 'Teams pages' })).toContainText(
       '1–5 of 7 teams',
     );
-    await expectAccessible(page);
     await screenshot(page, testInfo, '142-teams-page-1');
+    await expectAccessible(page);
 
     await panel.getByRole('link', { name: 'Next page' }).click();
     await expect(names).toHaveText(TEAMS_BY_NAME.slice(5));
@@ -676,8 +676,8 @@ test.describe('public season page in the browser', () => {
     await expect(panel.getByRole('navigation', { name: 'Teams pages' })).toContainText(
       '6–7 of 7 teams',
     );
-    await expectAccessible(page);
     await screenshot(page, testInfo, '142-teams-page-2');
+    await expectAccessible(page);
 
     await page.goBack();
     await expect(names).toHaveText(TEAMS_BY_NAME.slice(0, 5));
@@ -768,6 +768,7 @@ test.describe('public season page offline', () => {
     await expect(dates).toHaveText('Dec 1, 2027 – Feb 20, 2028');
     await expect(dates.locator('time')).toHaveText(['Dec 1, 2027', 'Feb 20, 2028']);
     await expect(note).toBeVisible();
+    await expect(page.locator('main section#teams')).toContainText('No teams yet');
     await expect(page.locator('app-not-saved-view')).toHaveCount(0);
 
     await crumbs.getByRole('link', { name: 'Offline League' }).click();

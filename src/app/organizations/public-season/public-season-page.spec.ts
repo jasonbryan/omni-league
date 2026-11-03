@@ -8,6 +8,7 @@ import {
   FakeConvexClient,
   type FakeSubscription,
 } from '../../core/data/convex/testing/fake-convex-client';
+import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PlainTestPage } from '../../shell/testing/test-pages';
 import { PublicSeasonPage } from './public-season-page';
 import {
@@ -141,7 +142,7 @@ describe('PublicSeasonPage queries', () => {
     expect(text(skeleton?.querySelector('[role="status"]'))).toBe('Loading the season.');
     expect(skeleton?.querySelector('[role="status"]')?.classList).toContain('sr-only');
     expect(skeleton?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
-    subscription(SEASON).emit(SUMMER_2027);
+    emit();
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe(
       'Sunday Reverse Coed 4s · Summer 2027',
@@ -517,17 +518,27 @@ describe('PublicSeasonPage teams', () => {
     });
   });
 
-  it('shows the season before its teams arrive, then the panel', async () => {
+  it('keeps the loading view until both the season and its teams arrive, then shows the panel', async () => {
     const harness = await open();
     subscription(SEASON).emit(SUMMER_2027);
+    await settle(harness);
+    expect(host(harness).querySelector('main h1')).toBeNull();
+    expect(host(harness).querySelector('app-public-season-skeleton')).not.toBeNull();
+    subscription(TEAMS).emit(teamsPage(1));
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe(
       'Sunday Reverse Coed 4s · Summer 2027',
     );
-    expect(panel(harness)).toBeNull();
-    subscription(TEAMS).emit(teamsPage(1));
-    await settle(harness);
     expect(teamNames(harness)).toEqual(TEAM_NAMES.slice(0, 5));
+  });
+
+  it('falls back to the error view when the teams never answer', async () => {
+    const harness = await open();
+    subscription(SEASON).emit(SUMMER_2027);
+    vi.advanceTimersByTime(PAGE_LOAD_WAIT_MS);
+    await settle(harness);
+    expect(host(harness).querySelector('app-server-error-view')).not.toBeNull();
+    expect(host(harness).querySelector('main h1')?.textContent).not.toContain('Summer 2027');
   });
 
   it('updates the names and the total in place when a team registers', async () => {

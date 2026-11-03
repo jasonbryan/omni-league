@@ -128,14 +128,18 @@ export class PublicSeasonPage {
   protected readonly view = computed((): PublicSeasonView | undefined => {
     if (this.failed()) return undefined;
     const season = this.season.value();
-    if (!season) return undefined;
-    // The panel is last in its column, so it can land after the season without moving anything; and the teams have no saved copy, so a
-    // saved season shows offline without them.
-    const teams = this.shownTeams()?.value;
-    return teams ? { season, teams } : { season };
+    const teams = this.shownTeams();
+    if (!season || !teams) return undefined;
+    return { season, teams: teams.value };
   });
 
-  protected readonly savedAt = computed(() => (this.online() ? undefined : this.season.savedAt()));
+  protected readonly savedAt = computed(() => {
+    if (this.online()) return undefined;
+    const times = [this.season.savedAt(), this.teams.savedAt()].filter(
+      (time) => time !== undefined,
+    );
+    return times.length > 0 ? Math.min(...times) : undefined;
+  });
 
   private readonly phase = computed(() => {
     if (this.view()) return 'page';
@@ -171,7 +175,7 @@ export class PublicSeasonPage {
           season.organization.slug,
           season.league.slug,
           season.slug,
-          teams?.page ?? 1,
+          teams.page,
         ),
       };
     });
