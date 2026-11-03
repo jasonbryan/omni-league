@@ -45,8 +45,8 @@ const FACT = 'relative min-h-18 py-4 ps-14';
 const REGISTRATION_CARD =
   'rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
 /**
- * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration, so each kind
- * reserves the height of the taller of the two at that width and the details do not move.
+ * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration. The signed-out card
+ * stays in the card behind the team card, so the card is never shorter than it; these floors cover the team card when it is the taller one.
  */
 const RESERVED_HEIGHT = {
   open: 'min-h-66 sm:min-h-58',
@@ -123,69 +123,93 @@ const FACT_ICON =
           >
             <div [class]="registrationCardClass()">
               <h2 id="registration-heading" class="sr-only">Registration</h2>
-              @if (team(); as team) {
-                <p>
-                  <span [class]="openBadge"
-                    ><ng-icon
-                      name="lucideCheck"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />You&apos;re registered</span
-                  >
-                </p>
-                <div class="mt-4 flex items-center gap-3">
-                  <span
-                    class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
-                    ><ng-icon name="lucideShirt" class="text-xl" aria-hidden="true"
-                  /></span>
-                  <div class="min-w-0">
-                    <p class="font-semibold break-words">{{ team.name }}</p>
-                    <p class="text-sm text-muted-foreground">{{ team.role }}</p>
-                  </div>
-                </div>
-                <a [routerLink]="teamHref(team.teamId)" data-slot="button" [class]="openTeamButton"
-                  >Open your team<ng-icon
-                    name="lucideArrowRight"
-                    data-icon="inline-end"
-                    aria-hidden="true"
-                /></a>
-                @if (team.invite; as invite) {
-                  <p class="mt-4 text-sm text-muted-foreground">{{ invite }}</p>
-                }
-              } @else if (card.kind === 'open') {
-                <p class="text-lg font-semibold tracking-tight">
-                  Registration open &middot; closes {{ card.closes }}
-                </p>
-                <div class="mt-5 flex flex-col gap-2">
-                  <a [routerLink]="registerTeamHref()" data-slot="button" [class]="registerButton"
-                    ><ng-icon
-                      name="lucideShirt"
-                      data-icon="inline-start"
-                      aria-hidden="true"
-                    />Register a team</a
-                  >
-                </div>
-                <p class="mt-4 text-sm text-muted-foreground">
-                  Captains register a team, then invite their players. Without a team? Register as a
-                  free agent, and an organizer places you on one.
-                </p>
-              } @else {
-                <p class="text-lg font-semibold tracking-tight">
-                  Registration closed on {{ card.closedOn }}
-                </p>
-                <p class="mt-4 text-sm text-muted-foreground">
-                  {{ card.note }}
-                  @if (card.next; as next) {
-                    Registration is open for {{ next.name }}.
+              <div class="grid">
+                <div
+                  class="col-start-1 row-start-1"
+                  [class.invisible]="!!team()"
+                  [attr.inert]="team() ? '' : null"
+                  [attr.aria-hidden]="team() ? 'true' : null"
+                >
+                  @if (card.kind === 'open') {
+                    <p class="text-lg font-semibold tracking-tight">
+                      Registration open &middot; closes {{ card.closes }}
+                    </p>
+                    <div class="mt-5 flex flex-col gap-2">
+                      <a
+                        [routerLink]="registerTeamHref()"
+                        data-slot="button"
+                        [class]="registerButton"
+                        ><ng-icon
+                          name="lucideShirt"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />Register a team</a
+                      >
+                    </div>
+                    <p class="mt-4 text-sm text-muted-foreground">
+                      Captains register a team, then invite their players. Without a team? Register
+                      as a free agent, and an organizer places you on one.
+                    </p>
+                  } @else {
+                    <p class="text-lg font-semibold tracking-tight">
+                      Registration closed on {{ card.closedOn }}
+                    </p>
+                    <p class="mt-4 text-sm text-muted-foreground">
+                      {{ card.note }}
+                      @if (card.next; as next) {
+                        Registration is open for {{ next.name }}.
+                      }
+                    </p>
+                    @if (card.next; as next) {
+                      <a
+                        [routerLink]="nextHref(next.slug)"
+                        data-slot="button"
+                        [class]="seeSeasonButton"
+                        >See {{ next.name
+                        }}<ng-icon
+                          name="lucideArrowRight"
+                          data-icon="inline-end"
+                          aria-hidden="true"
+                      /></a>
+                    }
                   }
-                </p>
-                @if (card.next; as next) {
-                  <a [routerLink]="nextHref(next.slug)" data-slot="button" [class]="seeSeasonButton"
-                    >See {{ next.name
-                    }}<ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
-                  /></a>
+                </div>
+                @if (team(); as team) {
+                  <div class="col-start-1 row-start-1">
+                    <p>
+                      <span [class]="openBadge"
+                        ><ng-icon
+                          name="lucideCheck"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />You&apos;re registered</span
+                      >
+                    </p>
+                    <div class="mt-4 flex items-center gap-3">
+                      <span
+                        class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
+                        ><ng-icon name="lucideShirt" class="text-xl" aria-hidden="true"
+                      /></span>
+                      <div class="min-w-0">
+                        <p class="truncate font-semibold">{{ team.name }}</p>
+                        <p class="text-sm text-muted-foreground">{{ team.role }}</p>
+                      </div>
+                    </div>
+                    <a
+                      [routerLink]="teamHref(team.teamId)"
+                      data-slot="button"
+                      [class]="openTeamButton"
+                      >Open your team<ng-icon
+                        name="lucideArrowRight"
+                        data-icon="inline-end"
+                        aria-hidden="true"
+                    /></a>
+                    @if (team.invite; as invite) {
+                      <p class="mt-4 text-sm text-muted-foreground">{{ invite }}</p>
+                    }
+                  </div>
                 }
-              }
+              </div>
             </div>
           </section>
         }

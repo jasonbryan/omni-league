@@ -958,6 +958,78 @@ test.describe('public season page: signed in and on a team', () => {
     await expect(page).toHaveURL(`${baseURL}/app/teams/${teamId}`);
   });
 
+  const LONG_SPACED_NAME = 'The Sand Sharks Beach Volleyball Club of Corpus Christi, Texas';
+  const LONG_UNBROKEN_NAME = 'W'.repeat(60);
+  const NO_SHIFT_WIDTHS = [320, 360, 640, 768, 1000];
+  const NO_SHIFT_CASES = [
+    {
+      title: 'an open season and a long team name',
+      season: 'fall-open',
+      teamName: LONG_SPACED_NAME,
+    },
+    {
+      title: 'a closed season with a next open one',
+      season: 'summer-2027',
+      teamName: 'Sand Sharks',
+    },
+    {
+      title: 'a closed season and a 60-character name with no spaces',
+      season: 'summer-2027',
+      teamName: LONG_UNBROKEN_NAME,
+    },
+  ];
+
+  for (const { title, season, teamName } of NO_SHIFT_CASES) {
+    test(`the details do not move when the team card replaces the signed-out card in ${title}`, async ({
+      page,
+      consoleGuard,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'chromium-desktop', 'sets its own viewport');
+      const { tenant } = await seed();
+      const captain = newUser('Captain');
+      await signUp(page, captain);
+      await convexRun('testing:seedTeam', {
+        organizationSlug: tenant.slug,
+        leagueSlug: LEAGUE_SLUG,
+        seasonSlug: season,
+        name: teamName,
+        captainEmail: captain.email,
+      });
+      for (const width of NO_SHIFT_WIDTHS) {
+        await page.setViewportSize({ width, height: 800 });
+        const held = await holdQueries(page, [REGISTRATION]);
+        await page.goto(`${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${season}`);
+        await hydrated(consoleGuard);
+        await expect.poll(() => held.isHolding()).toBe(true);
+        const before = await detailsTop(page);
+
+        held.release();
+        await expect(page.locator('#registration')).toContainText(teamName);
+        expect(await detailsTop(page), `details top at ${width}px`).toBe(before);
+      }
+    });
+  }
+
+  test('the signed-out card stays in the layout behind the team card, out of the tab order and the accessibility tree', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed();
+    await captainOfSandSharks(page, tenant);
+    await page.goto(OPEN_PATH(tenant));
+    await hydrated(consoleGuard);
+    const card = page.locator('#registration');
+    await expect(card).toContainText("You're registered");
+    const behind = card.locator('[inert]');
+    await expect(behind).toHaveAttribute('aria-hidden', 'true');
+    await expect(behind).toBeHidden();
+    await expect(card.getByRole('link')).toHaveCount(1);
+    expect(await card.evaluate((el) => el.contains(document.activeElement))).toBe(false);
+    await page.getByRole('link', { name: 'Open your team' }).focus();
+    await page.keyboard.press('Tab');
+    expect(await card.evaluate((el) => el.contains(document.activeElement))).toBe(false);
+  });
+
   test('a signed-in visitor on no team keeps the register actions', async ({
     page,
     consoleGuard,

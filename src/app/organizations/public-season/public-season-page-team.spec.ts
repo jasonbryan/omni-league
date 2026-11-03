@@ -81,8 +81,13 @@ function subscription(name: string): FakeSubscription {
 }
 
 const registrations = () => client.activeSubscriptions.filter((s) => s.name === REGISTRATION);
-const card = (harness: RouterTestingHarness) =>
+const fullCard = (harness: RouterTestingHarness) =>
   (harness.fixture.nativeElement as HTMLElement).querySelector('#registration');
+const card = (harness: RouterTestingHarness) => {
+  const shown = fullCard(harness)?.cloneNode(true) as Element | undefined;
+  shown?.querySelectorAll('[inert]').forEach((el) => el.remove());
+  return shown ?? null;
+};
 const spaced = (el: Element | null | undefined) =>
   (el?.innerHTML ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -166,6 +171,21 @@ describe("PublicSeasonPage the viewer's team", () => {
     expect(spaced(card(harness))).toBe(
       "Registration You're registered Sand Sharks Captain · 3 of the 4 players needed Open your team",
     );
+  });
+
+  it('keeps the signed-out card behind the team card, inert and hidden from assistive technology, so the card keeps the taller height', async () => {
+    const harness = await showTeam(SHARKS);
+    const behind = fullCard(harness)?.querySelector('[inert]');
+    expect(spaced(behind)).toContain('Register a team');
+    expect(behind?.getAttribute('aria-hidden')).toBe('true');
+    expect(behind?.classList.contains('invisible')).toBe(true);
+    expect(behind?.parentElement?.children).toHaveLength(2);
+  });
+
+  it('marks nothing inert while the visitor has no team', async () => {
+    const harness = await showTeam(null);
+    expect(fullCard(harness)?.querySelector('[inert]')).toBeNull();
+    expect(fullCard(harness)?.querySelector('.invisible')).toBeNull();
   });
 
   it('goes back to the register actions on sign-out, and closes the subscription', async () => {
