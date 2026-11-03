@@ -24,7 +24,8 @@ import {
   BADGE_SECONDARY,
 } from '../admin/field-classes';
 import { formatDay } from '../admin/format-day';
-import { CRUMB_LINK, CURRENT_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
+import { ROW_TITLE_LINK } from '../admin/link-classes';
+import { CURRENT_CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
 import { leaguePath } from '../league/league-path';
 import { seasonDates } from '../league/season-dates';
 import { SeasonContext } from './season-context';
@@ -47,8 +48,6 @@ const EMPTY_ICON =
   'flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground';
 const EMPTY_TEXT = 'mt-1 max-w-xs text-sm text-balance text-muted-foreground';
 const CAP_NOTE = 'border-t border-border px-4 py-3 text-sm text-muted-foreground md:px-5';
-const ROW_LINK =
-  'inline-flex items-center underline underline-offset-4 hover:text-primary pointer-coarse:min-h-11';
 const EMAIL_LINK =
   'inline-flex items-center break-all underline underline-offset-4 hover:text-foreground pointer-coarse:min-h-11';
 
@@ -88,7 +87,7 @@ function localDay(ms: number): string {
             class="flex flex-nowrap items-center gap-x-1.5 text-sm whitespace-nowrap text-muted-foreground"
           >
             <li [class]="nameCrumb">
-              <a [routerLink]="leagueHref()" [class]="crumbLink"
+              <a [routerLink]="leagueHref()" [class]="leagueCrumbLink"
                 ><span class="truncate">{{ league.name }}</span></a
               >
             </li>
@@ -314,7 +313,7 @@ export class SeasonManagement {
   protected readonly season = this.context.season;
   protected readonly freeAgents = this.context.freeAgents;
 
-  protected readonly crumbLink = CRUMB_LINK;
+  protected readonly leagueCrumbLink = LEAGUE_CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
   protected readonly nameCrumb = NAME_CRUMB;
   protected readonly defaultBadge = BADGE_DEFAULT;
@@ -333,7 +332,7 @@ export class SeasonManagement {
   protected readonly emptyIcon = EMPTY_ICON;
   protected readonly emptyText = EMPTY_TEXT;
   protected readonly capNote = CAP_NOTE;
-  protected readonly rowLink = ROW_LINK;
+  protected readonly rowLink = ROW_TITLE_LINK;
   protected readonly emailLink = EMAIL_LINK;
   protected readonly dates = seasonDates;
   protected readonly day = formatCalendarDate;

@@ -280,6 +280,9 @@ test.describe('Season management: an assigned league organizer', () => {
     await page.goto(seasonPath(tenant, SUMMER));
     await expect(teamRows(page)).toHaveCount(3);
     await expect(freeAgentRows(page)).toHaveCount(2);
+    await expect(
+      page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: LEAGUE }),
+    ).toHaveCSS('text-decoration-line', 'underline');
     if (page.viewportSize()!.width < 1024) {
       await page.getByRole('button', { name: 'Open navigation' }).click();
     }

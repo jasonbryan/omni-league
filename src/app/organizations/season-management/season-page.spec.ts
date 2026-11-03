@@ -121,6 +121,9 @@ describe('SeasonPage', () => {
         ['Coed 7v7 Rec', `/app/organizations/${GULF.slug}/leagues/${COED.slug}`, null],
         ['Summer 2027', URL, 'page'],
       ]);
+      const [leagueCrumb, seasonCrumb] = crumbs;
+      expect(leagueCrumb?.classList.contains('underline')).toBe(true);
+      expect(seasonCrumb?.classList.contains('underline')).toBe(false);
       expect(text(page.querySelector('main'))).toContain('Published');
       expect(text(page.querySelector('main'))).toContain('Soccer');
       expect(text(page.querySelector('main'))).toContain('Dates: Jun 6 – Aug 29, 2027');

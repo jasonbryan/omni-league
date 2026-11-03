@@ -32,6 +32,7 @@ import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
+import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { publicSeasonPath } from '../public-league/public-league-path';
 import { LeagueBreadcrumb } from './league-breadcrumb';
 import { LeagueContext } from './league-context';
@@ -42,9 +43,6 @@ import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
 import { SeasonCreateForm, type CreatedSeason, type SeasonShown } from './season-create-form';
-
-const SEASON_LINK =
-  'inline-flex items-center underline underline-offset-4 hover:text-primary pointer-coarse:min-h-11';
 
 interface PublishedSeason {
   seasonId: Id<'seasons'>;
@@ -380,7 +378,7 @@ export class LeagueManagement {
   protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly outlineBadge = BADGE_OUTLINE;
   protected readonly placeholders = [1, 2, 3];
-  protected readonly seasonLink = SEASON_LINK;
+  protected readonly seasonLink = ROW_TITLE_LINK;
   protected readonly dates = seasonDates;
   protected readonly day = formatCalendarDate;
 

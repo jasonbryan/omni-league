@@ -8,6 +8,7 @@ import { leaguePath } from './league-path';
 
 export const CRUMB_LINK =
   'inline-flex max-w-full items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
+export const LEAGUE_CRUMB_LINK = `${CRUMB_LINK} underline underline-offset-4`;
 export const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 
 export const NAME_CRUMB = 'flex min-w-11';
