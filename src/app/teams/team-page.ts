@@ -7,6 +7,7 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -437,10 +438,14 @@ export class TeamPage {
     return `${total} pending ${total === 1 ? 'invite' : 'invites'}`;
   });
 
-  protected readonly registered = signal(
+  private readonly arrivedRegistered =
     (inject(Router).currentNavigation()?.extras.state as TeamPageNavigationState | undefined)
-      ?.registered === true,
-  );
+      ?.registered === true;
+
+  protected readonly registered = linkedSignal<string, boolean>({
+    source: this.teamId,
+    computation: (_teamId, previous) => (previous ? false : this.arrivedRegistered),
+  });
 
   protected readonly registeredTitle = computed(() => {
     const team = this.team();
@@ -472,7 +477,10 @@ export class TeamPage {
   private readonly statusFocused = signal(false);
   private readonly removeDialog = viewChild(RemovePlayerDialog);
   private readonly removedStatus = viewChild<AdminAlert>('removedStatus');
-  protected readonly removedNotice = signal<AlertText | null>(null);
+  protected readonly removedNotice = linkedSignal<string, AlertText | null>({
+    source: this.teamId,
+    computation: () => null,
+  });
 
   constructor() {
     // The not-found and server-error views set their own title.
@@ -480,15 +488,6 @@ export class TeamPage {
       const team = this.team();
       if (team) this.title.setTitle(`${team.name} | Omni League`);
       else if (this.state() === 'forbidden') this.title.setTitle('No access | Omni League');
-    });
-    // A link to another team in the season reuses this page, so notices about the last team go.
-    let shownTeamId = this.teamId();
-    effect(() => {
-      const teamId = this.teamId();
-      if (teamId === shownTeamId) return;
-      shownTeamId = teamId;
-      this.registered.set(false);
-      this.removedNotice.set(null);
     });
     // The confirmation takes focus once, when it first shows with the team.
     effect(() => {
