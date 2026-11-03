@@ -34,7 +34,7 @@ const SUMMER = {
 };
 const ON_TEAM = {
   ...SUMMER,
-  team: { teamId: 'team_sharks', name: 'Sand Sharks', isCaptain: true },
+  team: { teamId: 'team_sharks', name: 'Sand Sharks', isCaptain: true, rosterCount: 1 },
 };
 
 const text = (element: Element | null | undefined) =>

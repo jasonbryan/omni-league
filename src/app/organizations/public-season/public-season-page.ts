@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, linkedSignal } fr
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { map } from 'rxjs';
-import { api, injectOnline, injectQuery } from '../../core/data/convex';
+import { AuthService } from '../../core/auth/auth.service';
+import { api, injectOnline, injectQuery, skipToken } from '../../core/data/convex';
 import { parseListPage } from '../../core/list-page';
 import { injectNow } from '../../core/now';
 import { bindPageMeta } from '../../core/page-meta';
@@ -42,6 +43,7 @@ import type { PublicSeasonTeams, PublicSeasonView } from './public-season-view';
           [savedAt]="savedAt()"
           [now]="now()"
           [busy]="busy()"
+          [viewerTeam]="viewerTeam()"
         />
       } @else if (state() === 'not-found') {
         <app-not-found-view [publicSite]="true" />
@@ -86,6 +88,14 @@ export class PublicSeasonPage {
     seasonSlug: this.seasonSlug(),
     page: this.requestedPage(),
   }));
+  private readonly auth = inject(AuthService);
+  // Asked only once Convex has accepted the sign-in, so the server render and a signed-out visitor make no call.
+  private readonly registration = injectQuery(api.seasons.getForRegistration, () =>
+    this.auth.convexAuthenticated()
+      ? { orgSlug: this.orgSlug(), leagueSlug: this.leagueSlug(), seasonSlug: this.seasonSlug() }
+      : skipToken,
+  );
+  protected readonly viewerTeam = computed(() => this.registration.value()?.team ?? undefined);
   private readonly online = injectOnline();
   protected readonly now = injectNow();
 

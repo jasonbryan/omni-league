@@ -1,4 +1,5 @@
-import { registrationCard } from './public-season-registration';
+import type { Id } from '../../../../convex/_generated/dataModel';
+import { registrationCard, teamCard, type ViewerTeam } from './public-season-registration';
 import { SUMMER_2027, without } from './testing/season-data';
 
 const at = (iso: string) => Date.parse(iso);
@@ -123,5 +124,70 @@ describe('registrationCard', () => {
   it('has no card for a saved copy that holds no deadline', () => {
     const saved = without(SUMMER, 'registrationDeadline');
     expect(registrationCard(saved, at('2027-05-01T00:00:00Z'))).toBeUndefined();
+  });
+});
+
+describe('teamCard', () => {
+  const SHARKS: ViewerTeam = {
+    teamId: 'team_sharks' as Id<'teams'>,
+    name: 'Sand Sharks',
+    isCaptain: true,
+    rosterCount: 3,
+  };
+  const OPEN = at('2027-05-01T00:00:00Z');
+
+  it('names the team and its captain role, the roster against the minimum, and the invites still needed before the deadline', () => {
+    expect(teamCard(SHARKS, SUMMER, OPEN)).toEqual({
+      teamId: 'team_sharks',
+      name: 'Sand Sharks',
+      role: 'Captain · 3 of the 4 players needed',
+      invite: 'Invite one more player before May 23, 2027 to reach the minimum.',
+    });
+  });
+
+  it('counts the players still needed in figures beyond one', () => {
+    expect(teamCard({ ...SHARKS, rosterCount: 1 }, SUMMER, OPEN)?.invite).toBe(
+      'Invite 3 more players before May 23, 2027 to reach the minimum.',
+    );
+  });
+
+  it('shows a player the roster with no invite line', () => {
+    const player = { ...SHARKS, isCaptain: false, rosterCount: 2 };
+    expect(teamCard(player, SUMMER, OPEN)).toMatchObject({
+      role: 'Player · 2 of the 4 players needed',
+      invite: undefined,
+    });
+  });
+
+  it('shows a player on a team that meets the minimum the full roster and no invite line', () => {
+    const player = { ...SHARKS, isCaptain: false, rosterCount: 4 };
+    expect(teamCard(player, SUMMER, OPEN)).toMatchObject({
+      role: 'Player · 4 of the 4 players needed',
+      invite: undefined,
+    });
+  });
+
+  it('shows no invite line to a captain whose team meets the minimum', () => {
+    expect(teamCard({ ...SHARKS, rosterCount: 4 }, SUMMER, OPEN)).toMatchObject({
+      role: 'Captain · 4 of the 4 players needed',
+      invite: undefined,
+    });
+  });
+
+  it('counts a roster above the minimum against it without overstating what is needed', () => {
+    expect(teamCard({ ...SHARKS, rosterCount: 6 }, SUMMER, OPEN)?.role).toBe(
+      'Captain · 6 players, at least 4 needed',
+    );
+  });
+
+  it('shows no invite line once registration has closed', () => {
+    expect(teamCard(SHARKS, SUMMER, at('2027-05-30T00:00:00Z'))).toMatchObject({
+      role: 'Captain · 3 of the 4 players needed',
+      invite: undefined,
+    });
+  });
+
+  it('shows no invite line for a saved copy that holds no deadline', () => {
+    expect(teamCard(SHARKS, without(SUMMER, 'registrationDeadline'), OPEN)?.invite).toBeUndefined();
   });
 });

@@ -16,6 +16,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideArrowRight,
   lucideCalendarDays,
+  lucideCheck,
   lucideChevronRight,
   lucideClock,
   lucideMapPin,
@@ -26,12 +27,12 @@ import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
 import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { BUTTON_BASE, PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
-import { registerTeamPath } from '../../teams/team-paths';
+import { registerTeamPath, teamPath } from '../../teams/team-paths';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
 import { PageControl } from '../page-control';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
-import { registrationCard } from './public-season-registration';
+import { registrationCard, teamCard, type ViewerTeam } from './public-season-registration';
 import { BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
 import type { SeasonPhase } from '../../../../convex/lib/registration';
 import type { PublicSeasonView } from './public-season-view';
@@ -41,6 +42,16 @@ const CRUMB_LINK =
   'inline-flex items-center rounded-md font-medium hover:text-foreground hover:underline pointer-coarse:min-h-11';
 const CURRENT_CRUMB_LINK = `${CRUMB_LINK} text-foreground`;
 const FACT = 'relative min-h-18 py-4 ps-14';
+const REGISTRATION_CARD =
+  'rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24 lg:min-h-0';
+/**
+ * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration, so each kind
+ * reserves the height of the taller of the two at that width and the details do not move.
+ */
+const RESERVED_HEIGHT = {
+  open: 'min-h-66 sm:min-h-58',
+  closed: 'min-h-47 md:min-h-49',
+} as const;
 const FACT_ICON =
   'absolute start-0 top-4 flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground';
 
@@ -52,6 +63,7 @@ const FACT_ICON =
     provideIcons({
       lucideArrowRight,
       lucideCalendarDays,
+      lucideCheck,
       lucideChevronRight,
       lucideClock,
       lucideMapPin,
@@ -109,11 +121,38 @@ const FACT_ICON =
             aria-labelledby="registration-heading"
             class="scroll-mt-20 pt-2 lg:col-start-3 lg:row-start-1 lg:pt-10 lg:pb-10"
           >
-            <div
-              class="rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10 md:p-6 lg:sticky lg:top-24"
-            >
+            <div [class]="registrationCardClass()">
               <h2 id="registration-heading" class="sr-only">Registration</h2>
-              @if (card.kind === 'open') {
+              @if (team(); as team) {
+                <p>
+                  <span [class]="openBadge"
+                    ><ng-icon
+                      name="lucideCheck"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />You&apos;re registered</span
+                  >
+                </p>
+                <div class="mt-4 flex items-center gap-3">
+                  <span
+                    class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
+                    ><ng-icon name="lucideShirt" class="text-xl" aria-hidden="true"
+                  /></span>
+                  <div class="min-w-0">
+                    <p class="font-semibold break-words">{{ team.name }}</p>
+                    <p class="text-sm text-muted-foreground">{{ team.role }}</p>
+                  </div>
+                </div>
+                <a [routerLink]="teamHref(team.teamId)" data-slot="button" [class]="openTeamButton"
+                  >Open your team<ng-icon
+                    name="lucideArrowRight"
+                    data-icon="inline-end"
+                    aria-hidden="true"
+                /></a>
+                @if (team.invite; as invite) {
+                  <p class="mt-4 text-sm text-muted-foreground">{{ invite }}</p>
+                }
+              } @else if (card.kind === 'open') {
                 <p class="text-lg font-semibold tracking-tight">
                   Registration open &middot; closes {{ card.closes }}
                 </p>
@@ -306,11 +345,14 @@ export class PublicSeasonContent {
   /** The viewer's clock, so the card follows the deadline after hydration. */
   readonly now = input.required<number>();
   readonly busy = input(false);
+  /** Set only after hydration, for a signed-in viewer on a team in this season. */
+  readonly viewerTeam = input<ViewerTeam | undefined>(undefined);
 
   protected readonly openBadge = OPEN_BADGE;
   protected readonly phaseLabel = (phase: SeasonPhase) => BADGE_TEXT[phase];
   protected readonly seeSeasonButton = SEE_SEASON_BUTTON;
   protected readonly registerButton = `${PRIMARY_BUTTON_LARGE} w-full`;
+  protected readonly openTeamButton = `${PRIMARY_BUTTON_LARGE} mt-5 w-full`;
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
   protected readonly fact = FACT;
@@ -329,6 +371,14 @@ export class PublicSeasonContent {
     return `${total} ${total === 1 ? 'team' : 'teams'}`;
   });
   protected readonly card = computed(() => registrationCard(this.season(), this.now()));
+  protected readonly registrationCardClass = computed(() => {
+    const kind = this.card()?.kind;
+    return kind ? `${RESERVED_HEIGHT[kind]} ${REGISTRATION_CARD}` : REGISTRATION_CARD;
+  });
+  protected readonly team = computed(() => {
+    const team = this.viewerTeam();
+    return team && teamCard(team, this.season(), this.now());
+  });
   protected readonly phaseBadge = computed(() =>
     this.card()?.phase === 'registrationOpen' ? OPEN_BADGE : MUTED_BADGE,
   );
@@ -409,6 +459,10 @@ export class PublicSeasonContent {
         });
       });
     });
+  }
+
+  protected teamHref(teamId: string): string {
+    return teamPath(teamId);
   }
 
   protected nextHref(seasonSlug: string): string {

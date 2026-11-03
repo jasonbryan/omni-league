@@ -357,11 +357,11 @@ describe('seasons.getForRegistration', () => {
     const forCaptain = await as(s, 'captain').query(api.seasons.getForRegistration, SLUGS);
     expect(forCaptain).toEqual({
       ...SEASON_FIELDS,
-      team: { teamId, name: 'Sand Sharks', isCaptain: true },
+      team: { teamId, name: 'Sand Sharks', isCaptain: true, rosterCount: 2 },
     });
     expect(JSON.stringify(forCaptain)).not.toContain(s.summer);
     expect(await as(s, 'player').query(api.seasons.getForRegistration, SLUGS)).toMatchObject({
-      team: { teamId, name: 'Sand Sharks', isCaptain: false },
+      team: { teamId, name: 'Sand Sharks', isCaptain: false, rosterCount: 2 },
     });
     expect(await as(s, 'rival').query(api.seasons.getForRegistration, SLUGS)).toMatchObject({
       team: null,
@@ -372,6 +372,36 @@ describe('seasons.getForRegistration', () => {
         seasonSlug: 'fall-2030',
       }),
     ).toMatchObject({ team: null });
+  });
+
+  test('two callers on different teams each get only their own team and its roster count', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    const sharks = await register(s, 'captain', 'Sand Sharks');
+    const rivals = await register(s, 'rival', 'Net Results');
+    await s.t.run(async (ctx) => {
+      await addRosterEntry(ctx, (await ctx.db.get('teams', sharks.teamId))!, {
+        userId: s.player,
+        source: 'invite',
+        addedByUserId: s.captain,
+      });
+    });
+    const forCaptain = await as(s, 'captain').query(api.seasons.getForRegistration, SLUGS);
+    const forRival = await as(s, 'rival').query(api.seasons.getForRegistration, SLUGS);
+    expect(forCaptain?.team).toEqual({
+      teamId: sharks.teamId,
+      name: 'Sand Sharks',
+      isCaptain: true,
+      rosterCount: 2,
+    });
+    expect(forRival?.team).toEqual({
+      teamId: rivals.teamId,
+      name: 'Net Results',
+      isCaptain: true,
+      rosterCount: 1,
+    });
+    expect(JSON.stringify(forCaptain)).not.toContain('Net Results');
+    expect(JSON.stringify(forRival)).not.toContain('Sand Sharks');
   });
 
   test('a removed entry is no team', async () => {

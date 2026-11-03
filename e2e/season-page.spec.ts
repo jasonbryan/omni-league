@@ -13,6 +13,7 @@ import {
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
+import { signUp } from './support/session';
 import {
   dateFromToday,
   seedSeasons,
@@ -898,4 +899,123 @@ test.describe('public season page: loading', () => {
     }
     await expect(page.locator('main[id="main"]')).toBeFocused();
   });
+});
+
+test.describe('public season page: signed in and on a team', () => {
+  const REGISTRATION = 'seasons:getForRegistration';
+  const OPEN_PATH = (tenant: Tenant) => `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`;
+
+  /** Signed up in the page, so the page holds the captain's session. */
+  async function captainOfSandSharks(page: Page, tenant: Tenant): Promise<string> {
+    const captain = newUser('Captain');
+    await signUp(page, captain);
+    const { teamId } = (await convexRun('testing:seedTeam', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      seasonSlug: OPEN_SEASON.slug,
+      name: 'Sand Sharks',
+      captainEmail: captain.email,
+    })) as { teamId: string };
+    for (const player of await Promise.all([1, 2].map(() => seedUser(newUser('Player'))))) {
+      await convexRun('testing:addToTeam', { teamId, email: player.email });
+    }
+    return teamId;
+  }
+
+  const detailsTop = async (page: Page) =>
+    (await page.locator('section[aria-labelledby="details-heading"]').boundingBox())!.y;
+
+  test('a captain below the minimum sees the team card after hydration, the details do not move, and it passes the axe helper', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const { tenant } = await seed();
+    const teamId = await captainOfSandSharks(page, tenant);
+    const held = await holdQueries(page, [REGISTRATION]);
+    await page.goto(OPEN_PATH(tenant));
+    await hydrated(consoleGuard);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    const card = page.locator('#registration');
+    await expect(card.getByRole('link', { name: 'Register a team' })).toBeVisible();
+    const before = await detailsTop(page);
+
+    held.release();
+    await expect(card).toContainText("You're registered");
+    await expect(card).toContainText('Sand Sharks');
+    await expect(card).toContainText('Captain · 3 of the 4 players needed');
+    const closes = formatDate(OPEN_SEASON.registrationDeadline ?? '');
+    await expect(card).toContainText(
+      `Invite one more player before ${closes} to reach the minimum.`,
+    );
+    await expect(card.getByRole('link', { name: 'Register a team' })).toHaveCount(0);
+    const open = card.getByRole('link', { name: 'Open your team' });
+    await expect(open).toHaveAttribute('href', `/app/teams/${teamId}`);
+    expect(await detailsTop(page)).toBe(before);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, 'season-registered');
+
+    await open.click();
+    await expect(page).toHaveURL(`${baseURL}/app/teams/${teamId}`);
+  });
+
+  test('a signed-in visitor on no team keeps the register actions', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed();
+    await signUp(page, newUser('Visitor'));
+    const held = await holdQueries(page, [REGISTRATION]);
+    await page.goto(OPEN_PATH(tenant));
+    await hydrated(consoleGuard);
+    await expect.poll(() => held.isHolding()).toBe(true);
+    held.release();
+    await expect(page.getByRole('link', { name: /^Account:/ })).toBeVisible();
+    const card = page.locator('#registration');
+    await expect(card.getByRole('link', { name: 'Register a team' })).toBeVisible();
+    await expect(card).not.toContainText("You're registered");
+  });
+
+  test('a signed-out visitor sees the register actions and asks for no team', async ({
+    page,
+    consoleGuard,
+  }) => {
+    const { tenant } = await seed();
+    const asked: string[] = [];
+    page.on('websocket', (socket) =>
+      socket.on('framesent', ({ payload }) => {
+        if (String(payload).includes(REGISTRATION)) asked.push(String(payload));
+      }),
+    );
+    await page.goto(OPEN_PATH(tenant));
+    await hydrated(consoleGuard);
+    await expect(
+      page.locator('#registration').getByRole('link', { name: 'Register a team' }),
+    ).toBeVisible();
+    await expect(page.locator('section#teams')).toBeVisible();
+    expect(asked).toEqual([]);
+  });
+
+  test(
+    'the document a signed-in captain loads holds no team card and has the anonymous caching headers',
+    VIEWPORT_AGNOSTIC,
+    async ({ page, request }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'chromium-desktop',
+        'the document does not depend on the viewport',
+      );
+      const { tenant } = await seed();
+      const teamId = await captainOfSandSharks(page, tenant);
+      const anonymous = await fetchRawHtml(request, OPEN_PATH(tenant));
+      const response = await page.goto(OPEN_PATH(tenant));
+      await expect(page.locator('#registration')).toContainText("You're registered");
+      const html = (await response?.text()) ?? '';
+      expect(spacedText(registrationCard(html))).toContain('Register a team');
+      for (const text of ['You&#39;re registered', "You're registered", 'Open your team', teamId]) {
+        expect(html).not.toContain(text);
+      }
+      const headers = response?.headers() ?? {};
+      expect(headers['cache-control']).toBe(anonymous.headers['cache-control']);
+      expect(headers['set-cookie']).toBeUndefined();
+    },
+  );
 });
