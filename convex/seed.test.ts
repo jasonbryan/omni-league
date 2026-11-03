@@ -994,6 +994,7 @@ describe('seed:demo', () => {
       'insertDemoData',
       'insertDemoInvite',
       'insertDemoTeamInvites',
+      'insertDemoTeamPlayer',
       'insertDemoTeams',
       'setDemoLogo',
     ]);

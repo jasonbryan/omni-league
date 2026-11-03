@@ -33,3 +33,7 @@ export function checkTeamInviteEmail(
 export function teamInviteLink(origin: string, token: string): string {
   return `${origin}/teams/join#${token}`;
 }
+
+/** `alreadyOnAnotherTeam` comes from the roster writer, with the other team's name. */
+export type TeamInviteAcceptCode =
+  'invalid' | 'emailMismatch' | 'alreadyOnTeam' | 'alreadyOnAnotherTeam';

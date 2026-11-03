@@ -34,3 +34,30 @@ describe('the invite alert', () => {
     }
   });
 });
+
+describe('the invite alert kinds', () => {
+  @Component({
+    imports: [InviteAlert],
+    template: `
+      <app-invite-alert kind="error" title="e" description="e" />
+      <app-invite-alert kind="notice" title="n" description="n" />
+      <app-invite-alert kind="info" title="i" description="i" />
+    `,
+    changeDetection: ChangeDetectionStrategy.OnPush,
+  })
+  class Kinds {}
+
+  it('draws an error in the destructive colour, and a notice and an info neutral, a notice with the alert icon', async () => {
+    const fixture = TestBed.createComponent(Kinds);
+    await fixture.whenStable();
+    const [error, notice, info] = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('[data-slot="alert"]'),
+    );
+    expect(error.className).toContain('text-destructive');
+    expect(notice.className).not.toContain('text-destructive');
+    expect(info.className).not.toContain('text-destructive');
+    const icon = (box: Element) => box.querySelector('ng-icon')?.innerHTML;
+    expect(icon(notice)).toBe(icon(error));
+    expect(icon(notice)).not.toBe(icon(info));
+  });
+});

@@ -204,6 +204,26 @@ export async function revokeTeamInvite(
   await changePendingInviteCount(ctx, invite.teamId, -1);
 }
 
+/** A refused roster entry throws before anything is written, so the invite stays pending. */
+export async function acceptTeamInvite(
+  ctx: MutationCtx,
+  inviteId: Id<'teamInvites'>,
+  userId: Id<'users'>,
+): Promise<Id<'rosterEntries'>> {
+  const invite = await ctx.db.get('teamInvites', inviteId);
+  if (invite?.status !== 'pending') throw new Error('Only a pending invite can be accepted');
+  const team = await ctx.db.get('teams', invite.teamId);
+  if (!team) throw new Error('No team has this id');
+  const entryId = await addRosterEntry(ctx, team, {
+    userId,
+    source: 'invite',
+    addedByUserId: invite.invitedByUserId,
+  });
+  await ctx.db.patch('teamInvites', inviteId, { status: 'accepted' });
+  await changePendingInviteCount(ctx, team._id, -1);
+  return entryId;
+}
+
 // Read fresh so a stale `Doc` cannot lose a count.
 async function changePendingInviteCount(
   ctx: MutationCtx,

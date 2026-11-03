@@ -3,7 +3,8 @@ import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import { hashInviteToken } from './lib/inviteToken';
-import { insertTenant } from './lib/tenantWrites';
+import { insertTeamWithCaptain } from './lib/rosterWrites';
+import { insertSeason, insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
 
@@ -86,5 +87,71 @@ describe('testing:addInvite', () => {
       t.mutation(internal.testing.addInvite, { ...INVITE, leagueNames: ['Missing'] }),
     ).rejects.toThrow(/No league/);
     expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
+  });
+});
+
+describe('testing:addTeamInvite', () => {
+  async function team(t: Awaited<ReturnType<typeof setup>>) {
+    return t.run(async (ctx) => {
+      const league = (await ctx.db.query('leagues').first())!;
+      const seasonId = await insertSeason(
+        ctx,
+        league,
+        {
+          name: 'Summer',
+          slug: 'summer',
+          startDate: '2030-06-01',
+          endDate: '2030-08-30',
+          registrationDeadline: '2030-05-20',
+          playersPerSide: 7,
+          minimumRosterSize: 7,
+        },
+        'published',
+      );
+      const captainUserId = await ctx.db.insert('users', {
+        authUserId: 'captain',
+        name: 'Captain',
+        adultConfirmedAt: 1,
+      });
+      return insertTeamWithCaptain(ctx, (await ctx.db.get('seasons', seasonId))!, {
+        name: 'Sand Sharks',
+        captainUserId,
+      });
+    });
+  }
+
+  test('with a token, its hash is stored, so the token opens the invite', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    const teamId = await team(t);
+    const token = 'e2e-token_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    await t.mutation(internal.testing.addTeamInvite, {
+      teamId,
+      email: 'Late@Example.com',
+      expiresAt: Date.now() + 60_000,
+      token,
+    });
+    const rows = await t.run((ctx) => ctx.db.query('teamInvites').collect());
+    expect(rows[0]).toMatchObject({
+      email: 'late@example.com',
+      tokenHash: await hashInviteToken(token),
+    });
+    expect(await t.query(api.teamInvites.getByToken, { token })).toMatchObject({
+      status: 'valid',
+      teamName: 'Sand Sharks',
+    });
+  });
+
+  test('without a token, the hash matches no token anyone holds', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    const teamId = await team(t);
+    await t.mutation(internal.testing.addTeamInvite, {
+      teamId,
+      email: 'x@example.com',
+      expiresAt: Date.now() + 60_000,
+    });
+    const rows = await t.run((ctx) => ctx.db.query('teamInvites').collect());
+    expect(rows[0]?.tokenHash).toMatch(/^[0-9a-f]{64}$/);
   });
 });

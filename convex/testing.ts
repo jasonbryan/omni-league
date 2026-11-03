@@ -447,17 +447,22 @@ export const addToTeam = internalMutation({
   },
 });
 
-/** A pending invite whose token nobody holds; `expiresAt` in the past makes an expired one. */
+/** A pending invite that `token` opens, or that no token opens without one; `expiresAt` in the past makes an expired one. */
 export const addTeamInvite = internalMutation({
-  args: { teamId: v.id('teams'), email: v.string(), expiresAt: v.number() },
+  args: {
+    teamId: v.id('teams'),
+    email: v.string(),
+    expiresAt: v.number(),
+    token: v.optional(v.string()),
+  },
   returns: v.null(),
-  handler: async (ctx, { teamId, email, expiresAt }) => {
+  handler: async (ctx, { teamId, email, expiresAt, token }) => {
     assertTestDeployment();
     const team = await ctx.db.get('teams', teamId);
     if (!team) throw new Error('No team has this id');
     await insertTeamInvite(ctx, team, {
       email: normaliseInviteEmail(email),
-      tokenHash: await hashInviteToken(generateInviteToken()),
+      tokenHash: await hashInviteToken(token ?? generateInviteToken()),
       expiresAt,
       invitedByUserId: team.captainUserId,
     });

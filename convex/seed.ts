@@ -22,6 +22,7 @@ import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
+  acceptTeamInvite,
   backfillTeamPendingInviteCounts,
   insertTeamInvite,
   insertTeamWithCaptain,
@@ -836,6 +837,16 @@ const DEMO_TEAM_INVITES = {
   ],
 } as const;
 
+/**
+ * player@ joins the captain@ account's team by accepting an invite, so the team shows 2 of 4. The
+ * marker inserts it once: a removed entry is not put back.
+ */
+const DEMO_TEAM_PLAYER = {
+  teamName: 'Sand Sharks',
+  email: `player@${DEMO_ACCOUNT_DOMAIN}`,
+  tokenHash: 'demo-invite-player',
+} as const;
+
 /** The pending staff invite on the demo staff list. Its token is discarded, so it cannot be accepted. */
 const DEMO_INVITE = {
   organizationSlug: 'gulf-coast-sport-social',
@@ -1116,6 +1127,37 @@ export const insertDemoTeamInvites = internalMutation({
   },
 });
 
+export const insertDemoTeamPlayer = internalMutation({
+  args: { authUserId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { authUserId }) => {
+    assertPreviewDeployment();
+    const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
+    const team = found
+      ? await teamWithSortName(ctx, found.season._id, DEMO_TEAM_PLAYER.teamName)
+      : null;
+    if (!team) return false;
+    const marked = await ctx.db
+      .query('teamInvites')
+      .withIndex('by_tokenHash', (q) => q.eq('tokenHash', DEMO_TEAM_PLAYER.tokenHash))
+      .first();
+    if (marked || (await pendingTeamInvite(ctx, team._id, DEMO_TEAM_PLAYER.email))) return false;
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+      .unique();
+    if (!user || (await rosteredEntryInSeason(ctx, team.seasonId, user._id))) return false;
+    const inviteId = await insertTeamInvite(ctx, team, {
+      email: DEMO_TEAM_PLAYER.email,
+      tokenHash: DEMO_TEAM_PLAYER.tokenHash,
+      expiresAt: Date.now() + INVITE_LIFETIME_MS,
+      invitedByUserId: team.captainUserId,
+    });
+    await acceptTeamInvite(ctx, inviteId, user._id);
+    return true;
+  },
+});
+
 interface AccountOutcome {
   code: AccountCode;
   authUserId?: string;
@@ -1277,6 +1319,12 @@ export const demo = internalAction({
         }
         teams = await ctx.runMutation(internal.seed.insertDemoTeams, { captains });
         teamInvites = await ctx.runMutation(internal.seed.insertDemoTeamInvites, {});
+        const player = captains.find((account) => account.email === DEMO_TEAM_PLAYER.email);
+        if (player) {
+          await ctx.runMutation(internal.seed.insertDemoTeamPlayer, {
+            authUserId: player.authUserId,
+          });
+        }
       }
     }
     return { ...data, logos, memberships, invites, teams, teamInvites, accounts };

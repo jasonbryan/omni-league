@@ -2,16 +2,18 @@ import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 
 export const INVITE_TOKEN_KEY = 'omni.invite-token';
+export const TEAM_INVITE_TOKEN_KEY = 'omni.team-invite-token';
 
 /** Anything else is not from an invite link, so it is never stored or sent to the server. */
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]{1,128}$/;
 
 /**
- * A fragment never reaches a server or a `Referer`, but it would ride along in `returnTo` or the address bar, so `captureInviteToken` moves it here and removes it from the URL.
+ * A fragment never reaches a server or a `Referer`, but it would ride along in `returnTo` or the address bar, so the route's capture guard moves it here and removes it from the URL.
  * It stays through sign-up and sign-in (the user may reload or switch accounts). It is never put in a URL or logged.
+ * Each kind of invite has its own key, so a page never reads the token of another kind of link opened in the same tab.
  */
-@Injectable({ providedIn: 'root' })
-export class InviteTokenStore {
+export abstract class SessionTokenStore {
+  protected abstract readonly key: string;
   private readonly inBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly saves = signal(0);
 
@@ -24,7 +26,7 @@ export class InviteTokenStore {
     this.clear();
     if (!this.inBrowser || !TOKEN_SHAPE.test(raw)) return false;
     try {
-      sessionStorage.setItem(INVITE_TOKEN_KEY, raw);
+      sessionStorage.setItem(this.key, raw);
       return true;
     } catch {
       return false;
@@ -34,7 +36,7 @@ export class InviteTokenStore {
   read(): string | null {
     if (!this.inBrowser) return null;
     try {
-      const stored = sessionStorage.getItem(INVITE_TOKEN_KEY);
+      const stored = sessionStorage.getItem(this.key);
       return stored !== null && TOKEN_SHAPE.test(stored) ? stored : null;
     } catch {
       return null;
@@ -44,9 +46,19 @@ export class InviteTokenStore {
   clear(): void {
     if (!this.inBrowser) return;
     try {
-      sessionStorage.removeItem(INVITE_TOKEN_KEY);
+      sessionStorage.removeItem(this.key);
     } catch {
       // Blocked storage holds nothing to remove.
     }
   }
+}
+
+@Injectable({ providedIn: 'root' })
+export class InviteTokenStore extends SessionTokenStore {
+  protected readonly key = INVITE_TOKEN_KEY;
+}
+
+@Injectable({ providedIn: 'root' })
+export class TeamInviteTokenStore extends SessionTokenStore {
+  protected readonly key = TEAM_INVITE_TOKEN_KEY;
 }

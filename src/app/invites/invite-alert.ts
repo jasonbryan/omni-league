@@ -15,7 +15,8 @@ import {
   ALERT_TITLE,
 } from '../organizations/admin/admin-alert';
 
-export type InviteAlertKind = 'error' | 'info';
+/** `notice` is a refusal the user resolves themselves, such as signing in with another account: neutral, with the alert icon. */
+export type InviteAlertKind = 'error' | 'notice' | 'info';
 
 /** Takes focus through `focus()` and shows the focus ring the mockup draws, because focus moves to it from a button that has just gone. */
 @Component({
@@ -44,11 +45,12 @@ export class InviteAlert {
 
   protected readonly classes = computed(
     () =>
-      `${this.kind() === 'info' ? ALERT_NEUTRAL : ALERT_DESTRUCTIVE} outline-offset-2 focus:outline-2 focus:outline-ring`,
+      `${this.kind() === 'error' ? ALERT_DESTRUCTIVE : ALERT_NEUTRAL} outline-offset-2 focus:outline-2 focus:outline-ring`,
   );
   protected readonly icon = computed(() => {
     const icons = {
       error: 'lucideCircleAlert',
+      notice: 'lucideCircleAlert',
       info: 'lucideInfo',
     } as const;
     return icons[this.kind()];
