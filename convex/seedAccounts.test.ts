@@ -533,6 +533,28 @@ describe('seed:demo accounts: the demo teams', () => {
   );
 
   test(
+    'a second run leaves player@ on Sand Sharks once, with one accepted invite',
+    async () => {
+      const t = setup();
+      await run(t);
+      await run(t);
+      expect((await demoTeams(t)).teams['Sand Sharks']).toEqual({
+        captain: EMAILS.captain,
+        rosterCount: 2,
+        roster: [
+          [EMAILS.captain, 'rostered', 'captain'],
+          [EMAILS.player, 'rostered', 'invite'],
+        ],
+      });
+      const invites = await t.run((ctx) => ctx.db.query('teamInvites').collect());
+      expect(invites.filter((row) => row.tokenHash === 'demo-invite-player')).toMatchObject([
+        { status: 'accepted' },
+      ]);
+    },
+    SLOW,
+  );
+
+  test(
     'does not put player@ back on Sand Sharks after the entry is removed',
     async () => {
       const t = setup();
