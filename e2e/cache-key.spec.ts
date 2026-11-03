@@ -304,6 +304,8 @@ test.describe('query strings and the CDN', () => {
         (c: string) => `?ott=${c}`,
         (c: string) => `?page=2&q=${c}`,
         (c: string) => `?seasonSlug=${c}`,
+        (c: string) => `?page=${c}`,
+        (c: string) => `?page=2&page=${c}`,
       ]) {
         const token = canary();
         const response = await rawGet(`${path}${sample(token)}`);
@@ -314,6 +316,9 @@ test.describe('query strings and the CDN', () => {
         expect(response.headers['netlify-vary'], sample(token)).toBe('query');
         const h1 = (body: string) => /<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(body)?.[1]?.trim();
         expect(h1(response.body), sample(token)).toBe(h1(first.body));
+        const teams = (body: string) =>
+          /<section\b[^>]*id="teams"[^>]*>[\s\S]*?<\/section>/.exec(body)?.[0];
+        expect(teams(response.body), sample(token)).toBe(teams(first.body));
       }
     },
   );

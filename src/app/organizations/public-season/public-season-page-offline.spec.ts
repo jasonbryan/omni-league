@@ -126,6 +126,13 @@ describe('PublicSeasonPage offline', () => {
       );
     });
 
+    it('shows no Teams panel: team names are never saved', () => {
+      const listed = new Set(OFFLINE_SAVED_QUERIES.map((entry) => getFunctionName(entry.query)));
+      expect(listed.has('teams:listPublic')).toBe(false);
+      expect(host(harness).querySelector('main h1')).not.toBeNull();
+      expect(host(harness).querySelector('main #teams')).toBeNull();
+    });
+
     it('shows the saved-copy note right under the h1, with the saved time', () => {
       const expected = formatSavedTime(SAVED_AT, NOW);
       const h1 = host(harness).querySelector('main h1');

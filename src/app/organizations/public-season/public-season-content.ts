@@ -1,4 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  input,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -11,11 +23,13 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import { formatCalendarDate } from '../../../../convex/lib/seasonInput';
+import { LIST_PAGE_SIZE } from '../../core/list-page';
 import { SavedCopyNote } from '../../offline/saved-copy-note';
 import { BUTTON_BASE, PRIMARY_BUTTON_LARGE } from '../../ui/button/button-classes';
 import { registerTeamPath } from '../../teams/team-paths';
 import { seasonDateParts } from '../league/season-dates';
 import { organizationPath } from '../organization-path';
+import { PageControl } from '../page-control';
 import { publicLeaguePath, publicSeasonPath } from '../public-league/public-league-path';
 import { registrationCard } from './public-season-registration';
 import { BADGE_TEXT, MUTED_BADGE, OPEN_BADGE } from '../season-status';
@@ -33,7 +47,7 @@ const FACT_ICON =
 /** The dates are written from the stored text (`seasonDateParts`), never through `Date`, so the server and a browser in any time zone render the same text. */
 @Component({
   selector: 'app-public-season-content',
-  imports: [NgIcon, RouterLink, SavedCopyNote],
+  imports: [NgIcon, PageControl, RouterLink, SavedCopyNote],
   providers: [
     provideIcons({
       lucideArrowRight,
@@ -219,6 +233,68 @@ const FACT_ICON =
               </ol>
             </section>
           }
+          @if (view().teams; as teams) {
+            <div class="border-t border-border py-8 md:py-10">
+              <section
+                id="teams"
+                aria-labelledby="teams-heading"
+                class="scroll-mt-20 overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+              >
+                <div class="border-b border-border px-4 py-3 md:px-5">
+                  <h2
+                    #teamsHeading
+                    id="teams-heading"
+                    tabindex="-1"
+                    class="font-semibold focus:outline-none"
+                  >
+                    Teams
+                  </h2>
+                </div>
+                @if (teams.rows.length) {
+                  <ul
+                    role="list"
+                    class="divide-y divide-border"
+                    [attr.aria-busy]="busy() ? 'true' : null"
+                  >
+                    @for (team of teams.rows; track team.name) {
+                      <li class="flex items-center gap-3 px-4 py-3.5 md:px-5">
+                        <span class="font-medium">{{ team.name }}</span>
+                      </li>
+                    }
+                  </ul>
+                  @if (teams.total > pageSize) {
+                    <app-page-control
+                      label="Teams pages"
+                      noun="teams"
+                      [page]="teams.page"
+                      [pageCount]="teams.pageCount"
+                      [total]="teams.total"
+                      [path]="seasonHref()"
+                      fragment="teams"
+                      (pageActivated)="pageRequested = true"
+                    />
+                  } @else {
+                    <p
+                      class="border-t border-border px-4 py-3 text-sm text-muted-foreground tabular-nums md:px-5"
+                    >
+                      {{ teamTotal() }}
+                    </p>
+                  }
+                } @else {
+                  <div class="flex flex-col items-center px-6 py-10 text-center">
+                    <span
+                      class="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                      ><ng-icon name="lucideUsers" class="text-xl" aria-hidden="true"
+                    /></span>
+                    <p class="mt-4 font-medium">No teams yet</p>
+                    <p class="mt-1 max-w-xs text-sm text-balance text-muted-foreground">
+                      Teams appear here once they register.
+                    </p>
+                  </div>
+                }
+              </section>
+            </div>
+          }
         </div>
       </div>
     </div>
@@ -229,6 +305,7 @@ export class PublicSeasonContent {
   readonly savedAt = input<number | undefined>(undefined);
   /** The viewer's clock, so the card follows the deadline after hydration. */
   readonly now = input.required<number>();
+  readonly busy = input(false);
 
   protected readonly openBadge = OPEN_BADGE;
   protected readonly phaseLabel = (phase: SeasonPhase) => BADGE_TEXT[phase];
@@ -239,7 +316,18 @@ export class PublicSeasonContent {
   protected readonly fact = FACT;
   protected readonly factIcon = FACT_ICON;
 
+  protected readonly pageSize = LIST_PAGE_SIZE;
+  protected pageRequested = false;
+
+  private readonly teamsHeading = viewChild<ElementRef<HTMLElement>>('teamsHeading');
+  private readonly injector = inject(Injector);
+
   protected readonly season = computed(() => this.view().season);
+  private readonly shownTeams = computed(() => this.view().teams);
+  protected readonly teamTotal = computed(() => {
+    const total = this.shownTeams()?.total ?? 0;
+    return `${total} ${total === 1 ? 'team' : 'teams'}`;
+  });
   protected readonly card = computed(() => registrationCard(this.season(), this.now()));
   protected readonly phaseBadge = computed(() =>
     this.card()?.phase === 'registrationOpen' ? OPEN_BADGE : MUTED_BADGE,
@@ -307,6 +395,21 @@ export class PublicSeasonContent {
       this.season().slug,
     ),
   );
+
+  constructor() {
+    // Moves focus, which only the browser does: a side effect outside Angular. The teams shown change when the page asked for has arrived, or
+    // when a live update replaces them; only the first, after a click on a page link, moves focus.
+    effect(() => {
+      this.shownTeams();
+      untracked(() => {
+        if (!this.pageRequested) return;
+        this.pageRequested = false;
+        afterNextRender(() => this.teamsHeading()?.nativeElement.focus(), {
+          injector: this.injector,
+        });
+      });
+    });
+  }
 
   protected nextHref(seasonSlug: string): string {
     return publicSeasonPath(this.season().organization.slug, this.season().league.slug, seasonSlug);

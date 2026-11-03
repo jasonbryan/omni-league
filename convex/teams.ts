@@ -2,6 +2,8 @@ import { ConvexError, v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import { canManageTeam, requireTeamMemberOrOrganizer, requireUser } from './lib/access';
+import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
+import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
 import { registrationIsOpen } from './lib/registration';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
@@ -40,6 +42,35 @@ export const register = mutation({
       captainUserId: user._id,
     });
     return { status: 'registered' as const, teamId };
+  },
+});
+
+const EMPTY_LIST = { rows: [], page: 1, pageCount: 0, total: 0 };
+
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public: an anonymous public page that reads no identity and returns only the names of a published season's teams.
+export const listPublic = query({
+  args: { ...seasonSlugsValidator.fields, page: v.number() },
+  returns: publicTeamsValidator,
+  handler: async (ctx, { page: requested, ...slugs }): Promise<PublicTeams> => {
+    const found = await findSeasonBySlugs(ctx, slugs);
+    // A draft answers like an unknown season, as the season page's query does.
+    if (found?.league.status !== 'published' || found.season.status !== 'published') {
+      return EMPTY_LIST;
+    }
+    const { season } = found;
+    const total = season.teamCount ?? 0;
+    const { page, pageCount } = pageOf(total, requested);
+    if (pageCount === 0) return EMPTY_LIST;
+    const read = await ctx.db
+      .query('teams')
+      .withIndex('by_seasonId_and_sortName', (q) => q.eq('seasonId', season._id))
+      .take(page * PUBLIC_LIST_PAGE_SIZE);
+    return {
+      rows: pageRows(read, page).map((team) => ({ name: team.name })),
+      page,
+      pageCount,
+      total,
+    };
   },
 });
 
