@@ -1,7 +1,11 @@
 import { ConvexError, v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
-import { requireLeagueOrganizer, requireUser } from './lib/access';
+import {
+  requireLeagueOrganizer,
+  requireSeasonOrganizerOrForbidden,
+  requireUser,
+} from './lib/access';
 import {
   checkSeasonFields,
   firstSeasonError,
@@ -39,6 +43,8 @@ import { getCurrentUser } from './lib/users';
 export const ORGANIZER_SEASONS_LIMIT = 200;
 
 export const OPEN_SEASONS_READ_LIMIT = 50;
+
+export const ORGANIZER_TEAMS_LIMIT = 200;
 
 function refuse(error: SeasonInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
@@ -135,6 +141,68 @@ export const listForOrganizer = query({
       minimumRosterSize: season.minimumRosterSize,
       status: season.status,
     }));
+  },
+});
+
+const organizerTeamValidator = v.object({
+  teamId: v.id('teams'),
+  name: v.string(),
+  captainName: v.string(),
+  rosterCount: v.number(),
+  pendingInviteCount: v.number(),
+});
+
+export const getOrganizerView = query({
+  args: seasonSlugsValidator.fields,
+  returns: v.union(
+    v.null(),
+    v.object({
+      seasonId: v.id('seasons'),
+      name: v.string(),
+      slug: v.string(),
+      status: seasonStatusValidator,
+      startDate: v.string(),
+      endDate: v.string(),
+      registrationDeadline: v.string(),
+      formatName: v.string(),
+      minimumRosterSize: v.number(),
+      teams: v.array(organizerTeamValidator),
+      teamCount: v.number(),
+    }),
+  ),
+  handler: async (ctx, slugs) => {
+    const found = await findSeasonBySlugs(ctx, slugs);
+    if (!found) return null;
+    const { league, season } = found;
+    if (!(await requireSeasonOrganizerOrForbidden(ctx, league, season))) return null;
+    const teams = await ctx.db
+      .query('teams')
+      .withIndex('by_seasonId_and_sortName', (q) => q.eq('seasonId', season._id))
+      .take(ORGANIZER_TEAMS_LIMIT);
+    const rows = [];
+    for (const team of teams) {
+      const captain = await ctx.db.get('users', team.captainUserId);
+      rows.push({
+        teamId: team._id,
+        name: team.name,
+        captainName: captain?.name ?? '',
+        rosterCount: team.rosterCount,
+        pendingInviteCount: team.pendingInviteCount ?? 0,
+      });
+    }
+    return {
+      seasonId: season._id,
+      name: season.name,
+      slug: season.slug,
+      status: season.status,
+      startDate: season.startDate,
+      endDate: season.endDate,
+      registrationDeadline: season.registrationDeadline,
+      formatName: formatLabel(seasonPlayersPerSide(season)),
+      minimumRosterSize: season.minimumRosterSize,
+      teams: rows,
+      teamCount: season.teamCount ?? 0,
+    };
   },
 });
 

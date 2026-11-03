@@ -98,9 +98,11 @@ describe('LeagueManagement: publishing a season', () => {
       expect(calls()).toEqual([]);
     });
 
-    it('a season’s name stays plain text: its page comes later', async () => {
+    it('a season’s name is its only link in the row', async () => {
       await open();
-      expect(page.querySelector('#seasons-list a')).toBeNull();
+      expect(
+        [...page.querySelectorAll('#seasons-list li:first-child a')].map((a) => text(a)),
+      ).toEqual(['Fall 2027']);
     });
   });
 

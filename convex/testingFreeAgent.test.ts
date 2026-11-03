@@ -92,3 +92,44 @@ describe('testing:seedFreeAgent', () => {
     });
   });
 });
+
+describe('testing:seedWaitingFreeAgents', () => {
+  test('writes the given number of waiting free agents, each with an account and its email', async () => {
+    const { t } = await setup();
+    await t.mutation(internal.testing.seedWaitingFreeAgents, {
+      ...SEASON_SLUGS,
+      count: 3,
+      emailPrefix: 'many',
+    });
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query('freeAgents').collect();
+      expect(rows.map((row) => row.status)).toEqual(['waiting', 'waiting', 'waiting']);
+      const names = [];
+      for (const row of rows) {
+        const user = (await ctx.db.get('users', row.userId))!;
+        const account = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+          model: 'user',
+          where: [{ field: '_id', value: user.authUserId }],
+        } as never)) as { email: string };
+        names.push([user.name, account.email]);
+      }
+      expect(names).toEqual([
+        ['Free Agent 001', 'many-001@example.test'],
+        ['Free Agent 002', 'many-002@example.test'],
+        ['Free Agent 003', 'many-003@example.test'],
+      ]);
+    });
+  });
+
+  test('refuses outside a test deployment', async () => {
+    const { t } = await setup();
+    vi.stubEnv('IS_TEST', undefined);
+    await expect(
+      t.mutation(internal.testing.seedWaitingFreeAgents, {
+        ...SEASON_SLUGS,
+        count: 1,
+        emailPrefix: 'many',
+      }),
+    ).rejects.toThrow();
+  });
+});

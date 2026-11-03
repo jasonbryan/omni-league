@@ -32,11 +32,13 @@ import { AdminAlert } from '../admin/admin-alert';
 import { adminPath } from '../admin/admin-path';
 import { OUTLINE_BUTTON } from '../admin/button-classes';
 import { BADGE_DEFAULT, BADGE_OUTLINE, BADGE_SECONDARY } from '../admin/field-classes';
+import { ROW_TITLE_LINK } from '../admin/link-classes';
 import { publicSeasonPath } from '../public-league/public-league-path';
 import { LeagueBreadcrumb } from './league-breadcrumb';
 import { LeagueContext } from './league-context';
 import { LeagueDetailsForm } from './league-details-form';
 import { LeagueLanding, type LandingTarget } from './league-landing';
+import { seasonManagementPath } from '../season-management/season-management-path';
 import { leaguePath } from './league-path';
 import { seasonDates } from './season-dates';
 import { PublishSeasonDialog, type PublishSeasonOutcome } from './publish-season-dialog';
@@ -207,7 +209,11 @@ interface PublishedSeason {
                   >
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <h3 tabindex="-1" class="me-1 font-medium">{{ row.name }}</h3>
+                        <h3 tabindex="-1" class="me-1 font-medium">
+                          <a [routerLink]="seasonHref(row.slug)" [class]="seasonLink">{{
+                            row.name
+                          }}</a>
+                        </h3>
                         @if (row.status === 'published') {
                           <span data-slot="badge" data-variant="default" [class]="defaultBadge"
                             ><ng-icon
@@ -372,6 +378,7 @@ export class LeagueManagement {
   protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly outlineBadge = BADGE_OUTLINE;
   protected readonly placeholders = [1, 2, 3];
+  protected readonly seasonLink = ROW_TITLE_LINK;
   protected readonly dates = seasonDates;
   protected readonly day = formatCalendarDate;
 
@@ -389,6 +396,9 @@ export class LeagueManagement {
   protected readonly leagueHref = computed(() =>
     leaguePath(this.context.orgSlug(), this.context.leagueSlug()),
   );
+  protected seasonHref(slug: string): string {
+    return seasonManagementPath(this.context.orgSlug(), this.context.leagueSlug(), slug);
+  }
   protected readonly createPath = computed(() => `${this.leagueHref()}#create-season`);
   protected readonly publishedSeasonIds = computed<ReadonlySet<string>>(
     () =>

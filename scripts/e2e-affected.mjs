@@ -103,6 +103,10 @@ export const ROUTE_SPECS = {
     'league-management-mockup',
     'after-sign-in',
   ],
+  'app/organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug': [
+    'season-management',
+    'after-sign-in',
+  ],
   'app/organizations/:slug': ['organization-admin', 'after-sign-in'],
   'app/organizations/:slug/': ['organization-admin', 'organization-details'],
   'app/organizations/:slug/locations': ['organization-admin'],
@@ -756,6 +760,12 @@ export const AREAS = [
     test: inDir('src/app/organizations/league/'),
     specs: [],
     derive: (_graph, root) => ({ extraSpecs: findLeagueManagementPageSpecs(root) }),
+  },
+  {
+    // The season management page opens from the league management page's season rows.
+    name: 'season management page',
+    test: inDir('src/app/organizations/season-management/'),
+    specs: ['season-management'],
   },
   {
     name: 'placeholder home',

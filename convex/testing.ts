@@ -445,6 +445,47 @@ export const seedFreeAgent = internalMutation({
   },
 });
 
+/** Many waiting free agents at once, each with an account of its own, so a test can reach the list's cap. They share one registration time, and the index then keeps them in insertion order. */
+export const seedWaitingFreeAgents = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    leagueSlug: v.string(),
+    seasonSlug: v.string(),
+    count: v.number(),
+    emailPrefix: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, count, emailPrefix }) => {
+    assertTestDeployment();
+    const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
+    const now = Date.now();
+    for (let i = 1; i <= count; i++) {
+      const number = String(i).padStart(3, '0');
+      const name = `Free Agent ${number}`;
+      // The component's generated return types are `any`.
+      const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: 'user',
+          data: {
+            name,
+            email: `${emailPrefix}-${number}@example.test`,
+            emailVerified: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      })) as { _id: string };
+      const userId = await ctx.db.insert('users', {
+        authUserId: account._id,
+        name,
+        adultConfirmedAt: now,
+      });
+      await insertFreeAgent(ctx, season, userId);
+    }
+    return null;
+  },
+});
+
 export const addToTeam = internalMutation({
   args: { teamId: v.id('teams'), email: v.string() },
   returns: v.null(),
