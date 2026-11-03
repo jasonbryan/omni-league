@@ -470,6 +470,7 @@ describe('teams.getForMember', () => {
       ],
       viewerIsCaptain: true,
       viewerCanManage: true,
+      viewerTeamName: 'Sand Sharks',
     });
     expect(JSON.stringify(team)).not.toContain('@');
   });
@@ -478,6 +479,7 @@ describe('teams.getForMember', () => {
     ['a rostered player of the team', 'player', false],
     ['an org admin of the organization', 'admin-a', false],
     ['an organizer of the league', 'organizer-coed', false],
+    ['a rostered player of another team in the season', 'rival', false],
   ])('%s is allowed', async (_label, caller, isCaptain) => {
     const { s, teamId } = await withTeam();
     expect(await as(s, caller).query(api.teams.getForMember, { teamId })).toMatchObject({
@@ -487,7 +489,6 @@ describe('teams.getForMember', () => {
   });
 
   test.each([
-    ['a rostered player of another team in the season', 'rival'],
     ['a league organizer of another league in the organization', 'organizer-mens'],
     ['an org admin of another organization', 'admin-b'],
     ['a signed-in user with no part in it', 'stranger'],

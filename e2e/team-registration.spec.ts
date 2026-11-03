@@ -125,9 +125,10 @@ test.describe('register a team', () => {
     const main = page.locator('main');
     await expect(main.getByTestId('roster-count')).toHaveText('1 of 4 players');
     await expect(main.getByTestId('roster-note')).toContainText('3 more needed');
-    await expect(main.locator('section ul > li')).toHaveCount(1);
-    await expect(main.locator('section ul > li')).toContainText(user.name);
-    await expect(main.locator('section ul > li')).toContainText('Captain');
+    const roster = main.locator('section[aria-labelledby="roster-heading"] ul > li');
+    await expect(roster).toHaveCount(1);
+    await expect(roster).toContainText(user.name);
+    await expect(roster).toContainText('Captain');
     await expect(main.getByRole('status').filter({ hasText: 'is registered for' })).toBeFocused();
     await expectAccessible(page);
     await screenshot(page, testInfo, '129-team-registered');
