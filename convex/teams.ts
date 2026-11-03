@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { requireTeamMemberOrOrganizer, requireUser } from './lib/access';
+import { canManageTeam, requireTeamMemberOrOrganizer, requireUser } from './lib/access';
 import { registrationIsOpen } from './lib/registration';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
@@ -55,6 +55,7 @@ const teamForMemberValidator = v.object({
   rosterCount: v.number(),
   roster: v.array(rosterRowValidator),
   viewerIsCaptain: v.boolean(),
+  viewerCanManage: v.boolean(),
 });
 
 /** `teamId` is a string so a malformed id answers `null`, as an unknown one does, never a validator error. */
@@ -79,6 +80,7 @@ export const getForMember = query({
       rosterCount: team.rosterCount,
       roster: await rosterOf(ctx, team, user),
       viewerIsCaptain: team.captainUserId === user._id,
+      viewerCanManage: await canManageTeam(ctx, user._id, team, league),
     };
   },
 });

@@ -1,9 +1,11 @@
-// The only writer of `teams`, `rosterEntries`, `teams.rosterCount`, and `seasons.teamCount`, so the
-// counters and the one-team-per-season rule hold for every way onto a roster.
+// The only writer of `teams`, `rosterEntries`, `teamInvites`, `teams.rosterCount`,
+// `teams.pendingInviteCount`, and `seasons.teamCount`, so the counters, the one-team-per-season rule,
+// and one pending invite per address hold for every way onto a roster.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { RosterEntrySource } from './rosterEntry';
+import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
 import { TEAM_MESSAGES, teamSortName, type RosterRefusal, type TeamNameError } from './teamInput';
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
@@ -38,7 +40,7 @@ export async function teamWithSortName(
     .first();
 }
 
-function refuse(refusal: RosterRefusal | TeamNameError): never {
+function refuse(refusal: RosterRefusal | TeamNameError | TeamInviteInputError): never {
   // Spread: `ConvexError` data must be a plain object value, which an interface is not.
   throw new ConvexError({ ...refusal });
 }
@@ -87,6 +89,7 @@ export async function insertTeamWithCaptain(
     sortName: teamSortName(name),
     captainUserId,
     rosterCount: 0,
+    pendingInviteCount: 0,
     createdAt: Date.now(),
   });
   await countTeam(ctx, season._id);
@@ -141,6 +144,79 @@ export async function removeRosterEntry(
   await changeRosterCount(ctx, entry.teamId, -1);
 }
 
+/** At most one invite to an address is pending, and it is the newest, since no other could be made after it. */
+export async function pendingTeamInvite(
+  ctx: ReadCtx,
+  teamId: Id<'teams'>,
+  email: string,
+): Promise<Doc<'teamInvites'> | null> {
+  const newest = await ctx.db
+    .query('teamInvites')
+    .withIndex('by_teamId_and_email', (q) => q.eq('teamId', teamId).eq('email', email))
+    .order('desc')
+    .first();
+  return newest?.status === 'pending' ? newest : null;
+}
+
+export interface NewTeamInvite {
+  /** Already checked with `checkTeamInviteEmail`. */
+  email: string;
+  tokenHash: string;
+  expiresAt: number;
+  invitedByUserId: Id<'users'>;
+}
+
+/** An expired invite still counts as pending, so it blocks the address until it is revoked. */
+export async function insertTeamInvite(
+  ctx: MutationCtx,
+  team: Doc<'teams'>,
+  invite: NewTeamInvite,
+): Promise<Id<'teamInvites'>> {
+  if (await pendingTeamInvite(ctx, team._id, invite.email)) {
+    refuse({
+      field: 'email',
+      code: 'alreadyInvited',
+      message: TEAM_INVITE_MESSAGES.alreadyInvited(invite.email),
+    });
+  }
+  const inviteId = await ctx.db.insert('teamInvites', {
+    organizationId: team.organizationId,
+    seasonId: team.seasonId,
+    teamId: team._id,
+    email: invite.email,
+    tokenHash: invite.tokenHash,
+    expiresAt: invite.expiresAt,
+    status: 'pending',
+    invitedByUserId: invite.invitedByUserId,
+    createdAt: Date.now(),
+  });
+  await changePendingInviteCount(ctx, team._id, 1);
+  return inviteId;
+}
+
+export async function revokeTeamInvite(
+  ctx: MutationCtx,
+  inviteId: Id<'teamInvites'>,
+): Promise<void> {
+  const invite = await ctx.db.get('teamInvites', inviteId);
+  if (invite?.status !== 'pending') throw new Error('Only a pending invite can be revoked');
+  await ctx.db.patch('teamInvites', inviteId, { status: 'revoked' });
+  await changePendingInviteCount(ctx, invite.teamId, -1);
+}
+
+// Read fresh so a stale `Doc` cannot lose a count.
+async function changePendingInviteCount(
+  ctx: MutationCtx,
+  teamId: Id<'teams'>,
+  change: 1 | -1,
+): Promise<void> {
+  const team = await ctx.db.get('teams', teamId);
+  if (!team) throw new Error('No team has this id');
+  await ctx.db.patch('teams', teamId, {
+    pendingInviteCount: (team.pendingInviteCount ?? 0) + change,
+  });
+}
+
 // Read fresh so a stale `Doc` cannot lose a count.
 async function changeRosterCount(
   ctx: MutationCtx,
@@ -174,6 +250,17 @@ export async function backfillSeasonTeamCounts(ctx: MutationCtx): Promise<number
   for (const season of await ctx.db.query('seasons').take(BACKFILL_TEAM_COUNT_SCAN_LIMIT)) {
     if (season.teamCount !== undefined) continue;
     await ctx.db.patch('seasons', season._id, { teamCount: await recountTeams(ctx, season._id) });
+    backfilled++;
+  }
+  return backfilled;
+}
+
+/** A team written before invites existed has none, so its count is 0. */
+export async function backfillTeamPendingInviteCounts(ctx: MutationCtx): Promise<number> {
+  let backfilled = 0;
+  for (const team of await ctx.db.query('teams').take(BACKFILL_TEAM_COUNT_SCAN_LIMIT)) {
+    if (team.pendingInviteCount !== undefined) continue;
+    await ctx.db.patch('teams', team._id, { pendingInviteCount: 0 });
     backfilled++;
   }
   return backfilled;

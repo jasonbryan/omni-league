@@ -59,6 +59,8 @@ const LEAGUE_PAGE = ['league-page', 'league-page-offline', 'public-page-layout-s
 const SEASON_PAGE = ['season-page', 'public-page-layout-shift', 'cache-key'];
 // The season page's registration card links to the register route, and the register route opens the team page.
 const TEAM_REGISTRATION = ['team-registration'];
+// The team page holds the team invite form, link, and pending list.
+const TEAM_INVITES = ['team-invites'];
 // cache-key samples the find page's `?q=` parameter. The public layout's footer links to it.
 const FIND_PAGE = ['find-a-league', 'find-organizations', 'cache-key'];
 const LEAGUE_MANAGEMENT = [
@@ -105,7 +107,7 @@ export const ROUTE_SPECS = {
   'app/organizations/:slug/staff': ['organization-staff'],
   'app/organizations/:slug/details': ['organization-details'],
   'app/register/:orgSlug/:leagueSlug/:seasonSlug/team': TEAM_REGISTRATION,
-  'app/teams/:teamId': [...TEAM_REGISTRATION, 'after-sign-in'],
+  'app/teams/:teamId': [...TEAM_REGISTRATION, ...TEAM_INVITES, 'after-sign-in'],
   'app/**': ['not-found'],
   '**': ['not-found'],
 };
@@ -590,7 +592,7 @@ export const AREAS = [
     // The season page imports the register route's path from here.
     name: 'team pages',
     test: inDir('src/app/teams/'),
-    specs: [...TEAM_REGISTRATION, 'season-page'],
+    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, 'season-page'],
   },
   {
     name: 'helm input and field',
@@ -824,9 +826,9 @@ export const AREAS = [
   {
     name: 'convex teams and roster writes',
     test: (file) =>
-      named('convex/', ['teams'])(file) ||
-      named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput'])(file),
-    specs: [...TEAM_REGISTRATION, 'season-page'],
+      named('convex/', ['teams', 'teamInvites'])(file) ||
+      named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput', 'teamInviteInput'])(file),
+    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, 'season-page'],
   },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];

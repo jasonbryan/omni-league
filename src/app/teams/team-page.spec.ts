@@ -22,6 +22,7 @@ const SHARKS = {
   rosterCount: 1,
   roster: [{ rosterEntryId: 're_1', name: 'Tasha Greene', isCaptain: true, isViewer: true }],
   viewerIsCaptain: true,
+  viewerCanManage: true,
 };
 
 describe('TeamPage', () => {
@@ -81,7 +82,7 @@ describe('TeamPage', () => {
     );
     expect(rosterRows()).toEqual([['TG', 'Tasha Greene (you)', 'Captain']]);
     expect(document.title).toBe('Sand Sharks | Omni League');
-    expect(main().querySelector('[data-slot="alert"]')).toBeNull();
+    expect(main().querySelector('app-admin-alert[kind="success"]')).toBeNull();
   });
 
   it('a player who is not the captain gets no captain line and no "(you)" on the captain', async () => {
@@ -96,6 +97,7 @@ describe('TeamPage', () => {
         { rosterEntryId: 're_4', name: 'Ben Ode', isCaptain: false, isViewer: false },
       ],
       viewerIsCaptain: false,
+      viewerCanManage: false,
     });
     expect(main().textContent).not.toContain('You’re the captain.');
     expect(text(main().querySelector('[data-testid="roster-count"]'))).toBe('4 of 4 players');
@@ -119,7 +121,7 @@ describe('TeamPage', () => {
     const status = main().querySelector<HTMLElement>('[data-slot="alert"]');
     expect(status?.getAttribute('role')).toBe('status');
     expect(text(status)).toBe(
-      'Sand Sharks is registered for Summer 2027. You’re its captain and first player.',
+      'Sand Sharks is registered for Summer 2027. Invite your players next. Each invite link is shown once.',
     );
     expect(document.activeElement).toBe(status);
   });

@@ -99,6 +99,23 @@ export async function requireTeamMemberOrOrganizer(
   return user;
 }
 
+export async function canManageTeam(
+  ctx: Ctx,
+  userId: Id<'users'>,
+  team: Doc<'teams'>,
+  league: Doc<'leagues'>,
+): Promise<boolean> {
+  return team.captainUserId === userId || (await organizesLeague(ctx, userId, league));
+}
+
+export async function requireTeamManager(ctx: Ctx, team: Doc<'teams'>): Promise<Doc<'users'>> {
+  const user = await requireUser(ctx);
+  const league = await ctx.db.get('leagues', team.leagueId);
+  if (!league || !(await canManageTeam(ctx, user._id, team, league)))
+    throw new Error('Not allowed');
+  return user;
+}
+
 export async function requireLeagueOrganizerOrForbidden(
   ctx: Ctx,
   league: Doc<'leagues'>,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, components, internal } from './_generated/api';
 import { isForbidden } from './lib/forbidden';
 import { authUserIdByEmail } from './lib/authUsers';
+import { hashInviteToken } from './lib/inviteToken';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
 import seedSource from './seed.ts?raw';
@@ -246,6 +247,7 @@ const NO_BACKFILL = {
   seasons: 0,
   leagueDivisions: 0,
   teamCounts: 0,
+  pendingInviteCounts: 0,
 };
 
 describe('seed:demo accounts: a new deployment', () => {
@@ -262,6 +264,7 @@ describe('seed:demo accounts: a new deployment', () => {
         memberships: 5,
         invites: 1,
         teams: 4,
+        teamInvites: 2,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -505,6 +508,39 @@ describe('seed:demo accounts: the demo teams', () => {
   );
 
   test(
+    'puts two pending invites with marker hashes on Sand Sharks, once, which no token opens',
+    async () => {
+      const t = setup();
+      const first = await run(t);
+      expect(first.teamInvites).toBe(2);
+      const captain = await as(t, EMAILS.captain);
+      const registration = await captain.query(api.seasons.getForRegistration, {
+        orgSlug: GULF_COAST,
+        leagueSlug: 'sunday-reverse-coed-4s',
+        seasonSlug: 'summer-2027',
+      });
+      const teamId = registration?.team?.teamId;
+      if (!teamId) throw new Error('Sand Sharks missing');
+      const pending = await captain.query(api.teamInvites.listPending, { teamId });
+      expect(pending.rows.map((row) => row.email)).toEqual([
+        'devon.park@demo.omni-league.test',
+        'kai.nakamura@demo.omni-league.test',
+      ]);
+      expect(pending.total).toBe(2);
+      const rows = await t.run((ctx) => ctx.db.query('teamInvites').collect());
+      const markers = rows.map((row) => row.tokenHash);
+      expect(markers).toEqual(['demo-invite-1', 'demo-invite-2']);
+      for (const marker of markers) expect(marker).not.toMatch(/^[0-9a-f]{64}$/);
+      expect(await hashInviteToken('demo-invite-1')).toMatch(/^[0-9a-f]{64}$/);
+
+      await captain.mutation(api.teamInvites.revoke, { inviteId: pending.rows[0].inviteId });
+      expect((await run(t)).teamInvites).toBe(0);
+      expect(await t.run((ctx) => ctx.db.query('teamInvites').collect())).toHaveLength(2);
+    },
+    SLOW,
+  );
+
+  test(
     'gives an address someone else holds no team, and seeds the others',
     async () => {
       const t = setup();
@@ -548,6 +584,7 @@ describe('seed:demo accounts: a second run', () => {
         memberships: 0,
         invites: 0,
         teams: 0,
+        teamInvites: 0,
         accounts: ALL('exists'),
       });
       expect({
@@ -672,6 +709,7 @@ describe('seed:demo accounts: the password', () => {
         memberships: 0,
         invites: 1,
         teams: 0,
+        teamInvites: 0,
         accounts: ALL('skipped:unset'),
       });
       expect(await authRows(t, 'user')).toEqual([]);
@@ -739,7 +777,13 @@ describe('seed:demo accounts: the password', () => {
       const t = setup();
       const result = await run(t);
       expect(result.accounts).toEqual(ALL(code));
-      expect(result).toMatchObject({ ...DATA, memberships: 0, invites: 1, teams: 0 });
+      expect(result).toMatchObject({
+        ...DATA,
+        memberships: 0,
+        invites: 1,
+        teams: 0,
+        teamInvites: 0,
+      });
       expect(await authRows(t, 'user')).toEqual([]);
       expect(await authRows(t, 'account')).toEqual([]);
       expect((await appRows(t)).memberships).toEqual([]);

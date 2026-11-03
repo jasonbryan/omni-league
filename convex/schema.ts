@@ -175,6 +175,8 @@ export default defineSchema({
     captainUserId: v.id('users'),
     /** The team's `rostered` entries. */
     rosterCount: v.number(),
+    /** The team's `pending` invites, expired ones included; absent on a team written before invites existed, which has none. */
+    pendingInviteCount: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index('by_seasonId_and_sortName', ['seasonId', 'sortName'])
@@ -196,6 +198,25 @@ export default defineSchema({
     .index('by_teamId_and_status', ['teamId', 'status'])
     .index('by_seasonId_and_userId', ['seasonId', 'userId'])
     .index('by_userId_and_status', ['userId', 'status']),
+
+  // Written only through `convex/lib/rosterWrites.ts`, which keeps the team's `pendingInviteCount`.
+  // A pending invite is not a roster entry.
+  teamInvites: defineTable({
+    organizationId: v.id('organizations'),
+    seasonId: v.id('seasons'),
+    teamId: v.id('teams'),
+    /** Trimmed and lowercased, so an address matches whatever its case. */
+    email: v.string(),
+    // Only the hash is stored, so a database read cannot reveal a usable invite link.
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+    status: inviteStatusValidator,
+    invitedByUserId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_teamId_and_status', ['teamId', 'status'])
+    .index('by_teamId_and_email', ['teamId', 'email'])
+    .index('by_tokenHash', ['tokenHash']),
 
   // An endpoint is an unguessable capability URL only its browser holds, so presenting it is proof
   // enough to move its row to the caller.

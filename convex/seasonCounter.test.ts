@@ -280,6 +280,7 @@ describe('leagues.publishedSeasonCount: seed:demo', () => {
       seasons: 0,
       leagueDivisions: 0,
       teamCounts: 0,
+      pendingInviteCounts: 0,
     });
     expect(await stored(t, league._id)).toBe(2);
   });

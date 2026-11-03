@@ -29,6 +29,7 @@ const NONE = {
   seasons: 0,
   leagueDivisions: 0,
   teamCounts: 0,
+  pendingInviteCounts: 0,
 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
@@ -791,6 +792,7 @@ describe('seed:demo', () => {
         seasons: 0,
         leagueDivisions: 2,
         teamCounts: 0,
+        pendingInviteCounts: 0,
       },
       updated: { organizations: 1 },
     });
@@ -991,6 +993,7 @@ describe('seed:demo', () => {
       'grantDemoMemberships',
       'insertDemoData',
       'insertDemoInvite',
+      'insertDemoTeamInvites',
       'insertDemoTeams',
       'setDemoLogo',
     ]);
@@ -1073,6 +1076,7 @@ describe('seed:demo backfill against a recount', () => {
       seasons: 0,
       leagueDivisions: 2,
       teamCounts: 0,
+      pendingInviteCounts: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({

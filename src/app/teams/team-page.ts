@@ -17,10 +17,13 @@ import {
   lucideCrown,
   lucideInfo,
   lucideLock,
+  lucideShieldCheck,
+  lucideUserPlus,
 } from '@ng-icons/lucide';
 import { map } from 'rxjs';
 import { isForbidden } from '../../../convex/lib/forbidden';
 import { AuthService } from '../core/auth/auth.service';
+import type { Id } from '../../../convex/_generated/dataModel';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { NotFoundView } from '../not-found/not-found-view';
 import { AdminAlert } from '../organizations/admin/admin-alert';
@@ -32,10 +35,13 @@ import {
 } from '../organizations/public-league/public-league-path';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
+import { isPlainClick } from '../shell/follow-link';
 import { initialsOf } from '../shell/initials';
-import { PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { rosterCount } from './roster-count';
+import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
+import { TeamPendingInvites } from './team-pending-invites';
 
 type TeamState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
@@ -53,9 +59,26 @@ export interface TeamPageNavigationState {
 
 @Component({
   selector: 'app-team-page',
-  imports: [AdminAlert, NgIcon, NotFoundView, RouterLink, ServerErrorView, Shell],
+  imports: [
+    AdminAlert,
+    NgIcon,
+    NotFoundView,
+    RouterLink,
+    ServerErrorView,
+    Shell,
+    TeamInvitePanel,
+    TeamPendingInvites,
+  ],
   providers: [
-    provideIcons({ lucideArrowLeft, lucideCircleCheck, lucideCrown, lucideInfo, lucideLock }),
+    provideIcons({
+      lucideArrowLeft,
+      lucideCircleCheck,
+      lucideCrown,
+      lucideInfo,
+      lucideLock,
+      lucideShieldCheck,
+      lucideUserPlus,
+    }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -129,28 +152,57 @@ export interface TeamPageNavigationState {
                 ><ng-icon name="lucideArrowLeft" class="text-base" aria-hidden="true" />Your
                 account</a
               >
-              <div class="mt-3 min-w-0">
-                <p class="text-sm font-medium text-muted-foreground">Team</p>
-                <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-                  {{ team.name }}
-                </h1>
-                <p class="mt-2 text-sm text-muted-foreground">
-                  <a [routerLink]="seasonHref()" [class]="inlineLink">{{ team.season.name }}</a>
-                  &middot;
-                  <a [routerLink]="leagueHref()" [class]="inlineLink">{{ team.league.name }}</a>
-                  &middot;
-                  <a [routerLink]="organizationHref()" [class]="inlineLink">{{
-                    team.organization.name
-                  }}</a>
-                </p>
-                @if (team.viewerIsCaptain) {
-                  <p class="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
-                    <ng-icon
-                      name="lucideCrown"
-                      class="mt-0.5 shrink-0 text-base"
-                      aria-hidden="true"
-                    /><span>You&rsquo;re the captain.</span>
+              <div class="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-muted-foreground">Team</p>
+                  <h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+                    {{ team.name }}
+                  </h1>
+                  <p class="mt-2 text-sm text-muted-foreground">
+                    <a [routerLink]="seasonHref()" [class]="inlineLink">{{ team.season.name }}</a>
+                    &middot;
+                    <a [routerLink]="leagueHref()" [class]="inlineLink">{{ team.league.name }}</a>
+                    &middot;
+                    <a [routerLink]="organizationHref()" [class]="inlineLink">{{
+                      team.organization.name
+                    }}</a>
                   </p>
+                  @if (team.viewerIsCaptain) {
+                    <p class="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
+                      <ng-icon
+                        name="lucideCrown"
+                        class="mt-0.5 shrink-0 text-base"
+                        aria-hidden="true"
+                      /><span
+                        >You&rsquo;re the captain. You invite players and manage the roster.</span
+                      >
+                    </p>
+                  } @else if (team.viewerCanManage) {
+                    <p class="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
+                      <ng-icon
+                        name="lucideShieldCheck"
+                        class="mt-0.5 shrink-0 text-base"
+                        aria-hidden="true"
+                      /><span
+                        >You&rsquo;re an organizer of {{ team.league.name }}, so you can manage this
+                        team&rsquo;s roster.</span
+                      >
+                    </p>
+                  }
+                </div>
+                @if (team.viewerCanManage) {
+                  <!-- The fragment link is explicit: a bare #invite would resolve against <base href="/"> to the home page. -->
+                  <a
+                    [href]="path() + '#invite'"
+                    data-slot="button"
+                    [class]="jumpClass"
+                    (click)="jumpToPanel($event)"
+                    ><ng-icon
+                      name="lucideUserPlus"
+                      data-icon="inline-start"
+                      aria-hidden="true"
+                    />Invite players</a
+                  >
                 }
               </div>
               @if (registered()) {
@@ -158,64 +210,76 @@ export interface TeamPageNavigationState {
                   #registeredStatus
                   kind="success"
                   [title]="registeredTitle()"
-                  description="You’re its captain and first player."
+                  description="Invite your players next. Each invite link is shown once."
                   class="mt-4"
                 />
               }
               <div class="mt-6 grid items-start gap-4 md:gap-6 lg:grid-cols-3">
-                <section aria-labelledby="roster-heading" class="${PANEL} lg:col-span-2">
-                  <div
-                    class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
-                  >
-                    <h2 id="roster-heading" class="font-semibold">Roster</h2>
-                    <p
-                      data-testid="roster-count"
-                      class="text-sm text-muted-foreground tabular-nums"
+                <div class="flex flex-col gap-4 md:gap-6 lg:col-span-2">
+                  <section aria-labelledby="roster-heading" class="${PANEL}">
+                    <div
+                      class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
                     >
-                      {{ count().count }}
+                      <h2 id="roster-heading" class="font-semibold">Roster</h2>
+                      <p class="text-sm text-muted-foreground tabular-nums">
+                        <span data-testid="roster-count">{{ count().count }}</span>
+                        @if (pendingCount(); as pending) {
+                          &middot; <span data-testid="pending-count">{{ pending }}</span>
+                        }
+                      </p>
+                    </div>
+                    <p
+                      data-testid="roster-note"
+                      class="flex items-start gap-1.5 border-b border-border px-4 py-3 text-sm text-muted-foreground md:px-5"
+                    >
+                      <ng-icon
+                        [name]="count().met ? 'lucideCircleCheck' : 'lucideInfo'"
+                        class="mt-0.5 shrink-0 text-base"
+                        aria-hidden="true"
+                      /><span>{{ count().note }}</span>
                     </p>
-                  </div>
-                  <p
-                    data-testid="roster-note"
-                    class="flex items-start gap-1.5 border-b border-border px-4 py-3 text-sm text-muted-foreground md:px-5"
-                  >
-                    <ng-icon
-                      [name]="count().met ? 'lucideCircleCheck' : 'lucideInfo'"
-                      class="mt-0.5 shrink-0 text-base"
-                      aria-hidden="true"
-                    /><span>{{ count().note }}</span>
-                  </p>
-                  <ul role="list" class="divide-y divide-border">
-                    @for (player of team.roster; track player.rosterEntryId) {
-                      <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
-                        <span
-                          aria-hidden="true"
-                          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground"
-                          >{{ initials(player.name) }}</span
-                        >
-                        <div class="min-w-0 flex-1">
-                          <h3 class="font-medium break-words">
-                            {{ player.name }}
-                            @if (player.isViewer) {
-                              <span class="text-sm font-normal text-muted-foreground">(you)</span>
+                    <ul role="list" class="divide-y divide-border">
+                      @for (player of team.roster; track player.rosterEntryId) {
+                        <li class="flex flex-wrap items-start gap-x-3 gap-y-3 px-4 py-3.5 md:px-5">
+                          <span
+                            aria-hidden="true"
+                            class="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground"
+                            >{{ initials(player.name) }}</span
+                          >
+                          <div class="min-w-0 flex-1">
+                            <h3 class="font-medium break-words">
+                              {{ player.name }}
+                              @if (player.isViewer) {
+                                <span class="text-sm font-normal text-muted-foreground">(you)</span>
+                              }
+                            </h3>
+                            @if (player.isCaptain) {
+                              <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                                <span data-slot="badge" [class]="captainBadge"
+                                  ><ng-icon
+                                    name="lucideCrown"
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                  />Captain</span
+                                >
+                              </p>
                             }
-                          </h3>
-                          @if (player.isCaptain) {
-                            <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                              <span data-slot="badge" [class]="captainBadge"
-                                ><ng-icon
-                                  name="lucideCrown"
-                                  data-icon="inline-start"
-                                  aria-hidden="true"
-                                />Captain</span
-                              >
-                            </p>
-                          }
-                        </div>
-                      </li>
-                    }
-                  </ul>
-                </section>
+                          </div>
+                        </li>
+                      }
+                    </ul>
+                  </section>
+                  @if (team.viewerCanManage) {
+                    <app-team-pending-invites
+                      [rows]="pending.value()?.rows"
+                      [total]="pending.value()?.total"
+                      [failed]="pending.error() !== undefined"
+                    />
+                  }
+                </div>
+                @if (team.viewerCanManage && teamIdOf(); as id) {
+                  <app-team-invite-panel [teamId]="id" />
+                }
               </div>
             </div>
           }
@@ -230,6 +294,7 @@ export class TeamPage {
 
   protected readonly skeletonRows = [0, 1, 2];
   protected readonly primaryButton = PRIMARY_BUTTON;
+  protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly backLink = BACK_LINK;
   protected readonly inlineLink = INLINE_LINK;
   protected readonly captainBadge = BADGE_SECONDARY;
@@ -257,6 +322,23 @@ export class TeamPage {
   protected readonly team = computed(() =>
     this.state() === 'ready' ? (this.query.value() ?? null) : null,
   );
+
+  /** The id Convex accepted, so the invite calls never send one it would refuse. */
+  protected readonly teamIdOf = computed(() =>
+    this.team() ? (this.teamId() as Id<'teams'>) : null,
+  );
+
+  // Only for the captain and organizers: other members never see the addresses.
+  protected readonly pending = injectQuery(api.teamInvites.listPending, () => {
+    const id = this.teamIdOf();
+    return id && this.team()?.viewerCanManage ? { teamId: id } : skipToken;
+  });
+
+  protected readonly pendingCount = computed(() => {
+    const total = this.pending.value()?.total;
+    if (total === undefined) return null;
+    return `${total} pending ${total === 1 ? 'invite' : 'invites'}`;
+  });
 
   protected readonly registered = signal(
     (inject(Router).currentNavigation()?.extras.state as TeamPageNavigationState | undefined)
@@ -289,6 +371,7 @@ export class TeamPage {
   });
 
   private readonly registeredStatus = viewChild<AdminAlert>('registeredStatus');
+  private readonly invitePanel = viewChild(TeamInvitePanel);
   private readonly statusFocused = signal(false);
 
   constructor() {
@@ -305,5 +388,15 @@ export class TeamPage {
       this.statusFocused.set(true);
       status.focus();
     });
+  }
+
+  protected jumpToPanel(event: MouseEvent): void {
+    if (!isPlainClick(event)) return;
+    const panel = this.invitePanel();
+    const section = panel?.scrollTarget();
+    if (!panel || !section) return;
+    event.preventDefault();
+    section.scrollIntoView();
+    panel.focusFirst();
   }
 }
