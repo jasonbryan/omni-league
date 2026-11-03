@@ -358,6 +358,40 @@ test.describe('Season management: placing a free agent', () => {
   });
 });
 
+test.describe('Season management: placing a free agent, while the placement is held', () => {
+  test('the Placing… button is disabled and the dialog stays accessible', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { tenant, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
+    await waitingPage.context().close();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.routeWebSocket(/.*/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage(async (message) => {
+        if (typeof message === 'string' && message.includes('"Mutation"')) await held;
+        server.send(message);
+      });
+      server.onMessage((message) => ws.send(message));
+    });
+    await page.goto(seasonPath(tenant, SUMMER));
+    await freeAgentRows(page)
+      .filter({ hasText: waiting.name })
+      .getByRole('button', { name: `Place on team: ${waiting.name}` })
+      .click();
+    const dialog = placeDialog(page);
+    await dialog.getByRole('radio', { name: 'Dig Deep' }).check();
+    await dialog.getByRole('button', { name: 'Place on team' }).click();
+    const placing = dialog.getByRole('button', { name: 'Placing…' });
+    await expect(placing).toHaveAttribute('aria-disabled', 'true');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '135-placing');
+    release();
+    await expect(dialog).toHaveCount(0);
+  });
+});
+
 test.describe('Season management: placing a free agent someone else placed', () => {
   test.use({ expectedConvexErrors: ['freeAgents:place'] });
 
@@ -394,6 +428,11 @@ test.describe('Season management: placing a free agent someone else placed', () 
 
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
+    await expect(
+      freeAgentRows(page)
+        .first()
+        .getByRole('button', { name: /Place on team/ }),
+    ).toBeFocused();
     const sharks = teamRows(page).filter({ hasText: 'Sand Sharks' });
     await expect(sharks.locator('[data-slot="roster"]')).toHaveText('4 of 4 players');
     await expect(freeAgentRows(page).filter({ hasText: waiting.name })).toHaveCount(0);

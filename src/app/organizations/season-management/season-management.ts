@@ -267,7 +267,7 @@ function localDay(ms: number): string {
           </section>
           <section id="free-agents" aria-labelledby="free-agents-heading" [class]="panel">
             <div [class]="panelHead">
-              <h2 id="free-agents-heading" class="font-semibold">Free agents</h2>
+              <h2 id="free-agents-heading" tabindex="-1" class="font-semibold">Free agents</h2>
             </div>
             @if (placed(); as placed) {
               <div [class]="panelNote">
@@ -450,7 +450,7 @@ export class SeasonManagement {
     this.placeDialog()?.open({ freeAgentId: row.freeAgentId, name: row.name });
   }
 
-  /** A placement moves focus to the status, because the row and its button are gone; a cancel puts focus back on the row's button. */
+  /** A placement moves focus to the status, because the row and its button are gone; a cancel puts focus back on the row's button, or on the first remaining button or the heading when the row is gone. */
   protected placeDismissed({ freeAgentId, name, placedOn }: PlaceFreeAgentOutcome): void {
     if (placedOn) {
       const minimum = this.season()?.minimumRosterSize ?? 0;
@@ -459,10 +459,14 @@ export class SeasonManagement {
       return;
     }
     afterNextRender(
-      () =>
-        this.host.nativeElement
-          .querySelector<HTMLElement>(`button[data-free-agent-id="${freeAgentId}"]`)
-          ?.focus(),
+      () => {
+        const host: HTMLElement = this.host.nativeElement;
+        const target =
+          host.querySelector<HTMLElement>(`button[data-free-agent-id="${freeAgentId}"]`) ??
+          host.querySelector<HTMLElement>('#free-agents-list button[data-free-agent-id]') ??
+          host.querySelector<HTMLElement>('#free-agents-heading');
+        target?.focus();
+      },
       { injector: this.injector },
     );
   }
