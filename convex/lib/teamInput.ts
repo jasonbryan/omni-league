@@ -15,6 +15,11 @@ export interface RegistrationClosedError {
   message: string;
 }
 
+export interface SeasonFullRefusal {
+  code: 'seasonFull';
+  message: string;
+}
+
 export type RosterRefusalCode = 'alreadyOnTeam' | 'alreadyOnAnotherTeam';
 
 export interface RosterRefusal {
@@ -57,6 +62,7 @@ export const TEAM_MESSAGES = {
   nameTaken: (registered: string) =>
     `${registered} is already registered in this season. Choose another name.`,
   registrationClosed: 'Registration for this season is closed.',
+  seasonFull: 'This season is full.',
   alreadyOnTeam: 'Already on the team.',
   alreadyOnAnotherTeam: (teamName: string) => `Already on ${teamName} in this season.`,
   waitingFreeAgent:

@@ -116,6 +116,7 @@ describe('seasons.getPublicPage', () => {
       registrationDeadline: '2027-05-30',
       formatName: '4v4',
       minimumRosterSize: 5,
+      isFull: false,
     });
   });
 

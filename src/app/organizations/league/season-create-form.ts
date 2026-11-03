@@ -30,7 +30,16 @@ import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { CREATED_STATUS, CREATED_TITLE } from '../admin/footer-status';
 import { STICKY_FOOTER_CLEARANCE, StickyFooter } from '../admin/sticky-footer';
 import { StickyFooterFocus } from '../admin/sticky-footer-focus';
-import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
+import {
+  DESCRIPTION,
+  FIELD,
+  FIELD_ERROR,
+  FIELD_GROUP,
+  FIELD_SET,
+  INPUT,
+  LABEL,
+  LEGEND,
+} from '../admin/field-classes';
 import type { OrganizerLeague } from './league-context';
 import { SEASON_FORM_ALERTS, SeasonForm, type SeasonField } from './season-form';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
@@ -77,6 +86,7 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
   startDate: '#start-date',
   endDate: '#end-date',
   registrationDeadline: '#registration-deadline',
+  maxTeams: '#maximum-teams',
 };
 
 @Component({
@@ -305,6 +315,69 @@ const FOCUS_SELECTOR: Record<SeasonField, string> = {
             >. Seasons already published keep theirs.
           </p>
         </section>
+        <fieldset
+          id="limits"
+          data-slot="field-set"
+          aria-describedby="limits-description"
+          [class]="fieldSetClass"
+        >
+          <legend data-slot="field-legend" data-variant="label" [class]="legendClass">
+            Limits
+          </legend>
+          <p data-slot="field-description" id="limits-description" [class]="descriptionClass">
+            Optional. Leave a limit blank for none.
+          </p>
+          <div
+            role="group"
+            data-slot="field"
+            data-orientation="vertical"
+            [attr.data-matches-spartan-invalid]="form.errors.maxTeams() ? 'true' : null"
+            [attr.data-invalid]="form.errors.maxTeams() ? 'true' : null"
+            [class]="fieldClass"
+          >
+            <label for="maximum-teams" data-slot="field-label" [class]="labelClass"
+              >Maximum teams</label
+            >
+            <input
+              id="maximum-teams"
+              type="text"
+              inputmode="numeric"
+              data-slot="input"
+              autocomplete="off"
+              [formField]="form.fields.maxTeams"
+              (blur)="form.left('maxTeams')"
+              [attr.aria-describedby]="
+                describedBy('maxTeams', 'maximum-teams-description', 'maximum-teams')
+              "
+              [attr.aria-invalid]="form.errors.maxTeams() ? 'true' : null"
+              [attr.data-invalid]="form.errors.maxTeams() ? 'true' : null"
+              [attr.data-matches-spartan-invalid]="form.errors.maxTeams() ? 'true' : null"
+              [class]="inputClass"
+            />
+            <p
+              data-slot="field-description"
+              id="maximum-teams-description"
+              [class]="descriptionClass"
+            >
+              2 to 200. When it’s reached, the season is full.
+            </p>
+            @if (form.errors.maxTeams(); as error) {
+              <div
+                role="alert"
+                data-slot="field-error"
+                id="maximum-teams-error"
+                [class]="errorClass"
+              >
+                <ng-icon
+                  name="lucideCircleAlert"
+                  class="mt-0.5 shrink-0 text-base"
+                  aria-hidden="true"
+                />
+                <span>{{ error }}</span>
+              </div>
+            }
+          </div>
+        </fieldset>
       </div>
       @if (divisionMissing()) {
         <app-admin-alert
@@ -424,6 +497,8 @@ export class SeasonCreateForm {
   protected readonly inputClass = INPUT;
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
+  protected readonly fieldSetClass = FIELD_SET;
+  protected readonly legendClass = LEGEND;
   protected readonly buttonClass = `${PRIMARY_BUTTON} w-full sm:w-auto`;
   protected readonly createdClass = CREATED_STATUS;
   protected readonly createdTitleClass = CREATED_TITLE;

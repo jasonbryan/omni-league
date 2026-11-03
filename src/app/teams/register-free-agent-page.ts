@@ -347,7 +347,8 @@ export class RegisterFreeAgentPage {
   /** Signed out, the page stays on its skeleton while it sends the visitor to sign in. */
   protected readonly state = computed<RegisterTeamState | 'error'>(() => {
     if (this.registration.error()) return 'error';
-    const state = this.firstState();
+    const first = this.firstState();
+    const state = first === 'full' ? 'form' : first;
     if (state === 'signed-out') return 'loading';
     if (state !== 'form') return state;
     if (this.registeredAt() !== null || this.refusal() === 'waiting') return 'waiting';

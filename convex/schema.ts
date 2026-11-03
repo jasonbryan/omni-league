@@ -155,6 +155,8 @@ export default defineSchema({
     status: seasonStatusValidator,
     /** Kept by `convex/lib/rosterWrites.ts`; absent on a season written before teams existed, which has none. */
     teamCount: v.optional(v.number()),
+    /** Absent means no limit. */
+    maxTeams: v.optional(v.number()),
   })
     .index('by_leagueId_and_slug', ['leagueId', 'slug'])
     .index('by_leagueId_and_startDate', ['leagueId', 'startDate'])

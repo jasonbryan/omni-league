@@ -4,7 +4,12 @@ import { isChoosableSlug } from './slugs';
 
 export const MAX_SEASON_NAME_LENGTH = 100;
 
-export type SeasonField = 'name' | 'slug' | 'startDate' | 'endDate' | 'registrationDeadline';
+export const MIN_MAX_TEAMS = 2;
+/** The organizer season page reads at most this many teams. */
+export const MAX_MAX_TEAMS = 200;
+
+export type SeasonField =
+  'name' | 'slug' | 'startDate' | 'endDate' | 'registrationDeadline' | 'maxTeams';
 
 export const SEASON_FIELDS: readonly SeasonField[] = [
   'name',
@@ -12,6 +17,7 @@ export const SEASON_FIELDS: readonly SeasonField[] = [
   'startDate',
   'endDate',
   'registrationDeadline',
+  'maxTeams',
 ];
 
 export type SeasonDateField = 'startDate' | 'endDate' | 'registrationDeadline';
@@ -25,7 +31,9 @@ export type SeasonInputCode =
   | 'dateEmpty'
   | 'dateInvalid'
   | 'endBeforeStart'
-  | 'deadlineNotBeforeStart';
+  | 'deadlineNotBeforeStart'
+  | 'maxTeamsInvalid'
+  | 'maxTeamsBelowCount';
 
 export interface SeasonInputError {
   field: SeasonField;
@@ -60,6 +68,9 @@ export const SEASON_MESSAGES = {
   deadlineNotBeforeStart: (startDate: string) =>
     `The registration deadline must be before the start date, ${formatCalendarDate(startDate)}.`,
   leagueFormatMissing: 'Set this league’s format in its details first.',
+  maxTeamsInvalid: `Enter a whole number from ${MIN_MAX_TEAMS} to ${MAX_MAX_TEAMS}, or leave it blank.`,
+  maxTeamsBelowCount: (teamCount: number) =>
+    `${teamCount} teams are already registered. Enter ${teamCount} or more, or leave it blank.`,
 } as const;
 
 function daysInMonth(year: number, month: number): number {
@@ -158,9 +169,35 @@ export function checkSeasonDates(
   return errors;
 }
 
+export interface SeasonTeamLimit {
+  teamCount?: number | undefined;
+  maxTeams?: number | undefined;
+}
+
+export function seasonIsFull({ teamCount, maxTeams }: SeasonTeamLimit): boolean {
+  return maxTeams !== undefined && (teamCount ?? 0) >= maxTeams;
+}
+
+/** `undefined` is no limit. */
+export function checkMaxTeams(maxTeams: number | undefined): SeasonInputError | null {
+  if (maxTeams === undefined) return null;
+  if (Number.isInteger(maxTeams) && maxTeams >= MIN_MAX_TEAMS && maxTeams <= MAX_MAX_TEAMS) {
+    return null;
+  }
+  return { field: 'maxTeams', code: 'maxTeamsInvalid', message: SEASON_MESSAGES.maxTeamsInvalid };
+}
+
+/** Blank is no limit. Text other than digits reads as `NaN`, which `checkMaxTeams` refuses, so `1e1` is not 10. */
+export function maxTeamsFromText(text: string): number | undefined {
+  const trimmed = text.trim();
+  if (trimmed === '') return undefined;
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN;
+}
+
 export interface SeasonValues extends SeasonDates {
   name: string;
   slug: string;
+  maxTeams?: number | undefined;
 }
 
 export function checkSeasonFields(
@@ -172,6 +209,8 @@ export function checkSeasonFields(
   const slug = checkSeasonSlug(values.slug);
   if (slug) errors.slug = slug;
   Object.assign(errors, checkSeasonDates(values));
+  const maxTeams = checkMaxTeams(values.maxTeams);
+  if (maxTeams) errors.maxTeams = maxTeams;
   return errors;
 }
 

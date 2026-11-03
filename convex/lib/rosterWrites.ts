@@ -1,6 +1,7 @@
 // The only writer of `teams`, `rosterEntries`, `teamInvites`, `freeAgents`, `teams.rosterCount`,
-// `teams.pendingInviteCount`, and `seasons.teamCount`, so the counters, the one-place-per-season rule,
-// and one pending invite per address hold for every way onto a roster.
+// `teams.pendingInviteCount`, `seasons.teamCount`, and `seasons.maxTeams` once the season exists, so the
+// counters, the team limit, the one-place-per-season rule, and one pending invite per address hold for
+// every way onto a roster.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
@@ -13,6 +14,7 @@ import {
   type NothingChosenRefusal,
 } from './minorName';
 import type { RosterEntrySource } from './rosterEntry';
+import { SEASON_MESSAGES, seasonIsFull, type SeasonInputError } from './seasonInput';
 import { TEAM_INVITE_MESSAGES, type TeamInviteInputError } from './teamInviteInput';
 import {
   TEAM_MESSAGES,
@@ -20,6 +22,7 @@ import {
   type AlreadyFreeAgentRefusal,
   type AlreadyPlacedRefusal,
   type RosterRefusal,
+  type SeasonFullRefusal,
   type TeamNameError,
   type WaitingFreeAgentRefusal,
 } from './teamInput';
@@ -100,6 +103,8 @@ export async function freeAgentInSeason(
 }
 
 type Refusal =
+  | SeasonFullRefusal
+  | SeasonInputError
   | RosterRefusal
   | TeamNameError
   | TeamInviteInputError
@@ -156,6 +161,10 @@ export async function insertTeamWithCaptain(
   season: Doc<'seasons'>,
   { name, captainUserId }: NewTeam,
 ): Promise<Id<'teams'>> {
+  // Read fresh: a caller's `Doc` may predate teams inserted since. Concurrent registrations conflict on this read and retry.
+  const current = await ctx.db.get('seasons', season._id);
+  if (!current) throw new Error('No season has this id');
+  if (seasonIsFull(current)) refuse({ code: 'seasonFull', message: TEAM_MESSAGES.seasonFull });
   const taken = await teamWithSortName(ctx, season._id, name);
   if (taken) {
     refuse({ field: 'name', code: 'nameTaken', message: TEAM_MESSAGES.nameTaken(taken.name) });
@@ -515,6 +524,25 @@ async function countTeam(ctx: MutationCtx, seasonId: Id<'seasons'>): Promise<voi
   const teamCount =
     season.teamCount === undefined ? await recountTeams(ctx, seasonId) : season.teamCount + 1;
   await ctx.db.patch('seasons', seasonId, { teamCount });
+}
+
+/** `null` removes the limit. The range is checked by the caller; a limit below the registered teams is refused here. */
+export async function setSeasonMaxTeams(
+  ctx: MutationCtx,
+  seasonId: Id<'seasons'>,
+  maxTeams: number | null,
+): Promise<void> {
+  const season = await ctx.db.get('seasons', seasonId);
+  if (!season) throw new Error('No season has this id');
+  const teamCount = season.teamCount ?? (await recountTeams(ctx, seasonId));
+  if (maxTeams !== null && maxTeams < teamCount) {
+    refuse({
+      field: 'maxTeams',
+      code: 'maxTeamsBelowCount',
+      message: SEASON_MESSAGES.maxTeamsBelowCount(teamCount),
+    });
+  }
+  await ctx.db.patch('seasons', seasonId, { maxTeams: maxTeams ?? undefined });
 }
 
 async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {

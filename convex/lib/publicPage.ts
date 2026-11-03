@@ -147,7 +147,7 @@ export const publicSeasonsValidator = publicListValidator(publicSeasonValidator)
 
 export type PublicSeasons = Infer<typeof publicSeasonsValidator>;
 
-// `divisionLabel`, `locations`, `upcomingSeasons`, and `registrationDeadline` are optional so a copy saved before they existed stays valid.
+// `divisionLabel`, `locations`, `upcomingSeasons`, `registrationDeadline`, and `isFull` are optional so a copy saved before they existed stays valid.
 export const publicSeasonPageValidator = v.object({
   organization: v.object({ name: v.string(), slug: v.string() }),
   league: v.object({
@@ -175,6 +175,8 @@ export const publicSeasonPageValidator = v.object({
   registrationDeadline: v.optional(v.string()),
   formatName: v.string(),
   minimumRosterSize: v.number(),
+  isFull: v.optional(v.boolean()),
+  maxTeams: v.optional(v.number()),
 });
 
 export type PublicSeasonPage = Infer<typeof publicSeasonPageValidator>;

@@ -21,7 +21,7 @@ function setup() {
 
 type T = ReturnType<typeof setup>;
 
-const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 6 };
+const ROWS = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 7 };
 const NONE = {
   organizations: 0,
   locations: 0,
@@ -167,7 +167,7 @@ describe('seed:demo', () => {
     expect(await counts(t)).toEqual(ROWS);
   });
 
-  test('adds the two demo draft seasons and the four published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
+  test('adds the two demo draft seasons and the five published ones of Gulf Coast Sport & Social, as seasons.create would take them', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     const rows = await t.run(async (ctx) => {
@@ -252,6 +252,18 @@ describe('seed:demo', () => {
       },
       {
         organization: 'gulf-coast-sport-social',
+        league: 'thursday-night-coed-2s',
+        name: 'Summer 2027',
+        slug: 'summer-2027',
+        playersPerSide: 2,
+        minimumRosterSize: 2,
+        startDate: '2027-06-03',
+        endDate: '2027-08-26',
+        registrationDeadline: '2027-05-20',
+        status: 'published',
+      },
+      {
+        organization: 'gulf-coast-sport-social',
         league: 'sunday-reverse-coed-4s',
         name: 'Current season',
         slug: 'current-season',
@@ -311,14 +323,14 @@ describe('seed:demo', () => {
       updated: { organizations: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(6);
+    expect(after).toHaveLength(7);
     for (const season of before) expect(after).toContainEqual(season);
     expect(
       after.find((season) => season.slug === 'fall-2027' && season.playersPerSide === 7),
     ).toMatchObject({ status: 'published', minimumRosterSize: 9 });
   });
 
-  test('on a deployment where the draft seasons were already seeded, inserts the two published summer-2027 seasons, leaves the fall-2027 drafts unchanged, and a second run inserts nothing', async () => {
+  test('on a deployment where the draft seasons were already seeded, inserts the three published summer-2027 seasons, leaves the fall-2027 drafts unchanged, and a second run inserts nothing', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     await t.run(async (ctx) => {
@@ -336,17 +348,18 @@ describe('seed:demo', () => {
 
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
-      seasons: 2,
+      seasons: 3,
       backfilled: NONE,
       updated: { organizations: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
-    expect(after).toHaveLength(6);
+    expect(after).toHaveLength(7);
     for (const draft of drafts) expect(after).toContainEqual(draft);
     const summers = after.filter((season) => season.slug === 'summer-2027');
     expect(
       summers.map((season) => [season.name, season.status, season.playersPerSide]).sort(),
     ).toEqual([
+      ['Summer 2027', 'published', 2],
       ['Summer 2027', 'published', 4],
       ['Summer 2027', 'published', 7],
     ]);
@@ -974,6 +987,8 @@ describe('seed:demo', () => {
       DEMO_TEAM_SEASON,
       DEMO_CAPTAINS,
       DEMO_TEAMS,
+      DEMO_FULL_SEASON,
+      DEMO_FULL_SEASON_TEAMS,
       DEMO_FREE_AGENT_PEOPLE,
       DEMO_FREE_AGENTS,
       ...functions
@@ -992,6 +1007,8 @@ describe('seed:demo', () => {
     expect(DEMO_TEAM_SEASON.seasonSlug).toBe('summer-2027');
     expect(DEMO_CAPTAINS).toHaveLength(3);
     expect(DEMO_TEAMS).toHaveLength(4);
+    expect(DEMO_FULL_SEASON.leagueSlug).toBe('thursday-night-coed-2s');
+    expect(DEMO_FULL_SEASON_TEAMS).toHaveLength(2);
     expect(DEMO_FREE_AGENT_PEOPLE).toHaveLength(3);
     expect(DEMO_FREE_AGENTS).toHaveLength(4);
     const exports = Object.entries(functions);
@@ -1273,7 +1290,7 @@ describe('seed:demo seasons dated from the run', () => {
     }
   });
 
-  test('keeps the Summer 2027 seasons of both leagues open for registration beside them', async () => {
+  test('keeps the Summer 2027 seasons of the three leagues open for registration beside them', async () => {
     const t = setup();
     await t.mutation(internal.seed.insertDemoData, {});
     const published = await t.query(api.seasons.listOpenForOrganization, {
@@ -1282,6 +1299,7 @@ describe('seed:demo seasons dated from the run', () => {
     const open = published.filter((season) => registrationIsOpen(season, RUN));
     expect(open.map((season) => [season.league.slug, season.slug])).toEqual([
       ['sunday-reverse-coed-4s', 'summer-2027'],
+      ['thursday-night-coed-2s', 'summer-2027'],
       ['coed-7v7-rec', 'summer-2027'],
     ]);
   });

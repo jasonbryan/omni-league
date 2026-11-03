@@ -3,6 +3,7 @@ import { form, required, type FieldTree } from '@angular/forms/signals';
 import { ConvexError } from 'convex/values';
 import {
   checkSeasonFields,
+  maxTeamsFromText,
   SEASON_FIELDS,
   type SeasonField,
   type SeasonInputError,
@@ -21,6 +22,7 @@ export interface SeasonTextModel {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
+  maxTeams: string;
 }
 
 export interface SeasonValues {
@@ -29,6 +31,8 @@ export interface SeasonValues {
   startDate: string;
   endDate: string;
   registrationDeadline: string;
+  /** Left out for no limit. */
+  maxTeams?: number;
 }
 
 export type SeasonFormAlertKind = 'offline' | 'failed';
@@ -84,6 +88,7 @@ const EMPTY: SeasonTextModel = {
   startDate: '',
   endDate: '',
   registrationDeadline: '',
+  maxTeams: '',
 };
 
 /** The rules and messages are `convex/lib/seasonInput.ts`, which `seasons.create` applies again. */
@@ -122,6 +127,7 @@ export class SeasonForm {
         startDate: m.startDate,
         endDate: m.endDate,
         registrationDeadline: m.registrationDeadline,
+        maxTeams: maxTeamsFromText(m.maxTeams),
       });
     });
     const sources: Record<SeasonField, () => unknown> = {
@@ -130,6 +136,7 @@ export class SeasonForm {
       startDate: () => this.model().startDate,
       endDate: () => this.model().endDate,
       registrationDeadline: () => this.model().registrationDeadline,
+      maxTeams: () => this.model().maxTeams,
     };
     const slugChanged = () => this.fields.slug().dirty() || this.fields.name().dirty();
     const changed: Record<SeasonField, () => boolean> = {
@@ -138,6 +145,7 @@ export class SeasonForm {
       startDate: () => this.fields.startDate().dirty(),
       endDate: () => this.fields.endDate().dirty(),
       registrationDeadline: () => this.fields.registrationDeadline().dirty(),
+      maxTeams: () => this.fields.maxTeams().dirty(),
     };
     this.shown = Object.fromEntries(
       SEASON_FIELDS.map((field) => [
@@ -195,12 +203,14 @@ export class SeasonForm {
     if (pressedOffline) return this.showAlert('offline');
 
     const m = this.model();
+    const maxTeams = maxTeamsFromText(m.maxTeams);
     const values: SeasonValues = {
       name: m.name.trim(),
       slug: m.slug,
       startDate: m.startDate,
       endDate: m.endDate,
       registrationDeadline: m.registrationDeadline,
+      ...(maxTeams !== undefined && { maxTeams }),
     };
     this.submitting.set(true);
     try {

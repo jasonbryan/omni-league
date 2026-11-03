@@ -44,6 +44,7 @@ import { seasonDates } from '../league/season-dates';
 import { PlaceFreeAgentDialog, type PlaceFreeAgentOutcome } from './place-free-agent-dialog';
 import { placedText } from './place-free-agent-text';
 import { SeasonContext, type SeasonFreeAgents } from './season-context';
+import { SeasonLimits } from './season-limits';
 import { seasonManagementPath } from './season-management-path';
 import { teamRowLines } from './team-row-lines';
 
@@ -79,7 +80,7 @@ function localDay(ms: number): string {
 
 @Component({
   selector: 'app-season-management',
-  imports: [AdminAlert, NgIcon, PlaceFreeAgentDialog, RouterLink],
+  imports: [AdminAlert, NgIcon, PlaceFreeAgentDialog, RouterLink, SeasonLimits],
   providers: [
     provideIcons({
       lucideCalendarClock,
@@ -170,6 +171,11 @@ function localDay(ms: number): string {
             >
           </p>
         </div>
+        <app-season-limits
+          [seasonId]="season.seasonId"
+          [maxTeams]="season.maxTeams"
+          [teamCount]="season.teamCount"
+        />
         <dl class="mt-6 grid grid-cols-2 gap-3 md:gap-4">
           <div [class]="tile">
             <dt [class]="tileLabel">
@@ -177,7 +183,14 @@ function localDay(ms: number): string {
                 ><ng-icon name="lucideUsersRound" class="text-base" aria-hidden="true" /></span
               >Teams
             </dt>
-            <dd [class]="tileValue" data-testid="team-count">{{ season.teamCount }}</dd>
+            <dd [class]="tileValue" data-testid="team-count">
+              {{ season.teamCount }}
+              @if (season.maxTeams !== undefined) {
+                <span class="text-base font-medium text-muted-foreground">
+                  of {{ season.maxTeams }}</span
+                >
+              }
+            </dd>
           </div>
           <div [class]="tile">
             <dt [class]="tileLabel">

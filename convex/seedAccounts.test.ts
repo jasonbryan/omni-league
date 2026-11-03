@@ -255,7 +255,7 @@ async function logoFiles(t: T) {
   });
 }
 
-const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 6 };
+const DATA = { organizations: 7, locations: 25, customLevels: 1, leagues: 45, seasons: 7 };
 const NO_BACKFILL = {
   organizations: 0,
   locations: 0,
@@ -279,7 +279,7 @@ describe('seed:demo accounts: a new deployment', () => {
         updated: { organizations: 0 },
         memberships: 5,
         invites: 1,
-        teams: 4,
+        teams: 6,
         teamInvites: 2,
         freeAgents: 5,
         accounts: ALL('created'),
@@ -553,7 +553,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await t.mutation(internal.seed.insertDemoData, {});
       expect(await t.mutation(internal.seed.insertDemoTeams, { captains: [] })).toBe(0);
       const first = await run(t);
-      expect(first.teams).toBe(4);
+      expect(first.teams).toBe(6);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', undefined);
       expect((await run(t)).teams).toBe(0);
       vi.stubEnv('DEMO_ACCOUNT_PASSWORD', PASSWORD);
@@ -682,7 +682,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await signUp(t, EMAILS.captain, OTHER_PASSWORD);
       const result = await run(t);
       expect(result.accounts.captain).toBe('conflict');
-      expect(result.teams).toBe(3);
+      expect(result.teams).toBe(5);
       expect(Object.keys((await demoTeams(t)).teams).sort()).toEqual([
         'Block Party',
         'Dig Dynasty',
@@ -783,7 +783,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(8);
+      expect(rosterEntries).toHaveLength(10);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
