@@ -114,7 +114,7 @@ const FACT_ICON =
       }
     </div>
     <div class="border-t border-border">
-      <div class="mx-auto grid w-full max-w-6xl gap-x-12 px-4 md:px-8 lg:grid-cols-3">
+      <div class="mx-auto grid w-full grid-cols-1 max-w-6xl gap-x-12 px-4 md:px-8 lg:grid-cols-3">
         @if (card(); as card) {
           <section
             id="registration"
@@ -123,7 +123,7 @@ const FACT_ICON =
           >
             <div [class]="registrationCardClass()">
               <h2 id="registration-heading" class="sr-only">Registration</h2>
-              <div class="grid">
+              <div class="grid grid-cols-1">
                 <div
                   class="col-start-1 row-start-1"
                   [class.invisible]="!!team()"

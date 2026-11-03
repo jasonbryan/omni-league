@@ -959,13 +959,19 @@ test.describe('public season page: signed in and on a team', () => {
   });
 
   const LONG_SPACED_NAME = 'The Sand Sharks Beach Volleyball Club of Corpus Christi, Texas';
+  const LONG_SPACED_NAME_58 = 'The Sand Sharks Beach Volleyball Club of Corpus Christi Tx';
   const LONG_UNBROKEN_NAME = 'W'.repeat(60);
-  const NO_SHIFT_WIDTHS = [320, 360, 640, 768, 1000];
+  const NO_SHIFT_WIDTHS = [320, 360, 640, 768, 1000, 1280];
   const NO_SHIFT_CASES = [
     {
       title: 'an open season and a long team name',
       season: 'fall-open',
       teamName: LONG_SPACED_NAME,
+    },
+    {
+      title: 'a closed season and a 58-character name with spaces',
+      season: 'summer-2027',
+      teamName: LONG_SPACED_NAME_58,
     },
     {
       title: 'a closed season with a next open one',
@@ -1006,6 +1012,18 @@ test.describe('public season page: signed in and on a team', () => {
         held.release();
         await expect(page.locator('#registration')).toContainText(teamName);
         expect(await detailsTop(page), `details top at ${width}px`).toBe(before);
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          ),
+          `no sideways scroll at ${width}px`,
+        ).toBe(true);
+        const nameBox = await page.locator('#registration p.truncate').boundingBox();
+        const cardBox = await page.locator('#registration').boundingBox();
+        expect(
+          (nameBox?.x ?? 0) + (nameBox?.width ?? Infinity),
+          `team name clipped inside the card at ${width}px`,
+        ).toBeLessThanOrEqual((cardBox?.x ?? 0) + (cardBox?.width ?? 0));
       }
     });
   }
