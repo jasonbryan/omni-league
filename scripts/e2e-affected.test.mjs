@@ -511,6 +511,7 @@ describe('selectSpecs: mapped areas', () => {
       '66-69-organization-leagues.html': 'organization-leagues-mockup',
       '125-126-seasons.html': 'league-management-mockup',
       '141-app-leagues.html': 'app-leagues',
+      '130-app-teams.html': 'app-teams',
     };
     for (const [file, spec] of Object.entries(mockups)) {
       assert.deepEqual(specsFor([`design/mockups/${file}`]), want(`e2e/${spec}.spec.ts`), file);

@@ -34,7 +34,7 @@ describe('AccountPage', () => {
     return harness.routeNativeElement!;
   }
 
-  it('asks organizations.listMine only once Convex has accepted the token', async () => {
+  it('asks organizations.listMine and teams.listMine only once Convex has accepted the token', async () => {
     const page = await open();
     TestBed.tick();
     expect(convex.subscriptions).toEqual([]);
@@ -46,6 +46,7 @@ describe('AccountPage', () => {
     expect(
       convex.activeSubscriptions.filter((s) => s.name === 'organizations:listMine'),
     ).toHaveLength(2);
+    expect(convex.activeSubscriptions.filter((s) => s.name === 'teams:listMine')).toHaveLength(1);
   });
 
   it('has one h1, "Home", and no Sign out or signed-in account panel', async () => {
@@ -77,7 +78,7 @@ describe('AccountPage', () => {
     expect(link?.querySelector('.sr-only')?.textContent).toBe(' notifications');
   });
 
-  it('shows "Your organizations"', async () => {
+  it('shows "Your teams" above "Your organizations", then Notifications', async () => {
     const page = await open();
     TestBed.inject(AuthService).onChange(true);
     TestBed.tick();
@@ -95,9 +96,10 @@ describe('AccountPage', () => {
 
     const sections = [...page.querySelectorAll('main section')];
     expect(sections.map((s) => s.getAttribute('aria-labelledby'))).toEqual([
+      'teams-heading',
       'organizations-heading',
       'app-notifications-heading',
     ]);
-    expect(sections[0]?.querySelector('h3')?.textContent?.trim()).toBe('Coastal Bend Rec Club');
+    expect(sections[1]?.querySelector('h3')?.textContent?.trim()).toBe('Coastal Bend Rec Club');
   });
 });

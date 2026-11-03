@@ -89,7 +89,7 @@ export const ROUTE_SPECS = {
   'sign-in': ['sign-in', 'auth-session', 'after-sign-in'],
   'invites/accept': ['accept-invite'],
   app: ['auth-session'],
-  'app/': ['after-sign-in', 'auth-session', 'app-leagues'],
+  'app/': ['after-sign-in', 'auth-session', 'app-leagues', 'app-teams'],
   'app/account': ['account-settings', 'after-sign-in'],
   'app/notifications': ['notifications', 'after-sign-in'],
   'app/organizations/new': ['create-organization', 'after-sign-in'],
@@ -473,6 +473,11 @@ export const AREAS = [
     specs: ['app-leagues'],
   },
   {
+    name: 'app teams mockup',
+    test: (file) => file === 'design/mockups/130-app-teams.html',
+    specs: ['app-teams'],
+  },
+  {
     // chip-classes.spec.ts and the harness's a11y-helper.spec.ts take the kit CSS from this mockup's inlined block.
     name: 'chip mockup',
     test: (file) => file === 'design/mockups/300-public-site-league-form.html',
@@ -592,7 +597,7 @@ export const AREAS = [
     // The season page imports the register route's path from here.
     name: 'team pages',
     test: inDir('src/app/teams/'),
-    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, 'season-page'],
+    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, 'season-page', 'app-teams'],
   },
   {
     name: 'helm input and field',
@@ -634,7 +639,7 @@ export const AREAS = [
   {
     name: 'account page',
     test: inDir('src/app/account/'),
-    specs: [SESSION],
+    specs: [SESSION, 'app-teams'],
   },
   {
     // The account link shows on every public page for a signed-in visitor, and the specs that sign a user in read it.
@@ -828,7 +833,7 @@ export const AREAS = [
     test: (file) =>
       named('convex/', ['teams', 'teamInvites'])(file) ||
       named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput', 'teamInviteInput'])(file),
-    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, 'season-page'],
+    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, 'season-page', 'app-teams'],
   },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];

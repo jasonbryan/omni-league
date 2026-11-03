@@ -5,16 +5,18 @@ import { lucideBell } from '@ng-icons/lucide';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON } from '../ui/button/button-classes';
 import { YourOrganizations } from './your-organizations';
+import { YourTeams } from './your-teams';
 
 @Component({
   selector: 'app-account-page',
-  imports: [NgIcon, RouterLink, Shell, YourOrganizations],
+  imports: [NgIcon, RouterLink, Shell, YourOrganizations, YourTeams],
   providers: [provideIcons({ lucideBell })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-shell>
       <div class="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-8">
         <h1 class="text-2xl font-semibold tracking-tight">Home</h1>
+        <app-your-teams />
         <app-your-organizations />
         <section
           aria-labelledby="app-notifications-heading"

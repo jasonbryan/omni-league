@@ -6,11 +6,15 @@ import { registrationIsOpen } from './lib/registration';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import { checkTeamName, TEAM_MESSAGES, type RegistrationClosedError } from './lib/teamInput';
+import { getCurrentUser } from './lib/users';
 
 /** More than a roster holds, so the page always lists the whole roster. */
 export const ROSTER_READ_LIMIT = 200;
 
 export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
+
+/** A user on more teams than this sees the teams of their most recently added entries. */
+export const TEAMS_LIST_MINE_LIMIT = 50;
 
 export const register = mutation({
   args: { ...seasonSlugsValidator.fields, name: v.string() },
@@ -38,6 +42,57 @@ export const register = mutation({
     return { status: 'registered' as const, teamId };
   },
 });
+
+const myTeamValidator = v.object({
+  teamId: v.id('teams'),
+  teamName: v.string(),
+  seasonName: v.string(),
+  leagueName: v.string(),
+  organizationName: v.string(),
+  role: v.union(v.literal('captain'), v.literal('player')),
+});
+
+// eslint-disable-next-line @convex-dev/require-access-control -- the caller's own roster entries only, found from ctx.auth (getCurrentUser); no argument names a user, and an anonymous caller gets [].
+export const listMine = query({
+  args: {},
+  returns: v.array(myTeamValidator),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    const entries = await ctx.db
+      .query('rosterEntries')
+      .withIndex('by_userId_and_status', (q) => q.eq('userId', user._id).eq('status', 'rostered'))
+      .order('desc')
+      .take(TEAMS_LIST_MINE_LIMIT);
+    const rows = [];
+    for (const entry of entries) {
+      const team = await ctx.db.get('teams', entry.teamId);
+      if (!team) continue;
+      const [season, league, organization] = await Promise.all([
+        ctx.db.get('seasons', team.seasonId),
+        ctx.db.get('leagues', team.leagueId),
+        ctx.db.get('organizations', team.organizationId),
+      ]);
+      if (!season || !league || !organization) continue;
+      rows.push({
+        startDate: season.startDate,
+        row: {
+          teamId: team._id,
+          teamName: team.name,
+          seasonName: season.name,
+          leagueName: league.name,
+          organizationName: organization.name,
+          role: team.captainUserId === user._id ? ('captain' as const) : ('player' as const),
+        },
+      });
+    }
+    return rows.sort(newestSeasonFirst).map(({ row }) => row);
+  },
+});
+
+function newestSeasonFirst(a: { startDate: string }, b: { startDate: string }): number {
+  return a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0;
+}
 
 const rosterRowValidator = v.object({
   rosterEntryId: v.id('rosterEntries'),
