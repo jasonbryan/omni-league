@@ -174,6 +174,19 @@ describe('teams.register in a full season', () => {
     expect(await rows(s)).toEqual(before);
   });
 
+  test('a free agent can still register in a full season', async () => {
+    vi.useFakeTimers({ now: OPEN_NOW });
+    const s = await setup();
+    await as(s, 'newcomer').mutation(api.freeAgents.register, SLUGS);
+    const { freeAgents, teams } = await s.t.run(async (ctx) => ({
+      freeAgents: await ctx.db.query('freeAgents').collect(),
+      teams: await ctx.db.query('teams').collect(),
+    }));
+    expect(freeAgents).toHaveLength(1);
+    expect(teams).toHaveLength(2);
+    expect((await season(s))?.teamCount).toBe(2);
+  });
+
   test('a season with no limit takes a third team', async () => {
     vi.useFakeTimers({ now: OPEN_NOW });
     const s = await setup({ maxTeams: null });

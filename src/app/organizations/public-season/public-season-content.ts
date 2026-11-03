@@ -56,10 +56,11 @@ const REGISTRATION_CARD =
 /**
  * Below 1024px the card sits above the details, and the team card replaces the server's signed-out card after hydration. The signed-out card
  * stays in the card behind the team card, so the card is never shorter than it; these floors cover the team card when it is the taller one.
+ * A full season is still open for registration, so a captain below the minimum gets the open team card.
  */
 const RESERVED_HEIGHT = {
   open: 'min-h-66 sm:min-h-58',
-  full: 'min-h-47 md:min-h-49',
+  full: 'min-h-66 sm:min-h-58',
   closed: 'min-h-47 md:min-h-49',
 } as const;
 const FULL_BADGE_TEXT = 'Full';
