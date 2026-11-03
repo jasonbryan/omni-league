@@ -5,6 +5,7 @@ import { ConvexError } from 'convex/values';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
+import { MAX_MINORS_PER_GUARDIAN_IN_SEASON } from './lib/minorName';
 import { addMinorEntry, addRosterEntry, insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant, type NewSeason } from './lib/tenantWrites';
 import schema from './schema';
@@ -411,6 +412,129 @@ describe('the same minor in a season', () => {
     const { entries } = await snapshot(s);
     expect(entries.find((entry) => entry._id === maya)?.minorName).toBe('maya rivera');
     expect(entries.find((entry) => entry._id === leo)?.minorName).toBe('Leo Rivera');
+  });
+});
+
+async function addAndRemoveMinors(s: Setup, guardian: Who, teamId: Id<'teams'>, count: number) {
+  for (let i = 0; i < count; i++) {
+    const { rosterEntryId } = await s
+      .as(guardian)
+      .mutation(api.rosterEntries.addMinor, { teamId, minorName: `Cycle ${i}` });
+    await s.as(guardian).mutation(api.rosterEntries.remove, { rosterEntryId });
+  }
+}
+
+describe('a guardian’s minors in a season', () => {
+  test(`are limited to ${MAX_MINORS_PER_GUARDIAN_IN_SEASON}, removed ones included, by addMinor and accept`, async () => {
+    const s = await setup();
+    await seedPlayer(s, 'guardian', s.sharks);
+    await addAndRemoveMinors(s, 'guardian', s.sharks, MAX_MINORS_PER_GUARDIAN_IN_SEASON);
+    const before = await snapshot(s);
+    expect(
+      await refusalOf(
+        s
+          .as('guardian')
+          .mutation(api.rosterEntries.addMinor, { teamId: s.sharks, minorName: 'Maya Rivera' }),
+      ),
+    ).toEqual({
+      field: 'minorName',
+      code: 'minorLimit',
+      message: `You’ve added ${MAX_MINORS_PER_GUARDIAN_IN_SEASON} minors in this season, removed ones included, which is the most one guardian can add.`,
+    });
+    const token = await inviteToken(s, 'guardian@example.test', s.party, 'rivalCaptain');
+    expect(
+      await refusalOf(
+        s.as('guardian').mutation(api.teamInvites.accept, {
+          token,
+          joinSelf: false,
+          minorName: 'Maya Rivera',
+        }),
+      ),
+    ).toMatchObject({ code: 'minorLimit' });
+    const refused = await snapshot(s);
+    expect(refused.entries).toEqual(before.entries);
+    expect(refused.invites.map((invite) => invite.status)).toEqual(['pending']);
+    await acceptAs(s, 'guardian', s.fallCrew, { joinSelf: false, minorName: 'Maya Rivera' });
+  });
+
+  test('a guardian at the limit who captains a team cannot register or captain a second one', async () => {
+    const s = await setup();
+    await seedMinor(s, 'guardian', s.sharks, 'Maya Rivera');
+    await addAndRemoveMinors(s, 'guardian', s.sharks, MAX_MINORS_PER_GUARDIAN_IN_SEASON - 1);
+    await s.as('guardian').mutation(api.teams.register, { ...SLUGS, name: 'Rivera Rockets' });
+    expect(
+      await refusalOf(
+        s.as('guardian').mutation(api.teams.register, { ...SLUGS, name: 'Rivera Rollers' }),
+      ),
+    ).toMatchObject({ code: 'alreadyOnAnotherTeam', teamName: 'Rivera Rockets' });
+    expect(
+      (await snapshot(s)).teams.filter((team) => team.captainUserId === s.people.guardian.userId),
+    ).toHaveLength(1);
+  });
+
+  test('do not hide the guardian’s own entry, however many there are', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const team = (await ctx.db.get('teams', s.sharks))!;
+      for (let i = 0; i < 150; i++) {
+        await ctx.db.insert('rosterEntries', {
+          organizationId: team.organizationId,
+          seasonId: team.seasonId,
+          teamId: team._id,
+          userId: s.people.guardian.userId,
+          minorName: `Old ${i}`,
+          status: 'removed',
+          source: 'guardian',
+          addedAt: 1,
+          addedByUserId: s.people.guardian.userId,
+        });
+      }
+    });
+    await s.as('guardian').mutation(api.teams.register, { ...SLUGS, name: 'Rivera Rockets' });
+    expect(
+      await refusalOf(
+        s.as('guardian').mutation(api.teams.register, { ...SLUGS, name: 'Rivera Rollers' }),
+      ),
+    ).toMatchObject({ code: 'alreadyOnAnotherTeam' });
+    expect(
+      await refusalOf(s.as('guardian').mutation(api.freeAgents.register, SLUGS)),
+    ).toMatchObject({ code: 'alreadyOnAnotherTeam' });
+    const registration = await s.as('guardian').query(api.seasons.getForRegistration, SLUGS);
+    expect(registration?.team).toMatchObject({ name: 'Rivera Rockets' });
+  });
+
+  test('the same minor cannot go on a second team after many minors were added and removed', async () => {
+    const s = await setup();
+    await seedPlayer(s, 'guardian', s.sharks);
+    await seedMinor(s, 'guardian', s.sharks, 'Maya Rivera');
+    await addAndRemoveMinors(s, 'guardian', s.sharks, MAX_MINORS_PER_GUARDIAN_IN_SEASON - 2);
+    const token = await inviteToken(s, 'guardian@example.test', s.party, 'rivalCaptain');
+    expect(
+      await refusalOf(
+        s.as('guardian').mutation(api.teamInvites.accept, {
+          token,
+          joinSelf: false,
+          minorName: 'maya rivera',
+        }),
+      ),
+    ).toMatchObject({ code: 'minorInSeason', teamName: 'Sand Sharks' });
+    const { rosterEntryId } = await s
+      .as('guardian')
+      .mutation(api.rosterEntries.addMinor, { teamId: s.sharks, minorName: 'Leo Rivera' });
+    expect(
+      await refusalOf(
+        s
+          .as('guardian')
+          .mutation(api.rosterEntries.renameMinor, { rosterEntryId, minorName: 'Maya Rivera' }),
+      ),
+    ).toMatchObject({ code: 'minorInSeason', teamName: 'Sand Sharks' });
+    const rostered = (await snapshot(s)).entries.filter(
+      (entry) => entry.minorName !== undefined && entry.status === 'rostered',
+    );
+    expect(rostered.map((entry) => [entry.teamId, entry.minorName])).toEqual([
+      [s.sharks, 'Maya Rivera'],
+      [s.sharks, 'Leo Rivera'],
+    ]);
   });
 });
 

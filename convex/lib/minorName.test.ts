@@ -30,6 +30,29 @@ describe('checkMinorName', () => {
     });
   });
 
+  test.each([
+    ['a zero-width space', 'Maya\u200BRivera'],
+    ['a zero-width joiner', 'Maya\u200DRivera'],
+    ['a right-to-left override', 'Maya \u202ERivera'],
+    ['a left-to-right mark', 'Maya\u200ERivera'],
+    ['a null character', 'Maya\u0000 Rivera'],
+    ['a delete character', 'Maya Rivera\u007F'],
+  ])('refuses a name with %s', (_, name) => {
+    expect(checkMinorName(name)).toEqual({
+      ok: false,
+      error: {
+        field: 'minorName',
+        code: 'minorNameInvisible',
+        message: 'Remove the hidden or control characters from the name.',
+      },
+    });
+  });
+
+  test('accepts accents, apostrophes, and hyphens, and turns tabs and line breaks into spaces', () => {
+    expect(checkMinorName('Zoë O’Brien-Núñez')).toEqual({ ok: true, name: 'Zoë O’Brien-Núñez' });
+    expect(checkMinorName('Maya\tRivera\n')).toEqual({ ok: true, name: 'Maya Rivera' });
+  });
+
   test('the key ignores case and spacing', () => {
     expect(minorNameKey(' maya  RIVERA')).toBe(minorNameKey('Maya Rivera'));
   });

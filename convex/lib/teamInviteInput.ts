@@ -44,4 +44,6 @@ export type TeamInviteAcceptCode =
   | 'nothingChosen'
   | 'minorNameEmpty'
   | 'minorNameTooLong'
-  | 'minorInSeason';
+  | 'minorNameInvisible'
+  | 'minorInSeason'
+  | 'minorLimit';

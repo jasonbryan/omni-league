@@ -249,7 +249,7 @@ async function rosterOf(
   viewerCanManage: boolean,
 ) {
   const viewerId = reader.user._id;
-  // Owner (chat, 2026-10-10): players on other teams see a minor's first name and last initial.
+  // Requirements, Accounts: players on other teams see a minor's first name and last initial.
   const seesMinors = reader.organizes || reader.rosteredTeamIds.has(team._id);
   const entries = await ctx.db
     .query('rosterEntries')

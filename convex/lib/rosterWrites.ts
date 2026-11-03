@@ -5,9 +5,11 @@ import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import {
+  MAX_MINORS_PER_GUARDIAN_IN_SEASON,
   MINOR_MESSAGES,
   minorNameKey,
   type MinorInSeasonRefusal,
+  type MinorLimitRefusal,
   type NothingChosenRefusal,
 } from './minorName';
 import type { RosterEntrySource } from './rosterEntry';
@@ -24,22 +26,7 @@ import {
 
 type ReadCtx = Pick<QueryCtx, 'db'>;
 
-/** More entries than one person has in one season, removed ones included. */
-const ENTRIES_PER_USER_IN_SEASON_LIMIT = 100;
-
 export const BACKFILL_TEAM_COUNT_SCAN_LIMIT = 1000;
-
-export async function rosteredEntriesInSeason(
-  ctx: ReadCtx,
-  seasonId: Id<'seasons'>,
-  userId: Id<'users'>,
-): Promise<Doc<'rosterEntries'>[]> {
-  const entries = await ctx.db
-    .query('rosterEntries')
-    .withIndex('by_seasonId_and_userId', (q) => q.eq('seasonId', seasonId).eq('userId', userId))
-    .take(ENTRIES_PER_USER_IN_SEASON_LIMIT);
-  return entries.filter((entry) => entry.status === 'rostered');
-}
 
 export function isMinorEntry(entry: Doc<'rosterEntries'>): boolean {
   return entry.minorName !== undefined;
@@ -51,8 +38,41 @@ export async function adultEntryInSeason(
   seasonId: Id<'seasons'>,
   userId: Id<'users'>,
 ): Promise<Doc<'rosterEntries'> | null> {
-  const entries = await rosteredEntriesInSeason(ctx, seasonId, userId);
-  return entries.find((entry) => !isMinorEntry(entry)) ?? null;
+  return ctx.db
+    .query('rosterEntries')
+    .withIndex('by_seasonId_and_userId_and_minorName_and_status', (q) =>
+      q
+        .eq('seasonId', seasonId)
+        .eq('userId', userId)
+        .eq('minorName', undefined)
+        .eq('status', 'rostered'),
+    )
+    .first();
+}
+
+/** Removed ones included; `addMinorEntry` keeps them within `MAX_MINORS_PER_GUARDIAN_IN_SEASON`. */
+async function minorEntriesInSeason(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  guardianUserId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  return ctx.db
+    .query('rosterEntries')
+    .withIndex('by_seasonId_and_userId_and_minorName_and_status', (q) =>
+      q.eq('seasonId', seasonId).eq('userId', guardianUserId).gte('minorName', ''),
+    )
+    .take(MAX_MINORS_PER_GUARDIAN_IN_SEASON);
+}
+
+export async function rosteredEntriesInSeason(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  userId: Id<'users'>,
+): Promise<Doc<'rosterEntries'>[]> {
+  const adult = await adultEntryInSeason(ctx, seasonId, userId);
+  const minors = await minorEntriesInSeason(ctx, seasonId, userId);
+  const rosteredMinors = minors.filter((entry) => entry.status === 'rostered');
+  return adult ? [adult, ...rosteredMinors] : rosteredMinors;
 }
 
 export async function teamWithSortName(
@@ -87,6 +107,7 @@ type Refusal =
   | AlreadyFreeAgentRefusal
   | AlreadyPlacedRefusal
   | MinorInSeasonRefusal
+  | MinorLimitRefusal
   | NothingChosenRefusal;
 
 function refuse(refusal: Refusal): never {
@@ -204,16 +225,15 @@ export interface NewMinorEntry {
 // A minor has no identity beyond its guardian and name, so the check cannot match minors across guardians.
 async function assertMinorNotInSeason(
   ctx: ReadCtx,
-  seasonId: Id<'seasons'>,
-  guardianUserId: Id<'users'>,
+  minors: Doc<'rosterEntries'>[],
   minorName: string,
   renamedEntryId: Id<'rosterEntries'> | null,
 ): Promise<void> {
   const key = minorNameKey(minorName);
-  const entries = await rosteredEntriesInSeason(ctx, seasonId, guardianUserId);
-  const same = entries.find(
+  const same = minors.find(
     (entry) =>
       entry._id !== renamedEntryId &&
+      entry.status === 'rostered' &&
       entry.minorName !== undefined &&
       minorNameKey(entry.minorName) === key,
   );
@@ -235,7 +255,12 @@ export async function addMinorEntry(
   team: Doc<'teams'>,
   entry: NewMinorEntry,
 ): Promise<Id<'rosterEntries'>> {
-  await assertMinorNotInSeason(ctx, team.seasonId, entry.guardianUserId, entry.minorName, null);
+  const minors = await minorEntriesInSeason(ctx, team.seasonId, entry.guardianUserId);
+  await assertMinorNotInSeason(ctx, minors, entry.minorName, null);
+  // Removed entries count too, so adding and removing cannot grow a guardian's entries past the read window.
+  if (minors.length >= MAX_MINORS_PER_GUARDIAN_IN_SEASON) {
+    refuse({ field: 'minorName', code: 'minorLimit', message: MINOR_MESSAGES.minorLimit });
+  }
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
     seasonId: team.seasonId,
@@ -260,7 +285,8 @@ export async function renameMinorEntry(
   if (!isMinorEntry(entry) || entry.status !== 'rostered') {
     throw new Error('Only a rostered minor can be renamed');
   }
-  await assertMinorNotInSeason(ctx, entry.seasonId, entry.userId, minorName, entry._id);
+  const minors = await minorEntriesInSeason(ctx, entry.seasonId, entry.userId);
+  await assertMinorNotInSeason(ctx, minors, minorName, entry._id);
   await ctx.db.patch('rosterEntries', entry._id, { minorName });
 }
 

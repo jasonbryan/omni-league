@@ -1191,7 +1191,7 @@ async function insertDemoRemovedPlayer(
   if (!user) return;
   const seeded = await ctx.db
     .query('rosterEntries')
-    .withIndex('by_seasonId_and_userId', (q) =>
+    .withIndex('by_seasonId_and_userId_and_minorName_and_status', (q) =>
       q.eq('seasonId', team.seasonId).eq('userId', user._id),
     )
     .first();
@@ -1282,7 +1282,7 @@ export const insertDemoMinor = internalMutation({
     if (!user) return false;
     const seeded = await ctx.db
       .query('rosterEntries')
-      .withIndex('by_seasonId_and_userId', (q) =>
+      .withIndex('by_seasonId_and_userId_and_minorName_and_status', (q) =>
         q.eq('seasonId', team.seasonId).eq('userId', user._id),
       )
       .first();

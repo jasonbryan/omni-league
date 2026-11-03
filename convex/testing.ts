@@ -20,6 +20,7 @@ import {
   insertPlacedFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
+  isMinorEntry,
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
@@ -558,7 +559,7 @@ export const removeFromTeam = internalMutation({
       .query('rosterEntries')
       .withIndex('by_teamId_and_status', (q) => q.eq('teamId', teamId).eq('status', 'rostered'))
       .take(200);
-    const entry = entries.find((row) => row.userId === user._id);
+    const entry = entries.find((row) => row.userId === user._id && !isMinorEntry(row));
     if (!entry) throw new Error('This user has no rostered entry on the team');
     await removeRosterEntry(ctx, entry, team.captainUserId);
     return null;

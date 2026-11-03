@@ -200,7 +200,12 @@ export default defineSchema({
     removedByUserId: v.optional(v.id('users')),
   })
     .index('by_teamId_and_status', ['teamId', 'status'])
-    .index('by_seasonId_and_userId', ['seasonId', 'userId'])
+    .index('by_seasonId_and_userId_and_minorName_and_status', [
+      'seasonId',
+      'userId',
+      'minorName',
+      'status',
+    ])
     .index('by_userId_and_status', ['userId', 'status']),
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps the team's `pendingInviteCount`.

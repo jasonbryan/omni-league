@@ -120,7 +120,7 @@ async function setup() {
     });
     const removedEntry = (await ctx.db
       .query('rosterEntries')
-      .withIndex('by_seasonId_and_userId', (q) =>
+      .withIndex('by_seasonId_and_userId_and_minorName_and_status', (q) =>
         q.eq('seasonId', summer).eq('userId', users.removed),
       )
       .unique())!;
