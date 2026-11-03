@@ -33,6 +33,8 @@ import { lucideCheck } from '@ng-icons/lucide';
       [attr.aria-invalid]="showInvalid() || null"
       [attr.aria-describedby]="describedBy() || null"
       [attr.data-state]="checked() ? 'checked' : 'unchecked'"
+      [disabled]="disabled()"
+      [attr.data-disabled]="disabled() ? '' : null"
       class="peer shrink-0 cursor-default disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary data-checked:border-primary data-[matches-spartan-invalid=true]:aria-checked:border-primary data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 flex size-4 items-center justify-center rounded-[4px] border transition-colors group-has-disabled/field:opacity-50 data-[matches-spartan-invalid=true]:ring-3 mt-0.5 border-input data-[invalid=true]:border-destructive"
       [attr.data-invalid]="showInvalid() ? 'true' : null"
       (click)="toggle()"
@@ -51,6 +53,7 @@ import { lucideCheck } from '@ng-icons/lucide';
 export class Checkbox implements FormCheckboxControl {
   readonly checked = model(false);
   readonly required = input(false, { transform: booleanAttribute });
+  readonly disabled = input(false, { transform: booleanAttribute });
   readonly touch = output();
 
   readonly controlId = input.required<string>();

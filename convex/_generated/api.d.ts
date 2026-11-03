@@ -36,6 +36,7 @@ import type * as lib_leagueStatus from "../lib/leagueStatus.js";
 import type * as lib_locationInput from "../lib/locationInput.js";
 import type * as lib_logoFile from "../lib/logoFile.js";
 import type * as lib_memberships from "../lib/memberships.js";
+import type * as lib_minorName from "../lib/minorName.js";
 import type * as lib_organizationInput from "../lib/organizationInput.js";
 import type * as lib_organizationLogo from "../lib/organizationLogo.js";
 import type * as lib_password from "../lib/password.js";
@@ -112,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   "lib/locationInput": typeof lib_locationInput;
   "lib/logoFile": typeof lib_logoFile;
   "lib/memberships": typeof lib_memberships;
+  "lib/minorName": typeof lib_minorName;
   "lib/organizationInput": typeof lib_organizationInput;
   "lib/organizationLogo": typeof lib_organizationLogo;
   "lib/password": typeof lib_password;

@@ -1,7 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { forbidden } from './forbidden';
-import { rosteredEntryInSeason } from './rosterWrites';
+import { isMinorEntry, rosteredEntriesInSeason } from './rosterWrites';
 import { getCurrentUser } from './users';
 
 type Ctx = Pick<QueryCtx | MutationCtx, 'auth' | 'db'>;
@@ -88,11 +88,14 @@ export async function organizesLeague(
 
 export interface TeamReader {
   user: Doc<'users'>;
-  /** The caller's own team in the season, null for an organizer on no roster. */
+  /** The team the caller plays on in the season, null for a guardian or organizer on no roster. */
   ownTeamId: Id<'teams'> | null;
+  /** Every team of the season with the caller's own entry or a minor's entry under them. */
+  rosteredTeamIds: ReadonlySet<Id<'teams'>>;
+  organizes: boolean;
 }
 
-/** Teams in a season see each other's rosters (requirements, Payments, rule 6), as do the league's organizers. */
+/** Teams in a season see each other's rosters (requirements, Payments, rule 6), as do the league's organizers. A guardian of a minor is on the minor's team. */
 export async function requireSeasonMemberOrOrganizer(
   ctx: Ctx,
   team: Doc<'teams'>,
@@ -100,9 +103,15 @@ export async function requireSeasonMemberOrOrganizer(
 ): Promise<TeamReader> {
   const user = await getCurrentUser(ctx);
   if (!user) throw forbidden();
-  const own = await rosteredEntryInSeason(ctx, team.seasonId, user._id);
-  if (!own && !(await organizesLeague(ctx, user._id, league))) throw forbidden();
-  return { user, ownTeamId: own?.teamId ?? null };
+  const entries = await rosteredEntriesInSeason(ctx, team.seasonId, user._id);
+  const organizes = await organizesLeague(ctx, user._id, league);
+  if (entries.length === 0 && !organizes) throw forbidden();
+  return {
+    user,
+    ownTeamId: entries.find((entry) => !isMinorEntry(entry))?.teamId ?? null,
+    rosteredTeamIds: new Set(entries.map((entry) => entry.teamId)),
+    organizes,
+  };
 }
 
 export async function canManageTeam(

@@ -33,6 +33,8 @@ const JOINED = {
   teamName: 'Sand Sharks',
   seasonName: 'Summer 2027',
   captainName: 'Tasha Greene',
+  joinedSelf: true,
+  minorName: null,
 };
 
 @Component({ template: 'elsewhere' })
@@ -94,6 +96,27 @@ async function open(options: { token?: string | null; signedIn?: boolean } = {})
     [...page.querySelectorAll('button')].find((b) => text(b)?.startsWith('Accept invite'));
   const call = () => convex.calls.find((c) => c.name === ACCEPT);
   return { convex, auth, harness, page, flush, sub, emitInvite, signIn, accept, call };
+}
+
+const checkbox = (page: HTMLElement, id: string) =>
+  page.querySelector<HTMLButtonElement>(`button[role="checkbox"]#${id}`)!;
+const minorInput = (page: HTMLElement) => page.querySelector<HTMLInputElement>('#minor-name');
+
+function typeMinor(page: HTMLElement, name: string): void {
+  const input = minorInput(page)!;
+  input.value = name;
+  input.dispatchEvent(new Event('input'));
+}
+
+function expectSelfBlocked(page: HTMLElement, description: string): void {
+  const self = checkbox(page, 'join-self');
+  expect([self.disabled, self.getAttribute('aria-checked')]).toEqual([true, 'false']);
+  expect(text(page.querySelector('#join-self-description'))).toBe(description);
+  expect(checkbox(page, 'join-minor').getAttribute('aria-checked')).toBe('true');
+  expect(minorInput(page)).not.toBeNull();
+  expect(
+    [...page.querySelectorAll('button')].some((b) => text(b)?.startsWith('Accept invite')),
+  ).toBe(true);
 }
 
 const links = (page: HTMLElement) =>
@@ -186,7 +209,7 @@ describe('JoinTeamPage', () => {
   });
 
   describe('signed in', () => {
-    it('shows who is signed in and Accept invite, and sends only the token', async () => {
+    it('shows who is signed in and Accept invite, and with only "Join the roster myself" checked sends the token and joinSelf', async () => {
       const { page, emitInvite, signIn, accept, flush, call } = await open({ signedIn: true });
       await emitInvite(INVITE);
       await signIn();
@@ -195,7 +218,7 @@ describe('JoinTeamPage', () => {
       accept()?.click();
       await flush();
       expect(call()?.kind).toBe('mutation');
-      expect(call()?.args).toEqual({ token: TOKEN });
+      expect(call()?.args).toEqual({ token: TOKEN, joinSelf: true });
     });
 
     it('while accepting: aria-disabled, "Accepting…", a status, and a second press sends nothing', async () => {
@@ -230,6 +253,74 @@ describe('JoinTeamPage', () => {
       expect(links(page)).toEqual([['Go to Sand Sharks', '/app/teams/team123']]);
       expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
       expect(TestBed.inject(Title).getTitle()).toBe('Joined Sand Sharks | Omni League');
+    });
+  });
+
+  describe('choices', () => {
+    async function ready() {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite(INVITE);
+      await ctx.signIn();
+      return ctx;
+    }
+
+    it('"Who’s joining?" starts with "Join the roster myself" checked and no name field', async () => {
+      const { page } = await ready();
+      expect(text(page.querySelector('fieldset legend'))).toBe('Who’s joining?');
+      expect(checkbox(page, 'join-self').getAttribute('aria-checked')).toBe('true');
+      expect(checkbox(page, 'join-minor').getAttribute('aria-checked')).toBe('false');
+      expect(minorInput(page)).toBeNull();
+    });
+
+    it('neither box checked: the error under the group, focus on the first box, nothing sent', async () => {
+      const { page, flush, accept, convex } = await ready();
+      checkbox(page, 'join-self').click();
+      await flush();
+      accept()?.click();
+      await flush();
+      expect(text(page.querySelector('#choices-error'))).toBe(
+        'Choose at least one: join yourself, add a minor, or both.',
+      );
+      expect(page.querySelector('#choices')?.getAttribute('aria-describedby')).toBe(
+        'choices-description choices-error',
+      );
+      expect(document.activeElement).toBe(checkbox(page, 'join-self'));
+      expect(convex.calls.filter((c) => c.name === ACCEPT)).toEqual([]);
+      checkbox(page, 'join-minor').click();
+      await flush();
+      expect(page.querySelector('#choices-error')).toBeNull();
+    });
+
+    it('"Add a minor" reveals the name field; an empty name shows its error with focus, and nothing is sent', async () => {
+      const { page, flush, accept, convex } = await ready();
+      checkbox(page, 'join-minor').click();
+      await flush();
+      expect(text(page.querySelector('#minor-name-description'))).toBe(
+        'Up to 60 characters. Players on other teams see their first name and last initial.',
+      );
+      accept()?.click();
+      await flush();
+      expect(text(page.querySelector('#minor-name-error'))).toBe('Enter the minor’s name.');
+      expect(minorInput(page)?.getAttribute('aria-invalid')).toBe('true');
+      expect(document.activeElement).toBe(minorInput(page));
+      expect(convex.calls.filter((c) => c.name === ACCEPT)).toEqual([]);
+    });
+
+    it('both choices send the minor’s name, and the accepted view names both', async () => {
+      const { page, flush, accept, call } = await ready();
+      checkbox(page, 'join-minor').click();
+      await flush();
+      typeMinor(page, '  Lily   Park ');
+      await flush();
+      accept()?.click();
+      await flush();
+      expect(call()?.args).toEqual({ token: TOKEN, joinSelf: true, minorName: 'Lily Park' });
+      call()?.resolve({ ...JOINED, minorName: 'Lily Park' });
+      await flush();
+      expect(text(page.querySelector('h1'))).toBe('You’re on Sand Sharks');
+      expect(text(page.querySelector('main p'))).toBe(
+        'You and Lily Park are on the roster for Summer 2027. Tasha Greene is the captain.',
+      );
     });
   });
 
@@ -289,7 +380,7 @@ describe('JoinTeamPage', () => {
       expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
     });
 
-    it('on another team in the season: names that team, links to your teams, no Accept', async () => {
+    it('on another team in the season: names that team, disables "Join the roster myself", offers the minor, and keeps the token', async () => {
       const { page } = await refuse(
         new ConvexError({
           code: 'alreadyOnAnotherTeam',
@@ -300,14 +391,14 @@ describe('JoinTeamPage', () => {
       const { title, description } = alertOf(page);
       expect([title, description]).toEqual([
         'You’re already on Net Results in this season.',
-        'Each person plays on one team per season, so you can’t join Sand Sharks.',
+        'Each person plays on one team per season, so you can’t join Sand Sharks yourself. You can still add a minor you’re responsible for.',
       ]);
-      expect(page.querySelector('button')).toBeNull();
-      expect(links(page)).toEqual([['Go to your teams', '/app']]);
-      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
+      expectSelfBlocked(page, 'Not available: you’re on Net Results in this season.');
+      expect(links(page)).toEqual([]);
+      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TOKEN);
     });
 
-    it('a waiting free agent of the season: says an organizer places them, links to your teams, no Accept', async () => {
+    it('a waiting free agent of the season: says an organizer places them, disables "Join the roster myself", and offers the minor', async () => {
       const { page } = await refuse(
         new ConvexError({
           code: 'waitingFreeAgent',
@@ -318,11 +409,55 @@ describe('JoinTeamPage', () => {
       const { title, description } = alertOf(page);
       expect([title, description]).toEqual([
         'You’re registered as a free agent in this season.',
-        'Organizers place free agents on teams. Ask an organizer of Sunday Reverse Coed 4s to place you on Sand Sharks.',
+        'Organizers place free agents on teams. Ask an organizer of Sunday Reverse Coed 4s to place you on Sand Sharks. You can still add a minor you’re responsible for.',
       ]);
-      expect(page.querySelector('button')).toBeNull();
-      expect(links(page)).toEqual([['Go to your teams', '/app']]);
-      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
+      expectSelfBlocked(page, 'Not available: an organizer places free agents.');
+      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TOKEN);
+    });
+
+    it('after the one-team refusal, a minor alone is sent and accepted', async () => {
+      const { page, flush, convex, accept } = await refuse(
+        new ConvexError({ code: 'alreadyOnAnotherTeam', teamName: 'Net Results' }),
+      );
+      typeMinor(page, 'Lily Park');
+      await flush();
+      accept()?.click();
+      await flush();
+      const calls = convex.calls.filter((c) => c.name === ACCEPT);
+      expect(calls[1]?.args).toEqual({ token: TOKEN, joinSelf: false, minorName: 'Lily Park' });
+      calls[1]?.resolve({ ...JOINED, joinedSelf: false, minorName: 'Lily Park' });
+      await flush();
+      expect(text(page.querySelector('h1'))).toBe('Lily Park is on Sand Sharks');
+      expect(text(page.querySelector('main p'))).toBe(
+        'Lily Park is on the roster for Summer 2027. Tasha Greene is the captain.',
+      );
+    });
+
+    it('the same minor already in the season: the field error names the minor in bold and the team, with focus on the field', async () => {
+      const ctx = await open({ signedIn: true });
+      await ctx.emitInvite(INVITE);
+      await ctx.signIn();
+      checkbox(ctx.page, 'join-minor').click();
+      await ctx.flush();
+      typeMinor(ctx.page, 'theo  bell');
+      await ctx.flush();
+      ctx.accept()?.click();
+      await ctx.flush();
+      ctx.call()?.reject(
+        new ConvexError({
+          field: 'minorName',
+          code: 'minorInSeason',
+          minorName: 'Theo Bell',
+          teamName: 'Block Party',
+          message: 'Theo Bell is already on Block Party in this season.',
+        }),
+      );
+      await ctx.flush();
+      const error = ctx.page.querySelector('#minor-name-error');
+      expect(text(error)).toBe('Theo Bell is already on Block Party in this season.');
+      expect(text(error?.querySelector('strong'))).toBe('Theo Bell');
+      expect(document.activeElement).toBe(minorInput(ctx.page));
+      expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TOKEN);
     });
 
     it('the invite became invalid: the invalid view, and the token is deleted', async () => {
@@ -371,7 +506,7 @@ describe('JoinTeamPage', () => {
 
     it('a roster refusal link opened again clears the stored token again', async () => {
       const { flush, harness } = await refuse(
-        new ConvexError({ code: 'alreadyOnAnotherTeam', teamName: 'Net Results' }),
+        new ConvexError({ code: 'alreadyOnTeam', teamName: 'Sand Sharks', teamId: 'team123' }),
       );
       await harness.navigateByUrl(`/teams/join#${TOKEN}`);
       await flush();

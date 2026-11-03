@@ -20,6 +20,7 @@ const EMAILS = {
   organizer: `organizer@${DOMAIN}`,
   player: `player@${DOMAIN}`,
   captain: `captain@${DOMAIN}`,
+  guardian: `guardian@${DOMAIN}`,
 } as const;
 const FICTIONAL_CAPTAINS = [
   `maya.chen@${DOMAIN}`,
@@ -33,8 +34,8 @@ const FICTIONAL_FREE_AGENTS = [
 ] as const;
 const PLACED_FREE_AGENT = `nia.brooks@${DOMAIN}`;
 const REMOVED_PLAYER = `rio.santos@${DOMAIN}`;
-/** The four demo accounts, the three fictional captains, the four fictional free agents, and the removed player. */
-const USERS = 12;
+/** The five demo accounts, the three fictional captains, the four fictional free agents, and the removed player. */
+const USERS = 13;
 const INVITED = `invited@${DOMAIN}`;
 const PASSWORD = 'throwaway demo passphrase 2026';
 const OTHER_PASSWORD = 'a different throwaway phrase 2026';
@@ -221,7 +222,13 @@ async function membershipsOf(t: T, email: string) {
   });
 }
 
-const ALL = (code: string) => ({ admin: code, organizer: code, player: code, captain: code });
+const ALL = (code: string) => ({
+  admin: code,
+  organizer: code,
+  player: code,
+  captain: code,
+  guardian: code,
+});
 
 // An action's storage write can land in another function's transaction in convex-test: https://github.com/convex/convex-test/pull/151
 async function seedDataWithLogo(t: T) {
@@ -261,7 +268,7 @@ const NO_BACKFILL = {
 
 describe('seed:demo accounts: a new deployment', () => {
   test(
-    'creates the four accounts, which sign in with the password, and the demo teams',
+    'creates the five accounts, which sign in with the password, and the demo teams',
     async () => {
       const t = setup();
       const result = await run(t);
@@ -456,12 +463,6 @@ describe('seed:demo accounts: a new deployment', () => {
 });
 
 describe('seed:demo accounts: the demo teams', () => {
-  const captainOnly = (email: string) => ({
-    captain: email,
-    rosterCount: 1,
-    roster: [[email, 'rostered', 'captain']],
-  });
-
   test(
     'puts four teams in sunday-reverse-coed-4s / summer-2027, Sand Sharks captained by captain@ with player@ joined by invite',
     async () => {
@@ -478,7 +479,14 @@ describe('seed:demo accounts: the demo teams', () => {
               [REMOVED_PLAYER, 'removed', 'invite'],
             ],
           },
-          'Block Party': captainOnly(FICTIONAL_CAPTAINS[1]),
+          'Block Party': {
+            captain: FICTIONAL_CAPTAINS[1],
+            rosterCount: 2,
+            roster: [
+              [FICTIONAL_CAPTAINS[1], 'rostered', 'captain'],
+              [EMAILS.guardian, 'rostered', 'invite'],
+            ],
+          },
           'Dig Dynasty': {
             captain: FICTIONAL_CAPTAINS[2],
             rosterCount: 2,
@@ -685,6 +693,50 @@ describe('seed:demo accounts: the demo teams', () => {
   );
 });
 
+describe('seed:demo accounts: the demo guardian', () => {
+  test(
+    'puts guardian@’s minor on Block Party once, with counters that match a recount, shortened for other teams',
+    async () => {
+      const t = setup();
+      await run(t);
+      await run(t);
+      const minors = await t.run(async (ctx) =>
+        (await ctx.db.query('rosterEntries').collect()).filter(
+          (entry) => entry.minorName !== undefined,
+        ),
+      );
+      expect(minors).toMatchObject([{ minorName: 'Ava Lane', status: 'rostered' }]);
+      const teams = await t.run((ctx) => ctx.db.query('teams').collect());
+      const entries = await t.run((ctx) => ctx.db.query('rosterEntries').collect());
+      for (const team of teams) {
+        const rostered = entries.filter(
+          (entry) => entry.teamId === team._id && entry.status === 'rostered',
+        );
+        expect({ team: team.name, count: team.rosterCount }).toEqual({
+          team: team.name,
+          count: rostered.length,
+        });
+      }
+
+      const guardian = await as(t, EMAILS.guardian);
+      const mine = await guardian.query(api.teams.listMine, {});
+      expect(mine.map((row) => [row.teamName, row.role])).toEqual([['Block Party', 'guardian']]);
+      const blockParty = mine[0].teamId;
+      const own = await guardian.query(api.teams.getForMember, { teamId: blockParty });
+      expect(own?.roster.find((row) => row.minor !== null)).toMatchObject({
+        name: 'Ava Lane',
+        minor: { guardianName: 'Demo Guardian' },
+      });
+      const captain = await as(t, EMAILS.captain);
+      const opponent = await captain.query(api.teams.getForMember, { teamId: blockParty });
+      expect(opponent?.roster.map((row) => row.name)).toContain('Ava L.');
+      expect(JSON.stringify(opponent)).not.toContain('Lane');
+      expect(JSON.stringify(opponent)).not.toContain('Demo Guardian');
+    },
+    SLOW,
+  );
+});
+
 describe('seed:demo accounts: the demo free agents', () => {
   async function demoFreeAgents(t: T) {
     return t.run(async (ctx) => {
@@ -731,7 +783,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(7);
+      expect(rosterEntries).toHaveLength(8);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
@@ -823,6 +875,7 @@ describe('seed:demo accounts: an address someone else holds', () => {
         organizer: 'conflict',
         player: 'created',
         captain: 'created',
+        guardian: 'created',
       });
       expect(await membershipsOf(t, EMAILS.organizer)).toEqual([]);
       expect(await membershipsOf(t, EMAILS.admin)).toHaveLength(4);
@@ -860,14 +913,15 @@ describe('seed:demo accounts: an address someone else holds', () => {
         organizer: 'created',
         player: 'conflict',
         captain: 'created',
+        guardian: 'created',
       });
       const players = (await authRows(t, 'user')).filter((u) => u['email'] === EMAILS.player);
       expect(players).toHaveLength(1);
       expect((await authRows(t, 'account')).map((a) => a['userId'])).not.toContain(
         players[0]?.['_id'],
       );
-      // One per sign-up: three demo accounts, the three fictional captains, the four fictional free agents, and the removed player.
-      expect(await authRows(t, 'session')).toHaveLength(11);
+      // One per sign-up: four demo accounts, the three fictional captains, the four fictional free agents, and the removed player.
+      expect(await authRows(t, 'session')).toHaveLength(12);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
     SLOW,

@@ -36,4 +36,14 @@ export function teamInviteLink(origin: string, token: string): string {
 
 /** `alreadyOnAnotherTeam`, with the other team's name, and `waitingFreeAgent` come from the roster writer. */
 export type TeamInviteAcceptCode =
-  'invalid' | 'emailMismatch' | 'alreadyOnTeam' | 'alreadyOnAnotherTeam' | 'waitingFreeAgent';
+  | 'invalid'
+  | 'emailMismatch'
+  | 'alreadyOnTeam'
+  | 'alreadyOnAnotherTeam'
+  | 'waitingFreeAgent'
+  | 'nothingChosen'
+  | 'minorNameEmpty'
+  | 'minorNameTooLong'
+  | 'minorNameInvisible'
+  | 'minorInSeason'
+  | 'minorLimit';

@@ -14,11 +14,13 @@ import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 import {
+  addMinorEntry,
   addRosterEntry,
   insertFreeAgent,
   insertPlacedFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
+  isMinorEntry,
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
@@ -503,6 +505,25 @@ export const addToTeam = internalMutation({
   },
 });
 
+/** A minor's entry under the guardian, as an accepted invite writes it. */
+export const addMinorToTeam = internalMutation({
+  args: { teamId: v.id('teams'), guardianEmail: v.string(), minorName: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { teamId, guardianEmail, minorName }) => {
+    assertTestDeployment();
+    const team = await ctx.db.get('teams', teamId);
+    if (!team) throw new Error('No team has this id');
+    const guardian = await userByEmail(ctx, guardianEmail);
+    await addMinorEntry(ctx, team, {
+      guardianUserId: guardian._id,
+      minorName,
+      source: 'invite',
+      addedByUserId: team.captainUserId,
+    });
+    return null;
+  },
+});
+
 /** A pending invite that `token` opens, or that no token opens without one; `expiresAt` in the past makes an expired one. */
 export const addTeamInvite = internalMutation({
   args: {
@@ -538,7 +559,7 @@ export const removeFromTeam = internalMutation({
       .query('rosterEntries')
       .withIndex('by_teamId_and_status', (q) => q.eq('teamId', teamId).eq('status', 'rostered'))
       .take(200);
-    const entry = entries.find((row) => row.userId === user._id);
+    const entry = entries.find((row) => row.userId === user._id && !isMinorEntry(row));
     if (!entry) throw new Error('This user has no rostered entry on the team');
     await removeRosterEntry(ctx, entry, team.captainUserId);
     return null;

@@ -37,7 +37,7 @@ import { formatLabel } from './lib/divisions';
 import { seasonPlayersPerSide, sportName, sportValidator } from './lib/sports';
 import { insertSeason, publishSeason, seasonSlugTaken } from './lib/tenantWrites';
 import { freeAgentStatusValidator } from './lib/freeAgent';
-import { freeAgentInSeason, rosteredEntryInSeason } from './lib/rosterWrites';
+import { freeAgentInSeason, adultEntryInSeason } from './lib/rosterWrites';
 import { getCurrentUser } from './lib/users';
 
 export const ORGANIZER_SEASONS_LIMIT = 200;
@@ -370,7 +370,7 @@ export const getForRegistration = query({
     if (found?.league.status !== 'published' || found.season.status !== 'published') return null;
     const { organization, league, season } = found;
     const user = await getCurrentUser(ctx);
-    const entry = user ? await rosteredEntryInSeason(ctx, season._id, user._id) : null;
+    const entry = user ? await adultEntryInSeason(ctx, season._id, user._id) : null;
     const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
     const freeAgent = user ? await freeAgentInSeason(ctx, season._id, user._id) : null;
     return {

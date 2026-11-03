@@ -188,7 +188,10 @@ export default defineSchema({
     organizationId: v.id('organizations'),
     seasonId: v.id('seasons'),
     teamId: v.id('teams'),
+    /** The guardian's, when the entry is a minor's. */
     userId: v.id('users'),
+    /** Set only on a minor's entry, which has no account (requirements, Accounts). */
+    minorName: v.optional(v.string()),
     status: rosterEntryStatusValidator,
     source: rosterEntrySourceValidator,
     addedAt: v.number(),
@@ -197,7 +200,12 @@ export default defineSchema({
     removedByUserId: v.optional(v.id('users')),
   })
     .index('by_teamId_and_status', ['teamId', 'status'])
-    .index('by_seasonId_and_userId', ['seasonId', 'userId'])
+    .index('by_seasonId_and_userId_and_minorName_and_status', [
+      'seasonId',
+      'userId',
+      'minorName',
+      'status',
+    ])
     .index('by_userId_and_status', ['userId', 'status']),
 
   // Written only through `convex/lib/rosterWrites.ts`, which keeps the team's `pendingInviteCount`.
