@@ -106,16 +106,20 @@ test.describe('/app: Your teams', () => {
     await expect(rowOf(page, 'Sand Sharks')).toContainText(seeded.tenant.name);
     await expect(rowOf(page, 'Sand Sharks').locator('[data-slot="badge"]')).toHaveText('Captain');
     await expect(rowOf(page, 'Pair of Aces').locator('[data-slot="badge"]')).toHaveText('Player');
-    await expect(
-      rowOf(page, 'Sand Sharks').getByRole('link', { name: 'Team page: Sand Sharks' }),
-    ).toHaveAttribute('href', `/app/teams/${seeded.sharks}`);
-    await expect(
-      rowOf(page, 'Pair of Aces').getByRole('link', { name: 'Team page: Pair of Aces' }),
-    ).toHaveAttribute('href', `/app/teams/${seeded.aces}`);
+    await expect(rowOf(page, 'Sand Sharks').getByRole('link')).toHaveText('Team page: Sand Sharks');
+    await expect(rowOf(page, 'Sand Sharks').getByRole('link')).toHaveAttribute(
+      'href',
+      `/app/teams/${seeded.sharks}`,
+    );
+    await expect(rowOf(page, 'Pair of Aces').getByRole('link')).toHaveText(
+      'Team page: Pair of Aces',
+    );
+    await expect(rowOf(page, 'Pair of Aces').getByRole('link')).toHaveAttribute(
+      'href',
+      `/app/teams/${seeded.aces}`,
+    );
 
-    await rowOf(page, 'Pair of Aces')
-      .getByRole('link', { name: 'Team page: Pair of Aces' })
-      .click();
+    await rowOf(page, 'Pair of Aces').getByRole('link').click();
     await expect(page).toHaveURL(`${baseURL}/app/teams/${seeded.aces}`);
     await expect(page.getByRole('heading', { level: 1, name: 'Pair of Aces' })).toBeVisible();
   });
