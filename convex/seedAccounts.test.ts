@@ -31,8 +31,9 @@ const FICTIONAL_FREE_AGENTS = [
   `lena.ortiz@${DOMAIN}`,
   `theo.grant@${DOMAIN}`,
 ] as const;
-/** The four demo accounts, the three fictional captains, and the three fictional free agents. */
-const USERS = 10;
+const PLACED_FREE_AGENT = `nia.brooks@${DOMAIN}`;
+/** The four demo accounts, the three fictional captains, and the four fictional free agents. */
+const USERS = 11;
 const INVITED = `invited@${DOMAIN}`;
 const PASSWORD = 'throwaway demo passphrase 2026';
 const OTHER_PASSWORD = 'a different throwaway phrase 2026';
@@ -272,7 +273,7 @@ describe('seed:demo accounts: a new deployment', () => {
         invites: 1,
         teams: 4,
         teamInvites: 2,
-        freeAgents: 4,
+        freeAgents: 5,
         accounts: ALL('created'),
       });
       for (const email of Object.values(EMAILS)) {
@@ -470,7 +471,14 @@ describe('seed:demo accounts: the demo teams', () => {
         teams: {
           'Net Results': captainOnly(FICTIONAL_CAPTAINS[0]),
           'Block Party': captainOnly(FICTIONAL_CAPTAINS[1]),
-          'Dig Dynasty': captainOnly(FICTIONAL_CAPTAINS[2]),
+          'Dig Dynasty': {
+            captain: FICTIONAL_CAPTAINS[2],
+            rosterCount: 2,
+            roster: [
+              [FICTIONAL_CAPTAINS[2], 'rostered', 'captain'],
+              [PLACED_FREE_AGENT, 'rostered', 'placement'],
+            ],
+          },
           'Sand Sharks': {
             captain: EMAILS.captain,
             rosterCount: 2,
@@ -663,12 +671,13 @@ describe('seed:demo accounts: the demo free agents', () => {
   }
 
   test(
-    'three fictional free agents wait in sunday-reverse-coed-4s / summer-2027 and player@ in coed-7v7-rec / summer-2027, once',
+    'three fictional free agents wait in sunday-reverse-coed-4s / summer-2027, one is placed there, and player@ waits in coed-7v7-rec / summer-2027, once',
     async () => {
       const t = setup();
       await run(t);
       const expected = [
         [`lena.ortiz@${DOMAIN}`, 'sunday-reverse-coed-4s/summer-2027', 'waiting'],
+        [PLACED_FREE_AGENT, 'sunday-reverse-coed-4s/summer-2027', 'placed'],
         [EMAILS.player, 'coed-7v7-rec/summer-2027', 'waiting'],
         [`sam.okoye@${DOMAIN}`, 'sunday-reverse-coed-4s/summer-2027', 'waiting'],
         [`theo.grant@${DOMAIN}`, 'sunday-reverse-coed-4s/summer-2027', 'waiting'],
@@ -681,11 +690,11 @@ describe('seed:demo accounts: the demo free agents', () => {
         seasonSlug: 'summer-2027',
       });
       expect(registration).toMatchObject({ team: null, freeAgent: { status: 'waiting' } });
-      for (const email of FICTIONAL_FREE_AGENTS) {
+      for (const email of [...FICTIONAL_FREE_AGENTS, PLACED_FREE_AGENT]) {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(5);
+      expect(rosterEntries).toHaveLength(6);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
@@ -820,8 +829,8 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect((await authRows(t, 'account')).map((a) => a['userId'])).not.toContain(
         players[0]?.['_id'],
       );
-      // One per sign-up: three demo accounts, the three fictional captains, and the three fictional free agents.
-      expect(await authRows(t, 'session')).toHaveLength(9);
+      // One per sign-up: three demo accounts, the three fictional captains, and the four fictional free agents.
+      expect(await authRows(t, 'session')).toHaveLength(10);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
     SLOW,

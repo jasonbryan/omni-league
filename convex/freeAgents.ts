@@ -1,10 +1,14 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireSeasonOrganizerOrForbidden, requireUser } from './lib/access';
+import {
+  requireLeagueOrganizer,
+  requireSeasonOrganizerOrForbidden,
+  requireUser,
+} from './lib/access';
 import { authEmailOf } from './lib/authUsers';
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import { registrationIsOpen } from './lib/registration';
-import { insertFreeAgent } from './lib/rosterWrites';
+import { insertFreeAgent, placeFreeAgent } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import {
   SEASON_NOT_FOUND_CODE,
@@ -31,6 +35,23 @@ export const register = mutation({
     }
     const { status, registeredAt } = await insertFreeAgent(ctx, season, user._id);
     return { status, registeredAt };
+  },
+});
+
+export const place = mutation({
+  args: { freeAgentId: v.id('freeAgents'), teamId: v.id('teams') },
+  returns: v.null(),
+  handler: async (ctx, { freeAgentId, teamId }) => {
+    // Signed in first, so an unknown free agent and another organization's look alike.
+    await requireUser(ctx);
+    const freeAgent = await ctx.db.get('freeAgents', freeAgentId);
+    const season = freeAgent && (await ctx.db.get('seasons', freeAgent.seasonId));
+    if (!freeAgent || !season) throw new Error('Not allowed');
+    const { user } = await requireLeagueOrganizer(ctx, season.leagueId);
+    const team = await ctx.db.get('teams', teamId);
+    if (team?.seasonId !== season._id) throw new Error('The team is not in this season');
+    await placeFreeAgent(ctx, freeAgent, team, user._id);
+    return null;
   },
 });
 

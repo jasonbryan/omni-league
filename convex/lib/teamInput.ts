@@ -33,6 +33,11 @@ export interface AlreadyFreeAgentRefusal {
   message: string;
 }
 
+export interface AlreadyPlacedRefusal {
+  code: 'alreadyPlaced';
+  message: string;
+}
+
 export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
 
 export const TEAM_MESSAGES = {
@@ -47,6 +52,7 @@ export const TEAM_MESSAGES = {
   waitingFreeAgent:
     "You're registered as a free agent in this season. An organizer places free agents on teams.",
   alreadyFreeAgent: 'Already registered as a free agent in this season.',
+  alreadyPlaced: 'Already placed on a team.',
 } as const;
 
 export function normalizeTeamName(name: string): string {

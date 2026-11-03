@@ -26,6 +26,7 @@ import {
   backfillTeamPendingInviteCounts,
   freeAgentInSeason,
   insertFreeAgent,
+  insertPlacedFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
   pendingTeamInvite,
@@ -828,9 +829,20 @@ export const DEMO_FREE_AGENT_PEOPLE = [
   { email: `theo.grant@${DEMO_ACCOUNT_DOMAIN}`, name: 'Theo Grant' },
 ] as const;
 
+/**
+ * A fictional free agent already placed on a demo team, signed up as the captains are. It is inserted
+ * placed, with its roster entry, so the seed never patches a waiting free agent.
+ */
+const DEMO_PLACED_FREE_AGENT = {
+  email: `nia.brooks@${DEMO_ACCOUNT_DOMAIN}`,
+  name: 'Nia Brooks',
+  teamName: 'Dig Dynasty',
+} as const;
+
 const FICTIONAL_PEOPLE: readonly { email: string; name: string }[] = [
   ...DEMO_CAPTAINS,
   ...DEMO_FREE_AGENT_PEOPLE,
+  DEMO_PLACED_FREE_AGENT,
 ];
 
 /** player@ waits in another season than its team's, so the one-place rule holds. */
@@ -1218,9 +1230,34 @@ export const insertDemoFreeAgents = internalMutation({
       await insertFreeAgent(ctx, found.season, user._id);
       inserted++;
     }
+    if (await insertDemoPlacedFreeAgent(ctx, people)) inserted++;
     return inserted;
   },
 });
+
+async function insertDemoPlacedFreeAgent(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<boolean> {
+  const authUserId = people.find(
+    (person) => person.email === DEMO_PLACED_FREE_AGENT.email,
+  )?.authUserId;
+  if (authUserId === undefined) return false;
+  const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
+  const team = found
+    ? await teamWithSortName(ctx, found.season._id, DEMO_PLACED_FREE_AGENT.teamName)
+    : null;
+  if (!team) return false;
+  const user = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  if (!user) return false;
+  if (await freeAgentInSeason(ctx, team.seasonId, user._id)) return false;
+  if (await rosteredEntryInSeason(ctx, team.seasonId, user._id)) return false;
+  await insertPlacedFreeAgent(ctx, team, user._id);
+  return true;
+}
 
 interface AccountOutcome {
   code: AccountCode;

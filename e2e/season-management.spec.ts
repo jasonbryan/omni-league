@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import type { Browser, Page } from '@playwright/test';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -201,6 +201,9 @@ test.describe('Season management: an org admin', () => {
       main(page).getByText('Teams appear here when captains register them.'),
     ).toBeVisible();
     await expect(freeAgentRows(page)).toHaveCount(1);
+    await expect(main(page).getByText('No team to place them on yet')).toBeVisible();
+    await expect(main(page).getByText('Place free agents once a team registers.')).toBeVisible();
+    await expect(main(page).getByRole('button', { name: /Place on team/ })).toHaveCount(0);
     await expectAccessible(page);
     await screenshot(page, testInfo, '134-season-no-teams');
 
@@ -263,6 +266,148 @@ test.describe('Season management: an org admin', () => {
     await expect(notFound(page)).toBeVisible();
     expect(sent.some((frame) => frame.includes('seasons:getOrganizerView'))).toBe(true);
     expect(sent.some((frame) => frame.includes(FREE_AGENTS_QUERY))).toBe(false);
+  });
+});
+
+const placeDialog = (page: Page) => page.getByRole('dialog');
+
+async function placeAsOrgAdmin(page: Page, browser: Browser) {
+  const tenant = await asOrgAdmin(page);
+  const season = await seedSummer(tenant);
+  const waiting = newUser('Waiting');
+  const waitingPage = await otherUser(browser, waiting);
+  await convexRun('testing:seedFreeAgent', {
+    organizationSlug: tenant.slug,
+    leagueSlug: LEAGUE_SLUG,
+    seasonSlug: SUMMER,
+    email: waiting.email,
+  });
+  return { tenant, season, waiting, waitingPage };
+}
+
+test.describe('Season management: placing a free agent', () => {
+  test('an org admin places a waiting free agent on a team below the minimum; the free agent sees the team and opens it', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { tenant, season, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
+    try {
+      await page.goto(seasonPath(tenant, SUMMER));
+      await expect(freeAgentRows(page)).toHaveCount(3);
+      await expect(page.getByTestId('free-agent-count')).toHaveText('3');
+      const row = freeAgentRows(page).filter({ hasText: waiting.name });
+      const open = row.getByRole('button', { name: `Place on team: ${waiting.name}` });
+      await expect(open).toHaveAttribute('aria-haspopup', 'dialog');
+      await open.click();
+
+      const dialog = placeDialog(page);
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog.getByRole('heading', { name: `Place ${waiting.name} on a team` }),
+      ).toBeVisible();
+      await expect(dialog.getByRole('radio', { name: 'Block Party' })).toBeFocused();
+      await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toHaveAccessibleDescription(
+        '2 of 4 players · 2 more needed',
+      );
+      await expect(page.locator('app-season-management')).toHaveAttribute('inert', '');
+      // The modal holds focus, so the page-wide Tab walk (which expects to leave the page) does not
+      // apply: axe, and a Tab that cycles inside the dialog.
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+      await page.keyboard.press(tabKey(page));
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+      await page.keyboard.press(tabKey(page));
+      await expect(dialog.getByRole('button', { name: 'Place on team' })).toBeFocused();
+      await page.keyboard.press(`Shift+${tabKey(page)}`);
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+      await dialog.getByRole('radio', { name: 'Block Party' }).focus();
+      await screenshot(page, testInfo, '135-place-choose');
+
+      await dialog.getByRole('button', { name: 'Place on team' }).click();
+      await expect(dialog.getByText('Choose a team.')).toBeVisible();
+      await expect(dialog.getByRole('radio', { name: 'Block Party' })).toBeFocused();
+
+      await dialog.getByRole('radio', { name: 'Dig Deep' }).check();
+      await dialog.getByRole('button', { name: 'Place on team' }).click();
+      await expect(dialog).toHaveCount(0);
+      const status = main(page).locator('#free-agents [role="status"]');
+      await expect(status).toContainText(`${waiting.name} is on Dig Deep now.`);
+      await expect(status).toContainText('Dig Deep has 3 of 4 players.');
+      await expect(status).toBeFocused();
+      await expect(freeAgentRows(page)).toHaveCount(2);
+      await expect(freeAgentRows(page).filter({ hasText: waiting.name })).toHaveCount(0);
+      await expect(page.getByTestId('free-agent-count')).toHaveText('2');
+      const dig = teamRows(page).filter({ hasText: 'Dig Deep' });
+      await expect(dig.locator('[data-slot="roster"]')).toHaveText(
+        '3 of 4 players · 1 more needed',
+      );
+      await screenshot(page, testInfo, '135-placed');
+      await expectAccessible(page);
+
+      await waitingPage.goto(`/app/register/${tenant.slug}/${LEAGUE_SLUG}/${SUMMER}/free-agent`);
+      await expect(waitingPage.locator('main [data-slot="alert"]')).toContainText(
+        'You’re on Dig Deep in this season.',
+      );
+      await waitingPage.getByRole('link', { name: 'Go to Dig Deep' }).click();
+      await expect(waitingPage).toHaveURL(`/app/teams/${season.teamIds['Dig Deep']}`);
+      await expect(
+        waitingPage.getByRole('main').getByRole('heading', { level: 1, name: 'Dig Deep' }),
+      ).toBeVisible();
+    } finally {
+      await waitingPage.context().close();
+    }
+  });
+});
+
+test.describe('Season management: placing a free agent someone else placed', () => {
+  test.use({ expectedConvexErrors: ['freeAgents:place'] });
+
+  test('a free agent another organizer placed first: the dialog says so and nothing changes; Cancel returns focus', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const { tenant, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
+    await waitingPage.context().close();
+    await page.goto(seasonPath(tenant, SUMMER));
+    const row = freeAgentRows(page).filter({ hasText: waiting.name });
+    await row.getByRole('button', { name: `Place on team: ${waiting.name}` }).click();
+    const dialog = placeDialog(page);
+    await dialog.getByRole('radio', { name: 'Sand Sharks' }).check();
+
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(seasonPath(tenant, SUMMER));
+    await freeAgentRows(otherTab)
+      .filter({ hasText: waiting.name })
+      .getByRole('button', { name: /Place on team/ })
+      .click();
+    await placeDialog(otherTab).getByRole('radio', { name: 'Block Party' }).check();
+    await placeDialog(otherTab).getByRole('button', { name: 'Place on team' }).click();
+    await expect(placeDialog(otherTab)).toHaveCount(0);
+    await otherTab.close();
+
+    await dialog.getByRole('button', { name: 'Place on team' }).click();
+    const alert = dialog.getByRole('alert');
+    await expect(alert).toContainText(`${waiting.name} could not be placed.`);
+    await expect(alert).toContainText('They’ve already been placed on a team.');
+    await expect(alert).toBeFocused();
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '135-place-error');
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    const sharks = teamRows(page).filter({ hasText: 'Sand Sharks' });
+    await expect(sharks.locator('[data-slot="roster"]')).toHaveText('4 of 4 players');
+    await expect(freeAgentRows(page).filter({ hasText: waiting.name })).toHaveCount(0);
+
+    await freeAgentRows(page)
+      .first()
+      .getByRole('button', { name: /Place on team/ })
+      .click();
+    await placeDialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(
+      freeAgentRows(page)
+        .first()
+        .getByRole('button', { name: /Place on team/ }),
+    ).toBeFocused();
   });
 });
 
