@@ -23,6 +23,7 @@ const SHARKS = {
   roster: [{ rosterEntryId: 're_1', name: 'Tasha Greene', isCaptain: true, isViewer: true }],
   viewerIsCaptain: true,
   viewerCanManage: true,
+  viewerTeamName: 'Sand Sharks',
 };
 
 describe('TeamPage', () => {
@@ -42,7 +43,7 @@ describe('TeamPage', () => {
 
   const main = () => o.harness.routeNativeElement!.querySelector('main')!;
   const rosterRows = () =>
-    [...main().querySelectorAll('section ul > li')].map((li) =>
+    [...main().querySelectorAll('section[aria-labelledby="roster-heading"] ul > li')].map((li) =>
       [
         text(li.querySelector('[aria-hidden="true"]')),
         text(li.querySelector('h3')),

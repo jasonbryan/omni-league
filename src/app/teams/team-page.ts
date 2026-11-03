@@ -7,6 +7,7 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -18,11 +19,13 @@ import {
   lucideArrowLeft,
   lucideCircleCheck,
   lucideCrown,
+  lucideEye,
   lucideInfo,
   lucideLock,
   lucideShieldCheck,
   lucideUserMinus,
   lucideUserPlus,
+  lucideUsers,
 } from '@ng-icons/lucide';
 import { map } from 'rxjs';
 import { isForbidden } from '../../../convex/lib/forbidden';
@@ -46,6 +49,7 @@ import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button
 import { RemovePlayerDialog, type RemovePlayerOutcome } from './remove-player-dialog';
 import { removedText } from './remove-player-text';
 import { rosterCount } from './roster-count';
+import { SeasonTeamsPanel } from './season-teams-panel';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
 import { TeamPendingInvites } from './team-pending-invites';
@@ -72,6 +76,7 @@ export interface TeamPageNavigationState {
     NotFoundView,
     RemovePlayerDialog,
     RouterLink,
+    SeasonTeamsPanel,
     ServerErrorView,
     Shell,
     TeamInvitePanel,
@@ -82,11 +87,13 @@ export interface TeamPageNavigationState {
       lucideArrowLeft,
       lucideCircleCheck,
       lucideCrown,
+      lucideEye,
       lucideInfo,
       lucideLock,
       lucideShieldCheck,
       lucideUserMinus,
       lucideUserPlus,
+      lucideUsers,
     }),
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -113,8 +120,8 @@ export interface TeamPageNavigationState {
                 You can&rsquo;t open this team page
               </h1>
               <p class="mt-3 text-balance text-muted-foreground">
-                Only the team&rsquo;s players and the league&rsquo;s organizers can see it. If you
-                should be on this team, ask its captain.
+                Only the players on teams in its season and the league&rsquo;s organizers can see
+                it. If you were removed from the team, ask the captain to invite you again.
               </p>
               <a routerLink="/app" data-slot="button" [class]="primaryButton + ' mt-8'"
                 ><ng-icon name="lucideArrowLeft" data-icon="inline-start" aria-hidden="true" />Go to
@@ -196,6 +203,17 @@ export interface TeamPageNavigationState {
                         >You&rsquo;re an organizer of {{ team.league.name }}, so you can manage this
                         team&rsquo;s roster.</span
                       >
+                    </p>
+                  } @else if (viewerNote(); as note) {
+                    <p
+                      data-testid="viewer-note"
+                      class="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground"
+                    >
+                      <ng-icon
+                        [name]="note.icon"
+                        class="mt-0.5 shrink-0 text-base"
+                        aria-hidden="true"
+                      /><span>{{ note.text }}</span>
                     </p>
                   }
                 </div>
@@ -316,9 +334,17 @@ export interface TeamPageNavigationState {
                     />
                   }
                 </div>
-                @if (team.viewerCanManage && teamIdOf(); as id) {
-                  <app-team-invite-panel [teamId]="id" />
-                }
+                <div class="flex flex-col gap-4 md:gap-6">
+                  @if (team.viewerCanManage && teamIdOf(); as id) {
+                    <app-team-invite-panel [teamId]="id" />
+                  }
+                  <app-season-teams-panel
+                    [rows]="seasonTeams.value()?.rows"
+                    [total]="seasonTeams.value()?.total"
+                    [failed]="seasonTeams.error() !== undefined"
+                    [currentTeamId]="teamId()"
+                  />
+                </div>
               </div>
             </div>
             @if (team.viewerCanManage) {
@@ -348,7 +374,7 @@ export class TeamPage {
   protected readonly captainBadge = BADGE_SECONDARY;
   protected readonly initials = initialsOf;
 
-  private readonly teamId = toSignal(
+  protected readonly teamId = toSignal(
     inject(ActivatedRoute).paramMap.pipe(map((params) => params.get('teamId') ?? '')),
     { requireSync: true },
   );
@@ -382,16 +408,44 @@ export class TeamPage {
     return id && this.team()?.viewerCanManage ? { teamId: id } : skipToken;
   });
 
+  protected readonly seasonTeams = injectQuery(api.teams.listForSeasonMember, () => {
+    const id = this.teamIdOf();
+    return id ? { teamId: id } : skipToken;
+  });
+
+  protected readonly viewerNote = computed(() => {
+    const team = this.team();
+    if (!team) return null;
+    if (team.roster.some((player) => player.isViewer)) {
+      const captain = team.roster.find((player) => player.isCaptain);
+      return {
+        icon: 'lucideUsers',
+        text: captain
+          ? `You’re on this team. ${captain.name} is the captain.`
+          : 'You’re on this team.',
+      };
+    }
+    if (team.viewerTeamName === null) return null;
+    return {
+      icon: 'lucideEye',
+      text: `You’re on ${team.viewerTeamName}. Teams in a season see each other’s rosters, so everyone who plays is listed.`,
+    };
+  });
+
   protected readonly pendingCount = computed(() => {
     const total = this.pending.value()?.total;
     if (total === undefined) return null;
     return `${total} pending ${total === 1 ? 'invite' : 'invites'}`;
   });
 
-  protected readonly registered = signal(
+  private readonly arrivedRegistered =
     (inject(Router).currentNavigation()?.extras.state as TeamPageNavigationState | undefined)
-      ?.registered === true,
-  );
+      ?.registered === true;
+
+  protected readonly registered = linkedSignal<string, boolean>({
+    source: this.teamId,
+    computation: (_teamId, previous) => (previous ? false : this.arrivedRegistered),
+  });
 
   protected readonly registeredTitle = computed(() => {
     const team = this.team();
@@ -423,7 +477,10 @@ export class TeamPage {
   private readonly statusFocused = signal(false);
   private readonly removeDialog = viewChild(RemovePlayerDialog);
   private readonly removedStatus = viewChild<AdminAlert>('removedStatus');
-  protected readonly removedNotice = signal<AlertText | null>(null);
+  protected readonly removedNotice = linkedSignal<string, AlertText | null>({
+    source: this.teamId,
+    computation: () => null,
+  });
 
   constructor() {
     // The not-found and server-error views set their own title.

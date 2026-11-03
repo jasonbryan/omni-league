@@ -86,17 +86,23 @@ export async function organizesLeague(
   return membership !== null && mayOrganizeLeague(membership, league._id);
 }
 
-export async function requireTeamMemberOrOrganizer(
+export interface TeamReader {
+  user: Doc<'users'>;
+  /** The caller's own team in the season, null for an organizer on no roster. */
+  ownTeamId: Id<'teams'> | null;
+}
+
+/** Teams in a season see each other's rosters (requirements, Payments, rule 6), as do the league's organizers. */
+export async function requireSeasonMemberOrOrganizer(
   ctx: Ctx,
   team: Doc<'teams'>,
   league: Doc<'leagues'>,
-): Promise<Doc<'users'>> {
+): Promise<TeamReader> {
   const user = await getCurrentUser(ctx);
   if (!user) throw forbidden();
   const own = await rosteredEntryInSeason(ctx, team.seasonId, user._id);
-  const isMember = own?.teamId === team._id;
-  if (!isMember && !(await organizesLeague(ctx, user._id, league))) throw forbidden();
-  return user;
+  if (!own && !(await organizesLeague(ctx, user._id, league))) throw forbidden();
+  return { user, ownTeamId: own?.teamId ?? null };
 }
 
 export async function canManageTeam(

@@ -1,7 +1,12 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { mutation, query, type QueryCtx } from './_generated/server';
-import { canManageTeam, requireTeamMemberOrOrganizer, requireUser } from './lib/access';
+import {
+  canManageTeam,
+  requireSeasonMemberOrOrganizer,
+  requireUser,
+  type TeamReader,
+} from './lib/access';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
 import { registrationIsOpen } from './lib/registration';
@@ -17,6 +22,9 @@ import { getCurrentUser } from './lib/users';
 
 /** More than a roster holds, so the page always lists the whole roster. */
 export const ROSTER_READ_LIMIT = 200;
+
+/** A season list longer than this shows its first teams by name and the whole total. */
+export const SEASON_TEAMS_LIMIT = 200;
 
 /** A user on more teams than this sees the teams of their most recently added entries. */
 export const TEAMS_LIST_MINE_LIMIT = 50;
@@ -145,18 +153,31 @@ const teamForMemberValidator = v.object({
   roster: v.array(rosterRowValidator),
   viewerIsCaptain: v.boolean(),
   viewerCanManage: v.boolean(),
+  viewerTeamName: v.union(v.null(), v.string()),
 });
+
+async function teamAndLeague(ctx: Pick<QueryCtx, 'db'>, rawTeamId: string) {
+  const teamId = ctx.db.normalizeId('teams', rawTeamId);
+  const team = teamId ? await ctx.db.get('teams', teamId) : null;
+  const league = team ? await ctx.db.get('leagues', team.leagueId) : null;
+  return team && league ? { team, league } : null;
+}
+
+async function ownTeamName(ctx: Pick<QueryCtx, 'db'>, reader: TeamReader) {
+  const own = reader.ownTeamId ? await ctx.db.get('teams', reader.ownTeamId) : null;
+  return own?.name ?? null;
+}
 
 /** `teamId` is a string so a malformed id answers `null`, as an unknown one does, never a validator error. */
 export const getForMember = query({
   args: { teamId: v.string() },
   returns: v.union(v.null(), teamForMemberValidator),
   handler: async (ctx, args) => {
-    const teamId = ctx.db.normalizeId('teams', args.teamId);
-    const team = teamId ? await ctx.db.get('teams', teamId) : null;
-    const league = team ? await ctx.db.get('leagues', team.leagueId) : null;
-    if (!team || !league) return null;
-    const user = await requireTeamMemberOrOrganizer(ctx, team, league);
+    const found = await teamAndLeague(ctx, args.teamId);
+    if (!found) return null;
+    const { team, league } = found;
+    const reader = await requireSeasonMemberOrOrganizer(ctx, team, league);
+    const { user } = reader;
     const season = await ctx.db.get('seasons', team.seasonId);
     const organization = await ctx.db.get('organizations', team.organizationId);
     if (!season || !organization) return null;
@@ -170,6 +191,37 @@ export const getForMember = query({
       roster: await rosterOf(ctx, team, user),
       viewerIsCaptain: team.captainUserId === user._id,
       viewerCanManage: await canManageTeam(ctx, user._id, team, league),
+      viewerTeamName: await ownTeamName(ctx, reader),
+    };
+  },
+});
+
+const seasonTeamsValidator = v.object({
+  rows: v.array(v.object({ teamId: v.id('teams'), name: v.string(), isViewerTeam: v.boolean() })),
+  total: v.number(),
+});
+
+export const listForSeasonMember = query({
+  args: { teamId: v.string() },
+  returns: v.union(v.null(), seasonTeamsValidator),
+  handler: async (ctx, args) => {
+    const found = await teamAndLeague(ctx, args.teamId);
+    if (!found) return null;
+    const { team, league } = found;
+    const { ownTeamId } = await requireSeasonMemberOrOrganizer(ctx, team, league);
+    const season = await ctx.db.get('seasons', team.seasonId);
+    if (!season) return null;
+    const teams = await ctx.db
+      .query('teams')
+      .withIndex('by_seasonId_and_sortName', (q) => q.eq('seasonId', season._id))
+      .take(SEASON_TEAMS_LIMIT);
+    return {
+      rows: teams.map((row) => ({
+        teamId: row._id,
+        name: row.name,
+        isViewerTeam: row._id === ownTeamId,
+      })),
+      total: season.teamCount ?? teams.length,
     };
   },
 });
