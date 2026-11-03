@@ -473,7 +473,11 @@ describe('seed:demo accounts: the demo teams', () => {
         seasonSlug: 'summer-2027',
       };
       const registration = await captain.query(api.seasons.getForRegistration, slugs);
-      expect(registration?.team).toMatchObject({ name: 'Sand Sharks', isCaptain: true });
+      expect(registration?.team).toMatchObject({
+        name: 'Sand Sharks',
+        isCaptain: true,
+        rosterCount: 1,
+      });
       const teamId = registration?.team?.teamId ?? '';
       expect(await captain.query(api.teams.getForMember, { teamId })).toMatchObject({
         name: 'Sand Sharks',

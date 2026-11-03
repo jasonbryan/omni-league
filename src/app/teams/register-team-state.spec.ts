@@ -14,7 +14,7 @@ const OPEN: NonNullable<RegistrationAnswer> = {
 };
 const ON_TEAM: RegistrationAnswer = {
   ...OPEN,
-  team: { teamId: 'team-a' as Id<'teams'>, name: 'Sand Sharks', isCaptain: true },
+  team: { teamId: 'team-a' as Id<'teams'>, name: 'Sand Sharks', isCaptain: true, rosterCount: 1 },
 };
 const BEFORE_DEADLINE = Date.parse('2027-05-01T00:00:00Z');
 const AFTER_DEADLINE = Date.parse('2027-05-30T00:00:00Z');

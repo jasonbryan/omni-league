@@ -268,6 +268,7 @@ const registrationTeamValidator = v.object({
   teamId: v.id('teams'),
   name: v.string(),
   isCaptain: v.boolean(),
+  rosterCount: v.number(),
 });
 
 const getForRegistrationReturns = v.union(
@@ -309,7 +310,12 @@ export const getForRegistration = query({
       minimumRosterSize: season.minimumRosterSize,
       team:
         team && user
-          ? { teamId: team._id, name: team.name, isCaptain: team.captainUserId === user._id }
+          ? {
+              teamId: team._id,
+              name: team.name,
+              isCaptain: team.captainUserId === user._id,
+              rosterCount: team.rosterCount,
+            }
           : null,
     };
   },
