@@ -32,8 +32,9 @@ const FICTIONAL_FREE_AGENTS = [
   `theo.grant@${DOMAIN}`,
 ] as const;
 const PLACED_FREE_AGENT = `nia.brooks@${DOMAIN}`;
-/** The four demo accounts, the three fictional captains, and the four fictional free agents. */
-const USERS = 11;
+const REMOVED_PLAYER = `rio.santos@${DOMAIN}`;
+/** The four demo accounts, the three fictional captains, the four fictional free agents, and the removed player. */
+const USERS = 12;
 const INVITED = `invited@${DOMAIN}`;
 const PASSWORD = 'throwaway demo passphrase 2026';
 const OTHER_PASSWORD = 'a different throwaway phrase 2026';
@@ -469,7 +470,14 @@ describe('seed:demo accounts: the demo teams', () => {
       expect(await demoTeams(t)).toEqual({
         teamCount: 4,
         teams: {
-          'Net Results': captainOnly(FICTIONAL_CAPTAINS[0]),
+          'Net Results': {
+            captain: FICTIONAL_CAPTAINS[0],
+            rosterCount: 1,
+            roster: [
+              [FICTIONAL_CAPTAINS[0], 'rostered', 'captain'],
+              [REMOVED_PLAYER, 'removed', 'invite'],
+            ],
+          },
           'Block Party': captainOnly(FICTIONAL_CAPTAINS[1]),
           'Dig Dynasty': {
             captain: FICTIONAL_CAPTAINS[2],
@@ -517,7 +525,7 @@ describe('seed:demo accounts: the demo teams', () => {
       });
       const { entry, sharks } = await t.run(async (ctx) => ({
         entry: (await ctx.db.query('rosterEntries').collect()).find(
-          (row) => row.source === 'invite',
+          (row) => row.source === 'invite' && row.status === 'rostered',
         ),
         sharks: (await ctx.db.query('teams').collect()).find((row) => row.name === 'Sand Sharks'),
       }));
@@ -576,7 +584,7 @@ describe('seed:demo accounts: the demo teams', () => {
       await run(t);
       await t.run(async (ctx) => {
         const entry = (await ctx.db.query('rosterEntries').collect()).find(
-          (row) => row.source === 'invite',
+          (row) => row.source === 'invite' && row.status === 'rostered',
         )!;
         await removeRosterEntry(ctx, entry, entry.addedByUserId);
       });
@@ -589,6 +597,35 @@ describe('seed:demo accounts: the demo teams', () => {
           [EMAILS.player, 'removed', 'invite'],
         ],
       });
+    },
+    SLOW,
+  );
+
+  test(
+    'keeps one removed entry on Net Results, removed by its captain, once, which no one signs in as',
+    async () => {
+      const t = setup();
+      await run(t);
+      await run(t);
+      expect((await demoTeams(t)).teams['Net Results']).toEqual({
+        captain: FICTIONAL_CAPTAINS[0],
+        rosterCount: 1,
+        roster: [
+          [FICTIONAL_CAPTAINS[0], 'rostered', 'captain'],
+          [REMOVED_PLAYER, 'removed', 'invite'],
+        ],
+      });
+      const { removed, netResults } = await t.run(async (ctx) => ({
+        removed: (await ctx.db.query('rosterEntries').collect()).find(
+          (row) => row.status === 'removed',
+        ),
+        netResults: (await ctx.db.query('teams').collect()).find(
+          (row) => row.name === 'Net Results',
+        ),
+      }));
+      expect(removed?.removedByUserId).toBe(netResults?.captainUserId);
+      expect(removed?.removedAt).toEqual(expect.any(Number));
+      expect((await signIn(t, REMOVED_PLAYER)).status).toBe(401);
     },
     SLOW,
   );
@@ -694,7 +731,7 @@ describe('seed:demo accounts: the demo free agents', () => {
         expect((await signIn(t, email)).status).toBe(401);
       }
       const { rosterEntries } = await appRows(t);
-      expect(rosterEntries).toHaveLength(6);
+      expect(rosterEntries).toHaveLength(7);
 
       expect((await run(t)).freeAgents).toBe(0);
       expect(await demoFreeAgents(t)).toEqual(expected);
@@ -829,8 +866,8 @@ describe('seed:demo accounts: an address someone else holds', () => {
       expect((await authRows(t, 'account')).map((a) => a['userId'])).not.toContain(
         players[0]?.['_id'],
       );
-      // One per sign-up: three demo accounts, the three fictional captains, and the four fictional free agents.
-      expect(await authRows(t, 'session')).toHaveLength(10);
+      // One per sign-up: three demo accounts, the three fictional captains, the four fictional free agents, and the removed player.
+      expect(await authRows(t, 'session')).toHaveLength(11);
       expect(await membershipsOf(t, EMAILS.player)).toEqual([]);
     },
     SLOW,

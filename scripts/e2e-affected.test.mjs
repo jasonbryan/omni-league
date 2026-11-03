@@ -429,6 +429,7 @@ describe('selectSpecs: mapped areas', () => {
       'src/app/teams/team-invite-panel.ts',
       'convex/teams.ts',
       'convex/teamInvites.ts',
+      'convex/rosterEntries.ts',
       'convex/lib/rosterWrites.ts',
       'convex/lib/teamInput.ts',
       'convex/lib/teamInviteInput.ts',

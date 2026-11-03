@@ -23,6 +23,7 @@ import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
   acceptTeamInvite,
+  addRosterEntry,
   backfillTeamPendingInviteCounts,
   freeAgentInSeason,
   insertFreeAgent,
@@ -30,6 +31,7 @@ import {
   insertTeamInvite,
   insertTeamWithCaptain,
   pendingTeamInvite,
+  removeRosterEntry,
   rosteredEntryInSeason,
   teamWithSortName,
 } from './lib/rosterWrites';
@@ -839,10 +841,21 @@ const DEMO_PLACED_FREE_AGENT = {
   teamName: 'Dig Dynasty',
 } as const;
 
+/**
+ * A fictional player removed from a demo team by its captain, signed up as the captains are. The entry
+ * is kept with status `removed`, so it shows in the data and not on the roster.
+ */
+const DEMO_REMOVED_PLAYER = {
+  email: `rio.santos@${DEMO_ACCOUNT_DOMAIN}`,
+  name: 'Rio Santos',
+  teamName: 'Net Results',
+} as const;
+
 const FICTIONAL_PEOPLE: readonly { email: string; name: string }[] = [
   ...DEMO_CAPTAINS,
   ...DEMO_FREE_AGENT_PEOPLE,
   DEMO_PLACED_FREE_AGENT,
+  DEMO_REMOVED_PLAYER,
 ];
 
 /** player@ waits in another season than its team's, so the one-place rule holds. */
@@ -1138,9 +1151,45 @@ export const insertDemoTeams = internalMutation({
       await insertTeamWithCaptain(ctx, season, { name: team.name, captainUserId: user._id });
       inserted++;
     }
+    await insertDemoRemovedPlayer(ctx, captains);
     return inserted;
   },
 });
+
+/** Once: any entry of the person in the season, removed included, means it was seeded already. */
+async function insertDemoRemovedPlayer(
+  ctx: MutationCtx,
+  people: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const authUserId = people.find(
+    (person) => person.email === DEMO_REMOVED_PLAYER.email,
+  )?.authUserId;
+  if (authUserId === undefined) return;
+  const found = await findSeasonBySlugs(ctx, DEMO_TEAM_SEASON);
+  const team = found
+    ? await teamWithSortName(ctx, found.season._id, DEMO_REMOVED_PLAYER.teamName)
+    : null;
+  if (!team) return;
+  const user = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  if (!user) return;
+  const seeded = await ctx.db
+    .query('rosterEntries')
+    .withIndex('by_seasonId_and_userId', (q) =>
+      q.eq('seasonId', team.seasonId).eq('userId', user._id),
+    )
+    .first();
+  if (seeded || (await freeAgentInSeason(ctx, team.seasonId, user._id))) return;
+  const entryId = await addRosterEntry(ctx, team, {
+    userId: user._id,
+    source: 'invite',
+    addedByUserId: team.captainUserId,
+  });
+  const entry = await ctx.db.get('rosterEntries', entryId);
+  if (entry) await removeRosterEntry(ctx, entry, team.captainUserId);
+}
 
 /** Each demo invite is inserted once, by its marker, even after it is revoked. */
 export const insertDemoTeamInvites = internalMutation({

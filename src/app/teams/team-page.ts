@@ -1,6 +1,9 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -18,12 +21,14 @@ import {
   lucideInfo,
   lucideLock,
   lucideShieldCheck,
+  lucideUserMinus,
   lucideUserPlus,
 } from '@ng-icons/lucide';
 import { map } from 'rxjs';
 import { isForbidden } from '../../../convex/lib/forbidden';
 import { AuthService } from '../core/auth/auth.service';
 import type { Id } from '../../../convex/_generated/dataModel';
+import type { AlertText } from '../organizations/admin/alert-text';
 import { api, injectQuery, skipToken } from '../core/data/convex';
 import { NotFoundView } from '../not-found/not-found-view';
 import { AdminAlert } from '../organizations/admin/admin-alert';
@@ -37,7 +42,9 @@ import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
 import { isPlainClick } from '../shell/follow-link';
 import { initialsOf } from '../shell/initials';
-import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
+import { RemovePlayerDialog, type RemovePlayerOutcome } from './remove-player-dialog';
+import { removedText } from './remove-player-text';
 import { rosterCount } from './roster-count';
 import { TeamInvitePanel } from './team-invite-panel';
 import { teamPath } from './team-paths';
@@ -63,6 +70,7 @@ export interface TeamPageNavigationState {
     AdminAlert,
     NgIcon,
     NotFoundView,
+    RemovePlayerDialog,
     RouterLink,
     ServerErrorView,
     Shell,
@@ -77,6 +85,7 @@ export interface TeamPageNavigationState {
       lucideInfo,
       lucideLock,
       lucideShieldCheck,
+      lucideUserMinus,
       lucideUserPlus,
     }),
   ],
@@ -220,7 +229,7 @@ export interface TeamPageNavigationState {
                     <div
                       class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
                     >
-                      <h2 id="roster-heading" class="font-semibold">Roster</h2>
+                      <h2 id="roster-heading" tabindex="-1" class="font-semibold">Roster</h2>
                       <p class="text-sm text-muted-foreground tabular-nums">
                         <span data-testid="roster-count">{{ count().count }}</span>
                         @if (pendingCount(); as pending) {
@@ -228,6 +237,16 @@ export interface TeamPageNavigationState {
                         }
                       </p>
                     </div>
+                    @if (removedNotice(); as notice) {
+                      <div class="border-b border-border px-4 py-3 md:px-5">
+                        <app-admin-alert
+                          #removedStatus
+                          kind="success"
+                          [title]="notice.title"
+                          [description]="notice.description"
+                        />
+                      </div>
+                    }
                     <p
                       data-testid="roster-note"
                       class="flex items-start gap-1.5 border-b border-border px-4 py-3 text-sm text-muted-foreground md:px-5"
@@ -265,6 +284,26 @@ export interface TeamPageNavigationState {
                               </p>
                             }
                           </div>
+                          @if (team.viewerCanManage && !player.isCaptain) {
+                            <div class="flex w-full flex-wrap gap-2 ps-12 sm:w-auto sm:ps-0">
+                              <button
+                                type="button"
+                                aria-haspopup="dialog"
+                                data-slot="button"
+                                [attr.data-roster-entry-id]="player.rosterEntryId"
+                                [class]="destructiveButton"
+                                (click)="openRemove(player)"
+                              >
+                                <ng-icon
+                                  name="lucideUserMinus"
+                                  data-icon="inline-start"
+                                  aria-hidden="true"
+                                />Remove<span class="sr-only">
+                                  {{ player.name }} from {{ team.name }}</span
+                                >
+                              </button>
+                            </div>
+                          }
                         </li>
                       }
                     </ul>
@@ -282,6 +321,12 @@ export interface TeamPageNavigationState {
                 }
               </div>
             </div>
+            @if (team.viewerCanManage) {
+              <app-remove-player-dialog
+                [teamName]="team.name"
+                (dismissed)="removeDismissed($event)"
+              />
+            }
           }
         }
       }
@@ -291,9 +336,12 @@ export interface TeamPageNavigationState {
 export class TeamPage {
   private readonly auth = inject(AuthService);
   private readonly title = inject(Title);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly skeletonRows = [0, 1, 2];
   protected readonly primaryButton = PRIMARY_BUTTON;
+  protected readonly destructiveButton = DESTRUCTIVE_BUTTON;
   protected readonly jumpClass = `${OUTLINE_BUTTON} lg:hidden`;
   protected readonly backLink = BACK_LINK;
   protected readonly inlineLink = INLINE_LINK;
@@ -373,6 +421,9 @@ export class TeamPage {
   private readonly registeredStatus = viewChild<AdminAlert>('registeredStatus');
   private readonly invitePanel = viewChild(TeamInvitePanel);
   private readonly statusFocused = signal(false);
+  private readonly removeDialog = viewChild(RemovePlayerDialog);
+  private readonly removedStatus = viewChild<AdminAlert>('removedStatus');
+  protected readonly removedNotice = signal<AlertText | null>(null);
 
   constructor() {
     // The not-found and server-error views set their own title.
@@ -388,6 +439,31 @@ export class TeamPage {
       this.statusFocused.set(true);
       status.focus();
     });
+  }
+
+  protected openRemove(player: { rosterEntryId: Id<'rosterEntries'>; name: string }): void {
+    this.removedNotice.set(null);
+    this.removeDialog()?.open({ rosterEntryId: player.rosterEntryId, name: player.name });
+  }
+
+  /** A removal focuses the status, because the row and its Remove are gone. */
+  protected removeDismissed({ rosterEntryId, name, removed }: RemovePlayerOutcome): void {
+    if (removed) {
+      this.removedNotice.set(removedText(name, this.team()?.name ?? ''));
+      afterNextRender(() => this.removedStatus()?.focus(), { injector: this.injector });
+      return;
+    }
+    afterNextRender(
+      () => {
+        const host: HTMLElement = this.host.nativeElement;
+        const target =
+          host.querySelector<HTMLElement>(`button[data-roster-entry-id="${rosterEntryId}"]`) ??
+          host.querySelector<HTMLElement>('button[data-roster-entry-id]') ??
+          host.querySelector<HTMLElement>('#roster-heading');
+        target?.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   protected jumpToPanel(event: MouseEvent): void {

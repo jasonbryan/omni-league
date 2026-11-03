@@ -66,6 +66,7 @@ import type * as locations from "../locations.js";
 import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
 import type * as push from "../push.js";
+import type * as rosterEntries from "../rosterEntries.js";
 import type * as search from "../search.js";
 import type * as seasons from "../seasons.js";
 import type * as seed from "../seed.js";
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   memberships: typeof memberships;
   organizations: typeof organizations;
   push: typeof push;
+  rosterEntries: typeof rosterEntries;
   search: typeof search;
   seasons: typeof seasons;
   seed: typeof seed;
