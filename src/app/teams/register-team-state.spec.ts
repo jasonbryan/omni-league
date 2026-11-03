@@ -17,6 +17,15 @@ const ON_TEAM: RegistrationAnswer = {
   ...OPEN,
   team: { teamId: 'team-a' as Id<'teams'>, name: 'Sand Sharks', isCaptain: true, rosterCount: 1 },
 };
+const REGISTERED_AT = Date.parse('2027-05-01T00:00:00Z');
+const WAITING: RegistrationAnswer = {
+  ...OPEN,
+  freeAgent: { status: 'waiting', registeredAt: REGISTERED_AT },
+};
+const PLACED: RegistrationAnswer = {
+  ...ON_TEAM,
+  freeAgent: { status: 'placed', registeredAt: REGISTERED_AT },
+};
 const BEFORE_DEADLINE = Date.parse('2027-05-01T00:00:00Z');
 const AFTER_DEADLINE = Date.parse('2027-05-30T00:00:00Z');
 
@@ -29,6 +38,10 @@ describe('registerTeamState: the first state that applies', () => {
     ['signed out after the deadline', OPEN, false, AFTER_DEADLINE, 'signed-out'],
     ['on a team before the deadline', ON_TEAM, true, BEFORE_DEADLINE, 'on-team'],
     ['on a team after the deadline', ON_TEAM, true, AFTER_DEADLINE, 'on-team'],
+    ['a waiting free agent before the deadline', WAITING, true, BEFORE_DEADLINE, 'waiting'],
+    ['a waiting free agent after the deadline', WAITING, true, AFTER_DEADLINE, 'waiting'],
+    ['a placed free agent after the deadline', PLACED, true, AFTER_DEADLINE, 'on-team'],
+    ['a waiting free agent, signed out', WAITING, false, AFTER_DEADLINE, 'signed-out'],
     ['on no team after the deadline', OPEN, true, AFTER_DEADLINE, 'closed'],
     ['on no team while open', OPEN, true, BEFORE_DEADLINE, 'form'],
   ])('%s: %s', (_label, answer, signedIn, nowMs, state) => {

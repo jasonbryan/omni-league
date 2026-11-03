@@ -8,6 +8,7 @@ import {
   addRosterEntry,
   backfillSeasonTeamCounts,
   insertFreeAgent,
+  insertPlacedFreeAgent,
   insertTeamWithCaptain,
   removeRosterEntry,
 } from './lib/rosterWrites';
@@ -326,5 +327,54 @@ describe('rosterWrites: one place per person per season, free agents included', 
       expect((await teamOf(ctx, teamId)).rosterCount).toBe(1);
     });
     await expectCountersMatchRecount(s);
+  });
+});
+
+describe('rosterWrites: insertPlacedFreeAgent', () => {
+  async function withTeamAndWaiting(s: Setup) {
+    return s.t.run(async (ctx) => {
+      const teamId = await insertTeamWithCaptain(ctx, await seasonOf(ctx, s.summer), {
+        name: 'Sand Sharks',
+        captainUserId: s.ana,
+      });
+      await insertFreeAgent(ctx, await seasonOf(ctx, s.summer), s.ben);
+      return teamId;
+    });
+  }
+
+  test('writes the placement entry and the placed row, and counts the entry', async () => {
+    const s = await setup();
+    const teamId = await s.t.run(async (ctx) => {
+      const season = await seasonOf(ctx, s.summer);
+      const id = await insertTeamWithCaptain(ctx, season, {
+        name: 'Sand Sharks',
+        captainUserId: s.ana,
+      });
+      await insertPlacedFreeAgent(ctx, await teamOf(ctx, id), s.ben);
+      return id;
+    });
+    await s.t.run(async (ctx) => {
+      expect(await ctx.db.query('freeAgents').collect()).toEqual([
+        expect.objectContaining({ userId: s.ben, status: 'placed', placedTeamId: teamId }),
+      ]);
+      expect((await teamOf(ctx, teamId)).rosterCount).toBe(2);
+    });
+    await expectCountersMatchRecount(s);
+  });
+
+  test('refuses a person who already has a free-agent row, and writes nothing', async () => {
+    const s = await setup();
+    const teamId = await withTeamAndWaiting(s);
+    const failure = await s.t
+      .run(async (ctx) => insertPlacedFreeAgent(ctx, await teamOf(ctx, teamId), s.ben))
+      .catch((error: unknown) => error);
+    expect(refusalOf(failure)).toEqual({
+      code: 'alreadyFreeAgent',
+      message: TEAM_MESSAGES.alreadyFreeAgent,
+    });
+    await s.t.run(async (ctx) => {
+      expect(await ctx.db.query('freeAgents').collect()).toHaveLength(1);
+      expect(await ctx.db.query('rosterEntries').collect()).toHaveLength(1);
+    });
   });
 });

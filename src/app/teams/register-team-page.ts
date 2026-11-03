@@ -21,12 +21,13 @@ import {
   lucideArrowRight,
   lucideCalendarX,
   lucideCircleAlert,
+  lucideHourglass,
   lucideLoaderCircle,
   lucideUsers,
 } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
 import { map } from 'rxjs';
-import { checkTeamName, MAX_TEAM_NAME_LENGTH } from '../../../convex/lib/teamInput';
+import { checkTeamName, MAX_TEAM_NAME_LENGTH, TEAM_MESSAGES } from '../../../convex/lib/teamInput';
 import { AuthService } from '../core/auth/auth.service';
 import { SIGN_IN_PATH } from '../core/auth/guards';
 import {
@@ -59,7 +60,7 @@ import {
   registrationClosedLine,
   type RegisterTeamState,
 } from './register-team-state';
-import { registerTeamPath, teamPath } from './team-paths';
+import { registerFreeAgentPath, registerTeamPath, teamPath } from './team-paths';
 
 export const REGISTER_MESSAGES = {
   failedTitle: 'The team could not be registered.',
@@ -69,10 +70,13 @@ export const REGISTER_MESSAGES = {
   onTeamDescription:
     'Each person plays on one team per season, so there’s nothing to register here.',
   closedTitle: 'Registration for this season is closed.',
+  waitingTitle: 'You’re waiting to be placed on a team.',
+  waitingDescription: TEAM_MESSAGES.waitingFreeAgent,
+  waitingLink: 'View your free-agent registration',
 } as const;
 
 /** What the page shows after a refused submit, before the query catches up. */
-type Refusal = 'closed' | 'onTeam';
+type Refusal = 'closed' | 'onTeam' | 'waiting';
 
 type FormAlert = 'offline' | 'failed';
 
@@ -115,6 +119,7 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
       lucideArrowRight,
       lucideCalendarX,
       lucideCircleAlert,
+      lucideHourglass,
       lucideLoaderCircle,
       lucideUsers,
     }),
@@ -165,6 +170,30 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                       }}<ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
                     /></a>
                   }
+                }
+                @case ('waiting') {
+                  <div
+                    #cardAlert
+                    data-slot="alert"
+                    [attr.role]="refused() ? 'alert' : 'status'"
+                    tabindex="-1"
+                    [class]="neutralAlert"
+                  >
+                    <ng-icon name="lucideHourglass" aria-hidden="true" />
+                    <div data-slot="alert-title" [class]="alertTitle">
+                      {{ messages.waitingTitle }}
+                    </div>
+                    <div data-slot="alert-description" [class]="alertDescription">
+                      {{ messages.waitingDescription }}
+                    </div>
+                  </div>
+                  <a
+                    [routerLink]="freeAgentHref()"
+                    data-slot="button"
+                    [class]="primaryButton + ' mt-4 w-full'"
+                    >{{ messages.waitingLink
+                    }}<ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
+                  /></a>
                 }
                 @case ('closed') {
                   <div
@@ -322,6 +351,11 @@ export class RegisterTeamPage {
     return publicSeasonPath(orgSlug, leagueSlug, seasonSlug);
   });
 
+  protected readonly freeAgentHref = computed(() => {
+    const { orgSlug, leagueSlug, seasonSlug } = this.slugs();
+    return registerFreeAgentPath(orgSlug, leagueSlug, seasonSlug);
+  });
+
   private readonly sessionKnown = signal(false);
 
   // Asked signed out as well, so an unknown season shows the not-found view before any sign-in. Signed in, it waits until Convex has
@@ -353,7 +387,9 @@ export class RegisterTeamPage {
     if (this.registration.error()) return 'error';
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';
-    return state === 'form' && this.refusal() === 'closed' ? 'closed' : state;
+    if (state !== 'form') return state;
+    if (this.refusal() === 'waiting') return 'waiting';
+    return this.refusal() === 'closed' ? 'closed' : state;
   });
 
   protected readonly closedLine = computed(() => {
@@ -461,6 +497,10 @@ export class RegisterTeamPage {
     const code = data?.['code'];
     if (code === 'registrationClosed') {
       this.refuse('closed');
+      return;
+    }
+    if (code === 'waitingFreeAgent') {
+      this.refuse('waiting');
       return;
     }
     if (code === 'alreadyOnTeam' || code === 'alreadyOnAnotherTeam') {

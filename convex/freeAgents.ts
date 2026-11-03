@@ -5,8 +5,11 @@ import { freeAgentStatusValidator } from './lib/freeAgent';
 import { registrationIsOpen } from './lib/registration';
 import { insertFreeAgent } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
-import { TEAM_MESSAGES, type RegistrationClosedError } from './lib/teamInput';
-import { SEASON_NOT_FOUND_CODE } from './teams';
+import {
+  SEASON_NOT_FOUND_CODE,
+  TEAM_MESSAGES,
+  type RegistrationClosedError,
+} from './lib/teamInput';
 
 export const register = mutation({
   args: seasonSlugsValidator.fields,

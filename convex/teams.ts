@@ -7,13 +7,16 @@ import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
 import { registrationIsOpen } from './lib/registration';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
-import { checkTeamName, TEAM_MESSAGES, type RegistrationClosedError } from './lib/teamInput';
+import {
+  checkTeamName,
+  SEASON_NOT_FOUND_CODE,
+  TEAM_MESSAGES,
+  type RegistrationClosedError,
+} from './lib/teamInput';
 import { getCurrentUser } from './lib/users';
 
 /** More than a roster holds, so the page always lists the whole roster. */
 export const ROSTER_READ_LIMIT = 200;
-
-export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
 
 /** A user on more teams than this sees the teams of their most recently added entries. */
 export const TEAMS_LIST_MINE_LIMIT = 50;

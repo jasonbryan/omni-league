@@ -33,6 +33,8 @@ export interface AlreadyFreeAgentRefusal {
   message: string;
 }
 
+export const SEASON_NOT_FOUND_CODE = 'seasonNotFound';
+
 export const TEAM_MESSAGES = {
   nameEmpty: 'Enter a team name.',
   nameTooLong: (length: number) =>

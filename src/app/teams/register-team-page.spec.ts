@@ -31,6 +31,11 @@ const SUMMER = {
   formatName: '4v4',
   minimumRosterSize: 4,
   team: null,
+  freeAgent: null,
+};
+const WAITING = {
+  ...SUMMER,
+  freeAgent: { status: 'waiting', registeredAt: Date.parse('2027-05-01T00:00:00Z') },
 };
 const ON_TEAM = {
   ...SUMMER,
@@ -150,6 +155,23 @@ describe('RegisterTeamPage', () => {
       expect(page.textContent).not.toContain('Registration for this season is closed.');
     });
 
+    it('a waiting free agent: says so with a link to the free-agent route, and no form', async () => {
+      await open({ now: '2027-05-30T00:00:00Z' });
+      await answer(WAITING);
+      const card = page.querySelector('[data-slot="alert"]');
+      expect(card?.getAttribute('role')).toBe('status');
+      expect(text(card)).toBe(
+        "You’re waiting to be placed on a team. You're registered as a free agent in this season. An organizer places free agents on teams.",
+      );
+      const link = [...page.querySelectorAll('main a')].find(
+        (a) => text(a) === 'View your free-agent registration',
+      );
+      expect(link?.getAttribute('href')).toBe(
+        `/app/register/${SLUGS.orgSlug}/${SLUGS.leagueSlug}/${SLUGS.seasonSlug}/free-agent`,
+      );
+      expect(page.querySelector('form')).toBeNull();
+    });
+
     it('closed: shows the deadline and no form', async () => {
       await open({ now: '2027-05-24T12:00:00Z' });
       await answer(SUMMER);
@@ -264,6 +286,23 @@ describe('RegisterTeamPage', () => {
       const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
       expect(alert?.getAttribute('role')).toBe('alert');
       expect(text(alert)).toContain('Registration for this season is closed.');
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('a refusal as a waiting free agent shows the waiting card, whose alert takes focus', async () => {
+      await type('Sand Sharks');
+      await submit();
+      registers()[0].reject(
+        new ConvexError({
+          code: 'waitingFreeAgent',
+          message: "You're registered as a free agent in this season.",
+        }),
+      );
+      await flush();
+      const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(text(alert)).toContain('You’re waiting to be placed on a team.');
+      expect(page.querySelector('form')).toBeNull();
       expect(document.activeElement).toBe(alert);
     });
 

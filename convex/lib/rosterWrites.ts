@@ -190,6 +190,32 @@ export async function insertFreeAgent(
   return freeAgent;
 }
 
+/** A free agent already placed on `team`: the roster entry is written first, because the writer refuses a waiting free agent any other. */
+export async function insertPlacedFreeAgent(
+  ctx: MutationCtx,
+  team: Doc<'teams'>,
+  userId: Id<'users'>,
+): Promise<void> {
+  if (await freeAgentInSeason(ctx, team.seasonId, userId)) {
+    refuse({ code: 'alreadyFreeAgent', message: TEAM_MESSAGES.alreadyFreeAgent });
+  }
+  await addRosterEntry(ctx, team, {
+    userId,
+    source: 'placement',
+    addedByUserId: team.captainUserId,
+  });
+  const placedAt = Date.now();
+  await ctx.db.insert('freeAgents', {
+    organizationId: team.organizationId,
+    seasonId: team.seasonId,
+    userId,
+    status: 'placed',
+    registeredAt: placedAt,
+    placedTeamId: team._id,
+    placedAt,
+  });
+}
+
 export async function removeRosterEntry(
   ctx: MutationCtx,
   entry: Doc<'rosterEntries'>,

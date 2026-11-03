@@ -51,8 +51,11 @@ import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { RegisterCard, RegisterSkeleton } from './register-card';
-import { registerFreeAgentState, type RegisterFreeAgentState } from './register-free-agent-state';
-import { registrationClosedLine } from './register-team-state';
+import {
+  registerTeamState,
+  registrationClosedLine,
+  type RegisterTeamState,
+} from './register-team-state';
 import { registerFreeAgentPath, teamPath } from './team-paths';
 
 export const FREE_AGENT_MESSAGES = {
@@ -334,7 +337,7 @@ export class RegisterFreeAgentPage {
   });
 
   private readonly firstState = computed(() =>
-    registerFreeAgentState({
+    registerTeamState({
       answer: this.sessionKnown() ? this.registration.value() : undefined,
       signedIn: this.auth.signedIn(),
       nowMs: this.now(),
@@ -342,7 +345,7 @@ export class RegisterFreeAgentPage {
   );
 
   /** Signed out, the page stays on its skeleton while it sends the visitor to sign in. */
-  protected readonly state = computed<RegisterFreeAgentState | 'error'>(() => {
+  protected readonly state = computed<RegisterTeamState | 'error'>(() => {
     if (this.registration.error()) return 'error';
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';

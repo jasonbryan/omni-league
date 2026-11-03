@@ -16,6 +16,7 @@ import { roleValidator } from './lib/roles';
 import {
   addRosterEntry,
   insertFreeAgent,
+  insertPlacedFreeAgent,
   insertTeamInvite,
   insertTeamWithCaptain,
   removeRosterEntry,
@@ -439,21 +440,7 @@ export const seedFreeAgent = internalMutation({
     }
     const team = await ctx.db.get('teams', placedTeamId);
     if (team?.seasonId !== season._id) throw new Error('The team is not in this season');
-    await addRosterEntry(ctx, team, {
-      userId: user._id,
-      source: 'placement',
-      addedByUserId: team.captainUserId,
-    });
-    const placedAt = Date.now();
-    await ctx.db.insert('freeAgents', {
-      organizationId: season.organizationId,
-      seasonId: season._id,
-      userId: user._id,
-      status: 'placed',
-      registeredAt: placedAt,
-      placedTeamId,
-      placedAt,
-    });
+    await insertPlacedFreeAgent(ctx, team, user._id);
     return null;
   },
 });
