@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
-import { captureInviteToken } from './invites/capture-invite-token';
+import { captureInviteToken, captureTeamInviteToken } from './invites/capture-invite-token';
 
 export const routes: Routes = [
   {
@@ -53,6 +53,14 @@ export const routes: Routes = [
     // A link opened on the open page changes only the fragment, so the guard must run again.
     runGuardsAndResolvers: 'always',
     loadComponent: () => import('./invites/accept-invite-page').then((m) => m.AcceptInvitePage),
+  },
+  {
+    // The team invite link `/teams/join#<token>`, captured into its own key as the staff link above is.
+    path: 'teams/join',
+    title: 'Team invite | Omni League',
+    canActivate: [captureTeamInviteToken],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () => import('./teams/join-team-page').then((m) => m.JoinTeamPage),
   },
   {
     // Client routes only, so the guards never run on the server.

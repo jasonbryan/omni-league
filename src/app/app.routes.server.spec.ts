@@ -4,11 +4,12 @@ import { NotificationsPage } from './notifications/notifications-page';
 import { AccountSettingsPage } from './account/account-settings-page';
 import { FindPage } from './find/find-page';
 import { AcceptInvitePage } from './invites/accept-invite-page';
-import { captureInviteToken } from './invites/capture-invite-token';
+import { captureInviteToken, captureTeamInviteToken } from './invites/capture-invite-token';
 import { routes } from './app.routes';
 import { redirectSignedIn, requireSignedIn } from './core/auth/guards';
 import { serverRoutes } from './app.routes.server';
 import { AppNotFoundPage } from './not-found/app-not-found-page';
+import { JoinTeamPage } from './teams/join-team-page';
 import { RegisterTeamPage } from './teams/register-team-page';
 import { TeamPage } from './teams/team-page';
 import { NotFoundPage } from './not-found/not-found-page';
@@ -44,7 +45,7 @@ function directives(value: string): Map<string, string | true> {
 }
 
 describe('Route tables', () => {
-  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, app, app/** Client, leagues Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
+  it("server routes are exactly '' Prerender, sign-up, sign-in, invites/accept, teams/join, app, app/** Client, leagues Server, organizations/:orgSlug Server, organizations/:orgSlug/sports/:sport Server, organizations/:orgSlug/leagues/:leagueSlug Server, organizations/:orgSlug/leagues/:leagueSlug/seasons/:seasonSlug Server, ** Server, in that order", () => {
     expect(serverRoutes).toEqual([
       { path: '', renderMode: RenderMode.Prerender },
       {
@@ -59,6 +60,11 @@ describe('Route tables', () => {
       },
       {
         path: 'invites/accept',
+        renderMode: RenderMode.Client,
+        headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
+      },
+      {
+        path: 'teams/join',
         renderMode: RenderMode.Client,
         headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
       },
@@ -125,10 +131,10 @@ describe('Route tables', () => {
   it('has Client routes for the bound above to check', () => {
     expect(
       serverRoutes.filter((route) => route.renderMode === RenderMode.Client).map((r) => r.path),
-    ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'app', 'app/**']);
+    ).toEqual(['sign-up', 'sign-in', 'invites/accept', 'teams/join', 'app', 'app/**']);
   });
 
-  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, sign-up, sign-in, invites/accept, app, and then **', async () => {
+  it('the client router has \'\' (the placeholder, titled "Omni League"), the organization page, the sport view, the league page, the season page, sign-up, sign-in, invites/accept, teams/join, app, and then **', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '',
       'leagues',
@@ -139,6 +145,7 @@ describe('Route tables', () => {
       'sign-up',
       'sign-in',
       'invites/accept',
+      'teams/join',
       'app',
       '**',
     ]);
@@ -211,10 +218,20 @@ describe('Route tables', () => {
     expect(route?.canActivate).toEqual([captureInviteToken]);
   });
 
-  it("the invite page's response sends no referrer", () => {
-    const invite = serverRoutes.find((r) => r.path === 'invites/accept');
-    const headers = new Headers(invite?.renderMode === RenderMode.Client ? invite.headers : {});
-    expect(headers.get('Referrer-Policy')).toBe('no-referrer');
+  it("each invite page's response sends no referrer", () => {
+    for (const path of ['invites/accept', 'teams/join']) {
+      const invite = serverRoutes.find((r) => r.path === path);
+      const headers = new Headers(invite?.renderMode === RenderMode.Client ? invite.headers : {});
+      expect(headers.get('Referrer-Policy'), path).toBe('no-referrer');
+    }
+  });
+
+  it('teams/join lazy-loads the join page, behind the guard that takes the team token out of the URL', async () => {
+    const route = routes.find((r) => r.path === 'teams/join');
+    expect(route?.component).toBeUndefined();
+    expect(await route?.loadComponent?.()).toBe(JoinTeamPage);
+    expect(route?.title).toBe('Team invite | Omni League');
+    expect(route?.canActivate).toEqual([captureTeamInviteToken]);
   });
 
   it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded admin area, the unguarded register route, the guarded team page, and its own not-found route', async () => {

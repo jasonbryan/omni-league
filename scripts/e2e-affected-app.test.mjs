@@ -436,6 +436,7 @@ describe('the route tables', () => {
     requireSignedIn: ['after-sign-in'],
     redirectSignedIn: ['sign-in', 'sign-up', 'auth-session'],
     captureInviteToken: ['accept-invite'],
+    captureTeamInviteToken: ['team-join'],
   };
 
   it('reads every path of the route table, nested ones with their parents', () => {
@@ -446,6 +447,7 @@ describe('the route tables', () => {
       'sign-in',
       'sign-up',
       'invites/accept',
+      'teams/join',
       'app',
       'app/',
       'app/organizations/new',

@@ -24,6 +24,12 @@ export const serverRoutes: ServerRoute[] = [
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
   },
   {
+    // A team invite link's token is a bearer secret too, handled as the staff link above.
+    path: 'teams/join',
+    renderMode: RenderMode.Client,
+    headers: { 'Cache-Control': CLIENT_SHELL_CACHE, 'Referrer-Policy': 'no-referrer' },
+  },
+  {
     path: 'app',
     renderMode: RenderMode.Client,
     headers: { 'Cache-Control': CLIENT_SHELL_CACHE },

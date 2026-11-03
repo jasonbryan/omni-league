@@ -3,10 +3,16 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Component } from '@angular/core';
 import { routes } from '../app.routes';
-import { captureInviteToken } from './capture-invite-token';
-import { INVITE_TOKEN_KEY, InviteTokenStore } from './invite-token-store';
+import { captureInviteToken, captureTeamInviteToken } from './capture-invite-token';
+import {
+  INVITE_TOKEN_KEY,
+  InviteTokenStore,
+  TEAM_INVITE_TOKEN_KEY,
+  TeamInviteTokenStore,
+} from './invite-token-store';
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP-_0123456';
+const TEAM_TOKEN = 'teamtokenABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_abc';
 
 @Component({ template: 'accept' })
 class Accept {}
@@ -130,5 +136,71 @@ describe('captureInviteToken', () => {
     await open(`/invites/accept?token=${TOKEN}&x=1`);
     expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBeNull();
     expect(TestBed.inject(Router).url).toBe('/invites/accept');
+  });
+});
+
+describe('the staff and team invite stores', () => {
+  it('keep their tokens under separate keys, so neither reads or clears the other', () => {
+    const staff = TestBed.inject(InviteTokenStore);
+    const team = TestBed.inject(TeamInviteTokenStore);
+    expect(INVITE_TOKEN_KEY).not.toBe(TEAM_INVITE_TOKEN_KEY);
+    staff.save(TOKEN);
+    expect(team.read()).toBeNull();
+    team.save(TEAM_TOKEN);
+    expect(staff.read()).toBe(TOKEN);
+    expect(team.read()).toBe(TEAM_TOKEN);
+    expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TEAM_TOKEN);
+    team.clear();
+    expect(staff.read()).toBe(TOKEN);
+    team.save(TEAM_TOKEN);
+    staff.save('not a token');
+    expect(team.read()).toBe(TEAM_TOKEN);
+    expect(staff.read()).toBeNull();
+  });
+});
+
+describe('captureTeamInviteToken', () => {
+  @Component({ template: 'join' })
+  class Join {}
+
+  async function open(url: string) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: 'teams/join', component: Join, canActivate: [captureTeamInviteToken] },
+          { path: 'invites/accept', component: Accept, canActivate: [captureInviteToken] },
+        ]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url);
+    return harness;
+  }
+
+  it('moves the fragment into the team key only and leaves the URL without it', async () => {
+    sessionStorage.setItem(INVITE_TOKEN_KEY, TOKEN);
+    await open(`/teams/join#${TEAM_TOKEN}`);
+    expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TEAM_TOKEN);
+    expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
+    expect(TestBed.inject(Router).url).toBe('/teams/join');
+  });
+
+  it('a staff link opened after it leaves the team token in place', async () => {
+    const harness = await open(`/teams/join#${TEAM_TOKEN}`);
+    await harness.navigateByUrl(`/invites/accept#${TOKEN}`);
+    expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(TEAM_TOKEN);
+    expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(TOKEN);
+  });
+
+  it('never keeps a token passed in the query string, and drops the query from the URL', async () => {
+    await open(`/teams/join?token=${TEAM_TOKEN}`);
+    expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
+    expect(TestBed.inject(Router).url).toBe('/teams/join');
+  });
+
+  it('the app route re-runs the guard on every navigation, so a fragment-only one is captured', () => {
+    const route = routes.find((candidate) => candidate.path === 'teams/join');
+    expect(route?.canActivate).toContain(captureTeamInviteToken);
+    expect(route?.runGuardsAndResolvers).toBe('always');
   });
 });

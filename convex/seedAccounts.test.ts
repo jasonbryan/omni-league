@@ -7,6 +7,7 @@ import { isForbidden } from './lib/forbidden';
 import { authUserIdByEmail } from './lib/authUsers';
 import { hashInviteToken } from './lib/inviteToken';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
+import { removeRosterEntry } from './lib/rosterWrites';
 import schema from './schema';
 import seedSource from './seed.ts?raw';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
@@ -453,7 +454,7 @@ describe('seed:demo accounts: the demo teams', () => {
   });
 
   test(
-    'puts four teams in sunday-reverse-coed-4s / summer-2027, Sand Sharks captained by captain@, and player@ on none',
+    'puts four teams in sunday-reverse-coed-4s / summer-2027, Sand Sharks captained by captain@ with player@ joined by invite',
     async () => {
       const t = setup();
       await run(t);
@@ -463,7 +464,14 @@ describe('seed:demo accounts: the demo teams', () => {
           'Net Results': captainOnly(FICTIONAL_CAPTAINS[0]),
           'Block Party': captainOnly(FICTIONAL_CAPTAINS[1]),
           'Dig Dynasty': captainOnly(FICTIONAL_CAPTAINS[2]),
-          'Sand Sharks': captainOnly(EMAILS.captain),
+          'Sand Sharks': {
+            captain: EMAILS.captain,
+            rosterCount: 2,
+            roster: [
+              [EMAILS.captain, 'rostered', 'captain'],
+              [EMAILS.player, 'rostered', 'invite'],
+            ],
+          },
         },
       });
       const captain = await as(t, EMAILS.captain);
@@ -476,16 +484,29 @@ describe('seed:demo accounts: the demo teams', () => {
       expect(registration?.team).toMatchObject({
         name: 'Sand Sharks',
         isCaptain: true,
-        rosterCount: 1,
+        rosterCount: 2,
       });
       const teamId = registration?.team?.teamId ?? '';
       expect(await captain.query(api.teams.getForMember, { teamId })).toMatchObject({
         name: 'Sand Sharks',
-        rosterCount: 1,
-        roster: [{ name: 'Demo Captain', isCaptain: true, isViewer: true }],
+        rosterCount: 2,
+        roster: [
+          { name: 'Demo Captain', isCaptain: true, isViewer: true },
+          { name: 'Demo Player', isCaptain: false, isViewer: false },
+        ],
       });
       const player = await as(t, EMAILS.player);
-      expect((await player.query(api.seasons.getForRegistration, slugs))?.team).toBeNull();
+      expect((await player.query(api.seasons.getForRegistration, slugs))?.team).toMatchObject({
+        name: 'Sand Sharks',
+        isCaptain: false,
+      });
+      const { entry, sharks } = await t.run(async (ctx) => ({
+        entry: (await ctx.db.query('rosterEntries').collect()).find(
+          (row) => row.source === 'invite',
+        ),
+        sharks: (await ctx.db.query('teams').collect()).find((row) => row.name === 'Sand Sharks'),
+      }));
+      expect(entry?.addedByUserId).toBe(sharks?.captainUserId);
       // Each fictional captain's password was random and discarded.
       for (const email of FICTIONAL_CAPTAINS) {
         expect((await signIn(t, email)).status).toBe(401);
@@ -512,6 +533,30 @@ describe('seed:demo accounts: the demo teams', () => {
   );
 
   test(
+    'does not put player@ back on Sand Sharks after the entry is removed',
+    async () => {
+      const t = setup();
+      await run(t);
+      await t.run(async (ctx) => {
+        const entry = (await ctx.db.query('rosterEntries').collect()).find(
+          (row) => row.source === 'invite',
+        )!;
+        await removeRosterEntry(ctx, entry, entry.addedByUserId);
+      });
+      await run(t);
+      expect((await demoTeams(t)).teams['Sand Sharks']).toEqual({
+        captain: EMAILS.captain,
+        rosterCount: 1,
+        roster: [
+          [EMAILS.captain, 'rostered', 'captain'],
+          [EMAILS.player, 'removed', 'invite'],
+        ],
+      });
+    },
+    SLOW,
+  );
+
+  test(
     'puts two pending invites with marker hashes on Sand Sharks, once, which no token opens',
     async () => {
       const t = setup();
@@ -533,13 +578,17 @@ describe('seed:demo accounts: the demo teams', () => {
       expect(pending.total).toBe(2);
       const rows = await t.run((ctx) => ctx.db.query('teamInvites').collect());
       const markers = rows.map((row) => row.tokenHash);
-      expect(markers).toEqual(['demo-invite-1', 'demo-invite-2']);
+      expect(rows.map((row) => [row.tokenHash, row.status])).toEqual([
+        ['demo-invite-1', 'pending'],
+        ['demo-invite-2', 'pending'],
+        ['demo-invite-player', 'accepted'],
+      ]);
       for (const marker of markers) expect(marker).not.toMatch(/^[0-9a-f]{64}$/);
       expect(await hashInviteToken('demo-invite-1')).toMatch(/^[0-9a-f]{64}$/);
 
       await captain.mutation(api.teamInvites.revoke, { inviteId: pending.rows[0].inviteId });
       expect((await run(t)).teamInvites).toBe(0);
-      expect(await t.run((ctx) => ctx.db.query('teamInvites').collect())).toHaveLength(2);
+      expect(await t.run((ctx) => ctx.db.query('teamInvites').collect())).toHaveLength(3);
     },
     SLOW,
   );
@@ -829,6 +878,10 @@ describe('seed:demo accounts: the production guard', () => {
       (t) => t.query(internal.seed.findDemoCaptain, { email: FICTIONAL_CAPTAINS[0] }),
     ],
     ['insertDemoTeams', (t) => t.mutation(internal.seed.insertDemoTeams, { captains: [] })],
+    [
+      'insertDemoTeamPlayer',
+      (t) => t.mutation(internal.seed.insertDemoTeamPlayer, { authUserId: 'someone' }),
+    ],
   ];
 
   test.each(calls)(

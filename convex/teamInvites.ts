@@ -10,14 +10,21 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { requireTeamManager, requireUser } from './lib/access';
-import { authUserIdByEmail } from './lib/authUsers';
+import { authEmailOf, authUserIdByEmail } from './lib/authUsers';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
-import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
-import { insertTeamInvite, revokeTeamInvite, rosteredEntryInSeason } from './lib/rosterWrites';
+import { findUsableTeamInvite } from './lib/inviteLookup';
+import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
+import {
+  acceptTeamInvite,
+  insertTeamInvite,
+  revokeTeamInvite,
+  rosteredEntryInSeason,
+} from './lib/rosterWrites';
 import {
   checkTeamInviteEmail,
   TEAM_INVITE_LIST_LIMIT,
   TEAM_INVITE_MESSAGES,
+  type TeamInviteAcceptCode,
   type TeamInviteInputError,
 } from './lib/teamInviteInput';
 
@@ -145,6 +152,84 @@ export const listPending = query({
         expiresAt: invite.expiresAt,
       })),
       total: team.pendingInviteCount ?? 0,
+    };
+  },
+});
+
+// All unusable tokens answer alike, so the answer says nothing about which.
+// eslint-disable-next-line @convex-dev/require-access-control -- deliberately public (convex.md, Functions): the visitor has no account yet, the argument is a 256-bit bearer token that is hashed and looked up, and the answer holds no address, id, hash, captain, or roster.
+export const getByToken = query({
+  args: { token: v.string() },
+  returns: v.union(
+    v.object({
+      status: v.literal('valid'),
+      teamName: v.string(),
+      seasonName: v.string(),
+      leagueName: v.string(),
+      organizationName: v.string(),
+      expiresAt: v.number(),
+    }),
+    v.object({ status: v.literal('invalid') }),
+  ),
+  handler: async (ctx, { token }) => {
+    const found = await findUsableTeamInvite(ctx, token, Date.now());
+    if (!found) return { status: 'invalid' as const };
+    const { invite, team, season } = found;
+    const league = await ctx.db.get('leagues', team.leagueId);
+    const organization = await ctx.db.get('organizations', team.organizationId);
+    if (!league || !organization) return { status: 'invalid' as const };
+    return {
+      status: 'valid' as const,
+      teamName: team.name,
+      seasonName: season.name,
+      leagueName: league.name,
+      organizationName: organization.name,
+      expiresAt: invite.expiresAt,
+    };
+  },
+});
+
+function refuseAccept(code: Extract<TeamInviteAcceptCode, 'invalid' | 'emailMismatch'>): never {
+  throw new ConvexError({ code });
+}
+
+export const accept = mutation({
+  args: { token: v.string() },
+  returns: v.object({
+    teamId: v.id('teams'),
+    teamName: v.string(),
+    seasonName: v.string(),
+    captainName: v.string(),
+  }),
+  handler: async (ctx, { token }) => {
+    const user = await requireUser(ctx);
+    const found = await findUsableTeamInvite(ctx, token, Date.now());
+    if (!found) refuseAccept('invalid');
+    const { invite, team, season } = found;
+
+    const accountEmail = (await authEmailOf(ctx, user.authUserId)) ?? '';
+    if (accountEmail === '' || !timingSafeEqual(accountEmail, invite.email)) {
+      refuseAccept('emailMismatch');
+    }
+
+    // The writer refuses this too; here the refusal also carries the id, so the page links to the
+    // caller's own team.
+    const entry = await rosteredEntryInSeason(ctx, team.seasonId, user._id);
+    if (entry?.teamId === team._id) {
+      throw new ConvexError({
+        code: 'alreadyOnTeam' satisfies TeamInviteAcceptCode,
+        teamName: team.name,
+        teamId: team._id,
+      });
+    }
+
+    await acceptTeamInvite(ctx, invite._id, user._id);
+    const captain = await ctx.db.get('users', team.captainUserId);
+    return {
+      teamId: team._id,
+      teamName: team.name,
+      seasonName: season.name,
+      captainName: captain?.name ?? '',
     };
   },
 });
