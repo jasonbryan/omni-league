@@ -91,6 +91,12 @@ async function setup() {
     const mens = await league('mens-2s');
     const seasonId = await insertSeason(ctx, coed, SUMMER, 'published');
     await insertSeason(ctx, mens, { ...SUMMER, maxTeams: undefined }, 'published');
+    await insertSeason(
+      ctx,
+      mens,
+      { ...SUMMER, name: 'Mens Only', slug: 'mens-only', maxTeams: undefined },
+      'published',
+    );
     const users = {} as Record<Person, { authUserId: string; userId: Id<'users'> }>;
     for (const name of PEOPLE) {
       const now = Date.now();
@@ -356,6 +362,28 @@ describe('one place per season with a waiting entry', () => {
     expect(after.invites.map((invite) => invite.status)).toEqual(['pending']);
   });
 
+  test('a waiting captain who holds a minor-only place adds no further minor to that team', async () => {
+    const s = await setup();
+    const token = await inviteTo(s, s.teamOne, 'late');
+    await as(s, 'late').mutation(api.teamInvites.accept, {
+      token,
+      joinSelf: false,
+      minorName: 'Ava Lane',
+    });
+    expect(await register(s, 'late', 'Late Lobsters')).toEqual({
+      status: 'waitlisted',
+      position: 1,
+    });
+    const before = await snapshot(s);
+    expect(
+      await as(s, 'late')
+        .mutation(api.rosterEntries.addMinor, { teamId: s.teamOne, minorName: 'Ben Lane' })
+        .catch(refusalOf),
+    ).toEqual(ON_WAITLIST);
+    expect(await snapshot(s)).toEqual(before);
+    await expectCountersMatchRecount(s);
+  });
+
   test('the refusal carries the position of the waiting entry', async () => {
     const s = await setup();
     await register(s, 'late', 'Late Lobsters');
@@ -509,17 +537,19 @@ describe('waitlist.promote', () => {
     async (who) => {
       const { s, entryId } = await raisedWithEntry();
       const before = await snapshot(s);
-      await expect(promote(s, entryId, who)).rejects.toThrow();
+      await expect(promote(s, entryId, who)).rejects.toThrow('Not allowed');
       expect(await snapshot(s)).toEqual(before);
+      await expectCountersMatchRecount(s);
     },
   );
 
   test('an unauthenticated caller is refused', async () => {
     const { s, entryId } = await raisedWithEntry();
-    await expect(
-      s.t.mutation(api.waitlist.promote, { waitlistEntryId: entryId }),
-    ).rejects.toThrow();
-    expect(await waitingEntries(s)).toHaveLength(1);
+    const before = await snapshot(s);
+    await expect(s.t.mutation(api.waitlist.promote, { waitlistEntryId: entryId })).rejects.toThrow(
+      'Sign in required',
+    );
+    expect(await snapshot(s)).toEqual(before);
   });
 });
 
@@ -563,19 +593,17 @@ describe('waitlist.listForOrganizer', () => {
     '%s is refused',
     async (who) => {
       const s = await twoWaiting();
-      const answer = await as(s, who)
-        .query(api.waitlist.listForOrganizer, SLUGS)
-        .catch((failure: unknown) => failure);
-      expect(answer).not.toMatchObject({ waitlistCount: expect.any(Number) as number });
+      expect(await as(s, who).query(api.waitlist.listForOrganizer, SLUGS).catch(refusalOf)).toEqual(
+        { code: 'FORBIDDEN' },
+      );
     },
   );
 
   test('an unauthenticated caller is refused', async () => {
     const s = await twoWaiting();
-    const answer = await s.t
-      .query(api.waitlist.listForOrganizer, SLUGS)
-      .catch((failure: unknown) => failure);
-    expect(answer).not.toMatchObject({ waitlistCount: expect.any(Number) as number });
+    expect(await s.t.query(api.waitlist.listForOrganizer, SLUGS).catch(refusalOf)).toEqual({
+      code: 'FORBIDDEN',
+    });
   });
 
   test('an unknown slug and a season slug of another league give null', async () => {
@@ -588,10 +616,20 @@ describe('waitlist.listForOrganizer', () => {
       await as(s, 'admin-a').query(api.waitlist.listForOrganizer, { ...SLUGS, leagueSlug: 'nope' }),
     ).toBeNull();
     expect(
-      await organizer
-        .query(api.waitlist.listForOrganizer, { ...SLUGS, leagueSlug: 'mens-2s' })
-        .catch((failure: unknown) => failure),
-    ).not.toMatchObject({ rows: expect.anything() as unknown });
+      await organizer.query(api.waitlist.listForOrganizer, { ...SLUGS, seasonSlug: 'mens-only' }),
+    ).toBeNull();
+  });
+
+  test('a season of another league answers only under its own league, and refuses an organizer of the first', async () => {
+    const s = await twoWaiting();
+    const mensOnly = { ...SLUGS, leagueSlug: 'mens-2s', seasonSlug: 'mens-only' };
+    expect(await as(s, 'organizer-mens').query(api.waitlist.listForOrganizer, mensOnly)).toEqual({
+      rows: [],
+      waitlistCount: 0,
+    });
+    expect(
+      await as(s, 'organizer-coed').query(api.waitlist.listForOrganizer, mensOnly).catch(refusalOf),
+    ).toEqual({ code: 'FORBIDDEN' });
   });
 });
 

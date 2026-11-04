@@ -447,12 +447,13 @@ async function assertMinorNotInSeason(
   });
 }
 
-/** The one-team and free-agent rules cover the guardian's own entry only, so neither applies here. */
+/** The one-team and free-agent rules cover the guardian's own entry only, so neither applies here; a waiting captain adds no minor, so the waiting entry stays promotable. */
 export async function addMinorEntry(
   ctx: MutationCtx,
   team: Doc<'teams'>,
   entry: NewMinorEntry,
 ): Promise<Id<'rosterEntries'>> {
+  await assertNotWaitlisted(ctx, team.seasonId, entry.guardianUserId);
   const minors = await minorEntriesInSeason(ctx, team.seasonId, entry.guardianUserId);
   await assertMinorNotInSeason(ctx, minors, entry.minorName, null);
   // Removed entries count too, so adding and removing cannot grow a guardian's entries past the read window.
@@ -666,8 +667,6 @@ export async function acceptTeamInvite(
   if (invite?.status !== 'pending') throw new Error('Only a pending invite can be accepted');
   const team = await ctx.db.get('teams', invite.teamId);
   if (!team) throw new Error('No team has this id');
-  // A minor's entry skips the guardian's own checks, so a waiting captain's minor-only accept is refused here.
-  await assertNotWaitlisted(ctx, team.seasonId, userId);
   if (joinSelf) {
     await addRosterEntry(ctx, team, {
       userId,

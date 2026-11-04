@@ -81,6 +81,21 @@ export const FREE_AGENT_MESSAGES = {
 /** What the page shows after a refused submit, before the query catches up. */
 type Refusal = 'closed' | 'onTeam' | 'waiting' | 'waitlisted';
 
+interface WaitlistPlace {
+  teamName: string;
+  position: number;
+}
+
+function waitlistPlaceOf(failure: unknown): WaitlistPlace | null {
+  if (!(failure instanceof ConvexError)) return null;
+  const data: unknown = failure.data;
+  if (typeof data !== 'object' || data === null) return null;
+  const { teamName, position } = data as { teamName?: unknown; position?: unknown };
+  return typeof teamName === 'string' && typeof position === 'number'
+    ? { teamName, position }
+    : null;
+}
+
 type FormAlert = 'offline' | 'failed';
 
 function refusalOf(failure: unknown): Refusal | null {
@@ -175,7 +190,7 @@ function refusalOf(failure: unknown): Refusal | null {
                   }
                 }
                 @case ('waitlisted') {
-                  @if (season.waitlist; as waitlist) {
+                  @if (waitlistPlace(); as waitlist) {
                     <div
                       #cardAlert
                       data-slot="alert"
@@ -373,6 +388,12 @@ export class RegisterFreeAgentPage {
     source: this.slugs,
     computation: () => null,
   });
+  /** The refusal's place, shown until the query holds the caller's waiting entry. */
+  private readonly refusedPlace = linkedSignal<unknown, WaitlistPlace | null>({
+    source: this.slugs,
+    computation: () => null,
+  });
+  protected readonly waitlistPlace = computed(() => this.season()?.waitlist ?? this.refusedPlace());
   /** The time `register` answered, shown until the query holds the new row. */
   private readonly registeredAt = linkedSignal<unknown, number | null>({
     source: this.slugs,
@@ -477,6 +498,7 @@ export class RegisterFreeAgentPage {
       return;
     }
     // The query answers with the caller's row, team, or the closed season soon after; the card's alert takes focus once it shows.
+    if (refusal === 'waitlisted') this.refusedPlace.set(waitlistPlaceOf(failure));
     this.refusal.set(refusal);
     this.focusCardAlert.set(true);
   }

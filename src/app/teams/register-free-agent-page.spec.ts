@@ -261,6 +261,23 @@ describe('RegisterFreeAgentPage', () => {
       expect(document.activeElement).toBe(cardAlert());
     });
 
+    it('a refusal as on the waitlist shows the waitlisted card at once, before the query catches up', async () => {
+      await submit();
+      registers()[0].reject(
+        new ConvexError({
+          code: 'onWaitlist',
+          teamName: 'Late Lobsters',
+          position: 3,
+          message: "You're on the waitlist with Late Lobsters in this season.",
+        }),
+      );
+      await flush();
+      expect(cardAlert()?.getAttribute('role')).toBe('alert');
+      expect(text(cardAlert())).toContain('You’re on the waitlist with Late Lobsters, position 3.');
+      expect(linkNamed('See your waitlist place')).toBeTruthy();
+      expect(document.activeElement).toBe(cardAlert());
+    });
+
     it('any other failure shows the form alert, focused, and keeps the button', async () => {
       await submit();
       registers()[0].reject(new Error('network'));
