@@ -437,7 +437,7 @@ describe('seasons.create', () => {
       ).toMatchObject({ field: 'name', code: 'nameEmpty' });
       expect(
         await refusal(
-          s.adminA.mutation(api.seasons.create, { ...fall2026(s), name: 'Fall\u200B2026' }),
+          s.adminA.mutation(api.seasons.create, { ...fall2026(s), name: 'Fall\u202E2026' }),
         ),
       ).toMatchObject({ field: 'name', code: 'nameInvisible' });
       expect(await seasons(s.t)).toEqual([]);

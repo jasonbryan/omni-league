@@ -253,7 +253,11 @@ export const undoUpdate = mutation({
       refuse({ field: 'name', code: 'changedSince', message: LEAGUE_MESSAGES.changedSince });
     }
     // What `update` returned always passes these checks, so a failure is a caller sending its own values.
-    const name = checkLeagueName(values.name);
+    // A name saved before the hidden-character rule stays as it is.
+    const name =
+      values.name === league.name
+        ? { ok: true as const, name: values.name }
+        : checkLeagueName(values.name);
     if (!name.ok || draftSeasons.length > MAX_DRAFT_SEASONS_UPDATED) throw new Error('Not allowed');
     const { gender, playersPerSide, level, ageGroup, customLevelId, minimumRosterSize } = values;
     // A league without a division cannot be put back to one, so no screen lets a save strip it.

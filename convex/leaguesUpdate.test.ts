@@ -412,7 +412,8 @@ describe('leagues.update', () => {
   test.each([
     ['an empty name', { name: '   ' }, 'name', 'nameEmpty'],
     ['a name over 100 characters', { name: 'x'.repeat(101) }, 'name', 'nameTooLong'],
-    ['a name of only zero-width characters', { name: '\u200B\u200B' }, 'name', 'nameInvisible'],
+    ['a name with a bidi override', { name: 'Sunday\u202ESand' }, 'name', 'nameInvisible'],
+    ['a name of only zero-width characters', { name: '\u200B\u200B' }, 'name', 'nameEmpty'],
     ['a format outside the sport', { playersPerSide: 9 }, 'format', 'formatInvalid'],
     [
       'a minimum below the format',
@@ -447,6 +448,24 @@ describe('leagues.undoUpdate', () => {
     expect(after.league).toEqual(before.league);
     expect(after.seasons).toEqual(before.seasons);
     expect(after.seasons[2]).toMatchObject({ playersPerSide: 4, minimumRosterSize: 6 });
+  });
+
+  test('restores a stored name that has a hidden character without checking it', async () => {
+    const s = await setup();
+    const earlier = await s.admin.mutation(api.leagues.update, {
+      ...sundayArgs(s),
+      playersPerSide: 6,
+    });
+    const legacyName = 'Sunday\u202ESand';
+    await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { name: legacyName }));
+    await s.admin.mutation(api.leagues.undoUpdate, {
+      leagueId: s.sundayId,
+      ...earlier,
+      league: { ...earlier.league, name: legacyName },
+      written: { ...earlier.written, name: legacyName },
+    });
+    const league = (await stored(s)).league!;
+    expect(league).toMatchObject({ name: legacyName, playersPerSide: 4 });
   });
 
   test('leaves a season published in between as it is', async () => {

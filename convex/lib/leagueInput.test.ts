@@ -10,10 +10,12 @@ import {
 
 describe('checkLeagueName hidden characters', () => {
   test.each([
-    ['only zero-width spaces', '\u200B\u200B'],
-    ['a zero-width space inside', 'Sunday\u200BCoed'],
     ['a right-to-left override', 'Sunday \u202ECoed'],
+    ['a left-to-right mark', 'Sunday\u200ECoed'],
+    ['an isolate', 'Sunday\u2066Coed'],
+    ['an Arabic letter mark', 'Sunday\u061CCoed'],
     ['a null character', 'Sunday\u0000Coed'],
+    ['a line break inside', 'Sunday\nCoed'],
   ])('refuses a name with %s', (_, name) => {
     expect(checkLeagueName(name)).toEqual({
       ok: false,
@@ -25,8 +27,26 @@ describe('checkLeagueName hidden characters', () => {
     });
   });
 
-  test('accepts accents and apostrophes', () => {
-    expect(checkLeagueName(' Zoë’s Sunday Coed ')).toEqual({ ok: true, name: 'Zoë’s Sunday Coed' });
+  test.each([
+    ['only zero-width spaces', '\u200B\u200B'],
+    ['zero-width spaces and spaces', ' \u200D \u200B'],
+  ])('asks for a name when it has %s', (_, name) => {
+    expect(checkLeagueName(name)).toEqual({
+      ok: false,
+      error: { field: 'name', code: 'nameEmpty', message: 'Enter the league’s name.' },
+    });
+  });
+
+  test.each([
+    ['a ZWJ emoji', '👨\u200D👩\u200D👧 Sunday'],
+    [
+      'a tag-sequence flag',
+      '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} Sunday',
+    ],
+    ['a ZWNJ word', 'می\u200Cخواهم'],
+    ['accents and apostrophes', 'Zoë’s Sunday Coed'],
+  ])('accepts a name with %s', (_, name) => {
+    expect(checkLeagueName(` ${name} `)).toEqual({ ok: true, name });
   });
 });
 

@@ -71,9 +71,8 @@ describe('checkSeasonName', () => {
 
 describe('checkSeasonName hidden characters', () => {
   test.each([
-    ['only zero-width spaces', '\u200B\u200B'],
-    ['a zero-width space inside', 'Fall\u200B2026'],
     ['a right-to-left override', 'Fall \u202E2026'],
+    ['a left-to-right mark', 'Fall\u200E2026'],
     ['a null character', 'Fall\u00002026'],
   ])('refuses a name with %s', (_, name) => {
     expect(checkSeasonName(name)).toEqual({
@@ -84,6 +83,21 @@ describe('checkSeasonName hidden characters', () => {
         message: 'Remove the hidden or control characters from the name.',
       },
     });
+  });
+
+  test('asks for a name when it has only zero-width spaces', () => {
+    expect(checkSeasonName('\u200B\u200B')).toEqual({
+      ok: false,
+      error: { field: 'name', code: 'nameEmpty', message: 'Enter the season’s name.' },
+    });
+  });
+
+  test.each([
+    ['a ZWJ emoji', 'Pride 🏳️\u200D🌈'],
+    ['a tag-sequence flag', '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} Fall'],
+    ['a ZWNJ word', 'می\u200Cخواهم'],
+  ])('accepts a name with %s', (_, name) => {
+    expect(checkSeasonName(name)).toEqual({ ok: true, name });
   });
 });
 
