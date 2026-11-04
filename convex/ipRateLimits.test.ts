@@ -169,7 +169,7 @@ describe('prune', () => {
   });
 
   test('is scheduled every hour', () => {
-    expect(Object.values(crons.crons)).toEqual([
+    expect(Object.values(crons.crons).filter((job) => job.name === 'ipRateLimits:prune')).toEqual([
       {
         name: 'ipRateLimits:prune',
         args: [{}],
