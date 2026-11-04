@@ -19,6 +19,7 @@ import {
   INVITE_RESTORE_WINDOW_MS,
   type InviteInputError,
   type InviteRestoreError,
+  type InviteRevokeError,
 } from './lib/inviteInput';
 import { findUsableInvite } from './lib/inviteLookup';
 import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
@@ -166,7 +167,12 @@ export const revoke = mutation({
     const invite = await ctx.db.get('invites', inviteId);
     if (!invite) throw new Error('Not allowed');
     await requireOrgAdmin(ctx, invite.organizationId);
-    if (invite.status !== 'pending') throw new Error('Only a pending invite can be revoked');
+    if (invite.status !== 'pending') {
+      throw new ConvexError({
+        code: 'notPending',
+        message: INVITE_MESSAGES.revokeNotPending,
+      } satisfies InviteRevokeError);
+    }
     await ctx.db.patch('invites', inviteId, { status: 'revoked', revokedAt: Date.now() });
     return null;
   },
@@ -181,7 +187,10 @@ export const restore = mutation({
     if (!invite) throw new Error('Not allowed');
     await requireOrgAdmin(ctx, invite.organizationId);
     if (invite.status !== 'revoked' || invite.revokedAt === undefined) {
-      throw new Error('Only a revoked invite can be restored');
+      throw new ConvexError({
+        code: 'notRevoked',
+        message: INVITE_MESSAGES.restoreNotRevoked,
+      } satisfies InviteRestoreError);
     }
     const now = Date.now();
     if (now - invite.revokedAt > INVITE_RESTORE_WINDOW_MS) {

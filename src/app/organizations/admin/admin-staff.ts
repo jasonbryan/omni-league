@@ -2,6 +2,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
   Injector,
   afterNextRender,
   computed,
@@ -22,7 +24,7 @@ import {
   lucideUsers,
 } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
-import { INVITE_MESSAGES } from '../../../../convex/lib/inviteInput';
+import { INVITE_MESSAGES, INVITE_RESTORE_WINDOW_MS } from '../../../../convex/lib/inviteInput';
 import type { Role } from '../../../../convex/lib/roles';
 import {
   api,
@@ -44,7 +46,7 @@ import { formatDay } from './format-day';
 import { StaffInvitePanel } from './staff-invite-panel';
 
 type RestoreRefusal =
-  'windowPassed' | 'expired' | 'alreadyInvited' | 'alreadyMember' | 'leaguesGone';
+  'windowPassed' | 'expired' | 'alreadyInvited' | 'alreadyMember' | 'leaguesGone' | 'notRevoked';
 
 const RESTORE_REFUSALS: readonly string[] = [
   'windowPassed',
@@ -52,24 +54,29 @@ const RESTORE_REFUSALS: readonly string[] = [
   'alreadyInvited',
   'alreadyMember',
   'leaguesGone',
+  'notRevoked',
 ] satisfies RestoreRefusal[];
 
 type Notice =
   | { kind: 'revoked'; inviteId: Id<'invites'>; email: string }
   | { kind: 'failed' }
+  | { kind: 'revokeRefused'; email: string }
   | { kind: 'offline' }
   | { kind: 'restored'; email: string }
   | { kind: 'refused'; email: string; reason: RestoreRefusal }
-  | { kind: 'restoreFailed'; inviteId: Id<'invites'>; email: string }
+  | { kind: 'restoreFailed' }
   | { kind: 'restoreOffline'; inviteId: Id<'invites'>; email: string };
 
-function refusalOf(failure: unknown): RestoreRefusal | null {
+function codeOf(failure: unknown): string | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   const code = typeof data === 'object' && data !== null && 'code' in data ? data.code : null;
-  return typeof code === 'string' && RESTORE_REFUSALS.includes(code)
-    ? (code as RestoreRefusal)
-    : null;
+  return typeof code === 'string' ? code : null;
+}
+
+function refusalOf(failure: unknown): RestoreRefusal | null {
+  const code = codeOf(failure);
+  return code !== null && RESTORE_REFUSALS.includes(code) ? (code as RestoreRefusal) : null;
 }
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -79,7 +86,8 @@ const ROLE_LABEL: Record<Role, string> = {
 
 /**
  * Revoke acts at once, with no confirmation: a status above the list says so and takes focus, because the button that had it is gone. The status carries Undo, which `invites.restore` allows
- * for 10 minutes after the revoke (the server enforces it) and which makes the link already sent work again.
+ * for 10 minutes after the revoke (the server enforces it, the page hides Undo when the time is up) and which makes the link already sent work again.
+ * A failure that is not offline came from the server, so retrying the same press would fail the same way: Undo goes, and the alert says so instead of blaming the connection.
  * Every query here is org-admin only; the area's parent has already shown the no-access view to anyone else, so none is asked for them.
  */
 @Component({
@@ -235,10 +243,8 @@ const ROLE_LABEL: Record<Role, string> = {
                       #noticeAlert
                       kind="error"
                       title="The invite could not be restored."
-                      description="Check your connection and try again."
-                    >
-                      <ng-container [ngTemplateOutlet]="undoAction" />
-                    </app-admin-alert>
+                      description="The invite stays revoked. Reload the page, then invite this address again."
+                    />
                   }
                   @case ('restoreOffline') {
                     <app-admin-offline-alert
@@ -254,12 +260,20 @@ const ROLE_LABEL: Record<Role, string> = {
                       description="The invite is unchanged. Try again when you're connected."
                     />
                   }
+                  @case ('revokeRefused') {
+                    <app-admin-alert
+                      #noticeAlert
+                      kind="error"
+                      [title]="'Invite to ' + notice.email + ' could not be revoked.'"
+                      [description]="revokeNotPending"
+                    />
+                  }
                   @default {
                     <app-admin-alert
                       #noticeAlert
                       kind="error"
                       title="The invite could not be revoked."
-                      description="Check your connection and try again."
+                      description="The invite is unchanged. Reload the page and try again."
                     />
                   }
                 }
@@ -317,15 +331,28 @@ const ROLE_LABEL: Record<Role, string> = {
                         <button
                           type="button"
                           data-slot="button"
-                          [class]="online() ? destructiveButton : destructiveButton + ' opacity-50'"
-                          [attr.aria-disabled]="online() ? null : 'true'"
+                          [class]="
+                            revokeDimmed() ? destructiveButton + ' opacity-50' : destructiveButton
+                          "
+                          [attr.aria-disabled]="
+                            revokeDimmed() || revokingId() === row.inviteId ? 'true' : null
+                          "
                           (click)="revoke(row.inviteId, row.email)"
                         >
-                          <ng-icon
-                            name="lucideBan"
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                          />Revoke<span class="sr-only"> the invite to {{ row.email }}</span>
+                          @if (revokingId() === row.inviteId) {
+                            <ng-icon
+                              name="lucideLoaderCircle"
+                              class="motion-safe:animate-spin"
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />Revoking…
+                          } @else {
+                            <ng-icon
+                              name="lucideBan"
+                              data-icon="inline-start"
+                              aria-hidden="true"
+                            />Revoke<span class="sr-only"> the invite to {{ row.email }}</span>
+                          }
                         </button>
                       </div>
                     </li>
@@ -378,6 +405,7 @@ const ROLE_LABEL: Record<Role, string> = {
       @if (undoTarget(); as target) {
         <div class="mt-2">
           <button
+            #undoButton
             type="button"
             data-slot="button"
             [class]="undoClass"
@@ -417,6 +445,11 @@ export class AdminStaff {
   protected readonly destructiveButton = DESTRUCTIVE_BUTTON;
   protected readonly undoClass = `${OUTLINE_BUTTON} pointer-coarse:min-h-11 pointer-coarse:px-4`;
   protected readonly restoring = computed(() => this.restoreCall.pending());
+  protected readonly revokingId = signal<Id<'invites'> | null>(null);
+  protected readonly revokeNotPending = INVITE_MESSAGES.revokeNotPending;
+  protected readonly revokeDimmed = computed(
+    () => !this.online() || this.revokingId() !== null || this.restoring(),
+  );
   protected readonly secondaryBadge = BADGE_SECONDARY;
   protected readonly placeholders = [1, 2, 3];
   protected readonly day = formatDay;
@@ -459,16 +492,23 @@ export class AdminStaff {
 
   protected readonly notice = signal<Notice | null>(null);
 
+  private readonly undoWindowOpen = signal(false);
+  private undoWindowTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // An Undo already sent stays on screen until the server answers.
   protected readonly undoTarget = computed(() => {
     const notice = this.notice();
-    return notice && 'inviteId' in notice ? notice : null;
+    const offered = this.undoWindowOpen() || this.restoring();
+    return offered && notice && 'inviteId' in notice ? notice : null;
   });
 
   private readonly panel = viewChild(StaffInvitePanel);
   private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
+  private readonly undoButton = viewChild<ElementRef<HTMLButtonElement>>('undoButton');
 
   constructor() {
     bindAdminTitle('Staff');
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.undoWindowTimer));
   }
 
   protected roleLabel(role: Role): string {
@@ -492,11 +532,17 @@ export class AdminStaff {
       this.show({ kind: 'offline' });
       return;
     }
+    this.revokingId.set(inviteId);
     try {
       await this.revokeCall.run({ inviteId });
+      this.startUndoWindow();
       this.show({ kind: 'revoked', inviteId, email });
     } catch (failure) {
-      this.show(failure instanceof ConvexOfflineError ? { kind: 'offline' } : { kind: 'failed' });
+      if (failure instanceof ConvexOfflineError) this.show({ kind: 'offline' });
+      else if (codeOf(failure) === 'notPending') this.show({ kind: 'revokeRefused', email });
+      else this.show({ kind: 'failed' });
+    } finally {
+      this.revokingId.set(null);
     }
   }
 
@@ -512,6 +558,8 @@ export class AdminStaff {
         return INVITE_MESSAGES.alreadyMember(email);
       case 'leaguesGone':
         return INVITE_MESSAGES.restoreLeaguesGone;
+      case 'notRevoked':
+        return INVITE_MESSAGES.restoreNotRevoked;
     }
   }
 
@@ -530,12 +578,28 @@ export class AdminStaff {
       if (reason) this.show({ kind: 'refused', email, reason });
       else if (failure instanceof ConvexOfflineError) {
         this.show({ kind: 'restoreOffline', inviteId, email });
-      } else this.show({ kind: 'restoreFailed', inviteId, email });
+      } else this.show({ kind: 'restoreFailed' });
     }
+  }
+
+  private startUndoWindow(): void {
+    clearTimeout(this.undoWindowTimer);
+    this.undoWindowOpen.set(true);
+    this.undoWindowTimer = setTimeout(() => this.endUndoWindow(), INVITE_RESTORE_WINDOW_MS);
+  }
+
+  private endUndoWindow(): void {
+    const undoHadFocus = this.undoButton()?.nativeElement.matches(':focus') ?? false;
+    this.undoWindowOpen.set(false);
+    if (undoHadFocus) this.focusNotice();
   }
 
   private show(notice: Notice): void {
     this.notice.set(notice);
+    this.focusNotice();
+  }
+
+  private focusNotice(): void {
     afterNextRender(() => this.noticeAlert()?.focus(), { injector: this.injector });
   }
 }

@@ -329,12 +329,14 @@ describe('invites.revoke', () => {
     const s = await setup();
     const { inviteId } = await invite(s, 'dana@example.com');
     await s.asAdminA.mutation(api.invites.revoke, { inviteId });
-    await expect(s.asAdminA.mutation(api.invites.revoke, { inviteId })).rejects.toThrow(/pending/);
+    await expect(s.asAdminA.mutation(api.invites.revoke, { inviteId })).rejects.toMatchObject({
+      data: { code: 'notPending', message: INVITE_MESSAGES.revokeNotPending },
+    });
     const accepted = await invite(s, 'erin@example.com');
     await s.t.run((ctx) => ctx.db.patch('invites', accepted.inviteId, { status: 'accepted' }));
     await expect(
       s.asAdminA.mutation(api.invites.revoke, { inviteId: accepted.inviteId }),
-    ).rejects.toThrow(/pending/);
+    ).rejects.toMatchObject({ data: { code: 'notPending' } });
   });
 
   test('revokes an expired invite', async () => {
@@ -535,9 +537,13 @@ describe('invites.restore', () => {
   test('refuses an invite that is pending or accepted', async () => {
     const s = await setup();
     const pending = await invite(s, 'dana@example.com');
-    await expect(restore(s, pending.inviteId)).rejects.toThrow(/revoked/);
+    await expect(restore(s, pending.inviteId)).rejects.toMatchObject({
+      data: { code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked },
+    });
     await s.t.run((ctx) => ctx.db.patch('invites', pending.inviteId, { status: 'accepted' }));
-    await expect(restore(s, pending.inviteId)).rejects.toThrow(/revoked/);
+    await expect(restore(s, pending.inviteId)).rejects.toMatchObject({
+      data: { code: 'notRevoked' },
+    });
     expect((await allInvites(s))[0].status).toBe('accepted');
   });
 
@@ -545,7 +551,7 @@ describe('invites.restore', () => {
     const s = await setup();
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     await s.t.run((ctx) => ctx.db.patch('invites', inviteId, { revokedAt: undefined }));
-    await expect(restore(s, inviteId)).rejects.toThrow(/revoked/);
+    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'notRevoked' } });
     expect((await allInvites(s))[0].status).toBe('revoked');
   });
 
@@ -632,7 +638,7 @@ describe('invites.restore: edge cases', () => {
     const s = await setup();
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     await restore(s, inviteId);
-    await expect(restore(s, inviteId)).rejects.toThrow(/revoked/);
+    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'notRevoked' } });
     const secondRevokeAt = NOW + 5 * 60 * 1000;
     vi.setSystemTime(secondRevokeAt);
     await s.asAdminA.mutation(api.invites.revoke, { inviteId });
@@ -676,7 +682,7 @@ describe('invites.restore: edge cases', () => {
       role: 'orgAdmin',
     });
     expect((await allInvites(s))[0].status).toBe('accepted');
-    await expect(restore(s, inviteId)).rejects.toThrow(/revoked/);
+    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'notRevoked' } });
   });
 
   test('a restored league organizer invite keeps all its leagues', async () => {

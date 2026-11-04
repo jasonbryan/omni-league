@@ -1,8 +1,10 @@
-// Undo on the Staff page's revoked status. The window's edges are Convex tests. Each test signs up
+// Undo on the Staff page's revoked status. The window's edges are Convex tests; the page's own timer
+// for hiding Undo runs on the browser clock. Each test signs up
 // its own org admin and seeds the invite with a known token (`testing:addInvite`), so the tests
 // need the local Convex backend and are skipped with E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
+import { INVITE_MESSAGES } from '../convex/lib/inviteInput';
 import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { TOKEN_PATH } from './support/auth-tokens';
@@ -29,11 +31,20 @@ const LEAGUES = [
   { name: 'Coed 7v7 Rec', sport: 'soccer' as const, locations: ['Redfish Flats Fields'] },
 ];
 
+const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
+
 const main = (page: Page) => page.getByRole('main');
 const pendingRows = (page: Page) => page.locator('#pending-list > li');
 
+interface OpenOptions {
+  /** Further invites, in the order they list after `email`. */
+  otherEmails?: string[];
+  /** Runs once signed in, before `/staff` loads: the place for a socket route or the clock. */
+  beforeOpen?: () => Promise<void>;
+}
+
 /** An org admin signed in on `/staff` of a new organization holding one invite with a known token. */
-async function openStaffWithInvite(page: Page, email: string) {
+async function openStaffWithInvite(page: Page, email: string, options: OpenOptions = {}) {
   const admin = newUser('Admin');
   await signUp(page, admin);
   const tenant = await seedTenant({ name: 'E2E Undo', locations: LOCATIONS, leagues: LEAGUES });
@@ -50,9 +61,19 @@ async function openStaffWithInvite(page: Page, email: string) {
     expiresAt: Date.now() + 14 * DAY,
     token,
   });
+  for (const other of options.otherEmails ?? []) {
+    await convexRun('testing:addInvite', {
+      organizationSlug: tenant.slug,
+      email: other,
+      role: 'orgAdmin',
+      expiresAt: Date.now() + 14 * DAY,
+      token: randomBytes(32).toString('base64url'),
+    });
+  }
+  await options.beforeOpen?.();
   await page.goto(`/app/organizations/${tenant.slug}/staff`);
   await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
-  await expect(pendingRows(page)).toHaveCount(1);
+  await expect(pendingRows(page)).toHaveCount(1 + (options.otherEmails?.length ?? 0));
   return { tenant, token };
 }
 
@@ -60,6 +81,57 @@ const revokeButton = (page: Page, email: string) =>
   page.getByRole('button', { name: `Revoke the invite to ${email}` });
 const undoButton = (page: Page, email: string) =>
   page.getByRole('button', { name: `Undo revoking the invite to ${email}` });
+
+function requestIdOf(frame: string | Buffer, udfPath: string): number | null {
+  try {
+    const parsed = JSON.parse(frame.toString()) as {
+      type?: string;
+      udfPath?: string;
+      requestId?: number;
+    };
+    const wanted = parsed.type === 'Mutation' && parsed.udfPath === udfPath;
+    return wanted && parsed.requestId !== undefined ? parsed.requestId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Answers or holds the page's calls to one mutation on its Convex socket. `plainServerError` is
+ * what a function that throws a plain `Error` sends in production: no reason, only "Server Error".
+ * `refused` is a `ConvexError` the page reads, and `hold` keeps the call from the server until
+ * `release()`.
+ */
+async function interceptMutation(
+  page: Page,
+  udfPath: string,
+  handling: 'plainServerError' | 'refused' | 'hold',
+) {
+  let release: () => void = () => undefined;
+  await page.routeWebSocket(CONVEX_SOCKET, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((frame) => {
+      const requestId = requestIdOf(frame, udfPath);
+      if (requestId === null) {
+        server.send(frame);
+      } else if (handling === 'hold') {
+        release = () => server.send(frame);
+      } else {
+        const failure = { type: 'MutationResponse', requestId, success: false, logLines: [] };
+        const errorData = { code: 'notPending', message: INVITE_MESSAGES.revokeNotPending };
+        ws.send(
+          JSON.stringify(
+            handling === 'refused'
+              ? { ...failure, result: 'ConvexError', errorData }
+              : { ...failure, result: 'Server Error' },
+          ),
+        );
+      }
+    });
+    server.onMessage((frame) => ws.send(frame));
+  });
+  return { release: () => release() };
+}
 
 /** Opens the invite link in another tab of the same browser and returns that tab's heading. */
 async function inviteLinkHeading(page: Page, token: string) {
@@ -133,6 +205,79 @@ test.describe('Staff: undoing a revoke', () => {
     await link.tab.close();
   });
 
+  test.describe('a server error with no reason on Undo', () => {
+    test.use({ expectedConvexErrors: ['invites:restore'] });
+
+    test('ends the offer and says what to do, without blaming the connection', async ({
+      page,
+    }, testInfo) => {
+      const email = 'dana@example.com';
+      await openStaffWithInvite(page, email, {
+        beforeOpen: async () => {
+          await interceptMutation(page, 'invites:restore', 'plainServerError');
+        },
+      });
+      await revokeButton(page, email).click();
+      await undoButton(page, email).click();
+      const failed = page
+        .getByRole('alert')
+        .filter({ hasText: 'The invite could not be restored.' });
+      await expect(failed).toBeFocused();
+      await expect(failed).toContainText(
+        'The invite stays revoked. Reload the page, then invite this address again.',
+      );
+      await expect(main(page)).not.toContainText('Check your connection');
+      await expect(undoButton(page, email)).toHaveCount(0);
+      await screenshot(page, testInfo, '228-staff-undo-server-error');
+      await expectAccessible(page);
+    });
+  });
+
+  test.describe('a failed Revoke', () => {
+    test.use({ expectedConvexErrors: ['invites:revoke'] });
+
+    test('says the invite is unchanged, without blaming the connection, and Revoke stays', async ({
+      page,
+    }, testInfo) => {
+      const email = 'erin@example.com';
+      await openStaffWithInvite(page, email, {
+        beforeOpen: async () => {
+          await interceptMutation(page, 'invites:revoke', 'plainServerError');
+        },
+      });
+      await revokeButton(page, email).click();
+      const failed = page
+        .getByRole('alert')
+        .filter({ hasText: 'The invite could not be revoked.' });
+      await expect(failed).toBeFocused();
+      await expect(failed).toContainText('The invite is unchanged. Reload the page and try again.');
+      await expect(main(page)).not.toContainText('Check your connection');
+      await expect(pendingRows(page)).toHaveCount(1);
+      await expect(revokeButton(page, email)).toBeVisible();
+      await screenshot(page, testInfo, '228-staff-revoke-server-error');
+      await expectAccessible(page);
+    });
+
+    test('a refusal with a reason shows it', async ({ page }, testInfo) => {
+      const email = 'erin@example.com';
+      await openStaffWithInvite(page, email, {
+        beforeOpen: async () => {
+          await interceptMutation(page, 'invites:revoke', 'refused');
+        },
+      });
+      await revokeButton(page, email).click();
+      const refused = page
+        .getByRole('alert')
+        .filter({ hasText: `Invite to ${email} could not be revoked.` });
+      await expect(refused).toBeFocused();
+      await expect(refused).toContainText(
+        'This invite is no longer pending, so there is nothing to revoke. It was accepted or revoked already.',
+      );
+      await screenshot(page, testInfo, '228-staff-revoke-refused');
+      await expectAccessible(page);
+    });
+  });
+
   test.describe('a refusal from the server', () => {
     test.use({ expectedConvexErrors: ['invites:restore'] });
 
@@ -166,6 +311,132 @@ test.describe('Staff: undoing a revoke', () => {
         await link.tab.close();
       },
     );
+  });
+
+  test('Undo goes when the 10 minutes pass: the status stays, and takes focus when Undo had it', async ({
+    page,
+  }, testInfo) => {
+    const email = 'dana@example.com';
+    await openStaffWithInvite(page, email, {
+      beforeOpen: async () => {
+        await page.clock.install();
+      },
+    });
+    await revokeButton(page, email).click();
+    const revoked = page.getByRole('status').filter({ hasText: `Invite to ${email} revoked.` });
+    await expect(revoked).toBeFocused();
+    await page.keyboard.press(tabKey(page));
+    await expect(undoButton(page, email)).toBeFocused();
+
+    await page.clock.fastForward('09:50');
+    await expect(undoButton(page, email)).toBeVisible();
+    await page.clock.fastForward('00:15');
+    await expect(undoButton(page, email)).toHaveCount(0);
+    await expect(revoked).toBeFocused();
+    await expect(revoked).toContainText(
+      'Its link no longer works. You can invite this address again.',
+    );
+    await screenshot(page, testInfo, '228-staff-undo-window-passed');
+    await expectAccessible(page);
+  });
+
+  test('every Revoke shows it is waiting while an Undo is in flight', async ({
+    page,
+  }, testInfo) => {
+    const email = 'dana@example.com';
+    const other = 'erin@example.com';
+    let undo: { release: () => void } | undefined;
+    await openStaffWithInvite(page, email, {
+      otherEmails: [other],
+      beforeOpen: async () => {
+        undo = await interceptMutation(page, 'invites:restore', 'hold');
+      },
+    });
+    await revokeButton(page, email).click();
+    await undoButton(page, email).click();
+    const working = page.getByRole('button', { name: 'Undoing…' });
+    await expect(working).toHaveAttribute('aria-disabled', 'true');
+    await expect(revokeButton(page, other)).toHaveAttribute('aria-disabled', 'true');
+    await expect(revokeButton(page, other)).toHaveClass(/opacity-50/);
+    // Playwright waits for an aria-disabled button to be enabled, and a real press is what is under test.
+    await revokeButton(page, other).click({ force: true });
+    await expect(pendingRows(page)).toHaveCount(1);
+    await screenshot(page, testInfo, '228-staff-revoke-waits-for-undo');
+    await expectAccessible(page);
+
+    undo?.release();
+    await expect(
+      page.getByRole('status').filter({ hasText: `Invite to ${email} restored.` }),
+    ).toBeFocused();
+    await expect(revokeButton(page, other)).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  test('a revoke in flight reads "Revoking…" on its own button and waits on the others', async ({
+    page,
+  }, testInfo) => {
+    const email = 'dana@example.com';
+    const other = 'erin@example.com';
+    let revoke: { release: () => void } | undefined;
+    await openStaffWithInvite(page, email, {
+      otherEmails: [other],
+      beforeOpen: async () => {
+        revoke = await interceptMutation(page, 'invites:revoke', 'hold');
+      },
+    });
+    await revokeButton(page, email).click();
+    await expect(page.getByRole('button', { name: 'Revoking…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(revokeButton(page, other)).toHaveAttribute('aria-disabled', 'true');
+    await screenshot(page, testInfo, '228-staff-revoking');
+    await expectAccessible(page);
+
+    revoke?.release();
+    await expect(
+      page.getByRole('status').filter({ hasText: `Invite to ${email} revoked.` }),
+    ).toBeFocused();
+    await expect(revokeButton(page, other)).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  test.describe('an invite that is no longer revoked', () => {
+    test.use({ expectedConvexErrors: ['invites:restore'] });
+
+    test('refuses Undo with the server’s reason and drops Undo', async ({ page }, testInfo) => {
+      const email = 'dana@example.com';
+      const { tenant } = await openStaffWithInvite(page, email);
+      const elsewhere = await page.context().newPage();
+      const token = await appToken(elsewhere);
+      const context = await call(elsewhere, token, 'query', 'organizations:getAdminContext', {
+        slug: tenant.slug,
+      });
+      const { organizationId } = context.value as { organizationId: string };
+      const listed = await call(elsewhere, token, 'query', 'invites:listPending', {
+        organizationId,
+      });
+      const { inviteId } = (listed.value as { inviteId: string; email: string }[]).find(
+        (row) => row.email === email,
+      )!;
+
+      await revokeButton(page, email).click();
+      await expect(undoButton(page, email)).toBeVisible();
+      const restored = await call(elsewhere, token, 'mutation', 'invites:restore', { inviteId });
+      expect(restored.status).toBe('success');
+      await elsewhere.close();
+      await expect(pendingRows(page)).toHaveCount(1);
+
+      await undoButton(page, email).click();
+      const refused = page
+        .getByRole('alert')
+        .filter({ hasText: `Invite to ${email} could not be restored.` });
+      await expect(refused).toBeFocused();
+      await expect(refused).toContainText(
+        'This invite is no longer revoked, so there is nothing to undo. It was restored or accepted already.',
+      );
+      await expect(undoButton(page, email)).toHaveCount(0);
+      await screenshot(page, testInfo, '228-staff-restore-not-revoked');
+      await expectAccessible(page);
+    });
   });
 });
 

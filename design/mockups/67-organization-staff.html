@@ -50,8 +50,9 @@
         </p>
         <p class="mt-3 max-w-3xl text-sm/relaxed text-muted-foreground">
           Focus order at 1280px: skip link, Omni League, Account, the sidebar, each pending
-          invite&apos;s Revoke, then Email, Role, Leagues, Create invite link. After creation: the
-          link panel&apos;s heading, Invite link, Copy link, Invite someone else.
+          invite&apos;s Revoke, then Email, Role, Leagues, Create invite link. After a revoke, focus
+          moves to the status, and Tab then reaches its Undo before the next Revoke. After creation:
+          the link panel&apos;s heading, Invite link, Copy link, Invite someone else.
         </p>
         <nav aria-label="States" class="mt-4">
           <p class="mt-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -503,10 +504,14 @@
           The status carries an Undo button. Undo works for 10 minutes after the revoke, and the
           server enforces that window (<code>invites.restore</code>), not the page. It sets the same
           invite back to pending, with the same link and expiry, so the link the org admin already
-          sent works again, and the status says so and takes focus. Undo is refused, and the status
-          says why, after 10 minutes, once the invite has expired, when another pending invite to
-          the address exists, when the address has joined the staff, or when a league on the invite
-          no longer exists. Inviting the address again stays the way back after that.
+          sent works again, and the status says so and takes focus. The page hides Undo when the 10
+          minutes are up (a timer; the status stays, and focus moves to it if Undo had it), so the
+          server&apos;s refusal is the backstop. Undo is refused, and the status says why, after 10
+          minutes, once the invite has expired, when another pending invite to the address exists,
+          when the address has joined the staff, when a league on the invite no longer exists, or
+          when the invite is no longer revoked. A server error that gives no reason also ends the
+          offer, because pressing again would fail the same way. Inviting the address again stays
+          the way back after that.
         </p>
         <div
           tabindex="0"
@@ -706,7 +711,9 @@
                   had expired, so its link cannot work again. Invite this address again.";
                   "&lt;email&gt; already has a newer pending invite, so the old link stays
                   revoked."; "&lt;email&gt; is already on your staff."; "A league on this invite no
-                  longer exists. Invite this address again with the leagues you want."
+                  longer exists. Invite this address again with the leagues you want."; "This invite
+                  is no longer revoked, so there is nothing to undo. It was restored or accepted
+                  already."
                 </td>
                 <td class="px-4 py-2 align-top">
                   Destructive alert above the pending list; no Undo
@@ -718,12 +725,14 @@
                   Restore failed
                 </th>
                 <td class="px-4 py-2 align-top">
-                  "The invite could not be restored." / "Check your connection and try again."
-                  Offline: "You're offline. Nothing was sent." / "The invite is still revoked. Try
-                  again when you're connected."
+                  Server error with no reason: "The invite could not be restored." / "The invite
+                  stays revoked. Reload the page, then invite this address again." Offline: "You're
+                  offline. Nothing was sent." / "The invite is still revoked. Try again when you're
+                  connected."
                 </td>
                 <td class="px-4 py-2 align-top">
-                  Destructive alert above the pending list; Undo stays, to try again
+                  Destructive alert above the pending list. A server error drops Undo; offline keeps
+                  it, to try again
                 </td>
                 <td class="px-4 py-2 align-top">The alert</td>
               </tr>
@@ -732,7 +741,10 @@
                   Revoke failed
                 </th>
                 <td class="px-4 py-2 align-top">
-                  "The invite could not be revoked." / "Check your connection and try again."
+                  Server error with no reason: "The invite could not be revoked." / "The invite is
+                  unchanged. Reload the page and try again." Refused: "Invite to &lt;email&gt; could
+                  not be revoked." / "This invite is no longer pending, so there is nothing to
+                  revoke. It was accepted or revoked already."
                 </td>
                 <td class="px-4 py-2 align-top">Destructive alert above the pending list</td>
                 <td class="px-4 py-2 align-top">The alert</td>
@@ -802,7 +814,10 @@
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">Revoke</th>
                 <td class="px-4 py-2 align-top"><code>button</code>, helm destructive</td>
                 <td class="px-4 py-2 align-top">"Revoke the invite to &lt;email&gt;"</td>
-                <td class="px-4 py-2 align-top">Acts at once</td>
+                <td class="px-4 py-2 align-top">
+                  Acts at once; <code>aria-disabled</code> and dimmed while a revoke or an Undo
+                  works, and the pressed one reads "Revoking…" with a spinner
+                </td>
               </tr>
               <tr>
                 <th scope="row" class="px-4 py-2 text-start align-top font-medium">Undo</th>
@@ -813,7 +828,7 @@
                 <td class="px-4 py-2 align-top">"Undo revoking the invite to &lt;email&gt;"</td>
                 <td class="px-4 py-2 align-top">
                   <code>aria-disabled</code> while it works ("Undoing…") and offline; allowed for 10
-                  minutes, enforced by the server
+                  minutes, enforced by the server and hidden by the page when the time is up
                 </td>
               </tr>
               <tr>

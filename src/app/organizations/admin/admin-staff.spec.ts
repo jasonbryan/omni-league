@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
-import { INVITE_MESSAGES } from '../../../../convex/lib/inviteInput';
+import { INVITE_MESSAGES, INVITE_RESTORE_WINDOW_MS } from '../../../../convex/lib/inviteInput';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminStaff } from './admin-staff';
@@ -1070,7 +1070,7 @@ describe('AdminStaff', () => {
       expect(text(statusBox())).toContain('Invite to r.castillo@example.com revoked.');
     });
 
-    it('a failed revoke shows the destructive alert above the list, focuses it, and keeps the invite', async () => {
+    it('a server error on revoke says so above the list without blaming the connection, focuses it, and keeps the invite', async () => {
       await openFull();
       await press(0);
       o.convex.calls[0].reject(new Error('Server Error: secret'));
@@ -1078,11 +1078,48 @@ describe('AdminStaff', () => {
       const box = statusBox()!;
       expect(box.getAttribute('role')).toBe('alert');
       expect(text(box)).toBe(
-        'The invite could not be revoked. Check your connection and try again.',
+        'The invite could not be revoked. The invite is unchanged. Reload the page and try again.',
       );
       expect(page.textContent).not.toContain('secret');
+      expect(page.textContent).not.toContain('Check your connection and try again.');
       expect(document.activeElement).toBe(box);
       expect(pending()).toHaveLength(2);
+    });
+
+    it('a refusal on revoke shows the server’s reason', async () => {
+      await openFull();
+      await press(0);
+      o.convex.calls[0].reject(
+        new ConvexError({ code: 'notPending', message: INVITE_MESSAGES.revokeNotPending }),
+      );
+      await o.flush();
+      const box = statusBox()!;
+      expect(box.getAttribute('role')).toBe('alert');
+      expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+        'Invite to dana.whitlock@example.com could not be revoked.',
+      );
+      expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
+        INVITE_MESSAGES.revokeNotPending,
+      );
+      expect(document.activeElement).toBe(box);
+    });
+
+    it('while a revoke is in flight its button reads "Revoking…" and every Revoke is aria-disabled', async () => {
+      await openFull();
+      await press(0);
+      expect(text(revokeButton(0))).toBe('Revoking…');
+      expect(revokeButton(0).getAttribute('aria-disabled')).toBe('true');
+      expect(revokeButton(0).hasAttribute('disabled')).toBe(false);
+      expect(text(revokeButton(1))).toBe('Revoke the invite to r.castillo@example.com');
+      expect(revokeButton(1).getAttribute('aria-disabled')).toBe('true');
+      expect(revokeButton(1).classList.contains('opacity-50')).toBe(true);
+      await press(1);
+      expect(o.convex.calls).toHaveLength(1);
+      o.convex.calls[0].resolve(null);
+      o.subscription(LIST_PENDING)!.emit([PENDING[1]]);
+      await o.flush();
+      expect(revokeButton(0).getAttribute('aria-disabled')).toBeNull();
+      expect(revokeButton(0).classList.contains('opacity-50')).toBe(false);
     });
 
     it('a press while offline shows the offline alert and sends nothing', async () => {
@@ -1224,6 +1261,11 @@ describe('AdminStaff', () => {
           `${DANA} is already on your staff.`,
         ],
         [
+          'the invite is no longer revoked',
+          { code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked },
+          INVITE_MESSAGES.restoreNotRevoked,
+        ],
+        [
           'a league is gone',
           { code: 'leaguesGone', message: INVITE_MESSAGES.restoreLeaguesGone },
           'A league on this invite no longer exists. Invite this address again with the leagues you want.',
@@ -1248,7 +1290,7 @@ describe('AdminStaff', () => {
       }
     });
 
-    it('any other failure shows the destructive alert, focuses it, and offers Undo again', async () => {
+    it('a server error that gives no reason ends the offer: the alert does not blame the connection, focuses itself, and drops Undo', async () => {
       await revokeDana();
       await pressUndo();
       o.convex.calls[1].reject(new Error('Server Error: secret'));
@@ -1258,15 +1300,14 @@ describe('AdminStaff', () => {
       expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
         'The invite could not be restored.',
       );
-      expect(text(box.querySelector('[data-slot="alert-description"]'))).toContain(
-        'Check your connection and try again.',
+      expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
+        'The invite stays revoked. Reload the page, then invite this address again.',
       );
       expect(page.textContent).not.toContain('secret');
+      expect(page.textContent).not.toContain('Check your connection');
       expect(document.activeElement).toBe(box);
-      expect(text(undoButton())).toBe(`Undo revoking the invite to ${DANA}`);
-      await pressUndo();
-      expect(o.convex.calls).toHaveLength(3);
-      expect(calls()[2]).toEqual([RESTORE, { inviteId: 'inv_dana' }]);
+      expect(undoButton()).toBeUndefined();
+      expect(o.convex.calls).toHaveLength(2);
     });
 
     it('offline, Undo is aria-disabled and a press sends nothing and shows the offline alert', async () => {
@@ -1296,6 +1337,130 @@ describe('AdminStaff', () => {
       expect(text(statusBox()!.querySelector('[data-slot="alert-title"]'))).toBe(
         "You're offline. Nothing was sent.",
       );
+    });
+
+    describe('the 10-minute window', () => {
+      let windowTimers: { callback: () => void; handle: number }[];
+
+      beforeEach(() => {
+        windowTimers = [];
+        const real = window.setTimeout.bind(window);
+        vi.spyOn(window, 'setTimeout').mockImplementation(((
+          callback: () => void,
+          delay?: number,
+        ) => {
+          const handle = real(callback, delay);
+          if (delay === INVITE_RESTORE_WINDOW_MS) windowTimers.push({ callback, handle });
+          return handle;
+        }) as typeof window.setTimeout);
+      });
+
+      async function windowPasses() {
+        windowTimers.at(-1)!.callback();
+        await o.flush();
+      }
+
+      it('starts when the revoke succeeds, not before', async () => {
+        await openFull();
+        revokeButton(0).click();
+        await o.flush();
+        expect(windowTimers).toHaveLength(0);
+        o.convex.calls[0].resolve(null);
+        await o.flush();
+        expect(windowTimers).toHaveLength(1);
+      });
+
+      it('takes Undo away when it passes, and the revoked status stays', async () => {
+        await revokeDana();
+        expect(undoButton()).toBeDefined();
+        await windowPasses();
+        expect(undoButton()).toBeUndefined();
+        expect(text(statusBox()!.querySelector('[data-slot="alert-title"]'))).toBe(
+          `Invite to ${DANA} revoked.`,
+        );
+        expect(text(statusBox())).toBe(
+          `Invite to ${DANA} revoked. Its link no longer works. You can invite this address again.`,
+        );
+      });
+
+      it('moves focus to the status when Undo had it', async () => {
+        await revokeDana();
+        undoButton()!.focus();
+        expect(document.activeElement).toBe(undoButton());
+        await windowPasses();
+        expect(document.activeElement).toBe(statusBox());
+      });
+
+      it('leaves focus where it is when Undo did not have it', async () => {
+        await revokeDana();
+        const email = input('email');
+        email.focus();
+        await windowPasses();
+        expect(document.activeElement).toBe(email);
+      });
+
+      it('takes Undo away from the offline alert too', async () => {
+        await revokeDana();
+        await goOffline();
+        await pressUndo();
+        expect(undoButton()).toBeDefined();
+        await windowPasses();
+        expect(undoButton()).toBeUndefined();
+        expect(text(statusBox())).toContain("You're offline. Nothing was sent.");
+      });
+
+      it('restarts with the next revoke, which gets a full window', async () => {
+        await revokeDana();
+        revokeButton(0).click();
+        await o.flush();
+        o.convex.calls[1].resolve(null);
+        await o.flush();
+        expect(windowTimers).toHaveLength(2);
+        expect(undoButton()).toBeDefined();
+        await windowPasses();
+        expect(undoButton()).toBeUndefined();
+      });
+
+      it('keeps the button while an Undo is in flight, and the answer replaces the status', async () => {
+        await revokeDana();
+        await pressUndo();
+        await windowPasses();
+        expect(text(undoButton())).toBe('Undoing…');
+        o.convex.calls[1].reject(
+          new ConvexError({ code: 'windowPassed', message: INVITE_MESSAGES.restoreWindowPassed }),
+        );
+        await o.flush();
+        expect(text(statusBox()!.querySelector('[data-slot="alert-description"]'))).toBe(
+          INVITE_MESSAGES.restoreWindowPassed,
+        );
+        expect(undoButton()).toBeUndefined();
+      });
+
+      it('stops with the page', async () => {
+        await revokeDana();
+        const clear = vi.spyOn(window, 'clearTimeout');
+        await o.harness.navigateByUrl('/app');
+        expect(clear).toHaveBeenCalledWith(windowTimers[0].handle);
+      });
+    });
+
+    describe('Revoke while an Undo is in flight', () => {
+      it('shows every Revoke as aria-disabled with the helm dimming, and a press sends nothing', async () => {
+        await revokeDana(PENDING);
+        await pressUndo();
+        for (const n of [0, 1]) {
+          expect(revokeButton(n).getAttribute('aria-disabled')).toBe('true');
+          expect(revokeButton(n).hasAttribute('disabled')).toBe(false);
+          expect(revokeButton(n).classList.contains('opacity-50')).toBe(true);
+        }
+        revokeButton(1).click();
+        await o.flush();
+        expect(o.convex.calls).toHaveLength(2);
+        o.convex.calls[1].resolve(null);
+        await o.flush();
+        expect(revokeButton(0).getAttribute('aria-disabled')).toBeNull();
+        expect(revokeButton(0).classList.contains('opacity-50')).toBe(false);
+      });
     });
 
     it('the status leaves with the next press, and Undo with it', async () => {
