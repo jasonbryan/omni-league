@@ -1,6 +1,7 @@
 // Imports only `convex/lib` files that import nothing from the server, so the app can import it.
 import { LEAGUE_MESSAGES } from './leagueInput';
 import { isChoosableSlug } from './slugs';
+import { ROSTER_SIZE_INPUT_MAX } from './sports';
 
 export const MAX_SEASON_NAME_LENGTH = 100;
 
@@ -9,7 +10,7 @@ export const MIN_MAX_TEAMS = 2;
 export const MAX_MAX_TEAMS = 200;
 
 export type SeasonField =
-  'name' | 'slug' | 'startDate' | 'endDate' | 'registrationDeadline' | 'maxTeams';
+  'name' | 'slug' | 'startDate' | 'endDate' | 'registrationDeadline' | 'maxTeams' | 'maxRosterSize';
 
 export const SEASON_FIELDS: readonly SeasonField[] = [
   'name',
@@ -18,6 +19,7 @@ export const SEASON_FIELDS: readonly SeasonField[] = [
   'endDate',
   'registrationDeadline',
   'maxTeams',
+  'maxRosterSize',
 ];
 
 export type SeasonDateField = 'startDate' | 'endDate' | 'registrationDeadline';
@@ -33,7 +35,9 @@ export type SeasonInputCode =
   | 'endBeforeStart'
   | 'deadlineNotBeforeStart'
   | 'maxTeamsInvalid'
-  | 'maxTeamsBelowCount';
+  | 'maxTeamsBelowCount'
+  | 'maxRosterSizeInvalid'
+  | 'maxRosterSizeBelowRoster';
 
 export interface SeasonInputError {
   field: SeasonField;
@@ -71,6 +75,10 @@ export const SEASON_MESSAGES = {
   maxTeamsInvalid: `Enter a whole number from ${MIN_MAX_TEAMS} to ${MAX_MAX_TEAMS}, or leave it blank.`,
   maxTeamsBelowCount: (teamCount: number) =>
     `${teamCount} teams are already registered. Enter ${teamCount} or more, or leave it blank.`,
+  maxRosterSizeInvalid: (minimumRosterSize: number) =>
+    `Enter a whole number from ${minimumRosterSize} to ${ROSTER_SIZE_INPUT_MAX}, or leave it blank.`,
+  maxRosterSizeBelowRoster: (teamName: string, rosterCount: number) =>
+    `${teamName} already has ${rosterCount} players. Enter ${rosterCount} or more, or leave it blank.`,
 } as const;
 
 function daysInMonth(year: number, month: number): number {
@@ -187,8 +195,59 @@ export function checkMaxTeams(maxTeams: number | undefined): SeasonInputError | 
   return { field: 'maxTeams', code: 'maxTeamsInvalid', message: SEASON_MESSAGES.maxTeamsInvalid };
 }
 
-/** Blank is no limit. Text other than digits reads as `NaN`, which `checkMaxTeams` refuses, so `1e1` is not 10. */
-export function maxTeamsFromText(text: string): number | undefined {
+export function teamIsFull(rosterCount: number, maxRosterSize: number | undefined): boolean {
+  return maxRosterSize !== undefined && rosterCount >= maxRosterSize;
+}
+
+/** `undefined` is no limit. The maximum is at least the minimum, so a team at the maximum meets it. */
+export function checkMaxRosterSize(
+  maxRosterSize: number | undefined,
+  minimumRosterSize: number,
+): SeasonInputError | null {
+  if (maxRosterSize === undefined) return null;
+  if (
+    Number.isInteger(maxRosterSize) &&
+    maxRosterSize >= minimumRosterSize &&
+    maxRosterSize <= ROSTER_SIZE_INPUT_MAX
+  ) {
+    return null;
+  }
+  return {
+    field: 'maxRosterSize',
+    code: 'maxRosterSizeInvalid',
+    message: SEASON_MESSAGES.maxRosterSizeInvalid(minimumRosterSize),
+  };
+}
+
+export interface LargestRoster {
+  name: string;
+  rosterCount: number;
+}
+
+/** A whole number below the largest roster names that team; a largest roster below the minimum leaves the range message to say what fits. */
+export function checkMaxRosterSizeFor(
+  maxRosterSize: number | undefined,
+  minimumRosterSize: number,
+  largest: LargestRoster | null,
+): SeasonInputError | null {
+  if (
+    maxRosterSize !== undefined &&
+    largest !== null &&
+    Number.isInteger(maxRosterSize) &&
+    maxRosterSize < largest.rosterCount &&
+    largest.rosterCount >= minimumRosterSize
+  ) {
+    return {
+      field: 'maxRosterSize',
+      code: 'maxRosterSizeBelowRoster',
+      message: SEASON_MESSAGES.maxRosterSizeBelowRoster(largest.name, largest.rosterCount),
+    };
+  }
+  return checkMaxRosterSize(maxRosterSize, minimumRosterSize);
+}
+
+/** Blank is no limit. Text other than digits reads as `NaN`, which the range checks refuse, so `1e1` is not 10. */
+export function limitFromText(text: string): number | undefined {
   const trimmed = text.trim();
   if (trimmed === '') return undefined;
   return /^\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN;
@@ -198,6 +257,9 @@ export interface SeasonValues extends SeasonDates {
   name: string;
   slug: string;
   maxTeams?: number | undefined;
+  maxRosterSize?: number | undefined;
+  /** Absent skips the maximum roster size check: the league has no format yet, which `seasons.create` refuses. */
+  minimumRosterSize?: number | undefined;
 }
 
 export function checkSeasonFields(
@@ -211,6 +273,10 @@ export function checkSeasonFields(
   Object.assign(errors, checkSeasonDates(values));
   const maxTeams = checkMaxTeams(values.maxTeams);
   if (maxTeams) errors.maxTeams = maxTeams;
+  if (values.minimumRosterSize !== undefined) {
+    const maxRosterSize = checkMaxRosterSize(values.maxRosterSize, values.minimumRosterSize);
+    if (maxRosterSize) errors.maxRosterSize = maxRosterSize;
+  }
   return errors;
 }
 

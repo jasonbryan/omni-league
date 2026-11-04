@@ -8,6 +8,12 @@ import type { RegistrationAnswer } from './register-team-state';
 
 const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
 
+export function rosterRange(minimumRosterSize: number, maxRosterSize?: number): string {
+  if (maxRosterSize === undefined) return `At least ${minimumRosterSize} players`;
+  if (maxRosterSize === minimumRosterSize) return `${minimumRosterSize} players`;
+  return `${minimumRosterSize} to ${maxRosterSize} players`;
+}
+
 @Component({
   selector: 'app-register-card',
   imports: [NgIcon, RouterLink],
@@ -48,9 +54,7 @@ const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
             </div>
             <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
               <dt class="text-muted-foreground">Roster</dt>
-              <dd class="font-medium sm:text-end">
-                At least {{ season().minimumRosterSize }} players
-              </dd>
+              <dd class="font-medium sm:text-end">{{ roster() }}</dd>
             </div>
             <div class="flex flex-wrap justify-between gap-x-4 gap-y-0.5 px-3 py-2.5">
               <dt class="text-muted-foreground">Registration closes</dt>
@@ -75,6 +79,9 @@ export class RegisterCard {
   );
   protected readonly dates = computed(() =>
     seasonDates(this.season().startDate, this.season().endDate),
+  );
+  protected readonly roster = computed(() =>
+    rosterRange(this.season().minimumRosterSize, this.season().maxRosterSize),
   );
   protected readonly deadline = computed(() =>
     formatCalendarDate(this.season().registrationDeadline),

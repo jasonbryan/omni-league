@@ -295,6 +295,9 @@ describe('seed:demo', () => {
           startDate: season.startDate,
           endDate: season.endDate,
           registrationDeadline: season.registrationDeadline,
+          maxTeams: season.maxTeams,
+          maxRosterSize: season.maxRosterSize,
+          minimumRosterSize: season.minimumRosterSize,
         }),
       ).toEqual({});
       expect({

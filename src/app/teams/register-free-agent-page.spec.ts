@@ -174,6 +174,18 @@ describe('RegisterFreeAgentPage', () => {
       expect(document.title).toBe('Register as a free agent | Summer 2027 | Omni League');
     });
 
+    it('open: the roster row gives the range under a maximum roster size, and the minimum without one', async () => {
+      await open();
+      await answer({ ...SUMMER, maxRosterSize: 6 });
+      const roster = () =>
+        [...page.querySelectorAll('main dl > div')].find(
+          (row) => text(row.querySelector('dt')) === 'Roster',
+        );
+      expect(text(roster()?.querySelector('dd'))).toBe('4 to 6 players');
+      await answer(SUMMER);
+      expect(text(roster()?.querySelector('dd'))).toBe('At least 4 players');
+    });
+
     it('a full season still offers the form: the maximum limits teams, not free agents', async () => {
       await open();
       await answer({ ...SUMMER, isFull: true, maxTeams: 2 });

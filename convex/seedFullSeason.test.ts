@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
-import { DEMO_CAPTAINS, DEMO_FULL_SEASON } from './seed';
+import { DEMO_CAPTAINS, DEMO_FULL_SEASON, DEMO_TEAM_SEASON } from './seed';
 import { modules } from './test.setup';
 
 function setup() {
@@ -94,5 +94,29 @@ describe('seed:demo: a published season at its team limit', () => {
     );
     expect(await fullSeason(t)).toEqual([]);
     expect(await t.run((ctx) => ctx.db.query('teams').collect())).toEqual([]);
+  });
+});
+
+describe('seed:demo: a maximum roster size', () => {
+  test('the demo team season has a maximum of 6, which its demo teams are within', async () => {
+    const t = setup();
+    await insertCaptainUsers(t);
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.mutation(internal.seed.insertDemoTeams, { captains: CAPTAINS });
+    const { maxRosterSize, rosterCounts } = await t.run(async (ctx) => {
+      const season = (await ctx.db.query('seasons').collect()).find(
+        (row) => row.slug === DEMO_TEAM_SEASON.seasonSlug && row.maxRosterSize !== undefined,
+      );
+      const teams = await ctx.db.query('teams').collect();
+      return {
+        maxRosterSize: season?.maxRosterSize,
+        rosterCounts: teams
+          .filter((team) => team.seasonId === season?._id)
+          .map((team) => team.rosterCount),
+      };
+    });
+    expect(maxRosterSize).toBe(6);
+    expect(rosterCounts.length).toBeGreaterThan(0);
+    expect(rosterCounts.every((count) => count <= 6)).toBe(true);
   });
 });

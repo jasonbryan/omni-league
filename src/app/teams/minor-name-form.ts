@@ -4,11 +4,12 @@ import { ConvexError } from 'convex/values';
 import { checkMinorName } from '../../../convex/lib/minorName';
 import { ConvexOfflineError } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
+import { isTeamFull } from './team-invite-form';
 
 export type MinorNameError =
   { kind: 'text'; text: string } | { kind: 'inSeason'; minorName: string; teamName: string };
 
-export type MinorNameFormAlertKind = 'offline' | 'failed';
+export type MinorNameFormAlertKind = 'offline' | 'failed' | 'full';
 
 export type MinorNameSubmitOutcome<R> =
   | { sent: true; name: string; result: R }
@@ -93,6 +94,7 @@ export class MinorNameForm {
       return { sent: true, name, result: await send(name) };
     } catch (failure) {
       if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
+      if (isTeamFull(failure)) return this.showAlert('full');
       const refusal = minorNameRefusalOf(failure);
       if (refusal === null) return this.showAlert('failed');
       this.serverError.set(refusal);

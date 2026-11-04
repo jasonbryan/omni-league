@@ -634,3 +634,136 @@ test.describe('Season management: maximum teams', () => {
     });
   });
 });
+
+test.describe('Season management: maximum roster size', () => {
+  const CAP = 'roster-cap';
+  const limits = (page: Page) => page.locator('section[aria-labelledby="limits-heading"]');
+  const summary = (page: Page) => page.getByTestId('max-roster-size-summary');
+  const field = (page: Page) => page.locator('#edit-maximum-roster-size');
+  const saveButton = (page: Page) => limits(page).getByRole('button', { name: 'Save changes' });
+
+  async function seedCapSeason(tenant: Tenant): Promise<TestUser> {
+    await convexRun('testing:seedSeason', {
+      organizationSlug: tenant.slug,
+      leagueSlug: LEAGUE_SLUG,
+      name: 'Roster Cap',
+      slug: CAP,
+      startDate: dateFromToday(40),
+      endDate: dateFromToday(100),
+      registrationDeadline: dateFromToday(20),
+      minimumRosterSize: 4,
+      maxRosterSize: 4,
+      status: 'published',
+    });
+    const captains = [newUser('Captain'), newUser('Captain')];
+    const players = [newUser('Player'), newUser('Player'), newUser('Player')];
+    const waiting = newUser('Waiting');
+    await seedUsers([...captains, ...players, waiting]);
+    const slugs = { organizationSlug: tenant.slug, leagueSlug: LEAGUE_SLUG, seasonSlug: CAP };
+    for (const [i, name] of ['Block Party', 'Dig Deep'].entries()) {
+      const { teamId } = (await convexRun('testing:seedTeam', {
+        ...slugs,
+        name,
+        captainEmail: captains[i].email,
+      })) as { teamId: string };
+      if (i > 0) continue;
+      for (const player of players) {
+        await convexRun('testing:addToTeam', { teamId, email: player.email });
+      }
+    }
+    await convexRun('testing:seedFreeAgent', { ...slugs, email: waiting.email });
+    return waiting;
+  }
+
+  test('the create form takes Maximum roster size, refuses one below the minimum, and the new season shows it', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await asOrgAdmin(page);
+    await page.goto(`/app/organizations/${tenant.slug}/leagues/${LEAGUE_SLUG}`);
+    const create = page.locator('#create-season form');
+    await page.locator('#name').fill('Winter Roster');
+    await page.locator('#start-date').fill(dateFromToday(60));
+    await page.locator('#end-date').fill(dateFromToday(120));
+    await page.locator('#registration-deadline').fill(dateFromToday(30));
+    await page.locator('#maximum-roster-size').fill('3');
+    await create.getByRole('button', { name: /^Create draft season/ }).click();
+    await expect(page.locator('#maximum-roster-size-error')).toHaveText(
+      'Enter a whole number from 4 to 99, or leave it blank.',
+    );
+    await expect(page.locator('#maximum-roster-size')).toBeFocused();
+    await page.locator('#maximum-roster-size').scrollIntoViewIfNeeded();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '144-create-maximum-roster-size-error');
+
+    await page.locator('#maximum-roster-size').fill('4');
+    await create.getByRole('button', { name: /^Create draft season/ }).click();
+    await expect(create.locator('[data-slot="created-title"]')).toHaveText(
+      'Winter Roster created as a draft.',
+    );
+    await page.goto(seasonPath(tenant, 'winter-roster'));
+    await expect(summary(page)).toHaveText('4 players per team');
+  });
+
+  test.describe('editing', () => {
+    test('the limit is refused below the largest roster, naming the team, then raised and removed', async ({
+      page,
+    }, testInfo) => {
+      const tenant = await asOrgAdmin(page);
+      await seedCapSeason(tenant);
+      await page.goto(seasonPath(tenant, CAP));
+      await expect(summary(page)).toHaveText('4 players per team');
+
+      await limits(page).getByRole('button', { name: 'Edit maximum roster size' }).click();
+      await expect(field(page)).toBeFocused();
+      await expect(field(page)).toHaveValue('4');
+      await expect(page.locator('#edit-maximum-roster-size-description')).toHaveText(
+        'From the minimum roster size (4) to 99, or blank for no limit.',
+      );
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '144-edit-maximum-roster-size');
+
+      await field(page).fill('3');
+      await saveButton(page).click();
+      await expect(page.locator('#edit-maximum-roster-size-error')).toHaveText(
+        'Block Party already has 4 players. Enter 4 or more, or leave it blank.',
+      );
+      await expect(field(page)).toBeFocused();
+      await expectAccessible(page);
+      await screenshot(page, testInfo, '144-edit-maximum-roster-size-error');
+
+      await field(page).fill('6');
+      await saveButton(page).click();
+      const status = limits(page).getByRole('status');
+      await expect(status).toHaveText('Maximum roster size saved. Teams can have up to 6 players.');
+      await expect(status).toBeFocused();
+      await expect(summary(page)).toHaveText('6 players per team');
+
+      await limits(page).getByRole('button', { name: 'Edit maximum roster size' }).click();
+      await field(page).fill('');
+      await saveButton(page).click();
+      await expect(limits(page).getByRole('status')).toHaveText(
+        'Maximum roster size removed. There’s no limit now.',
+      );
+      await expect(summary(page)).toHaveText('No limit');
+    });
+  });
+
+  test('the place dialog keeps a full team in the list as unavailable', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await asOrgAdmin(page);
+    const waiting = await seedCapSeason(tenant);
+    await page.goto(seasonPath(tenant, CAP));
+    await freeAgentRows(page)
+      .filter({ hasText: waiting.name })
+      .getByRole('button', { name: `Place on team: ${waiting.name}` })
+      .click();
+    const dialog = placeDialog(page);
+    const full = dialog.getByRole('radio', { name: 'Block Party' });
+    await expect(full).toBeDisabled();
+    await expect(full).toHaveAccessibleDescription('Full: 4 of 4 players');
+    await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toBeFocused();
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '144-place-full-team');
+  });
+});

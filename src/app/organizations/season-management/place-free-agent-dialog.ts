@@ -23,6 +23,7 @@ import {
 } from '@spartan-ng/brain/alert-dialog';
 import { BrnDialogService } from '@spartan-ng/brain/dialog';
 import type { Id } from '../../../../convex/_generated/dataModel';
+import { teamIsFull } from '../../../../convex/lib/seasonInput';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
 import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
 import { AdminAlert } from '../admin/admin-alert';
@@ -145,17 +146,24 @@ const TEAM_INPUT_NAME = 'place-team';
                   role="group"
                   data-slot="field"
                   data-orientation="horizontal"
+                  [attr.data-disabled]="team.full ? 'true' : null"
                   [class]="fieldHorizontalClass"
                 >
                   <span
                     data-slot="radio-group-item"
                     [attr.data-checked]="chosen() === team.teamId ? 'true' : null"
-                    [class]="radioItemClass + ' ' + (unchosen() ? radioEdgeInvalid : radioEdge)"
+                    [class]="
+                      radioItemClass +
+                      ' ' +
+                      (unchosen() ? radioEdgeInvalid : radioEdge) +
+                      (team.full ? ' opacity-50' : '')
+                    "
                     ><input
                       type="radio"
                       [id]="'place-team-' + team.teamId"
                       [name]="teamInputName"
                       [value]="team.teamId"
+                      [disabled]="team.full"
                       [checked]="chosen() === team.teamId"
                       [attr.aria-describedby]="'place-team-' + team.teamId + '-description'"
                       (change)="choose(team.teamId)"
@@ -248,10 +256,11 @@ export class PlaceFreeAgentDialog {
 
   readonly teams = input.required<readonly PlaceTeamOption[]>();
   readonly minimumRosterSize = input.required<number>();
+  readonly maxRosterSize = input<number | undefined>(undefined);
   readonly dismissed = output<PlaceFreeAgentOutcome>();
 
   protected readonly online = injectOnline();
-  protected readonly firstTeamSelector = `input[name="${TEAM_INPUT_NAME}"]`;
+  protected readonly firstTeamSelector = `input[name="${TEAM_INPUT_NAME}"]:not(:disabled)`;
   protected readonly teamInputName = TEAM_INPUT_NAME;
   protected readonly contentClass = `${ALERT_DIALOG_CONTENT} max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]`;
   protected readonly headerClass = ALERT_DIALOG_HEADER;
@@ -279,12 +288,19 @@ export class PlaceFreeAgentDialog {
   protected readonly placing = signal(false);
   private readonly failure = signal<PlaceFailure | null>(null);
 
-  protected readonly options = computed(() =>
-    this.teams().map((team) => ({
-      ...team,
-      roster: teamRowLines(team.rosterCount, this.minimumRosterSize(), 0).roster,
-    })),
-  );
+  protected readonly options = computed(() => {
+    const max = this.maxRosterSize();
+    return this.teams().map((team) => {
+      const full = teamIsFull(team.rosterCount, max);
+      return {
+        ...team,
+        full,
+        roster: full
+          ? `Full: ${team.rosterCount} of ${max} players`
+          : teamRowLines(team.rosterCount, this.minimumRosterSize(), 0).roster,
+      };
+    });
+  });
   protected readonly alert = computed(() => {
     const failure = this.failure();
     const target = this.target();
@@ -301,9 +317,9 @@ export class PlaceFreeAgentDialog {
   readonly isOpen = computed(() => this.dialog().stateComputed() === 'open');
 
   open(target: PlaceFreeAgentTarget): void {
-    const teams = this.teams();
+    const choosable = this.options().filter((team) => !team.full);
     this.target.set(target);
-    this.chosen.set(teams.length === 1 ? teams[0].teamId : null);
+    this.chosen.set(choosable.length === 1 ? choosable[0].teamId : null);
     this.unchosen.set(false);
     this.failure.set(null);
     this.placedOn = null;
@@ -324,7 +340,7 @@ export class PlaceFreeAgentDialog {
     const target = this.target();
     if (!target || this.placing()) return;
     this.failure.set(null);
-    const team = this.teams().find((option) => option.teamId === this.chosen());
+    const team = this.options().find((option) => option.teamId === this.chosen() && !option.full);
     if (!team) {
       this.unchosen.set(true);
       afterNextRender(() => this.firstTeamInput()?.focus(), { injector: this.injector });

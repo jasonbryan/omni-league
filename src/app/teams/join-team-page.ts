@@ -88,6 +88,7 @@ type Refusal =
   | { kind: 'alreadyOnTeam'; teamId: string }
   | { kind: 'alreadyOnAnotherTeam'; teamName: string }
   | { kind: 'waitingFreeAgent' }
+  | { kind: 'teamFull' }
   | { kind: 'minorName'; error: MinorNameError }
   | { kind: 'failed' }
   | { kind: 'offline' };
@@ -126,6 +127,8 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
       return { kind: 'alreadyOnAnotherTeam', teamName: text('teamName') };
     case 'waitingFreeAgent':
       return { kind: 'waitingFreeAgent' };
+    case 'teamFull':
+      return { kind: 'teamFull' };
     default:
       return { kind: 'failed' };
   }
@@ -785,6 +788,13 @@ export class JoinTeamPage {
           alert: 'info',
           title: 'You’re registered as a free agent in this season.',
           description: `Organizers place free agents on teams. Ask an organizer of ${leagueName} to place you on ${teamName}. You can still add a minor you’re responsible for.`,
+        };
+      case 'teamFull':
+        return {
+          alert: 'full',
+          title: `${teamName} is full.`,
+          description:
+            'Nothing was added. If you chose two entries, there may be room for one; otherwise ask the captain whether a place opens.',
         };
       case 'failed':
         return {

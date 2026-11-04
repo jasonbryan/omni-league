@@ -335,6 +335,7 @@ export const seedSeason = internalMutation({
     playersPerSide: v.optional(v.number()),
     minimumRosterSize: v.number(),
     maxTeams: v.optional(v.number()),
+    maxRosterSize: v.optional(v.number()),
     status: v.optional(seasonStatusValidator),
   },
   returns: v.object({ slug: v.string() }),
@@ -362,6 +363,7 @@ const seasonSeedValidator = v.object({
   playersPerSide: v.optional(v.number()),
   minimumRosterSize: v.number(),
   maxTeams: v.optional(v.number()),
+  maxRosterSize: v.optional(v.number()),
   status: v.optional(seasonStatusValidator),
 });
 

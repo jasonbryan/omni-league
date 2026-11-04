@@ -18,29 +18,38 @@ import { FormField, form } from '@angular/forms/signals';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideCircleAlert, lucideLoaderCircle } from '@ng-icons/lucide';
 import { ConvexError } from 'convex/values';
-import type { Id } from '../../../../convex/_generated/dataModel';
-import { checkMaxTeams, maxTeamsFromText } from '../../../../convex/lib/seasonInput';
-import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
+import { limitFromText } from '../../../../convex/lib/seasonInput';
+import { ConvexOfflineError, injectOnline } from '../../core/data/convex';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
 import { ShownUntilValid } from '../../core/forms/shown-errors';
 import { AdminAlert } from '../admin/admin-alert';
 import { AdminOfflineAlert } from '../admin/admin-offline-alert';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
 import { DESCRIPTION, FIELD, FIELD_ERROR, FIELD_GROUP, INPUT, LABEL } from '../admin/field-classes';
-import { MAX_TEAMS_ALERTS, maxTeamsDescription } from './max-teams-text';
+import { LIMIT_ALERTS } from './limit-text';
 
 type FormAlert = 'offline' | 'failed';
 
-function fieldRefusalOf(failure: unknown): string | null {
+export interface LimitSpec {
+  field: 'maxTeams' | 'maxRosterSize';
+  id: string;
+  label: string;
+  current: number | undefined;
+  description: string;
+  check: (value: number | undefined) => string | null;
+  save: (value: number | null) => Promise<unknown>;
+}
+
+function fieldRefusalOf(failure: unknown, field: LimitSpec['field']): string | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   if (typeof data !== 'object' || data === null) return null;
-  const { field, message } = data as Record<string, unknown>;
-  return field === 'maxTeams' && typeof message === 'string' ? message : null;
+  const { field: refused, message } = data as Record<string, unknown>;
+  return refused === field && typeof message === 'string' ? message : null;
 }
 
 @Component({
-  selector: 'app-max-teams-edit-form',
+  selector: 'app-limit-edit-form',
   imports: [AdminAlert, AdminOfflineAlert, FormField, MousePressKeepsFocus, NgIcon],
   providers: [provideIcons({ lucideCircleAlert, lucideLoaderCircle })],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,11 +57,11 @@ function fieldRefusalOf(failure: unknown): string | null {
   template: `
     <form
       novalidate
-      aria-labelledby="edit-maximum-teams-heading"
+      [attr.aria-labelledby]="ids().heading"
       (submit)="save($event)"
       (keydown.escape)="cancel()"
     >
-      <h3 id="edit-maximum-teams-heading" class="text-sm font-semibold">Edit maximum teams</h3>
+      <h3 [id]="ids().heading" class="text-sm font-semibold">Edit {{ lowerLabel() }}</h3>
       @if (alert(); as kind) {
         @if (kind === 'offline') {
           <app-admin-offline-alert
@@ -79,42 +88,31 @@ function fieldRefusalOf(failure: unknown): string | null {
           [attr.data-invalid]="error() ? 'true' : null"
           [class]="fieldClass"
         >
-          <label for="edit-maximum-teams" data-slot="field-label" [class]="labelClass"
-            >Maximum teams</label
-          >
+          <label [for]="ids().input" data-slot="field-label" [class]="labelClass">{{
+            spec().label
+          }}</label>
           <input
             #field
-            id="edit-maximum-teams"
+            [id]="ids().input"
             type="text"
             inputmode="numeric"
             data-slot="input"
             autocomplete="off"
-            [formField]="fields.maxTeams"
+            [formField]="fields.value"
             (blur)="shown.left()"
             [attr.aria-describedby]="
-              error()
-                ? 'edit-maximum-teams-description edit-maximum-teams-error'
-                : 'edit-maximum-teams-description'
+              error() ? ids().description + ' ' + ids().error : ids().description
             "
             [attr.aria-invalid]="error() ? 'true' : null"
             [attr.data-invalid]="error() ? 'true' : null"
             [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
             [class]="inputClass"
           />
-          <p
-            data-slot="field-description"
-            id="edit-maximum-teams-description"
-            [class]="descriptionClass"
-          >
-            {{ description() }}
+          <p data-slot="field-description" [id]="ids().description" [class]="descriptionClass">
+            {{ spec().description }}
           </p>
           @if (error(); as error) {
-            <div
-              role="alert"
-              data-slot="field-error"
-              id="edit-maximum-teams-error"
-              [class]="errorClass"
-            >
+            <div role="alert" data-slot="field-error" [id]="ids().error" [class]="errorClass">
               <ng-icon
                 name="lucideCircleAlert"
                 class="mt-0.5 shrink-0 text-base"
@@ -159,19 +157,26 @@ function fieldRefusalOf(failure: unknown): string | null {
     </form>
   `,
 })
-export class MaxTeamsEditForm implements OnInit {
+export class LimitEditForm implements OnInit {
   private readonly injector = inject(Injector);
-  private readonly setMaxTeams = injectMutation(api.seasons.setMaxTeams);
   private destroyed = false;
 
-  readonly seasonId = input.required<Id<'seasons'>>();
-  readonly maxTeams = input<number | undefined>(undefined);
-  readonly teamCount = input.required<number>();
+  readonly spec = input.required<LimitSpec>();
   readonly cancelled = output();
   readonly saved = output<number | null>();
 
   protected readonly online = injectOnline();
-  protected readonly alerts = MAX_TEAMS_ALERTS;
+  protected readonly alerts = LIMIT_ALERTS;
+  protected readonly lowerLabel = computed(() => this.spec().label.toLowerCase());
+  protected readonly ids = computed(() => {
+    const base = `edit-${this.spec().id}`;
+    return {
+      input: base,
+      heading: `${base}-heading`,
+      description: `${base}-description`,
+      error: `${base}-error`,
+    };
+  });
   protected readonly primaryButton = PRIMARY_BUTTON;
   protected readonly outlineButton = OUTLINE_BUTTON;
   protected readonly fieldGroupClass = FIELD_GROUP;
@@ -181,22 +186,21 @@ export class MaxTeamsEditForm implements OnInit {
   protected readonly descriptionClass = DESCRIPTION;
   protected readonly errorClass = FIELD_ERROR;
 
-  private readonly model = signal({ maxTeams: '' });
+  private readonly model = signal({ value: '' });
   protected readonly fields = form(this.model);
-  private readonly value = computed(() => maxTeamsFromText(this.model().maxTeams));
-  private readonly clientError = computed(() => checkMaxTeams(this.value())?.message ?? null);
+  private readonly value = computed(() => limitFromText(this.model().value));
+  private readonly clientError = computed(() => this.spec().check(this.value()));
   protected readonly shown = new ShownUntilValid(
     () => this.clientError() !== null,
-    () => this.fields.maxTeams().dirty(),
+    () => this.fields.value().dirty(),
   );
   private readonly serverError = linkedSignal<string, string | null>({
-    source: () => this.model().maxTeams,
+    source: () => this.model().value,
     computation: () => null,
   });
   protected readonly error = computed(() =>
     this.shown.shown() ? this.clientError() : this.serverError(),
   );
-  protected readonly description = computed(() => maxTeamsDescription(this.teamCount()));
   protected readonly submitting = signal(false);
   protected readonly alert = signal<FormAlert | null>(null);
   readonly saving = this.submitting.asReadonly();
@@ -206,8 +210,8 @@ export class MaxTeamsEditForm implements OnInit {
 
   /** Starts from the limit when Edit was pressed, so a live change while the organizer types does not overwrite their text. */
   ngOnInit(): void {
-    const maxTeams = this.maxTeams();
-    this.model.set({ maxTeams: maxTeams === undefined ? '' : String(maxTeams) });
+    const current = this.spec().current;
+    this.model.set({ value: current === undefined ? '' : String(current) });
     this.focusAfterRender(() => this.field().nativeElement.focus());
   }
 
@@ -233,17 +237,17 @@ export class MaxTeamsEditForm implements OnInit {
       this.showAlert('offline');
       return;
     }
-    const maxTeams = this.value() ?? null;
+    const value = this.value() ?? null;
     this.submitting.set(true);
     try {
-      await this.setMaxTeams.run({ seasonId: this.seasonId(), maxTeams });
+      await this.spec().save(value);
     } catch (failure) {
       this.submitting.set(false);
       if (!this.destroyed) this.showFailure(failure);
       return;
     }
     this.submitting.set(false);
-    if (!this.destroyed) this.saved.emit(maxTeams);
+    if (!this.destroyed) this.saved.emit(value);
   }
 
   private showFailure(failure: unknown): void {
@@ -251,7 +255,7 @@ export class MaxTeamsEditForm implements OnInit {
       this.showAlert('offline');
       return;
     }
-    const refusal = fieldRefusalOf(failure);
+    const refusal = fieldRefusalOf(failure, this.spec().field);
     if (refusal) {
       this.serverError.set(refusal);
       this.focusAfterRender(() => this.field().nativeElement.focus());

@@ -333,6 +333,48 @@ describe('leagues.update', () => {
     expect(await stored(s)).toEqual(before);
   });
 
+  test('refuses a minimum above a draft season’s maximum roster size, naming it and changing nothing', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('seasons', s.fall, { maxRosterSize: 6 }));
+    const before = await stored(s);
+    const data = await refusal(
+      s.organizer.mutation(api.leagues.update, { ...sundayArgs(s), minimumRosterSize: 8 }),
+    );
+    expect(data).toEqual({
+      field: 'format',
+      code: 'draftSeasonMaxRosterSizeLow',
+      message:
+        'Fall 2027 takes at most 6 players per team, fewer than the minimum of 8. Raise its maximum roster size first.',
+    });
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('refuses a format whose minimum is above a draft season’s maximum roster size', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('seasons', s.fall, { maxRosterSize: 5 }));
+    const before = await stored(s);
+    const data = await refusal(
+      s.admin.mutation(api.leagues.update, { ...sundayArgs(s), playersPerSide: 6 }),
+    );
+    expect(data).toMatchObject({ field: 'format', code: 'draftSeasonMaxRosterSizeLow' });
+    expect(data.message).toContain('Fall 2027 takes at most 5 players per team');
+    expect(await stored(s)).toEqual(before);
+  });
+
+  test('takes a minimum equal to a draft season’s maximum roster size', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('seasons', s.fall, { maxRosterSize: 8 }));
+    await s.organizer.mutation(api.leagues.update, { ...sundayArgs(s), minimumRosterSize: 8 });
+    expect((await stored(s)).seasons[1]).toMatchObject({ minimumRosterSize: 8, maxRosterSize: 8 });
+  });
+
+  test('takes a minimum above a published season’s maximum roster size, which keeps its own', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('seasons', s.summer, { maxRosterSize: 6 }));
+    await s.organizer.mutation(api.leagues.update, { ...sundayArgs(s), minimumRosterSize: 8 });
+    expect((await stored(s)).seasons[0]).toMatchObject({ minimumRosterSize: 4, maxRosterSize: 6 });
+  });
+
   test('still renames a league with more than 200 draft seasons', async () => {
     const s = await setup();
     await s.t.run(async (ctx) => {
@@ -571,6 +613,27 @@ describe('leagues.update edge cases', () => {
       adminC.mutation(api.leagues.undoUpdate, { leagueId: legacyId, ...earlier }),
     ).rejects.toThrow('Not allowed');
     expect(await read()).toMatchObject({ name: 'Legacy Sand', playersPerSide: 2, level: 'b' });
+  });
+
+  test('an Undo is refused when it would put a draft season’s minimum above its maximum roster size', async () => {
+    const s = await setup();
+    await s.admin.mutation(api.leagues.update, { ...sundayArgs(s), minimumRosterSize: 8 });
+    const earlier = await s.admin.mutation(api.leagues.update, {
+      ...sundayArgs(s),
+      minimumRosterSize: 4,
+    });
+    await s.t.run((ctx) => ctx.db.patch('seasons', s.fall, { maxRosterSize: 6 }));
+    const before = await stored(s);
+    const data = await refusal(
+      s.admin.mutation(api.leagues.undoUpdate, { leagueId: s.sundayId, ...earlier }),
+    );
+    expect(data).toEqual({
+      field: 'format',
+      code: 'draftSeasonMaxRosterSizeLow',
+      message:
+        'Fall 2027 takes at most 6 players per team, fewer than the minimum of 8. Raise its maximum roster size first.',
+    });
+    expect(await stored(s)).toEqual(before);
   });
 
   test('an Undo is refused once another save changed the league, and changes nothing', async () => {

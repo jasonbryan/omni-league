@@ -475,6 +475,7 @@ export async function updateLeague(
     }
     const playersPerSide = change.division.playersPerSide;
     const minimumRosterSize = effectiveMinimum(change.division)!;
+    for (const season of drafts) assertMaxRosterSizeHolds(season, minimumRosterSize);
     for (const season of drafts) {
       const current = seasonPlayersPerSide(season);
       if (current === playersPerSide && season.minimumRosterSize === minimumRosterSize) continue;
@@ -510,7 +511,23 @@ export async function updateLeague(
   return { league: earlier, draftSeasons, written };
 }
 
-function isDraftOf(season: Doc<'seasons'> | null, league: Doc<'leagues'>): boolean {
+function assertMaxRosterSizeHolds(season: Doc<'seasons'>, minimumRosterSize: number): void {
+  if (season.maxRosterSize === undefined || season.maxRosterSize >= minimumRosterSize) return;
+  throw new ConvexError({
+    field: 'format',
+    code: 'draftSeasonMaxRosterSizeLow',
+    message: LEAGUE_MESSAGES.draftSeasonMaxRosterSizeLow(
+      season.name,
+      season.maxRosterSize,
+      minimumRosterSize,
+    ),
+  } satisfies LeagueInputError);
+}
+
+function isDraftOf(
+  season: Doc<'seasons'> | null,
+  league: Doc<'leagues'>,
+): season is Doc<'seasons'> {
   return season?.leagueId === league._id && season.status === 'draft';
 }
 
@@ -520,6 +537,13 @@ export async function restoreLeague(
   earlier: LeagueUpdateEarlier,
 ): Promise<void> {
   const { league: values } = earlier;
+  const drafts: DraftSeasonEarlier[] = [];
+  for (const draft of earlier.draftSeasons) {
+    const season = await ctx.db.get('seasons', draft.seasonId);
+    if (!isDraftOf(season, league)) continue;
+    assertMaxRosterSizeHolds(season, draft.minimumRosterSize);
+    drafts.push(draft);
+  }
   await ctx.db.patch('leagues', league._id, {
     name: values.name,
     sortName: sortName(values.name),
@@ -539,9 +563,7 @@ export async function restoreLeague(
     ageGroup: values.ageGroup,
     minimumRosterSize: values.minimumRosterSize,
   });
-  for (const { seasonId, playersPerSide, minimumRosterSize } of earlier.draftSeasons) {
-    const season = await ctx.db.get('seasons', seasonId);
-    if (!isDraftOf(season, league)) continue;
+  for (const { seasonId, playersPerSide, minimumRosterSize } of drafts) {
     await ctx.db.patch('seasons', seasonId, { playersPerSide, minimumRosterSize });
   }
 }
@@ -572,6 +594,7 @@ export interface NewSeason {
   playersPerSide: number;
   minimumRosterSize: number;
   maxTeams?: number;
+  maxRosterSize?: number;
 }
 
 // Values are validated in `seasons.create`, not here, so a seed can hold a deadline on or after the
@@ -595,6 +618,7 @@ export async function insertSeason(
     status,
     teamCount: 0,
     ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
+    ...(season.maxRosterSize !== undefined && { maxRosterSize: season.maxRosterSize }),
   });
   if (status === 'published') await countPublishedSeason(ctx, league._id);
   return seasonId;

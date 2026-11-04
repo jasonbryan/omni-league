@@ -5,7 +5,7 @@ import { checkTeamInviteEmail } from '../../../convex/lib/teamInviteInput';
 import { ConvexOfflineError } from '../core/data/convex';
 import { ShownUntilValid } from '../core/forms/shown-errors';
 
-export type TeamInviteFormAlertKind = 'offline' | 'failed';
+export type TeamInviteFormAlertKind = 'offline' | 'failed' | 'full';
 
 export const TEAM_INVITE_FORM_ALERTS = {
   failed: {
@@ -13,12 +13,19 @@ export const TEAM_INVITE_FORM_ALERTS = {
     description: 'Check your connection and try again.',
   },
   offline: { description: "The address is still here. Try again when you're connected." },
+  full: { title: 'The team is full.', description: 'Remove a player to invite someone else.' },
 } as const;
 
 export type TeamInviteSubmitOutcome<R> =
   | { sent: true; email: string; result: R }
   | { sent: false; focus: 'email' }
   | { sent: false; alert: TeamInviteFormAlertKind };
+
+export function isTeamFull(failure: unknown): boolean {
+  if (!(failure instanceof ConvexError)) return false;
+  const data: unknown = failure.data;
+  return typeof data === 'object' && data !== null && 'code' in data && data.code === 'teamFull';
+}
 
 function emailRefusalOf(failure: unknown): string | null {
   if (!(failure instanceof ConvexError)) return null;
@@ -81,6 +88,7 @@ export class TeamInviteForm {
       return { sent: true, email: checked.email, result: await send(checked.email) };
     } catch (failure) {
       if (failure instanceof ConvexOfflineError) return this.showAlert('offline');
+      if (isTeamFull(failure)) return this.showAlert('full');
       const refusal = emailRefusalOf(failure);
       if (refusal === null) return this.showAlert('failed');
       this.serverError.set(refusal);

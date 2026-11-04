@@ -535,6 +535,7 @@ export const DEMO_SEASONS: readonly {
       registrationDeadline: '2027-05-23',
       playersPerSide: 4,
       minimumRosterSize: 4,
+      maxRosterSize: 6,
     },
     status: 'published',
   },
