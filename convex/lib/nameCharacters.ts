@@ -1,7 +1,7 @@
 // Imports nothing, so the app can import it.
 
 // Bidi controls reorder the name on other pages. Other format characters (the zero-width joiner and non-joiner, emoji tag characters) are part of real names.
-const CONTROL_OR_BIDI_CHARACTER = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/u;
+const CONTROL_OR_BIDI_CHARACTER = /[\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 
 const VISIBLE_CHARACTER = /[^\p{Cf}\s]/u;
 

@@ -93,7 +93,7 @@ describe('checkSeasonName hidden characters', () => {
   });
 
   test.each([
-    ['a ZWJ emoji', 'Pride 🏳️\u200D🌈'],
+    ['a ZWJ emoji', 'Pride \u{1F3F3}\uFE0F\u200D\u{1F308}'],
     ['a tag-sequence flag', '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} Fall'],
     ['a ZWNJ word', 'می\u200Cخواهم'],
   ])('accepts a name with %s', (_, name) => {

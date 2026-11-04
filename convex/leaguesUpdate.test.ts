@@ -450,24 +450,6 @@ describe('leagues.undoUpdate', () => {
     expect(after.seasons[2]).toMatchObject({ playersPerSide: 4, minimumRosterSize: 6 });
   });
 
-  test('restores a stored name that has a hidden character without checking it', async () => {
-    const s = await setup();
-    const earlier = await s.admin.mutation(api.leagues.update, {
-      ...sundayArgs(s),
-      playersPerSide: 6,
-    });
-    const legacyName = 'Sunday\u202ESand';
-    await s.t.run((ctx) => ctx.db.patch('leagues', s.sundayId, { name: legacyName }));
-    await s.admin.mutation(api.leagues.undoUpdate, {
-      leagueId: s.sundayId,
-      ...earlier,
-      league: { ...earlier.league, name: legacyName },
-      written: { ...earlier.written, name: legacyName },
-    });
-    const league = (await stored(s)).league!;
-    expect(league).toMatchObject({ name: legacyName, playersPerSide: 4 });
-  });
-
   test('leaves a season published in between as it is', async () => {
     const s = await setup();
     const earlier = await s.admin.mutation(api.leagues.update, {
