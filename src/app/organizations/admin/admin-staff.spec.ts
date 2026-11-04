@@ -1474,6 +1474,61 @@ describe('AdminStaff', () => {
         expect(document.activeElement).toBe(working);
       });
 
+      describe('an Undo in flight when the window passes', () => {
+        async function undoInFlightPastTheWindow() {
+          await revokeDana();
+          await pressUndo();
+          await windowPasses();
+        }
+        const description = () =>
+          text(statusBox()!.querySelector('[data-slot="alert-description"]'));
+
+        it('and then fails as offline ends on the window-passed refusal, with no Undo and no wait to offer', async () => {
+          await undoInFlightPastTheWindow();
+          o.convex.calls[1].reject(new ConvexOfflineError());
+          await o.flush();
+          const box = statusBox()!;
+          expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+            `Invite to ${DANA} could not be restored.`,
+          );
+          expect(description()).toBe(INVITE_MESSAGES.restoreWindowPassed);
+          expect(text(box)).not.toContain('connected');
+          expect(undoButton()).toBeUndefined();
+          expect(document.activeElement).toBe(box);
+        });
+
+        it('and then succeeds says restored, and focuses the status', async () => {
+          await undoInFlightPastTheWindow();
+          o.convex.calls[1].resolve(null);
+          o.subscription(LIST_PENDING)!.emit(PENDING);
+          await o.flush();
+          expect(text(statusBox())).toBe(`Invite to ${DANA} restored. Its link works again.`);
+          expect(document.activeElement).toBe(statusBox());
+        });
+
+        it('and then fails with a server error says so without Undo, and focuses the status', async () => {
+          await undoInFlightPastTheWindow();
+          o.convex.calls[1].reject(new Error('Server Error: secret'));
+          await o.flush();
+          expect(description()).toBe(
+            'The invite stays revoked. Reload the page, then invite this address again.',
+          );
+          expect(undoButton()).toBeUndefined();
+          expect(document.activeElement).toBe(statusBox());
+        });
+
+        it('and then is refused says the reason, without Undo, and focuses the status', async () => {
+          await undoInFlightPastTheWindow();
+          o.convex.calls[1].reject(
+            new ConvexError({ code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked }),
+          );
+          await o.flush();
+          expect(description()).toBe(INVITE_MESSAGES.restoreNotRevoked);
+          expect(undoButton()).toBeUndefined();
+          expect(document.activeElement).toBe(statusBox());
+        });
+      });
+
       it('keeps the button while an Undo is in flight, and the answer replaces the status', async () => {
         await revokeDana();
         await pressUndo();

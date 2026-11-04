@@ -728,9 +728,10 @@
                   Server error with no reason: "The invite could not be restored." / "The invite
                   stays revoked. Reload the page, then invite this address again." Offline: "You're
                   offline. Nothing was sent." / "The invite is still revoked. Try again when you're
-                  connected." When the 10 minutes end while the offline alert shows, it gives way to
-                  the refusal "Invite to &lt;email&gt; could not be restored." / "You can undo a
-                  revoke for 10 minutes. That time has passed. Invite this address again."
+                  connected." When the 10 minutes end while the offline alert shows, or while an
+                  Undo waits to go out and then fails as offline, the alert is the refusal "Invite
+                  to &lt;email&gt; could not be restored." / "You can undo a revoke for 10 minutes.
+                  That time has passed. Invite this address again."
                 </td>
                 <td class="px-4 py-2 align-top">
                   Destructive alert above the pending list. A server error drops Undo; offline keeps

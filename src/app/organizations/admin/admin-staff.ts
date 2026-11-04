@@ -569,7 +569,7 @@ export class AdminStaff {
   protected async restore(inviteId: Id<'invites'>, email: string): Promise<void> {
     if (this.restoreCall.pending()) return;
     if (!this.online()) {
-      this.show({ kind: 'restoreOffline', inviteId, email });
+      this.show(this.offlineRestoreNotice(inviteId, email));
       return;
     }
     try {
@@ -579,9 +579,16 @@ export class AdminStaff {
       const reason = refusalOf(failure);
       if (reason) this.show({ kind: 'refused', email, reason });
       else if (failure instanceof ConvexOfflineError) {
-        this.show({ kind: 'restoreOffline', inviteId, email });
+        this.show(this.offlineRestoreNotice(inviteId, email));
       } else this.show({ kind: 'restoreFailed' });
     }
+  }
+
+  /** The window can end while an Undo waits for the connection, and then there is nothing to try again. */
+  private offlineRestoreNotice(inviteId: Id<'invites'>, email: string): Notice {
+    return this.undoWindowOpen()
+      ? { kind: 'restoreOffline', inviteId, email }
+      : { kind: 'refused', email, reason: 'windowPassed' };
   }
 
   private startUndoWindow(): void {
@@ -591,7 +598,7 @@ export class AdminStaff {
   }
 
   private endUndoWindow(): void {
-    // The reply to an Undo already sent moves focus.
+    // The reply to an Undo already sent replaces the status and moves focus.
     if (this.restoring()) {
       this.undoWindowOpen.set(false);
       return;
