@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { Router, provideRouter, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Component } from '@angular/core';
 import { routes } from '../app.routes';
+import { acceptInviteRoutes, joinTeamRoutes } from '../app.routes.invites';
 import { captureInviteToken, captureTeamInviteToken } from './capture-invite-token';
 import {
   INVITE_TOKEN_KEY,
@@ -16,6 +17,23 @@ const TEAM_TOKEN = 'teamtokenABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_abc';
 
 @Component({ template: 'accept' })
 class Accept {}
+
+/** The app's route for `path`, with its lazy child resolved and the child's page swapped for a stub. */
+function appInviteRoute(path: string, lazyRoutes: Routes): Routes {
+  const parent = routes.find((candidate) => candidate.path === path);
+  const children = lazyRoutes.map((child) => ({
+    ...child,
+    loadComponent: undefined,
+    component: Accept,
+  }));
+  return [{ ...parent, loadChildren: undefined, children }];
+}
+
+async function openTwoLinks(path: string, lazyRoutes: Routes, first: string, second: string) {
+  TestBed.configureTestingModule({ providers: [provideRouter(appInviteRoute(path, lazyRoutes))] });
+  const harness = await RouterTestingHarness.create(`/${path}#${first}`);
+  await harness.navigateByUrl(`/${path}#${second}`);
+}
 
 afterEach(() => sessionStorage.clear());
 
@@ -113,10 +131,11 @@ describe('captureInviteToken', () => {
     expect(TestBed.inject(Router).url).toBe('/invites/accept');
   });
 
-  it('the app route re-runs the guard on every navigation, so a fragment-only one is captured', () => {
-    const route = routes.find((candidate) => candidate.path === 'invites/accept');
-    expect(route?.canActivate).toContain(captureInviteToken);
-    expect(route?.runGuardsAndResolvers).toBe('always');
+  it('the app route re-runs the guard on every navigation, so a second link in the open tab replaces the token', async () => {
+    const second = TOKEN.split('').reverse().join('');
+    await openTwoLinks('invites/accept', acceptInviteRoutes, TOKEN, second);
+    expect(sessionStorage.getItem(INVITE_TOKEN_KEY)).toBe(second);
+    expect(TestBed.inject(Router).url).toBe('/invites/accept');
   });
 
   it('a new link replaces the token of an earlier one', async () => {
@@ -198,9 +217,10 @@ describe('captureTeamInviteToken', () => {
     expect(TestBed.inject(Router).url).toBe('/teams/join');
   });
 
-  it('the app route re-runs the guard on every navigation, so a fragment-only one is captured', () => {
-    const route = routes.find((candidate) => candidate.path === 'teams/join');
-    expect(route?.canActivate).toContain(captureTeamInviteToken);
-    expect(route?.runGuardsAndResolvers).toBe('always');
+  it('the app route re-runs the guard on every navigation, so a second link in the open tab replaces the token', async () => {
+    const second = TEAM_TOKEN.split('').reverse().join('');
+    await openTwoLinks('teams/join', joinTeamRoutes, TEAM_TOKEN, second);
+    expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBe(second);
+    expect(TestBed.inject(Router).url).toBe('/teams/join');
   });
 });

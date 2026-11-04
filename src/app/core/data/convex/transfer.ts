@@ -1,9 +1,15 @@
 import { ApplicationRef, Injectable, inject } from '@angular/core';
+import type { FunctionReference } from 'convex/server';
 import { jsonToConvex, type JSONValue } from 'convex/values';
 import { ConvexServerQueryError } from './errors';
+import { getFunctionName } from './function-name';
 
 export type TransferredQuery =
   { v: JSONValue } | { u: true } | { e: { name: string; message: string } };
+
+export function transferKey(query: FunctionReference<'query'>, argsKey: string): string {
+  return `cvx:${getFunctionName(query)}:${argsKey}`;
+}
 
 export function decodeTransferred(entry: TransferredQuery): { value?: unknown; error?: Error } {
   if ('e' in entry) return { error: new ConvexServerQueryError(entry.e.message) };

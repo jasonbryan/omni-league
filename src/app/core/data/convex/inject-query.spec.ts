@@ -13,6 +13,7 @@ import {
   skipToken,
   type SkipToken,
 } from './index';
+import { CONVEX_SERVER_QUERIES } from './inject-query';
 import { FakeConvexClient } from './testing/fake-convex-client';
 
 const listTeams = makeFunctionReference<'query', { leagueId: string }, string[]>('teams:list');
@@ -57,6 +58,18 @@ describe('injectQuery (browser, fake client)', () => {
     expect(teams.value()).toEqual(['Sharks']);
     expect(teams.isLoading()).toBe(false);
     expect(teams.error()).toBeUndefined();
+  });
+
+  it('subscribes through the browser client without asking for the server query loader', () => {
+    const serverQueries = vi.fn(() => ({ load: vi.fn() }));
+    TestBed.configureTestingModule({
+      providers: [{ provide: CONVEX_SERVER_QUERIES, useFactory: serverQueries }],
+    });
+    const { teams } = createHost();
+    client.subscriptions[0].emit(['Sharks']);
+
+    expect(teams.value()).toEqual(['Sharks']);
+    expect(serverQueries).not.toHaveBeenCalled();
   });
 
   it('applies a second emission on the same subscription without opening another', () => {

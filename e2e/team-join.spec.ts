@@ -396,6 +396,29 @@ test.describe('Join a team: links that cannot be used', () => {
     await expectAccessible(page);
   });
 
+  test('two links in sequence in one tab: the second replaces the first and neither token is in the address bar or a request', async ({
+    page,
+  }) => {
+    const captain = await seedUser(newUser('Captain'));
+    const { tenant, teamId } = await seedTeam(captain);
+    const otherTeamId = await addTeam(tenant, 'Beach Bums', await seedUser(newUser('Captain2')));
+    const tokenA = await seedInvite(teamId, newUser('SeqA').email);
+    const tokenB = await seedInvite(otherTeamId, newUser('SeqB').email);
+    const urls = watchUrls(page);
+
+    await openLink(page, tokenA);
+    await expect(heading(page)).toHaveText('Join Sand Sharks');
+    await expect(page).toHaveTitle('Team invite | Omni League');
+
+    const secondUrls = watchUrls(page);
+    await page.goto(`/teams/join#${tokenB}`);
+    await expect(page).toHaveURL(`${baseURL}/teams/join`);
+    await expect(heading(page)).toHaveText('Join Beach Bums');
+    expect(await stored(page, TEAM_KEY)).toBe(tokenB);
+    urls.expectNone(tokenA);
+    secondUrls.expectNone(tokenB);
+  });
+
   test('a staff invite and a team invite in one tab: each page reads only its own token, and a staff token at /teams/join is invalid', async ({
     page,
   }) => {

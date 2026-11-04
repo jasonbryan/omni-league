@@ -7,6 +7,7 @@ import { appConfig } from './app.config';
 import { AUTH_CLIENT } from './core/auth/auth-client';
 import { AuthService } from './core/auth/auth.service';
 import { CONVEX_AUTH, CONVEX_CLIENT, CONVEX_CLIENT_FACTORY } from './core/data/convex';
+import { CONVEX_SERVER_QUERIES } from './core/data/convex/inject-query';
 import { AppUpdates } from './core/service-worker/app-updates';
 import { QueryTolerantUrlSerializer } from './core/url-serializer';
 import { HlmSheet, HlmSheetContent, HlmSheetPortal } from './ui/sheet';
@@ -90,6 +91,12 @@ describe('appConfig with no Convex URL', () => {
     await fixture.whenStable();
     expect(TestBed.inject(AppUpdates).start()).toBe(false);
     expect(document.body.querySelector('app-update-prompt')).toBeNull();
+  });
+
+  it('provides no server query loader, so the browser build leaves out the Convex HTTP client', () => {
+    TestBed.configureTestingModule({ providers: [...appConfig.providers] });
+
+    expect(TestBed.inject(CONVEX_SERVER_QUERIES, null)).toBeNull();
   });
 
   it('reads a URL with an undecodable query string as its path, without a warning', () => {

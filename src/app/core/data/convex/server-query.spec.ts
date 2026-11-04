@@ -13,14 +13,17 @@ import type { MockInstance } from 'vitest';
 import {
   CONVEX_AUTH,
   CONVEX_CLIENT_FACTORY,
-  CONVEX_HTTP_CLIENT_FACTORY,
-  CONVEX_SERVER_QUERY_TIMEOUT_MS,
   CONVEX_URL,
   ConvexNotConfiguredError,
   injectQuery,
   provideConvex,
   skipToken,
 } from './index';
+import {
+  provideConvexServerQueries,
+  CONVEX_HTTP_CLIENT_FACTORY,
+  CONVEX_SERVER_QUERY_TIMEOUT_MS,
+} from './server-query-loader';
 import { FakeConvexClient } from './testing/fake-convex-client';
 import { FakeConvexHttpClient } from './testing/fake-convex-http-client';
 
@@ -64,6 +67,7 @@ describe('injectQuery on the server platform', () => {
         { provide: PLATFORM_ID, useValue: options.platform ?? 'server' },
         { provide: CONVEX_URL, useValue: options.url === undefined ? DEPLOYMENT_URL : options.url },
         { provide: CONVEX_CLIENT_FACTORY, useValue: wsFactory },
+        provideConvexServerQueries(),
         { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: httpFactory },
         ...(options.timeoutMs === undefined
           ? []

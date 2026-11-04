@@ -50,6 +50,23 @@ test.describe('query strings and the CDN', () => {
     },
   );
 
+  test(
+    'the invite pages and the app pages answer with the Client shell, and the invite pages send no referrer',
+    RAW_HTTP,
+    async () => {
+      for (const path of ['/invites/accept', '/teams/join', '/app', '/app/account']) {
+        const response = await rawGet(path);
+        expect(response.status, path).toBe(200);
+        expect(response.body, path).toContain('<app-root></app-root>');
+        expect(response.body, path).not.toContain('ng-server-context');
+        expect(response.headers['cache-control'], path).toBe('public, max-age=0, must-revalidate');
+        expect(response.headers['referrer-policy'], path).toBe(
+          path === '/invites/accept' || path === '/teams/join' ? 'no-referrer' : undefined,
+        );
+      }
+    },
+  );
+
   // On a preview, the first request stores the page, and the next ones with another query string,
   // or none, must not get the first one's value.
   test(

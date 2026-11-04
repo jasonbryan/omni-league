@@ -1,4 +1,5 @@
 import {
+  InjectionToken,
   Injector,
   PLATFORM_ID,
   TransferState,
@@ -19,8 +20,38 @@ import { CONVEX_CLIENT } from './client-token';
 import { CONVEX_URL } from './convex-url';
 import { ConvexNotConfiguredError } from './errors';
 import { ConvexSavedCopies } from './saved-copies';
-import { ConvexServerQueryLoader, transferKey } from './server-query-loader';
-import { ConvexHydrationWindow, decodeTransferred, type TransferredQuery } from './transfer';
+import {
+  ConvexHydrationWindow,
+  decodeTransferred,
+  transferKey,
+  type TransferredQuery,
+} from './transfer';
+
+export type ServerQueryResult =
+  { value: unknown; error?: undefined } | { value?: undefined; error: Error };
+
+export interface ConvexServerQueries {
+  load(
+    query: FunctionReference<'query'>,
+    args: unknown,
+    argsKey: string,
+  ): Promise<ServerQueryResult>;
+}
+
+/** Provided only by the server config (`provideConvexServerQueries()`), so the browser build never ships the HTTP client. */
+export const CONVEX_SERVER_QUERIES = new InjectionToken<ConvexServerQueries>(
+  'CONVEX_SERVER_QUERIES',
+);
+
+// A thrown injector error mid-render leaves an empty 200 page that the CDN may cache, so a missing provider fails each query instead and the page renders its 503 view.
+const MISSING_SERVER_QUERIES: ConvexServerQueries = {
+  load: () =>
+    Promise.resolve({
+      error: new Error(
+        'CONVEX_SERVER_QUERIES has no provider: add provideConvexServerQueries() to the server config',
+      ),
+    }),
+};
 
 export const skipToken = Symbol('convex.skipToken');
 export type SkipToken = typeof skipToken;
@@ -68,7 +99,10 @@ export function injectQuery<Q extends FunctionReference<'query'>>(
     );
 
     const server = isPlatformServer(inject(PLATFORM_ID));
-    const loader = server && inject(CONVEX_URL) !== null ? inject(ConvexServerQueryLoader) : null;
+    const loader =
+      server && inject(CONVEX_URL) !== null
+        ? (inject(CONVEX_SERVER_QUERIES, { optional: true }) ?? MISSING_SERVER_QUERIES)
+        : null;
     const client = server ? null : inject(CONVEX_CLIENT);
     if (!loader && !client) {
       const error = new ConvexNotConfiguredError();

@@ -6,13 +6,12 @@ import {
 } from '@angular/platform-browser';
 import { provideServerRendering, renderApplication } from '@angular/platform-server';
 import { makeFunctionReference } from 'convex/server';
+import { CONVEX_URL, injectQuery, provideConvex } from './index';
 import {
+  provideConvexServerQueries,
   CONVEX_HTTP_CLIENT_FACTORY,
-  CONVEX_URL,
-  injectQuery,
-  provideConvex,
   type ConvexHttpClientLike,
-} from './index';
+} from './server-query-loader';
 
 import { snapshotDomGlobals } from './testing/dom-globals';
 
@@ -68,6 +67,7 @@ function render(client: ConvexHttpClientLike): Promise<string> {
           provideClientHydration(),
           provideConvex(),
           { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+          provideConvexServerQueries(),
           { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => client },
         ],
       },
@@ -127,6 +127,7 @@ describe('concurrent server renders', () => {
                 provideClientHydration(),
                 provideConvex(),
                 { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+                provideConvexServerQueries(),
                 { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: factory },
                 { provide: LEAGUE_ID, useValue: leagueId },
               ],
