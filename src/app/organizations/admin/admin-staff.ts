@@ -591,8 +591,13 @@ export class AdminStaff {
   }
 
   private endUndoWindow(): void {
+    // The reply to an Undo already sent moves focus.
+    if (this.restoring()) {
+      this.undoWindowOpen.set(false);
+      return;
+    }
     const notice = this.notice();
-    const replacing = notice?.kind === 'restoreOffline' && !this.restoring();
+    const replacing = notice?.kind === 'restoreOffline';
     const holdsFocus = replacing
       ? (this.noticeHost()?.nativeElement.matches(':focus-within') ?? false)
       : (this.undoButton()?.nativeElement.matches(':focus') ?? false);

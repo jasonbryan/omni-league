@@ -1464,6 +1464,16 @@ describe('AdminStaff', () => {
         expect(undoButton()).toBeUndefined();
       });
 
+      it('leaves focus on Undoing… when the window passes while an Undo is in flight', async () => {
+        await revokeDana();
+        await pressUndo();
+        undoButton()!.focus();
+        const working = undoButton();
+        await windowPasses();
+        expect(undoButton()).toBe(working);
+        expect(document.activeElement).toBe(working);
+      });
+
       it('keeps the button while an Undo is in flight, and the answer replaces the status', async () => {
         await revokeDana();
         await pressUndo();
