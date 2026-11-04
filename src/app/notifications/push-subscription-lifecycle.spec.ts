@@ -10,6 +10,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { NotificationsPage } from './notifications-page';
+import { SIGN_OUT_CHECK_WAIT_MS } from './push-subscription-lifecycle';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
 
 function base64Url(bytes: Uint8Array): string {
@@ -51,6 +52,8 @@ class FakeSwPush {
   }>();
   readonly requests: { serverPublicKey: string }[] = [];
   nextSubscription: PushSubscription | Error = fakeSubscription(NEW_ENDPOINT);
+  holdRequests = false;
+  private releaseHeldRequest: (() => void) | null = null;
   unsubscribes = 0;
 
   constructor(private readonly log: string[]) {}
@@ -59,9 +62,18 @@ class FakeSwPush {
     this.log.push('SwPush.requestSubscription');
     this.requests.push(options);
     const next = this.nextSubscription;
-    if (next instanceof Error) return Promise.reject(next);
-    this.subscription.next(next);
-    return Promise.resolve(next);
+    const answer = (): Promise<PushSubscription> => {
+      if (next instanceof Error) return Promise.reject(next);
+      this.subscription.next(next);
+      return Promise.resolve(next);
+    };
+    if (!this.holdRequests) return answer();
+    return new Promise<void>((resolve) => (this.releaseHeldRequest = resolve)).then(answer);
+  }
+
+  releaseRequest(): void {
+    this.releaseHeldRequest?.();
+    this.releaseHeldRequest = null;
   }
 
   unsubscribe(): Promise<void> {
@@ -275,11 +287,15 @@ describe('PushSubscriptionLifecycle', () => {
   });
 
   describe('a key or subscription change', () => {
-    function expectReplaced() {
-      expect(log.filter((entry) => entry.startsWith('SwPush.'))).toEqual([
+    async function expectReplaced() {
+      await settleCalls();
+      expect(log).toEqual([
         'SwPush.unsubscribe',
         'SwPush.requestSubscription',
+        'push:subscribe',
+        'push:unsubscribe',
       ]);
+      expect(callsTo('push:unsubscribe').map((c) => c.args)).toEqual([{ endpoint: ENDPOINT }]);
       expect(swPush.requests).toEqual([{ serverPublicKey: VAPID_KEY }]);
       expect(
         callsTo('push:subscribe').map((c) => (c.args as { endpoint: string }).endpoint),
@@ -294,7 +310,7 @@ describe('PushSubscriptionLifecycle', () => {
       await answerStatus(true);
       await answerConfig();
 
-      expectReplaced();
+      await expectReplaced();
     });
 
     it('subscribes again when expirationTime has passed', async () => {
@@ -304,7 +320,7 @@ describe('PushSubscriptionLifecycle', () => {
       await answerStatus(true);
       await answerConfig();
 
-      expectReplaced();
+      await expectReplaced();
     });
 
     it('subscribes again when pushSubscriptionChanges reports a new subscription', async () => {
@@ -324,7 +340,19 @@ describe('PushSubscriptionLifecycle', () => {
       await answerStatus(true);
       await answerConfig();
 
-      expectReplaced();
+      await expectReplaced();
+    });
+
+    it('saves nothing when the browser subscription changed after the status query confirmed it', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      await signedIn();
+      await convexAccepts();
+      await answerStatus(true);
+      swPush.subscription.next(fakeSubscription(NEW_ENDPOINT));
+      await answerConfig();
+
+      expect(convex.calls).toEqual([]);
+      expect(swPush.unsubscribes).toBe(0);
     });
 
     it('keeps no subscription, saves nothing, and removes the old row when the browser refuses to subscribe again', async () => {
@@ -394,16 +422,73 @@ describe('PushSubscriptionLifecycle', () => {
   });
 
   describe('sign-out', () => {
-    async function signOutFromAccountSettings() {
+    async function openAccountSettings() {
       await signedIn();
       const harness = await RouterTestingHarness.create('/app/account');
       await convexAccepts();
-      const button = [...harness.routeNativeElement!.querySelectorAll('button')].find((b) =>
+      return [...harness.routeNativeElement!.querySelectorAll('button')].find((b) =>
         b.textContent?.includes('Sign out'),
       )!;
+    }
+
+    async function signOutFromAccountSettings() {
+      const button = await openAccountSettings();
+      for (const sub of statusQueries()) sub.fail(new Error('Sign in required'));
+      await flush();
       button.click();
       await flush();
     }
+
+    it('during a re-subscribe for a new key, ends with no browser subscription and saves nothing', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT, { key: OLD_KEY }));
+      swPush.holdRequests = true;
+      const button = await openAccountSettings();
+      await answerStatus(true);
+      await answerConfig();
+      expect(log).toEqual(['SwPush.unsubscribe', 'SwPush.requestSubscription']);
+
+      button.click();
+      await flush();
+      expect(log).not.toContain('session ends');
+      swPush.releaseRequest();
+      await flush();
+      await settleCalls();
+
+      expect(log).toEqual([
+        'SwPush.unsubscribe',
+        'SwPush.requestSubscription',
+        'SwPush.unsubscribe',
+        'push:unsubscribe',
+        'session ends',
+      ]);
+      expect(callsTo('push:unsubscribe').map((c) => c.args)).toEqual([{ endpoint: ENDPOINT }]);
+      expect(callsTo('push:subscribe')).toEqual([]);
+      expect(swPush.subscription.value).toBeNull();
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('waits a bounded time for a check that is held up offline, then signs out', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      const button = await openAccountSettings();
+      vi.useFakeTimers();
+      try {
+        button.click();
+        await vi.advanceTimersByTimeAsync(SIGN_OUT_CHECK_WAIT_MS - 100);
+        expect(log).toEqual([]);
+        await vi.advanceTimersByTimeAsync(200);
+        for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+        await vi.advanceTimersByTimeAsync(100);
+      } finally {
+        vi.useRealTimers();
+      }
+      await flush();
+
+      expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
+      for (const sub of statusQueries()) sub.emit(true);
+      await flush();
+      expect(callsTo('push:subscribe')).toEqual([]);
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
 
     it('removes the row and then the browser subscription before the session ends', async () => {
       swPush.subscription.next(fakeSubscription(ENDPOINT));

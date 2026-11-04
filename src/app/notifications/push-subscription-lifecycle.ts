@@ -12,6 +12,19 @@ import { CONVEX_CLIENT, api, injectMutation, type ConvexClientLike } from '../co
 /** SwPush emits nothing while no worker controls the page, so a read gives up rather than hold up sign-out. */
 export const SUBSCRIPTION_READ_TIMEOUT_MS = 2_000;
 
+/** Offline, the running check's query pauses rather than fails, so sign-out waits for it only this long. */
+export const SIGN_OUT_CHECK_WAIT_MS = 3_000;
+
+function settledWithin(task: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    void task.finally(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 function queryOnce<Q extends FunctionReference<'query'>>(
   client: ConvexClientLike,
   query: Q,
@@ -89,12 +102,16 @@ export class PushSubscriptionLifecycle {
   private readonly save = injectMutation(api.push.subscribe);
   private readonly remove = injectMutation(api.push.unsubscribe);
   private queue: Promise<void> = Promise.resolve();
+  /** Raised by sign-out; a task started before it writes nothing more. */
+  private generation = 0;
 
   constructor() {
     const changes = this.enabledSwPush()?.pushSubscriptionChanges.subscribe(
       ({ oldSubscription }) => {
         const endpoint = oldSubscription?.endpoint;
-        if (endpoint) void this.enqueue(() => this.checkEndpoint(endpoint, { replace: true }));
+        if (endpoint) {
+          void this.enqueue((run) => this.checkEndpoint(run, endpoint, { replace: true }));
+        }
       },
     );
     inject(DestroyRef).onDestroy(() => changes?.unsubscribe());
@@ -102,23 +119,30 @@ export class PushSubscriptionLifecycle {
 
   /** On start and after each sign-in, once the Convex client is authenticated. */
   check(): Promise<void> {
-    return this.enqueue(async () => {
+    return this.enqueue(async (run) => {
       const subscription = await this.browserSubscription();
-      if (subscription) await this.checkEndpoint(subscription.endpoint, { replace: false });
+      if (subscription) await this.checkEndpoint(run, subscription.endpoint, { replace: false });
     });
   }
 
   /** Before the session ends; never rejects, so sign-out always completes. */
   async forget(): Promise<void> {
+    this.generation += 1;
+    await settledWithin(this.queue, SIGN_OUT_CHECK_WAIT_MS);
     const subscription = await this.browserSubscription();
     if (!subscription) return;
     await this.removeRow(subscription.endpoint);
     await this.unsubscribeBrowser();
   }
 
-  private enqueue(task: () => Promise<void>): Promise<void> {
-    this.queue = this.queue.then(task).catch(() => undefined);
+  private enqueue(task: (run: number) => Promise<void>): Promise<void> {
+    const run = this.generation;
+    this.queue = this.queue.then(() => task(run)).catch(() => undefined);
     return this.queue;
+  }
+
+  private signingOutSince(run: number): boolean {
+    return run !== this.generation;
   }
 
   private enabledSwPush(): SwPush | null {
@@ -131,9 +155,13 @@ export class PushSubscriptionLifecycle {
     return firstWithin(swPush.subscription, SUBSCRIPTION_READ_TIMEOUT_MS);
   }
 
-  private async checkEndpoint(endpoint: string, { replace }: { replace: boolean }): Promise<void> {
+  private async checkEndpoint(
+    run: number,
+    endpoint: string,
+    { replace }: { replace: boolean },
+  ): Promise<void> {
     const client = this.client;
-    if (!client || !this.auth.convexAuthenticated()) return;
+    if (!client || !this.auth.convexAuthenticated() || this.signingOutSince(run)) return;
     let owned: boolean;
     try {
       owned = await queryOnce(client, api.push.getMyDeviceStatus, { endpoint });
@@ -150,18 +178,32 @@ export class PushSubscriptionLifecycle {
       (config) => config.vapidPublicKey,
       () => null,
     );
-    const current = await this.browserSubscription();
-    if (replace || (current && needsNewSubscription(current, vapidPublicKey))) {
-      await this.replace(endpoint, vapidPublicKey);
-    } else if (current) {
-      await this.save.run(subscriptionArgs(current)).catch(() => undefined);
+    if (replace) {
+      await this.replace(run, endpoint, vapidPublicKey);
+      return;
     }
+    const current = await this.browserSubscription();
+    // Only the endpoint the status query confirmed: subscribe takes over another user's row.
+    if (current?.endpoint !== endpoint || this.signingOutSince(run)) return;
+    if (needsNewSubscription(current, vapidPublicKey)) {
+      await this.replace(run, endpoint, vapidPublicKey);
+      return;
+    }
+    await this.save.run(subscriptionArgs(current)).catch(() => undefined);
   }
 
-  private async replace(oldEndpoint: string, vapidPublicKey: string | null): Promise<void> {
+  private async replace(
+    run: number,
+    oldEndpoint: string,
+    vapidPublicKey: string | null,
+  ): Promise<void> {
     const swPush = this.enabledSwPush();
-    if (!swPush || !vapidPublicKey) return;
+    if (!swPush || !vapidPublicKey || this.signingOutSince(run)) return;
     await this.unsubscribeBrowser();
+    if (this.signingOutSince(run)) {
+      await this.removeRow(oldEndpoint);
+      return;
+    }
     let next: PushSubscription;
     try {
       // No user gesture here, so Safari may refuse it; the page then shows off and the user turns them on again.
@@ -170,12 +212,13 @@ export class PushSubscriptionLifecycle {
       await this.removeRow(oldEndpoint);
       return;
     }
-    if (!isAllowedPushEndpoint(next.endpoint)) {
+    if (!isAllowedPushEndpoint(next.endpoint) || this.signingOutSince(run)) {
       await this.unsubscribeBrowser();
       await this.removeRow(oldEndpoint);
       return;
     }
     await this.save.run(subscriptionArgs(next)).catch(() => undefined);
+    if (next.endpoint !== oldEndpoint) await this.removeRow(oldEndpoint);
   }
 
   private async removeRow(endpoint: string): Promise<void> {
