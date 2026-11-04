@@ -11,7 +11,7 @@ import { shortMinorName } from './lib/minorName';
 import { pageOf, pageRows, PUBLIC_LIST_PAGE_SIZE } from './lib/publicList';
 import { publicTeamsValidator, type PublicTeams } from './lib/publicPage';
 import { registrationIsOpen } from './lib/registration';
-import { insertTeamWithCaptain, isMinorEntry } from './lib/rosterWrites';
+import { isMinorEntry, registerTeamOrJoinWaitlist } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import {
   checkTeamName,
@@ -30,9 +30,13 @@ export const SEASON_TEAMS_LIMIT = 200;
 /** A user on more teams than this sees the teams of their most recently added entries. */
 export const TEAMS_LIST_MINE_LIMIT = 50;
 
+/** A full season puts the team on its waitlist instead (`seasonIsFull`). */
 export const register = mutation({
   args: { ...seasonSlugsValidator.fields, name: v.string() },
-  returns: v.object({ status: v.literal('registered'), teamId: v.id('teams') }),
+  returns: v.union(
+    v.object({ status: v.literal('registered'), teamId: v.id('teams') }),
+    v.object({ status: v.literal('waitlisted'), position: v.number() }),
+  ),
   handler: async (ctx, { name, ...slugs }) => {
     const user = await requireUser(ctx);
     const found = await findSeasonBySlugs(ctx, slugs);
@@ -49,11 +53,10 @@ export const register = mutation({
     }
     const checked = checkTeamName(name);
     if (!checked.ok) throw new ConvexError({ ...checked.error });
-    const teamId = await insertTeamWithCaptain(ctx, season, {
+    return registerTeamOrJoinWaitlist(ctx, season, {
       name: checked.name,
       captainUserId: user._id,
     });
-    return { status: 'registered' as const, teamId };
   },
 });
 

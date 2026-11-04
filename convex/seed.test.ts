@@ -30,6 +30,7 @@ const NONE = {
   leagueDivisions: 0,
   teamCounts: 0,
   pendingInviteCounts: 0,
+  waitlistCounts: 0,
 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
 const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
@@ -809,6 +810,7 @@ describe('seed:demo', () => {
         leagueDivisions: 2,
         teamCounts: 0,
         pendingInviteCounts: 0,
+        waitlistCounts: 0,
       },
       updated: { organizations: 1 },
     });
@@ -992,6 +994,7 @@ describe('seed:demo', () => {
       DEMO_TEAMS,
       DEMO_FULL_SEASON,
       DEMO_FULL_SEASON_TEAMS,
+      DEMO_WAITLIST_ENTRY,
       DEMO_FREE_AGENT_PEOPLE,
       DEMO_FREE_AGENTS,
       ...functions
@@ -1012,6 +1015,7 @@ describe('seed:demo', () => {
     expect(DEMO_TEAMS).toHaveLength(4);
     expect(DEMO_FULL_SEASON.leagueSlug).toBe('thursday-night-coed-2s');
     expect(DEMO_FULL_SEASON_TEAMS).toHaveLength(2);
+    expect(DEMO_WAITLIST_ENTRY.teamName).toBe('Late Lobsters');
     expect(DEMO_FREE_AGENT_PEOPLE).toHaveLength(3);
     expect(DEMO_FREE_AGENTS).toHaveLength(4);
     const exports = Object.entries(functions);
@@ -1110,6 +1114,7 @@ describe('seed:demo backfill against a recount', () => {
       leagueDivisions: 2,
       teamCounts: 0,
       pendingInviteCounts: 0,
+      waitlistCounts: 0,
     });
     await expectCountersMatchRecount(t);
     expect(await t.query(api.organizations.getPublicPage, { slug: 'old-club' })).toMatchObject({

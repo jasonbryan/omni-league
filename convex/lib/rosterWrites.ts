@@ -1,6 +1,6 @@
-// The only writer of `teams`, `rosterEntries`, `teamInvites`, `freeAgents`, `teams.rosterCount`,
-// `teams.pendingInviteCount`, `seasons.teamCount`, `seasons.maxTeams`, and `seasons.maxRosterSize` once the
-// season exists, so the counters, the team and roster limits, the one-place-per-season rule, and one
+// The only writer of `teams`, `rosterEntries`, `teamInvites`, `freeAgents`, `waitlistEntries`, `teams.rosterCount`,
+// `teams.pendingInviteCount`, `seasons.teamCount`, `seasons.waitlistCount`, `seasons.maxTeams`, and `seasons.maxRosterSize`
+// once the season exists, so the counters, the team and roster limits, the one-place-per-season rule, and one
 // pending invite per address hold for every way onto a roster.
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
@@ -14,9 +14,11 @@ import {
   type NothingChosenRefusal,
 } from './minorName';
 import type { RosterEntrySource } from './rosterEntry';
+import { WAITLIST_READ_LIMIT } from './waitlist';
 import {
   checkMaxRosterSizeFor,
   SEASON_MESSAGES,
+  seasonHasRoom,
   seasonIsFull,
   teamIsFull,
   type SeasonInputError,
@@ -27,6 +29,9 @@ import {
   teamSortName,
   type AlreadyFreeAgentRefusal,
   type AlreadyPlacedRefusal,
+  type AlreadyPromotedRefusal,
+  type NoRoomRefusal,
+  type OnWaitlistRefusal,
   type RosterRefusal,
   type SeasonFullRefusal,
   type TeamFullRefusal,
@@ -109,6 +114,53 @@ export async function freeAgentInSeason(
     .unique();
 }
 
+/** Every way onto a roster or a waitlist refuses a waiting captain, so a waiting entry, when there is one, is the caller's newest. */
+export async function waitingEntryInSeason(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  userId: Id<'users'>,
+): Promise<Doc<'waitlistEntries'> | null> {
+  const newest = await ctx.db
+    .query('waitlistEntries')
+    .withIndex('by_seasonId_and_userId', (q) => q.eq('seasonId', seasonId).eq('userId', userId))
+    .order('desc')
+    .first();
+  return newest?.status === 'waiting' ? newest : null;
+}
+
+/** 1 plus the waiting entries requested before this one; past the read limit it is the limit plus 1. */
+export async function waitlistPosition(
+  ctx: ReadCtx,
+  entry: Doc<'waitlistEntries'>,
+): Promise<number> {
+  const upTo = await ctx.db
+    .query('waitlistEntries')
+    .withIndex('by_seasonId_and_status_and_requestedAt', (q) =>
+      q
+        .eq('seasonId', entry.seasonId)
+        .eq('status', 'waiting')
+        .lte('requestedAt', entry.requestedAt),
+    )
+    .take(WAITLIST_READ_LIMIT);
+  const index = upTo.findIndex((row) => row._id === entry._id);
+  return index === -1 ? upTo.length + 1 : index + 1;
+}
+
+async function waitingEntryWithSortName(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  name: string,
+): Promise<Doc<'waitlistEntries'> | null> {
+  const same = await ctx.db
+    .query('waitlistEntries')
+    .withIndex('by_seasonId_and_sortName', (q) =>
+      q.eq('seasonId', seasonId).eq('sortName', teamSortName(name)),
+    )
+    .order('desc')
+    .first();
+  return same?.status === 'waiting' ? same : null;
+}
+
 type Refusal =
   | SeasonFullRefusal
   | TeamFullRefusal
@@ -119,6 +171,9 @@ type Refusal =
   | WaitingFreeAgentRefusal
   | AlreadyFreeAgentRefusal
   | AlreadyPlacedRefusal
+  | OnWaitlistRefusal
+  | NoRoomRefusal
+  | AlreadyPromotedRefusal
   | MinorInSeasonRefusal
   | MinorLimitRefusal
   | NothingChosenRefusal;
@@ -158,6 +213,22 @@ async function assertNotWaitingFreeAgent(
   refuse({ code: 'waitingFreeAgent', message: TEAM_MESSAGES.waitingFreeAgent });
 }
 
+/** Only the promotion of the entry passes, because it marks the entry promoted first; so a waiting entry never belongs to someone on a team. */
+async function assertNotWaitlisted(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  userId: Id<'users'>,
+): Promise<void> {
+  const entry = await waitingEntryInSeason(ctx, seasonId, userId);
+  if (!entry) return;
+  refuse({
+    code: 'onWaitlist',
+    teamName: entry.teamName,
+    position: await waitlistPosition(ctx, entry),
+    message: TEAM_MESSAGES.onWaitlist(entry.teamName),
+  });
+}
+
 /** Read fresh: within one mutation an earlier entry has already raised the count, and concurrent writers conflict on this read and retry. */
 async function assertTeamHasRoom(ctx: ReadCtx, teamId: Id<'teams'>): Promise<void> {
   const team = await ctx.db.get('teams', teamId);
@@ -175,21 +246,44 @@ export interface NewTeam {
   captainUserId: Id<'users'>;
 }
 
-export async function insertTeamWithCaptain(
+/** `promotedEntryId` is the waiting entry being promoted, whose own name does not refuse it. */
+async function assertTeamNameFree(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  name: string,
+  promotedEntryId: Id<'waitlistEntries'> | null,
+): Promise<void> {
+  const team = await teamWithSortName(ctx, seasonId, name);
+  const entry = await waitingEntryWithSortName(ctx, seasonId, name);
+  const taken = team?.name ?? (entry && entry._id !== promotedEntryId ? entry.teamName : null);
+  if (taken !== null) {
+    refuse({ field: 'name', code: 'nameTaken', message: TEAM_MESSAGES.nameTaken(taken) });
+  }
+}
+
+/** The checks a captain's own entry gets, run before a team or a waiting entry is written so a refusal writes nothing. */
+async function assertCaptainHasNoPlace(
+  ctx: ReadCtx,
+  seasonId: Id<'seasons'>,
+  captainUserId: Id<'users'>,
+): Promise<void> {
+  await assertNotRostered(ctx, seasonId, captainUserId, null);
+  await assertNotWaitingFreeAgent(ctx, seasonId, captainUserId);
+  await assertNotWaitlisted(ctx, seasonId, captainUserId);
+}
+
+// Read fresh: a caller's `Doc` may predate teams and waiting entries inserted since. Concurrent writers conflict on this read and retry.
+async function currentSeason(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<Doc<'seasons'>> {
+  const season = await ctx.db.get('seasons', seasonId);
+  if (!season) throw new Error('No season has this id');
+  return season;
+}
+
+async function insertTeam(
   ctx: MutationCtx,
   season: Doc<'seasons'>,
   { name, captainUserId }: NewTeam,
 ): Promise<Id<'teams'>> {
-  // Read fresh: a caller's `Doc` may predate teams inserted since. Concurrent registrations conflict on this read and retry.
-  const current = await ctx.db.get('seasons', season._id);
-  if (!current) throw new Error('No season has this id');
-  if (seasonIsFull(current)) refuse({ code: 'seasonFull', message: TEAM_MESSAGES.seasonFull });
-  const taken = await teamWithSortName(ctx, season._id, name);
-  if (taken) {
-    refuse({ field: 'name', code: 'nameTaken', message: TEAM_MESSAGES.nameTaken(taken.name) });
-  }
-  await assertNotRostered(ctx, season._id, captainUserId, null);
-  await assertNotWaitingFreeAgent(ctx, season._id, captainUserId);
   const teamId = await ctx.db.insert('teams', {
     organizationId: season.organizationId,
     leagueId: season.leagueId,
@@ -212,6 +306,80 @@ export async function insertTeamWithCaptain(
   return teamId;
 }
 
+/** A full season refuses; `registerTeamOrJoinWaitlist` puts the team on the waitlist instead. */
+export async function insertTeamWithCaptain(
+  ctx: MutationCtx,
+  season: Doc<'seasons'>,
+  newTeam: NewTeam,
+): Promise<Id<'teams'>> {
+  const current = await currentSeason(ctx, season._id);
+  if (seasonIsFull(current)) refuse({ code: 'seasonFull', message: TEAM_MESSAGES.seasonFull });
+  await assertTeamNameFree(ctx, season._id, newTeam.name, null);
+  await assertCaptainHasNoPlace(ctx, season._id, newTeam.captainUserId);
+  return insertTeam(ctx, current, newTeam);
+}
+
+export type Registration =
+  { status: 'registered'; teamId: Id<'teams'> } | { status: 'waitlisted'; position: number };
+
+export async function registerTeamOrJoinWaitlist(
+  ctx: MutationCtx,
+  season: Doc<'seasons'>,
+  newTeam: NewTeam,
+): Promise<Registration> {
+  const current = await currentSeason(ctx, season._id);
+  await assertTeamNameFree(ctx, season._id, newTeam.name, null);
+  await assertCaptainHasNoPlace(ctx, season._id, newTeam.captainUserId);
+  if (!seasonIsFull(current)) {
+    return { status: 'registered', teamId: await insertTeam(ctx, current, newTeam) };
+  }
+  const entryId = await ctx.db.insert('waitlistEntries', {
+    organizationId: current.organizationId,
+    seasonId: current._id,
+    userId: newTeam.captainUserId,
+    teamName: newTeam.name,
+    sortName: teamSortName(newTeam.name),
+    status: 'waiting',
+    requestedAt: Date.now(),
+  });
+  await changeWaitlistCount(ctx, current._id, 1);
+  const entry = await ctx.db.get('waitlistEntries', entryId);
+  if (!entry) throw new Error('No waitlist entry has this id');
+  return { status: 'waitlisted', position: await waitlistPosition(ctx, entry) };
+}
+
+/** The registration deadline does not apply: promotion is an organizer's action. */
+export async function promoteWaitlistEntry(
+  ctx: MutationCtx,
+  entryId: Id<'waitlistEntries'>,
+  promotedByUserId: Id<'users'>,
+): Promise<{ teamId: Id<'teams'>; teamCount: number; maxTeams: number | undefined }> {
+  const entry = await ctx.db.get('waitlistEntries', entryId);
+  if (!entry) throw new Error('No waitlist entry has this id');
+  if (entry.status !== 'waiting') {
+    refuse({ code: 'alreadyPromoted', message: TEAM_MESSAGES.alreadyPromoted });
+  }
+  const season = await currentSeason(ctx, entry.seasonId);
+  if (!seasonHasRoom(season)) refuse({ code: 'noRoom', message: TEAM_MESSAGES.noRoom });
+  await assertTeamNameFree(ctx, season._id, entry.teamName, entry._id);
+  await assertNotRostered(ctx, season._id, entry.userId, null);
+  const promotedAt = Date.now();
+  // Promoted before the team is written, so the writer's waitlist check passes for this entry only.
+  await ctx.db.patch('waitlistEntries', entry._id, {
+    status: 'promoted',
+    promotedAt,
+    promotedByUserId,
+  });
+  await changeWaitlistCount(ctx, season._id, -1);
+  const teamId = await insertTeam(ctx, season, {
+    name: entry.teamName,
+    captainUserId: entry.userId,
+  });
+  await ctx.db.patch('waitlistEntries', entry._id, { promotedTeamId: teamId });
+  const after = await currentSeason(ctx, season._id);
+  return { teamId, teamCount: after.teamCount ?? 0, maxTeams: after.maxTeams };
+}
+
 export interface NewRosterEntry {
   userId: Id<'users'>;
   source: RosterEntrySource;
@@ -228,6 +396,7 @@ export async function addRosterEntry(
   if (entry.source !== 'placement') {
     await assertNotWaitingFreeAgent(ctx, team.seasonId, entry.userId);
   }
+  await assertNotWaitlisted(ctx, team.seasonId, entry.userId);
   await assertTeamHasRoom(ctx, team._id);
   const entryId = await ctx.db.insert('rosterEntries', {
     organizationId: team.organizationId,
@@ -329,6 +498,7 @@ export async function insertFreeAgent(
     refuse({ code: 'alreadyFreeAgent', message: TEAM_MESSAGES.alreadyFreeAgent });
   }
   await assertNotRostered(ctx, season._id, userId, null);
+  await assertNotWaitlisted(ctx, season._id, userId);
   const freeAgentId = await ctx.db.insert('freeAgents', {
     organizationId: season.organizationId,
     seasonId: season._id,
@@ -496,6 +666,8 @@ export async function acceptTeamInvite(
   if (invite?.status !== 'pending') throw new Error('Only a pending invite can be accepted');
   const team = await ctx.db.get('teams', invite.teamId);
   if (!team) throw new Error('No team has this id');
+  // A minor's entry skips the guardian's own checks, so a waiting captain's minor-only accept is refused here.
+  await assertNotWaitlisted(ctx, team.seasonId, userId);
   if (joinSelf) {
     await addRosterEntry(ctx, team, {
       userId,
@@ -546,6 +718,20 @@ async function countTeam(ctx: MutationCtx, seasonId: Id<'seasons'>): Promise<voi
   const teamCount =
     season.teamCount === undefined ? await recountTeams(ctx, seasonId) : season.teamCount + 1;
   await ctx.db.patch('seasons', seasonId, { teamCount });
+}
+
+// An unset counter is recounted, which already includes the change.
+async function changeWaitlistCount(
+  ctx: MutationCtx,
+  seasonId: Id<'seasons'>,
+  change: 1 | -1,
+): Promise<void> {
+  const season = await currentSeason(ctx, seasonId);
+  const waitlistCount =
+    season.waitlistCount === undefined
+      ? await recountWaiting(ctx, seasonId)
+      : season.waitlistCount + change;
+  await ctx.db.patch('seasons', seasonId, { waitlistCount });
 }
 
 /** `null` removes the limit. The range is checked by the caller; a limit below the registered teams is refused here. */
@@ -602,6 +788,28 @@ async function recountTeams(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<numb
     .withIndex('by_seasonId_and_sortName', (q) => q.eq('seasonId', seasonId))
     .take(BACKFILL_TEAM_COUNT_SCAN_LIMIT);
   return teams.length;
+}
+
+async function recountWaiting(ctx: ReadCtx, seasonId: Id<'seasons'>): Promise<number> {
+  const waiting = await ctx.db
+    .query('waitlistEntries')
+    .withIndex('by_seasonId_and_status_and_requestedAt', (q) =>
+      q.eq('seasonId', seasonId).eq('status', 'waiting'),
+    )
+    .take(BACKFILL_TEAM_COUNT_SCAN_LIMIT);
+  return waiting.length;
+}
+
+export async function backfillSeasonWaitlistCounts(ctx: MutationCtx): Promise<number> {
+  let backfilled = 0;
+  for (const season of await ctx.db.query('seasons').take(BACKFILL_TEAM_COUNT_SCAN_LIMIT)) {
+    if (season.waitlistCount !== undefined) continue;
+    await ctx.db.patch('seasons', season._id, {
+      waitlistCount: await recountWaiting(ctx, season._id),
+    });
+    backfilled++;
+  }
+  return backfilled;
 }
 
 export async function backfillSeasonTeamCounts(ctx: MutationCtx): Promise<number> {

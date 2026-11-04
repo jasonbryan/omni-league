@@ -132,7 +132,9 @@ function refusalOf(failure: unknown): unknown {
 }
 
 async function register(s: Setup, authUserId: string, name: string, slugs = SLUGS) {
-  return as(s, authUserId).mutation(api.teams.register, { ...slugs, name });
+  const result = await as(s, authUserId).mutation(api.teams.register, { ...slugs, name });
+  if (result.status !== 'registered') throw new Error('The team joined the waitlist');
+  return result;
 }
 
 async function rows(s: Setup) {
@@ -335,6 +337,7 @@ describe('seasons.getForRegistration', () => {
     minimumRosterSize: 4,
     isFull: false,
     freeAgent: null,
+    waitlist: null,
   };
 
   test('an unauthenticated caller gets the season with no team', async () => {

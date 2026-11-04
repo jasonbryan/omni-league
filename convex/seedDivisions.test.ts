@@ -25,6 +25,7 @@ const ZERO_BACKFILL = {
   leagueDivisions: 0,
   teamCounts: 0,
   pendingInviteCounts: 0,
+  waitlistCounts: 0,
 };
 
 beforeEach(() => {

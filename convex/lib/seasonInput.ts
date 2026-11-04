@@ -180,10 +180,17 @@ export function checkSeasonDates(
 export interface SeasonTeamLimit {
   teamCount?: number | undefined;
   maxTeams?: number | undefined;
+  waitlistCount?: number | undefined;
 }
 
-export function seasonIsFull({ teamCount, maxTeams }: SeasonTeamLimit): boolean {
-  return maxTeams !== undefined && (teamCount ?? 0) >= maxTeams;
+/** Room for one more team under the maximum: what promoting a waiting team needs. */
+export function seasonHasRoom({ teamCount, maxTeams }: SeasonTeamLimit): boolean {
+  return maxTeams === undefined || (teamCount ?? 0) < maxTeams;
+}
+
+/** Full for registration: while any team waits, a new team joins the waitlist behind it even when there is room. */
+export function seasonIsFull(season: SeasonTeamLimit): boolean {
+  return !seasonHasRoom(season) || (season.waitlistCount ?? 0) > 0;
 }
 
 /** `undefined` is no limit. */

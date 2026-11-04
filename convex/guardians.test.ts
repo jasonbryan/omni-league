@@ -549,9 +549,11 @@ describe('a guardian whose only entry in the season is a minor’s', () => {
       email: 'guardian@example.test',
     });
     expect(invited.token).not.toBe('');
-    const { teamId } = await s
+    const result = await s
       .as('guardian')
       .mutation(api.teams.register, { ...SLUGS, name: 'Rivera Rockets' });
+    expect(result.status).toBe('registered');
+    const teamId = result.status === 'registered' ? result.teamId : null;
     expect((await snapshot(s)).teams.find((team) => team._id === teamId)?.rosterCount).toBe(1);
   });
 

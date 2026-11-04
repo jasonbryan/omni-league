@@ -22,6 +22,7 @@ import { addCalendarDays, dateAtUtcMinus12 } from './lib/registration';
 import type { Role } from './lib/roles';
 import {
   backfillSeasonTeamCounts,
+  backfillSeasonWaitlistCounts,
   acceptTeamInvite,
   addMinorEntry,
   addRosterEntry,
@@ -33,11 +34,13 @@ import {
   insertTeamInvite,
   insertTeamWithCaptain,
   pendingTeamInvite,
+  registerTeamOrJoinWaitlist,
   removeRosterEntry,
   teamWithSortName,
 } from './lib/rosterWrites';
 import { findLeagueBySlugs, findSeasonBySlugs } from './lib/seasonLookup';
 import { seasonIsFull } from './lib/seasonInput';
+import { teamSortName } from './lib/teamInput';
 import { DEMO_LOGO_ORGANIZATION_SLUG, demoLogoBytes } from './seedAssets';
 import type { SeasonStatus } from './lib/seasonStatus';
 import type { Sport } from './lib/sports';
@@ -629,6 +632,7 @@ const resultValidator = v.object({
     ...divisionBackfilledValidator.fields,
     teamCounts: v.number(),
     pendingInviteCounts: v.number(),
+    waitlistCounts: v.number(),
   }),
   updated: v.object({ organizations: v.number() }),
 });
@@ -703,6 +707,7 @@ export const insertDemoData = internalMutation({
       ...divisionBackfilled,
       teamCounts: await backfillSeasonTeamCounts(ctx),
       pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
+      waitlistCounts: await backfillSeasonWaitlistCounts(ctx),
     };
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
@@ -906,6 +911,12 @@ export const DEMO_FULL_SEASON_TEAMS: readonly { name: string; captainEmail: stri
   { name: 'Pair of Aces', captainEmail: DEMO_CAPTAINS[0].email },
   { name: 'Two Tall', captainEmail: DEMO_CAPTAINS[1].email },
 ];
+
+/** Joins `DEMO_FULL_SEASON`'s waitlist once the season is full, inserted by team name once its captain's account exists. */
+export const DEMO_WAITLIST_ENTRY = {
+  teamName: 'Late Lobsters',
+  captainEmail: DEMO_CAPTAINS[2].email,
+} as const;
 
 /** Each team is inserted by name in `DEMO_TEAM_SEASON`, once its captain's account exists. */
 export const DEMO_TEAMS: readonly { name: string; captainEmail: string }[] = [
@@ -1182,10 +1193,36 @@ export const insertDemoTeams = internalMutation({
     const full = await findSeasonBySlugs(ctx, DEMO_FULL_SEASON);
     if (full) {
       inserted += await insertSeasonTeams(ctx, full.season._id, DEMO_FULL_SEASON_TEAMS, captains);
+      await insertDemoWaitlistEntry(ctx, full.season._id, captains);
     }
     return inserted;
   },
 });
+
+async function insertDemoWaitlistEntry(
+  ctx: MutationCtx,
+  seasonId: Id<'seasons'>,
+  captains: readonly { email: string; authUserId: string }[],
+): Promise<void> {
+  const { teamName, captainEmail } = DEMO_WAITLIST_ENTRY;
+  const authUserId = captains.find((captain) => captain.email === captainEmail)?.authUserId;
+  if (authUserId === undefined) return;
+  const seeded = await ctx.db
+    .query('waitlistEntries')
+    .withIndex('by_seasonId_and_sortName', (q) =>
+      q.eq('seasonId', seasonId).eq('sortName', teamSortName(teamName)),
+    )
+    .first();
+  if (seeded || (await teamWithSortName(ctx, seasonId, teamName))) return;
+  const user = await ctx.db
+    .query('users')
+    .withIndex('by_authUserId', (q) => q.eq('authUserId', authUserId))
+    .unique();
+  const season = await ctx.db.get('seasons', seasonId);
+  // Only a full season puts the team on the waitlist; any other would register it.
+  if (!user || !season || !seasonIsFull(season)) return;
+  await registerTeamOrJoinWaitlist(ctx, season, { name: teamName, captainUserId: user._id });
+}
 
 async function insertSeasonTeams(
   ctx: MutationCtx,
