@@ -7,6 +7,11 @@ import {
   type AgeGroup,
   type StandardLevel,
 } from './divisions';
+import {
+  HIDDEN_CHARACTER_MESSAGE,
+  hasControlOrBidiCharacter,
+  hasVisibleCharacter,
+} from './nameCharacters';
 import { ORGANIZATION_MESSAGES } from './organizationInput';
 import { isChoosableSlug } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX, type Sport } from './sports';
@@ -16,6 +21,7 @@ export const MAX_LEAGUE_NAME_LENGTH = 100;
 export type LeagueInputCode =
   | 'nameEmpty'
   | 'nameTooLong'
+  | 'nameInvisible'
   | 'slugEmpty'
   | 'slugInvalid'
   | 'slugTaken'
@@ -43,6 +49,7 @@ export const LEAGUE_MESSAGES = {
   nameEmpty: 'Enter the league’s name.',
   nameTooLong: (length: number) =>
     `Use ${MAX_LEAGUE_NAME_LENGTH} characters or fewer. This name has ${length}.`,
+  nameInvisible: HIDDEN_CHARACTER_MESSAGE,
   slugEmpty: 'Enter a slug for the league.',
   slugInvalid: ORGANIZATION_MESSAGES.slugInvalid,
   slugTaken: (slug: string) =>
@@ -69,7 +76,7 @@ export function checkLeagueName(
   name: string,
 ): { ok: true; name: string } | { ok: false; error: LeagueInputError } {
   const trimmed = name.trim();
-  if (trimmed === '') {
+  if (!hasVisibleCharacter(trimmed)) {
     return {
       ok: false,
       error: { field: 'name', code: 'nameEmpty', message: LEAGUE_MESSAGES.nameEmpty },
@@ -83,6 +90,12 @@ export function checkLeagueName(
         code: 'nameTooLong',
         message: LEAGUE_MESSAGES.nameTooLong(trimmed.length),
       },
+    };
+  }
+  if (hasControlOrBidiCharacter(trimmed)) {
+    return {
+      ok: false,
+      error: { field: 'name', code: 'nameInvisible', message: LEAGUE_MESSAGES.nameInvisible },
     };
   }
   return { ok: true, name: trimmed };

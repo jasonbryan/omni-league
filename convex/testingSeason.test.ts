@@ -121,6 +121,22 @@ describe('testing:seedSeason', () => {
     ]);
   });
 
+  test.each([
+    ['soccer', 'coed-7v7', 12],
+    ['soccer', 'coed-7v7', 7.5],
+    ['beach volleyball', 'sand-2s', 7],
+  ])(
+    'refuses a %s league’s season of %s players per side',
+    async (_, leagueSlug, playersPerSide) => {
+      const t = await seeded();
+      await expect(
+        t.mutation(internal.testing.seedSeason, { ...SEASON, leagueSlug, playersPerSide }),
+      ).rejects.toThrow(/is not a format of/);
+      expect(await seasons(t)).toEqual([]);
+    },
+    30_000,
+  );
+
   test('inserts a published season when asked', async () => {
     const t = await seeded();
     await t.mutation(internal.testing.seedSeason, { ...SEASON, status: 'published' });
@@ -277,6 +293,15 @@ describe('testing:seedSeasons', () => {
     });
     expect(counter).toBe(rows.filter((row) => row.status === 'published').length);
     expect(counter).toBe(7);
+  }, 30_000);
+
+  test('refuses a format outside the league’s sport, writing none of the batch', async () => {
+    const t = await seeded();
+    const list = [...batch(2), { ...batch(1)[0], slug: 'too-big', playersPerSide: 12 }];
+    await expect(t.mutation(internal.testing.seedSeasons, args(list))).rejects.toThrow(
+      /is not a format of soccer/,
+    );
+    expect(await seasons(t)).toEqual([]);
   }, 30_000);
 
   test('throws, writing nothing, for an unknown league', async () => {

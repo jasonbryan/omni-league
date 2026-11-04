@@ -1,5 +1,10 @@
 // Imports only `convex/lib` files that import nothing from the server, so the app can import it.
 import { LEAGUE_MESSAGES } from './leagueInput';
+import {
+  HIDDEN_CHARACTER_MESSAGE,
+  hasControlOrBidiCharacter,
+  hasVisibleCharacter,
+} from './nameCharacters';
 import { isChoosableSlug } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX } from './sports';
 
@@ -27,6 +32,7 @@ export type SeasonDateField = 'startDate' | 'endDate' | 'registrationDeadline';
 export type SeasonInputCode =
   | 'nameEmpty'
   | 'nameTooLong'
+  | 'nameInvisible'
   | 'slugEmpty'
   | 'slugInvalid'
   | 'slugTaken'
@@ -62,6 +68,7 @@ export const SEASON_MESSAGES = {
   nameEmpty: 'Enter the season’s name.',
   nameTooLong: (length: number) =>
     `Use ${MAX_SEASON_NAME_LENGTH} characters or fewer. This name has ${length}.`,
+  nameInvisible: HIDDEN_CHARACTER_MESSAGE,
   slugEmpty: 'Enter a slug for the season.',
   slugInvalid: LEAGUE_MESSAGES.slugInvalid,
   slugTaken: (slug: string, leagueName: string) =>
@@ -105,7 +112,7 @@ export function checkSeasonName(
   name: string,
 ): { ok: true; name: string } | { ok: false; error: SeasonInputError } {
   const trimmed = name.trim();
-  if (trimmed === '') {
+  if (!hasVisibleCharacter(trimmed)) {
     return {
       ok: false,
       error: { field: 'name', code: 'nameEmpty', message: SEASON_MESSAGES.nameEmpty },
@@ -119,6 +126,12 @@ export function checkSeasonName(
         code: 'nameTooLong',
         message: SEASON_MESSAGES.nameTooLong(trimmed.length),
       },
+    };
+  }
+  if (hasControlOrBidiCharacter(trimmed)) {
+    return {
+      ok: false,
+      error: { field: 'name', code: 'nameInvisible', message: SEASON_MESSAGES.nameInvisible },
     };
   }
   return { ok: true, name: trimmed };

@@ -69,6 +69,38 @@ describe('checkSeasonName', () => {
   });
 });
 
+describe('checkSeasonName hidden characters', () => {
+  test.each([
+    ['a right-to-left override', 'Fall \u202E2026'],
+    ['a left-to-right mark', 'Fall\u200E2026'],
+    ['a null character', 'Fall\u00002026'],
+  ])('refuses a name with %s', (_, name) => {
+    expect(checkSeasonName(name)).toEqual({
+      ok: false,
+      error: {
+        field: 'name',
+        code: 'nameInvisible',
+        message: 'Remove the hidden or control characters from the name.',
+      },
+    });
+  });
+
+  test('asks for a name when it has only zero-width spaces', () => {
+    expect(checkSeasonName('\u200B\u200B')).toEqual({
+      ok: false,
+      error: { field: 'name', code: 'nameEmpty', message: 'Enter the season’s name.' },
+    });
+  });
+
+  test.each([
+    ['a ZWJ emoji', 'Pride \u{1F3F3}\uFE0F\u200D\u{1F308}'],
+    ['a tag-sequence flag', '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} Fall'],
+    ['a ZWNJ word', 'می\u200Cخواهم'],
+  ])('accepts a name with %s', (_, name) => {
+    expect(checkSeasonName(name)).toEqual({ ok: true, name });
+  });
+});
+
 describe('checkSeasonSlug', () => {
   test('accepts a slug and refuses an empty one', () => {
     expect(checkSeasonSlug('fall-2026')).toBeNull();
