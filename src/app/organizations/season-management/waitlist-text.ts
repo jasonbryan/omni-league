@@ -60,7 +60,6 @@ export function promotedText(
   };
 }
 
-/** The note over a waitlist that has teams waiting: how to make room, or that the room is for promoting. */
 export function waitlistNote(teamCount: number, maxTeams: number | undefined): AlertText {
   if (maxTeams !== undefined && teamCount >= maxTeams) {
     return {

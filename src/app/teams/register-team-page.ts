@@ -475,7 +475,6 @@ export class RegisterTeamPage {
     return state;
   });
 
-  /** The form joins the waitlist while the season is full (`seasonIsFull`). */
   protected readonly joinsWaitlist = computed(() => this.state() === 'full');
 
   /** The mutation's answer, shown until the query holds the new entry. */
