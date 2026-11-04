@@ -412,6 +412,8 @@ describe('leagues.update', () => {
   test.each([
     ['an empty name', { name: '   ' }, 'name', 'nameEmpty'],
     ['a name over 100 characters', { name: 'x'.repeat(101) }, 'name', 'nameTooLong'],
+    ['a name with a bidi override', { name: 'Sunday\u202ESand' }, 'name', 'nameInvisible'],
+    ['a name of only zero-width characters', { name: '\u200B\u200B' }, 'name', 'nameEmpty'],
     ['a format outside the sport', { playersPerSide: 9 }, 'format', 'formatInvalid'],
     [
       'a minimum below the format',

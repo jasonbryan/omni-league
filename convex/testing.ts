@@ -25,7 +25,7 @@ import {
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
-import { playersPerSideOfSport } from './lib/divisions';
+import { formatLabel, isPlayersPerSideOfSport, playersPerSideOfSport } from './lib/divisions';
 import type { Sport } from './lib/sports';
 import {
   insertLeague,
@@ -398,11 +398,14 @@ function withPlayersPerSide<S extends { playersPerSide?: number | undefined }>(
   league: Doc<'leagues'>,
   season: S,
 ): Omit<S, 'playersPerSide'> & { playersPerSide: number } {
-  return {
-    ...season,
-    playersPerSide:
-      season.playersPerSide ?? league.playersPerSide ?? smallestPlayersPerSide(league.sport),
-  };
+  const playersPerSide =
+    season.playersPerSide ?? league.playersPerSide ?? smallestPlayersPerSide(league.sport);
+  if (!isPlayersPerSideOfSport(league.sport, playersPerSide)) {
+    throw new Error(
+      `${formatLabel(playersPerSide)} is not a format of ${league.sport}, the sport of league ${league.slug}`,
+    );
+  }
+  return { ...season, playersPerSide };
 }
 
 // Through the roster writer, so a seeded team keeps the counters and the one-team rule. Skips the registration window.

@@ -87,6 +87,8 @@ export interface SeasonSeed {
   endDate: string;
   /** Defaults to a date long past, so the season is not open for registration. */
   registrationDeadline?: string;
+  /** Defaults to 4, which suits soccer and beach volleyball. */
+  playersPerSide?: number;
   status?: 'draft' | 'published';
 }
 
@@ -126,8 +128,8 @@ export async function seedSeasons(
       startDate: season.startDate,
       endDate: season.endDate,
       registrationDeadline: season.registrationDeadline ?? '2025-12-01',
-      playersPerSide: 4,
-      minimumRosterSize: 4,
+      playersPerSide: season.playersPerSide ?? 4,
+      minimumRosterSize: season.playersPerSide ?? 4,
       status: season.status ?? 'published',
     })),
   });
