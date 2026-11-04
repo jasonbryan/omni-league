@@ -186,12 +186,13 @@ export const restore = mutation({
     const invite = await ctx.db.get('invites', inviteId);
     if (!invite) throw new Error('Not allowed');
     await requireOrgAdmin(ctx, invite.organizationId);
-    if (invite.status !== 'revoked' || invite.revokedAt === undefined) {
+    if (invite.status !== 'revoked') {
       throw new ConvexError({
         code: 'notRevoked',
         message: INVITE_MESSAGES.restoreNotRevoked,
       } satisfies InviteRestoreError);
     }
+    if (invite.revokedAt === undefined) throw new Error('A revoked invite has no revokedAt');
     const now = Date.now();
     if (now - invite.revokedAt > INVITE_RESTORE_WINDOW_MS) {
       throw new ConvexError({

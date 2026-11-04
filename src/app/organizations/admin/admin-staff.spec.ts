@@ -110,20 +110,31 @@ describe('AdminStaff', () => {
   type Opened = Awaited<ReturnType<typeof openAdmin>>;
   let o: Opened;
   let page: HTMLElement;
+  let timeoutsFaked: boolean;
 
   beforeEach(() => {
+    timeoutsFaked = false;
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
   });
   afterEach(() => {
-    vi.useRealTimers();
+    // Restored first: a spy made on a faked timer would otherwise put the fake back.
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   async function open(
     lists: { members?: unknown[]; pending?: unknown[]; leagues?: unknown[] } = {},
   ) {
     o = await openAdmin(ROUTES, URL);
+    if (timeoutsFaked) {
+      // The harness flush waits on a real setTimeout, which a faked one never fires.
+      o.flush = async () => {
+        await o.harness.fixture.whenStable();
+        await vi.advanceTimersByTimeAsync(0);
+        await o.harness.fixture.whenStable();
+      };
+    }
     page = o.page;
     o.acceptToken();
     o.subscription(GET_ADMIN_CONTEXT)!.emit(COASTAL);
@@ -1110,6 +1121,7 @@ describe('AdminStaff', () => {
       expect(text(revokeButton(0))).toBe('Revoking…');
       expect(revokeButton(0).getAttribute('aria-disabled')).toBe('true');
       expect(revokeButton(0).hasAttribute('disabled')).toBe(false);
+      expect(revokeButton(0).classList.contains('opacity-50')).toBe(false);
       expect(text(revokeButton(1))).toBe('Revoke the invite to r.castillo@example.com');
       expect(revokeButton(1).getAttribute('aria-disabled')).toBe('true');
       expect(revokeButton(1).classList.contains('opacity-50')).toBe(true);
@@ -1340,34 +1352,28 @@ describe('AdminStaff', () => {
     });
 
     describe('the 10-minute window', () => {
-      let windowTimers: { callback: () => void; handle: number }[];
+      const MINUTE = 60 * 1000;
 
       beforeEach(() => {
-        windowTimers = [];
-        const real = window.setTimeout.bind(window);
-        vi.spyOn(window, 'setTimeout').mockImplementation(((
-          callback: () => void,
-          delay?: number,
-        ) => {
-          const handle = real(callback, delay);
-          if (delay === INVITE_RESTORE_WINDOW_MS) windowTimers.push({ callback, handle });
-          return handle;
-        }) as typeof window.setTimeout);
+        timeoutsFaked = true;
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        vi.setSystemTime(NOW);
       });
 
-      async function windowPasses() {
-        windowTimers.at(-1)!.callback();
+      async function minutesPass(minutes: number) {
+        await vi.advanceTimersByTimeAsync(minutes * MINUTE);
         await o.flush();
       }
+      const windowPasses = () => minutesPass(INVITE_RESTORE_WINDOW_MS / MINUTE);
 
       it('starts when the revoke succeeds, not before', async () => {
         await openFull();
         revokeButton(0).click();
         await o.flush();
-        expect(windowTimers).toHaveLength(0);
+        const before = vi.getTimerCount();
         o.convex.calls[0].resolve(null);
         await o.flush();
-        expect(windowTimers).toHaveLength(1);
+        expect(vi.getTimerCount()).toBe(before + 1);
       });
 
       it('takes Undo away when it passes, and the revoked status stays', async () => {
@@ -1406,18 +1412,55 @@ describe('AdminStaff', () => {
         expect(undoButton()).toBeDefined();
         await windowPasses();
         expect(undoButton()).toBeUndefined();
-        expect(text(statusBox())).toContain("You're offline. Nothing was sent.");
+        const box = statusBox()!;
+        expect(box.getAttribute('role')).toBe('alert');
+        expect(text(box.querySelector('[data-slot="alert-title"]'))).toBe(
+          `Invite to ${DANA} could not be restored.`,
+        );
+        expect(text(box.querySelector('[data-slot="alert-description"]'))).toBe(
+          INVITE_MESSAGES.restoreWindowPassed,
+        );
+        expect(text(box)).not.toContain('connected');
       });
 
-      it('restarts with the next revoke, which gets a full window', async () => {
+      it('moves focus to the replacing alert when the offline alert had it', async () => {
         await revokeDana();
-        revokeButton(0).click();
+        await goOffline();
+        await pressUndo();
+        expect(document.activeElement).toBe(statusBox());
+        await windowPasses();
+        expect(document.activeElement).toBe(statusBox());
+      });
+
+      it('leaves the offline alert alone while an Undo is in flight', async () => {
+        await revokeDana();
+        await goOffline();
+        await pressUndo();
+        vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+        window.dispatchEvent(new Event('online'));
+        TestBed.tick();
+        await o.flush();
+        await pressUndo();
+        expect(text(undoButton())).toBe('Undoing…');
+        await windowPasses();
+        expect(text(undoButton())).toBe('Undoing…');
+      });
+
+      it('restarts with the next revoke: the first window ends nothing, and the second ends at its own time', async () => {
+        await revokeDana(PENDING);
+        await minutesPass(4);
+        revokeButton(1).click();
         await o.flush();
         o.convex.calls[1].resolve(null);
         await o.flush();
-        expect(windowTimers).toHaveLength(2);
+        expect(text(statusBox()!.querySelector('[data-slot="alert-title"]'))).toBe(
+          'Invite to r.castillo@example.com revoked.',
+        );
+        await minutesPass(6);
         expect(undoButton()).toBeDefined();
-        await windowPasses();
+        await minutesPass(3);
+        expect(undoButton()).toBeDefined();
+        await minutesPass(1);
         expect(undoButton()).toBeUndefined();
       });
 
@@ -1437,10 +1480,15 @@ describe('AdminStaff', () => {
       });
 
       it('stops with the page', async () => {
+        const started = vi.spyOn(window, 'setTimeout');
         await revokeDana();
-        const clear = vi.spyOn(window, 'clearTimeout');
+        const call = started.mock.calls.findIndex(
+          ([, delay]) => delay === INVITE_RESTORE_WINDOW_MS,
+        );
+        expect(call).toBeGreaterThanOrEqual(0);
+        const cleared = vi.spyOn(window, 'clearTimeout');
         await o.harness.navigateByUrl('/app');
-        expect(clear).toHaveBeenCalledWith(windowTimers[0].handle);
+        expect(cleared).toHaveBeenCalledWith(started.mock.results[call].value);
       });
     });
 

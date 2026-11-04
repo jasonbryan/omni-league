@@ -87,7 +87,7 @@ const ROLE_LABEL: Record<Role, string> = {
 /**
  * Revoke acts at once, with no confirmation: a status above the list says so and takes focus, because the button that had it is gone. The status carries Undo, which `invites.restore` allows
  * for 10 minutes after the revoke (the server enforces it, the page hides Undo when the time is up) and which makes the link already sent work again.
- * A failure that is not offline came from the server, so retrying the same press would fail the same way: Undo goes, and the alert says so instead of blaming the connection.
+ * A failure that is not offline came from the server, so retrying the same press would fail the same way, and Undo goes.
  * Every query here is org-admin only; the area's parent has already shown the no-access view to anyone else, so none is asked for them.
  */
 @Component({
@@ -332,11 +332,11 @@ const ROLE_LABEL: Record<Role, string> = {
                           type="button"
                           data-slot="button"
                           [class]="
-                            revokeDimmed() ? destructiveButton + ' opacity-50' : destructiveButton
+                            revokeDimmed() && revokingId() !== row.inviteId
+                              ? destructiveButton + ' opacity-50'
+                              : destructiveButton
                           "
-                          [attr.aria-disabled]="
-                            revokeDimmed() || revokingId() === row.inviteId ? 'true' : null
-                          "
+                          [attr.aria-disabled]="revokeDimmed() ? 'true' : null"
                           (click)="revoke(row.inviteId, row.email)"
                         >
                           @if (revokingId() === row.inviteId) {
@@ -495,7 +495,6 @@ export class AdminStaff {
   private readonly undoWindowOpen = signal(false);
   private undoWindowTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // An Undo already sent stays on screen until the server answers.
   protected readonly undoTarget = computed(() => {
     const notice = this.notice();
     const offered = this.undoWindowOpen() || this.restoring();
@@ -504,6 +503,9 @@ export class AdminStaff {
 
   private readonly panel = viewChild(StaffInvitePanel);
   private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
+  private readonly noticeHost = viewChild<unknown, ElementRef<HTMLElement>>('noticeAlert', {
+    read: ElementRef,
+  });
   private readonly undoButton = viewChild<ElementRef<HTMLButtonElement>>('undoButton');
 
   constructor() {
@@ -589,9 +591,15 @@ export class AdminStaff {
   }
 
   private endUndoWindow(): void {
-    const undoHadFocus = this.undoButton()?.nativeElement.matches(':focus') ?? false;
+    const notice = this.notice();
+    const replacing = notice?.kind === 'restoreOffline' && !this.restoring();
+    const holdsFocus = replacing
+      ? (this.noticeHost()?.nativeElement.matches(':focus-within') ?? false)
+      : (this.undoButton()?.nativeElement.matches(':focus') ?? false);
     this.undoWindowOpen.set(false);
-    if (undoHadFocus) this.focusNotice();
+    if (replacing)
+      this.notice.set({ kind: 'refused', email: notice.email, reason: 'windowPassed' });
+    if (holdsFocus) this.focusNotice();
   }
 
   private show(notice: Notice): void {

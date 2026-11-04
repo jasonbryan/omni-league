@@ -551,7 +551,10 @@ describe('invites.restore', () => {
     const s = await setup();
     const { inviteId } = await revokedInvite(s, 'dana@example.com');
     await s.t.run((ctx) => ctx.db.patch('invites', inviteId, { revokedAt: undefined }));
-    await expect(restore(s, inviteId)).rejects.toMatchObject({ data: { code: 'notRevoked' } });
+    const failure = await restore(s, inviteId).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('has no revokedAt');
+    expect((failure as { data?: unknown }).data).toBeUndefined();
     expect((await allInvites(s))[0].status).toBe('revoked');
   });
 
