@@ -1,6 +1,6 @@
 # Convex adapter
 
-Signal-based access to Convex for components and services. Code outside this folder imports only from `index.ts`. Only this folder may import `convex/browser`; the `no-restricted-imports` lint rule enforces that.
+Signal-based access to Convex for components and services. Code outside this folder imports from `index.ts`, with two exceptions: startup code (`app.config.ts`, `app.routes.ts`, `core/auth/`, `core/service-worker/`, `core/*.ts`, `shell/update-prompt.ts`) imports the module it needs directly, such as `convex-client.ts`, because the barrel would put every lazy page's adapter code in the initial bundle; and server-only code and specs import `server-query-loader.ts` directly. Lint enforces the first. Only this folder may import `convex/browser`; the `no-restricted-imports` lint rule enforces that.
 
 Function references come from this folder too: `api` (typed from `convex/_generated/api.d.ts`) and `getFunctionName`. A runtime import of `convex/_generated/api` or `convex/server` would put Convex's server code (its schema builder) in the initial bundle, so outside specs both may be named only by `import type`, which `no-restricted-imports` also enforces. `api.spec.ts` checks that both give the names `convex/server` gives, so a Convex update that changes how references carry their name fails it.
 
@@ -89,6 +89,8 @@ readonly me = injectQuery(api.users.me, () => (this.auth.convexAuthenticated() ?
 
 On `RenderMode.Server` routes, query helpers fetch once over HTTP during the render, and the browser picks up the result through `TransferState`. No `ConvexClient` is created on the server, so no WebSocket opens.
 
+- **Server config only.** `provideConvexServerQueries()` (`server-query-loader.ts`, listed in `app.config.server.ts`) provides `CONVEX_SERVER_QUERIES`, the loader that `injectQuery` uses on the server. The barrel does not re-export `server-query-loader`, so the browser build never ships `ConvexHttpClient`. Without the provider, every server query fails with an error naming it, so the page renders its 503 server-error view rather than an empty page.
+
 - **Anonymous only.** The server path uses a `ConvexHttpClient` per render and never calls `setAuth`; `CONVEX_AUTH` is ignored on the server. The HTML is public and CDN-cacheable, so no token or per-user data may reach it.
 - **Args come only from the route and URL** (params, query string), so the server and the browser compute the same args, and so the same `TransferState` key, `cvx:<function>:<JSON args>`.
 - **One fetch per function and args per render.** Helpers asking for the same pair share it. The render waits for every query (`PendingTasks`) before it serialises.
@@ -104,4 +106,4 @@ On `RenderMode.Server` routes, query helpers fetch once over HTTP during the ren
 
 Provide a fake through `CONVEX_CLIENT` (helpers) or `CONVEX_CLIENT_FACTORY` (the provider). `testing/fake-convex-client.ts` implements only the `ConvexClientLike` surface. It starts connected; `setConnected(false)` drops the socket (`{ neverConnected: true }` for a client that never connected) and notifies `subscribeToConnectionState` callbacks. Stub `navigator.onLine` with `vi.spyOn(window.navigator, 'onLine', 'get')` and dispatch `offline` or `online` on `window`; the `online` signal reads the browser after the first render, so call `TestBed.tick()` first. Call `TestBed.tick()` before asserting on subscriptions: they open in an effect.
 
-For the server path, set `PLATFORM_ID` to `'server'`, provide `CONVEX_URL`, and provide `CONVEX_HTTP_CLIENT_FACTORY` returning `testing/fake-convex-http-client.ts`. `server-render.spec.ts` shows a full `renderApplication` render. A spec that calls `renderApplication` must restore the global DOM classes after each test with `testing/dom-globals.ts`: the render swaps jsdom's `Event`, `Node` and the rest for domino's, and spec files share one global (`isolate: false`).
+For the server path, set `PLATFORM_ID` to `'server'`, provide `CONVEX_URL` and `provideConvexServerQueries()`, and provide `CONVEX_HTTP_CLIENT_FACTORY` (from `server-query-loader.ts`) returning `testing/fake-convex-http-client.ts`. `server-render.spec.ts` shows a full `renderApplication` render. A spec that calls `renderApplication` must restore the global DOM classes after each test with `testing/dom-globals.ts`: the render swaps jsdom's `Event`, `Node` and the rest for domino's, and spec files share one global (`isolate: false`).

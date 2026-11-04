@@ -3,13 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { makeFunctionReference } from 'convex/server';
 import { convexToJson } from 'convex/values';
 import { api } from '../../../../../convex/_generated/api';
-import {
-  CONVEX_CLIENT_FACTORY,
-  CONVEX_HTTP_CLIENT_FACTORY,
-  CONVEX_URL,
-  injectQuery,
-  provideConvex,
-} from './index';
+import { CONVEX_CLIENT_FACTORY, CONVEX_URL, injectQuery, provideConvex } from './index';
+import { provideConvexServerQueries, CONVEX_HTTP_CLIENT_FACTORY } from './server-query-loader';
 import { OFFLINE_SAVED_QUERIES } from './offline-saved-queries';
 import { savedCopyKey } from './saved-copies';
 import { FakeConvexClient } from './testing/fake-convex-client';
@@ -239,6 +234,7 @@ describe('injectQuery saved copies (server)', () => {
         provideConvex(),
         { provide: PLATFORM_ID, useValue: 'server' },
         { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+        provideConvexServerQueries(),
         { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => http },
       ],
     });

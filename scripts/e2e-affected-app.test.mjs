@@ -19,6 +19,12 @@ const pr = { event: 'pull_request', base: 'main' };
 const FULL = 'FULL';
 const read = (file) => readFileSync(join(repoRoot, file), 'utf8');
 const specFile = (name) => `e2e/${name}.spec.ts`;
+const CLIENT_ROUTE_FILES = [
+  'src/app/app.routes.ts',
+  'src/app/app.routes.app.ts',
+  'src/app/app.routes.invites.ts',
+];
+const ROUTE_TABLE_FILES = [...CLIENT_ROUTE_FILES, 'src/app/app.routes.server.ts'];
 const withAlways = (...filters) => [...new Set([...ALWAYS, ...filters])].sort();
 
 /**
@@ -193,7 +199,7 @@ describe('the specs of the importers outside a hand rule', () => {
       const importers = new Map();
       for (const file of files) {
         if (!file.startsWith('src/app/') || isUnitTestFile(file)) continue;
-        if (file === 'src/app/app.routes.ts' || file === 'src/app/app.routes.server.ts') continue;
+        if (ROUTE_TABLE_FILES.includes(file)) continue;
         for (const match of read(file).matchAll(importerEdge)) {
           const base = posix.normalize(posix.join(posix.dirname(file), match[2]));
           const target = candidates(base).find((candidate) => files.has(candidate));
@@ -259,8 +265,7 @@ describe('the specs of the importers outside a hand rule', () => {
         'server route table',
       ]);
       for (const file of [
-        'src/app/app.routes.ts',
-        'src/app/app.routes.server.ts',
+        ...ROUTE_TABLE_FILES,
         'src/app/core/data/convex/offline-saved-queries.ts',
         'src/app/notifications/notifications-page.ts',
       ]) {
@@ -404,6 +409,25 @@ describe('the admin area specs', () => {
 
 describe('the route tables', () => {
   /**
+   * Written apart from the rule: the route file's text with each `loadChildren: () => import('./file').then((m) => m.name)`
+   * replaced by `children: [...]`, the body of that file's `export const name: Routes = [...]`.
+   * @param {string} file
+   * @returns {string}
+   */
+  function inlineLoadChildren(file) {
+    const lazy =
+      /\bloadChildren:\s*\(\)\s*=>\s*import\('(\.[^']+)'\)\.then\(\(m\)\s*=>\s*m\.(\w+)\)/g;
+    return read(file).replace(lazy, (_, specifier, name) => {
+      const target = `${posix.normalize(posix.join(posix.dirname(file), specifier))}.ts`;
+      const body = inlineLoadChildren(target).match(
+        new RegExp(String.raw`^export const ${name}: Routes = \[\n([\s\S]*?)^\];$`, 'm'),
+      );
+      assert.ok(body, `${target} exports no route array ${name}`);
+      return `children: [\n${body[1]}]`;
+    });
+  }
+
+  /**
    * Written apart from the rule: each `path:` of the file with the full path of its route, and the guards on that route.
    * @param {string} text
    * @returns {{ path: string, guards: string[] }[]}
@@ -432,7 +456,7 @@ describe('the route tables', () => {
     return routes;
   }
 
-  const routes = readRoutes(read('src/app/app.routes.ts'));
+  const routes = readRoutes(inlineLoadChildren('src/app/app.routes.ts'));
 
   const GUARD_SPECS = {
     requireSignedIn: ['after-sign-in'],
@@ -449,7 +473,9 @@ describe('the route tables', () => {
       'sign-in',
       'sign-up',
       'invites/accept',
+      'invites/accept/',
       'teams/join',
+      'teams/join/',
       'app',
       'app/',
       'app/organizations/new',
@@ -510,7 +536,7 @@ describe('the route tables', () => {
     for (const route of signedIn) {
       assert.ok(ROUTE_SPECS[route.path].includes('after-sign-in'), route.path);
     }
-    assert.ok(ROUTE_SPECS['invites/accept'].includes('accept-invite'));
+    assert.ok(ROUTE_SPECS['invites/accept/'].includes('accept-invite'));
   });
 
   it('names only specs that exist', () => {
@@ -519,13 +545,15 @@ describe('the route tables', () => {
     }
   });
 
-  it('runs every spec in ROUTE_SPECS, navigation-focus, and not-found for the route table, not the full suite', () => {
-    const specs = specsFor(['src/app/app.routes.ts']);
-    assert.ok(!specs.includes(FULL));
-    for (const name of [...Object.values(ROUTE_SPECS).flat(), 'navigation-focus', 'not-found']) {
-      assert.ok(specs.includes(specFile(name)), name);
-    }
-  });
+  for (const file of CLIENT_ROUTE_FILES) {
+    it(`runs every spec in ROUTE_SPECS, navigation-focus, and not-found for ${file}, not the full suite`, () => {
+      const specs = specsFor([file]);
+      assert.ok(!specs.includes(FULL));
+      for (const name of [...Object.values(ROUTE_SPECS).flat(), 'navigation-focus', 'not-found']) {
+        assert.ok(specs.includes(specFile(name)), name);
+      }
+    });
+  }
 
   it('runs the route table specs, cache-key, and every spec that imports a raw HTTP helper for the server route table', () => {
     const specs = specsFor(['src/app/app.routes.server.ts']);
@@ -637,6 +665,7 @@ describe('the files under src/app that run the full suite', () => {
     'src/app/core/data/convex/convex-client.ts': MAIN_SERVER,
     'src/app/core/data/convex/convex-url.ts': MAIN_SERVER,
     'src/app/core/data/convex/errors.ts': MAIN_SERVER,
+    'src/app/core/data/convex/function-name.ts': MAIN_SERVER,
     'src/app/core/data/convex/index.ts': MAIN_SERVER,
     'src/app/core/data/convex/inject-call.ts': MAIN_SERVER,
     'src/app/core/data/convex/inject-query.ts': MAIN_SERVER,

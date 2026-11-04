@@ -11,14 +11,8 @@ import {
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { makeFunctionReference } from 'convex/server';
 import { convexToJson } from 'convex/values';
-import {
-  CONVEX_CLIENT_FACTORY,
-  CONVEX_HTTP_CLIENT_FACTORY,
-  CONVEX_URL,
-  injectQuery,
-  provideConvex,
-  skipToken,
-} from './index';
+import { CONVEX_CLIENT_FACTORY, CONVEX_URL, injectQuery, provideConvex, skipToken } from './index';
+import { provideConvexServerQueries, CONVEX_HTTP_CLIENT_FACTORY } from './server-query-loader';
 import { FakeConvexClient } from './testing/fake-convex-client';
 import { FakeConvexHttpClient } from './testing/fake-convex-http-client';
 
@@ -120,6 +114,7 @@ describe('injectQuery with args from component inputs (server render)', () => {
         provideConvex(),
         { provide: PLATFORM_ID, useValue: 'server' },
         { provide: CONVEX_URL, useValue: DEPLOYMENT_URL },
+        provideConvexServerQueries(),
         { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => http },
       ],
     });

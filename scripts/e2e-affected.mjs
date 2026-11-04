@@ -74,7 +74,8 @@ const LEAGUE_MANAGEMENT = [
 
 export const SESSION = '@session';
 
-// The key is the route's full path from `src/app/app.routes.ts`, with each parent's `path` joined by `/`, so a parent's empty child is `app/`.
+// The key is the route's full path from `src/app/app.routes.ts` and the route files it loads with `loadChildren`, with each parent's
+// `path` joined by `/`, so a parent's empty child is `app/`.
 // A path with `canActivate` lists a spec that exercises the guard.
 export const ROUTE_SPECS = {
   '': ['install', 'pwa', 'pwa-kill-switch'],
@@ -90,7 +91,9 @@ export const ROUTE_SPECS = {
   'sign-up': ['sign-up', 'auth-session', 'after-sign-in'],
   'sign-in': ['sign-in', 'auth-session', 'after-sign-in'],
   'invites/accept': ['accept-invite'],
+  'invites/accept/': ['accept-invite'],
   'teams/join': TEAM_JOIN,
+  'teams/join/': TEAM_JOIN,
   app: ['auth-session'],
   'app/': ['after-sign-in', 'auth-session', 'app-leagues', 'app-teams'],
   'app/account': ['account-settings', 'after-sign-in'],
@@ -271,7 +274,12 @@ const NON_IMPORTER = [
 ];
 const isNonImporter = (file) => NON_IMPORTER.some((pattern) => pattern.test(file));
 // A route table only wires a path to its page. Counting it as an importer would give every file it imports the route table's specs.
-const ROUTE_TABLES = new Set(['src/app/app.routes.ts', 'src/app/app.routes.server.ts']);
+const CLIENT_ROUTE_TABLES = [
+  'src/app/app.routes.ts',
+  'src/app/app.routes.app.ts',
+  'src/app/app.routes.invites.ts',
+];
+const ROUTE_TABLES = new Set([...CLIENT_ROUTE_TABLES, 'src/app/app.routes.server.ts']);
 // `import type`, `export … from`, `export * from`, and multi-line named imports all end in `from '…'`.
 const FROM_SPECIFIER = /\bfrom\s*(['"])([^'"\n]+)\1/g;
 const SIDE_EFFECT_IMPORT = /\bimport\s*(['"])([^'"\n]+)\1/g;
@@ -733,7 +741,7 @@ export const AREAS = [
     // The route table decides which page opens at each path, and the guards decide who may open it. app.config.ts imports it and runs
     // the full suite, so it takes no importer specs.
     name: 'route table',
-    test: (file) => file === 'src/app/app.routes.ts',
+    test: (file) => CLIENT_ROUTE_TABLES.includes(file),
     specs: ROUTE_TABLE_SPECS,
     widen: false,
   },

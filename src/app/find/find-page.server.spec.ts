@@ -11,13 +11,13 @@ import { provideRouter } from '@angular/router';
 import { getFunctionName, type FunctionReference } from 'convex/server';
 import { App } from '../app';
 import { routes } from '../app.routes';
+import { CONVEX_URL, provideConvex } from '../core/data/convex';
 import {
+  provideConvexServerQueries,
   CONVEX_HTTP_CLIENT_FACTORY,
   CONVEX_SERVER_QUERY_TIMEOUT_MS,
-  CONVEX_URL,
-  provideConvex,
   type ConvexHttpClientLike,
-} from '../core/data/convex';
+} from '../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import { at, COED_RESULTS, NO_RESULTS, OPEN_DAY } from './testing/find-data';
@@ -100,6 +100,7 @@ async function render(
           provideClientHydration(),
           provideConvex(),
           { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+          provideConvexServerQueries(),
           { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => client },
           { provide: CONVEX_SERVER_QUERY_TIMEOUT_MS, useValue: timeoutMs },
           { provide: Meta, useFactory: metaInRenderDocument },

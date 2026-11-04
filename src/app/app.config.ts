@@ -4,7 +4,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { routes } from './app.routes';
 import { provideClientHydration } from '@angular/platform-browser';
 import { AuthService } from './core/auth/auth.service';
-import { provideConvex, provideConvexAuth } from './core/data/convex';
+import { provideConvex, provideConvexAuth } from './core/data/convex/convex-client';
 import {
   SERVICE_WORKER_BUILD,
   serviceWorkerRegistration,

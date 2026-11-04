@@ -11,13 +11,13 @@ import { provideRouter } from '@angular/router';
 import { getFunctionName, type FunctionReference } from 'convex/server';
 import { App } from '../app';
 import { routes } from '../app.routes';
+import { CONVEX_URL, provideConvex } from '../core/data/convex';
 import {
+  provideConvexServerQueries,
   CONVEX_HTTP_CLIENT_FACTORY,
   CONVEX_SERVER_QUERY_TIMEOUT_MS,
-  CONVEX_URL,
-  provideConvex,
   type ConvexHttpClientLike,
-} from '../core/data/convex';
+} from '../core/data/convex/server-query-loader';
 import { snapshotDomGlobals } from '../core/data/convex/testing/dom-globals';
 import { PUBLIC_FRAME, publicFrame } from '../public-layout/testing/frame';
 import {
@@ -77,6 +77,7 @@ async function render(
   path: string,
   query: (name: string, args: unknown) => Promise<unknown>,
   timeoutMs?: number,
+  { serverQueries = true }: { serverQueries?: boolean } = {},
 ): Promise<Rendered> {
   const queries: { name: string; args: unknown }[] = [];
   const client: ConvexHttpClientLike = {
@@ -104,6 +105,7 @@ async function render(
           provideClientHydration(),
           provideConvex(),
           { provide: CONVEX_URL, useValue: 'https://happy-otter-123.convex.cloud' },
+          ...(serverQueries ? [provideConvexServerQueries()] : []),
           { provide: CONVEX_HTTP_CLIENT_FACTORY, useValue: () => client },
           ...(timeoutMs === undefined
             ? []
@@ -314,6 +316,19 @@ describe('OrganizationPage server render', () => {
     expect(head.querySelector('link[rel="canonical"], meta[property^="og:"]')).toBeNull();
     expect(html).not.toContain('internal-db');
     expect(html).not.toContain('SECRET');
+  });
+
+  it('renders the server-error view with 503 and asks for no query when the server config leaves out the query loader', async () => {
+    const { body, responseInit, queries } = await render(
+      '/organizations/gulf-coast-sport-social',
+      gulfCoast,
+      undefined,
+      { serverQueries: false },
+    );
+    expect(responseInit.status).toBe(503);
+    expect(responseInit.headers.get('Cache-Control')).toBe('no-store');
+    expect(text(body.querySelector('main h1'))).toBe('This page is temporarily unavailable');
+    expect(queries).toEqual([]);
   });
 
   it('renders the server-error view with 503 and no-store when the query times out', async () => {

@@ -41,6 +41,13 @@ const CONVEX_BROWSER_PATH = {
   message: 'Use the Convex adapter in src/app/core/data/convex/ (docs/conventions/angular.md).',
 };
 
+const CONVEX_BARREL_PATTERN = {
+  regex: String.raw`(^|/)data/convex(/index(\.js)?)?$`,
+  message:
+    'Startup code imports the Convex adapter module it needs (for example core/data/convex/convex-client), not the barrel: the barrel puts the adapter code of every lazy page in the initial bundle.',
+  allowTypeImports: true,
+};
+
 export default defineConfig([
   globalIgnores([
     'convex/_generated/',
@@ -161,6 +168,31 @@ export default defineConfig([
         {
           paths: [...CONVEX_SERVER_PATHS, ...REACT_PATHS],
           patterns: [...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
+        },
+      ],
+    },
+  },
+
+  // esbuild puts every file a barrel re-exports into the chunk of the code that imports it, so a
+  // value import of the barrel from eager code ships every lazy page's adapter code at startup.
+  // This block replaces the options of the src/**/*.ts block above for these files, so it repeats
+  // its restrictions.
+  {
+    files: [
+      'src/app/app.config.ts',
+      'src/app/app.routes.ts',
+      'src/app/core/auth/**/*.ts',
+      'src/app/core/service-worker/**/*.ts',
+      'src/app/core/*.ts',
+      'src/app/shell/update-prompt.ts',
+    ],
+    ignores: ['src/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [CONVEX_BROWSER_PATH, ...CONVEX_SERVER_PATHS, ...REACT_PATHS],
+          patterns: [CONVEX_BARREL_PATTERN, ...CONVEX_SERVER_PATTERNS, ...REACT_PATTERNS],
         },
       ],
     },

@@ -23,8 +23,3 @@ export {
 export { injectOfflineTitle, offlineLead, offlineTitle, type NotDone } from './offline-title';
 export { injectAction, injectMutation, type CallRef } from './inject-call';
 export { injectQuery, skipToken, type QueryRef, type SkipToken } from './inject-query';
-export {
-  CONVEX_HTTP_CLIENT_FACTORY,
-  CONVEX_SERVER_QUERY_TIMEOUT_MS,
-  type ConvexHttpClientLike,
-} from './server-query-loader';

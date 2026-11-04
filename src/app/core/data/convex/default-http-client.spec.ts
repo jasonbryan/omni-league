@@ -1,7 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { makeFunctionReference } from 'convex/server';
-import { CONVEX_HTTP_CLIENT_FACTORY, CONVEX_SERVER_QUERY_TIMEOUT_MS } from './index';
-import { fetchWithTimeout } from './server-query-loader';
+import {
+  fetchWithTimeout,
+  CONVEX_HTTP_CLIENT_FACTORY,
+  CONVEX_SERVER_QUERY_TIMEOUT_MS,
+} from './server-query-loader';
 
 const listTeams = makeFunctionReference<'query', { leagueId: string }, string[]>('teams:list');
 

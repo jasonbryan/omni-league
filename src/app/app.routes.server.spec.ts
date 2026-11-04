@@ -1,3 +1,4 @@
+import type { Route, Routes } from '@angular/router';
 import { RenderMode } from '@angular/ssr';
 import { AccountPage } from './account/account-page';
 import { NotificationsPage } from './notifications/notifications-page';
@@ -32,6 +33,10 @@ import { SignUpPage } from './sign-up/sign-up-page';
 
 const PUBLIC_PAGE_CACHE = 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
 const CLIENT_SHELL_CACHE = 'public, max-age=0, must-revalidate';
+
+async function lazyChildren(route: Route | undefined): Promise<Routes> {
+  return (await route?.loadChildren?.()) as Routes;
+}
 
 function directives(value: string): Map<string, string | true> {
   return new Map(
@@ -212,35 +217,42 @@ describe('Route tables', () => {
     expect(route?.canActivate).toEqual([redirectSignedIn]);
   });
 
-  it('invites/accept lazy-loads the invite page, behind the guard that takes the token out of the URL', async () => {
-    const route = routes.find((r) => r.path === 'invites/accept');
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(AcceptInvitePage);
-    expect(route?.title).toBe('Staff invite | Omni League');
-    expect(route?.canActivate).toEqual([captureInviteToken]);
-  });
+  for (const [path, page, title, guard] of [
+    ['invites/accept', AcceptInvitePage, 'Staff invite | Omni League', captureInviteToken],
+    ['teams/join', JoinTeamPage, 'Team invite | Omni League', captureTeamInviteToken],
+  ] as const) {
+    it(`${path} lazy-loads one titled child behind the guard that takes the token out of the URL, rerun on every navigation`, async () => {
+      const route = routes.find((r) => r.path === path);
+      expect(route?.component).toBeUndefined();
+      expect(route?.loadComponent).toBeUndefined();
+      expect(route?.title).toBeUndefined();
+      expect(route?.canActivate).toBeUndefined();
+      expect(route?.runGuardsAndResolvers).toBeUndefined();
+      const [child, ...rest] = await lazyChildren(route);
+      expect(rest).toEqual([]);
+      expect(child?.path).toBe('');
+      expect(child?.title).toBe(title);
+      expect(child?.canActivate).toEqual([guard]);
+      expect(child?.runGuardsAndResolvers).toBe('always');
+      expect(await child?.loadComponent?.()).toBe(page);
+    });
+  }
 
-  it("each invite page's response sends no referrer", () => {
+  it('each invite page is a Client route whose response sends no referrer', () => {
     for (const path of ['invites/accept', 'teams/join']) {
       const invite = serverRoutes.find((r) => r.path === path);
+      expect(invite?.renderMode, path).toBe(RenderMode.Client);
       const headers = new Headers(invite?.renderMode === RenderMode.Client ? invite.headers : {});
       expect(headers.get('Referrer-Policy'), path).toBe('no-referrer');
     }
   });
 
-  it('teams/join lazy-loads the join page, behind the guard that takes the team token out of the URL', async () => {
-    const route = routes.find((r) => r.path === 'teams/join');
-    expect(route?.component).toBeUndefined();
-    expect(await route?.loadComponent?.()).toBe(JoinTeamPage);
-    expect(route?.title).toBe('Team invite | Omni League');
-    expect(route?.canActivate).toEqual([captureTeamInviteToken]);
-  });
-
-  it('app has the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
+  it('app lazy-loads the guarded home page, the guarded account settings page, the guarded notifications page, the guarded create-organization page, the guarded league management page, the guarded season management page, the guarded admin area, the unguarded register routes, the guarded team page, and its own not-found route', async () => {
     const app = routes.find((r) => r.path === 'app');
     expect(app?.component).toBeUndefined();
     expect(app?.loadComponent).toBeUndefined();
     expect(app?.canActivate).toBeUndefined();
+    expect(app?.children).toBeUndefined();
     const [
       account,
       settings,
@@ -254,7 +266,7 @@ describe('Route tables', () => {
       team,
       notFound,
       ...rest
-    ] = app?.children ?? [];
+    ] = await lazyChildren(app);
     expect(rest).toEqual([]);
     expect(settings?.path).toBe('account');
     expect(settings?.title).toBe('Account settings | Omni League');
@@ -296,6 +308,7 @@ describe('Route tables', () => {
     expect(await account?.loadComponent?.()).toBe(AccountPage);
     // The page itself sends a signed-out visitor to sign in, after it has shown an unknown season as not found.
     expect(register?.path).toBe('register/:orgSlug/:leagueSlug/:seasonSlug/team');
+    expect(register?.title).toBe('Register a team | Omni League');
     expect(register?.canActivate).toBeUndefined();
     expect(await register?.loadComponent?.()).toBe(RegisterTeamPage);
     expect(registerFreeAgent?.path).toBe('register/:orgSlug/:leagueSlug/:seasonSlug/free-agent');
@@ -303,6 +316,7 @@ describe('Route tables', () => {
     expect(registerFreeAgent?.canActivate).toBeUndefined();
     expect(await registerFreeAgent?.loadComponent?.()).toBe(RegisterFreeAgentPage);
     expect(team?.path).toBe('teams/:teamId');
+    expect(team?.title).toBe('Team | Omni League');
     expect(team?.canActivate).toEqual([requireSignedIn]);
     expect(await team?.loadComponent?.()).toBe(TeamPage);
     expect(notFound?.path).toBe('**');

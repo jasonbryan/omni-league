@@ -12,7 +12,7 @@ import { NavigationEnd, Router } from '@angular/router';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { filter } from 'rxjs';
 import { ChangesInFlight } from '../changes-in-flight';
-import { ConvexConnection } from '../data/convex';
+import { ConvexConnection } from '../data/convex/connection';
 import { PageSafety } from './page-safety';
 import {
   mayReloadForUnrecoverable,

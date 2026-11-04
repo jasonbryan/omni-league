@@ -4,14 +4,20 @@ import {
   PendingTasks,
   TransferState,
   inject,
+  makeEnvironmentProviders,
   makeStateKey,
+  type EnvironmentProviders,
 } from '@angular/core';
 import { ConvexHttpClient } from 'convex/browser';
 import type { FunctionReference } from 'convex/server';
 import { convexToJson, type Value } from 'convex/values';
-import { getFunctionName } from './api';
 import { CONVEX_URL } from './convex-url';
-import type { TransferredQuery } from './transfer';
+import {
+  CONVEX_SERVER_QUERIES,
+  type ConvexServerQueries,
+  type ServerQueryResult,
+} from './inject-query';
+import { transferKey, type TransferredQuery } from './transfer';
 
 export interface ConvexHttpClientLike {
   query: ConvexHttpClient['query'];
@@ -45,13 +51,6 @@ export const CONVEX_HTTP_CLIENT_FACTORY = new InjectionToken<(url: string) => Co
   },
 );
 
-export function transferKey(query: FunctionReference<'query'>, argsKey: string): string {
-  return `cvx:${getFunctionName(query)}:${argsKey}`;
-}
-
-export type ServerQueryResult =
-  { value: unknown; error?: undefined } | { value?: undefined; error: Error };
-
 const FAILED_MESSAGE = 'Convex query failed during server render';
 
 class LoaderTimeoutError extends Error {
@@ -60,7 +59,7 @@ class LoaderTimeoutError extends Error {
 
 /** One instance per render: Angular SSR bootstraps a new application per request, so nothing is shared across requests. */
 @Injectable({ providedIn: 'root' })
-export class ConvexServerQueryLoader {
+export class ConvexServerQueryLoader implements ConvexServerQueries {
   private readonly url = inject(CONVEX_URL);
   private readonly createClient = inject(CONVEX_HTTP_CLIENT_FACTORY);
   private readonly timeoutMs = inject(CONVEX_SERVER_QUERY_TIMEOUT_MS);
@@ -138,4 +137,10 @@ export class ConvexServerQueryLoader {
   private timeoutError(): Error {
     return new LoaderTimeoutError(`Convex query timed out after ${this.timeoutMs} ms`);
   }
+}
+
+export function provideConvexServerQueries(): EnvironmentProviders {
+  return makeEnvironmentProviders([
+    { provide: CONVEX_SERVER_QUERIES, useExisting: ConvexServerQueryLoader },
+  ]);
 }
