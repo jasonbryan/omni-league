@@ -45,6 +45,8 @@ import {
   largestRoster,
   setSeasonMaxRosterSize,
   setSeasonMaxTeams,
+  waitingEntryInSeason,
+  waitlistPosition,
 } from './lib/rosterWrites';
 import { getCurrentUser } from './lib/users';
 
@@ -411,6 +413,7 @@ const getForRegistrationReturns = v.union(
       v.null(),
       v.object({ status: freeAgentStatusValidator, registeredAt: v.number() }),
     ),
+    waitlist: v.union(v.null(), v.object({ teamName: v.string(), position: v.number() })),
   }),
 );
 
@@ -428,6 +431,7 @@ export const getForRegistration = query({
     const entry = user ? await adultEntryInSeason(ctx, season._id, user._id) : null;
     const team = entry ? await ctx.db.get('teams', entry.teamId) : null;
     const freeAgent = user ? await freeAgentInSeason(ctx, season._id, user._id) : null;
+    const waiting = user ? await waitingEntryInSeason(ctx, season._id, user._id) : null;
     return {
       organizationName: organization.name,
       leagueName: league.name,
@@ -452,6 +456,10 @@ export const getForRegistration = query({
       freeAgent: freeAgent && {
         status: freeAgent.status,
         registeredAt: freeAgent.registeredAt,
+      },
+      waitlist: waiting && {
+        teamName: waiting.teamName,
+        position: await waitlistPosition(ctx, waiting),
       },
     };
   },

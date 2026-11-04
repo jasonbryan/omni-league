@@ -63,6 +63,7 @@ import type * as lib_tenantWrites from "../lib/tenantWrites.js";
 import type * as lib_testOnly from "../lib/testOnly.js";
 import type * as lib_userName from "../lib/userName.js";
 import type * as lib_users from "../lib/users.js";
+import type * as lib_waitlist from "../lib/waitlist.js";
 import type * as locations from "../locations.js";
 import type * as memberships from "../memberships.js";
 import type * as organizations from "../organizations.js";
@@ -77,6 +78,7 @@ import type * as teamInvites from "../teamInvites.js";
 import type * as teams from "../teams.js";
 import type * as testing from "../testing.js";
 import type * as users from "../users.js";
+import type * as waitlist from "../waitlist.js";
 
 import type {
   ApiFromModules,
@@ -140,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   "lib/testOnly": typeof lib_testOnly;
   "lib/userName": typeof lib_userName;
   "lib/users": typeof lib_users;
+  "lib/waitlist": typeof lib_waitlist;
   locations: typeof locations;
   memberships: typeof memberships;
   organizations: typeof organizations;
@@ -154,6 +157,7 @@ declare const fullApi: ApiFromModules<{
   teams: typeof teams;
   testing: typeof testing;
   users: typeof users;
+  waitlist: typeof waitlist;
 }>;
 
 /**

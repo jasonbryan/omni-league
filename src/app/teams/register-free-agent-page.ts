@@ -20,6 +20,7 @@ import {
   lucideArrowRight,
   lucideCalendarX,
   lucideHourglass,
+  lucideListOrdered,
   lucideLoaderCircle,
   lucideUser,
   lucideUsers,
@@ -56,7 +57,7 @@ import {
   registrationClosedLine,
   type RegisterTeamState,
 } from './register-team-state';
-import { registerFreeAgentPath, teamPath } from './team-paths';
+import { registerFreeAgentPath, registerTeamPath, teamPath } from './team-paths';
 
 export const FREE_AGENT_MESSAGES = {
   failedTitle: 'You could not be registered.',
@@ -68,12 +69,32 @@ export const FREE_AGENT_MESSAGES = {
   onTeamTitle: (team: string) => `You’re on ${team} in this season.`,
   onTeamDescription:
     'Each person plays on one team per season, so there’s no need to register as a free agent.',
+  waitlistedTitle: (team: string, position: number) =>
+    `You’re on the waitlist with ${team}, position ${position}.`,
+  waitlistedDescription:
+    'While your team waits, you can’t also register as a free agent in this season.',
+  waitlistedLink: 'See your waitlist place',
   closedTitle: 'Registration for this season is closed.',
   closedInvite: 'To play on a team that has already registered, ask its captain for an invite.',
 } as const;
 
 /** What the page shows after a refused submit, before the query catches up. */
-type Refusal = 'closed' | 'onTeam' | 'waiting';
+type Refusal = 'closed' | 'onTeam' | 'waiting' | 'waitlisted';
+
+interface WaitlistPlace {
+  teamName: string;
+  position: number;
+}
+
+function waitlistPlaceOf(failure: unknown): WaitlistPlace | null {
+  if (!(failure instanceof ConvexError)) return null;
+  const data: unknown = failure.data;
+  if (typeof data !== 'object' || data === null) return null;
+  const { teamName, position } = data as { teamName?: unknown; position?: unknown };
+  return typeof teamName === 'string' && typeof position === 'number'
+    ? { teamName, position }
+    : null;
+}
 
 type FormAlert = 'offline' | 'failed';
 
@@ -89,6 +110,8 @@ function refusalOf(failure: unknown): Refusal | null {
       return 'onTeam';
     case 'alreadyFreeAgent':
       return 'waiting';
+    case 'onWaitlist':
+      return 'waitlisted';
     default:
       return null;
   }
@@ -113,6 +136,7 @@ function refusalOf(failure: unknown): Refusal | null {
       lucideArrowRight,
       lucideCalendarX,
       lucideHourglass,
+      lucideListOrdered,
       lucideLoaderCircle,
       lucideUser,
       lucideUsers,
@@ -163,6 +187,35 @@ function refusalOf(failure: unknown): Refusal | null {
                       >Go to {{ team.name
                       }}<ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
                     /></a>
+                  }
+                }
+                @case ('waitlisted') {
+                  @if (waitlistPlace(); as waitlist) {
+                    <div
+                      #cardAlert
+                      data-slot="alert"
+                      [attr.role]="refusal() ? 'alert' : 'status'"
+                      tabindex="-1"
+                      [class]="cardAlertClass"
+                    >
+                      <ng-icon name="lucideListOrdered" aria-hidden="true" />
+                      <div data-slot="alert-title" [class]="alertTitle">
+                        {{ messages.waitlistedTitle(waitlist.teamName, waitlist.position) }}
+                      </div>
+                      <div data-slot="alert-description" [class]="alertDescription">
+                        {{ messages.waitlistedDescription }}
+                      </div>
+                    </div>
+                    <a
+                      [routerLink]="teamRouteHref()"
+                      data-slot="button"
+                      [class]="outlineButton + ' mt-4 w-full'"
+                      ><ng-icon
+                        name="lucideListOrdered"
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />{{ messages.waitlistedLink }}</a
+                    >
                   }
                 }
                 @case ('waiting') {
@@ -314,6 +367,11 @@ export class RegisterFreeAgentPage {
     return publicSeasonPath(orgSlug, leagueSlug, seasonSlug);
   });
 
+  protected readonly teamRouteHref = computed(() => {
+    const { orgSlug, leagueSlug, seasonSlug } = this.slugs();
+    return registerTeamPath(orgSlug, leagueSlug, seasonSlug);
+  });
+
   private readonly sessionKnown = signal(false);
 
   // Asked signed out as well, so an unknown season shows the not-found view before any sign-in. Signed in, it waits until Convex has
@@ -330,6 +388,12 @@ export class RegisterFreeAgentPage {
     source: this.slugs,
     computation: () => null,
   });
+  /** The refusal's place, shown until the query holds the caller's waiting entry. */
+  private readonly refusedPlace = linkedSignal<unknown, WaitlistPlace | null>({
+    source: this.slugs,
+    computation: () => null,
+  });
+  protected readonly waitlistPlace = computed(() => this.season()?.waitlist ?? this.refusedPlace());
   /** The time `register` answered, shown until the query holds the new row. */
   private readonly registeredAt = linkedSignal<unknown, number | null>({
     source: this.slugs,
@@ -351,6 +415,7 @@ export class RegisterFreeAgentPage {
     const state = first === 'full' ? 'form' : first;
     if (state === 'signed-out') return 'loading';
     if (state !== 'form') return state;
+    if (this.refusal() === 'waitlisted') return 'waitlisted';
     if (this.registeredAt() !== null || this.refusal() === 'waiting') return 'waiting';
     return this.refusal() === 'closed' ? 'closed' : state;
   });
@@ -433,6 +498,7 @@ export class RegisterFreeAgentPage {
       return;
     }
     // The query answers with the caller's row, team, or the closed season soon after; the card's alert takes focus once it shows.
+    if (refusal === 'waitlisted') this.refusedPlace.set(waitlistPlaceOf(failure));
     this.refusal.set(refusal);
     this.focusCardAlert.set(true);
   }

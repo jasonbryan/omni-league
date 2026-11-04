@@ -175,6 +175,15 @@ const FACT_ICON =
                     <p class="mt-2 text-sm text-muted-foreground">{{ card.note }}</p>
                     <div class="mt-5 flex flex-col gap-2">
                       <a
+                        [routerLink]="registerTeamHref()"
+                        data-slot="button"
+                        [class]="registerButton"
+                        ><ng-icon
+                          name="lucideClock"
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />Join the waitlist</a
+                      ><a
                         [routerLink]="registerFreeAgentHref()"
                         data-slot="button"
                         [class]="freeAgentButton"

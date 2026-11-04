@@ -513,7 +513,7 @@ test.describe('a full season', () => {
   const seasonPagePath = (tenant: Tenant, season: string) =>
     `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/${season}`;
 
-  test('the season page says the season is full and offers only the free-agent route', async ({
+  test('the season page says the season is full and offers the waitlist and the free-agent route', async ({
     page,
     request,
   }, testInfo) => {
@@ -523,7 +523,7 @@ test.describe('a full season', () => {
     if (testInfo.project.name === 'chromium-desktop') {
       const { html } = await fetchRawHtml(request, path);
       expect(html).toContain('This season is full');
-      expect(html).not.toContain(`href="${registerPath(tenant, FULL)}"`);
+      expect(html).toContain(`href="${registerPath(tenant, FULL)}"`);
       expect(html).toContain(
         `href="/app/register/${tenant.slug}/${LEAGUE_SLUG}/${FULL}/free-agent"`,
       );
@@ -532,16 +532,20 @@ test.describe('a full season', () => {
     const card = page.locator('#registration');
     await expect(card).toContainText('This season is full');
     await expect(card).toContainText(
-      'It takes 2 teams, and every place is taken. Free agents can still register until',
+      'Join the waitlist and an organizer offers you a place if one opens. Registration closes',
     );
     await expect(card.getByRole('link', { name: 'Register a team' })).toHaveCount(0);
+    await expect(card.getByRole('link', { name: 'Join the waitlist' })).toHaveAttribute(
+      'href',
+      registerPath(tenant, FULL),
+    );
     await expect(card.getByRole('link', { name: 'Register as a free agent' })).toBeVisible();
     await expect(page.getByTestId('season-phase')).toHaveText('Full');
     await expectAccessible(page);
-    await screenshot(page, testInfo, '143-season-full');
+    await screenshot(page, testInfo, '145-season-full-waitlist');
   });
 
-  test('the register route shows the full state with the free-agent link, and registers nothing', async ({
+  test('the register route offers the waitlist form, and sends nothing until it is submitted', async ({
     page,
   }, testInfo) => {
     const tenant = await seed();
@@ -552,18 +556,13 @@ test.describe('a full season', () => {
       socket.on('framesent', (frame) => sent.push(String(frame.payload)));
     });
     await page.goto(registerPath(tenant, FULL));
-    const card = page.locator('main [data-slot="alert"]');
-    await expect(card).toContainText('This season is full.');
-    await expect(card).toContainText(
-      `${LEAGUE} takes 2 teams in Full Season, and every place is taken.`,
-    );
-    await expect(teamName(page)).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Register as a free agent' })).toHaveAttribute(
-      'href',
-      `/app/register/${tenant.slug}/${LEAGUE_SLUG}/${FULL}/free-agent`,
-    );
+    const note = page.locator('main form [data-slot="alert"]');
+    await expect(note).toContainText('This season is full, so your team joins the waitlist.');
+    await expect(teamName(page)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Join the waitlist' })).toBeVisible();
+    await expect(registerButton(page)).toHaveCount(0);
     await expectAccessible(page);
-    await screenshot(page, testInfo, '143-register-full');
+    await screenshot(page, testInfo, '145-register-join-waitlist');
     expect(sent.filter((frame) => frame.includes('teams:register'))).toEqual([]);
   });
 

@@ -121,6 +121,7 @@ export class SeasonLimits {
   readonly maxRosterSize = input<number | undefined>(undefined);
   readonly minimumRosterSize = input.required<number>();
   readonly largestRoster = input<LargestRoster | undefined>(undefined);
+  readonly waitlistCount = input(0);
 
   protected readonly panel = PANEL;
   protected readonly outlineButton = OUTLINE_BUTTON;
@@ -198,7 +199,12 @@ export class SeasonLimits {
   protected savedLimit(field: Limit, value: number | null): void {
     this.editing.set(null);
     this.savedText.set(
-      field === 'maxTeams' ? maxTeamsSavedText(value) : maxRosterSizeSavedText(value),
+      field === 'maxTeams'
+        ? maxTeamsSavedText(value, {
+            teamCount: this.teamCount(),
+            waitlistCount: this.waitlistCount(),
+          })
+        : maxRosterSizeSavedText(value),
     );
     afterNextRender(() => this.savedNotice()?.focus(), { injector: this.injector });
   }

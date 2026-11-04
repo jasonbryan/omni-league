@@ -19,10 +19,26 @@ export function maxTeamsDescription(teamCount: number): string {
     : range;
 }
 
-export function maxTeamsSavedText(maxTeams: number | null): AlertText {
-  return maxTeams === null
-    ? { title: 'Maximum teams removed.', description: 'There’s no limit now.' }
-    : { title: 'Maximum teams saved.', description: `The season takes up to ${maxTeams} teams.` };
+/** While teams wait, new teams still join the waitlist, so the text says to promote them into the room the change made. */
+export function maxTeamsSavedText(
+  maxTeams: number | null,
+  { teamCount, waitlistCount }: { teamCount: number; waitlistCount: number } = {
+    teamCount: 0,
+    waitlistCount: 0,
+  },
+): AlertText {
+  if (maxTeams === null) {
+    return { title: 'Maximum teams removed.', description: 'There’s no limit now.' };
+  }
+  const room = maxTeams - teamCount;
+  const promote =
+    waitlistCount > 0 && room > 0
+      ? ` Teams on the waitlist keep their place: promote them to fill the ${room === 1 ? 'place' : `${room} places`}.`
+      : '';
+  return {
+    title: 'Maximum teams saved.',
+    description: `The season takes up to ${maxTeams} teams.${promote}`,
+  };
 }
 
 export function maxRosterSizeSummary(maxRosterSize: number | undefined): string {

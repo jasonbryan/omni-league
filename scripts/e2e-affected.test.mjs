@@ -445,6 +445,20 @@ describe('selectSpecs: mapped areas', () => {
     }
   });
 
+  it('maps the waitlist modules, the roster writer, the season management page, and the team pages to the waitlist spec', () => {
+    for (const file of [
+      'convex/waitlist.ts',
+      'convex/lib/waitlist.ts',
+      'convex/lib/rosterWrites.ts',
+      'src/app/organizations/season-management/season-waitlist-panel.ts',
+      'src/app/teams/register-team-page.ts',
+    ]) {
+      const specs = specsFor([file]);
+      assert.ok(!specs.includes('FULL'), file);
+      assert.ok(specs.includes('e2e/waitlist.spec.ts'), file);
+    }
+  });
+
   it('maps convex/seasons.ts to the league page and league management specs', () => {
     const specs = specsFor(['convex/seasons.ts']);
     for (const name of [

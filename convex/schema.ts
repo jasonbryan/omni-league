@@ -8,6 +8,7 @@ import { roleValidator } from './lib/roles';
 import { rosterEntrySourceValidator, rosterEntryStatusValidator } from './lib/rosterEntry';
 import { seasonStatusValidator } from './lib/seasonStatus';
 import { formatValidator, sportCountsValidator, sportValidator } from './lib/sports';
+import { waitlistEntryStatusValidator } from './lib/waitlist';
 
 export default defineSchema({
   users: defineTable({
@@ -159,6 +160,8 @@ export default defineSchema({
     maxTeams: v.optional(v.number()),
     /** Absent means no limit; when set it is at least `minimumRosterSize`. */
     maxRosterSize: v.optional(v.number()),
+    /** The `waiting` waitlist entries, kept by `convex/lib/rosterWrites.ts`; absent on a season written before the waitlist existed, which has none. */
+    waitlistCount: v.optional(v.number()),
   })
     .index('by_leagueId_and_slug', ['leagueId', 'slug'])
     .index('by_leagueId_and_startDate', ['leagueId', 'startDate'])
@@ -246,6 +249,26 @@ export default defineSchema({
     .index('by_seasonId_and_status_and_registeredAt', ['seasonId', 'status', 'registeredAt'])
     .index('by_seasonId_and_userId', ['seasonId', 'userId'])
     .index('by_userId_and_status', ['userId', 'status']),
+
+  // Written only through `convex/lib/rosterWrites.ts`, which keeps the season's `waitlistCount`. A waiting entry is not a team or a
+  // roster entry, so it carries no fee; promotion turns it into a team.
+  waitlistEntries: defineTable({
+    organizationId: v.id('organizations'),
+    seasonId: v.id('seasons'),
+    /** The captain. */
+    userId: v.id('users'),
+    teamName: v.string(),
+    // `teamName` lowercased: a team name is unique across the season's teams and waiting entries.
+    sortName: v.string(),
+    status: waitlistEntryStatusValidator,
+    requestedAt: v.number(),
+    promotedTeamId: v.optional(v.id('teams')),
+    promotedAt: v.optional(v.number()),
+    promotedByUserId: v.optional(v.id('users')),
+  })
+    .index('by_seasonId_and_status_and_requestedAt', ['seasonId', 'status', 'requestedAt'])
+    .index('by_seasonId_and_userId', ['seasonId', 'userId'])
+    .index('by_seasonId_and_sortName', ['seasonId', 'sortName']),
 
   // An endpoint is an unguessable capability URL only its browser holds, so presenting it is proof
   // enough to move its row to the caller.

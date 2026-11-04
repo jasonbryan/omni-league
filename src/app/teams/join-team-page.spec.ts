@@ -380,6 +380,27 @@ describe('JoinTeamPage', () => {
       expect(sessionStorage.getItem(TEAM_INVITE_TOKEN_KEY)).toBeNull();
     });
 
+    it('a waitlisted captain: names the waiting team and its position, no form, and a link to the account', async () => {
+      const { page } = await refuse(
+        new ConvexError({
+          code: 'onWaitlist',
+          teamName: 'Late Lobsters',
+          position: 2,
+          message: "You're on the waitlist with Late Lobsters in this season.",
+        }),
+      );
+      const { alert, title, description } = alertOf(page);
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect([title, description]).toEqual([
+        'You’re on the waitlist with Late Lobsters in this season.',
+        'Late Lobsters is at position 2. While it waits, you can’t join another team in this season or add a minor to one. Leaving the waitlist isn’t possible yet.',
+      ]);
+      expect(document.activeElement).toBe(alert);
+      expect(page.querySelector('form[aria-label="Accept the invite"]')).toBeNull();
+      expect(page.querySelector('button')).toBeNull();
+      expect(links(page)).toEqual([['Go to your account', '/app']]);
+    });
+
     it('on another team in the season: names that team, disables "Join the roster myself", offers the minor, and keeps the token', async () => {
       const { page } = await refuse(
         new ConvexError({

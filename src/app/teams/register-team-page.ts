@@ -22,6 +22,7 @@ import {
   lucideCalendarX,
   lucideCircleAlert,
   lucideHourglass,
+  lucideListOrdered,
   lucideLoaderCircle,
   lucideUsers,
 } from '@ng-icons/lucide';
@@ -70,22 +71,32 @@ export const REGISTER_MESSAGES = {
   onTeamDescription:
     'Each person plays on one team per season, so there’s nothing to register here.',
   closedTitle: 'Registration for this season is closed.',
-  fullTitle: TEAM_MESSAGES.seasonFull,
-  fullDescription: (league: string, season: string, maxTeams: number | undefined) => {
-    const taken =
-      maxTeams === undefined
-        ? `Every place in ${season} is taken`
-        : `${league} takes ${maxTeams} teams in ${season}, and every place is taken`;
-    return `${taken}. You can still register as a free agent, and an organizer may place you on a team.`;
+  waitlistTitle: 'This season is full, so your team joins the waitlist.',
+  waitlistDescription:
+    'Waiting teams keep their place in line. If a place opens, an organizer moves a team from the waitlist into the season, and you become its captain.',
+  waitlistedTitle: (team: string, position: number) =>
+    `${team} is on the waitlist, position ${position}.`,
+  waitlistedDescription: (position: number) => {
+    const ahead =
+      position <= 1
+        ? 'Your team is first in line.'
+        : position === 2
+          ? 'One team is ahead of yours.'
+          : `${position - 1} teams are ahead of yours.`;
+    return `${ahead} If an organizer gives your team a place, it appears under Your teams, and you can invite your players.`;
   },
-  fullLink: 'Register as a free agent',
   waitingTitle: 'You’re waiting to be placed on a team.',
   waitingDescription: TEAM_MESSAGES.waitingFreeAgent,
   waitingLink: 'View your free-agent registration',
 } as const;
 
 /** What the page shows after a refused submit, before the query catches up. */
-type Refusal = 'closed' | 'full' | 'onTeam' | 'waiting';
+type Refusal = 'closed' | 'onTeam' | 'waiting' | 'waitlisted';
+
+interface WaitlistPlace {
+  teamName: string;
+  position: number;
+}
 
 type FormAlert = 'offline' | 'failed';
 
@@ -94,10 +105,22 @@ interface NameRefusal {
   message: string;
 }
 
+function checkedName(name: string): string {
+  const checked = checkTeamName(name);
+  return checked.ok ? checked.name : name;
+}
+
 function refusalData(failure: unknown): Record<string, unknown> | null {
   if (!(failure instanceof ConvexError)) return null;
   const data: unknown = failure.data;
   return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+}
+
+function waitlistPlaceOf(data: Record<string, unknown>): WaitlistPlace | null {
+  const { teamName, position } = data;
+  return typeof teamName === 'string' && typeof position === 'number'
+    ? { teamName, position }
+    : null;
 }
 
 function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
@@ -129,6 +152,7 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
       lucideCalendarX,
       lucideCircleAlert,
       lucideHourglass,
+      lucideListOrdered,
       lucideLoaderCircle,
       lucideUsers,
     }),
@@ -231,35 +255,36 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                     />Back to the season page</a
                   >
                 }
-                @case ('full') {
-                  <div
-                    #cardAlert
-                    data-slot="alert"
-                    [attr.role]="refused() ? 'alert' : 'status'"
-                    tabindex="-1"
-                    [class]="neutralAlert"
-                  >
-                    <ng-icon name="lucideUsers" aria-hidden="true" />
-                    <div data-slot="alert-title" [class]="alertTitle">
-                      {{ messages.fullTitle }}
+                @case ('waitlisted') {
+                  @if (waitlistPlace(); as place) {
+                    <div
+                      #cardAlert
+                      data-slot="alert"
+                      [attr.role]="refused() ? 'alert' : 'status'"
+                      tabindex="-1"
+                      [class]="
+                        neutralAlert + ' outline-offset-2 focus:outline-2 focus:outline-ring'
+                      "
+                    >
+                      <ng-icon name="lucideListOrdered" aria-hidden="true" />
+                      <div data-slot="alert-title" [class]="alertTitle">
+                        {{ messages.waitlistedTitle(place.teamName, place.position) }}
+                      </div>
+                      <div data-slot="alert-description" [class]="alertDescription">
+                        {{ messages.waitlistedDescription(place.position) }}
+                      </div>
                     </div>
-                    <div data-slot="alert-description" [class]="alertDescription">
-                      {{
-                        messages.fullDescription(
-                          season.leagueName,
-                          season.seasonName,
-                          season.maxTeams
-                        )
-                      }}
-                    </div>
-                  </div>
-                  <a
-                    [routerLink]="freeAgentHref()"
-                    data-slot="button"
-                    [class]="primaryButton + ' mt-4 w-full'"
-                    >{{ messages.fullLink
-                    }}<ng-icon name="lucideArrowRight" data-icon="inline-end" aria-hidden="true"
-                  /></a>
+                    <a
+                      [routerLink]="seasonHref()"
+                      data-slot="button"
+                      [class]="outlineButton + ' mt-4 w-full'"
+                      ><ng-icon
+                        name="lucideArrowLeft"
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />Back to the season page</a
+                    >
+                  }
                 }
                 @default {
                   <form novalidate aria-labelledby="register-heading" (submit)="submit($event)">
@@ -280,9 +305,21 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                         />
                       }
                     }
-                    <p class="text-sm text-muted-foreground">
-                      You&rsquo;ll be the captain and the team&rsquo;s first player.
-                    </p>
+                    @if (joinsWaitlist()) {
+                      <div data-slot="alert" role="note" [class]="neutralAlert">
+                        <ng-icon name="lucideListOrdered" aria-hidden="true" />
+                        <div data-slot="alert-title" [class]="alertTitle">
+                          {{ messages.waitlistTitle }}
+                        </div>
+                        <div data-slot="alert-description" [class]="alertDescription">
+                          {{ messages.waitlistDescription }}
+                        </div>
+                      </div>
+                    } @else {
+                      <p class="text-sm text-muted-foreground">
+                        You&rsquo;ll be the captain and the team&rsquo;s first player.
+                      </p>
+                    }
                     <div hlmFieldGroup class="mt-5">
                       <div
                         hlmField
@@ -308,7 +345,12 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                           [attr.data-matches-spartan-invalid]="error() ? 'true' : null"
                         />
                         <p hlmFieldDescription id="team-name-description">
-                          Up to {{ maxLength }} characters. Other teams in the season see it.
+                          @if (joinsWaitlist()) {
+                            Up to {{ maxLength }} characters. Organizers see it while your team
+                            waits; it is not public until the team has a place.
+                          } @else {
+                            Up to {{ maxLength }} characters. Other teams in the season see it.
+                          }
                         </p>
                         @if (error(); as error) {
                           <div hlmFieldError id="team-name-error">
@@ -335,13 +377,13 @@ function nameRefusalOf(data: Record<string, unknown>): NameRefusal | null {
                           class="motion-safe:animate-spin"
                           data-icon="inline-start"
                           aria-hidden="true"
-                        />Registering team…
+                        />{{ joinsWaitlist() ? 'Joining the waitlist…' : 'Registering team…' }}
                       } @else {
-                        Register team
+                        {{ joinsWaitlist() ? 'Join the waitlist' : 'Register team' }}
                       }
                     </button>
                     <p role="status" class="sr-only">
-                      {{ submitting() ? 'Registering the team.' : '' }}
+                      {{ submittingStatus() }}
                     </p>
                   </form>
                 }
@@ -426,10 +468,28 @@ export class RegisterTeamPage {
     if (this.registration.error()) return 'error';
     const state = this.firstState();
     if (state === 'signed-out') return 'loading';
-    if (state !== 'form') return state;
+    if (state !== 'form' && state !== 'full') return state;
+    if (this.joinedWaitlist()) return 'waitlisted';
     const refusal = this.refusal();
-    if (refusal === 'waiting' || refusal === 'closed' || refusal === 'full') return refusal;
+    if (refusal === 'waiting' || refusal === 'closed' || refusal === 'waitlisted') return refusal;
     return state;
+  });
+
+  protected readonly joinsWaitlist = computed(() => this.state() === 'full');
+
+  /** The mutation's answer, shown until the query holds the new entry. */
+  private readonly joinedWaitlist = linkedSignal<unknown, WaitlistPlace | null>({
+    source: this.slugs,
+    computation: () => null,
+  });
+
+  protected readonly waitlistPlace = computed<WaitlistPlace | null>(
+    () => this.season()?.waitlist ?? this.joinedWaitlist(),
+  );
+
+  protected readonly submittingStatus = computed(() => {
+    if (!this.submitting()) return '';
+    return this.joinsWaitlist() ? 'Joining the waitlist.' : 'Registering the team.';
   });
 
   protected readonly closedLine = computed(() => {
@@ -506,16 +566,25 @@ export class RegisterTeamPage {
       return;
     }
     this.submitting.set(true);
-    let teamId: string;
+    let result: Awaited<ReturnType<typeof this.registerTeam.run>>;
     try {
-      ({ teamId } = await this.registerTeam.run({ ...this.slugs(), name: this.model().name }));
+      result = await this.registerTeam.run({ ...this.slugs(), name: this.model().name });
     } catch (failure) {
       this.submitting.set(false);
       this.showFailure(failure);
       return;
     }
+    if (result.status === 'waitlisted') {
+      this.submitting.set(false);
+      this.joinedWaitlist.set({
+        teamName: checkedName(this.model().name),
+        position: result.position,
+      });
+      this.focusCardAlert.set(true);
+      return;
+    }
     // A finished one-time form is replaced in history, so Back returns to the season page.
-    await this.router.navigateByUrl(teamPath(teamId), {
+    await this.router.navigateByUrl(teamPath(result.teamId), {
       replaceUrl: true,
       state: { registered: true },
     });
@@ -539,8 +608,9 @@ export class RegisterTeamPage {
       this.refuse('closed');
       return;
     }
-    if (code === 'seasonFull') {
-      this.refuse('full');
+    if (code === 'onWaitlist' && data) {
+      this.joinedWaitlist.set(waitlistPlaceOf(data));
+      this.refuse('waitlisted');
       return;
     }
     if (code === 'waitingFreeAgent') {

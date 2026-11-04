@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
+  seasonHasRoom,
+  seasonIsFull,
   checkSeasonDates,
   checkSeasonFields,
   firstSeasonError,
@@ -177,5 +179,19 @@ describe('SEASON_MESSAGES', () => {
     expect(SEASON_MESSAGES.leagueFormatMissing).toBe(
       'Set this league’s format in its details first.',
     );
+  });
+});
+
+describe('seasonIsFull and seasonHasRoom', () => {
+  test.each([
+    [{ teamCount: 2, maxTeams: 2 }, true, false],
+    [{ teamCount: 1, maxTeams: 2 }, false, true],
+    [{ teamCount: 2, maxTeams: 3, waitlistCount: 1 }, true, true],
+    [{ teamCount: 2, waitlistCount: 1 }, true, true],
+    [{ teamCount: 9 }, false, true],
+    [{}, false, true],
+  ])('%o: full %s, room %s', (season, full, room) => {
+    expect(seasonIsFull(season)).toBe(full);
+    expect(seasonHasRoom(season)).toBe(room);
   });
 });

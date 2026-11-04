@@ -33,8 +33,10 @@ const SUMMER = {
   isFull: false,
   team: null,
   freeAgent: null,
+  waitlist: null,
 };
 const FULL = { ...SUMMER, isFull: true, maxTeams: 8 };
+const WAITLISTED = { ...FULL, waitlist: { teamName: 'Late Lobsters', position: 2 } };
 const WAITING = {
   ...SUMMER,
   freeAgent: { status: 'waiting', registeredAt: Date.parse('2027-05-01T00:00:00Z') },
@@ -195,22 +197,52 @@ describe('RegisterTeamPage', () => {
       );
     });
 
-    it('full: says so with a link to the free-agent route, no form, and calls no mutation', async () => {
+    it('full: the form joins the waitlist, with the waitlist note and button, and calls no mutation', async () => {
       await open();
       await answer(FULL);
+      const note = page.querySelector('form [data-slot="alert"]');
+      expect(note?.getAttribute('role')).toBe('note');
+      expect(text(note)).toBe(
+        'This season is full, so your team joins the waitlist. Waiting teams keep their place in line. If a place opens, an organizer moves a team from the waitlist into the season, and you become its captain.',
+      );
+      expect(text(page.querySelector('#team-name-description'))).toBe(
+        'Up to 60 characters. Organizers see it while your team waits; it is not public until the team has a place.',
+      );
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Join the waitlist');
+      expect(convex.calls).toEqual([]);
+    });
+
+    it('waitlisted: the position and a link back to the season page, and no form', async () => {
+      await open();
+      await answer(WAITLISTED);
       const card = page.querySelector('[data-slot="alert"]');
       expect(card?.getAttribute('role')).toBe('status');
       expect(text(card)).toBe(
-        'This season is full. Sunday Reverse Coed 4s takes 8 teams in Summer 2027, and every place is taken. You can still register as a free agent, and an organizer may place you on a team.',
+        'Late Lobsters is on the waitlist, position 2. One team is ahead of yours. If an organizer gives your team a place, it appears under Your teams, and you can invite your players.',
       );
       const link = [...page.querySelectorAll('main a')].find(
-        (a) => text(a) === 'Register as a free agent',
+        (a) => text(a) === 'Back to the season page',
       );
-      expect(link?.getAttribute('href')).toBe(
-        `/app/register/${SLUGS.orgSlug}/${SLUGS.leagueSlug}/${SLUGS.seasonSlug}/free-agent`,
-      );
+      expect(link?.getAttribute('href')).toBe(SEASON_PATH);
       expect(page.querySelector('form')).toBeNull();
-      expect(convex.calls).toEqual([]);
+    });
+
+    it('waitlisted after the deadline: the position, not the closed state', async () => {
+      await open({ now: '2027-06-10T00:00:00Z' });
+      await answer(WAITLISTED);
+      expect(text(page.querySelector('[data-slot="alert"]'))).toContain(
+        'Late Lobsters is on the waitlist, position 2.',
+      );
+      expect(page.textContent).not.toContain('Registration for this season is closed.');
+    });
+
+    it.each([
+      [1, 'Your team is first in line.'],
+      [4, '3 teams are ahead of yours.'],
+    ])('waitlisted at position %s says how many teams are ahead', async (position, ahead) => {
+      await open();
+      await answer({ ...FULL, waitlist: { teamName: 'Late Lobsters', position } });
+      expect(text(page.querySelector('[data-slot="alert-description"]'))).toContain(ahead);
     });
 
     it('full and on a team: "You’re on <team>" wins over full', async () => {
@@ -260,6 +292,27 @@ describe('RegisterTeamPage', () => {
       (row) => text(row.querySelector('dt')) === 'Roster',
     );
     expect(text(roster?.querySelector('dd'))).toBe('4 to 6 players');
+  });
+
+  describe('joining the waitlist', () => {
+    it('shows the pending state, then the position in a status that takes focus, on the same route', async () => {
+      await open();
+      await answer(FULL);
+      await type(' Late   Lobsters ');
+      await submit();
+      expect(registers().map((call) => call.args)).toEqual([
+        { ...SLUGS, name: ' Late   Lobsters ' },
+      ]);
+      expect(text(page.querySelector('button[type="submit"]'))).toBe('Joining the waitlist…');
+      expect(text(page.querySelector('form > p[role="status"]'))).toBe('Joining the waitlist.');
+      registers()[0].resolve({ status: 'waitlisted', position: 1 });
+      await flush();
+      const status = page.querySelector<HTMLElement>('[data-slot="alert"]');
+      expect(status?.getAttribute('role')).toBe('status');
+      expect(text(status)).toContain('Late Lobsters is on the waitlist, position 1.');
+      expect(document.activeElement).toBe(status);
+      expect(url()).toBe(URL);
+    });
   });
 
   describe('the form', () => {
@@ -336,18 +389,21 @@ describe('RegisterTeamPage', () => {
       expect(document.activeElement).toBe(alert);
     });
 
-    it('a refusal as full shows the full card, whose alert takes focus', async () => {
-      await type('Sand Sharks');
+    it('a refusal as on the waitlist shows the waitlisted card, whose alert takes focus', async () => {
+      await type('Second Try');
       await submit();
       registers()[0].reject(
-        new ConvexError({ code: 'seasonFull', message: 'This season is full.' }),
+        new ConvexError({
+          code: 'onWaitlist',
+          teamName: 'Late Lobsters',
+          position: 3,
+          message: "You're on the waitlist with Late Lobsters in this season.",
+        }),
       );
       await flush();
       const alert = page.querySelector<HTMLElement>('[data-slot="alert"]');
       expect(alert?.getAttribute('role')).toBe('alert');
-      expect(text(alert)).toBe(
-        'This season is full. Every place in Summer 2027 is taken. You can still register as a free agent, and an organizer may place you on a team.',
-      );
+      expect(text(alert)).toContain('Late Lobsters is on the waitlist, position 3.');
       expect(page.querySelector('form')).toBeNull();
       expect(document.activeElement).toBe(alert);
     });

@@ -30,7 +30,6 @@ const SUMMER: NewSeason = {
 const SLUGS = { orgSlug: 'org-a', leagueSlug: 'coed-4s', seasonSlug: 'summer-2030' };
 const OPEN_NOW = Date.parse('2030-05-20T12:00:00Z');
 const AFTER_DEADLINE = Date.parse('2030-05-21T12:00:00Z');
-const FULL = { code: 'seasonFull', message: 'This season is full.' };
 
 async function setup({
   maxTeams = 2,
@@ -166,12 +165,16 @@ describe('seasons.create: maximum teams', () => {
 });
 
 describe('teams.register in a full season', () => {
-  test('a season at its maximum refuses another team and writes nothing', async () => {
+  test('a season at its maximum puts another team on the waitlist and writes no team', async () => {
     vi.useFakeTimers({ now: OPEN_NOW });
     const s = await setup();
     const before = await rows(s);
-    expect(await register(s, 'newcomer', 'Third Team').catch(refusalOf)).toEqual(FULL);
-    expect(await rows(s)).toEqual(before);
+    expect(await register(s, 'newcomer', 'Third Team')).toEqual({
+      status: 'waitlisted',
+      position: 1,
+    });
+    expect((await rows(s)).teams).toEqual(before.teams);
+    expect((await season(s))?.teamCount).toBe(2);
   });
 
   test('a free agent can still register in a full season', async () => {
@@ -202,18 +205,17 @@ describe('teams.register in a full season', () => {
     });
   });
 
-  test('two registrations at once for the last place get one team', async () => {
+  test('two registrations at once for the last place get one team and one waiting entry', async () => {
     vi.useFakeTimers({ now: OPEN_NOW });
     const s = await setup({ teams: 1 });
-    const results = await Promise.allSettled([
+    const results = await Promise.all([
       register(s, 'newcomer', 'Late One'),
       register(s, 'stranger', 'Late Two'),
     ]);
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    const refused = results.find((result) => result.status === 'rejected');
-    expect(refusalOf(refused?.reason)).toEqual(FULL);
+    expect(results.map((result) => result.status).sort()).toEqual(['registered', 'waitlisted']);
     expect((await rows(s)).teams).toHaveLength(2);
     expect((await season(s))?.teamCount).toBe(2);
+    expect((await season(s))?.waitlistCount).toBe(1);
   });
 });
 

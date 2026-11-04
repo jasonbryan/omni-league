@@ -104,7 +104,9 @@ async function rows(s: Setup) {
 }
 
 async function teamWithCaptain(s: Setup, authUserId: string, name: string) {
-  return as(s, authUserId).mutation(api.teams.register, { ...SLUGS, name });
+  const result = await as(s, authUserId).mutation(api.teams.register, { ...SLUGS, name });
+  if (result.status !== 'registered') throw new Error('The team joined the waitlist');
+  return result;
 }
 
 afterEach(() => {

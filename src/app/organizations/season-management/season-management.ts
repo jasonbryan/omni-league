@@ -17,6 +17,7 @@ import {
   lucideChevronRight,
   lucideCircleCheck,
   lucideCircleDashed,
+  lucideListOrdered,
   lucideMail,
   lucideTriangleAlert,
   lucideUserPlus,
@@ -45,6 +46,7 @@ import { PlaceFreeAgentDialog, type PlaceFreeAgentOutcome } from './place-free-a
 import { placedText } from './place-free-agent-text';
 import { SeasonContext, type SeasonFreeAgents } from './season-context';
 import { SeasonLimits } from './season-limits';
+import { SeasonWaitlistPanel } from './season-waitlist-panel';
 import { seasonManagementPath } from './season-management-path';
 import { teamRowLines } from './team-row-lines';
 
@@ -80,7 +82,14 @@ function localDay(ms: number): string {
 
 @Component({
   selector: 'app-season-management',
-  imports: [AdminAlert, NgIcon, PlaceFreeAgentDialog, RouterLink, SeasonLimits],
+  imports: [
+    AdminAlert,
+    NgIcon,
+    PlaceFreeAgentDialog,
+    RouterLink,
+    SeasonLimits,
+    SeasonWaitlistPanel,
+  ],
   providers: [
     provideIcons({
       lucideCalendarClock,
@@ -88,6 +97,7 @@ function localDay(ms: number): string {
       lucideChevronRight,
       lucideCircleCheck,
       lucideCircleDashed,
+      lucideListOrdered,
       lucideMail,
       lucideTriangleAlert,
       lucideUserPlus,
@@ -178,8 +188,9 @@ function localDay(ms: number): string {
           [maxRosterSize]="season.maxRosterSize"
           [minimumRosterSize]="season.minimumRosterSize"
           [largestRoster]="season.largestRoster"
+          [waitlistCount]="waitlistCount()"
         />
-        <dl class="mt-6 grid grid-cols-2 gap-3 md:gap-4">
+        <dl class="mt-6 grid grid-cols-3 gap-3 md:gap-4">
           <div [class]="tile">
             <dt [class]="tileLabel">
               <span [class]="tileIcon"
@@ -202,6 +213,14 @@ function localDay(ms: number): string {
               >Free agents waiting
             </dt>
             <dd [class]="tileValue" data-testid="free-agent-count">{{ freeAgentCount() }}</dd>
+          </div>
+          <div [class]="tile">
+            <dt [class]="tileLabel">
+              <span [class]="tileIcon"
+                ><ng-icon name="lucideListOrdered" class="text-base" aria-hidden="true" /></span
+              >On the waitlist
+            </dt>
+            <dd [class]="tileValue" data-testid="waitlist-tile">{{ waitlistTile() }}</dd>
           </div>
         </dl>
         <div class="mt-4 grid items-start gap-4 md:mt-6 md:gap-6 lg:grid-cols-3">
@@ -281,7 +300,17 @@ function localDay(ms: number): string {
               </div>
             }
           </section>
-          <section id="free-agents" aria-labelledby="free-agents-heading" [class]="panel">
+          <app-season-waitlist-panel
+            class="lg:col-span-2"
+            [waitlist]="waitlist()"
+            [teamCount]="season.teamCount"
+            [maxTeams]="season.maxTeams"
+          />
+          <section
+            id="free-agents"
+            aria-labelledby="free-agents-heading"
+            [class]="panel + ' lg:col-start-3 lg:row-span-2 lg:row-start-1'"
+          >
             <div [class]="panelHead">
               <h2 id="free-agents-heading" tabindex="-1" class="font-semibold">Free agents</h2>
             </div>
@@ -396,6 +425,12 @@ export class SeasonManagement {
   protected readonly league = this.context.league;
   protected readonly season = this.context.season;
   protected readonly freeAgents = this.context.freeAgents;
+  protected readonly waitlist = this.context.waitlist;
+  protected readonly waitlistCount = computed(() => this.waitlist()?.waitlistCount ?? 0);
+  protected readonly waitlistTile = computed(() => {
+    const waitlist = this.waitlist();
+    return waitlist ? String(waitlist.waitlistCount) : '–';
+  });
 
   protected readonly leagueCrumbLink = LEAGUE_CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;

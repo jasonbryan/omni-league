@@ -32,13 +32,13 @@ describe('registrationCard', () => {
     expect(registrationCard(SUMMER, at('2027-05-24T12:00:00Z'))?.kind).toBe('closed');
   });
 
-  it('is full while open when the season is full, with the free-agent deadline', () => {
+  it('is full while open when the season is full, with the waitlist and the deadline', () => {
     const full = { ...SUMMER, isFull: true, maxTeams: 2 };
     expect(registrationCard(full, at('2027-05-01T00:00:00Z'))).toEqual({
       kind: 'full',
       phase: 'registrationOpen',
       closes: 'May 23, 2027',
-      note: 'It takes 2 teams, and every place is taken. Free agents can still register until May 23, 2027, and an organizer places them on teams.',
+      note: 'Join the waitlist and an organizer offers you a place if one opens. Registration closes May 23, 2027.',
     });
     expect(registrationCard(full, at('2027-05-30T00:00:00Z'))?.kind).toBe('closed');
     expect(registrationCard({ ...SUMMER, isFull: false }, at('2027-05-01T00:00:00Z'))?.kind).toBe(

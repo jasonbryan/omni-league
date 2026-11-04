@@ -617,6 +617,7 @@ export async function insertSeason(
     minimumRosterSize: season.minimumRosterSize,
     status,
     teamCount: 0,
+    waitlistCount: 0,
     ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
     ...(season.maxRosterSize !== undefined && { maxRosterSize: season.maxRosterSize }),
   });

@@ -606,7 +606,14 @@ export const AREAS = [
     // The season page imports the register route's path from here.
     name: 'team pages',
     test: inDir('src/app/teams/'),
-    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, ...TEAM_JOIN, 'season-page', 'app-teams'],
+    specs: [
+      ...TEAM_REGISTRATION,
+      ...TEAM_INVITES,
+      ...TEAM_JOIN,
+      'season-page',
+      'app-teams',
+      'waitlist',
+    ],
   },
   {
     name: 'helm input and field',
@@ -765,7 +772,7 @@ export const AREAS = [
     // The season management page opens from the league management page's season rows.
     name: 'season management page',
     test: inDir('src/app/organizations/season-management/'),
-    specs: ['season-management'],
+    specs: ['season-management', 'waitlist'],
   },
   {
     name: 'placeholder home',
@@ -848,7 +855,20 @@ export const AREAS = [
     test: (file) =>
       named('convex/', ['teams', 'teamInvites', 'freeAgents', 'rosterEntries'])(file) ||
       named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput', 'teamInviteInput'])(file),
-    specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, ...TEAM_JOIN, 'season-page', 'app-teams'],
+    specs: [
+      ...TEAM_REGISTRATION,
+      ...TEAM_INVITES,
+      ...TEAM_JOIN,
+      'season-page',
+      'app-teams',
+      'waitlist',
+    ],
+  },
+  {
+    name: 'convex waitlist',
+    test: (file) =>
+      named('convex/', ['waitlist'])(file) || named('convex/lib/', ['waitlist'])(file),
+    specs: ['waitlist', ...TEAM_REGISTRATION, ...TEAM_JOIN, 'season-management'],
   },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];

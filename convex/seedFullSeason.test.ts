@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import schema from './schema';
-import { DEMO_CAPTAINS, DEMO_FULL_SEASON, DEMO_TEAM_SEASON } from './seed';
+import { DEMO_CAPTAINS, DEMO_FULL_SEASON, DEMO_TEAM_SEASON, DEMO_WAITLIST_ENTRY } from './seed';
 import { modules } from './test.setup';
 
 function setup() {
@@ -118,5 +118,58 @@ describe('seed:demo: a maximum roster size', () => {
     expect(maxRosterSize).toBe(6);
     expect(rosterCounts.length).toBeGreaterThan(0);
     expect(rosterCounts.every((count) => count <= 6)).toBe(true);
+  });
+});
+
+describe('seed:demo: a waiting team on the full season', () => {
+  async function waitlist(t: T) {
+    return t.run(async (ctx) => {
+      const season = (await ctx.db.query('seasons').collect()).find(
+        (row) => row.slug === DEMO_FULL_SEASON.seasonSlug && row.maxTeams !== undefined,
+      );
+      const entries = await ctx.db.query('waitlistEntries').collect();
+      return {
+        waitlistCount: season?.waitlistCount,
+        entries: entries.map((entry) => ({
+          seasonId: entry.seasonId === season?._id,
+          teamName: entry.teamName,
+          status: entry.status,
+        })),
+      };
+    });
+  }
+
+  const expected = {
+    waitlistCount: 1,
+    entries: [{ seasonId: true, teamName: DEMO_WAITLIST_ENTRY.teamName, status: 'waiting' }],
+  };
+
+  test('inserts one waiting entry once, with the counter equal to a recount', async () => {
+    const t = setup();
+    await insertCaptainUsers(t);
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.mutation(internal.seed.insertDemoTeams, { captains: CAPTAINS });
+    expect(await waitlist(t)).toEqual(expected);
+    expect(await t.query(api.seasons.getPublicPage, DEMO_FULL_SEASON)).toMatchObject({
+      isFull: true,
+    });
+
+    await t.mutation(internal.seed.insertDemoData, {});
+    await t.mutation(internal.seed.insertDemoTeams, { captains: CAPTAINS });
+    expect(await waitlist(t)).toEqual(expected);
+    expect((await fullSeason(t)).map(({ teams }) => teams.map(([name]) => name))).toEqual([
+      ['Pair of Aces', 'Two Tall'],
+    ]);
+  });
+
+  test('a wrong PREVIEW_ORIGIN_PATTERN writes no waiting entry', async () => {
+    const t = setup();
+    await insertCaptainUsers(t);
+    await t.mutation(internal.seed.insertDemoData, {});
+    vi.stubEnv('PREVIEW_ORIGIN_PATTERN', `${PREVIEW_ORIGIN_PATTERN} `);
+    await expect(t.mutation(internal.seed.insertDemoTeams, { captains: CAPTAINS })).rejects.toThrow(
+      /PREVIEW_ORIGIN_PATTERN/,
+    );
+    expect((await waitlist(t)).entries).toEqual([]);
   });
 });

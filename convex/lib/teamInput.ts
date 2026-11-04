@@ -48,6 +48,23 @@ export interface AlreadyPlacedRefusal {
   message: string;
 }
 
+export interface OnWaitlistRefusal {
+  code: 'onWaitlist';
+  teamName: string;
+  position: number;
+  message: string;
+}
+
+export interface NoRoomRefusal {
+  code: 'noRoom';
+  message: string;
+}
+
+export interface AlreadyPromotedRefusal {
+  code: 'alreadyPromoted';
+  message: string;
+}
+
 export interface CaptainRequiredRefusal {
   code: 'captainRequired';
   message: string;
@@ -75,6 +92,9 @@ export const TEAM_MESSAGES = {
     "You're registered as a free agent in this season. An organizer places free agents on teams.",
   alreadyFreeAgent: 'Already registered as a free agent in this season.',
   alreadyPlaced: 'Already placed on a team.',
+  onWaitlist: (teamName: string) => `You're on the waitlist with ${teamName} in this season.`,
+  noRoom: 'The season is full. Raise the maximum teams first.',
+  alreadyPromoted: 'It has already been promoted.',
   captainRequired: 'A team needs its captain.',
   notRostered: 'No longer on the team.',
 } as const;

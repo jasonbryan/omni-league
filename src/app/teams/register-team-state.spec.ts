@@ -13,6 +13,7 @@ const OPEN: NonNullable<RegistrationAnswer> = {
   isFull: false,
   team: null,
   freeAgent: null,
+  waitlist: null,
 };
 const FULL: RegistrationAnswer = { ...OPEN, isFull: true, maxTeams: 2 };
 const ON_TEAM: RegistrationAnswer = {
@@ -27,6 +28,10 @@ const WAITING: RegistrationAnswer = {
 const PLACED: RegistrationAnswer = {
   ...ON_TEAM,
   freeAgent: { status: 'placed', registeredAt: REGISTERED_AT },
+};
+const WAITLISTED: RegistrationAnswer = {
+  ...FULL,
+  waitlist: { teamName: 'Late Lobsters', position: 2 },
 };
 const BEFORE_DEADLINE = Date.parse('2027-05-01T00:00:00Z');
 const AFTER_DEADLINE = Date.parse('2027-05-30T00:00:00Z');
@@ -47,6 +52,9 @@ describe('registerTeamState: the first state that applies', () => {
     ['on no team after the deadline', OPEN, true, AFTER_DEADLINE, 'closed'],
     ['on no team while open', OPEN, true, BEFORE_DEADLINE, 'form'],
     ['a full season while open', FULL, true, BEFORE_DEADLINE, 'full'],
+    ['a waiting captain while open', WAITLISTED, true, BEFORE_DEADLINE, 'waitlisted'],
+    ['a waiting captain after the deadline', WAITLISTED, true, AFTER_DEADLINE, 'waitlisted'],
+    ['a waiting captain, signed out', WAITLISTED, false, AFTER_DEADLINE, 'signed-out'],
     ['a full season after the deadline', FULL, true, AFTER_DEADLINE, 'closed'],
     [
       'on a team in a full season',

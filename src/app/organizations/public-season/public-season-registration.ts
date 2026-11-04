@@ -55,11 +55,7 @@ export function registrationCard(
   const closes = formatCalendarDate(registrationDeadline);
   if (phase === 'registrationOpen') {
     if (!season.isFull) return { kind: 'open', phase, closes };
-    const taken =
-      season.maxTeams === undefined
-        ? 'Every place is taken.'
-        : `It takes ${season.maxTeams} teams, and every place is taken.`;
-    const note = `${taken} Free agents can still register until ${closes}, and an organizer places them on teams.`;
+    const note = `Join the waitlist and an organizer offers you a place if one opens. Registration closes ${closes}.`;
     return { kind: 'full', phase, closes, note };
   }
   const note =
