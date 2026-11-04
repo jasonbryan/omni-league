@@ -850,6 +850,12 @@ export const AREAS = [
       named('convex/lib/', ['rosterWrites', 'rosterEntry', 'teamInput', 'teamInviteInput'])(file),
     specs: [...TEAM_REGISTRATION, ...TEAM_INVITES, ...TEAM_JOIN, 'season-page', 'app-teams'],
   },
+  {
+    name: 'convex waitlist',
+    test: (file) =>
+      named('convex/', ['waitlist'])(file) || named('convex/lib/', ['waitlist'])(file),
+    specs: ['waitlist', ...TEAM_REGISTRATION, ...TEAM_JOIN, 'season-management'],
+  },
   { name: 'convex demo seed', test: named('convex/', ['seed']), specs: ['pwa'] },
 ];
 
