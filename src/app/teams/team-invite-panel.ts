@@ -23,6 +23,7 @@ import {
 import type { Id } from '../../../convex/_generated/dataModel';
 import { teamInviteLink } from '../../../convex/lib/teamInviteInput';
 import { MousePressKeepsFocus } from '../core/forms/mouse-press-keeps-focus';
+import { RevealOnFocus } from '../core/forms/reveal-on-focus';
 import { api, injectAction, injectOnline } from '../core/data/convex';
 import { AdminAlert } from '../organizations/admin/admin-alert';
 import { AdminOfflineAlert } from '../organizations/admin/admin-offline-alert';
@@ -54,7 +55,7 @@ const TEXTAREA =
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-team-invite-panel',
-  imports: [AdminAlert, AdminOfflineAlert, FormField, MousePressKeepsFocus, NgIcon],
+  imports: [AdminAlert, AdminOfflineAlert, FormField, MousePressKeepsFocus, NgIcon, RevealOnFocus],
   providers: [
     provideIcons({
       lucideCheck,
@@ -101,6 +102,7 @@ const TEXTAREA =
             >
             <textarea
               id="invite-link"
+              appRevealOnFocus
               readonly
               rows="3"
               spellcheck="false"

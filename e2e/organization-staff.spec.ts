@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -120,6 +120,28 @@ test.describe('Staff: inviting', () => {
     await screenshot(page, testInfo, '67-staff-reloaded');
     await expectAccessible(page);
     void base;
+  });
+
+  test('Tabbing to the link field from the Revoke button above it scrolls the whole field into view', async ({
+    page,
+  }) => {
+    await openStaff(page);
+    await invite(page, 'dana@example.com');
+    const revoke = pendingRows(page)
+      .first()
+      .getByRole('button', { name: /^Revoke/ });
+    await revoke.focus();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(revoke).toBeInViewport();
+    await page.keyboard.press(tabKey(page));
+    await expect(linkField(page)).toBeFocused();
+    // Read at once: WebKit's own scroll to a focused text field comes later on macOS and shows only the caret line on Linux.
+    const shownWhole = await linkField(page).evaluate((field) => {
+      const { top, bottom } = field.getBoundingClientRect();
+      // The page scrolls by whole pixels and the field sits at a fraction of one.
+      return Math.round(top) >= 0 && Math.round(bottom) <= innerHeight;
+    });
+    expect(shownWhole).toBe(true);
   });
 
   test(
@@ -242,8 +264,12 @@ test.describe('Staff: copying the link', () => {
   test('"Copy link" puts the whole link on the clipboard, then says "Copied"', async ({
     page,
     context,
+    browserName,
   }, testInfo) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    // WebKit has no `clipboard-write` permission: it lets a click write, and refuses the grant.
+    await context.grantPermissions(
+      browserName === 'webkit' ? ['clipboard-read'] : ['clipboard-read', 'clipboard-write'],
+    );
     await openStaff(page);
     await invite(page, 'dana@example.com');
     const link = await linkField(page).inputValue();
