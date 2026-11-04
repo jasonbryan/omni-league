@@ -447,7 +447,7 @@ async function assertMinorNotInSeason(
   });
 }
 
-/** The one-team and free-agent rules cover the guardian's own entry only, so neither applies here; a waiting captain adds no minor, so the waiting entry stays promotable. */
+/** The one-team and free-agent rules cover the guardian's own entry only, so neither applies here. */
 export async function addMinorEntry(
   ctx: MutationCtx,
   team: Doc<'teams'>,
