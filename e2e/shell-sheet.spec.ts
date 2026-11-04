@@ -37,10 +37,14 @@ async function activate(page: Page, control: Locator): Promise<void> {
   // Playwright's scrollIntoViewIfNeeded scrolls WebKit's page 67px under a sticky header that is already in view; the DOM call does not.
   // Unlike Playwright's, the DOM call does not wait for the sheet's slide-in, so a tap would miss.
   await control.evaluate(async (element) => {
-    const finite = document
+    const running = document
       .getAnimations()
-      .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity);
-    await Promise.allSettled(finite.map((animation) => animation.finished));
+      .filter(
+        (animation) =>
+          animation.playState === 'running' &&
+          animation.effect?.getComputedTiming().endTime !== Infinity,
+      );
+    await Promise.allSettled(running.map((animation) => animation.finished));
     element.scrollIntoView({ block: 'nearest' });
   });
   const box = await control.boundingBox();
