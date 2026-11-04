@@ -47,6 +47,7 @@ import {
 import { INVITE_FORM_ALERTS, InviteForm, type InviteField } from './invite-form';
 import { formatDay } from './format-day';
 import { MousePressKeepsFocus } from '../../core/forms/mouse-press-keeps-focus';
+import { RevealOnFocus } from '../../core/forms/reveal-on-focus';
 
 export interface InviteLeagueChoice {
   leagueId: Id<'leagues'>;
@@ -67,7 +68,15 @@ const TEXTAREA =
 /** The token lives only in this component's signal: it is shown once, never stored, logged, or put in the address. */
 @Component({
   selector: 'app-staff-invite-panel',
-  imports: [MousePressKeepsFocus, AdminAlert, AdminOfflineAlert, Checkbox, FormField, NgIcon],
+  imports: [
+    MousePressKeepsFocus,
+    RevealOnFocus,
+    AdminAlert,
+    AdminOfflineAlert,
+    Checkbox,
+    FormField,
+    NgIcon,
+  ],
   providers: [
     provideIcons({
       lucideCheck,
@@ -119,6 +128,7 @@ const TEXTAREA =
             >
             <textarea
               id="invite-link"
+              appRevealOnFocus
               readonly
               rows="3"
               spellcheck="false"
