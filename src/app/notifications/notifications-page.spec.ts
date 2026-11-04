@@ -10,6 +10,7 @@ import { CONVEX_CLIENT, ConvexOfflineError } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { NotificationsPage } from './notifications-page';
 import { PUSH_DEVICE, type DevicePermission, type PushDevice } from './push-device';
+import { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
 
 const VAPID_KEY = 'BPublicKeyFromGetConfig';
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/device-1';
@@ -104,6 +105,14 @@ describe('NotificationsPage', () => {
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
         { provide: SwPush, useValue: swPush },
+        // The start-up check has its own spec; here it would answer the page's status query too.
+        {
+          provide: PushSubscriptionLifecycle,
+          useValue: {
+            check: () => Promise.resolve(),
+            signOut: (endSession: () => Promise<void>) => endSession(),
+          },
+        },
         ...(realDevice ? [] : [{ provide: PUSH_DEVICE, useValue: device }]),
         provideRouter([{ path: 'app/notifications', component: NotificationsPage }]),
       ],

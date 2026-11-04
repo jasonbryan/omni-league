@@ -649,7 +649,14 @@ export const AREAS = [
     specs: [SESSION, ...ADMIN, ...LEAGUE_MANAGEMENT, 'mouse-press-keeps-focus'],
   },
   { name: 'invites', test: inDir('src/app/invites/'), specs: ['accept-invite'] },
-  { name: 'notifications page', test: inDir('src/app/notifications/'), specs: ['notifications'] },
+  {
+    // Its one importer outside the route table is AuthService's lazy load of the push lifecycle, a
+    // full-suite file; that load runs at sign-in and sign-out, which the session specs cover.
+    name: 'notifications page',
+    test: inDir('src/app/notifications/'),
+    specs: ['notifications', SESSION],
+    widen: false,
+  },
   { name: 'sign-in page', test: inDir('src/app/sign-in/'), specs: [SESSION] },
   { name: 'sign-up page', test: inDir('src/app/sign-up/'), specs: [SESSION] },
   {

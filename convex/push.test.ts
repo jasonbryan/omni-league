@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
+import crons from './crons';
 import type { Id } from './_generated/dataModel';
 import { MAX_ENDPOINT_LENGTH } from './lib/pushSubscription';
 import { deleteUserRecord } from './lib/users';
@@ -377,6 +378,19 @@ describe('push.getMyDeviceStatus', () => {
     ).toBe(false);
   });
 
+  test('B asking about A’s endpoint leaves A’s row with A and gives B none', async () => {
+    const s = await setup();
+    await s.a.mutation(api.push.subscribe, subscription());
+    const before = await s.rows();
+
+    expect(await s.b.query(api.push.getMyDeviceStatus, { endpoint: subscription().endpoint })).toBe(
+      false,
+    );
+
+    expect(await s.rows()).toEqual(before);
+    expect((await s.rows()).map((row) => row.userId)).toEqual([s.users.a]);
+  });
+
   test('unauthenticated: fails with Sign in required', async () => {
     const s = await setup();
     await expect(
@@ -408,5 +422,96 @@ describe('deleting a user', () => {
     await s.t.run((ctx) => deleteUserRecord(ctx, 'auth-a'));
 
     expect((await s.rows()).map((row) => row.userId)).toEqual([s.users.b]);
+  });
+});
+
+describe('push.pruneUnseen', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function insertRows(
+    s: Awaited<ReturnType<typeof setup>>,
+    rows: { name: string; lastSeenAt: number; lastSuccessAt?: number }[],
+  ) {
+    await s.t.run(async (ctx) => {
+      for (const row of rows) {
+        await ctx.db.insert('pushSubscriptions', {
+          userId: s.users.a,
+          endpoint: `https://fcm.googleapis.com/fcm/send/${row.name}`,
+          p256dh: P256DH,
+          auth: AUTH,
+          createdAt: row.lastSeenAt,
+          lastSeenAt: row.lastSeenAt,
+          ...(row.lastSuccessAt === undefined ? {} : { lastSuccessAt: row.lastSuccessAt }),
+          failureCount: 0,
+        });
+      }
+    });
+  }
+
+  const names = async (s: Awaited<ReturnType<typeof setup>>) =>
+    (await s.rows()).map((row) => row.endpoint.split('/').at(-1)).sort();
+
+  test('deletes only a row neither seen nor sent to successfully for 90 days', async () => {
+    const s = await setup();
+    await insertRows(s, [
+      { name: 'unused', lastSeenAt: NOW - 91 * DAY },
+      { name: 'sent-to', lastSeenAt: NOW - 91 * DAY, lastSuccessAt: NOW - 10 * DAY },
+      { name: 'seen', lastSeenAt: NOW - 89 * DAY },
+    ]);
+
+    await s.t.mutation(internal.push.pruneUnseen, {});
+    await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect(await names(s)).toEqual(['seen', 'sent-to']);
+  });
+
+  test('deletes 250 unused rows past 150 kept older ones, at most 100 per run', async () => {
+    const s = await setup();
+    // The kept rows sort first in by_lastSeenAt, so a run that started over each time would never reach the rest.
+    await insertRows(s, [
+      ...Array.from({ length: 150 }, (_, i) => ({
+        name: `kept-${i}`,
+        lastSeenAt: NOW - 200 * DAY + i,
+        lastSuccessAt: NOW - DAY,
+      })),
+      ...Array.from({ length: 250 }, (_, i) => ({
+        name: `unused-${i}`,
+        lastSeenAt: NOW - 100 * DAY + i,
+      })),
+    ]);
+
+    const counts = [(await s.rows()).length];
+    await s.t.mutation(internal.push.pruneUnseen, {});
+    counts.push((await s.rows()).length);
+    for (let run = 0; run < 10; run++) {
+      vi.runAllTimers();
+      await s.t.finishInProgressScheduledFunctions();
+      counts.push((await s.rows()).length);
+    }
+
+    const deletedPerRun = counts.slice(1).map((count, i) => (counts[i] ?? 0) - count);
+    expect(Math.max(...deletedPerRun)).toBeLessThanOrEqual(100);
+    expect(counts.at(-1)).toBe(150);
+    expect((await names(s)).every((name) => name?.startsWith('kept-'))).toBe(true);
+  });
+
+  test('is scheduled daily', () => {
+    expect(Object.values(crons.crons).filter((job) => job.name === 'push:pruneUnseen')).toEqual([
+      {
+        name: 'push:pruneUnseen',
+        args: [{}],
+        schedule: { type: 'daily', hourUTC: 9, minuteUTC: 17 },
+      },
+    ]);
+  });
+
+  test('does nothing under IS_TEST', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const s = await setup();
+    await insertRows(s, [{ name: 'unused', lastSeenAt: NOW - 91 * DAY }]);
+
+    await s.t.mutation(internal.push.pruneUnseen, {});
+
+    expect(await names(s)).toEqual(['unused']);
   });
 });

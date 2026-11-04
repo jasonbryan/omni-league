@@ -1,6 +1,14 @@
 import { ConvexError, v } from 'convex/values';
+import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
-import { env, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import {
+  env,
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from './_generated/server';
 import { requireUser } from './lib/access';
 import {
   isP256PublicKey,
@@ -99,5 +107,41 @@ export const getMyDeviceStatus = query({
     const user = await requireUser(ctx);
     const row = await rowByEndpoint(ctx, endpoint);
     return row?.userId === user._id;
+  },
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const UNSEEN_ROW_MAX_AGE_MS = 90 * DAY_MS;
+export const PRUNE_UNSEEN_PAGE_SIZE = 100;
+
+function isUnused(row: Doc<'pushSubscriptions'>, cutoff: number): boolean {
+  return row.lastSeenAt < cutoff && (row.lastSuccessAt === undefined || row.lastSuccessAt < cutoff);
+}
+
+// 404 and 410 arrive only on a send, so a row for a device that never gets one would otherwise stay.
+export const pruneUnseen = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    cutoff: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (env.IS_TEST === 'true') return null;
+    // Every page reads the same index range, so the cursor stays valid across runs.
+    const cutoff = args.cutoff ?? Date.now() - UNSEEN_ROW_MAX_AGE_MS;
+    const page = await ctx.db
+      .query('pushSubscriptions')
+      .withIndex('by_lastSeenAt', (q) => q.lt('lastSeenAt', cutoff))
+      .paginate({ cursor: args.cursor ?? null, numItems: PRUNE_UNSEEN_PAGE_SIZE });
+    for (const row of page.page) {
+      if (isUnused(row, cutoff)) await ctx.db.delete('pushSubscriptions', row._id);
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.push.pruneUnseen, {
+        cursor: page.continueCursor,
+        cutoff,
+      });
+    }
+    return null;
   },
 });

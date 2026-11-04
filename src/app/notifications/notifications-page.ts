@@ -47,6 +47,8 @@ import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { PUSH_DEVICE } from './push-device';
 
+export { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
+
 export type DeviceState = 'checking' | 'not-available' | 'install-first' | 'blocked' | 'off' | 'on';
 type Busy = 'idle' | 'turning-on' | 'turning-off';
 type Change = 'on' | 'off';

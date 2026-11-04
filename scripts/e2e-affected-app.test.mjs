@@ -250,9 +250,10 @@ describe('the specs of the importers outside a hand rule', () => {
       assert.deepEqual(Object.keys(IMPORTER_EXCEPTIONS), []);
     });
 
-    it('opts out of the importer specs only for the route tables and the saved query list, which a full-suite file imports', () => {
+    it('opts out of the importer specs only for the route tables, the saved query list, and the notifications page, which a full-suite file imports', () => {
       const optedOut = AREAS.filter((area) => area.widen === false).map((area) => area.name);
       assert.deepEqual(optedOut.sort(), [
+        'notifications page',
         'offline saved queries',
         'route table',
         'server route table',
@@ -261,6 +262,7 @@ describe('the specs of the importers outside a hand rule', () => {
         'src/app/app.routes.ts',
         'src/app/app.routes.server.ts',
         'src/app/core/data/convex/offline-saved-queries.ts',
+        'src/app/notifications/notifications-page.ts',
       ]) {
         for (const importer of importers.get(file) ?? []) {
           assert.ok(!isHandRule(ruleOf(importer)), `${importer} has a rule and imports ${file}`);

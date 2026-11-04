@@ -1,4 +1,5 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injector, Injectable, computed, inject, signal } from '@angular/core';
+import type { PushSubscriptionLifecycle } from '../../notifications/push-subscription-lifecycle';
 import { ChangesInFlight } from '../changes-in-flight';
 import type { ConvexAuthSource } from '../data/convex';
 import { AUTH_CLIENT, type AuthClientLike } from './auth-client';
@@ -76,6 +77,8 @@ export class AuthService implements ConvexAuthSource {
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly changes = inject(ChangesInFlight);
+  private readonly injector = inject(Injector);
+  private pushLifecycle: Promise<PushSubscriptionLifecycle | null> | undefined;
   private cachedToken: string | null = null;
   private pendingToken: Promise<string | null> | null = null;
   private tokenGeneration = 0;
@@ -162,7 +165,22 @@ export class AuthService implements ConvexAuthSource {
 
   readonly onChange = (isAuthenticated: boolean): void => {
     this.convexAuth.set(isAuthenticated);
+    if (isAuthenticated) void this.loadPushLifecycle().then((lifecycle) => lifecycle?.check());
   };
+
+  /**
+   * Loaded on demand with the notifications page's chunk, so the initial bundle carries none of it; a chunk of its own would move shared code into the initial bundle.
+   * A failed load leaves push as it is.
+   */
+  private loadPushLifecycle(): Promise<PushSubscriptionLifecycle | null> {
+    this.pushLifecycle ??= import('../../notifications/notifications-page')
+      .then(({ PushSubscriptionLifecycle }) => this.injector.get(PushSubscriptionLifecycle))
+      .catch(() => {
+        this.pushLifecycle = undefined;
+        return null;
+      });
+    return this.pushLifecycle;
+  }
 
   signUp(input: SignUpInput): Promise<SignUpResult> {
     return this.changes.track(() => this.requestSignUp(input));
@@ -212,6 +230,13 @@ export class AuthService implements ConvexAuthSource {
   }
 
   private async requestSignOut(): Promise<void> {
+    const lifecycle = await this.loadPushLifecycle();
+    const endSession = () => this.endSession();
+    // The device's row goes first, while the session lasts, so it is removed as this user's.
+    await (lifecycle ? lifecycle.signOut(endSession) : endSession());
+  }
+
+  private async endSession(): Promise<void> {
     this.forgetToken();
     try {
       await (await this.client)?.signOut();
