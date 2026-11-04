@@ -169,9 +169,13 @@ test.describe('organization page: Manage', () => {
         { name: 'Beta League', sport: 'softball', locations: ['Alpha Field'] },
       ],
     });
-    for (const league of ['alpha-league', 'beta-league']) {
+    for (const [league, playersPerSide] of [
+      ['alpha-league', 4],
+      ['beta-league', 10],
+    ] as const) {
       await seedSeasons(tenant, league, [
         {
+          playersPerSide,
           name: 'Open Season',
           slug: 'open-season',
           startDate: dateFromToday(30),
