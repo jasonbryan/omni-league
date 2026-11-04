@@ -108,7 +108,10 @@ describe('NotificationsPage', () => {
         // The start-up check has its own spec; here it would answer the page's status query too.
         {
           provide: PushSubscriptionLifecycle,
-          useValue: { check: () => Promise.resolve(), forget: () => Promise.resolve() },
+          useValue: {
+            check: () => Promise.resolve(),
+            signOut: (endSession: () => Promise<void>) => endSession(),
+          },
         },
         ...(realDevice ? [] : [{ provide: PUSH_DEVICE, useValue: device }]),
         provideRouter([{ path: 'app/notifications', component: NotificationsPage }]),

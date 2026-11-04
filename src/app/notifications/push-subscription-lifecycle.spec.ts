@@ -76,12 +76,25 @@ class FakeSwPush {
     this.releaseHeldRequest = null;
   }
 
+  holdUnsubscribes = false;
+  private releaseHeldUnsubscribe: (() => void) | null = null;
+
   unsubscribe(): Promise<void> {
     this.log.push('SwPush.unsubscribe');
     this.unsubscribes++;
-    if (!this.subscription.value) return Promise.reject(new Error('Not subscribed'));
-    this.subscription.next(null);
-    return Promise.resolve();
+    const answer = (): Promise<void> => {
+      if (!this.subscription.value) return Promise.reject(new Error('Not subscribed'));
+      this.subscription.next(null);
+      return Promise.resolve();
+    };
+    if (!this.holdUnsubscribes) return answer();
+    return new Promise<void>((resolve) => (this.releaseHeldUnsubscribe = resolve)).then(answer);
+  }
+
+  releaseUnsubscribe(): void {
+    this.holdUnsubscribes = false;
+    this.releaseHeldUnsubscribe?.();
+    this.releaseHeldUnsubscribe = null;
   }
 }
 
@@ -467,9 +480,8 @@ describe('PushSubscriptionLifecycle', () => {
       expect(TestBed.inject(Router).url).toBe('/');
     });
 
-    it('waits a bounded time for a check that is held up offline, then signs out', async () => {
-      swPush.subscription.next(fakeSubscription(ENDPOINT));
-      const button = await openAccountSettings();
+    /** Signs out while the check waits on a status query that never answers, past the bounded wait. */
+    async function signOutPastTheWait(button: HTMLButtonElement) {
       vi.useFakeTimers();
       try {
         button.click();
@@ -482,12 +494,131 @@ describe('PushSubscriptionLifecycle', () => {
         vi.useRealTimers();
       }
       await flush();
+      expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
+    }
+
+    const signOutOutcome = () => log.slice(log.indexOf('session ends') + 1);
+
+    for (const [title, key] of [
+      ['the same key', CURRENT_KEY],
+      ['an old key', OLD_KEY],
+    ] as const) {
+      it(`waits a bounded time for a check held up offline, and a late true status with ${title} saves nothing`, async () => {
+        swPush.subscription.next(fakeSubscription(ENDPOINT, { key }));
+        const button = await openAccountSettings();
+        await signOutPastTheWait(button);
+
+        await answerStatus(true);
+        await answerConfig();
+
+        expect(signOutOutcome()).toEqual([]);
+        expect(callsTo('push:subscribe')).toEqual([]);
+        expect(swPush.requests).toEqual([]);
+        expect(TestBed.inject(Router).url).toBe('/');
+      });
+    }
+
+    it('a late false status after the wait leaves the next user’s subscription alone', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      const button = await openAccountSettings();
+      await signOutPastTheWait(button);
+      const [staleQuery] = statusQueries();
+
+      swPush.subscription.next(fakeSubscription(NEW_ENDPOINT));
+      auth.emitSession({ id: 's2' });
+      await convexAccepts();
+      staleQuery.emit(false);
+      await flush();
+
+      expect(signOutOutcome()).toEqual([]);
+      expect(swPush.subscription.value?.endpoint).toBe(NEW_ENDPOINT);
+      expect(statusQueries().map((s) => s.args)).toEqual([{ endpoint: NEW_ENDPOINT }]);
+    });
+
+    it('a task queued before sign-out that starts after the wait asks nothing', async () => {
+      const old = fakeSubscription(ENDPOINT);
+      swPush.subscription.next(old);
+      const button = await openAccountSettings();
+      swPush.pushSubscriptionChanges.next({ oldSubscription: old, newSubscription: null });
+      await signOutPastTheWait(button);
+
+      for (const sub of statusQueries()) sub.fail(new Error('Sign in required'));
+      await flush();
+
+      expect(statusQueries()).toEqual([]);
+      expect(signOutOutcome()).toEqual([]);
+    });
+
+    it('a task queued while sign-out runs does nothing, even after the session ends', async () => {
+      const old = fakeSubscription(ENDPOINT);
+      swPush.subscription.next(old);
+      await signOutFromAccountSettings();
+      expect(log).toEqual(['push:unsubscribe']);
+
+      swPush.pushSubscriptionChanges.next({ oldSubscription: old, newSubscription: null });
+      authService().onChange(true);
+      await flush();
+      for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+      await flush();
 
       expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
-      for (const sub of statusQueries()) sub.emit(true);
+      expect(statusQueries()).toEqual([]);
+      expect(swPush.requests).toEqual([]);
+    });
+
+    it('a check whose config arrives during sign-out saves nothing', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      const button = await openAccountSettings();
+      await answerStatus(true);
+      button.click();
       await flush();
+      await answerConfig();
+
       expect(callsTo('push:subscribe')).toEqual([]);
-      expect(TestBed.inject(Router).url).toBe('/');
+      for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+      await flush();
+      expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
+    });
+
+    it('a subscription change whose config arrives during sign-out does not subscribe again', async () => {
+      const old = fakeSubscription(ENDPOINT);
+      swPush.subscription.next(old);
+      const button = await openAccountSettings();
+      for (const sub of statusQueries()) sub.fail(new Error('Sign in required'));
+      await flush();
+      swPush.pushSubscriptionChanges.next({ oldSubscription: old, newSubscription: null });
+      await flush();
+      await answerStatus(true);
+      button.click();
+      await flush();
+      await answerConfig();
+      for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+      await flush();
+
+      expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
+      expect(swPush.requests).toEqual([]);
+      expect(callsTo('push:subscribe')).toEqual([]);
+    });
+
+    it('sign-out while a re-subscribe unsubscribes the old one does not subscribe again', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT, { key: OLD_KEY }));
+      swPush.holdUnsubscribes = true;
+      const button = await openAccountSettings();
+      await answerStatus(true);
+      await answerConfig();
+      expect(log).toEqual(['SwPush.unsubscribe']);
+
+      button.click();
+      await flush();
+      swPush.releaseUnsubscribe();
+      await flush();
+      for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+      await flush();
+
+      expect(log).toEqual(['SwPush.unsubscribe', 'push:unsubscribe', 'session ends']);
+      expect(swPush.requests).toEqual([]);
+      expect(callsTo('push:subscribe')).toEqual([]);
+      expect(swPush.subscription.value).toBeNull();
     });
 
     it('removes the row and then the browser subscription before the session ends', async () => {

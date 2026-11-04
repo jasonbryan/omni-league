@@ -102,8 +102,10 @@ export class PushSubscriptionLifecycle {
   private readonly save = injectMutation(api.push.subscribe);
   private readonly remove = injectMutation(api.push.unsubscribe);
   private queue: Promise<void> = Promise.resolve();
-  /** Raised by sign-out; a task started before it writes nothing more. */
+  /** Raised by sign-out; a task queued before it subscribes and saves nothing more. */
   private generation = 0;
+  /** From the start of sign-out until the session has ended, a queued task does nothing. */
+  private signingOut = false;
 
   constructor() {
     const changes = this.enabledSwPush()?.pushSubscriptionChanges.subscribe(
@@ -125,9 +127,19 @@ export class PushSubscriptionLifecycle {
     });
   }
 
-  /** Before the session ends; never rejects, so sign-out always completes. */
-  async forget(): Promise<void> {
+  /** Removes this device's row and browser subscription, then ends the session; never rejects, so sign-out always completes. */
+  async signOut(endSession: () => Promise<void>): Promise<void> {
+    this.signingOut = true;
     this.generation += 1;
+    try {
+      await this.forget();
+      await endSession();
+    } finally {
+      this.signingOut = false;
+    }
+  }
+
+  private async forget(): Promise<void> {
     await settledWithin(this.queue, SIGN_OUT_CHECK_WAIT_MS);
     const subscription = await this.browserSubscription();
     if (!subscription) return;
@@ -136,7 +148,7 @@ export class PushSubscriptionLifecycle {
   }
 
   private enqueue(task: (run: number) => Promise<void>): Promise<void> {
-    const run = this.generation;
+    const run = this.signingOut ? -1 : this.generation;
     this.queue = this.queue.then(() => task(run)).catch(() => undefined);
     return this.queue;
   }
@@ -169,6 +181,8 @@ export class PushSubscriptionLifecycle {
       // Unauthenticated during the token fetch, or offline: a guess here could unsubscribe the owner's own device.
       return;
     }
+    // A late answer after sign-out may be about the next user, whose subscription this would remove.
+    if (this.signingOutSince(run)) return;
     if (!owned) {
       // Another user's row, or none: the next user gets nothing without turning notifications on.
       await this.unsubscribeBrowser();

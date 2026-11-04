@@ -230,8 +230,13 @@ export class AuthService implements ConvexAuthSource {
   }
 
   private async requestSignOut(): Promise<void> {
-    // While the session lasts, so the row can still be removed as this user's.
-    await (await this.loadPushLifecycle())?.forget();
+    const lifecycle = await this.loadPushLifecycle();
+    const endSession = () => this.endSession();
+    // The device's row goes first, while the session lasts, so it is removed as this user's.
+    await (lifecycle ? lifecycle.signOut(endSession) : endSession());
+  }
+
+  private async endSession(): Promise<void> {
     this.forgetToken();
     try {
       await (await this.client)?.signOut();
