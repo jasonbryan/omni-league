@@ -3,7 +3,7 @@
 // need the local Convex backend and are skipped with E2E_BASE_URL set.
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { TOKEN_PATH } from './support/auth-tokens';
 import { LOCAL_CONVEX_URL, remoteBaseUrl } from './support/env';
@@ -112,19 +112,20 @@ test.describe('Staff: undoing a revoke', () => {
     const { tenant, token } = await openStaffWithInvite(page, email);
 
     // No pointer input from here on: focus the button, then Enter, Tab, and Space.
+    const tab = tabKey(page);
     await revokeButton(page, email).focus();
     await page.keyboard.press('Enter');
     const revoked = page.getByRole('status').filter({ hasText: `Invite to ${email} revoked.` });
     await expect(revoked).toBeFocused();
 
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tab);
     await expect(undoButton(page, email)).toBeFocused();
     await page.keyboard.press('Space');
 
     const restored = page.getByRole('status').filter({ hasText: `Invite to ${email} restored.` });
     await expect(restored).toBeFocused();
     await expect(pendingRows(page)).toHaveCount(1);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tab);
     await expect(revokeButton(page, email)).toBeFocused();
 
     const link = await inviteLinkHeading(page, token);

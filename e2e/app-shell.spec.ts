@@ -9,7 +9,6 @@ import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
 import { seedTenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
-import { VIEWPORT_AGNOSTIC } from './support/viewport-agnostic';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
 
@@ -304,14 +303,32 @@ test.describe('the app shell', () => {
     });
   });
 
-  test.describe('on a shared device', VIEWPORT_AGNOSTIC, () => {
+  test.describe('on a shared device', () => {
+    /** The phone top bar shows only initials and the name, so the email is checked in the sheet's account row. */
+    async function expectAccountRowOf(page: Page, user: TestUser, isMobile: boolean) {
+      await expect(accountLink(page, user)).toContainText(user.name);
+      if (!isMobile) {
+        await expect(accountLink(page, user)).toContainText(user.email);
+        return;
+      }
+      await tap(page, menuButton(page));
+      const sheetRow = dialogOf(page).getByRole('link', {
+        name: new RegExp(`^Account settings: ${user.name}`),
+      });
+      await expect(sheetRow).toContainText(user.name);
+      await expect(sheetRow).toContainText(user.email);
+      await page.keyboard.press('Escape');
+      await expect(dialogOf(page)).toHaveCount(0);
+    }
+
     test("a second user who signs in right after sees their own name and email in the account row, never the first user's", async ({
       page,
+      isMobile,
     }) => {
       const alice = newUser('Alice');
       const bob = await seedUser(newUser('Bob'));
       await signUp(page, alice);
-      await expect(accountLink(page, alice)).toContainText(alice.email);
+      await expectAccountRowOf(page, alice, isMobile);
 
       await page.goto('/app/account');
       await page.getByRole('button', { name: 'Sign out' }).click();
@@ -339,9 +356,7 @@ test.describe('the app shell', () => {
       await expect(page).toHaveURL(`${baseURL}/app`);
       await tokens;
 
-      const row = accountLink(page, bob);
-      await expect(row).toContainText(bob.name);
-      await expect(row).toContainText(bob.email);
+      await expectAccountRowOf(page, bob, isMobile);
       expect(
         await page.evaluate(() => (window as Window & { aliceShown?: boolean }).aliceShown),
       ).toBe(false);
