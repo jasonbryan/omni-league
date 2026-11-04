@@ -51,6 +51,8 @@ Owner answers, 2026-10-09 (chat), as corrected the same day: "I would like a cor
 
 A league runs repeated **seasons** (owner answer, 2026-10-09). Registration, teams, the schedule, standings, and fees belong to a season.
 
+**Time settings belong to the season** (owner decision, 2026-11-04, chat, quoted exactly: "anything time related should be part of the Seasons, that includes days of the week games are played"). Dates, deadlines, the days of the week games are played, and game times are set on each season, never on the league. A league name may mention a day, such as Sunday Coed 4s, but the league stores no day or time.
+
 Owner answers, 2026-10-10 (chat):
 
 - **Registration deadline** ("Organizer sets a date"): each season has a registration deadline set by an organizer. Registration also closes when the season starts.
