@@ -107,9 +107,48 @@ describe('seed:demo search text', () => {
     expect(first.backfilled.leagues).toBe(2);
     const rewritten = await textsOf(t);
     expect(rewritten['old-eleven']).toBe(
-      "Old Eleven Soccer Women's 11v11 Intermediate womens Older Org Old Field Austin, TX",
+      'Old Eleven Soccer Women 11v11 Intermediate womens Older Org Old Field Austin, TX',
     );
     expect(rewritten['old-draft']).toMatch(/^Old Draft Softball /);
+
+    const second = await t.mutation(internal.seed.insertDemoData, {});
+    expect(second.backfilled.leagues).toBe(0);
+    expect(await textsOf(t)).toEqual(rewritten);
+  });
+
+  test('rewrites a text that holds the possessive gender label, counts it once, and a second run changes none', async () => {
+    const t = setup();
+    await t.run(async (ctx) => {
+      await insertTenant(ctx, {
+        organization: { name: 'Older Org', slug: 'older-org', cityState: 'Austin, TX' },
+        locations: [{ name: 'Old Field', address: '1 Old St' }],
+        leagues: [
+          {
+            name: 'Old Seven',
+            sport: 'soccer',
+            locations: ['Old Field'],
+            division: {
+              gender: 'womens',
+              playersPerSide: 7,
+              level: 'intermediate',
+              ageGroup: 'adult',
+            },
+          },
+        ],
+      });
+      const [league] = await ctx.db.query('leagues').collect();
+      await ctx.db.patch('leagues', league._id, {
+        searchText:
+          "Old Seven Soccer Women's 7v7 Intermediate womens Older Org Old Field Austin, TX",
+      });
+    });
+
+    const first = await t.mutation(internal.seed.insertDemoData, {});
+    expect(first.backfilled.leagues).toBe(1);
+    const rewritten = await textsOf(t);
+    expect(rewritten['old-seven']).toBe(
+      'Old Seven Soccer Women 7v7 Intermediate womens Older Org Old Field Austin, TX',
+    );
 
     const second = await t.mutation(internal.seed.insertDemoData, {});
     expect(second.backfilled.leagues).toBe(0);

@@ -6,6 +6,7 @@ import { holdQueries } from './support/hold-queries';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { screenshot } from './support/screenshot';
 import {
   dateFromToday,
   numberedLocations,
@@ -40,9 +41,9 @@ const LEAGUES = [
   beach('Wednesday Reverse Coed 4s', 'coed', 4, 'b'),
   beach('Saturday Coed 6s', 'coed', 6, 'rec'),
   beach('Friday Coed 6s', 'coed', 6, 'b'),
-  beach("Sunday Women's 6s", 'womens', 6, 'a'),
-  beach("Tuesday Women's 2s", 'womens', 2, 'a'),
-  beach("Thursday Men's 4s", 'mens', 4, 'aa'),
+  beach('Sunday Women 6s', 'womens', 6, 'a'),
+  beach('Tuesday Women 2s', 'womens', 2, 'a'),
+  beach('Thursday Men 4s', 'mens', 4, 'aa'),
 ];
 
 const openSeason = (name: string) => ({
@@ -131,7 +132,7 @@ test.describe('organization filters: raw server HTML', () => {
   );
 
   test(
-    "4v4 or 6v6 reads 6 of 7 over two pages that keep both formats, and Tuesday Women's 2s is on neither",
+    '4v4 or 6v6 reads 6 of 7 over two pages that keep both formats, and Tuesday Women 2s is on neither',
     RAW_HTTP,
     async ({ request }, testInfo) => {
       test.skip(!isDesktop(testInfo), 'raw HTML does not depend on the viewport');
@@ -142,7 +143,7 @@ test.describe('organization filters: raw server HTML', () => {
       expect(countOf(first)).toBe('6 of 7 leagues');
       expect(leagueRows(first)).toHaveLength(5);
       expect(leagueRows(second)).toEqual(['Wednesday Reverse Coed 4s']);
-      expect([...leagueRows(first), ...leagueRows(second)]).not.toContain("Tuesday Women's 2s");
+      expect([...leagueRows(first), ...leagueRows(second)]).not.toContain('Tuesday Women 2s');
       const pageLinks = hrefsIn(between(second, 'aria-label="Leagues pages"', '</nav>'));
       expect(pageLinks).toContain(`${tenant.path}?format=4v4&format=6v6#leagues`);
       for (const href of hrefsIn(between(second, 'aria-label="Active filters"', '</ul>'))) {
@@ -173,7 +174,7 @@ test.describe('organization filters: raw server HTML', () => {
             division: division('u10'),
           },
           {
-            name: "Women's Rec",
+            name: 'Women Rec',
             sport: 'soccer',
             locations: [LOCATIONS[0].name],
             division: division('adult'),
@@ -367,6 +368,36 @@ test.describe('organization filters in the browser', () => {
     await expect(
       isDesktop(testInfo) ? dimensionButton(page, 'Gender: Coed') : filtersButton(page),
     ).toBeFocused();
+  });
+
+  test('the Gender choices read Coed, Men, and Women, and Men shows the pill Gender: Men with gender=mens in the URL', async ({
+    page,
+    consoleGuard,
+  }, testInfo) => {
+    const tenant = await filterTenant();
+    await page.goto(tenant.path);
+    await expect.poll(() => consoleGuard.hydrated).toBe(true);
+    await (isDesktop(testInfo) ? dimensionButton(page, 'Gender') : filtersButton(page)).click();
+    const overlay = isDesktop(testInfo) ? genderPanel(page) : sheet(page);
+    const genders = (
+      isDesktop(testInfo) ? overlay : overlay.getByRole('group', { name: 'Gender' })
+    ).getByRole('checkbox');
+    await expect(genders).toHaveCount(3);
+    for (const [index, name] of ['Coed', 'Men', 'Women'].entries()) {
+      await expect(genders.nth(index)).toHaveAccessibleName(name);
+    }
+    await expect(overlay).not.toContainText(/men['’]s/i);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    await screenshot(page, testInfo, '545-filters-gender');
+
+    await overlay.getByText('Men', { exact: true }).click();
+    await expect(overlay.getByRole('checkbox', { name: 'Men', exact: true })).toBeChecked();
+    await overlay.getByRole('button', { name: /^Show \d+ leagues?$/ }).click();
+    await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
+    await expect(pills(page)).toHaveText([/^Gender: Men\b/]);
+    await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
+      'Thursday Men 4s',
+    ]);
   });
 
   test('the Locations page links keep gender=coed, and a filter change keeps locations=2', async ({
@@ -858,11 +889,11 @@ test.describe('organization filters in the browser', () => {
       await page.goto(tenant.path);
       const form = page.getByRole('search', { name: 'Filter leagues' });
       await form.getByText('Filters').click();
-      await form.getByText("Men's", { exact: true }).click();
+      await form.getByText('Men', { exact: true }).click();
       await form.getByRole('button', { name: 'Show leagues' }).click();
       await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
       await expect(page.locator('#leagues').getByRole('heading', { level: 3 })).toHaveText([
-        "Thursday Men's 4s",
+        'Thursday Men 4s',
       ]);
       await expect(count(page)).toHaveText('1 of 7 leagues');
     });

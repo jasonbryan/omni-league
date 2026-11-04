@@ -16,6 +16,17 @@ export function parseSearchQuery(values: readonly string[]): string {
 
 export const SEARCH_SUGGESTION_LIMIT = 3;
 
+const POSSESSIVE_ENDING = /['\u2019]s$/iu;
+
+/** A division label has no possessive word, so "men's soccer" must search for "men soccer" to find a Men league. */
+export function stripPossessives(q: string): string {
+  return q
+    .split(/\s+/)
+    .map((word) => word.replace(POSSESSIVE_ENDING, ''))
+    .filter(Boolean)
+    .join(' ');
+}
+
 export function searchWords(text: string): string[] {
   return text
     .normalize('NFD')
@@ -37,11 +48,11 @@ function holdsEveryWord(held: readonly string[], wanted: readonly string[]): boo
 
 /** Convex text search takes any word, so this keeps what it found only if every word of `q` is a word of the text; the last may be the start of one, as Convex matches it. */
 export function matchesEveryWord(searchText: string, q: string): boolean {
-  return holdsEveryWord(searchWords(searchText), searchWords(q));
+  return holdsEveryWord(searchWords(searchText), searchWords(stripPossessives(q)));
 }
 
 export function suggestFewerWords(searchTexts: readonly string[], q: string): string[] {
-  const words = q.split(' ').filter(Boolean);
+  const words = stripPossessives(q).split(' ');
   if (words.length < 2) return [];
   const heldWords = searchTexts.map(searchWords);
   const candidates = new Map<string, number>();

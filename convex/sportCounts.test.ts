@@ -236,7 +236,7 @@ describe('a league written before the backfill, then the backfill', () => {
         pendingInviteCounts: 0,
         waitlistCounts: 0,
       },
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await stored(t, organizationId)).toEqual(before);
   });

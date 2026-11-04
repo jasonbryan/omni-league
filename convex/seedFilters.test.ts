@@ -22,7 +22,7 @@ async function seeded() {
 const names = (rows: { name: string }[]) => rows.map((row) => row.name);
 
 describe('the demo data shows the division filters', () => {
-  test("Lakeshore Sand League shows 2 of 5 leagues for coed 4v4, and none for men's 6v6", async () => {
+  test('Lakeshore Sand League shows 2 of 5 leagues for coed 4v4, and none for men 6v6', async () => {
     const t = await seeded();
     const coedFours = await t.query(api.organizations.listPublicLeagues, {
       slug: 'lakeshore-sand-league',

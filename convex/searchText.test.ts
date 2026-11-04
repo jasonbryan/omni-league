@@ -109,7 +109,7 @@ describe('searchText upkeep', () => {
       'sunday-reverse-coed-4s':
         'Sunday Reverse Coed 4s Beach volleyball Coed 4v4 BB Gulf Coast Sport & Social North Beach Sand Courts Corpus Christi, TX',
       'wednesday-coed-slow-pitch':
-        "Wednesday Coed Slow-Pitch Softball Men's 10v10 Intermediate mens Gulf Coast Sport & Social Harbor Fields North Beach Sand Courts Corpus Christi, TX",
+        'Wednesday Coed Slow-Pitch Softball Men 10v10 Intermediate mens Gulf Coast Sport & Social Harbor Fields North Beach Sand Courts Corpus Christi, TX',
       'soccer-draft':
         'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     });
@@ -171,7 +171,7 @@ describe('searchText upkeep', () => {
       'Sunday Reverse Coed 4s Beach volleyball Coed 4v4 BB Gulf Coast Sport & Social South Shore Courts Corpus Christi, TX',
     );
     expect(texts['wednesday-coed-slow-pitch']).toBe(
-      "Wednesday Coed Slow-Pitch Softball Men's 10v10 Intermediate mens Gulf Coast Sport & Social Harbor Fields South Shore Courts Corpus Christi, TX",
+      'Wednesday Coed Slow-Pitch Softball Men 10v10 Intermediate mens Gulf Coast Sport & Social Harbor Fields South Shore Courts Corpus Christi, TX',
     );
     expect(texts['soccer-draft']).toBe(
       'Soccer Draft Soccer Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
@@ -245,7 +245,7 @@ describe('searchText upkeep', () => {
     const published = await leagueSlugged(t, organizationId, 'soccer-draft');
     expect(published.status).toBe('published');
     expect(published.searchText).toBe(
-      "Soccer Draft Soccer Women's 11v11 Competitive 30+ womens Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX",
+      'Soccer Draft Soccer Women 11v11 Competitive 30+ womens Gulf Coast Sport & Social Harbor Fields Corpus Christi, TX',
     );
   });
 
@@ -300,7 +300,7 @@ describe('searchText sport and division words', () => {
       }),
     );
     expect((await searchTexts(t, organizationId))['sunday-reverse-coed-4s']).toBe(
-      "Sunday Reverse Coed 4s Beach volleyball Women's 6v6 A 35+ womens Gulf Coast Sport & Social North Beach Sand Courts Corpus Christi, TX",
+      'Sunday Reverse Coed 4s Beach volleyball Women 6v6 A 35+ womens Gulf Coast Sport & Social North Beach Sand Courts Corpus Christi, TX',
     );
 
     const changed = await leagueSlugged(t, organizationId, 'sunday-reverse-coed-4s');
@@ -355,7 +355,7 @@ describe('searchText sport and division words', () => {
     expect(text).not.toMatch(/Women|womens/);
   });
 
-  test('an adult womens league holds Women’s and womens', async () => {
+  test('an adult womens league holds Women and womens', async () => {
     const { t, organizationId } = await setup();
     await t.run((ctx) =>
       insertLeague(ctx, organizationId, {
@@ -371,7 +371,7 @@ describe('searchText sport and division words', () => {
       }),
     );
     const text = (await searchTexts(t, organizationId))['sunday-eleven'];
-    expect(text).toContain("Women's 11v11 Intermediate womens");
+    expect(text).toContain('Women 11v11 Intermediate womens');
   });
 
   test('a league with a custom level holds its name and the standard level it maps to', async () => {

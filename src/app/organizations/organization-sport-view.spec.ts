@@ -212,7 +212,7 @@ describe('the sport view populated', () => {
     ).toBe('2 leagues');
     expect([...(section?.querySelectorAll('h3') ?? [])].map(text)).toEqual([
       'Coed 7v7 Rec',
-      "Men's Over-30 11v11",
+      'Men Over-30 11v11',
     ]);
   });
 

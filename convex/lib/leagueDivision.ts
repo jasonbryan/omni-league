@@ -4,7 +4,7 @@ import {
   customLevelLabel,
   divisionLabel,
   divisionLabelParts,
-  genderWithoutApostrophe,
+  genderSearchAlias,
   levelLabel,
   type DivisionLabelInput,
 } from './divisions';
@@ -55,6 +55,6 @@ export async function leagueDivisionSearchWords(
 ): Promise<string[]> {
   const input = await leagueDivisionInput(ctx, league);
   if (!input) return [sportName(league.sport)];
-  const alias = genderWithoutApostrophe(input.gender, input.ageGroup);
+  const alias = genderSearchAlias(input.gender, input.ageGroup);
   return [sportName(league.sport), ...divisionLabelParts(input), ...(alias ? [alias] : [])];
 }

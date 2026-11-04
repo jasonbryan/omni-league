@@ -30,9 +30,9 @@ const SAND: LeagueSeed[] = [
   beach('Wednesday Reverse Coed 4s', ['coed', 4, 'b']),
   beach('Saturday Coed 6s', ['coed', 6, 'rec']),
   beach('Friday Coed 6s', ['coed', 6, 'b']),
-  beach("Sunday Women's 6s", ['womens', 6, 'a']),
-  beach("Tuesday Women's 2s", ['womens', 2, 'a']),
-  beach("Thursday Men's 4s", ['mens', 4, 'aa']),
+  beach('Sunday Women 6s', ['womens', 6, 'a']),
+  beach('Tuesday Women 2s', ['womens', 2, 'a']),
+  beach('Thursday Men 4s', ['mens', 4, 'aa']),
 ];
 
 async function setup() {
@@ -92,12 +92,12 @@ describe('organizations.listPublicLeagues with division filters', () => {
         'Friday Coed 6s',
         'Monday Coed 4s',
         'Saturday Coed 6s',
-        "Sunday Women's 6s",
-        "Thursday Men's 4s",
+        'Sunday Women 6s',
+        'Thursday Men 4s',
         'Wednesday Reverse Coed 4s',
       ],
     ],
-    [{ level: ['a'] }, ["Sunday Women's 6s", "Tuesday Women's 2s"]],
+    [{ level: ['a'] }, ['Sunday Women 6s', 'Tuesday Women 2s']],
     [{ gender: ['mens'], playersPerSide: [6] }, []],
     [
       { ageGroup: ['adult'], gender: ['womens', 'mens'] },
@@ -155,7 +155,7 @@ describe('organizations.listPublicLeagues with division filters', () => {
       sport: 'beachVolleyball',
       gender: ['mens'],
     });
-    expect(names(result.rows)).toEqual(["Thursday Men's 4s"]);
+    expect(names(result.rows)).toEqual(['Thursday Men 4s']);
     expect(result.total).toBe(1);
   });
 
@@ -326,7 +326,7 @@ describe('the several-sports rule', () => {
       page: 1,
       playersPerSide: [2, 11],
     });
-    expect(names(inside.rows)).toEqual(["Tuesday Women's 2s"]);
+    expect(names(inside.rows)).toEqual(['Tuesday Women 2s']);
   });
 });
 

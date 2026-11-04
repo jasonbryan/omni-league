@@ -29,7 +29,7 @@ const NORTH_BEACH = {
 
 const GULF_COAST_LEAGUES: LeagueSeed[] = [
   { name: 'Coed 7v7 Rec', sport: 'soccer', locations: [BAYSIDE.name] },
-  { name: "Men's Over-30 11v11", sport: 'soccer', locations: [BAYSIDE.name] },
+  { name: 'Men Over-30 11v11', sport: 'soccer', locations: [BAYSIDE.name] },
   { name: 'Sunday Reverse Coed 4s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
   { name: 'Thursday Night Coed 2s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
   {
@@ -68,7 +68,7 @@ async function oneSport(): Promise<Target> {
     name: 'E2E One Sport',
     locations: [NORTH_BEACH],
     leagues: [
-      { name: 'Tuesday Women’s 2s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
+      { name: 'Tuesday Women 2s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
       { name: 'Saturday Coed 6s', sport: 'beachVolleyball', locations: [NORTH_BEACH.name] },
     ],
   });
@@ -181,7 +181,7 @@ test.describe('sport chips and the sport view: raw server HTML', () => {
         expect(textOf(/<h2\b[^>]*>([\s\S]*?)<\/h2>/.exec(leagues)?.[1] ?? ''), query).toBe(
           'Soccer leagues',
         );
-        expect(namesIn(leagues), query).toEqual(['Coed 7v7 Rec', "Men's Over-30 11v11"]);
+        expect(namesIn(leagues), query).toEqual(['Coed 7v7 Rec', 'Men Over-30 11v11']);
         expect(namesIn(sectionOf(html, 'locations')), query).toEqual([BAYSIDE.name]);
 
         expect(html, query).toContain(`<title>Soccer | ${target.name} | Omni League</title>`);
@@ -406,7 +406,7 @@ test.describe('the sport view in the browser', () => {
         .getByRole('link', { name: /^Soccer/ })
         .click();
       await expect(page).toHaveURL(`${baseURL}${target.path}/sports/soccer`);
-      await expect(page.locator('#leagues h3')).toHaveText(['Coed 7v7 Rec', "Men's Over-30 11v11"]);
+      await expect(page.locator('#leagues h3')).toHaveText(['Coed 7v7 Rec', 'Men Over-30 11v11']);
     });
   });
 });

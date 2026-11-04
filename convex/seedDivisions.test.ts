@@ -111,7 +111,7 @@ describe('seed:demo division backfill', () => {
     const t = setup();
     const { ids } = await insertLegacy(t, 'front-range-rec-sports', [
       ['Coed 6v6 Indoor', 'soccer'],
-      ["Men's Modified Fast-Pitch", 'softball'],
+      ['Men Modified Fast-Pitch', 'softball'],
     ]);
 
     const result = await t.mutation(internal.seed.insertDemoData, {});
@@ -124,7 +124,7 @@ describe('seed:demo division backfill', () => {
       ageGroup: 'adult',
       minimumRosterSize: 8,
     });
-    expect(await leagueRow(t, ids["Men's Modified Fast-Pitch"])).toMatchObject({
+    expect(await leagueRow(t, ids['Men Modified Fast-Pitch'])).toMatchObject({
       gender: 'mens',
       playersPerSide: 9,
       level: 'competitive',
@@ -134,7 +134,7 @@ describe('seed:demo division backfill', () => {
   test('links the demo league that uses a custom level to it, inserting the level first', async () => {
     const t = setup();
     const { ids } = await insertLegacy(t, 'saguaro-valley-softball', [
-      ["Men's D Division Slow-Pitch", 'softball'],
+      ['Men D Division Slow-Pitch', 'softball'],
     ]);
 
     const result = await t.mutation(internal.seed.insertDemoData, {});
@@ -148,7 +148,7 @@ describe('seed:demo division backfill', () => {
       standardLevel: 'rec',
     });
     expect(result.customLevels).toBe(1);
-    expect(await leagueRow(t, ids["Men's D Division Slow-Pitch"])).toMatchObject({
+    expect(await leagueRow(t, ids['Men D Division Slow-Pitch'])).toMatchObject({
       gender: 'mens',
       playersPerSide: 10,
       level: 'rec',
@@ -162,7 +162,7 @@ describe('seed:demo division backfill', () => {
       ['Tuesday 5s', 'beachVolleyball'],
       ['Tuesday League', 'soccer'],
       ['Newest Six', 'soccer'],
-      ["Women's Thursday Open 6v6", 'beachVolleyball'],
+      ['Women Thursday Open 6v6', 'beachVolleyball'],
     ]);
     await addSeason(t, organizationId, ids['Newest Six'], {
       slug: 'old',
@@ -190,7 +190,7 @@ describe('seed:demo division backfill', () => {
       playersPerSide: 6,
       minimumRosterSize: 8,
     });
-    expect(await leagueRow(t, ids["Women's Thursday Open 6v6"])).toMatchObject({
+    expect(await leagueRow(t, ids['Women Thursday Open 6v6'])).toMatchObject({
       gender: 'womens',
       playersPerSide: 6,
       level: 'open',
@@ -302,7 +302,7 @@ describe('seed:demo divisions on an empty deployment', () => {
     ]);
     const used = stored.filter((entry) => entry.league.customLevelId !== undefined);
     expect(used.map((entry) => [entry.organization, entry.league.name])).toEqual([
-      ['saguaro-valley-softball', "Men's D Division Slow-Pitch"],
+      ['saguaro-valley-softball', 'Men D Division Slow-Pitch'],
     ]);
     expect(used[0].league.customLevelId).toBe(levels[0]._id);
     expect(levels[0].organizationId).toBe(used[0].league.organizationId);
@@ -357,7 +357,7 @@ describe('seed:demo divisions on an empty deployment', () => {
       leagues: 0,
       seasons: 0,
       backfilled: ZERO_BACKFILL,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
 
     expect(await read()).toEqual(before);

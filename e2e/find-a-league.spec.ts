@@ -312,7 +312,7 @@ test.describe('find a league: raw server HTML', () => {
     );
 
     test(
-      'womens, typed without the apostrophe, lists the adult league and not the girls league',
+      'womens, typed as the plural, lists the adult league and not the girls league',
       RAW_HTTP,
       async ({ request }) => {
         const id = await seedDivisions();

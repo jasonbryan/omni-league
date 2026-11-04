@@ -110,7 +110,7 @@ const LEAGUES: LeagueSeed[] = [
     division: { gender: 'coed', playersPerSide: 7, level: 'rec', ageGroup: 'adult' },
   },
   {
-    name: "Men's Over-30 11v11",
+    name: 'Men Over-30 11v11',
     sport: 'soccer' as const,
     locations: ['Bayside Athletic Complex'],
     division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
@@ -143,7 +143,7 @@ const LEAGUES: LeagueSeed[] = [
   },
 ];
 const COED = 'coed-7v7-rec';
-const MENS = 'men-s-over-30-11v11';
+const MENS = 'men-over-30-11v11';
 const SUNDAY = 'sunday-reverse-coed-4s';
 const THURSDAY = 'thursday-night-coed-2s';
 const SLOW_PITCH = 'tuesday-coed-slow-pitch';

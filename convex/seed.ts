@@ -1,6 +1,6 @@
 import { v, type Infer } from 'convex/values';
 import { components, internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import {
   env,
   internalAction,
@@ -56,8 +56,10 @@ import {
   insertSeason,
   insertTenant,
   seasonSlugTaken,
+  updateLeague,
   updateOrganizationCityState,
   type DemoDivision,
+  type LeagueDivision,
   type DivisionSeed,
   type NewSeason,
   type Tenant,
@@ -73,6 +75,7 @@ function division(
 }
 
 // Insert-only: never rename or remove an entry, or the seed inserts it again next to the old one.
+// The one exception is `DEMO_LEAGUE_RENAMES`, which renames the row in place.
 export const DEMO: readonly Tenant[] = [
   {
     organization: {
@@ -99,7 +102,7 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 7, 'rec'),
       },
       {
-        name: "Men's Over-30 11v11",
+        name: 'Men Over-30 11v11',
         sport: 'soccer',
         locations: ['Bayside Athletic Complex'],
         division: division('mens', 11, 'rec', { ageGroup: 'over30' }),
@@ -158,7 +161,7 @@ export const DEMO: readonly Tenant[] = [
         division: division('womens', 7, 'rec', { ageGroup: 'u10' }),
       },
       {
-        name: "Women's Sunday 11v11",
+        name: 'Women Sunday 11v11',
         sport: 'soccer',
         locations: ['Cottonwood Creek Fields'],
         division: division('womens', 11, 'intermediate'),
@@ -170,7 +173,7 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 10, 'rec'),
       },
       {
-        name: "Men's Modified Fast-Pitch",
+        name: 'Men Modified Fast-Pitch',
         sport: 'softball',
         locations: ['Bluebird Softball Complex', 'Cottonwood Creek Fields'],
         division: division('mens', 9, 'competitive'),
@@ -189,7 +192,7 @@ export const DEMO: readonly Tenant[] = [
     ],
     leagues: [
       {
-        name: "Tuesday Women's 2s",
+        name: 'Tuesday Women 2s',
         sport: 'beachVolleyball',
         locations: ['Driftwood Beach Courts'],
         division: division('womens', 2, 'a'),
@@ -201,7 +204,7 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 6, 'rec'),
       },
       {
-        name: "Competitive Men's 4s",
+        name: 'Competitive Men 4s',
         sport: 'beachVolleyball',
         locations: ['Harbor Point Sand Courts'],
         division: division('mens', 4, 'aa'),
@@ -244,7 +247,7 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 10, 'rec', { ageGroup: 'over55' }),
       },
       {
-        name: "Men's D Division Slow-Pitch",
+        name: 'Men D Division Slow-Pitch',
         sport: 'softball',
         locations: ['Saguaro Ridge Park', 'Mesquite Flats Diamonds'],
         division: division('mens', 10, 'rec', { customLevel: 'D' }),
@@ -335,13 +338,13 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 6, 'aa'),
       },
       {
-        name: "Competitive Men's 2s",
+        name: 'Competitive Men 2s',
         sport: 'beachVolleyball',
         locations: ['Lakeshore Cove Sand Courts', 'Pocket Bend Sand Courts'],
         division: division('mens', 2, 'open'),
       },
       {
-        name: "Competitive Men's Fast-Pitch",
+        name: 'Competitive Men Fast-Pitch',
         sport: 'softball',
         locations: ['Oak Hollow Diamonds'],
         division: division('mens', 9, 'competitive'),
@@ -359,13 +362,13 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 10, 'intermediate'),
       },
       {
-        name: "Men's 11v11 Competitive",
+        name: 'Men 11v11 Competitive',
         sport: 'soccer',
         locations: ['Delta Breeze Fields'],
         division: division('mens', 11, 'competitive'),
       },
       {
-        name: "Men's Over-40 7v7",
+        name: 'Men Over-40 7v7',
         sport: 'soccer',
         locations: ['Sunrise Ridge Turf'],
         division: division('mens', 7, 'rec', { ageGroup: 'over40' }),
@@ -395,13 +398,13 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 6, 'rec'),
       },
       {
-        name: "Sunday Men's Over-50 Slow-Pitch",
+        name: 'Sunday Men Over-50 Slow-Pitch',
         sport: 'softball',
         locations: ['Bridgeway Softball Complex', 'Riverside Landing Softball Park'],
         division: division('mens', 10, 'rec', { ageGroup: 'over50' }),
       },
       {
-        name: "Sunday Women's 2s",
+        name: 'Sunday Women 2s',
         sport: 'beachVolleyball',
         locations: ['Lakeshore Cove Sand Courts'],
         division: division('womens', 2, 'a'),
@@ -413,13 +416,13 @@ export const DEMO: readonly Tenant[] = [
         division: division('coed', 2, 'b'),
       },
       {
-        name: "Thursday Men's 4s",
+        name: 'Thursday Men 4s',
         sport: 'beachVolleyball',
         locations: ['American River Sand Courts'],
         division: division('mens', 4, 'bb'),
       },
       {
-        name: "Tuesday Open Men's 2s",
+        name: 'Tuesday Open Men 2s',
         sport: 'beachVolleyball',
         locations: ['Pocket Bend Sand Courts'],
         division: division('mens', 2, 'open'),
@@ -431,31 +434,31 @@ export const DEMO: readonly Tenant[] = [
         division: division('mens', 9, 'rec', { ageGroup: 'u12' }),
       },
       {
-        name: "Wednesday Women's 4s",
+        name: 'Wednesday Women 4s',
         sport: 'beachVolleyball',
         locations: ['Pocket Bend Sand Courts'],
         division: division('womens', 4, 'b'),
       },
       {
-        name: "Women's 7v7 Intermediate",
+        name: 'Women 7v7 Intermediate',
         sport: 'soccer',
         locations: ['Mallard Point Park'],
         division: division('womens', 7, 'intermediate'),
       },
       {
-        name: "Women's A 6s",
+        name: 'Women A 6s',
         sport: 'beachVolleyball',
         locations: ['American River Sand Courts'],
         division: division('womens', 6, 'a'),
       },
       {
-        name: "Women's Modified Fast-Pitch",
+        name: 'Women Modified Fast-Pitch',
         sport: 'softball',
         locations: ['Oak Hollow Diamonds'],
         division: division('womens', 9, 'intermediate'),
       },
       {
-        name: "Women's Sunday 11v11",
+        name: 'Women Sunday 11v11',
         sport: 'soccer',
         locations: ['Capitol Grove Turf Center'],
         division: division('womens', 11, 'competitive'),
@@ -492,6 +495,28 @@ const DEMO_DIVISIONS: readonly DemoDivision[] = DEMO.flatMap((tenant) =>
       : [],
   ),
 );
+
+// A reused staging holds these demo leagues under their earlier names; see `renameDemoLeagues`.
+const DEMO_LEAGUE_RENAMES: readonly (readonly [from: string, to: string])[] = [
+  ["Men's Over-30 11v11", 'Men Over-30 11v11'],
+  ["Women's Sunday 11v11", 'Women Sunday 11v11'],
+  ["Men's Modified Fast-Pitch", 'Men Modified Fast-Pitch'],
+  ["Tuesday Women's 2s", 'Tuesday Women 2s'],
+  ["Competitive Men's 4s", 'Competitive Men 4s'],
+  ["Men's D Division Slow-Pitch", 'Men D Division Slow-Pitch'],
+  ["Competitive Men's 2s", 'Competitive Men 2s'],
+  ["Competitive Men's Fast-Pitch", 'Competitive Men Fast-Pitch'],
+  ["Men's 11v11 Competitive", 'Men 11v11 Competitive'],
+  ["Men's Over-40 7v7", 'Men Over-40 7v7'],
+  ["Sunday Men's Over-50 Slow-Pitch", 'Sunday Men Over-50 Slow-Pitch'],
+  ["Sunday Women's 2s", 'Sunday Women 2s'],
+  ["Thursday Men's 4s", 'Thursday Men 4s'],
+  ["Tuesday Open Men's 2s", 'Tuesday Open Men 2s'],
+  ["Wednesday Women's 4s", 'Wednesday Women 4s'],
+  ["Women's 7v7 Intermediate", 'Women 7v7 Intermediate'],
+  ["Women's A 6s", 'Women A 6s'],
+  ["Women's Modified Fast-Pitch", 'Women Modified Fast-Pitch'],
+];
 
 // Insert-only: a published season under the slug of an existing draft would never be inserted, so
 // the published seasons have slugs of their own.
@@ -634,7 +659,7 @@ const resultValidator = v.object({
     pendingInviteCounts: v.number(),
     waitlistCounts: v.number(),
   }),
-  updated: v.object({ organizations: v.number() }),
+  updated: v.object({ organizations: v.number(), leagues: v.number() }),
 });
 
 // Refuses to write on production, even when run from the dashboard or the CLI.
@@ -670,6 +695,55 @@ async function ensureOrganization(
   return { id, inserted: true, updated: false };
 }
 
+async function findLeagueByName(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  name: string,
+): Promise<Doc<'leagues'> | null> {
+  return ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_name', (q) =>
+      q.eq('organizationId', organizationId).eq('name', name),
+    )
+    .first();
+}
+
+function storedDivision(league: Doc<'leagues'>): LeagueDivision | undefined {
+  const { gender, playersPerSide, level, customLevelId, ageGroup, minimumRosterSize } = league;
+  if (gender === undefined || playersPerSide === undefined || level === undefined) return undefined;
+  if (ageGroup === undefined) return undefined;
+  return {
+    gender,
+    playersPerSide,
+    level,
+    ageGroup,
+    ...(customLevelId !== undefined && { customLevelId }),
+    ...(minimumRosterSize !== undefined && { minimumRosterSize }),
+  };
+}
+
+/** Runs before the insert loop, so the loop finds each league by its new name instead of inserting it again. */
+async function renameDemoLeagues(ctx: MutationCtx): Promise<number> {
+  let renamed = 0;
+  for (const tenant of DEMO) {
+    const organization = await ctx.db
+      .query('organizations')
+      .withIndex('by_slug', (q) => q.eq('slug', tenant.organization.slug))
+      .unique();
+    if (!organization) continue;
+    for (const [from, to] of DEMO_LEAGUE_RENAMES) {
+      if (!tenant.leagues.some((league) => league.name === to)) continue;
+      const earlier = await findLeagueByName(ctx, organization._id, from);
+      if (!earlier || (await findLeagueByName(ctx, organization._id, to))) continue;
+      const division = storedDivision(earlier);
+      if (!division) continue;
+      await updateLeague(ctx, earlier, { name: to, division });
+      renamed++;
+    }
+  }
+  return renamed;
+}
+
 async function ensureCustomLevels(
   ctx: MutationCtx,
   organizationId: Id<'organizations'>,
@@ -691,7 +765,7 @@ export const insertDemoData = internalMutation({
   handler: async (ctx) => {
     assertPreviewDeployment();
     const inserted = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
-    const updated = { organizations: 0 };
+    const updated = { organizations: 0, leagues: 0 };
     // Existing organizations get their custom levels first, so a demo league can name its level.
     for (const tenant of DEMO) {
       const slug = tenant.organization.slug;
@@ -709,6 +783,7 @@ export const insertDemoData = internalMutation({
       pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
       waitlistCounts: await backfillSeasonWaitlistCounts(ctx),
     };
+    updated.leagues = await renameDemoLeagues(ctx);
     for (const tenant of DEMO) {
       const organization = await ensureOrganization(ctx, tenant);
       const organizationId = organization.id;
@@ -734,13 +809,7 @@ export const insertDemoData = internalMutation({
       );
 
       for (const league of tenant.leagues) {
-        const existing = await ctx.db
-          .query('leagues')
-          .withIndex('by_organizationId_and_name', (q) =>
-            q.eq('organizationId', organizationId).eq('name', league.name),
-          )
-          .first();
-        if (existing) continue;
+        if (await findLeagueByName(ctx, organizationId, league.name)) continue;
         await insertLeague(ctx, organizationId, league);
         inserted.leagues++;
       }
