@@ -179,6 +179,8 @@ test.describe('Leagues: the division chips', () => {
     await expect(radio(page, 'Soccer')).toBeChecked();
     await page.keyboard.press('ArrowLeft');
     await expect(radio(page, 'Beach volleyball')).toBeChecked();
+    // The browser checks the chip before the app swaps the Format chips to the sport's own.
+    await expect(radio(page, '2v2')).toBeAttached();
 
     await page.keyboard.press(tabKey(page));
     await expect(radio(page, 'Coed')).toBeFocused();
