@@ -387,10 +387,11 @@ test.describe('organization filters in the browser', () => {
       await expect(genders.nth(index)).toHaveAccessibleName(name);
     }
     await expect(overlay).not.toContainText(/men['’]s/i);
-    await expectAccessible(page);
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '545-filters-gender');
 
-    await overlay.getByRole('checkbox', { name: 'Men', exact: true }).check();
+    await overlay.getByText('Men', { exact: true }).click();
+    await expect(overlay.getByRole('checkbox', { name: 'Men', exact: true })).toBeChecked();
     await overlay.getByRole('button', { name: /^Show \d+ leagues?$/ }).click();
     await expect(page).toHaveURL(`${baseURL}${tenant.path}?gender=mens`);
     await expect(pills(page)).toHaveText([/^Gender: Men\b/]);
