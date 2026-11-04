@@ -34,13 +34,14 @@ export function teamInviteLink(origin: string, token: string): string {
   return `${origin}/teams/join#${token}`;
 }
 
-/** `alreadyOnAnotherTeam`, with the other team's name, `waitingFreeAgent`, and `teamFull` come from the roster writer. */
+/** `alreadyOnAnotherTeam`, with the other team's name, `onWaitlist`, with the waiting team's name and position, `waitingFreeAgent`, and `teamFull` come from the roster writer. */
 export type TeamInviteAcceptCode =
   | 'invalid'
   | 'emailMismatch'
   | 'alreadyOnTeam'
   | 'alreadyOnAnotherTeam'
   | 'waitingFreeAgent'
+  | 'onWaitlist'
   | 'teamFull'
   | 'nothingChosen'
   | 'minorNameEmpty'

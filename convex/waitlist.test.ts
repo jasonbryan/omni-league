@@ -142,7 +142,7 @@ async function setup() {
         }),
       );
     }
-    await addRosterEntry(ctx, (await ctx.db.get('teams', teamIds[0]!))!, {
+    await addRosterEntry(ctx, (await ctx.db.get('teams', teamIds[0]))!, {
       userId: users.player.userId,
       source: 'invite',
       addedByUserId: users['captain-1'].userId,
@@ -152,7 +152,7 @@ async function setup() {
       (await ctx.db.get('seasons', seasonId))!,
       users['free-agent'].userId,
     );
-    return { seasonId, users, teamOne: teamIds[0]!, coedId: coed._id };
+    return { seasonId, users, teamOne: teamIds[0], coedId: coed._id };
   });
   return { t, ...ids };
 }
@@ -236,13 +236,13 @@ describe('teams.register in a full season: the waitlist', () => {
     expect(after.entries).toEqual(before.entries);
     expect(after.waitlist).toEqual([
       expect.objectContaining({
-        organizationId: before.seasons[0]!.organizationId,
+        organizationId: before.seasons[0].organizationId,
         seasonId: s.seasonId,
         userId: s.users.late.userId,
         teamName: 'Late Lobsters',
         sortName: 'late lobsters',
         status: 'waiting',
-        requestedAt: expect.any(Number),
+        requestedAt: expect.any(Number) as number,
       }),
     ]);
     expect((await season(s)).waitlistCount).toBe(1);
@@ -382,7 +382,7 @@ describe('waiting teams keep their place', () => {
     expect(await s.t.query(api.seasons.getForRegistration, SLUGS)).toMatchObject({ isFull: true });
     expect(await s.t.query(api.seasons.getPublicPage, SLUGS)).toMatchObject({ isFull: true });
     const [first] = await waitingEntries(s);
-    await expect(promote(s, first!._id)).resolves.toMatchObject({ teamCount: 3, maxTeams: 3 });
+    await expect(promote(s, first._id)).resolves.toMatchObject({ teamCount: 3, maxTeams: 3 });
     await expectCountersMatchRecount(s);
   });
 
@@ -405,14 +405,14 @@ describe('waitlist.promote', () => {
     await register(s, 'late', 'Late Lobsters');
     await setMax(s, 3);
     const [entry] = await waitingEntries(s);
-    return { s, entryId: entry!._id };
+    return { s, entryId: entry._id };
   }
 
   test('creates the team and the captain entry, counts it, and marks the entry promoted; its own name does not refuse it', async () => {
     const { s, entryId } = await raisedWithEntry();
     vi.setSystemTime(OPEN_NOW + 5000);
     const result = await promote(s, entryId);
-    expect(result).toEqual({ teamId: expect.any(String), teamCount: 3, maxTeams: 3 });
+    expect(result).toEqual({ teamId: expect.any(String) as string, teamCount: 3, maxTeams: 3 });
     const { teams, entries, waitlist } = await snapshot(s);
     const team = teams.find((row) => row._id === result.teamId)!;
     expect(team).toMatchObject({
@@ -457,7 +457,7 @@ describe('waitlist.promote', () => {
     await register(s, 'late', 'Late Lobsters');
     const [entry] = await waitingEntries(s);
     const before = await snapshot(s);
-    expect(await promote(s, entry!._id).catch(refusalOf)).toEqual({
+    expect(await promote(s, entry._id).catch(refusalOf)).toEqual({
       code: 'noRoom',
       message: 'The season is full. Raise the maximum teams first.',
     });
@@ -538,14 +538,14 @@ describe('waitlist.listForOrganizer', () => {
     expect(list).toEqual({
       rows: [
         {
-          waitlistEntryId: expect.any(String),
+          waitlistEntryId: expect.any(String) as string,
           teamName: 'Late Lobsters',
           captainName: 'Name late',
           captainEmail: 'late@example.test',
           requestedAt: OPEN_NOW,
         },
         {
-          waitlistEntryId: expect.any(String),
+          waitlistEntryId: expect.any(String) as string,
           teamName: 'Shore Thing',
           captainName: 'Name later',
           captainEmail: 'later@example.test',
@@ -566,7 +566,7 @@ describe('waitlist.listForOrganizer', () => {
       const answer = await as(s, who)
         .query(api.waitlist.listForOrganizer, SLUGS)
         .catch((failure: unknown) => failure);
-      expect(answer).not.toMatchObject({ waitlistCount: expect.any(Number) });
+      expect(answer).not.toMatchObject({ waitlistCount: expect.any(Number) as number });
     },
   );
 
@@ -575,7 +575,7 @@ describe('waitlist.listForOrganizer', () => {
     const answer = await s.t
       .query(api.waitlist.listForOrganizer, SLUGS)
       .catch((failure: unknown) => failure);
-    expect(answer).not.toMatchObject({ waitlistCount: expect.any(Number) });
+    expect(answer).not.toMatchObject({ waitlistCount: expect.any(Number) as number });
   });
 
   test('an unknown slug and a season slug of another league give null', async () => {
@@ -591,7 +591,7 @@ describe('waitlist.listForOrganizer', () => {
       await organizer
         .query(api.waitlist.listForOrganizer, { ...SLUGS, leagueSlug: 'mens-2s' })
         .catch((failure: unknown) => failure),
-    ).not.toMatchObject({ rows: expect.anything() });
+    ).not.toMatchObject({ rows: expect.anything() as unknown });
   });
 });
 

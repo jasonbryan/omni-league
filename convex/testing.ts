@@ -21,6 +21,7 @@ import {
   insertTeamInvite,
   insertTeamWithCaptain,
   isMinorEntry,
+  registerTeamOrJoinWaitlist,
   removeRosterEntry,
 } from './lib/rosterWrites';
 import { seasonStatusValidator } from './lib/seasonStatus';
@@ -420,6 +421,29 @@ export const seedTeam = internalMutation({
     const captain = await userByEmail(ctx, captainEmail);
     const teamId = await insertTeamWithCaptain(ctx, season, { name, captainUserId: captain._id });
     return { teamId };
+  },
+});
+
+/** A team on the season's waitlist through the roster writer, skipping the registration window; the season must be full. */
+export const seedWaitlistEntry = internalMutation({
+  args: {
+    organizationSlug: v.string(),
+    leagueSlug: v.string(),
+    seasonSlug: v.string(),
+    teamName: v.string(),
+    captainEmail: v.string(),
+  },
+  returns: v.object({ position: v.number() }),
+  handler: async (ctx, { organizationSlug, leagueSlug, seasonSlug, teamName, captainEmail }) => {
+    assertTestDeployment();
+    const season = await seasonBySlugs(ctx, organizationSlug, leagueSlug, seasonSlug);
+    const captain = await userByEmail(ctx, captainEmail);
+    const result = await registerTeamOrJoinWaitlist(ctx, season, {
+      name: teamName,
+      captainUserId: captain._id,
+    });
+    if (result.status !== 'waitlisted') throw new Error('The season is not full');
+    return { position: result.position };
   },
 });
 

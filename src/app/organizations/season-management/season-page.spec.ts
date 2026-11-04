@@ -15,6 +15,7 @@ import { SeasonPage } from './season-page';
 
 const GET_VIEW = 'seasons:getOrganizerView';
 const LIST_FREE_AGENTS = 'freeAgents:listForOrganizer';
+const LIST_WAITLIST = 'waitlist:listForOrganizer';
 const SEASON_SLUG = 'summer-2027';
 const URL = `/app/organizations/${GULF.slug}/leagues/${COED.slug}/seasons/${SEASON_SLUG}`;
 const SLUGS = { orgSlug: GULF.slug, leagueSlug: COED.slug, seasonSlug: SEASON_SLUG };
@@ -65,6 +66,20 @@ const freeAgent = (i: number) => ({
 });
 
 const FREE_AGENTS = { rows: [freeAgent(0), freeAgent(1)], hasMore: false };
+const NO_WAITLIST = { rows: [], waitlistCount: 0 };
+
+const waiting = (i: number, teamName: string) => ({
+  waitlistEntryId: `wl_${i}`,
+  teamName,
+  captainName: `Captain ${i}`,
+  captainEmail: `captain${i}@example.com`,
+  requestedAt: Date.UTC(2026, 9, 6 + i, 18),
+});
+
+const WAITLIST = {
+  rows: [waiting(0, 'Late Lobsters'), waiting(1, 'Shore Thing')],
+  waitlistCount: 2,
+};
 const tokens = (value: string) => value.split(' ').sort();
 
 describe('SeasonPage', () => {
@@ -72,13 +87,19 @@ describe('SeasonPage', () => {
   let o: Opened;
   let page: HTMLElement;
 
-  async function open(league: unknown, view: unknown, freeAgents?: unknown) {
+  async function open(
+    league: unknown,
+    view: unknown,
+    freeAgents?: unknown,
+    waitlist: unknown = NO_WAITLIST,
+  ) {
     o = await openAdmin(ROUTES, URL);
     page = o.page;
     o.acceptToken();
     o.subscription(GET_ORGANIZER_CONTEXT)!.emit(league);
     o.subscription(GET_VIEW)!.emit(view);
     await o.flush();
+    o.subscription(LIST_WAITLIST)?.emit(waitlist);
     if (freeAgents !== undefined) o.subscription(LIST_FREE_AGENTS)!.emit(freeAgents);
     await o.flush();
   }
@@ -103,10 +124,12 @@ describe('SeasonPage', () => {
       ]);
       expect(asked(GET_VIEW).map((s) => s.args)).toEqual([SLUGS]);
       expect(asked(LIST_FREE_AGENTS)).toEqual([]);
+      expect(asked(LIST_WAITLIST)).toEqual([]);
       o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
       o.subscription(GET_VIEW)!.emit(VIEW);
       await o.flush();
       expect(asked(LIST_FREE_AGENTS).map((s) => s.args)).toEqual([SLUGS]);
+      expect(asked(LIST_WAITLIST).map((s) => s.args)).toEqual([SLUGS]);
       expect(text(o.page.querySelector('main [role="status"]'))).toBe('Loading the season.');
     });
   });
@@ -771,6 +794,151 @@ describe('SeasonPage', () => {
       expect(text(page.querySelector('#edit-maximum-roster-size-error'))).toBe(
         'Block Party already has 7 players. Enter 7 or more, or leave it blank.',
       );
+    });
+  });
+
+  describe('the waitlist', () => {
+    const PROMOTE = 'waitlist:promote';
+    const FULL_VIEW = { ...VIEW, maxTeams: 3 };
+    const ROOM_VIEW = { ...VIEW, maxTeams: 5 };
+    const rows = () => [...page.querySelectorAll<HTMLElement>('#waitlist-list > li')];
+    const promoteButton = (team: string) =>
+      [...page.querySelectorAll<HTMLButtonElement>('#waitlist button')].find(
+        (button) => text(button) === `Promote ${team}`,
+      );
+
+    it('empty: says when teams wait here, and the tile reads 0', async () => {
+      await open(COED, VIEW, FREE_AGENTS);
+      const panel = page.querySelector('#waitlist');
+      expect(text(panel?.querySelector('h2'))).toBe('Waitlist');
+      expect(text(panel)).toContain(
+        'No teams waiting When the season is full, teams that register wait here in the order they joined.',
+      );
+      expect(text(page.querySelector('[data-testid="waitlist-tile"]'))).toBe('0');
+    });
+
+    it('populated in a full season: the count, the no-room note, and each team oldest first with its position', async () => {
+      await open(COED, FULL_VIEW, FREE_AGENTS, WAITLIST);
+      expect(text(page.querySelector('[data-testid="waitlist-tile"]'))).toBe('2');
+      expect(text(page.querySelector('[data-testid="waitlist-count"]'))).toBe('2 waiting');
+      expect(text(page.querySelector('#waitlist [role="note"]'))).toBe(
+        'The season is full Raise the maximum teams to promote a waiting team.',
+      );
+      expect(page.querySelector('#waitlist-list')?.tagName).toBe('OL');
+      expect(rows().map((row) => text(row.querySelector('h3')))).toEqual([
+        'Late Lobsters',
+        'Shore Thing',
+      ]);
+      const first = rows()[0];
+      expect(text(first)).toContain('Position 1');
+      expect(text(first)).toContain('Captain: Captain 0');
+      expect(first.querySelector('a')?.getAttribute('href')).toBe('mailto:captain0@example.com');
+      expect(text(first)).toContain('Joined Oct 6, 2026');
+      expect(tokens(promoteButton('Late Lobsters')!.className)).toEqual(tokens(OUTLINE_BUTTON));
+    });
+
+    it('with room while teams wait: says to promote to fill the places', async () => {
+      await open(COED, ROOM_VIEW, FREE_AGENTS, WAITLIST);
+      expect(text(page.querySelector('#waitlist [role="note"]'))).toBe(
+        'Room for 2 more teams While teams are waiting, new teams still join the waitlist, so promote to fill the places.',
+      );
+    });
+
+    it('promote: sends the entry, shows the pending label, then the promoted status, focused', async () => {
+      await open(COED, ROOM_VIEW, FREE_AGENTS, WAITLIST);
+      promoteButton('Late Lobsters')!.click();
+      await o.flush();
+      expect(o.convex.calls.map((c) => [c.name, c.args])).toEqual([
+        [PROMOTE, { waitlistEntryId: 'wl_0' }],
+      ]);
+      const pending = [...page.querySelectorAll('#waitlist button')][0];
+      expect(text(pending)).toBe('Promoting… Late Lobsters');
+      expect(pending?.getAttribute('aria-disabled')).toBe('true');
+      o.convex.calls[0].resolve({ teamId: 'tm_late', teamCount: 4, maxTeams: 5 });
+      await o.flush();
+      const status = page.querySelector<HTMLElement>(
+        '#waitlist [role="status"][data-slot="alert"]',
+      );
+      expect(text(status)).toBe(
+        'Late Lobsters is a team now. Captain 0 is its captain and can invite players. The season has 4 of 5 teams.',
+      );
+      expect(document.activeElement).toBe(status);
+    });
+
+    it('promote refused for no room: the destructive alert, focused', async () => {
+      await open(COED, FULL_VIEW, FREE_AGENTS, WAITLIST);
+      promoteButton('Shore Thing')!.click();
+      await o.flush();
+      o.convex.calls[0].reject(
+        new ConvexError({
+          code: 'noRoom',
+          message: 'The season is full. Raise the maximum teams first.',
+        }),
+      );
+      await o.flush();
+      const alert = page.querySelector<HTMLElement>('#waitlist [role="alert"]');
+      expect(text(alert)).toBe(
+        'Shore Thing could not be promoted. The season is full. Raise the maximum teams first.',
+      );
+      expect(alert?.className).toContain('text-destructive');
+      expect(document.activeElement).toBe(alert);
+    });
+
+    it('saving a raised maximum while teams wait says to promote into the new places', async () => {
+      await open(COED, FULL_VIEW, FREE_AGENTS, WAITLIST);
+      [...page.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => text(button) === 'Edit maximum teams')!
+        .click();
+      await o.flush();
+      const field = page.querySelector<HTMLInputElement>('#edit-maximum-teams')!;
+      field.value = '5';
+      field.dispatchEvent(new Event('input'));
+      await o.flush();
+      [...page.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => text(button) === 'Save changes')!
+        .click();
+      await o.flush();
+      o.convex.calls[0].resolve(null);
+      await o.flush();
+      expect(
+        text(page.querySelector('section[aria-labelledby="limits-heading"] [role="status"]')),
+      ).toBe(
+        'Maximum teams saved. The season takes up to 5 teams. Teams on the waitlist keep their place: promote them to fill the 2 places.',
+      );
+    });
+    it('offline: a press shows the offline alert and sends nothing', async () => {
+      await open(COED, ROOM_VIEW, FREE_AGENTS, WAITLIST);
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      TestBed.tick();
+      await o.harness.fixture.whenStable();
+      const button = promoteButton('Late Lobsters')!;
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      button.click();
+      await o.flush();
+      expect(text(page.querySelector('#waitlist [role="alert"]'))).toBe(
+        "You're offline. Nothing was sent. Late Lobsters is still waiting. Try again when you’re connected.",
+      );
+      expect(o.convex.calls).toEqual([]);
+      vi.restoreAllMocks();
+      window.dispatchEvent(new Event('online'));
+    });
+
+    it('a failed waitlist shows an alert in its panel and keeps the teams', async () => {
+      o = await openAdmin(ROUTES, URL);
+      page = o.page;
+      o.acceptToken();
+      o.subscription(GET_ORGANIZER_CONTEXT)!.emit(COED);
+      o.subscription(GET_VIEW)!.emit(VIEW);
+      await o.flush();
+      o.subscription(LIST_FREE_AGENTS)!.emit(FREE_AGENTS);
+      o.subscription(LIST_WAITLIST)!.fail(new Error('network'));
+      await o.flush();
+      expect(text(page.querySelector('#waitlist [role="alert"]'))).toContain(
+        'The waitlist could not be loaded.',
+      );
+      expect(text(page.querySelector('[data-testid="waitlist-tile"]'))).toBe('–');
+      expect(teamRows()).toHaveLength(3);
     });
   });
 });

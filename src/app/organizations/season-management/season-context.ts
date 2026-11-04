@@ -15,11 +15,14 @@ export type SeasonFreeAgents = NonNullable<
   FunctionReturnType<typeof api.freeAgents.listForOrganizer>
 >;
 
+export type SeasonWaitlist = NonNullable<FunctionReturnType<typeof api.waitlist.listForOrganizer>>;
+
 export type SeasonState = 'loading' | 'ready' | 'not-found' | 'forbidden' | 'error';
 
 /**
  * The league and the season are asked once Convex has accepted the token, so their first answers are the caller's own.
- * The free agents are asked only once both say the caller organizes the season, so a refused caller or an unknown slug requests none.
+ * The free agents and the waitlist are asked only once both say the caller organizes the season, so a refused caller or an unknown slug
+ * requests neither.
  */
 @Injectable()
 export class SeasonContext {
@@ -63,11 +66,16 @@ export class SeasonContext {
     this.frameState() === 'ready' ? this.params() : skipToken,
   );
 
+  private readonly waitlistQuery = injectQuery(api.waitlist.listForOrganizer, () =>
+    this.frameState() === 'ready' ? this.params() : skipToken,
+  );
+
   readonly state = computed<SeasonState>(() => {
     const frame = this.frameState();
     if (frame !== 'ready') return frame;
-    const waiting =
-      this.freeAgentsQuery.value() === undefined && this.freeAgentsQuery.error() === undefined;
+    const waiting = [this.freeAgentsQuery, this.waitlistQuery].some(
+      (query) => query.value() === undefined && query.error() === undefined,
+    );
     return waiting ? 'loading' : 'ready';
   });
 
@@ -82,6 +90,11 @@ export class SeasonContext {
   /** `null` when the list failed: the rest of the page still shows. */
   readonly freeAgents = computed<SeasonFreeAgents | null>(() =>
     this.state() === 'ready' ? (this.freeAgentsQuery.value() ?? null) : null,
+  );
+
+  /** `null` when the list failed: the rest of the page still shows. */
+  readonly waitlist = computed<SeasonWaitlist | null>(() =>
+    this.state() === 'ready' ? (this.waitlistQuery.value() ?? null) : null,
   );
 
   constructor() {

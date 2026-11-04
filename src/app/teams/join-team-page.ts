@@ -88,6 +88,7 @@ type Refusal =
   | { kind: 'alreadyOnTeam'; teamId: string }
   | { kind: 'alreadyOnAnotherTeam'; teamName: string }
   | { kind: 'waitingFreeAgent' }
+  | { kind: 'onWaitlist'; teamName: string; position: number }
   | { kind: 'teamFull' }
   | { kind: 'minorName'; error: MinorNameError }
   | { kind: 'failed' }
@@ -99,8 +100,8 @@ interface RefusalText {
   description: string;
 }
 
-/** This refusal leaves the invite pending but nothing to press here. */
-const SETTLED: ReadonlySet<Refusal['kind']> = new Set(['alreadyOnTeam']);
+/** These refusals leave the invite pending but nothing to press here. */
+const SETTLED: ReadonlySet<Refusal['kind']> = new Set(['alreadyOnTeam', 'onWaitlist']);
 
 /** The one-team and free-agent rules stop only the person's own entry, so a minor can still be added. */
 type SelfBlocked = { kind: 'otherTeam'; teamName: string } | { kind: 'freeAgent' };
@@ -127,6 +128,12 @@ function refusalOf(failure: unknown): Refusal | 'invalid' {
       return { kind: 'alreadyOnAnotherTeam', teamName: text('teamName') };
     case 'waitingFreeAgent':
       return { kind: 'waitingFreeAgent' };
+    case 'onWaitlist':
+      return {
+        kind: 'onWaitlist',
+        teamName: text('teamName'),
+        position: typeof fields['position'] === 'number' ? fields['position'] : 0,
+      };
     case 'teamFull':
       return { kind: 'teamFull' };
     default:
@@ -789,6 +796,12 @@ export class JoinTeamPage {
           title: 'You’re registered as a free agent in this season.',
           description: `Organizers place free agents on teams. Ask an organizer of ${leagueName} to place you on ${teamName}. You can still add a minor you’re responsible for.`,
         };
+      case 'onWaitlist':
+        return {
+          alert: 'waitlist',
+          title: `You’re on the waitlist with ${refusal.teamName} in this season.`,
+          description: `${refusal.teamName} is at position ${refusal.position}. While it waits, you can’t join another team in this season or add a minor to one. Leaving the waitlist isn’t possible yet.`,
+        };
       case 'teamFull':
         return {
           alert: 'full',
@@ -816,6 +829,7 @@ export class JoinTeamPage {
         route: ['/app', 'teams', refusal.teamId],
       };
     }
+    if (refusal?.kind === 'onWaitlist') return { label: 'Go to your account', route: ['/app'] };
     if (refusal && SETTLED.has(refusal.kind)) return { label: 'Go to your teams', route: ['/app'] };
     return null;
   });

@@ -34,6 +34,7 @@ const SUMMER = {
   isFull: false,
   team: null,
   freeAgent: null,
+  waitlist: null,
 };
 const SHARKS = { teamId: 'team_sharks', name: 'Sand Sharks', isCaptain: false, rosterCount: 4 };
 const WAITING = { ...SUMMER, freeAgent: { status: 'waiting', registeredAt: REGISTERED_AT } };
@@ -149,6 +150,23 @@ describe('RegisterFreeAgentPage', () => {
       expect(linkNamed('Back to the season page')?.getAttribute('href')).toBe(SEASON_PATH);
       expect(page.querySelector('form')).toBeNull();
       expect(page.textContent).not.toContain('Registration for this season is closed.');
+    });
+
+    it('a waiting captain: the waitlist position with a link to the team route, and no form', async () => {
+      await open();
+      await answer({
+        ...SUMMER,
+        isFull: true,
+        waitlist: { teamName: 'Late Lobsters', position: 2 },
+      });
+      expect(cardAlert()?.getAttribute('role')).toBe('status');
+      expect(text(cardAlert())).toBe(
+        'You’re on the waitlist with Late Lobsters, position 2. While your team waits, you can’t also register as a free agent in this season.',
+      );
+      expect(linkNamed('See your waitlist place')?.getAttribute('href')).toBe(
+        URL.replace(/free-agent$/, 'team'),
+      );
+      expect(page.querySelector('form')).toBeNull();
     });
 
     it('neither after the deadline: the closed state with the deadline and no form', async () => {
