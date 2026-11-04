@@ -33,11 +33,20 @@ export interface NothingChosenRefusal {
   message: string;
 }
 
+// A zero-width space would join the surname to the first name in `shortMinorName`, and a bidi override reorders the name on other teams' pages.
+const INVISIBLE_CHARACTER = /[\p{Cc}\p{Cf}]/u;
+
+export const INVISIBLE_CHARACTER_MESSAGE = 'Remove the hidden or control characters from the name.';
+
+export function hasInvisibleCharacter(text: string): boolean {
+  return INVISIBLE_CHARACTER.test(text);
+}
+
 export const MINOR_MESSAGES = {
   minorNameEmpty: 'Enter the minor’s name.',
   minorNameTooLong: (length: number) =>
     `Use ${MAX_MINOR_NAME_LENGTH} characters or fewer. This name has ${length}.`,
-  minorNameInvisible: 'Remove the hidden or control characters from the name.',
+  minorNameInvisible: INVISIBLE_CHARACTER_MESSAGE,
   minorInSeason: (minorName: string, teamName: string) =>
     `${minorName} is already on ${teamName} in this season.`,
   minorLimit: `You’ve added ${MAX_MINORS_PER_GUARDIAN_IN_SEASON} minors in this season, removed ones included, which is the most one guardian can add.`,
@@ -52,9 +61,6 @@ export function normalizeMinorName(name: string): string {
 export function minorNameKey(name: string): string {
   return normalizeMinorName(name).toLowerCase();
 }
-
-// A zero-width space would join the surname to the first name in `shortMinorName`, and a bidi override reorders the name on other teams' pages.
-const INVISIBLE_CHARACTER = /[\p{Cc}\p{Cf}]/u;
 
 export function checkMinorName(
   name: string,
@@ -76,7 +82,7 @@ export function checkMinorName(
       },
     };
   }
-  if (INVISIBLE_CHARACTER.test(normalized)) {
+  if (hasInvisibleCharacter(normalized)) {
     return {
       ok: false,
       error: {

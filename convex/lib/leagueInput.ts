@@ -7,6 +7,7 @@ import {
   type AgeGroup,
   type StandardLevel,
 } from './divisions';
+import { hasInvisibleCharacter, INVISIBLE_CHARACTER_MESSAGE } from './minorName';
 import { ORGANIZATION_MESSAGES } from './organizationInput';
 import { isChoosableSlug } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX, type Sport } from './sports';
@@ -16,6 +17,7 @@ export const MAX_LEAGUE_NAME_LENGTH = 100;
 export type LeagueInputCode =
   | 'nameEmpty'
   | 'nameTooLong'
+  | 'nameInvisible'
   | 'slugEmpty'
   | 'slugInvalid'
   | 'slugTaken'
@@ -43,6 +45,7 @@ export const LEAGUE_MESSAGES = {
   nameEmpty: 'Enter the league’s name.',
   nameTooLong: (length: number) =>
     `Use ${MAX_LEAGUE_NAME_LENGTH} characters or fewer. This name has ${length}.`,
+  nameInvisible: INVISIBLE_CHARACTER_MESSAGE,
   slugEmpty: 'Enter a slug for the league.',
   slugInvalid: ORGANIZATION_MESSAGES.slugInvalid,
   slugTaken: (slug: string) =>
@@ -83,6 +86,12 @@ export function checkLeagueName(
         code: 'nameTooLong',
         message: LEAGUE_MESSAGES.nameTooLong(trimmed.length),
       },
+    };
+  }
+  if (hasInvisibleCharacter(trimmed)) {
+    return {
+      ok: false,
+      error: { field: 'name', code: 'nameInvisible', message: LEAGUE_MESSAGES.nameInvisible },
     };
   }
   return { ok: true, name: trimmed };

@@ -448,6 +448,13 @@ describe('leagues.create', () => {
       code: 'nameTooLong',
       message: 'Use 100 characters or fewer. This name has 101.',
     });
+    expect(
+      await refusal(s.adminA.mutation(api.leagues.create, { ...valid(s), name: '\u200B\u200B' })),
+    ).toEqual({
+      field: 'name',
+      code: 'nameInvisible',
+      message: 'Remove the hidden or control characters from the name.',
+    });
     expect(await snapshot(s.t)).toEqual(before);
   });
 

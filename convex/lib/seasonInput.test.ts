@@ -69,6 +69,24 @@ describe('checkSeasonName', () => {
   });
 });
 
+describe('checkSeasonName hidden characters', () => {
+  test.each([
+    ['only zero-width spaces', '\u200B\u200B'],
+    ['a zero-width space inside', 'Fall\u200B2026'],
+    ['a right-to-left override', 'Fall \u202E2026'],
+    ['a null character', 'Fall\u00002026'],
+  ])('refuses a name with %s', (_, name) => {
+    expect(checkSeasonName(name)).toEqual({
+      ok: false,
+      error: {
+        field: 'name',
+        code: 'nameInvisible',
+        message: 'Remove the hidden or control characters from the name.',
+      },
+    });
+  });
+});
+
 describe('checkSeasonSlug', () => {
   test('accepts a slug and refuses an empty one', () => {
     expect(checkSeasonSlug('fall-2026')).toBeNull();

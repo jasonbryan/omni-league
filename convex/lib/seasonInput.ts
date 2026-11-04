@@ -1,5 +1,6 @@
 // Imports only `convex/lib` files that import nothing from the server, so the app can import it.
 import { LEAGUE_MESSAGES } from './leagueInput';
+import { hasInvisibleCharacter, INVISIBLE_CHARACTER_MESSAGE } from './minorName';
 import { isChoosableSlug } from './slugs';
 import { ROSTER_SIZE_INPUT_MAX } from './sports';
 
@@ -27,6 +28,7 @@ export type SeasonDateField = 'startDate' | 'endDate' | 'registrationDeadline';
 export type SeasonInputCode =
   | 'nameEmpty'
   | 'nameTooLong'
+  | 'nameInvisible'
   | 'slugEmpty'
   | 'slugInvalid'
   | 'slugTaken'
@@ -62,6 +64,7 @@ export const SEASON_MESSAGES = {
   nameEmpty: 'Enter the season’s name.',
   nameTooLong: (length: number) =>
     `Use ${MAX_SEASON_NAME_LENGTH} characters or fewer. This name has ${length}.`,
+  nameInvisible: INVISIBLE_CHARACTER_MESSAGE,
   slugEmpty: 'Enter a slug for the season.',
   slugInvalid: LEAGUE_MESSAGES.slugInvalid,
   slugTaken: (slug: string, leagueName: string) =>
@@ -119,6 +122,12 @@ export function checkSeasonName(
         code: 'nameTooLong',
         message: SEASON_MESSAGES.nameTooLong(trimmed.length),
       },
+    };
+  }
+  if (hasInvisibleCharacter(trimmed)) {
+    return {
+      ok: false,
+      error: { field: 'name', code: 'nameInvisible', message: SEASON_MESSAGES.nameInvisible },
     };
   }
   return { ok: true, name: trimmed };

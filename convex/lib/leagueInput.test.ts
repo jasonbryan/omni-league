@@ -4,8 +4,31 @@ import {
   checkLeagueFormat,
   checkLeagueLevel,
   checkLeagueMinimumRosterSize,
+  checkLeagueName,
   LEAGUE_MESSAGES,
 } from './leagueInput';
+
+describe('checkLeagueName hidden characters', () => {
+  test.each([
+    ['only zero-width spaces', '\u200B\u200B'],
+    ['a zero-width space inside', 'Sunday\u200BCoed'],
+    ['a right-to-left override', 'Sunday \u202ECoed'],
+    ['a null character', 'Sunday\u0000Coed'],
+  ])('refuses a name with %s', (_, name) => {
+    expect(checkLeagueName(name)).toEqual({
+      ok: false,
+      error: {
+        field: 'name',
+        code: 'nameInvisible',
+        message: 'Remove the hidden or control characters from the name.',
+      },
+    });
+  });
+
+  test('accepts accents and apostrophes', () => {
+    expect(checkLeagueName(' Zoë’s Sunday Coed ')).toEqual({ ok: true, name: 'Zoë’s Sunday Coed' });
+  });
+});
 
 describe('checkLeagueFormat', () => {
   test('accepts the formats of the sport and nothing outside its range', () => {
