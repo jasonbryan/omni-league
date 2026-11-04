@@ -11,7 +11,12 @@ import {
   type SearchLeagues,
   type SearchOrganizations,
 } from './lib/publicPage';
-import { matchesEveryWord, parseSearchQuery, suggestFewerWords } from './lib/searchQuery';
+import {
+  matchesEveryWord,
+  parseSearchQuery,
+  stripPossessives,
+  suggestFewerWords,
+} from './lib/searchQuery';
 import { SPORT_NAMES, sportName, type Sport } from './lib/sports';
 
 export const SEARCH_RESULT_LIMIT = 50;
@@ -24,7 +29,7 @@ export const leagues = query({
   returns: searchLeaguesValidator,
   handler: async (ctx, args): Promise<SearchLeagues> => {
     // The browser sends it already parsed; a caller that does not is held to the same limits.
-    const q = parseSearchQuery([args.q]);
+    const q = stripPossessives(parseSearchQuery([args.q]));
     if (q === '') return { rows: [], more: false };
     const scanned = await ctx.db
       .query('leagues')

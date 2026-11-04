@@ -69,9 +69,9 @@ test.describe('Leagues: the division', () => {
   }, testInfo) => {
     await openLeagues(page);
     await chooseChip(chip(page, 'Beach volleyball'));
-    await page.locator('#name').fill('Wednesday Women’s 2s BB');
+    await page.locator('#name').fill('Wednesday Women 2s BB');
     await page.locator('#name').blur();
-    await expect(radio(page, "Women's")).toBeChecked();
+    await expect(radio(page, 'Women')).toBeChecked();
     await expect(radio(page, '2v2')).toBeChecked();
     await expect(radio(page, 'BB')).toBeChecked();
     await expect(form(page).getByRole('status').filter({ hasText: FILLED_STATUS })).toBeVisible();
@@ -79,7 +79,7 @@ test.describe('Leagues: the division', () => {
     await expectAccessible(page);
 
     await chooseChip(chip(page, 'Coed'));
-    await page.locator('#name').fill('Thursday Men’s 3s A');
+    await page.locator('#name').fill('Thursday Men 3s A');
     await page.locator('#name').blur();
     await expect(radio(page, 'Coed')).toBeChecked();
     await expect(radio(page, '3v3')).toBeChecked();
@@ -132,8 +132,8 @@ test.describe('Leagues: the division chips', () => {
     await expect(radio(page, 'Soccer')).toBeChecked();
     await expect(radio(page, 'Beach volleyball')).not.toBeChecked();
 
-    await chip(page, "Women's").click();
-    await expect(radio(page, "Women's")).toBeChecked();
+    await chip(page, 'Women').click();
+    await expect(radio(page, 'Women')).toBeChecked();
     await expect(radio(page, 'Coed')).not.toBeChecked();
 
     await chip(page, '7v7').click();
@@ -183,9 +183,9 @@ test.describe('Leagues: the division chips', () => {
     await page.keyboard.press(tabKey(page));
     await expect(radio(page, 'Coed')).toBeFocused();
     await page.keyboard.press('ArrowRight');
-    await expect(radio(page, "Men's")).toBeChecked();
+    await expect(radio(page, 'Men')).toBeChecked();
     await page.keyboard.press('ArrowDown');
-    await expect(radio(page, "Women's")).toBeChecked();
+    await expect(radio(page, 'Women')).toBeChecked();
 
     // None is chosen in Format, so Tab lands on its first chip and Space chooses it.
     await page.keyboard.press(tabKey(page));
@@ -245,12 +245,12 @@ test.describe('Leagues: the division chips', () => {
     page,
   }) => {
     await openLeagues(page);
-    await page.locator('#name').fill('Wednesday Women’s 2s BB');
+    await page.locator('#name').fill('Wednesday Women 2s BB');
     await page.locator('#name').blur();
     await expect(form(page).getByRole('status').filter({ hasText: FILLED_STATUS })).toHaveCount(0);
 
     await chip(page, 'Beach volleyball').click();
-    await expect(radio(page, "Women's")).toBeChecked();
+    await expect(radio(page, 'Women')).toBeChecked();
     await expect(radio(page, '2v2')).toBeChecked();
     await expect(radio(page, 'BB')).toBeChecked();
     await expect(form(page).getByRole('status').filter({ hasText: FILLED_STATUS })).toBeVisible();
@@ -259,13 +259,13 @@ test.describe('Leagues: the division chips', () => {
   test('leaving Name again fills only what the organizer has not chosen', async ({ page }) => {
     await openLeagues(page);
     await chip(page, 'Beach volleyball').click();
-    await page.locator('#name').fill('Wednesday Women’s 2s BB');
+    await page.locator('#name').fill('Wednesday Women 2s BB');
     await page.locator('#name').blur();
     await chip(page, '5v5').click();
 
-    await page.locator('#name').fill('Thursday Men’s 3s A');
+    await page.locator('#name').fill('Thursday Men 3s A');
     await page.locator('#name').blur();
-    await expect(radio(page, "Men's")).toBeChecked();
+    await expect(radio(page, 'Men')).toBeChecked();
     await expect(radio(page, '5v5')).toBeChecked();
     await expect(radio(page, 'A')).toBeChecked();
   });
@@ -275,11 +275,11 @@ test.describe('Leagues: the division chips', () => {
   }) => {
     await openLeagues(page);
     await chip(page, 'Beach volleyball').click();
-    await page.locator('#name').fill('Wednesday Women’s 2s BB');
+    await page.locator('#name').fill('Wednesday Women 2s BB');
     await page.locator('#name').blur();
 
     await chip(page, 'Soccer').click();
-    await expect(radio(page, "Women's")).toBeChecked();
+    await expect(radio(page, 'Women')).toBeChecked();
     await expect(form(page).locator('#format input:checked')).toHaveCount(0);
     await expect(radio(page, 'Rec')).toBeChecked();
     await expect(
@@ -306,13 +306,13 @@ test.describe('Leagues: the division chips', () => {
   }) => {
     await openLeagues(page);
     await chip(page, 'Beach volleyball').click();
-    await page.locator('#name').fill('Wednesday Women’s 2s BB');
+    await page.locator('#name').fill('Wednesday Women 2s BB');
     await page.locator('#name').blur();
     await expect(radio(page, 'BB')).toBeChecked();
 
-    await page.locator('#name').fill('Wednesday Women’s 4s');
+    await page.locator('#name').fill('Wednesday Women 4s');
     await page.locator('#name').blur();
-    await expect(radio(page, "Women's")).toBeChecked();
+    await expect(radio(page, 'Women')).toBeChecked();
     await expect(radio(page, '4v4')).toBeChecked();
     await expect(radio(page, 'Rec')).toBeChecked();
     await expect(

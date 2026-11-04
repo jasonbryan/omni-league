@@ -3,7 +3,7 @@ import { filledFromNameMessage, LeagueDivision } from './league-division';
 
 const GOLD = { customLevelId: 'gold' as Id<'customLevels'>, standardLevel: 'a' as const };
 
-const NAME = "Wednesday Women's 2s BB";
+const NAME = 'Wednesday Women 2s BB';
 
 describe('LeagueDivision', () => {
   it('starts as Coed, Rec, and Adult with no format and no minimum', () => {
@@ -63,8 +63,8 @@ describe('LeagueDivision', () => {
 
     it('returns a filled field to its default when the edited name no longer states it', () => {
       const division = new LeagueDivision();
-      division.fillFromName("Women's 2s BB", 'beachVolleyball');
-      division.fillFromName("Women's league", 'beachVolleyball');
+      division.fillFromName('Women 2s BB', 'beachVolleyball');
+      division.fillFromName('Women league', 'beachVolleyball');
       expect([division.gender(), division.playersPerSide(), division.level()]).toEqual([
         'womens',
         null,
@@ -75,9 +75,9 @@ describe('LeagueDivision', () => {
 
     it('keeps a field the organizer chose when the edited name no longer states it', () => {
       const division = new LeagueDivision();
-      division.fillFromName("Women's 2s BB", 'beachVolleyball');
+      division.fillFromName('Women 2s BB', 'beachVolleyball');
       division.chooseLevel('a');
-      division.fillFromName("Women's 2s", 'beachVolleyball');
+      division.fillFromName('Women 2s', 'beachVolleyball');
       expect(division.level()).toBe('a');
     });
 
@@ -281,7 +281,7 @@ describe('LeagueDivision: a custom level', () => {
     it('fills a choice from the name when the name states a different value', () => {
       const division = new LeagueDivision();
       division.load({ ...SAVED, customLevelId: undefined });
-      division.fillFromName("Women's 6s BB", 'beachVolleyball');
+      division.fillFromName('Women 6s BB', 'beachVolleyball');
       expect([division.gender(), division.playersPerSide(), division.level()]).toEqual([
         'womens',
         6,
@@ -293,7 +293,7 @@ describe('LeagueDivision: a custom level', () => {
     it('keeps a saved custom level, which the name does not override', () => {
       const division = new LeagueDivision();
       division.load(SAVED);
-      division.fillFromName("Women's 6s BB", 'beachVolleyball');
+      division.fillFromName('Women 6s BB', 'beachVolleyball');
       expect([division.level(), division.customLevelId()]).toEqual(['a', GOLD.customLevelId]);
       expect(division.filledFromName()).toEqual(['gender', 'format']);
     });
@@ -301,7 +301,7 @@ describe('LeagueDivision: a custom level', () => {
     it('says nothing about a choice the name states as it already is', () => {
       const division = new LeagueDivision();
       division.load({ ...SAVED, customLevelId: undefined, level: 'bb', gender: 'womens' });
-      division.fillFromName("Women's 4s BB", 'beachVolleyball');
+      division.fillFromName('Women 4s BB', 'beachVolleyball');
       expect(division.filledFromName()).toEqual([]);
     });
   });
@@ -344,7 +344,7 @@ describe('LeagueDivision: values saved by someone else', () => {
     division.chooseCustomLevel(GOLD);
     expect(division.edited()).toEqual(new Set(['level']));
     division.load(SAVED);
-    division.fillFromName("Women's 6s A", 'beachVolleyball');
+    division.fillFromName('Women 6s A', 'beachVolleyball');
     expect(division.edited()).toEqual(new Set(['gender', 'format', 'level']));
   });
 
@@ -393,16 +393,16 @@ describe('LeagueDivision: values saved by someone else', () => {
 
   it('stops the name from changing an edited choice whose baseline came from someone else', () => {
     const division = loaded();
-    division.fillFromName("Women's 2s", 'beachVolleyball');
+    division.fillFromName('Women 2s', 'beachVolleyball');
     division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
-    division.fillFromName("Women's 3s", 'beachVolleyball');
+    division.fillFromName('Women 3s', 'beachVolleyball');
     expect(division.playersPerSide()).toBe(2);
   });
 
   it('still fills a choice the other save did not change', () => {
     const division = loaded();
     division.takeSavedByOthers({ ...SAVED, playersPerSide: 6 });
-    division.fillFromName("Women's 4s", 'beachVolleyball');
+    division.fillFromName('Women 4s', 'beachVolleyball');
     expect([division.gender(), division.playersPerSide()]).toEqual(['womens', 6]);
   });
 
@@ -457,7 +457,7 @@ describe('LeagueDivision: notes on a field another organizer changed', () => {
       minimumRosterSize: 8,
     });
     expect(shown(division)).toEqual({
-      gender: { kind: 'changed', value: "Women's" },
+      gender: { kind: 'changed', value: 'Women' },
       format: { kind: 'changed', value: '6v6' },
       level: { kind: 'changed', value: 'AA' },
       ageGroup: { kind: 'changed', value: 'U10' },
@@ -592,7 +592,7 @@ describe('LeagueDivision: notes on a field another organizer changed', () => {
 
     it('notes only the choices the other save changed, and still fills the others', () => {
       const division = afterOthersSaved6();
-      division.fillFromName("Sunday Women's 4s", 'beachVolleyball');
+      division.fillFromName('Sunday Women 4s', 'beachVolleyball');
       expect(division.gender()).toBe('womens');
       expect(shown(division)).toEqual({ format: { kind: 'rename', value: '6v6' } });
     });

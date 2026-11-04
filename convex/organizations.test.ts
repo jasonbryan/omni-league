@@ -645,7 +645,7 @@ describe('organizations:listPublicLeagues rows', () => {
       locations: [{ name: 'Home Field', address: '1 Home Road' }],
       leagues: [
         {
-          name: "Men's Over-30 11v11",
+          name: 'Men Over-30 11v11',
           sport: 'soccer',
           locations: ['Home Field'],
           division: {
@@ -670,7 +670,7 @@ describe('organizations:listPublicLeagues rows', () => {
     });
     expect(leagues.rows.map((row) => [row.name, row.divisionLabel])).toEqual([
       ['Coed 4s', 'Coed · 4v4 · BB'],
-      ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+"],
+      ['Men Over-30 11v11', 'Men · 11v11 · Rec · 30+'],
       ['Undivided', undefined],
     ]);
     expect(Object.keys(leagues.rows[2] ?? {})).not.toContain('divisionLabel');
@@ -690,7 +690,7 @@ describe('organizations:listPublicLeagues rows', () => {
         standardLevel: 'rec',
       });
       await insertLeague(ctx, organizationId, {
-        name: "Men's D Slow-Pitch",
+        name: 'Men D Slow-Pitch',
         sport: 'softball',
         locations: ['Home Field'],
         division: {
@@ -706,7 +706,7 @@ describe('organizations:listPublicLeagues rows', () => {
       slug: 'custom-club',
       page: 1,
     });
-    expect(leagues.rows[0]?.divisionLabel).toBe("Men's · 10v10 · D (Rec)");
+    expect(leagues.rows[0]?.divisionLabel).toBe('Men · 10v10 · D (Rec)');
   });
 
   test('a league whose custom level belongs to another organization or sport shows the standard level and the page still loads', async () => {

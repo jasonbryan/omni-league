@@ -4,6 +4,7 @@ import {
   matchesEveryWord,
   parseSearchQuery,
   searchWords,
+  stripPossessives,
   suggestFewerWords,
   SEARCH_QUERY_MAX_LENGTH,
   SEARCH_QUERY_MAX_WORDS,
@@ -63,6 +64,30 @@ describe('searchWords', () => {
   });
 });
 
+describe('stripPossessives', () => {
+  test('removes a word-final straight or typographic apostrophe s from each word', () => {
+    expect(stripPossessives("men's soccer")).toBe('men soccer');
+    expect(stripPossessives('women’s volleyball')).toBe('women volleyball');
+    expect(stripPossessives("joe's pub 4s")).toBe('joe pub 4s');
+  });
+
+  test('ignores case', () => {
+    expect(stripPossessives("MEN'S SOCCER")).toBe('MEN SOCCER');
+    expect(stripPossessives('Women’S')).toBe('Women');
+  });
+
+  test('keeps an apostrophe that does not end a word in s', () => {
+    expect(stripPossessives("o'brien rock'n")).toBe("o'brien rock'n");
+    expect(stripPossessives("players'")).toBe("players'");
+  });
+
+  test('is empty for a search that is only an apostrophe s', () => {
+    expect(stripPossessives("'s")).toBe('');
+    expect(stripPossessives('’s')).toBe('');
+    expect(stripPossessives("'s ’s")).toBe('');
+  });
+});
+
 describe('matchesEveryWord', () => {
   const text =
     'Sunday Reverse Coed 4s Gulf Coast Sport & Social North Beach Sand Courts Corpus Christi, TX';
@@ -106,6 +131,46 @@ describe('matchesEveryWord', () => {
     expect(matchesEveryWord(text, '-')).toBe(false);
     expect(matchesEveryWord(text, '')).toBe(false);
   });
+
+  describe('gender words', () => {
+    const men = 'Men Over-30 11v11 Soccer Men 11v11 Rec 30+ mens Gulf Coast Sport & Social';
+    const women =
+      'Women Sunday 11v11 Soccer Women 11v11 Competitive womens Gulf Coast Sport & Social';
+
+    test('reads a possessive search as the plain word', () => {
+      expect(matchesEveryWord(men, "men's soccer")).toBe(true);
+      expect(matchesEveryWord(men, 'men’s soccer')).toBe(true);
+      expect(matchesEveryWord(men, "MEN'S SOCCER")).toBe(true);
+      expect(matchesEveryWord(women, "women's soccer")).toBe(true);
+      expect(matchesEveryWord(women, "men's soccer")).toBe(false);
+      expect(matchesEveryWord(women, "men's")).toBe(false);
+    });
+
+    test('finds Men by men or mens and Women by women or womens, never the other', () => {
+      expect(matchesEveryWord(men, 'men')).toBe(true);
+      expect(matchesEveryWord(men, 'mens')).toBe(true);
+      expect(matchesEveryWord(men, 'mens soccer')).toBe(true);
+      expect(matchesEveryWord(women, 'women')).toBe(true);
+      expect(matchesEveryWord(women, 'womens')).toBe(true);
+      expect(matchesEveryWord(women, 'men')).toBe(false);
+      expect(matchesEveryWord(women, 'mens')).toBe(false);
+      expect(matchesEveryWord(men, 'women')).toBe(false);
+      expect(matchesEveryWord(men, 'womens')).toBe(false);
+    });
+
+    test('is false for a search that is only an apostrophe s', () => {
+      expect(matchesEveryWord(men, "'s")).toBe(false);
+      expect(matchesEveryWord(men, '’s')).toBe(false);
+    });
+  });
+
+  test('still finds a possessive name by its possessive or its plain word', () => {
+    const text = "Joe's Pub 4s Beach volleyball Coed 4v4 B";
+    expect(matchesEveryWord(text, "joe's")).toBe(true);
+    expect(matchesEveryWord(text, 'joe’s pub')).toBe(true);
+    expect(matchesEveryWord(text, 'joe')).toBe(true);
+    expect(matchesEveryWord(text, "joe's pub 4s")).toBe(true);
+  });
 });
 
 describe('suggestFewerWords', () => {
@@ -142,6 +207,10 @@ describe('suggestFewerWords', () => {
       'coed gulf christi',
       'coed corpus christi',
     ]);
+  });
+
+  test('builds the suggestions from the search without its possessives', () => {
+    expect(suggestFewerWords(texts, "coed's 4s austin's")).toEqual(['coed 4s']);
   });
 
   test('never suggests the same search twice', () => {

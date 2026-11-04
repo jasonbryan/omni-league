@@ -277,7 +277,7 @@ describe('seed:demo accounts: a new deployment', () => {
         ...DATA,
         logos: 1,
         backfilled: NO_BACKFILL,
-        updated: { organizations: 0 },
+        updated: { organizations: 0, leagues: 0 },
         memberships: 5,
         invites: 1,
         teams: 6,
@@ -354,7 +354,7 @@ describe('seed:demo accounts: a new deployment', () => {
       const labels = (
         await admin.query(api.leagues.listForAdmin, { organizationId: saguaro._id })
       ).map((league) => league.divisionLabel);
-      expect(labels).toContain("Men's · 10v10 · D (Rec)");
+      expect(labels).toContain('Men · 10v10 · D (Rec)');
     },
     SLOW,
   );
@@ -815,7 +815,7 @@ describe('seed:demo accounts: a second run', () => {
         seasons: 0,
         logos: 0,
         backfilled: NO_BACKFILL,
-        updated: { organizations: 0 },
+        updated: { organizations: 0, leagues: 0 },
         memberships: 0,
         invites: 0,
         teams: 0,
@@ -943,7 +943,7 @@ describe('seed:demo accounts: the password', () => {
         ...DATA,
         logos: 1,
         backfilled: NO_BACKFILL,
-        updated: { organizations: 0 },
+        updated: { organizations: 0, leagues: 0 },
         memberships: 0,
         invites: 1,
         teams: 0,

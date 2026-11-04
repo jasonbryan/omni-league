@@ -177,8 +177,8 @@ describe('OrganizationPage server render', () => {
       'Beach volleyball, soccer, and softball · 5 leagues at 3 locations',
     );
     expect(lines(body.querySelector('#league-2'))).toEqual([
-      "Men's Over-30 11v11",
-      "Men's · 11v11 · Rec · 30+",
+      'Men Over-30 11v11',
+      'Men · 11v11 · Rec · 30+',
       'Soccer · Bayside Athletic Complex',
       'No upcoming season',
     ]);
@@ -501,7 +501,7 @@ describe('sport view server render', () => {
     expect(text(body.querySelector('#leagues-heading'))).toBe('Soccer leagues');
     expect([...body.querySelectorAll('#leagues li h3')].map(text)).toEqual([
       'Coed 7v7 Rec',
-      "Men's Over-30 11v11",
+      'Men Over-30 11v11',
     ]);
     expect([...body.querySelectorAll('#locations li h3')].map(text)).toEqual([
       'Bayside Athletic Complex',

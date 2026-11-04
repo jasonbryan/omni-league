@@ -53,7 +53,7 @@ describe('seed:demo City, state', () => {
   test('inserts each demo organization with its value, and counts no update', async () => {
     const t = setup();
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.updated).toEqual({ organizations: 0 });
+    expect(result.updated).toEqual({ organizations: 0, leagues: 0 });
     expect(await cityStates(t)).toEqual(DEMO_CITY_STATES);
   });
 
@@ -62,19 +62,19 @@ describe('seed:demo City, state', () => {
     for (const slug of Object.keys(DEMO_CITY_STATES)) await insertBare(t, slug);
 
     const first = await t.mutation(internal.seed.insertDemoData, {});
-    expect(first.updated).toEqual({ organizations: 7 });
+    expect(first.updated).toEqual({ organizations: 7, leagues: 0 });
     expect((await cityStates(t))['lakeshore-sand-league']).toBe('Chicago, IL');
     expect(await cityStates(t)).toMatchObject(DEMO_CITY_STATES);
 
     const second = await t.mutation(internal.seed.insertDemoData, {});
-    expect(second.updated).toEqual({ organizations: 0 });
+    expect(second.updated).toEqual({ organizations: 0, leagues: 0 });
   });
 
   test('keeps a value an admin already set', async () => {
     const t = setup();
     await insertBare(t, 'front-range-rec-sports', 'Boulder, CO');
     const result = await t.mutation(internal.seed.insertDemoData, {});
-    expect(result.updated).toEqual({ organizations: 0 });
+    expect(result.updated).toEqual({ organizations: 0, leagues: 0 });
     expect((await cityStates(t))['front-range-rec-sports']).toBe('Boulder, CO');
   });
 

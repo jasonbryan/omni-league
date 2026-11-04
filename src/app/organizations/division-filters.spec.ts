@@ -180,7 +180,7 @@ describe('filterGroups', () => {
   it('offers only values some league in view has, in the standard order', () => {
     const groups = filterGroups(FACETS, NO_DIVISION_FILTERS, 'beachVolleyball');
     expect(groups.map((group) => [group.legend, group.options.map((o) => o.label)])).toEqual([
-      ['Gender', ['Coed', "Women's"]],
+      ['Gender', ['Coed', 'Women']],
       ['Format', ['2v2', '4v4', '6v6']],
       ['Level', ['BB', 'A']],
       ['Age group', ['Adult']],
@@ -188,7 +188,7 @@ describe('filterGroups', () => {
     expect(groups[0].options.map((option) => option.value)).toEqual(['coed', 'womens']);
   });
 
-  it("does not offer Men's when no league in view is men's", () => {
+  it('does not offer Men when no league in view is men', () => {
     const [gender] = filterGroups(FACETS, NO_DIVISION_FILTERS, 'beachVolleyball');
     expect(gender.options.map((option) => option.value)).not.toContain('mens');
   });

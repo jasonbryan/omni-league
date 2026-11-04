@@ -186,8 +186,8 @@ describe('OrganizationPage', () => {
           'No upcoming season',
         ],
         [
-          "Men's Over-30 11v11",
-          "Men's · 11v11 · Rec · 30+",
+          'Men Over-30 11v11',
+          'Men · 11v11 · Rec · 30+',
           'Soccer · Bayside Athletic Complex',
           'No upcoming season',
         ],

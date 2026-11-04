@@ -94,7 +94,7 @@ describe('the sport view offline', () => {
     expect(text(main?.querySelector('#leagues-heading'))).toBe('Soccer leagues');
     expect([...(main?.querySelectorAll('#leagues h3') ?? [])].map(text)).toEqual([
       'Coed 7v7 Rec',
-      "Men's Over-30 11v11",
+      'Men Over-30 11v11',
     ]);
     expect([...(main?.querySelectorAll('#locations h3') ?? [])].map(text)).toEqual([
       'Bayside Athletic Complex',

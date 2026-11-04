@@ -52,9 +52,9 @@ export const GULF_COAST: PublicOrganizationPage = {
       seasons: [],
     },
     {
-      name: "Men's Over-30 11v11",
-      slug: 'mens-over-30-11v11',
-      divisionLabel: "Men's · 11v11 · Rec · 30+",
+      name: 'Men Over-30 11v11',
+      slug: 'men-over-30-11v11',
+      divisionLabel: 'Men · 11v11 · Rec · 30+',
       sportName: 'Soccer',
       locationNames: ['Bayside Athletic Complex'],
       seasons: [],
@@ -236,9 +236,9 @@ const SAND_DIVISIONS = [
   ['Friday Coed 6s', 'coed', 6, 'b'],
   ['Monday Coed 4s', 'coed', 4, 'bb'],
   ['Saturday Coed 6s', 'coed', 6, 'rec'],
-  ["Sunday Women's 6s", 'womens', 6, 'a'],
-  ["Thursday Men's 4s", 'mens', 4, 'aa'],
-  ["Tuesday Women's 2s", 'womens', 2, 'a'],
+  ['Sunday Women 6s', 'womens', 6, 'a'],
+  ['Thursday Men 4s', 'mens', 4, 'aa'],
+  ['Tuesday Women 2s', 'womens', 2, 'a'],
   ['Wednesday Reverse Coed 4s', 'coed', 4, 'b'],
 ] as const;
 

@@ -93,7 +93,7 @@ describe('AdminLeagues: the Division group', () => {
       await choose('sport-beachVolleyball');
       expect(group('gender')).toEqual({
         legend: 'Gender',
-        labels: ['Coed', "Men's", "Women's"],
+        labels: ['Coed', 'Men', 'Women'],
         checked: ['Coed'],
       });
       expect(group('format')).toEqual({
@@ -174,15 +174,15 @@ describe('AdminLeagues: the Division group', () => {
   });
 
   describe('filling in from the name', () => {
-    const NAME = "Wednesday Women's 2s BB";
+    const NAME = 'Wednesday Women 2s BB';
 
-    it('chooses Women’s, 2v2, and BB when Name is left, and says so in a status', async () => {
+    it('chooses Women, 2v2, and BB when Name is left, and says so in a status', async () => {
       await open();
       await choose('sport-beachVolleyball');
       await type('name', NAME);
       expect(status()).toBe('');
       await leave('name');
-      expect(group('gender').checked).toEqual(["Women's"]);
+      expect(group('gender').checked).toEqual(['Women']);
       expect(group('format').checked).toEqual(['2v2']);
       expect(group('level').checked).toEqual(['BB']);
       expect(status()).toBe(
@@ -246,7 +246,7 @@ describe('AdminLeagues: the Division group', () => {
       ageGroup().dispatchEvent(new Event('change', { bubbles: true }));
       await settle();
       await choose('sport-soccer');
-      expect(group('gender').checked).toEqual(["Men's"]);
+      expect(group('gender').checked).toEqual(['Men']);
       expect(group('format').checked).toEqual(['6v6']);
       expect(group('level').checked).toEqual(['Rec']);
       expect(ageGroup().value).toBe('over40');
@@ -290,7 +290,7 @@ describe('AdminLeagues: the Division group', () => {
       ageGroup().dispatchEvent(new Event('change', { bubbles: true }));
       await settle();
       await submit();
-      expect(group('gender').checked).toEqual(["Women's"]);
+      expect(group('gender').checked).toEqual(['Women']);
       expect(group('level').checked).toEqual(['AA']);
       expect(ageGroup().value).toBe('u12');
       expect(input('name').value).toBe('Sunday Night Sand');

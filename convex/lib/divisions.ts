@@ -117,11 +117,14 @@ export function isYouth(ageGroup: AgeGroup): boolean {
   return /^u\d+$/.test(ageGroup);
 }
 
-export function genderLabel(gender: Gender, ageGroup?: AgeGroup): string {
-  const youth = ageGroup !== undefined && isYouth(ageGroup);
+export function genderName(gender: Gender, youth: boolean): string {
   if (gender === 'coed') return 'Coed';
-  if (gender === 'mens') return youth ? 'Boys' : "Men's";
-  return youth ? 'Girls' : "Women's";
+  if (gender === 'mens') return youth ? 'Boys' : 'Men';
+  return youth ? 'Girls' : 'Women';
+}
+
+export function genderLabel(gender: Gender, ageGroup?: AgeGroup): string {
+  return genderName(gender, ageGroup !== undefined && isYouth(ageGroup));
 }
 
 export function playersPerSideOfSport(sport: Sport): readonly number[] {
@@ -156,8 +159,8 @@ export function divisionLabel(division: DivisionLabelInput): string {
   return divisionLabelParts(division).join(' · ');
 }
 
-/** "Men's" and "Women's" split at the apostrophe when searched, so a search typed without it needs this word. */
-export function genderWithoutApostrophe(gender: Gender, ageGroup?: AgeGroup): string | undefined {
+/** A search typed with the plural "mens" or "womens" must still match the label word "Men" or "Women". */
+export function genderSearchAlias(gender: Gender, ageGroup?: AgeGroup): string | undefined {
   if (gender === 'coed' || (ageGroup !== undefined && isYouth(ageGroup))) return undefined;
   return gender;
 }
@@ -182,8 +185,8 @@ const WORD_BEFORE = "(?<![\\p{L}\\p{N}'])";
 const WORD_AFTER = "(?![\\p{L}\\p{N}'])";
 
 const GENDER_WORDS: readonly (readonly [Gender, RegExp])[] = [
-  ['womens', new RegExp(`${WORD_BEFORE}(?:women's|womens|ladies)${WORD_AFTER}`, 'iu')],
-  ['mens', new RegExp(`${WORD_BEFORE}(?:men's|mens)${WORD_AFTER}`, 'iu')],
+  ['womens', new RegExp(`${WORD_BEFORE}(?:women's|womens|women|ladies)${WORD_AFTER}`, 'iu')],
+  ['mens', new RegExp(`${WORD_BEFORE}(?:men's|mens|men)${WORD_AFTER}`, 'iu')],
   ['coed', new RegExp(`${WORD_BEFORE}(?:co-ed|coed)${WORD_AFTER}`, 'iu')],
 ];
 

@@ -710,8 +710,8 @@ describe('AdminLeagues', () => {
       await open([]);
       await type('name', 'Sunday Reverse Coed 4s');
       expect(input('slug').value).toBe('sunday-reverse-coed-4s');
-      await type('name', "Men's D Division");
-      expect(input('slug').value).toBe('men-s-d-division');
+      await type('name', 'Men D Division');
+      expect(input('slug').value).toBe('men-d-division');
       await type('name', '   ');
       expect(input('slug').value).toBe('');
       await type('slug', 'my-own');

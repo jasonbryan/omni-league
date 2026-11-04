@@ -442,7 +442,7 @@ describe('LeagueDetailsForm', () => {
 
     it('fills the division from a renamed league and says so', async () => {
       await open();
-      await typeName("Sunday Women's 6s A");
+      await typeName('Sunday Women 6s A');
       await leaveName();
       expect(chip('gender', 'womens').checked).toBe(true);
       expect(chip('format', '6').checked).toBe(true);
@@ -699,7 +699,7 @@ describe('LeagueDetailsForm', () => {
             customLevel: { customLevelId: 'cl_gold', name: 'Gold' },
             ageGroup: 'over40',
             minimumRosterSize: 8,
-            label: "Men's · 6v6 · Gold (A)",
+            label: 'Men · 6v6 · Gold (A)',
           },
         }),
       );
@@ -905,7 +905,7 @@ describe('LeagueDetailsForm', () => {
           owner: 'fieldset#details-gender',
           edit: () => choose('gender', 'mens'),
           change: () => live({ gender: 'womens' }),
-          value: "Women's",
+          value: 'Women',
           editAgain: () => choose('gender', 'coed'),
         },
         {
@@ -1086,7 +1086,7 @@ describe('LeagueDetailsForm', () => {
         await choose('format', '2');
         await choose('gender', 'mens');
         await live({ playersPerSide: 6, gender: 'womens' });
-        expect(announced()).toEqual([noteText("Women's"), noteText('6v6')]);
+        expect(announced()).toEqual([noteText('Women'), noteText('6v6')]);
       });
 
       it('announces only the note that is new when another follows', async () => {
@@ -1095,7 +1095,7 @@ describe('LeagueDetailsForm', () => {
         await choose('gender', 'mens');
         await live({ playersPerSide: 6 });
         await live({ playersPerSide: 6, gender: 'womens' });
-        expect(announced()).toEqual([noteText("Women's")]);
+        expect(announced()).toEqual([noteText('Women')]);
       });
 
       it('announces the rename note', async () => {

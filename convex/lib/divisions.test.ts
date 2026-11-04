@@ -11,6 +11,7 @@ import {
   divisionLabel,
   formatLabel,
   genderLabel,
+  genderName,
   genderValidator,
   isLevelOfSport,
   isPlayersPerSideOfSport,
@@ -25,19 +26,20 @@ import { SPORT_FORMATS, SPORT_NAMES, formatName, type Sport } from './sports';
 const sports = Object.keys(SPORT_NAMES) as Sport[];
 
 describe('gender', () => {
-  test('lists Coed, Men’s, and Women’s, with no Open gender', () => {
+  test('lists Coed, Men, and Women, with no Open gender', () => {
     expect([...GENDERS]).toEqual(['coed', 'mens', 'womens']);
-    expect(GENDERS.map((gender) => genderLabel(gender))).toEqual(['Coed', "Men's", "Women's"]);
+    expect(GENDERS.map((gender) => genderLabel(gender))).toEqual(['Coed', 'Men', 'Women']);
   });
 
-  test('reads Men’s and Women’s as Boys and Girls for a youth age group', () => {
+  test('reads Men and Women as Boys and Girls for a youth age group', () => {
     expect(GENDERS.map((gender) => genderLabel(gender, 'u12'))).toEqual(['Coed', 'Boys', 'Girls']);
-    expect(GENDERS.map((gender) => genderLabel(gender, 'adult'))).toEqual([
-      'Coed',
-      "Men's",
-      "Women's",
-    ]);
-    expect(genderLabel('mens', 'over40')).toBe("Men's");
+    expect(GENDERS.map((gender) => genderLabel(gender, 'adult'))).toEqual(['Coed', 'Men', 'Women']);
+    expect(genderLabel('mens', 'over40')).toBe('Men');
+  });
+
+  test('names a gender for adults and for youth the same way the label does', () => {
+    expect(GENDERS.map((gender) => genderName(gender, false))).toEqual(['Coed', 'Men', 'Women']);
+    expect(GENDERS.map((gender) => genderName(gender, true))).toEqual(['Coed', 'Boys', 'Girls']);
   });
 
   test('the validator accepts exactly the gender keys', () => {
@@ -188,7 +190,7 @@ describe('divisionLabel', () => {
   test('adds an adult bracket after the level', () => {
     expect(
       divisionLabel({ gender: 'mens', playersPerSide: 11, levelLabel: 'Rec', ageGroup: 'over30' }),
-    ).toBe("Men's · 11v11 · Rec · 30+");
+    ).toBe('Men · 11v11 · Rec · 30+');
   });
 
   test('reads gender as Boys or Girls for a youth group and adds the group', () => {
@@ -205,7 +207,24 @@ describe('divisionLabel', () => {
 
   test('treats a missing age group as Adult', () => {
     expect(divisionLabel({ gender: 'womens', playersPerSide: 2, levelLabel: 'A' })).toBe(
-      "Women's · 2v2 · A",
+      'Women · 2v2 · A',
+    );
+  });
+
+  test('reads Women for an adult womens division', () => {
+    expect(
+      divisionLabel({
+        gender: 'womens',
+        playersPerSide: 7,
+        levelLabel: 'Intermediate',
+        ageGroup: 'adult',
+      }),
+    ).toBe('Women · 7v7 · Intermediate');
+  });
+
+  test('never reads a possessive gender word', () => {
+    expect(divisionLabel({ gender: 'mens', playersPerSide: 4, levelLabel: 'B' })).not.toMatch(
+      /['’]s/,
     );
   });
 
@@ -254,6 +273,11 @@ describe('deriveDivisionFromName', () => {
     ['Men’s 4’s rec', 'beachVolleyball', { gender: 'mens', playersPerSide: 4, level: 'rec' }],
     ['Coed 4s and 6s', 'beachVolleyball', { gender: 'coed', playersPerSide: 4 }],
     ['A Coed League', 'beachVolleyball', { gender: 'coed' }],
+    ['Men Over-30 11v11', 'soccer', { gender: 'mens', playersPerSide: 11 }],
+    ['Tuesday Women 2s', 'beachVolleyball', { gender: 'womens', playersPerSide: 2 }],
+    ["Women's 4s", 'beachVolleyball', { gender: 'womens', playersPerSide: 4 }],
+    ["Men's 4s", 'beachVolleyball', { gender: 'mens', playersPerSide: 4 }],
+    ['MEN 4S', 'beachVolleyball', { gender: 'mens', playersPerSide: 4 }],
   ];
 
   test.each(rows)('%j (%s)', (name, sport, expected) => {
@@ -308,6 +332,13 @@ describe('deriveDivisionFromName', () => {
     expect(deriveDivisionFromName('Policemens 4s', 'beachVolleyball')).toStrictEqual({
       playersPerSide: 4,
     });
+    expect(deriveDivisionFromName('Policemen 4s', 'beachVolleyball')).toStrictEqual({
+      playersPerSide: 4,
+    });
+    expect(deriveDivisionFromName('Menstrual', 'soccer')).toStrictEqual({});
+    expect(deriveDivisionFromName('Mentors 4s', 'beachVolleyball')).toStrictEqual({
+      playersPerSide: 4,
+    });
     expect(deriveDivisionFromName('Intercoed 4s', 'beachVolleyball')).toStrictEqual({
       playersPerSide: 4,
     });
@@ -337,6 +368,13 @@ describe('deriveDivisionFromName', () => {
   test('does not read an age group number as a format', () => {
     expect(deriveDivisionFromName('U10 Girls 7s', 'soccer')).toStrictEqual({ playersPerSide: 7 });
     expect(deriveDivisionFromName('U10 Girls', 'soccer')).toStrictEqual({});
+  });
+
+  test('never reads Women as Men', () => {
+    expect(deriveDivisionFromName('Women 4s', 'beachVolleyball').gender).toBe('womens');
+    expect(deriveDivisionFromName('Sunday Women', 'soccer').gender).toBe('womens');
+    expect(deriveDivisionFromName('Women and Men 4s', 'beachVolleyball').gender).toBe('womens');
+    expect(deriveDivisionFromName('Men and Women 4s', 'beachVolleyball').gender).toBe('mens');
   });
 
   test('takes the earliest gender and the first format in range', () => {

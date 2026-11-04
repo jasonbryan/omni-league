@@ -59,7 +59,7 @@ function gulfCoastTenant(): Promise<Tenant> {
     locations: GULF_COAST_LOCATIONS,
     leagues: [
       {
-        name: "Men's Over-30 11v11",
+        name: 'Men Over-30 11v11',
         sport: 'soccer',
         locations: ['Bayside Athletic Complex'],
         division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
@@ -461,7 +461,7 @@ test.describe('organization page: hero, divisions, and sports', () => {
       expect(html).toMatch(new RegExp(`>\\s*${GULF_COAST_LINE}\\s*<`));
 
       expect(html).toMatch(
-        />\s*Men's · 11v11 · Rec · 30\+\s*<\/p>\s*(?:<!--[^>]*-->\s*)*<p[^>]*>\s*Soccer · Bayside/,
+        />\s*Men · 11v11 · Rec · 30\+\s*<\/p>\s*(?:<!--[^>]*-->\s*)*<p[^>]*>\s*Soccer · Bayside/,
       );
       expect(html).toMatch(
         />\s*Coed · 4v4 · BB\s*<\/p>\s*(?:<!--[^>]*-->\s*)*<p[^>]*>\s*Beach volleyball · North/,

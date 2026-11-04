@@ -13,6 +13,7 @@ import {
 import { rawGet } from './support/raw-get';
 import { RAW_HTTP } from './support/raw-http';
 import { fetchRawHtml } from './support/raw-html';
+import { screenshot } from './support/screenshot';
 import {
   dateFromToday,
   numberedSeasons,
@@ -743,4 +744,44 @@ test.describe('public league page in the browser', () => {
       await expect(page.locator('section#seasons > ul > li h3').first()).toHaveText('Season 99');
     },
   );
+});
+
+test.describe('public league page: Men and Women divisions', () => {
+  test('a Men league and a Women league show Men or Women in the division label, never the possessive', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seedTenant({
+      name: 'E2E League Gender',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        {
+          name: 'Men Over-30 11v11',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
+        },
+        {
+          name: 'Women 7v7 Intermediate',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: {
+            gender: 'womens',
+            playersPerSide: 7,
+            level: 'intermediate',
+            ageGroup: 'adult',
+          },
+        },
+      ],
+    });
+    for (const [slug, label, name] of [
+      ['men-over-30-11v11', 'Men · 11v11 · Rec · 30+', 'men'],
+      ['women-7v7-intermediate', 'Women · 7v7 · Intermediate', 'women'],
+    ]) {
+      await page.goto(`${tenant.path}/leagues/${slug}`);
+      await expect(page.getByRole('main').getByText(label, { exact: true })).toBeVisible();
+      await expect(page.getByRole('main')).not.toContainText(/men['’]s/i);
+      await expectAccessible(page);
+      await screenshot(page, testInfo, `545-league-page-${name}`);
+    }
+  });
 });

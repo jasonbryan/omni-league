@@ -33,7 +33,7 @@ const NONE = {
   waitlistCounts: 0,
 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
-const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0 } };
+const FULL = { ...ROWS, backfilled: NONE, updated: { organizations: 0, leagues: 0 } };
 
 async function counts(t: T) {
   return t.run(async (ctx) => ({
@@ -324,7 +324,7 @@ describe('seed:demo', () => {
       ...NO_ROWS,
       seasons: 1,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
     expect(after).toHaveLength(7);
@@ -354,7 +354,7 @@ describe('seed:demo', () => {
       ...NO_ROWS,
       seasons: 3,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     const after = await t.run((ctx) => ctx.db.query('seasons').collect());
     expect(after).toHaveLength(7);
@@ -372,7 +372,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(settled);
   });
@@ -486,7 +486,7 @@ describe('seed:demo', () => {
     ]);
     expect(gulfLeagues.rows.map((league) => [league.name, league.divisionLabel])).toEqual([
       ['Coed 7v7 Rec', 'Coed · 7v7 · Rec'],
-      ["Men's Over-30 11v11", "Men's · 11v11 · Rec · 30+"],
+      ['Men Over-30 11v11', 'Men · 11v11 · Rec · 30+'],
       ['Sunday Reverse Coed 4s', 'Coed · 4v4 · BB'],
       ['Thursday Night Coed 2s', 'Coed · 2v2 · B'],
       ['Wednesday Coed Slow-Pitch', 'Coed · 10v10 · Rec'],
@@ -495,7 +495,7 @@ describe('seed:demo', () => {
       gulfLeagues.rows.map((league) => [league.name, league.sportName, league.locationNames]),
     ).toEqual([
       ['Coed 7v7 Rec', 'Soccer', ['Bayside Athletic Complex']],
-      ["Men's Over-30 11v11", 'Soccer', ['Bayside Athletic Complex']],
+      ['Men Over-30 11v11', 'Soccer', ['Bayside Athletic Complex']],
       ['Sunday Reverse Coed 4s', 'Beach volleyball', ['North Beach Sand Courts']],
       ['Thursday Night Coed 2s', 'Beach volleyball', ['North Beach Sand Courts']],
       [
@@ -583,7 +583,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
   });
@@ -606,7 +606,7 @@ describe('seed:demo', () => {
         leagues: [
           { name: 'Coed 7v7 Rec', sport: 'soccer', locations: ['Bayside Athletic Complex'] },
           {
-            name: "Men's Over-30 11v11",
+            name: 'Men Over-30 11v11',
             sport: 'soccer',
             locations: ['Bayside Athletic Complex'],
           },
@@ -632,7 +632,7 @@ describe('seed:demo', () => {
       leagues: ROWS.leagues - 4,
       seasons: ROWS.seasons,
       backfilled: { ...NONE, leagues: 4, leagueDivisions: 4 },
-      updated: { organizations: 1 },
+      updated: { organizations: 1, leagues: 0 },
     });
 
     const after = await snapshot(t);
@@ -758,7 +758,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
       backfilled: { ...NONE, leagues: 1, leagueDivisions: 1 },
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
 
     const after = await snapshot(t);
@@ -812,7 +812,7 @@ describe('seed:demo', () => {
         pendingInviteCounts: 0,
         waitlistCounts: 0,
       },
-      updated: { organizations: 1 },
+      updated: { organizations: 1, leagues: 0 },
     });
 
     const { organizations, locations, leagues } = await snapshot(t);
@@ -892,7 +892,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
   });
@@ -937,7 +937,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...ROWS,
       backfilled: { ...NONE, organizations: 1, leagues: 3, leagueDivisions: 3 },
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect((await sportStored(t))['mid-club']).toEqual({
       leagues: { soccer: 2, softball: 1 },
@@ -951,7 +951,7 @@ describe('seed:demo', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
@@ -1155,7 +1155,7 @@ describe('seed:demo backfill against a recount', () => {
       await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
         ...NO_ROWS,
         backfilled: NONE,
-        updated: { organizations: 0 },
+        updated: { organizations: 0, leagues: 0 },
       });
       await expectCountersMatchRecount(t);
     }
@@ -1249,7 +1249,7 @@ describe('seed:demo and league status', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await snapshot(t)).toEqual(before);
     expect(await t.run((ctx) => ctx.db.query('sportLocations').collect())).toEqual(rowsBefore);
@@ -1354,7 +1354,7 @@ describe('seed:demo seasons dated from the run', () => {
     ]);
     const overThirty = await t.query(api.leagues.getPublicPage, {
       orgSlug,
-      leagueSlug: 'men-s-over-30-11v11',
+      leagueSlug: 'men-over-30-11v11',
     });
     expect(overThirty?.seasons).toEqual([]);
   });
@@ -1367,7 +1367,7 @@ describe('seed:demo seasons dated from the run', () => {
     await expect(t.mutation(internal.seed.insertDemoData, {})).resolves.toEqual({
       ...NO_ROWS,
       backfilled: NONE,
-      updated: { organizations: 0 },
+      updated: { organizations: 0, leagues: 0 },
     });
     expect(await seasonsOf(t, 'current-season')).toEqual(first);
   });

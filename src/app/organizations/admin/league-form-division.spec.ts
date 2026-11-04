@@ -17,7 +17,7 @@ describe('LeagueForm: the division', () => {
   it('fills gender, format, and level from the name when Name is left', () => {
     const form = create();
     form.chooseSport('beachVolleyball');
-    form.model.set({ name: "Wednesday Women's 2s BB", slug: 'wednesday' });
+    form.model.set({ name: 'Wednesday Women 2s BB', slug: 'wednesday' });
     form.left('name');
     expect([form.division.gender(), form.division.playersPerSide(), form.division.level()]).toEqual(
       ['womens', 2, 'bb'],

@@ -168,10 +168,10 @@ test.describe('Leagues: creating a draft', () => {
     await page.goto(`${base}/leagues`);
     await page.locator('#name').fill('Sunday Reverse Coed 4s');
     await expect(page.locator('#slug')).toHaveValue('sunday-reverse-coed-4s');
-    await page.locator('#name').fill('Men’s D Division');
-    await expect(page.locator('#slug')).toHaveValue('men-s-d-division');
+    await page.locator('#name').fill('Men D Division');
+    await expect(page.locator('#slug')).toHaveValue('men-d-division');
     await page.locator('#slug').fill('mens-d');
-    await page.locator('#name').fill('Men’s D Division Slow-Pitch');
+    await page.locator('#name').fill('Men D Division Slow-Pitch');
     await expect(page.locator('#slug')).toHaveValue('mens-d');
   });
 
@@ -952,4 +952,41 @@ test.describe('who may open Leagues', () => {
       }
     },
   );
+});
+
+test.describe('Leagues: Men and Women divisions', () => {
+  test('the list shows Men or Women in each division label, never the possessive', async ({
+    page,
+  }, testInfo) => {
+    const { base } = await memberOf(page, 'orgAdmin', {
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        {
+          name: 'Men Over-30 11v11',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
+        },
+        {
+          name: 'Women 7v7 Intermediate',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: {
+            gender: 'womens',
+            playersPerSide: 7,
+            level: 'intermediate',
+            ageGroup: 'adult',
+          },
+        },
+      ],
+    });
+    await page.goto(`${base}/leagues`);
+    await expect(leagueRows(page).locator('[data-slot="league-division"]')).toHaveText([
+      'Men · 11v11 · Rec · 30+',
+      'Women · 7v7 · Intermediate',
+    ]);
+    await expect(main(page)).not.toContainText(/men['’]s/i);
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '545-admin-leagues');
+  });
 });

@@ -186,7 +186,7 @@ describe('division backfill probes', () => {
     const leagueId = await insertLegacyLeague(
       t,
       organizationId,
-      "Men's D Division Slow-Pitch",
+      'Men D Division Slow-Pitch',
       'softball',
     );
     const levelId = await t.run((ctx) =>

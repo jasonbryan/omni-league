@@ -5,6 +5,7 @@ import {
   STANDARD_LEVEL_LABELS,
   ageGroupLabel,
   formatLabel,
+  genderName,
   isYouth,
   levelLabel,
   levelsOfSport,
@@ -99,12 +100,6 @@ function youthOnly(filters: DivisionFilters): boolean {
 function genderParam(gender: Gender, youth: boolean): string {
   if (!youth || gender === 'coed') return gender;
   return gender === 'mens' ? 'boys' : 'girls';
-}
-
-function genderName(gender: Gender, youth: boolean): string {
-  if (gender === 'coed') return 'Coed';
-  if (gender === 'mens') return youth ? 'Boys' : "Men's";
-  return youth ? 'Girls' : "Women's";
 }
 
 /** In the order gender, format, level, age; gender is spelled as the form's check boxes are, so a submit and a built link give one URL. */

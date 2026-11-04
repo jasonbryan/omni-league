@@ -1136,3 +1136,54 @@ test.describe('public season page: signed in and on a team', () => {
     },
   );
 });
+
+test.describe('public season page: Men and Women divisions', () => {
+  test('a season of a Men league and of a Women league show Men or Women in the division, never the possessive', async ({
+    page,
+  }, testInfo) => {
+    const tenant = await seedTenant({
+      name: 'E2E Season Gender',
+      locations: [{ name: 'Alpha Field', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
+      leagues: [
+        {
+          name: 'Men Over-30 11v11',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: { gender: 'mens', playersPerSide: 11, level: 'rec', ageGroup: 'over30' },
+        },
+        {
+          name: 'Women 7v7 Intermediate',
+          sport: 'soccer',
+          locations: ['Alpha Field'],
+          division: {
+            gender: 'womens',
+            playersPerSide: 7,
+            level: 'intermediate',
+            ageGroup: 'adult',
+          },
+        },
+      ],
+    });
+    const season = (playersPerSide: number): SeasonSeed => ({
+      name: 'Summer 2027',
+      slug: 'summer-2027',
+      startDate: '2027-06-06',
+      endDate: '2027-08-29',
+      playersPerSide,
+    });
+    await Promise.all([
+      seedSeasons(tenant, 'men-over-30-11v11', [season(11)]),
+      seedSeasons(tenant, 'women-7v7-intermediate', [season(7)]),
+    ]);
+    for (const [slug, label, name] of [
+      ['men-over-30-11v11', 'Men · 11v11 · Rec · 30+', 'men'],
+      ['women-7v7-intermediate', 'Women · 7v7 · Intermediate', 'women'],
+    ]) {
+      await page.goto(`${tenant.path}/leagues/${slug}/seasons/summer-2027`);
+      await expect(page.getByRole('main')).toContainText(label);
+      await expect(page.getByRole('main')).not.toContainText(/men['’]s/i);
+      await expectAccessible(page);
+      await screenshot(page, testInfo, `545-season-page-${name}`);
+    }
+  });
+});
