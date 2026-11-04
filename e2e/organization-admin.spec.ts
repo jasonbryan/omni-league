@@ -425,40 +425,48 @@ test.describe('who may open the admin area', () => {
     ['a league organizer of the organization', 'leagueOrganizer'],
     ['a signed-in user with no membership', null],
   ] as const) {
-    test(
-      `${label} sees the no-access view on every admin path, and no location data is requested`,
-      VIEWPORT_AGNOSTIC,
-      async ({ page }) => {
-        const user = newUser('Outsider');
-        await signUp(page, user);
-        const { tenant, base } = await seedFor(user.email, role, LOCATIONS);
-        const frames = sentFrames(page);
-        for (const path of [`${base}/locations`, base]) {
-          await page.goto(path);
-          await expect(
-            main(page).getByRole('heading', {
-              level: 1,
-              name: 'You can’t manage this organization',
-            }),
-          ).toBeVisible();
-          await expect(page).toHaveTitle('You can’t manage this organization | Omni League');
-          await expect(main(page)).toContainText(
-            'Only its org admins can open the admin area. If you should have access, ask one of them to invite you as an org admin.',
-          );
-          await expect(page.getByRole('navigation', { name: `${tenant.name} admin` })).toHaveCount(
-            0,
-          );
-          await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0);
-          await expect(page.locator('body')).not.toContainText(LOCATIONS[0].name);
-          // The home sidebar lists the organizations this user belongs to, so the page itself is checked.
-          await expect(main(page)).not.toContainText(tenant.name);
+    test(`${label} sees the no-access view on every admin path, and no location data is requested`, async ({
+      page,
+      isMobile,
+    }) => {
+      const user = newUser('Outsider');
+      await signUp(page, user);
+      const { tenant, base } = await seedFor(user.email, role, LOCATIONS);
+      const frames = sentFrames(page);
+      for (const path of [`${base}/locations`, base]) {
+        await page.goto(path);
+        await expect(
+          main(page).getByRole('heading', {
+            level: 1,
+            name: 'You can’t manage this organization',
+          }),
+        ).toBeVisible();
+        await expect(page).toHaveTitle('You can’t manage this organization | Omni League');
+        await expect(main(page)).toContainText(
+          'Only its org admins can open the admin area. If you should have access, ask one of them to invite you as an org admin.',
+        );
+        const adminNavigation = page.getByRole('navigation', { name: `${tenant.name} admin` });
+        await expect(adminNavigation).toHaveCount(0);
+        const menu = page.getByRole('button', { name: 'Open navigation' });
+        if (isMobile) {
+          await menu.tap();
+          const sheet = page.getByRole('dialog', { name: 'Navigation' });
+          await expect(sheet.getByRole('navigation', { name: 'Your account' })).toBeVisible();
+          await expect(adminNavigation).toHaveCount(0);
+          await page.keyboard.press('Escape');
+          await expect(sheet).toHaveCount(0);
+        } else {
+          await expect(menu).toHaveCount(0);
         }
-        expect(frames.join('\n')).toContain('organizations:getAdminContext');
-        expect(frames.join('\n')).not.toContain('locations:listForAdmin');
-        await main(page).getByRole('link', { name: 'Go to your organizations' }).click();
-        await expect(page).toHaveURL(`${baseURL}/app`);
-      },
-    );
+        await expect(page.locator('body')).not.toContainText(LOCATIONS[0].name);
+        // The home sidebar lists the organizations this user belongs to, so the page itself is checked.
+        await expect(main(page)).not.toContainText(tenant.name);
+      }
+      expect(frames.join('\n')).toContain('organizations:getAdminContext');
+      expect(frames.join('\n')).not.toContain('locations:listForAdmin');
+      await main(page).getByRole('link', { name: 'Go to your organizations' }).click();
+      await expect(page).toHaveURL(`${baseURL}/app`);
+    });
   }
 
   test('the no-access view is saved as a screenshot and passes the axe helper', async ({

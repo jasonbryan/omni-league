@@ -428,9 +428,14 @@ test.describe('League management: league details on a phone', () => {
 });
 
 test.describe('League management: the save status on a phone', () => {
+  const ALSO_ON_WEBKIT = { tag: '@also-webkit-mobile' } as const;
+
   test.beforeEach(({ page }, testInfo) => {
     void page;
-    test.skip(testInfo.project.name !== 'chromium-mobile', 'phone layout with a coarse pointer');
+    const projects = testInfo.tags.includes(ALSO_ON_WEBKIT.tag)
+      ? ['chromium-mobile', 'webkit-mobile']
+      : ['chromium-mobile'];
+    test.skip(!projects.includes(testInfo.project.name), 'phone layout with a coarse pointer');
   });
 
   const name = (page: Page) => details(page).locator('#league-name');
@@ -481,21 +486,23 @@ test.describe('League management: the save status on a phone', () => {
     await expect(undo(page)).toHaveCount(0);
   });
 
-  test('Undo reached by Shift+Tab from Save and pressed by Enter shows "Earlier details restored." next to Save and focuses it', async ({
-    page,
-  }) => {
-    await saveFromName(page, 'Enter');
-    await page.keyboard.press(`Shift+${tabKey(page)}`);
-    await expect(undo(page)).toBeFocused();
-    await expectVisibleInFooter(page, undo(page));
+  test(
+    'Undo reached by Shift+Tab from Save and pressed by Enter shows "Earlier details restored." next to Save and focuses it',
+    ALSO_ON_WEBKIT,
+    async ({ page }) => {
+      await saveFromName(page, 'Enter');
+      await page.keyboard.press(`Shift+${tabKey(page)}`);
+      await expect(undo(page)).toBeFocused();
+      await expectVisibleInFooter(page, undo(page));
 
-    await page.keyboard.press('Enter');
+      await page.keyboard.press('Enter');
 
-    const restored = status(page).getByText('Earlier details restored.');
-    await expectVisibleInFooter(page, restored);
-    await expect(status(page).locator('[tabindex="-1"]')).toBeFocused();
-    await expect(undo(page)).toHaveCount(0);
-  });
+      const restored = status(page).getByText('Earlier details restored.');
+      await expectVisibleInFooter(page, restored);
+      await expect(status(page).locator('[tabindex="-1"]')).toBeFocused();
+      await expect(undo(page)).toHaveCount(0);
+    },
+  );
 
   test('Undo pressed offline shows the offline note next to it, keeps focus on Undo, and the footer stays within 200px', async ({
     page,
