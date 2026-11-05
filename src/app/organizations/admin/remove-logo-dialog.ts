@@ -1,40 +1,17 @@
-import { Dialog } from '@angular/cdk/dialog';
 import {
   ChangeDetectionStrategy,
   Component,
-  Injector,
-  afterNextRender,
   computed,
-  inject,
   output,
   signal,
   viewChild,
 } from '@angular/core';
-import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideImageOff, lucideLoaderCircle } from '@ng-icons/lucide';
-import {
-  BrnAlertDialog,
-  BrnAlertDialogContent,
-  BrnAlertDialogDescription,
-  BrnAlertDialogOverlay,
-  BrnAlertDialogTitle,
-} from '@spartan-ng/brain/alert-dialog';
-import { BrnDialogService } from '@spartan-ng/brain/dialog';
+import { provideIcons } from '@ng-icons/core';
+import { lucideImageOff } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, ConvexOfflineError, injectMutation, injectOnline } from '../../core/data/convex';
-import { provideSpartanOverlay } from '../../ui/utils/provide-spartan-overlay';
-import { AdminAlert } from './admin-alert';
-import { AdminOfflineAlert } from './admin-offline-alert';
 import type { AlertTexts } from './alert-text';
-import {
-  ALERT_DIALOG_CONTENT,
-  ALERT_DIALOG_DESCRIPTION,
-  ALERT_DIALOG_FOOTER,
-  ALERT_DIALOG_HEADER,
-  ALERT_DIALOG_MEDIA,
-  ALERT_DIALOG_TITLE,
-} from './alert-dialog-classes';
-import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON } from './button-classes';
+import { confirmAlertView, ConfirmDialog } from './confirm-dialog';
 
 export interface RemoveOutcome {
   removed: boolean;
@@ -52,150 +29,57 @@ export const REMOVE_LOGO_ALERTS = {
   },
 } as const satisfies AlertTexts<RemoveAlert>;
 
-/**
- * Built like the publish dialog: the dialog does not restore focus, and `dismissed` tells the page how it ended so the page puts focus where it belongs.
- */
 @Component({
   selector: 'app-remove-logo-dialog',
-  imports: [
-    AdminAlert,
-    AdminOfflineAlert,
-    BrnAlertDialog,
-    BrnAlertDialogContent,
-    BrnAlertDialogDescription,
-    BrnAlertDialogOverlay,
-    BrnAlertDialogTitle,
-    NgIcon,
-  ],
-  providers: [
-    provideIcons({ lucideImageOff, lucideLoaderCircle }),
-    provideSpartanOverlay(Dialog, BrnDialogService),
-  ],
+  imports: [ConfirmDialog],
+  providers: [provideIcons({ lucideImageOff })],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <brn-alert-dialog
-      [autoFocus]="'#remove-logo-cancel'"
-      [restoreFocus]="false"
-      [disableClose]="true"
+    <app-confirm-dialog
+      icon="lucideImageOff"
+      heading="Remove the logo?"
+      cancelId="remove-logo-cancel"
+      confirmLabel="Remove logo"
+      pendingLabel="Removing…"
+      variant="destructive"
+      [buttonIcon]="false"
+      [pending]="removing()"
+      [alert]="alertView()"
+      (confirmed)="remove()"
       (closed)="onClosed()"
     >
-      <brn-alert-dialog-overlay class="bg-foreground/50" />
-      <div
-        *brnAlertDialogContent
-        data-slot="alert-dialog-content"
-        data-size="default"
-        tabindex="-1"
-        [class]="contentClass"
-        (keydown.escape)="cancel()"
-      >
-        <div data-slot="alert-dialog-header" [class]="headerClass">
-          <div data-slot="alert-dialog-media" [class]="mediaClass">
-            <ng-icon name="lucideImageOff" aria-hidden="true" />
-          </div>
-          <h2 brnAlertDialogTitle data-slot="alert-dialog-title" [class]="titleClass">
-            Remove the logo?
-          </h2>
-          <div
-            brnAlertDialogDescription
-            data-slot="alert-dialog-description"
-            [class]="descriptionClass"
-          >
-            <p>
-              Your public pages show the initials again. The image is deleted, so upload it again to
-              bring it back.
-            </p>
-            @if (alert(); as kind) {
-              @if (kind === 'offline') {
-                <app-admin-offline-alert
-                  #alertBox
-                  [description]="alerts.offline.description"
-                  class="mt-3"
-                />
-              } @else {
-                <app-admin-alert
-                  #alertBox
-                  kind="error"
-                  [title]="alerts[kind].title"
-                  [description]="alerts[kind].description"
-                  class="mt-3"
-                />
-              }
-            }
-          </div>
-        </div>
-        <div data-slot="alert-dialog-footer" [class]="footerClass">
-          <button
-            id="remove-logo-cancel"
-            type="button"
-            data-slot="button"
-            [class]="cancelClass"
-            [attr.aria-disabled]="removing() ? 'true' : null"
-            (click)="cancel()"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-slot="button"
-            [class]="removeClass()"
-            [attr.aria-disabled]="removing() || !online() ? 'true' : null"
-            (click)="remove()"
-          >
-            @if (removing()) {
-              <ng-icon
-                name="lucideLoaderCircle"
-                class="motion-safe:animate-spin"
-                data-icon="inline-start"
-                aria-hidden="true"
-              />Removing…
-            } @else {
-              Remove logo
-            }
-          </button>
-        </div>
-      </div>
-    </brn-alert-dialog>
+      <p>
+        Your public pages show the initials again. The image is deleted, so upload it again to bring
+        it back.
+      </p>
+    </app-confirm-dialog>
   `,
 })
 export class RemoveLogoDialog {
-  private readonly injector = inject(Injector);
   private readonly removeLogo = injectMutation(api.organizations.removeLogo);
 
   readonly dismissed = output<RemoveOutcome>();
 
   protected readonly online = injectOnline();
-  protected readonly alerts = REMOVE_LOGO_ALERTS;
-  protected readonly contentClass = ALERT_DIALOG_CONTENT;
-  protected readonly headerClass = ALERT_DIALOG_HEADER;
-  protected readonly mediaClass = ALERT_DIALOG_MEDIA;
-  protected readonly titleClass = ALERT_DIALOG_TITLE;
-  protected readonly descriptionClass = ALERT_DIALOG_DESCRIPTION;
-  protected readonly footerClass = ALERT_DIALOG_FOOTER;
-  protected readonly cancelClass = OUTLINE_BUTTON;
 
   protected readonly removing = signal(false);
-  protected readonly alert = signal<RemoveAlert | null>(null);
-  protected readonly removeClass = computed(() =>
-    !this.online() && !this.removing() ? `${DESTRUCTIVE_BUTTON} opacity-50` : DESTRUCTIVE_BUTTON,
-  );
+  private readonly alert = signal<RemoveAlert | null>(null);
+  protected readonly alertView = computed(() => {
+    const kind = this.alert();
+    return kind ? confirmAlertView(kind, REMOVE_LOGO_ALERTS) : null;
+  });
 
-  private readonly dialog = viewChild.required(BrnAlertDialog);
-  private readonly alertBox = viewChild<AdminAlert | AdminOfflineAlert>('alertBox');
+  private readonly dialog = viewChild.required(ConfirmDialog);
   private organizationId: Id<'organizations'> | null = null;
   private removed = false;
 
-  readonly isOpen = computed(() => this.dialog().stateComputed() === 'open');
+  readonly isOpen = computed(() => this.dialog().isOpen());
 
   open(organizationId: Id<'organizations'>): void {
     this.organizationId = organizationId;
     this.alert.set(null);
     this.removed = false;
     this.dialog().open();
-  }
-
-  protected cancel(): void {
-    if (this.removing()) return;
-    this.dialog().close();
   }
 
   protected async remove(): Promise<void> {
@@ -222,6 +106,6 @@ export class RemoveLogoDialog {
 
   private fail(kind: RemoveAlert): void {
     this.alert.set(kind);
-    afterNextRender(() => this.alertBox()?.focus(), { injector: this.injector });
+    this.dialog().focusAlert();
   }
 }

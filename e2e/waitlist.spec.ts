@@ -135,7 +135,9 @@ test.describe('Waitlist: an organizer', () => {
     await expect(panel.getByRole('heading', { level: 2, name: 'Waitlist' })).toBeVisible();
     await expect(page.getByTestId('waitlist-tile')).toHaveText('1');
     await expect(panel.getByTestId('waitlist-count')).toHaveText('1 waiting');
-    await expect(panel.getByRole('note')).toContainText('The season is full');
+    await expect(
+      panel.locator('[data-slot="alert"]').filter({ hasText: 'The season is full' }),
+    ).toBeVisible();
     const row = panel.locator('#waitlist-list > li');
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('Position 1');
@@ -165,7 +167,9 @@ test.describe('Waitlist: an organizer', () => {
     await expect(limits.getByRole('status')).toHaveText(
       'Maximum teams saved. The season takes up to 3 teams. Teams on the waitlist keep their place: promote them to fill the place.',
     );
-    await expect(panel.getByRole('note')).toContainText('Room for 1 more team');
+    await expect(
+      panel.locator('[data-slot="alert"]').filter({ hasText: 'Room for 1 more team' }),
+    ).toBeVisible();
 
     await panel.getByRole('button', { name: 'Promote Late Lobsters' }).click();
     const promoted = panel.getByRole('status').filter({ hasText: 'is a team now' });

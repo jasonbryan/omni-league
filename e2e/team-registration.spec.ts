@@ -583,3 +583,31 @@ test.describe('a full season', () => {
     await expect(alert).not.toContainText('This season is full.');
   });
 });
+
+test.describe('team page: removing a player, offline', () => {
+  test('the confirm button looks disabled and a press shows the offline alert in the dialog, focused', async ({
+    page,
+  }, testInfo) => {
+    const { players } = await rosterOfThree(page);
+    await removeFor(page, players[0].name, 'Sand Sharks').click();
+    const dialog = removeDialog(page);
+    await expect(dialog).toBeVisible();
+    await page.context().setOffline(true);
+    try {
+      const confirm = dialog.getByRole('button', { name: 'Remove player' });
+      await expect(confirm).toHaveAttribute('aria-disabled', 'true');
+      await confirm.click({ force: true });
+      const alert = dialog.locator('[data-slot="alert"]');
+      await expect(alert).toContainText("You're offline. Nothing was sent.");
+      await expect(alert).toContainText(`${players[0].name} is still on the team.`);
+      await expect(alert).toBeFocused();
+      await screenshot(page, testInfo, '137-remove-offline');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    } finally {
+      await page.context().setOffline(false);
+    }
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(rosterRows(page)).toHaveCount(3);
+  });
+});

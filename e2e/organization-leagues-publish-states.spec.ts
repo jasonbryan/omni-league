@@ -229,6 +229,7 @@ for (const width of [375, 1280]) {
       await page.waitForTimeout(500);
       expect(control.mutationsSent.slice(before)).toEqual([]);
       await shot(page, '69t-offline');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
       await page.context().setOffline(false);
     });
   });

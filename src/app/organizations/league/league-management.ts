@@ -168,8 +168,8 @@ interface PublishedSeason {
                   kind="info"
                   title="Publish the league first"
                   description="Seasons of a draft league can’t be published."
-                  ><a [href]="leaguesPath()">Publish {{ league.name }} in Leagues</a>, then come
-                  back to publish its seasons.</app-admin-alert
+                  ><a [routerLink]="leaguesPath()">Publish {{ league.name }} in Leagues</a>, then
+                  come back to publish its seasons.</app-admin-alert
                 >
               } @else {
                 <app-admin-alert
