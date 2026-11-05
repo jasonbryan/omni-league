@@ -4,7 +4,7 @@ import { booleanAttribute, Directive, ElementRef, inject, input } from '@angular
  * Pressing a button blurs the focused field, and the error that leaving it shows can move the button
  * before the release, which then lands elsewhere and fires no click. Keeping focus in the field on a
  * mouse press moves nothing; the click then focuses the button, as a click does in Chromium.
- * A tap sends down, up, and click together, so it cannot lose the press and keeps closing the keyboard,
+ * A tap sends down, up, and click together, so it cannot lose the press and is left alone,
  * unless the button opts in with `appTouchKeepsFocus`. A button in a field group opts in, because WebKit
  * sends a tap's focus to the page rather than the button, which ends the group's focus too early.
  */
