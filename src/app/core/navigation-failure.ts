@@ -1,6 +1,18 @@
-import { isPlatformBrowser } from '@angular/common';
-import { ErrorHandler, PLATFORM_ID, inject } from '@angular/core';
-import { withNavigationErrorHandler, withRouterConfig, type RouterFeatures } from '@angular/router';
+import { isPlatformBrowser, Location } from '@angular/common';
+import {
+  ErrorHandler,
+  PLATFORM_ID,
+  inject,
+  provideEnvironmentInitializer,
+  type EnvironmentProviders,
+} from '@angular/core';
+import {
+  NavigationError,
+  Router,
+  withNavigationErrorHandler,
+  withRouterConfig,
+  type RouterFeatures,
+} from '@angular/router';
 
 /** The `TypeError` text WebKit, Chromium, and Firefox give an `import()` whose chunk did not load. */
 const CHUNK_LOAD_FAILURE =
@@ -22,4 +34,27 @@ export function withQuietNavigationFailure(): RouterFeatures[] {
       inject(ErrorHandler).handleError(failure.error);
     }),
   ];
+}
+
+/**
+ * A failed navigation resets the address to the router's own URL, which is `/` until a navigation succeeds.
+ * WebKit runs that reset on a page that a link already started leaving, and it rewrites the page's history entry, so Back lands on `/`.
+ */
+export function provideLoadedAddressOnFailedFirstNavigation(): EnvironmentProviders {
+  return provideEnvironmentInitializer(() => {
+    if (!isPlatformBrowser(inject(PLATFORM_ID))) return;
+    const router = inject(Router);
+    const location = inject(Location);
+    const loaded = { path: location.path(true), state: location.getState() };
+    router.events.subscribe((event) => {
+      if (
+        event instanceof NavigationError &&
+        isChunkLoadFailure(event.error) &&
+        !router.navigated &&
+        location.path(true) !== loaded.path
+      ) {
+        location.replaceState(loaded.path, '', loaded.state);
+      }
+    });
+  });
 }
