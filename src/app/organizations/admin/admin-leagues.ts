@@ -38,7 +38,8 @@ import {
 } from './publish-league-dialog';
 import { injectSectionJump } from './section-jump';
 
-const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'bg-muted motion-safe:animate-pulse';
+const PULSE = `rounded-md ${FILL}`;
 const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="alert"]'];
 
 @Component({
@@ -277,7 +278,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                     <div class="flex h-5 items-center"><div class="${PULSE} h-3.5 w-16"></div></div>
                     <div
                       data-slot="skeleton-input"
-                      class="${PULSE} h-9 w-full rounded-lg pointer-coarse:h-11"
+                      class="${FILL} h-9 w-full rounded-lg pointer-coarse:h-11"
                     ></div>
                     <div>
                       <div class="flex h-5 items-center">
@@ -300,7 +301,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                     @for (chip of skeletonChips; track chip) {
                       <div
                         data-slot="skeleton-chip"
-                        class="${PULSE} h-9 w-24 rounded-full pointer-coarse:h-11"
+                        class="${FILL} h-9 w-24 rounded-full pointer-coarse:h-11"
                       ></div>
                     }
                   </div>
@@ -311,7 +312,7 @@ const NAME_THEN_GO_TO_LOCATIONS_THEN_ALERT = ['#name', 'a[href]', '[data-slot="a
                     data-slot="skeleton-location"
                     class="mt-3 flex h-5 items-center gap-3 pointer-coarse:h-11"
                   >
-                    <div class="${PULSE} size-4 shrink-0 rounded-sm"></div>
+                    <div class="${FILL} size-4 shrink-0 rounded-sm"></div>
                     <div class="${PULSE} h-3.5 w-48 max-w-full"></div>
                   </div>
                 </div>

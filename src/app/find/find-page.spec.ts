@@ -9,6 +9,7 @@ import {
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../shell/testing/test-pages';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { FindPage } from './find-page';
 import {
   at,
@@ -362,6 +363,17 @@ describe('FindPage searching', () => {
     subscription().emit(COED_RESULTS);
     await settle(harness);
     expect(results(harness)!.querySelector('[data-testid="find-skeleton"]')).toBeNull();
+  });
+
+  it('draws each skeleton logo rounded-xl and each badge rounded-full', async () => {
+    const harness = await open('/leagues?q=coed');
+    const skeleton = results(harness)!.querySelector('[data-testid="find-skeleton"]')!;
+    const logos = skeleton.querySelectorAll('.divide-y > div > span');
+    const badges = skeleton.querySelectorAll('.space-y-2 > span:last-child');
+    expect(logos.length).toBeGreaterThan(0);
+    expect(badges).toHaveLength(logos.length);
+    expect(allRadiusClasses(logos)).toEqual(Array.from(logos, () => ['rounded-xl']));
+    expect(allRadiusClasses(badges)).toEqual(Array.from(badges, () => ['rounded-full']));
   });
 
   it('a new search from the form changes the URL, shows the skeleton, then its results', async () => {

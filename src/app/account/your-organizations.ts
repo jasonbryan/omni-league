@@ -95,7 +95,7 @@ const ROLE_NAMES = { orgAdmin: 'Org admin', leagueOrganizer: 'League organizer' 
             <div class="flex items-center gap-3 px-4 py-3.5 md:px-5">
               <div
                 aria-hidden="true"
-                class="rounded-md bg-muted motion-safe:animate-pulse size-10 shrink-0 rounded-lg"
+                class="bg-muted motion-safe:animate-pulse size-10 shrink-0 rounded-lg"
               ></div>
               <div class="flex-1">
                 <div

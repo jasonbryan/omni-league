@@ -10,6 +10,7 @@ import {
 } from '../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../shell/testing/test-pages';
 import { buttonVariants } from '../ui/button';
+import { allRadiusClasses, radiusClasses } from '../ui/testing/radius-classes';
 import { OrganizationPage } from './organization-page';
 import type { PublicOrganizationPage } from './organization-path';
 import { GULF_COAST, PORT_ARANSAS, queryResults } from './testing/pages';
@@ -500,6 +501,22 @@ describe('OrganizationPage', () => {
       await settle(harness);
       expect(main()?.querySelector('app-organization-skeleton')).toBeNull();
       expect(text(main()?.querySelector('h1'))).toBe('Gulf Coast Sport & Social');
+    });
+
+    it('draws the badges and filter chips rounded-full and the logo rounded-lg, rounded-xl from md', async () => {
+      const harness = await open();
+      const skeleton = host(harness).querySelector('main app-organization-skeleton')!;
+      const badges = skeleton.querySelectorAll(
+        'app-open-seasons-skeleton .rounded-xl > span:first-child',
+      );
+      const chips = skeleton.querySelectorAll('.border-b > div > span');
+      expect(badges).toHaveLength(2);
+      expect(chips).toHaveLength(4);
+      expect(allRadiusClasses([...badges, ...chips])).toEqual(
+        Array.from({ length: 6 }, () => ['rounded-full']),
+      );
+      const logo = skeleton.querySelector('.items-start > span:first-child');
+      expect(radiusClasses(logo)).toEqual(['rounded-lg', 'md:rounded-xl']);
     });
 
     it('hides every bar, so a screen reader hears the status alone', async () => {

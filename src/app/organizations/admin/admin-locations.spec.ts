@@ -3,6 +3,7 @@ import { Title } from '@angular/platform-browser';
 import { ConvexError } from 'convex/values';
 import { LOCATION_MESSAGES } from '../../../../convex/lib/locationInput';
 import { ConvexConnection } from '../../core/data/convex';
+import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { AdminArea } from './admin-area';
 import { AdminLocations } from './admin-locations';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
@@ -96,6 +97,15 @@ describe('AdminLocations', () => {
       expect(panel.querySelector('ul')).toBeNull();
       expect(panel.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(3);
       expect(page.querySelector('#add-location form')).not.toBeNull();
+    });
+
+    it('loading: each placeholder row has a rounded-lg mark and rounded-md text bars', async () => {
+      await open();
+      const panel = page.querySelector('section[aria-labelledby="locations-heading"]')!;
+      const pieces = panel.querySelectorAll('[aria-hidden="true"].divide-y [aria-hidden="true"]');
+      expect(allRadiusClasses(pieces)).toEqual(
+        Array.from({ length: 3 }, () => [['rounded-lg'], ['rounded-md'], ['rounded-md']]).flat(),
+      );
     });
 
     it('none yet (state 7): the empty state', async () => {

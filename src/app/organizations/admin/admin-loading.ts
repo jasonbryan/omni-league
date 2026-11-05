@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'bg-muted motion-safe:animate-pulse';
+const PULSE = `rounded-md ${FILL}`;
 
 @Component({
   selector: 'app-admin-loading',
@@ -21,7 +22,7 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
         <div class="divide-y divide-border">
           @for (row of rows; track row) {
             <div class="flex gap-3 px-4 py-3.5 md:px-5">
-              <div aria-hidden="true" class="${PULSE} size-9 shrink-0 rounded-lg"></div>
+              <div aria-hidden="true" class="${FILL} size-9 shrink-0 rounded-lg"></div>
               <div class="flex-1">
                 <div aria-hidden="true" class="${PULSE} h-4 w-48 max-w-full"></div>
                 <div aria-hidden="true" class="${PULSE} mt-2 h-3.5 w-64 max-w-full"></div>

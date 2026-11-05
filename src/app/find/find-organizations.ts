@@ -22,7 +22,8 @@ import { FIND_PATH, type FindOrganizations } from './find-path';
 
 export type OrganizationsState = 'loading' | 'error' | 'ready';
 
-const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'block bg-muted motion-safe:animate-pulse';
+const BAR = `rounded-md ${FILL}`;
 
 const LIST_CLASSES = 'mt-4 grid gap-x-8 divide-y divide-border md:grid-cols-2 md:divide-y-0';
 
@@ -39,7 +40,7 @@ const LINK_CLASSES =
     <div class="${LIST_CLASSES}">
       @for (row of rows; track row) {
         <div class="flex min-h-18 items-center gap-4 py-4 md:border-b md:border-border">
-          <span aria-hidden="true" class="${BAR} size-11 shrink-0 rounded-xl"></span>
+          <span aria-hidden="true" class="${FILL} size-11 shrink-0 rounded-xl"></span>
           <div class="flex-1 space-y-2">
             <span aria-hidden="true" class="${BAR} h-5 w-1/2"></span>
             <span aria-hidden="true" class="${BAR} h-4 w-3/4"></span>

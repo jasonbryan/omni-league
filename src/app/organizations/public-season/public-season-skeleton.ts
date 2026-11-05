@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'block bg-muted motion-safe:animate-pulse';
+const BAR = `rounded-md ${FILL}`;
 
 /** At phone widths the breadcrumb and the heading each wrap to two lines, so the skeleton reserves two of each and the page replaces it without a shift. */
 @Component({
@@ -19,8 +20,8 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
         </div>
       </div>
       <div class="mt-4 flex gap-2 md:mt-6">
-        <span aria-hidden="true" class="${BAR} h-5.5 w-28 rounded-full"></span>
-        <span aria-hidden="true" class="${BAR} h-5.5 w-32 rounded-full"></span>
+        <span aria-hidden="true" class="${FILL} h-5.5 w-28 rounded-full"></span>
+        <span aria-hidden="true" class="${FILL} h-5.5 w-32 rounded-full"></span>
       </div>
       <div class="mt-3 flex h-18 flex-col gap-2 md:h-12">
         <span
@@ -53,7 +54,7 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
           <div class="grid sm:grid-cols-2 sm:gap-x-8">
             @for (fact of facts; track fact) {
               <div class="flex gap-4 py-4">
-                <span aria-hidden="true" class="${BAR} size-10 shrink-0 rounded-lg"></span>
+                <span aria-hidden="true" class="${FILL} size-10 shrink-0 rounded-lg"></span>
                 <div class="flex-1 space-y-2">
                   <span aria-hidden="true" class="${BAR} h-4 w-20"></span>
                   <span aria-hidden="true" class="${BAR} h-5 w-40"></span>

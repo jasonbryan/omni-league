@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { TestBed } from '@angular/core/testing';
+import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { AdminArea } from './admin-area';
 import {
   adminRoutes,
@@ -65,6 +66,12 @@ describe('AdminArea', () => {
       expect(
         page.querySelectorAll('[aria-hidden="true"].motion-safe\\:animate-pulse').length,
       ).toBeGreaterThan(5);
+    });
+
+    it('draws each row mark in the panel placeholder rounded-lg', async () => {
+      const { page } = await openAdmin(ROUTES, OVERVIEW);
+      const marks = page.querySelectorAll('main .divide-y [aria-hidden="true"].size-9');
+      expect(allRadiusClasses(marks)).toEqual([['rounded-lg'], ['rounded-lg'], ['rounded-lg']]);
     });
   });
 

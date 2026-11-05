@@ -41,9 +41,7 @@ import { OUTLINE_BUTTON } from '../ui/button/button-classes';
             } @else if (loading()) {
               <p role="status" class="sr-only">Loading your account details.</p>
               <div aria-hidden="true" class="flex items-center gap-3">
-                <div
-                  class="rounded-md bg-muted motion-safe:animate-pulse size-10 shrink-0 rounded-full"
-                ></div>
+                <div class="bg-muted motion-safe:animate-pulse size-10 shrink-0 rounded-full"></div>
                 <div class="flex-1">
                   <div
                     class="rounded-md bg-muted motion-safe:animate-pulse h-4 w-40 max-w-full"
