@@ -23,7 +23,12 @@ export type InviteRestoreCode =
   'alreadyMember' | 'alreadyInvited' | 'windowPassed' | 'expired' | 'leaguesGone';
 
 export interface InviteRestoreError {
-  code: 'windowPassed' | 'expired' | 'leaguesGone';
+  code: 'windowPassed' | 'expired' | 'leaguesGone' | 'notRevoked';
+  message: string;
+}
+
+export interface InviteRevokeError {
+  code: 'notPending';
   message: string;
 }
 
@@ -34,6 +39,10 @@ export const INVITE_MESSAGES = {
   alreadyMember: (email: string) => `${email} is already on your staff.`,
   alreadyInvited: (email: string) =>
     `${email} already has a pending invite. To send a new link, revoke that invite first.`,
+  revokeNotPending:
+    'This invite is no longer pending, so there is nothing to revoke. It was accepted or revoked already.',
+  restoreNotRevoked:
+    'This invite is no longer revoked, so there is nothing to undo. It was restored or accepted already.',
   restoreWindowPassed: `You can undo a revoke for ${INVITE_RESTORE_WINDOW_MINUTES} minutes. That time has passed. Invite this address again.`,
   restoreExpired:
     'This invite had expired, so its link cannot work again. Invite this address again.',
