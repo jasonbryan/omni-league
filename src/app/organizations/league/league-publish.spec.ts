@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { ConvexOfflineError } from '../../core/data/convex';
 import { overlayPanes, removePopoverApi, stubPopoverApi } from '../../ui/testing/overlay-panes';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../admin/button-classes';
@@ -393,7 +394,7 @@ describe('LeagueManagement: publishing a season', () => {
       const note = page.querySelector<HTMLElement>(
         'section[aria-labelledby="seasons-heading"] [data-slot="alert"]',
       )!;
-      expect(note.getAttribute('role')).toBe('note');
+      expect(note.hasAttribute('role')).toBe(false);
       expect(text(note.querySelector('[data-slot="alert-title"]'))).toBe(
         'Publish the league first',
       );
@@ -408,12 +409,27 @@ describe('LeagueManagement: publishing a season', () => {
       expect(page.querySelector('app-publish-season-dialog')).toBeNull();
     });
 
+    it('the link to the Leagues page navigates in the app instead of reloading', async () => {
+      await open(DRAFT_LEAGUE, DRAFT_LIST);
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+      const link = page.querySelector<HTMLAnchorElement>(
+        'section[aria-labelledby="seasons-heading"] [data-slot="alert"] a',
+      )!;
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+      link.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(true);
+      expect(navigate).toHaveBeenCalledOnce();
+      expect(navigate.mock.calls[0][0].toString()).toBe(
+        '/app/organizations/gulf-coast-sport-social/leagues',
+      );
+    });
+
     it('a league organizer sees "Ask an org admin to publish the league" with no link, and no Publish buttons', async () => {
       await open({ ...COED_AS_ORGANIZER, status: 'draft' }, DRAFT_LIST);
       const note = page.querySelector<HTMLElement>(
         'section[aria-labelledby="seasons-heading"] [data-slot="alert"]',
       )!;
-      expect(note.getAttribute('role')).toBe('note');
+      expect(note.hasAttribute('role')).toBe(false);
       expect(text(note.querySelector('[data-slot="alert-title"]'))).toBe(
         'Ask an org admin to publish the league',
       );
