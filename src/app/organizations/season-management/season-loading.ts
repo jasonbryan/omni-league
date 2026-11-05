@@ -4,7 +4,6 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
 const CARD = 'rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
 const PANEL = `overflow-hidden ${CARD}`;
 
-/** There is no sidebar column yet: the shell draws one only once there is a sidebar to show. */
 @Component({
   selector: 'app-season-loading',
   changeDetection: ChangeDetectionStrategy.OnPush,

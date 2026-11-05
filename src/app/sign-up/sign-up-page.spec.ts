@@ -422,6 +422,15 @@ describe('SignUpPage', () => {
       expect(error('password')).toBe('Use at least 15 characters. This password has 10.');
     });
 
+    it('keeps focus in Password on a mouse press of Show, which Safari would otherwise blur', () => {
+      showButton().dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }),
+      );
+      const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      showButton().dispatchEvent(mousedown);
+      expect(mousedown.defaultPrevented).toBe(true);
+    });
+
     it('checks the password when focus moves from it to another field', async () => {
       await type('password', 'tenletters');
       input('password').dispatchEvent(

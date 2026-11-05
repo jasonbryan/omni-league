@@ -132,6 +132,7 @@ test.describe('Back skips a finished form', () => {
       await expect(page).toHaveURL(`${baseURL}${leaguePath}`, { timeout: 20_000 });
       await page.goBack();
       await expect(page).toHaveURL(`${baseURL}${tenant.path}`);
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(tenant.name);
     },
   );
 

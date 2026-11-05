@@ -72,6 +72,7 @@ test.describe('offline note', () => {
     for (const width of [360, 1280]) {
       await page.setViewportSize({ width, height: width === 360 ? 800 : 720 });
       await expect(note).toBeVisible();
+      expect(await status.boundingBox()).toMatchObject({ x: 0, y: 65, width });
       const results = await axeScan(page);
       expect(describeViolations(results.violations), `axe violations at ${width}px`).toEqual([]);
       const path = testInfo.outputPath(`offline-note-${width}.png`);

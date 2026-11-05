@@ -21,7 +21,7 @@ export const NOTE_HEIGHT_PROPERTY = '--offline-note-h';
 /**
  * The host is the region itself, so `sticky` works against the shell's column rather than a wrapper.
  * In the browser it keeps `--offline-note-h` on `<html>` equal to its measured height (unset while empty).
- * html's `scroll-padding-top`, the header's negative scroll margin, and the sidebar's sticky offset add it, so they follow the note however many lines it wraps to (two at 320px).
+ * html's `scroll-padding-top` and the header's negative scroll margin add it, so they follow the note however many lines it wraps to (two at 320px).
  */
 @Component({
   selector: 'app-offline-note',

@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from '@playwright/test';
-import { axeScan, describeViolations, expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible, tabKey } from './support/a11y';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { holdQueries } from './support/hold-queries';
@@ -350,7 +350,7 @@ test.describe('organization filters in the browser', () => {
     const overlay = isDesktop(testInfo) ? genderPanel(page) : sheet(page);
     if (!isDesktop(testInfo)) {
       await expect(overlay.getByRole('button', { name: 'Close filters' })).toBeFocused();
-      await page.keyboard.press('Tab');
+      await page.keyboard.press(tabKey(page));
     }
     const coed = overlay.getByRole('checkbox', { name: 'Coed' });
     await expect(coed).toBeFocused();
@@ -359,7 +359,7 @@ test.describe('organization filters in the browser', () => {
     const show = overlay.getByRole('button', { name: 'Show 4 leagues' });
     for (let presses = 0; presses < 20; presses++) {
       if (await show.evaluate((button) => button === document.activeElement)) break;
-      await page.keyboard.press('Tab');
+      await page.keyboard.press(tabKey(page));
     }
     await expect(show).toBeFocused();
     await page.keyboard.press('Enter');
@@ -655,7 +655,7 @@ test.describe('organization filters in the browser', () => {
       const focusInSheet = () =>
         page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
       const tabStops = await sheet(page).locator('button, a, input').count();
-      for (const key of ['Tab', 'Shift+Tab']) {
+      for (const key of [tabKey(page), `Shift+${tabKey(page)}`]) {
         for (let press = 0; press <= tabStops; press++) {
           await page.keyboard.press(key);
           expect(await focusInSheet(), `${key} press ${String(press + 1)}`).toBe(true);
