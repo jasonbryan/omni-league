@@ -64,6 +64,7 @@ describe('organizations.create', () => {
         slug: 'coastal-bend-rec-club',
         leagueCount: 0,
         locationCount: 0,
+        staffCount: 1,
         sportLeagueCounts: {},
         sportLocationCounts: {},
       });

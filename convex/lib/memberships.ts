@@ -25,7 +25,8 @@ async function changeStaffCount(
   change: 1 | -1,
 ): Promise<void> {
   const organization = await ctx.db.get('organizations', organizationId);
-  if (!organization) throw new Error('No organization has this id');
+  // A gone organization has no counter, and a throw would roll back the account deletion that reached here.
+  if (!organization) return;
   const staffCount =
     organization.staffCount === undefined
       ? await recountMemberships(ctx, organizationId)

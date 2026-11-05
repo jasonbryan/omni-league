@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { resetVisibility, setVisibility } from './service-worker/testing/fake-sw-update';
 import { injectNowAtDeadlines, MAX_TIMER_DELAY_MS } from './now-at-deadlines';
 
 const START = Date.UTC(2026, 10, 4, 12, 0, 0);
@@ -22,6 +23,7 @@ describe('injectNowAtDeadlines', () => {
   });
 
   afterEach(() => {
+    resetVisibility();
     vi.useRealTimers();
   });
 
@@ -90,5 +92,23 @@ describe('injectNowAtDeadlines', () => {
     expect(vi.getTimerCount()).toBe(1);
     fixture.destroy();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('reads the clock again when the tab becomes visible, since a sleeping device fires its timer late', async () => {
+    const fixture = await open([START + MINUTE]);
+    vi.setSystemTime(START + 10 * MINUTE);
+    expect(fixture.componentInstance.now()).toBe(START);
+    setVisibility('hidden');
+    expect(fixture.componentInstance.now()).toBe(START);
+    setVisibility('visible');
+    expect(fixture.componentInstance.now()).toBe(START + 10 * MINUTE);
+  });
+
+  it('stops listening for the tab becoming visible when the component is destroyed', async () => {
+    const fixture = await open([]);
+    fixture.destroy();
+    vi.setSystemTime(START + MINUTE);
+    setVisibility('visible');
+    expect(fixture.componentInstance.now()).toBe(START);
   });
 });

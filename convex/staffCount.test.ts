@@ -155,6 +155,14 @@ describe('the staff counter', () => {
     expect((await storedAndRecount(s, s.organizationB)).stored).toBe(2);
   });
 
+  test('a missing organization leaves the count alone, so deleting a user still goes through', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.delete('organizations', s.organizationB));
+    await s.t.run((ctx) => deleteUserRecord(ctx, 'admin-b'));
+    const rows = await s.t.run((ctx) => ctx.db.query('memberships').collect());
+    expect(rows.map((row) => row.userId)).not.toContain(s.adminB);
+  });
+
   test('starts at 0 for a new organization', async () => {
     const s = await setup();
     const organizationId = await s.t.run((ctx) =>
