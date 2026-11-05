@@ -431,6 +431,21 @@ describe('SignUpPage', () => {
       expect(mousedown.defaultPrevented).toBe(true);
     });
 
+    it('keeps focus in Password on a touch press of Show, and the click focuses Show', () => {
+      input('password').focus();
+      showButton().dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }),
+      );
+      const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      showButton().dispatchEvent(mousedown);
+      expect(mousedown.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(input('password'));
+      showButton().dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }),
+      );
+      expect(document.activeElement).toBe(showButton());
+    });
+
     it('checks the password when focus moves from it to another field', async () => {
       await type('password', 'tenletters');
       input('password').dispatchEvent(
