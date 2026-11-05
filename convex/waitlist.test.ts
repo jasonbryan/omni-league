@@ -589,6 +589,23 @@ describe('waitlist.listForOrganizer', () => {
     });
   });
 
+  test('gives a captain whose Better Auth user is deleted an empty email and leaves the others their own', async () => {
+    const s = await twoWaiting();
+    vi.setSystemTime(OPEN_NOW + 2000);
+    await register(s, 'latest', 'Third Wheel');
+    await s.t.run(async (ctx) => {
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: { model: 'user', where: [{ field: 'email', value: 'later@example.test' }] },
+      } as never);
+    });
+    const list = await as(s, 'organizer-coed').query(api.waitlist.listForOrganizer, SLUGS);
+    expect(list?.rows.map((row) => [row.teamName, row.captainEmail])).toEqual([
+      ['Late Lobsters', 'late@example.test'],
+      ['Shore Thing', ''],
+      ['Third Wheel', 'latest@example.test'],
+    ]);
+  });
+
   test.each(['organizer-mens', 'admin-b', 'captain-1', 'late', 'stranger'] as const)(
     '%s is refused',
     async (who) => {

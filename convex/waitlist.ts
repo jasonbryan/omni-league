@@ -5,7 +5,7 @@ import {
   requireSeasonOrganizerOrForbidden,
   requireUser,
 } from './lib/access';
-import { authEmailOf } from './lib/authUsers';
+import { authEmailsOf } from './lib/authUsers';
 import { promoteWaitlistEntry } from './lib/rosterWrites';
 import { findSeasonBySlugs, seasonSlugsValidator } from './lib/seasonLookup';
 import { WAITLIST_READ_LIMIT } from './lib/waitlist';
@@ -39,17 +39,21 @@ export const listForOrganizer = query({
         q.eq('seasonId', season._id).eq('status', 'waiting'),
       )
       .take(WAITLIST_READ_LIMIT);
-    const rows = [];
-    for (const entry of waiting) {
-      const captain = await ctx.db.get('users', entry.userId);
-      rows.push({
+    const captains = await Promise.all(waiting.map((entry) => ctx.db.get('users', entry.userId)));
+    const emails = await authEmailsOf(
+      ctx,
+      captains.flatMap((captain) => (captain ? [captain.authUserId] : [])),
+    );
+    const rows = waiting.map((entry, index) => {
+      const captain = captains[index];
+      return {
         waitlistEntryId: entry._id,
         teamName: entry.teamName,
         captainName: captain?.name ?? '',
-        captainEmail: captain ? ((await authEmailOf(ctx, captain.authUserId)) ?? '') : '',
+        captainEmail: (captain && emails.get(captain.authUserId)) ?? '',
         requestedAt: entry.requestedAt,
-      });
-    }
+      };
+    });
     return { rows, waitlistCount: season.waitlistCount ?? rows.length };
   },
 });

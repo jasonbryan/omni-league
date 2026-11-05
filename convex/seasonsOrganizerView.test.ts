@@ -352,6 +352,33 @@ describe('freeAgents.listForOrganizer', () => {
     expect(result?.rows[0]?.name).toBe(`Name many-${ORGANIZER_FREE_AGENTS_LIMIT}`);
     expect(result?.rows.at(-1)?.name).toBe('Name many-1');
     expect(result?.hasMore).toBe(true);
+    for (const row of result?.rows ?? []) {
+      expect(row.email).toBe(`${row.name.replace('Name ', '')}@example.test`);
+    }
+  });
+
+  test('gives a row whose Better Auth user is deleted an empty email and leaves its neighbours their own', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      const summer = await season(ctx, s.summerId);
+      for (const [index, name] of ['gone-first', 'gone-middle', 'gone-last'].entries()) {
+        const user = await person(ctx, name);
+        const { _id } = await insertFreeAgent(ctx, summer, user._id);
+        await ctx.db.patch('freeAgents', _id, { registeredAt: OPENED + index });
+      }
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: {
+          model: 'user',
+          where: [{ field: 'email', value: 'gone-middle@example.test' }],
+        },
+      } as never);
+    });
+    const result = await freeAgents(s, 'admin-a');
+    expect(result?.rows.map((row) => [row.name, row.email])).toEqual([
+      ['Name gone-first', 'gone-first@example.test'],
+      ['Name gone-middle', ''],
+      ['Name gone-last', 'gone-last@example.test'],
+    ]);
   });
 
   test(`says hasMore false at exactly ${ORGANIZER_FREE_AGENTS_LIMIT}`, async () => {
@@ -359,12 +386,8 @@ describe('freeAgents.listForOrganizer', () => {
     await s.t.run(async (ctx) => {
       const summer = await season(ctx, s.summerId);
       for (let i = 0; i < ORGANIZER_FREE_AGENTS_LIMIT; i++) {
-        const userId = await ctx.db.insert('users', {
-          authUserId: `exact-${i}`,
-          name: `Exact ${i}`,
-          adultConfirmedAt: 1,
-        });
-        await insertFreeAgent(ctx, summer, userId);
+        const user = await person(ctx, `exact-${i}`);
+        await insertFreeAgent(ctx, summer, user._id);
       }
     });
     const result = await freeAgents(s, 'admin-a');

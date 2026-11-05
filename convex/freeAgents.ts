@@ -5,7 +5,7 @@ import {
   requireSeasonOrganizerOrForbidden,
   requireUser,
 } from './lib/access';
-import { authEmailOf } from './lib/authUsers';
+import { authEmailsOf } from './lib/authUsers';
 import { freeAgentStatusValidator } from './lib/freeAgent';
 import { registrationIsOpen } from './lib/registration';
 import { insertFreeAgent, placeFreeAgent } from './lib/rosterWrites';
@@ -85,16 +85,21 @@ export const listForOrganizer = query({
         q.eq('seasonId', season._id).eq('status', 'waiting'),
       )
       .take(ORGANIZER_FREE_AGENTS_LIMIT + 1);
-    const rows = [];
-    for (const freeAgent of waiting.slice(0, ORGANIZER_FREE_AGENTS_LIMIT)) {
-      const user = await ctx.db.get('users', freeAgent.userId);
-      rows.push({
+    const read = waiting.slice(0, ORGANIZER_FREE_AGENTS_LIMIT);
+    const users = await Promise.all(read.map((freeAgent) => ctx.db.get('users', freeAgent.userId)));
+    const emails = await authEmailsOf(
+      ctx,
+      users.flatMap((user) => (user ? [user.authUserId] : [])),
+    );
+    const rows = read.map((freeAgent, index) => {
+      const user = users[index];
+      return {
         freeAgentId: freeAgent._id,
         name: user?.name ?? '',
-        email: user ? ((await authEmailOf(ctx, user.authUserId)) ?? '') : '',
+        email: (user && emails.get(user.authUserId)) ?? '',
         registeredAt: freeAgent.registeredAt,
-      });
-    }
+      };
+    });
     return { rows, hasMore: waiting.length > ORGANIZER_FREE_AGENTS_LIMIT };
   },
 });
