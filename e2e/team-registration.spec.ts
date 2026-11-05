@@ -3,6 +3,7 @@ import { axeScan, describeViolations, expectAccessible, tabKey } from './support
 import { baseURL, remoteBaseUrl } from './support/env';
 import { convexRun } from './support/convex';
 import { expect, test } from './support/fixtures';
+import { holdMutations, type HeldMutations } from './support/hold-mutations';
 import { otherUser, signUp } from './support/session';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
@@ -430,21 +431,15 @@ test.describe('team page: removing a player, while the removal is held', () => {
   test('the Removing… button is disabled and the dialog stays accessible', async ({
     page,
   }, testInfo) => {
-    let release: () => void = () => undefined;
-    const held = new Promise<void>((resolve) => (release = resolve));
+    let held: HeldMutations | undefined;
     const { players } = await rosterOfThree(page, {
-      beforeOpen: () =>
-        page.routeWebSocket(/.*/, (ws) => {
-          const server = ws.connectToServer();
-          ws.onMessage(async (message) => {
-            if (typeof message === 'string' && message.includes('"Mutation"')) await held;
-            server.send(message);
-          });
-          server.onMessage((message) => ws.send(message));
-        }),
+      beforeOpen: async () => {
+        held = await holdMutations(page);
+      },
     });
     await removeFor(page, players[0].name, 'Sand Sharks').click();
     const dialog = removeDialog(page);
+    held!.hold();
     await dialog.getByRole('button', { name: 'Remove player' }).click();
     const removing = dialog.getByRole('button', { name: 'Removing…' });
     await expect(removing).toHaveAttribute('aria-disabled', 'true');
@@ -454,7 +449,7 @@ test.describe('team page: removing a player, while the removal is held', () => {
     );
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '137-remove-removing');
-    release();
+    held!.release();
     await expect(dialog).toHaveCount(0);
     await expect(rosterRows(page)).toHaveCount(2);
   });

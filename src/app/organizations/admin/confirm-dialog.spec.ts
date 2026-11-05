@@ -23,7 +23,8 @@ import { text } from './testing/admin-harness';
       [buttonIcon]="buttonIcon()"
       [pending]="pending()"
       [alert]="alert()"
-      [choice]="choice()"
+      [role]="role()"
+      [withBody]="withBody()"
       (confirmed)="confirmed = confirmed + 1"
       (closed)="closed = closed + 1"
     >
@@ -38,7 +39,8 @@ class Host {
   readonly buttonIcon = signal(true);
   readonly pending = signal(false);
   readonly alert = signal<ConfirmAlertView | null>(null);
-  readonly choice = signal(false);
+  readonly role = signal<'alertdialog' | 'dialog'>('alertdialog');
+  readonly withBody = signal(false);
   confirmed = 0;
   closed = 0;
 }
@@ -222,10 +224,11 @@ describe('ConfirmDialog', () => {
     });
   });
 
-  describe('as a choice', () => {
-    async function openChoice() {
+  describe('with a body', () => {
+    async function openWithBody() {
       const fixture = TestBed.createComponent(Host);
-      fixture.componentInstance.choice.set(true);
+      fixture.componentInstance.withBody.set(true);
+      fixture.componentInstance.role.set('dialog');
       await fixture.whenStable();
       fixture.componentInstance.dialog().open();
       await fixture.whenStable();
@@ -233,7 +236,7 @@ describe('ConfirmDialog', () => {
     }
 
     it('is a dialog, not an alertdialog, with the body in a scrolling row between header and footer', async () => {
-      await openChoice();
+      await openWithBody();
       expect(document.querySelector('[role="alertdialog"]')).toBeNull();
       const content = box().querySelector<HTMLElement>('[data-slot="alert-dialog-content"]')!;
       expect(content.className).toContain('grid-rows-[auto_minmax(0,1fr)_auto]');
@@ -243,13 +246,23 @@ describe('ConfirmDialog', () => {
       expect(body.nextElementSibling!.getAttribute('data-slot')).toBe('alert-dialog-footer');
     });
 
-    it('shows no body outside a choice', async () => {
+    it('keeps the role it is given, so a body can stay an alertdialog', async () => {
+      const fixture = TestBed.createComponent(Host);
+      fixture.componentInstance.withBody.set(true);
+      await fixture.whenStable();
+      fixture.componentInstance.dialog().open();
+      await fixture.whenStable();
+      expect(box().getAttribute('role')).toBe('alertdialog');
+      expect(box().querySelector('#in-body')).not.toBeNull();
+    });
+
+    it('shows no body without withBody', async () => {
       await open();
       expect(document.querySelector('#in-body')).toBeNull();
     });
 
     it('puts the alert in the body, below the choices', async () => {
-      const fixture = await openChoice();
+      const fixture = await openWithBody();
       fixture.componentInstance.alert.set(FAILED);
       await fixture.whenStable();
       const alert = box().querySelector('app-admin-alert')!;

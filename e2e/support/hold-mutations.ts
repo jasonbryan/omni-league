@@ -1,9 +1,17 @@
 import type { Page } from '@playwright/test';
 
 export interface HeldMutations {
-  /** Mutations sent from now on wait until `release`. */
   hold: () => void;
   release: () => void;
+}
+
+function isMutation(message: string | Buffer): boolean {
+  if (typeof message !== 'string') return false;
+  try {
+    return (JSON.parse(message) as { type?: string }).type === 'Mutation';
+  } catch {
+    return false;
+  }
 }
 
 // Register it before the page that sends the mutation loads.
@@ -13,7 +21,7 @@ export async function holdMutations(page: Page): Promise<HeldMutations> {
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage(async (message) => {
-      if (typeof message === 'string' && message.includes('"Mutation"')) await gate;
+      if (isMutation(message)) await gate;
       server.send(message);
     });
     server.onMessage((message) => ws.send(message));

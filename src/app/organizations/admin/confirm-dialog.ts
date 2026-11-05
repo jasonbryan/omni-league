@@ -51,7 +51,7 @@ export function confirmAlertView(
     : { kind, title: texts.failed.title, description: texts.failed.description };
 }
 
-const CHOICE_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]';
+const BODY_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]';
 
 /**
  * Its scrim is the phone-menu sheet's `bg-foreground/50` with no blur, not helm's. Escape is handled here, because the brain dialog reads `disableClose` only when it opens.
@@ -78,7 +78,7 @@ const CHOICE_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <brn-alert-dialog
-      [role]="choice() ? 'dialog' : 'alertdialog'"
+      [role]="role()"
       [autoFocus]="focusTarget()"
       [restoreFocus]="false"
       [disableClose]="true"
@@ -106,12 +106,12 @@ const CHOICE_CONTENT = 'max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_
             [class]="descriptionClass"
           >
             <ng-content />
-            @if (!choice()) {
+            @if (!withBody()) {
               <ng-container *ngTemplateOutlet="alertView; context: { margin: 'mt-3' }" />
             }
           </div>
         </div>
-        @if (choice()) {
+        @if (withBody()) {
           <div class="-mx-4 overflow-y-auto px-4">
             <ng-content select="[confirm-body]" />
             <ng-container *ngTemplateOutlet="alertView; context: { margin: 'mt-4' }" />
@@ -177,14 +177,13 @@ export class ConfirmDialog {
   readonly confirmLabel = input.required<string>();
   readonly pendingLabel = input.required<string>();
   readonly cancelId = input<string>();
-  /** A selector for the element to focus on open; Cancel when unset. */
   readonly autoFocus = input<string>();
   readonly variant = input<'primary' | 'destructive'>('primary');
   readonly buttonIcon = input(true, { transform: booleanAttribute });
   readonly pending = input(false, { transform: booleanAttribute });
   readonly alert = input<ConfirmAlertView | null>(null);
-  /** A dialog that asks for a choice: it takes a body between the header and the footer, and the alert goes in that body. */
-  readonly choice = input(false, { transform: booleanAttribute });
+  readonly role = input<'alertdialog' | 'dialog'>('alertdialog');
+  readonly withBody = input(false, { transform: booleanAttribute });
 
   readonly confirmed = output();
   readonly closed = output();
@@ -198,9 +197,12 @@ export class ConfirmDialog {
   protected readonly cancelClass = OUTLINE_BUTTON;
 
   protected readonly contentClass = computed(() =>
-    this.choice() ? `${ALERT_DIALOG_CONTENT} ${CHOICE_CONTENT}` : ALERT_DIALOG_CONTENT,
+    this.withBody() ? `${ALERT_DIALOG_CONTENT} ${BODY_CONTENT}` : ALERT_DIALOG_CONTENT,
   );
-  protected readonly focusTarget = computed(() => this.autoFocus() ?? `#${this.cancelId()}`);
+  protected readonly focusTarget = computed(() => {
+    const cancelId = this.cancelId();
+    return this.autoFocus() ?? (cancelId ? `#${cancelId}` : 'first-tabbable');
+  });
   protected readonly confirmClass = computed(() => {
     const base = this.variant() === 'destructive' ? DESTRUCTIVE_BUTTON : PRIMARY_BUTTON;
     return !this.online() && !this.pending() ? `${base} opacity-50` : base;

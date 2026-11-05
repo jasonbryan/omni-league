@@ -4,6 +4,7 @@ import { axeScan, describeViolations, expectAccessible, tabKey } from './support
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
@@ -366,16 +367,7 @@ test.describe('Season management: placing a free agent, while the placement is h
   }, testInfo) => {
     const { tenant, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
     await waitingPage.context().close();
-    let release: () => void = () => undefined;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.routeWebSocket(/.*/, (ws) => {
-      const server = ws.connectToServer();
-      ws.onMessage(async (message) => {
-        if (typeof message === 'string' && message.includes('"Mutation"')) await held;
-        server.send(message);
-      });
-      server.onMessage((message) => ws.send(message));
-    });
+    const held = await holdMutations(page);
     await page.goto(seasonPath(tenant, SUMMER));
     await freeAgentRows(page)
       .filter({ hasText: waiting.name })
@@ -383,12 +375,13 @@ test.describe('Season management: placing a free agent, while the placement is h
       .click();
     const dialog = placeDialog(page);
     await dialog.getByRole('radio', { name: 'Dig Deep' }).check();
+    held.hold();
     await dialog.getByRole('button', { name: 'Place on team' }).click();
     const placing = dialog.getByRole('button', { name: 'Placing…' });
     await expect(placing).toHaveAttribute('aria-disabled', 'true');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '135-placing');
-    release();
+    held.release();
     await expect(dialog).toHaveCount(0);
   });
 });
