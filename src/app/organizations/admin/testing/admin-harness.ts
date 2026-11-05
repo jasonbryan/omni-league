@@ -96,7 +96,7 @@ export const SHELL_SUBSCRIPTIONS: Asked[] = [
     'leagues:publishedCount',
     'leagues:listForAdmin',
     'locations:listForAdmin',
-    'memberships:listForOrganization',
+    'memberships:staffCount',
   ].map((name): Asked => [name, { organizationId: COASTAL.organizationId }]),
 ];
 

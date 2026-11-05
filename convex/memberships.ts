@@ -3,14 +3,26 @@ import type { Doc, Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { requireOrgAdmin } from './lib/access';
 import { authEmailOf } from './lib/authUsers';
+import { recountMemberships } from './lib/memberships';
 import { roleValidator } from './lib/roles';
 
 export const MEMBERS_LIMIT = 200;
+
+export const staffCount = query({
+  args: { organizationId: v.id('organizations') },
+  returns: v.number(),
+  handler: async (ctx, { organizationId }) => {
+    await requireOrgAdmin(ctx, organizationId);
+    const organization = await ctx.db.get('organizations', organizationId);
+    return organization?.staffCount ?? (await recountMemberships(ctx, organizationId));
+  },
+});
 
 export const listForOrganization = query({
   args: { organizationId: v.id('organizations') },
   returns: v.array(
     v.object({
+      membershipId: v.id('memberships'),
       name: v.string(),
       email: v.string(),
       role: roleValidator,
@@ -42,6 +54,7 @@ export const listForOrganization = query({
         if (name !== null) leagueNames.push(name);
       }
       rows.push({
+        membershipId: membership._id,
         name: user.name,
         email: (await authEmailOf(ctx, user.authUserId)) ?? '',
         role: membership.role,

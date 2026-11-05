@@ -767,8 +767,19 @@ describe('memberships.listForOrganization', () => {
     const rows = await s.asAdminA.query(api.memberships.listForOrganization, {
       organizationId: s.organizationA,
     });
+    const membershipOf = (userId: Id<'users'>) =>
+      s.t.run(async (ctx) => {
+        const membership = await ctx.db
+          .query('memberships')
+          .withIndex('by_userId_and_organizationId', (q) =>
+            q.eq('userId', userId).eq('organizationId', s.organizationA),
+          )
+          .unique();
+        return membership!._id;
+      });
     expect(rows).toEqual([
       {
+        membershipId: await membershipOf(s.adminA.userId),
         name: 'admin-a',
         email: 'admin-a@example.test',
         role: 'orgAdmin',
@@ -776,6 +787,7 @@ describe('memberships.listForOrganization', () => {
         isYou: true,
       },
       {
+        membershipId: await membershipOf(s.organizerA.userId),
         name: 'organizer-a',
         email: 'organizer-a@example.test',
         role: 'leagueOrganizer',

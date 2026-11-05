@@ -138,7 +138,7 @@ describe('LeagueSidebar', () => {
     for (const admin of [
       'leagues:publishedCount',
       'locations:listForAdmin',
-      'memberships:listForOrganization',
+      'memberships:staffCount',
     ]) {
       expect(names).not.toContain(admin);
     }

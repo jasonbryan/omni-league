@@ -6,6 +6,7 @@ import { api, components, internal } from './_generated/api';
 import { isForbidden } from './lib/forbidden';
 import { authUserIdByEmail } from './lib/authUsers';
 import { hashInviteToken } from './lib/inviteToken';
+import { deleteMembership } from './lib/memberships';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
 import { removeRosterEntry } from './lib/rosterWrites';
 import schema from './schema';
@@ -265,6 +266,7 @@ const NO_BACKFILL = {
   teamCounts: 0,
   pendingInviteCounts: 0,
   waitlistCounts: 0,
+  staffCounts: 0,
 };
 
 describe('seed:demo accounts: a new deployment', () => {
@@ -316,6 +318,10 @@ describe('seed:demo accounts: a new deployment', () => {
       expect(await membershipsOf(t, EMAILS.captain)).toEqual([]);
       const { memberships, invites, leagues, organizations } = await appRows(t);
       expect(memberships).toHaveLength(5);
+      for (const organization of organizations) {
+        const recount = memberships.filter((m) => m.organizationId === organization._id).length;
+        expect(organization.staffCount, organization.slug).toBe(recount);
+      }
       expect(invites).toHaveLength(1);
       const gulfCoast = organizations.find((o) => o.slug === GULF_COAST);
       const league = leagues.find(
@@ -843,7 +849,7 @@ describe('seed:demo accounts: a second run', () => {
       const before = await appRows(t);
       const gone = before.memberships.find((m) => m.role === 'orgAdmin');
       if (!gone) throw new Error('no admin membership');
-      await t.run((ctx) => ctx.db.delete('memberships', gone._id));
+      await t.run((ctx) => deleteMembership(ctx, gone));
       const second = await run(t);
       expect(second.memberships).toBe(1);
       expect(second.accounts).toEqual(ALL('exists'));

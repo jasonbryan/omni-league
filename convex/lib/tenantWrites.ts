@@ -181,6 +181,7 @@ export async function insertOrganization(
     hasPublishedLeague: false,
     leagueCount: 0,
     locationCount: 0,
+    staffCount: 0,
     sportLeagueCounts: {},
     sportLocationCounts: {},
   });

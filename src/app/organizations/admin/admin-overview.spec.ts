@@ -18,16 +18,9 @@ const URL = `/app/organizations/${COASTAL.slug}`;
 // The "Get set up" rule and the published part of the Leagues tile read the organization's counter, not the admin list, which stops at 200 rows; the drafts are counted from that list.
 const PUBLISHED_COUNT = 'leagues:publishedCount';
 const LIST_LEAGUES = 'leagues:listForAdmin';
-const LIST_MEMBERS = 'memberships:listForOrganization';
+const STAFF_COUNT = 'memberships:staffCount';
 const LIST_PENDING = 'invites:listPending';
 
-const member = (name: string) => ({
-  name,
-  email: `${name}@example.com`,
-  role: 'orgAdmin',
-  leagueNames: [],
-  isYou: false,
-});
 const invite = (id: string) => ({
   inviteId: id,
   email: `${id}@example.com`,
@@ -72,14 +65,14 @@ describe('AdminOverview', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
   });
 
-  it('asks the location list, the published-league counter, the league list, and the staff lists with the organization id', async () => {
+  it('asks the location list, the published-league counter, the league list, the staff counter, and the pending invites with the organization id', async () => {
     const { convex, subscription } = await open();
     expectPageAndShellSubscriptions(convex, [
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
       [PUBLISHED_COUNT, { organizationId: COASTAL.organizationId }],
       [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
-      [LIST_MEMBERS, { organizationId: COASTAL.organizationId }],
+      [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
       [LIST_PENDING, { organizationId: COASTAL.organizationId }],
     ]);
     expect(subscription(LIST_FOR_ADMIN)).toBeDefined();
@@ -198,17 +191,31 @@ describe('AdminOverview', () => {
     const tile = (page: HTMLElement) =>
       [...page.querySelectorAll('main dl > div')][2].querySelectorAll('dd');
 
-    it('reads the member count and "N pending invites", from the two staff-screen queries', async () => {
+    it('reads the staff counter and "N pending invites"', async () => {
       const { page, subscription, flush } = await open();
-      subscription(LIST_MEMBERS)!.emit([member('a'), member('b'), member('c')]);
+      subscription(STAFF_COUNT)!.emit(3);
       subscription(LIST_PENDING)!.emit([invite('x'), invite('y')]);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['3', '2 pending invites']);
     });
 
+    it('reads the counter, which holds past the 200 rows the member list stops at', async () => {
+      const { page, subscription, flush } = await open();
+      subscription(STAFF_COUNT)!.emit(250);
+      subscription(LIST_PENDING)!.emit([]);
+      await flush();
+      expect([...tile(page)].map(text)).toEqual(['250', 'No pending invites']);
+    });
+
+    it('asks no member list', async () => {
+      const { convex } = await open();
+      const asked = convex.activeSubscriptions.map((s) => s.name);
+      expect(asked).not.toContain('memberships:listForOrganization');
+    });
+
     it('uses the singular for one pending invite, and "No pending invites" for none', async () => {
       const { page, subscription, flush } = await open();
-      subscription(LIST_MEMBERS)!.emit([member('a')]);
+      subscription(STAFF_COUNT)!.emit(1);
       subscription(LIST_PENDING)!.emit([invite('x')]);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['1', '1 pending invite']);
@@ -217,18 +224,18 @@ describe('AdminOverview', () => {
       expect([...tile(page)].map(text)).toEqual(['1', 'No pending invites']);
     });
 
-    it('draws a placeholder while either list loads', async () => {
+    it('draws a placeholder while the counter or the invites load', async () => {
       const { page, subscription, flush } = await open();
       expect(text(tile(page)[0])).toBe('');
       expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
-      subscription(LIST_MEMBERS)!.emit([member('a')]);
+      subscription(STAFF_COUNT)!.emit(1);
       await flush();
       expect(text(tile(page)[0])).toBe('');
     });
 
-    it('shows "–" and a note when a list fails, never the error message', async () => {
+    it('shows "–" and a note when the counter fails, never the error message', async () => {
       const { page, subscription, flush } = await open();
-      subscription(LIST_MEMBERS)!.fail(new Error('Server Error: secret'));
+      subscription(STAFF_COUNT)!.fail(new Error('Server Error: secret'));
       await flush();
       expect([...tile(page)].map(text)).toEqual(['–', 'Could not be loaded']);
       expect(page.textContent).not.toContain('secret');
@@ -236,7 +243,7 @@ describe('AdminOverview', () => {
 
     it('a failing pending list does not hide the member count', async () => {
       const { page, subscription, flush } = await open();
-      subscription(LIST_MEMBERS)!.emit([member('a'), member('b')]);
+      subscription(STAFF_COUNT)!.emit(2);
       subscription(LIST_PENDING)!.fail(new Error('x'));
       await flush();
       expect([...tile(page)].map(text)).toEqual(['2', 'Pending invites could not be loaded']);

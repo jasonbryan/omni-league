@@ -14,7 +14,7 @@ import { ADULT_CONFIRMATION_FIELD, createAuth } from './auth';
 import { authUserIdByEmail } from './lib/authUsers';
 import { generateInviteToken, hashInviteToken } from './lib/inviteToken';
 import { INVITE_LIFETIME_MS } from './lib/inviteInput';
-import { insertMembership } from './lib/memberships';
+import { backfillStaffCounts, insertMembership } from './lib/memberships';
 import { verifyPassword } from './lib/password';
 import type { Gender, StandardLevel } from './lib/divisions';
 import { PREVIEW_ORIGIN_PATTERN } from './lib/previewOrigin';
@@ -658,6 +658,7 @@ const resultValidator = v.object({
     teamCounts: v.number(),
     pendingInviteCounts: v.number(),
     waitlistCounts: v.number(),
+    staffCounts: v.number(),
   }),
   updated: v.object({ organizations: v.number(), leagues: v.number() }),
 });
@@ -782,6 +783,7 @@ export const insertDemoData = internalMutation({
       teamCounts: await backfillSeasonTeamCounts(ctx),
       pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
       waitlistCounts: await backfillSeasonWaitlistCounts(ctx),
+      staffCounts: await backfillStaffCounts(ctx),
     };
     updated.leagues = await renameDemoLeagues(ctx);
     for (const tenant of DEMO) {

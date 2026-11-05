@@ -40,6 +40,7 @@ export default defineSchema({
     cityState: v.optional(v.string()),
     leagueCount: v.optional(v.number()),
     locationCount: v.optional(v.number()),
+    staffCount: v.optional(v.number()),
     sportLeagueCounts: v.optional(sportCountsValidator),
     sportLocationCounts: v.optional(sportCountsValidator),
     sortName: v.optional(v.string()),

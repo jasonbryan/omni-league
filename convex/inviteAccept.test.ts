@@ -260,6 +260,16 @@ describe('invites.accept', () => {
     });
   });
 
+  test('accepting adds one to the organization’s staff count', async () => {
+    const s = await setup();
+    const staffCount = () =>
+      s.t.run(async (ctx) => (await ctx.db.get('organizations', s.organizationA))?.staffCount);
+    const before = await staffCount();
+    const { token } = await invite(s, 'dana@example.test');
+    await s.asDana.mutation(api.invites.accept, { token });
+    expect(await staffCount()).toBe((before ?? 0) + 1);
+  });
+
   test('it returns the organization slug and each league name and slug, keeping leagueNames', async () => {
     const s = await setup();
     const { token } = await invite(s, 'dana@example.test', 'leagueOrganizer', [s.coed, s.sand]);

@@ -34,6 +34,7 @@ import {
   injectQuery,
   skipToken,
 } from '../../core/data/convex';
+import { injectNowAtDeadlines } from '../../core/now-at-deadlines';
 import { initials } from '../initials';
 import { isPlainClick } from '../../shell/follow-link';
 import { AdminAlert } from './admin-alert';
@@ -150,7 +151,7 @@ const ROLE_LABEL: Record<Role, string> = {
               </div>
             } @else if (memberRows(); as rows) {
               <ul id="members-list" role="list" class="divide-y divide-border">
-                @for (row of rows; track row.email) {
+                @for (row of rows; track row.membershipId) {
                   <li class="flex items-start gap-3 px-4 py-3.5 md:px-5">
                     <span
                       aria-hidden="true"
@@ -478,10 +479,14 @@ export class AdminStaff {
   protected readonly pendingFailed = computed(() => this.pendingList.error() !== undefined);
   protected readonly leaguesFailed = computed(() => this.leagueList.error() !== undefined);
 
+  private readonly now = injectNowAtDeadlines(
+    () => this.pendingList.value()?.map((row) => row.expiresAt) ?? [],
+  );
+
   protected readonly pendingRows = computed(() => {
     const rows = this.pendingList.value();
     if (rows === undefined) return undefined;
-    const now = Date.now();
+    const now = this.now();
     return rows.map((row) => ({ ...row, expired: row.expiresAt <= now }));
   });
 
