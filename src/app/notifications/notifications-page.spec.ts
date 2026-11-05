@@ -72,6 +72,10 @@ class FakePushDevice implements PushDevice {
     });
   }
 
+  subscription(): Promise<PushSubscription | null> {
+    return Promise.resolve(null);
+  }
+
   respond(permission: NotificationPermission): void {
     this.answer?.(permission);
   }

@@ -7,6 +7,7 @@
 - **Amended:** 2026-10-10, by #81 (PR #119) and #80 (PR #113): registration follows the `serviceWorker` build option, and `netlify.toml` sets the manifest's `Content-Type`. See "Amendment: one kill switch and the manifest content type (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-27, by #384: a new version applies itself when nothing on the page can be lost, and the 14-day forced-reload rule is removed. See "Amendment: new versions apply themselves (2026-10-27)" at the end. Where section 4 disagrees with it, the amendment applies.
 - **Amended:** 2026-10-28, by #385: the note and form alerts name the cause, and an old version whose Convex deployment is gone checks for an update early and reloads at once. See "Amendment: an old version whose Convex deployment is gone (2026-10-28)" at the end. Where sections 3 and 4 disagree with it, the amendment applies.
+- **Amended:** 2026-11-05, by #533: the client reads and removes this browser's push subscription on a page no service worker controls. See "Amendment: push cleanup on a page no service worker controls (2026-11-05)" at the end. Where section 7's Lifecycle bullets disagree with it, the amendment applies.
 
 ## Context
 
@@ -456,3 +457,19 @@ It amends section 3, "Adapter additions" (the `online` signal and the note), and
 - **Unsaved input.** A page with an unsaved field still shows the new-version prompt and keeps the input, and the unreachable note shows as well.
 
 **Rejected.** Keeping old staging deployments alive (previews and the 5-day expiry would still break old bundles). `navigationRequestStrategy: freshness` (it loses the instant shell on field wifi). Reading the Convex URL at runtime (an extra request on every load).
+
+## Amendment: push cleanup on a page no service worker controls (2026-11-05)
+
+After a hard reload (Shift+Reload), `navigator.serviceWorker.controller` is `null` for the life of the page, while the registration and its push subscription remain. `SwPush.subscription`, `SwPush.unsubscribe()` and `SwPush.requestSubscription()` all wait for a controller (`@angular/service-worker` 22.2.3: `registration` emits only after one appears), so on that page they emit nothing and never settle. Sign-out then left the previous user's subscription in the browser, and the sign-in check never found it. `getRegistration()`, `PushManager.getSubscription()` and `PushSubscription.unsubscribe()` need no controller.
+
+It amends section 7, "Lifecycle", and adds a note to section 5, "Client".
+
+**Section 7, Lifecycle.**
+
+- **Reading the subscription.** Both bullets read it with `getRegistration()` and then `getSubscription()`, whether or not `SwPush.isEnabled` and whether or not a worker controls the page. A build without the worker (the kill switch, before the old worker unregisters) still holds a registration, so sign-out clears it. With no registration, or a rejected call, there is no subscription and nothing is called. The read has no time limit, because both calls always settle.
+- **Start-up and every sign-in.** A `false` status unsubscribes through `SwPush.unsubscribe()` when `SwPush.isEnabled` and a worker controls the page, so an open notifications page shows "off". In every other case it calls `unsubscribe()` on the subscription read from the registration. A `true` status saves the row again as before. When the key differs or `expirationTime` has passed, the client subscribes again only on a controlled page; an uncontrolled page changes nothing, and the next controlled load's check replaces it.
+- **Sign-out** calls `push.unsubscribe` and then the same browser unsubscribe. It no longer waits for a read that may never answer, so it takes no longer on an uncontrolled page.
+
+**Section 5, Client.** Only `SwPush.requestSubscription` needs a controlling worker, because `PushManager.subscribe()` needs an active worker on the registration. Reading and removing a subscription do not.
+
+**Open.** On an uncontrolled page the notifications page shows "off" while the device may still be subscribed (#558).

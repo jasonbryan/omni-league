@@ -12,6 +12,7 @@ interface FakeWindowOptions {
   pushManager?: boolean;
   permission?: NotificationPermission;
   controlled?: boolean;
+  getRegistration?: () => Promise<unknown>;
 }
 
 function fakeWindow(options: FakeWindowOptions = {}) {
@@ -19,6 +20,7 @@ function fakeWindow(options: FakeWindowOptions = {}) {
   const fakeDocument = Object.assign(documentEvents, { visibilityState: 'visible' });
   const container = Object.assign(new EventTarget(), {
     controller: options.controlled === false ? null : {},
+    getRegistration: options.getRegistration ?? (() => Promise.resolve(undefined)),
   });
   const notification = {
     permission: options.permission ?? 'default',
@@ -147,5 +149,48 @@ describe('BrowserPushDevice', () => {
     expect(notification.requestPermission).toHaveBeenCalledTimes(1);
     expect(await answer).toBe('granted');
     expect(device.permission()).toBe('granted');
+  });
+
+  describe('subscription', () => {
+    const held = { endpoint: 'https://fcm.googleapis.com/fcm/send/device-1' };
+    const registrationHolding = (getSubscription: () => Promise<unknown>) =>
+      Promise.resolve({ pushManager: { getSubscription } });
+
+    it('resolves the subscription the registration holds while no worker controls the page', async () => {
+      const { device } = create({
+        controlled: false,
+        getRegistration: () => registrationHolding(() => Promise.resolve(held)),
+      });
+
+      expect(await device.subscription()).toBe(held);
+    });
+
+    it.each([
+      ['no registration', () => Promise.resolve(undefined)],
+      [
+        'a registration with no subscription',
+        () => registrationHolding(() => Promise.resolve(null)),
+      ],
+      ['getRegistration rejecting', () => Promise.reject(new Error('SecurityError'))],
+      [
+        'getSubscription rejecting',
+        () => registrationHolding(() => Promise.reject(new Error('InvalidStateError'))),
+      ],
+      ['a registration with no pushManager', () => Promise.resolve({})],
+    ])('resolves null with %s', async (_case, getRegistration) => {
+      expect(await create({ controlled: false, getRegistration }).device.subscription()).toBeNull();
+    });
+
+    it('resolves null when the window has no serviceWorker', async () => {
+      expect(await create({ serviceWorker: false }).device.subscription()).toBeNull();
+    });
+
+    it('resolves null with no window', async () => {
+      TestBed.configureTestingModule({
+        providers: [{ provide: DOCUMENT, useValue: { defaultView: null } }],
+      });
+
+      expect(await TestBed.inject(BrowserPushDevice).subscription()).toBeNull();
+    });
   });
 });

@@ -11,6 +11,11 @@ export interface PushDevice {
   readonly permission: Signal<DevicePermission>;
   /** A service worker controls the page, so `SwPush.requestSubscription` can resolve. */
   readonly controlled: Signal<boolean>;
+  /**
+   * This browser's push subscription, or `null` when there is none or the browser cannot say; never rejects.
+   * It does not need a controlling worker, unlike `SwPush.subscription`, which emits nothing on an uncontrolled page.
+   */
+  subscription(): Promise<PushSubscription | null>;
   /** Must be called synchronously in the click handler: Safari grants the prompt only from a direct user action. */
   requestPermission(): Promise<NotificationPermission>;
 }
@@ -74,6 +79,15 @@ export class BrowserPushDevice implements PushDevice {
       this.permissionState.set(permission);
       return permission;
     });
+  }
+
+  async subscription(): Promise<PushSubscription | null> {
+    try {
+      const registration = await this.container?.getRegistration();
+      return (await registration?.pushManager.getSubscription()) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private readPermission(): DevicePermission {
