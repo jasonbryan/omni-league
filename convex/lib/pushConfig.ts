@@ -14,7 +14,7 @@ function values() {
   };
 }
 
-/** Names only, never values. */
+// Callers log this list, so it holds variable names and never a secret value.
 export function missingPushConfig(): string[] {
   return Object.entries(values())
     .filter(([, value]) => value === '')
