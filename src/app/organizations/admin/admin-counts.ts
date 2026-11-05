@@ -19,10 +19,10 @@ export function injectAdminCounts(organizationId: () => Id<'organizations'>) {
   const published = injectQuery(api.leagues.publishedCount, args);
   const leagues = injectQuery(api.leagues.listForAdmin, args);
   const locations = injectQuery(api.locations.listForAdmin, args);
-  const members = injectQuery(api.memberships.listForOrganization, args);
+  const staff = injectQuery(api.memberships.staffCount, args);
   return {
     leagues: computed(() => leagueCount(published.value(), leagues.value())),
     locations: computed(() => locations.value()?.length ?? null),
-    staff: computed(() => members.value()?.length ?? null),
+    staff: computed(() => staff.value() ?? null),
   };
 }

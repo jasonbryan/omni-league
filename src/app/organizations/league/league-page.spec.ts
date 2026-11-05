@@ -75,7 +75,7 @@ describe('LeaguePage', () => {
         'leagues:publishedCount',
         'leagues:listForAdmin',
         'locations:listForAdmin',
-        'memberships:listForOrganization',
+        'memberships:staffCount',
       ].map((name): [string, unknown] => [name, { organizationId: COED.organizationId }]);
       const expected: [string, unknown][] = [
         [GET_ORGANIZER_CONTEXT, { orgSlug: GULF.slug, leagueSlug: COED.slug }],

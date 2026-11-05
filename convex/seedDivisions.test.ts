@@ -26,6 +26,7 @@ const ZERO_BACKFILL = {
   teamCounts: 0,
   pendingInviteCounts: 0,
   waitlistCounts: 0,
+  staffCounts: 0,
 };
 
 beforeEach(() => {

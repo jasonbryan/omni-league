@@ -16,7 +16,7 @@ import { OUTLINE_BUTTON } from './button-classes';
 /**
  * The published count is the organization's counter, which holds past the 200 rows the league list stops at, and the drafts are counted from that list,
  * so a draft past row 200 is not counted. The list hides once any league is published (by the counter), and is not drawn while the counter loads,
- * so an established organization never sees it flash.
+ * so an established organization never sees it flash. The Staff count is the organization's counter too, since the member list stops at 200 rows.
  */
 @Component({
   selector: 'app-admin-overview',
@@ -248,7 +248,7 @@ export class AdminOverview {
     };
   });
 
-  private readonly members = injectQuery(api.memberships.listForOrganization, () => {
+  private readonly staff = injectQuery(api.memberships.staffCount, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
@@ -259,10 +259,10 @@ export class AdminOverview {
   });
 
   protected readonly staffTile = computed(() => {
-    if (this.members.error()) return { count: '–', note: 'Could not be loaded' };
-    const members = this.members.value();
-    if (members === undefined) return null;
-    const count = String(members.length);
+    if (this.staff.error()) return { count: '–', note: 'Could not be loaded' };
+    const staff = this.staff.value();
+    if (staff === undefined) return null;
+    const count = String(staff);
     if (this.invites.error()) return { count, note: 'Pending invites could not be loaded' };
     const invites = this.invites.value();
     if (invites === undefined) return null;

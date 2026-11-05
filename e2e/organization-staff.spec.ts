@@ -379,6 +379,27 @@ test.describe('Staff: revoking', () => {
     await expectAccessible(page);
   });
 
+  test('an invite that expires while the page is open turns to Expired without a reload', async ({
+    page,
+  }, testInfo) => {
+    const { tenant } = await openStaff(page);
+    const LIFETIME_MS = 6_000;
+    await convexRun('testing:addInvite', {
+      organizationSlug: tenant.slug,
+      email: 'r.castillo@example.com',
+      role: 'leagueOrganizer',
+      leagueNames: ['Coed 7v7 Rec'],
+      expiresAt: Date.now() + LIFETIME_MS,
+    });
+    const row = pendingRows(page).first();
+    await expect(row).toContainText('Expires ');
+    await expect(row).toContainText(/Expired [A-Z][a-z]{2} \d{1,2}, \d{4}/, { timeout: 15_000 });
+    await expect(row).not.toContainText('Expires ');
+    await expect(row).toContainText('Revoke it to invite this address again.');
+    await screenshot(page, testInfo, '175-staff-expired-while-open');
+    await expectAccessible(page);
+  });
+
   test.describe('an expired address', () => {
     test.use({ expectedConvexErrors: ['invites:create'] });
 
@@ -591,6 +612,7 @@ test.describe('Staff: who may open it', () => {
         expect(sent).toContain('organizations:getAdminContext');
         expect(sent).not.toContain('invites:listPending');
         expect(sent).not.toContain('memberships:listForOrganization');
+        expect(sent).not.toContain('memberships:staffCount');
       },
     );
   }

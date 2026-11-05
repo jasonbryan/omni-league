@@ -1,5 +1,6 @@
 import type { Doc } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
+import { deleteUserMemberships } from './memberships';
 import { MAX_SUBSCRIPTIONS_PER_USER } from './pushSubscription';
 
 export async function insertUserRecord(
@@ -24,6 +25,7 @@ export async function deleteUserRecord(
     .withIndex('by_userId', (q) => q.eq('userId', user._id))
     .take(MAX_SUBSCRIPTIONS_PER_USER * 2);
   for (const row of subscriptions) await ctx.db.delete('pushSubscriptions', row._id);
+  await deleteUserMemberships(ctx, user._id);
   await ctx.db.delete('users', user._id);
 }
 

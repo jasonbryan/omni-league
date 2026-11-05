@@ -30,6 +30,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const MEMBERS = [
   {
+    membershipId: 'mem_1',
     name: 'Luis Herrera',
     email: 'luis.herrera@example.com',
     role: 'orgAdmin',
@@ -37,6 +38,7 @@ const MEMBERS = [
     isYou: false,
   },
   {
+    membershipId: 'mem_2',
     name: 'Maya Okafor',
     email: 'maya.okafor@example.com',
     role: 'orgAdmin',
@@ -44,6 +46,7 @@ const MEMBERS = [
     isYou: true,
   },
   {
+    membershipId: 'mem_3',
     name: 'Priya Natarajan',
     email: 'priya.natarajan@example.com',
     role: 'leagueOrganizer',
@@ -280,6 +283,21 @@ describe('AdminStaff', () => {
       expect(text(pending()[0].querySelectorAll('p')[0])).toBe('Org admin');
     });
 
+    it('tracks each member row by its membership, so members with no email keep their own rows', async () => {
+      const first = { ...MEMBERS[0], membershipId: 'mem_gone_1', name: 'First Gone', email: '' };
+      const second = { ...MEMBERS[1], membershipId: 'mem_gone_2', name: 'Second Gone', email: '' };
+      await open({ members: [first, second] });
+      const [firstRow, secondRow] = members();
+      expect(members().map((li) => text(li.querySelector('h3')))).toEqual([
+        'First Gone',
+        'Second Gone (you)',
+      ]);
+      o.subscription(LIST_MEMBERS)!.emit([second, first]);
+      await o.flush();
+      expect(members()[0]).toBe(secondRow);
+      expect(members()[1]).toBe(firstRow);
+    });
+
     it('an invite whose expiry has passed stays listed as "Expired <date>", in words and an icon, with the hint and Revoke', async () => {
       await openFull();
       const expired = pending()[1];
@@ -301,6 +319,59 @@ describe('AdminStaff', () => {
         leagues: LEAGUES,
       });
       expect(text(pending()[0])).toContain('Expired Oct 11, 2026');
+    });
+
+    describe('while the page stays open', () => {
+      const MINUTE = 60 * 1000;
+
+      beforeEach(() => {
+        timeoutsFaked = true;
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        vi.setSystemTime(NOW);
+      });
+
+      async function minutesPass(minutes: number) {
+        await vi.advanceTimersByTimeAsync(minutes * MINUTE);
+        await o.flush();
+      }
+
+      it('an invite that expires turns from "Expires <date>" to "Expired <date>" with the hint', async () => {
+        await open({
+          members: MEMBERS,
+          pending: [{ ...PENDING[0], expiresAt: NOW + 5 * MINUTE }],
+          leagues: LEAGUES,
+        });
+        expect(text(pending()[0])).toContain('Expires Oct 11, 2026');
+        await minutesPass(4);
+        expect(text(pending()[0])).toContain('Expires Oct 11, 2026');
+        await minutesPass(1);
+        expect(text(pending()[0])).toContain('Expired Oct 11, 2026');
+        expect(text(pending()[0])).not.toContain('Expires');
+        expect(text(pending()[0])).toContain('Revoke it to invite this address again.');
+      });
+
+      it('each invite turns at its own expiry', async () => {
+        await open({
+          members: MEMBERS,
+          pending: [
+            { ...PENDING[0], expiresAt: NOW + 2 * MINUTE },
+            { ...PENDING[1], expiresAt: NOW + 4 * MINUTE },
+          ],
+          leagues: LEAGUES,
+        });
+        await minutesPass(2);
+        expect(pending().map((li) => text(li)?.includes('Expired'))).toEqual([true, false]);
+        await minutesPass(2);
+        expect(pending().map((li) => text(li)?.includes('Expired'))).toEqual([true, true]);
+      });
+
+      it('an invite that expired before the list arrived reads as expired at once', async () => {
+        await open({ members: MEMBERS });
+        await minutesPass(10);
+        o.subscription(LIST_PENDING)!.emit([{ ...PENDING[0], expiresAt: NOW + 5 * MINUTE }]);
+        await o.flush();
+        expect(text(pending()[0])).toContain('Expired');
+      });
     });
 
     it('no pending invites (state 2): the empty state', async () => {

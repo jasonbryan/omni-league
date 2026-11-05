@@ -82,7 +82,7 @@ describe('AdminArea', () => {
         'leagues:publishedCount',
         'leagues:listForAdmin',
         LIST_FOR_ADMIN,
-        'memberships:listForOrganization',
+        'memberships:staffCount',
       ]);
     });
 

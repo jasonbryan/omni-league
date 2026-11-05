@@ -30,7 +30,7 @@ class Host {
 const PUBLISHED_COUNT = 'leagues:publishedCount';
 const LIST_LEAGUES = 'leagues:listForAdmin';
 const LIST_LOCATIONS = 'locations:listForAdmin';
-const LIST_MEMBERS = 'memberships:listForOrganization';
+const STAFF_COUNT = 'memberships:staffCount';
 
 async function render(url: string) {
   const convex = new FakeConvexClient();
@@ -115,7 +115,7 @@ describe('AdminSidebar', () => {
       expect(convex.subscriptions).toEqual([]);
       authenticate();
       expect(convex.activeSubscriptions.map((s) => [s.name, s.args]).sort()).toEqual(
-        [PUBLISHED_COUNT, LIST_LEAGUES, LIST_LOCATIONS, LIST_MEMBERS]
+        [PUBLISHED_COUNT, LIST_LEAGUES, LIST_LOCATIONS, STAFF_COUNT]
           .map((name) => [name, { organizationId: COASTAL.organizationId }])
           .sort(),
       );
@@ -139,7 +139,7 @@ describe('AdminSidebar', () => {
         { status: 'draft' },
       ]);
       await answer(LIST_LOCATIONS, COASTAL_LOCATIONS);
-      await answer(LIST_MEMBERS, [{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }]);
+      await answer(STAFF_COUNT, 4);
       const counts = [...host.querySelectorAll('nav ul:first-of-type li')].map((li) => [
         text(li.querySelector('a span.flex-1')),
         text(li.querySelector('.tabular-nums')) ?? null,
@@ -157,7 +157,7 @@ describe('AdminSidebar', () => {
       const { host, convex, fixture, authenticate, answer } = await render(BASE);
       authenticate();
       await answer(LIST_LOCATIONS, COASTAL_LOCATIONS);
-      convex.activeSubscriptions.find((s) => s.name === LIST_MEMBERS)?.fail(new Error('boom'));
+      convex.activeSubscriptions.find((s) => s.name === STAFF_COUNT)?.fail(new Error('boom'));
       await fixture.whenStable();
       expect(text(host.querySelector(`a[href="${BASE}/locations"] .tabular-nums`))).toBe('3');
       expect(host.querySelector(`a[href="${BASE}/staff"] .tabular-nums`)).toBeNull();
