@@ -46,6 +46,7 @@ import type { SeasonStatus } from './lib/seasonStatus';
 import type { Sport } from './lib/sports';
 import {
   backfilledValidator,
+  backfillDraftLeagueCounts,
   backfillDivisionFields,
   backfillTenantFields,
   divisionBackfilledValidator,
@@ -659,6 +660,7 @@ const resultValidator = v.object({
     pendingInviteCounts: v.number(),
     waitlistCounts: v.number(),
     staffCounts: v.number(),
+    draftLeagueCounts: v.number(),
   }),
   updated: v.object({ organizations: v.number(), leagues: v.number() }),
 });
@@ -784,6 +786,7 @@ export const insertDemoData = internalMutation({
       pendingInviteCounts: await backfillTeamPendingInviteCounts(ctx),
       waitlistCounts: await backfillSeasonWaitlistCounts(ctx),
       staffCounts: await backfillStaffCounts(ctx),
+      draftLeagueCounts: await backfillDraftLeagueCounts(ctx),
     };
     updated.leagues = await renameDemoLeagues(ctx);
     for (const tenant of DEMO) {

@@ -92,7 +92,7 @@ describe('AdminArea', () => {
         GET_ADMIN_CONTEXT,
         ...ACCOUNT,
         'leagues:publishedCount',
-        'leagues:listForAdmin',
+        'leagues:draftCount',
         LIST_FOR_ADMIN,
         'memberships:staffCount',
       ]);

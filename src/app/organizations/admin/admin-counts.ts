@@ -3,12 +3,8 @@ import type { Id } from '../../../../convex/_generated/dataModel';
 import { AuthService } from '../../core/auth/auth.service';
 import { api, injectQuery, skipToken } from '../../core/data/convex';
 
-function leagueCount(
-  published: number | undefined,
-  rows: readonly { status: string }[] | undefined,
-): number | null {
-  if (published === undefined || rows === undefined) return null;
-  return published + rows.filter((row) => row.status !== 'published').length;
+function leagueCount(published: number | undefined, drafts: number | undefined): number | null {
+  return published === undefined || drafts === undefined ? null : published + drafts;
 }
 
 /** The queries wait until Convex has accepted the token, so the first answer is the caller's own. */
@@ -17,11 +13,11 @@ export function injectAdminCounts(organizationId: () => Id<'organizations'>) {
   const args = () =>
     auth.convexAuthenticated() ? { organizationId: organizationId() } : skipToken;
   const published = injectQuery(api.leagues.publishedCount, args);
-  const leagues = injectQuery(api.leagues.listForAdmin, args);
+  const drafts = injectQuery(api.leagues.draftCount, args);
   const locations = injectQuery(api.locations.listForAdmin, args);
   const staff = injectQuery(api.memberships.staffCount, args);
   return {
-    leagues: computed(() => leagueCount(published.value(), leagues.value())),
+    leagues: computed(() => leagueCount(published.value(), drafts.value())),
     locations: computed(() => locations.value()?.length ?? null),
     staff: computed(() => staff.value() ?? null),
   };

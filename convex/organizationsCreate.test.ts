@@ -63,6 +63,7 @@ describe('organizations.create', () => {
         name: 'Coastal Bend Rec Club',
         slug: 'coastal-bend-rec-club',
         leagueCount: 0,
+        draftLeagueCount: 0,
         locationCount: 0,
         staffCount: 1,
         sportLeagueCounts: {},
