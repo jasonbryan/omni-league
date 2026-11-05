@@ -1,6 +1,6 @@
 import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
-import type { MutationCtx } from '../_generated/server';
+import type { MutationCtx, QueryCtx } from '../_generated/server';
 import {
   ageGroupValidator,
   customLevelNameKey,
@@ -146,6 +146,46 @@ async function increment(
   await ctx.db.patch('organizations', organizationId, { [counter]: count + 1 });
 }
 
+export async function recountDraftLeagues(
+  ctx: Pick<QueryCtx, 'db'>,
+  organizationId: Id<'organizations'>,
+): Promise<number> {
+  const drafts = await ctx.db
+    .query('leagues')
+    .withIndex('by_organizationId_and_status_and_sortName', (q) =>
+      q.eq('organizationId', organizationId).eq('status', 'draft'),
+    )
+    .take(BACKFILL_SCAN_LIMIT);
+  return drafts.length;
+}
+
+// Every league that enters or leaves `draft` goes through here, so `organizations.draftLeagueCount` stays equal to their count; a new writer does too.
+// Called after the row changed, so an unset counter's recount already includes the change.
+async function changeDraftLeagueCount(
+  ctx: MutationCtx,
+  organizationId: Id<'organizations'>,
+  change: 1 | -1,
+): Promise<void> {
+  const organization = await organizationOf(ctx, organizationId);
+  const draftLeagueCount =
+    organization.draftLeagueCount === undefined
+      ? await recountDraftLeagues(ctx, organizationId)
+      : Math.max(0, organization.draftLeagueCount + change);
+  await ctx.db.patch('organizations', organizationId, { draftLeagueCount });
+}
+
+export async function backfillDraftLeagueCounts(ctx: MutationCtx): Promise<number> {
+  let backfilled = 0;
+  for (const organization of await ctx.db.query('organizations').take(BACKFILL_SCAN_LIMIT)) {
+    if (organization.draftLeagueCount !== undefined) continue;
+    await ctx.db.patch('organizations', organization._id, {
+      draftLeagueCount: await recountDraftLeagues(ctx, organization._id),
+    });
+    backfilled++;
+  }
+  return backfilled;
+}
+
 export async function organizationSlugTaken(ctx: MutationCtx, slug: string): Promise<boolean> {
   const taken = await ctx.db
     .query('organizations')
@@ -180,6 +220,7 @@ export async function insertOrganization(
     sortName: sortName(name),
     hasPublishedLeague: false,
     leagueCount: 0,
+    draftLeagueCount: 0,
     locationCount: 0,
     staffCount: 0,
     sportLeagueCounts: {},
@@ -580,6 +621,7 @@ export async function publishLeague(ctx: MutationCtx, league: Doc<'leagues'>): P
     ),
   });
   await markHasPublishedLeague(ctx, league.organizationId);
+  if (league.status === 'draft') await changeDraftLeagueCount(ctx, league.organizationId, -1);
   const wasPublicAndCounted = league.status === undefined;
   if (wasPublicAndCounted) return;
   await increment(ctx, league.organizationId, 'leagueCount');
@@ -686,6 +728,7 @@ async function insertLeagueRow(
     publishedSeasonCount: 0,
     ...divisionFields(league.division),
   });
+  if (status === 'draft') await changeDraftLeagueCount(ctx, organizationId, 1);
   if (status === 'published') {
     await markHasPublishedLeague(ctx, organizationId);
     await increment(ctx, organizationId, 'leagueCount');

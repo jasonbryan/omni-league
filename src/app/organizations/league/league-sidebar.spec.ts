@@ -137,6 +137,7 @@ describe('LeagueSidebar', () => {
     const names = o.convex.activeSubscriptions.map((s) => s.name);
     for (const admin of [
       'leagues:publishedCount',
+      'leagues:draftCount',
       'locations:listForAdmin',
       'memberships:staffCount',
     ]) {

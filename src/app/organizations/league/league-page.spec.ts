@@ -73,7 +73,7 @@ describe('LeaguePage', () => {
       const key = ([name, args]: [string, unknown]) => `${name} ${JSON.stringify(args)}`;
       const sidebarCounts = [
         'leagues:publishedCount',
-        'leagues:listForAdmin',
+        'leagues:draftCount',
         'locations:listForAdmin',
         'memberships:staffCount',
       ].map((name): [string, unknown] => [name, { organizationId: COED.organizationId }]);

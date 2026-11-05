@@ -267,6 +267,7 @@ const NO_BACKFILL = {
   pendingInviteCounts: 0,
   waitlistCounts: 0,
   staffCounts: 0,
+  draftLeagueCounts: 0,
 };
 
 describe('seed:demo accounts: a new deployment', () => {

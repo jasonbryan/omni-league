@@ -24,22 +24,26 @@ const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 type Role = 'orgAdmin' | 'leagueOrganizer';
 
+type SeededLeague = NonNullable<Parameters<typeof seedTenant>[0]>['leagues'];
+
 async function memberOf(
   page: Page,
   role: Role | null,
   locations: { name: string; address: string }[] = [],
+  leagues: SeededLeague = [],
 ) {
   const user = newUser('Admin');
   await signUp(page, user);
-  return { user, ...(await seedFor(user.email, role, locations)) };
+  return { user, ...(await seedFor(user.email, role, locations, leagues)) };
 }
 
 async function seedFor(
   email: string,
   role: Role | null,
   locations: { name: string; address: string }[],
+  leagues: SeededLeague = [],
 ): Promise<{ tenant: Tenant; base: string }> {
-  const tenant = await seedTenant({ name: 'E2E Admin', locations });
+  const tenant = await seedTenant({ name: 'E2E Admin', locations, leagues });
   if (role) {
     await convexRun('testing:addMembership', {
       organizationSlug: tenant.slug,
@@ -57,6 +61,7 @@ const addForm = (page: Page) => page.locator('#add-location form');
 const addButton = (page: Page) => addForm(page).getByRole('button', { name: /^Add location/ });
 const locationTile = (page: Page) =>
   main(page).locator('dl > div').filter({ hasText: 'Locations' });
+const leagueTile = (page: Page) => main(page).locator('dl > div').filter({ hasText: 'Leagues' });
 const listRows = (page: Page) => page.locator('#locations-list > app-location-row');
 
 async function openMenu(page: Page): Promise<Locator> {
@@ -203,6 +208,31 @@ test.describe('Overview', () => {
     await expect(locationTile(page).locator('dd').first()).toHaveText('2');
     await expect(locationTile(page).locator('dd').nth(1)).toHaveText('All on your public page');
     await screenshot(page, testInfo, '65-overview');
+    await expectAccessible(page);
+  });
+
+  test('the Leagues tile and the sidebar count a published and a draft league from the counters', async ({
+    page,
+  }, testInfo) => {
+    const { tenant, base } = await memberOf(page, 'orgAdmin', LOCATIONS, [
+      { name: 'Published Tuesday 4s', sport: 'beachVolleyball', locations: [LOCATIONS[0].name] },
+      {
+        name: 'Draft Thursday 4s',
+        sport: 'beachVolleyball',
+        locations: [LOCATIONS[0].name],
+        status: 'draft',
+      },
+    ]);
+    await page.goto(base);
+    await expect(leagueTile(page).locator('dd').first()).toHaveText('2');
+    await expect(leagueTile(page).locator('dd').nth(1)).toHaveText('1 published, 1 draft');
+    const nav = await adminNav(page, tenant.name);
+    await expect(nav.getByRole('link', { name: /^Leagues/ })).toHaveText(/^Leagues2$/);
+    if (!isDesktop(page)) {
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog', { name: 'Navigation' })).toHaveCount(0);
+    }
+    await screenshot(page, testInfo, '172-overview-leagues-tile');
     await expectAccessible(page);
   });
 
