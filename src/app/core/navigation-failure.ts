@@ -39,7 +39,6 @@ export function withQuietNavigationFailure(): RouterFeatures[] {
 /**
  * A failed navigation resets the address to the router's own URL, which is `/` until a navigation succeeds.
  * WebKit runs that reset on a page that a link already started leaving, and it rewrites the page's history entry, so Back lands on `/`.
- * The address the browser loaded is put back when the first navigation fails to load a chunk.
  */
 export function provideLoadedAddressOnFailedFirstNavigation(): EnvironmentProviders {
   return provideEnvironmentInitializer(() => {
