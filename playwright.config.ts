@@ -53,8 +53,6 @@ export default defineConfig({
   // independent of order and of each other.
   workers: ci ? 2 : undefined,
   retries: ci ? 1 : 0,
-  repeatEach: 5,
-  grep: /Back shows the page before/,
   outputDir: output.outputDir,
   // The JSON report names the failing tests in the nightly run's issue.
   reporter: [
