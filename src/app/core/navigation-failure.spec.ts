@@ -1,4 +1,5 @@
 import { Location } from '@angular/common';
+import { MOCK_PLATFORM_LOCATION_CONFIG } from '@angular/common/testing';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,7 +12,10 @@ import { TestBed } from '@angular/core/testing';
 import { NavigationError, provideRouter, Router, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import type { MockInstance } from 'vitest';
-import { withQuietNavigationFailure } from './navigation-failure';
+import {
+  provideLoadedAddressOnFailedFirstNavigation,
+  withQuietNavigationFailure,
+} from './navigation-failure';
 
 @Component({
   selector: 'app-start-test-page',
@@ -52,6 +56,7 @@ function configure(...providers: Provider[]): void {
     providers: [
       { provide: ErrorHandler, useValue: { handleError } },
       provideRouter(routes, ...withQuietNavigationFailure()),
+      provideLoadedAddressOnFailedFirstNavigation(),
       ...providers,
     ],
   });
@@ -128,6 +133,20 @@ describe('withQuietNavigationFailure', () => {
       );
       expect(TestBed.inject(Location).path()).toBe('/start');
       expect(rejections).toEqual([]);
+    });
+
+    it('keeps the address the browser loaded when the first navigation fails to load its page', async () => {
+      configure({
+        provide: MOCK_PLATFORM_LOCATION_CONFIG,
+        useValue: { startUrl: 'http://localhost/broken' },
+      });
+      const location = TestBed.inject(Location);
+
+      TestBed.inject(Router).initialNavigation();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(location.path()).toBe('/broken');
+      expect(handleError).not.toHaveBeenCalled();
     });
 
     it('returns to the page shown when Back or Forward leads to a page that fails to load, and logs nothing', async () => {
