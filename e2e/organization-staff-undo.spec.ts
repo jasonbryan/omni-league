@@ -363,7 +363,7 @@ test.describe('Staff: undoing a revoke', () => {
     await expect(pendingRows(page)).toHaveCount(1);
     await screenshot(page, testInfo, '228-staff-revoke-waits-for-undo');
     await expectAccessible(page);
-    // The accessibility check moves focus, and a reply takes focus only from the pressed button.
+    // The accessibility check moves focus, and a reply takes focus from the pressed button but not from where the walk left it.
     await working.focus();
 
     undo?.release();

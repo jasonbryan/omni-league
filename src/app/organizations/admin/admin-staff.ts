@@ -607,7 +607,7 @@ export class AdminStaff {
   }
 
   private endUndoWindow(): void {
-    // The reply to an Undo already sent replaces the status and moves focus.
+    // The reply to an Undo already sent replaces the status and decides focus.
     if (this.restoring()) {
       this.undoWindowOpen.set(false);
       return;
