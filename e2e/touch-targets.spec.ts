@@ -328,7 +328,6 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     ]);
     await visit(page, `${base}/leagues`, 'Leagues');
     await expect(page.locator('#create-league form')).toBeVisible();
-    // The Age group select shows only once a sport is chosen.
     await chooseChip(
       page.locator('#create-league form label').filter({
         has: page.getByRole('radio', { name: 'Beach volleyball', exact: true }),
