@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -129,7 +129,7 @@ test.describe('/app: a league organizer reaches their assigned leagues', () => {
     const link = leagueLinks(page, tenant).filter({ hasText: SUNDAY });
     await page.locator('body').click({ position: { x: 0, y: 0 } });
     for (let step = 0; step < 20; step++) {
-      await page.keyboard.press('Tab');
+      await page.keyboard.press(tabKey(page));
       if (await link.evaluate((element) => element === document.activeElement)) break;
     }
     await expect(link).toBeFocused();
