@@ -45,6 +45,10 @@
   [data-slot='input'] {
     min-height: --spacing(11);
   }
+  /* WebKit overwrites `min-height` on a select that has a set height, so the height itself is set. */
+  select[data-slot='input'] {
+    height: --spacing(11);
+  }
   /* The label's overlay covers its row, so a tap anywhere on the row toggles the control. */
   [data-slot='field'][data-orientation='horizontal']:has([role='checkbox'], input[type='radio']) {
     position: relative;

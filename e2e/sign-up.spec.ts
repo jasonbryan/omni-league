@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import { expectAccessible, tabKey } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
@@ -246,10 +246,10 @@ test.describe('sign-up', () => {
 
     await field(page, 'password').focus();
     await page.keyboard.type('tenletters');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(page.getByRole('button', { name: /Show password/ })).toBeFocused();
     await expect(fieldError(page, 'password')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(adult(page)).toBeFocused();
     await expect(fieldError(page, 'password')).toHaveText(short);
     await expect(field(page, 'password')).toHaveAttribute('aria-invalid', 'true');
@@ -273,10 +273,10 @@ test.describe('sign-up', () => {
 
     await field(page, 'password').focus();
     await page.keyboard.type('tenletters');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(page.getByRole('button', { name: /Show password/ })).toBeFocused();
     await expect(page.getByRole('alert')).toHaveCount(0);
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tabKey(page));
     await expect(adult(page)).toBeFocused();
     const alert = page.getByRole('alert');
     await expect(alert).toHaveCount(1);

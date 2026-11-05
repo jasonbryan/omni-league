@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { expectAccessible } from './support/a11y';
+import { chooseChip } from './support/chip';
 import { convexRun } from './support/convex';
 import { LIST_PAGE_SIZE } from '../src/app/core/list-page';
 import { remoteBaseUrl } from './support/env';
@@ -124,6 +125,17 @@ async function expectRows(page: Page): Promise<number> {
       .toBe(isRadio ? true : !before);
   }
   return count;
+}
+
+async function expectSelectSize(select: Locator, height: number | 'touch'): Promise<void> {
+  await select.scrollIntoViewIfNeeded();
+  const box = await select.boundingBox();
+  if (height === 'touch') {
+    expect(box?.width ?? 0, 'select width').toBeGreaterThanOrEqual(TARGET);
+    expect(box?.height ?? 0, 'select height').toBeGreaterThanOrEqual(TARGET);
+  } else {
+    expect(box?.height, 'select height').toBe(height);
+  }
 }
 
 async function openSheet(page: Page): Promise<Locator> {
@@ -316,6 +328,13 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     ]);
     await visit(page, `${base}/leagues`, 'Leagues');
     await expect(page.locator('#create-league form')).toBeVisible();
+    await chooseChip(
+      page.locator('#create-league form label').filter({
+        has: page.getByRole('radio', { name: 'Beach volleyball', exact: true }),
+      }),
+    );
+    await expectSelectSize(page.locator('#create-league #age-group'), 'touch');
+    expect(await expectTargets(page, page.locator('#create-league form'))).toBeGreaterThan(0);
     await expect(page.getByRole('checkbox', { name: LOCATIONS[0].name })).toBeVisible();
     expect(await expectRows(page)).toBeGreaterThan(0);
     await visit(page, `${base}/staff`, 'Staff');
@@ -329,6 +348,10 @@ test.describe('touch screens: every control is at least 44 by 44 CSS px', () => 
     const leaguePath = `${base}/leagues/${FIRST_LEAGUE}`;
     await measureRoutes(page, [[leaguePath, LEAGUE_NAMES[0]]]);
     await visit(page, leaguePath, LEAGUE_NAMES[0]);
+    await expectSelectSize(page.locator('#details-age-group'), 'touch');
+    await page.getByRole('button', { name: 'Add a custom level' }).click();
+    await expectSelectSize(page.locator('#custom-level-maps'), 'touch');
+    expect(await expectTargets(page, page.locator('#custom-level'))).toBeGreaterThan(0);
     const sheet = await openSheet(page);
     expect(await expectTargets(page, sheet)).toBeGreaterThan(0);
   });
@@ -392,6 +415,10 @@ test.describe('desktop: controls keep their sizes', () => {
     expect(
       await heightOf(page.locator('app-page-control').getByRole('link', { name: 'Page 2' })),
     ).toBe(32);
+    await visit(page, `${base}/leagues/${FIRST_LEAGUE}`, LEAGUE_NAMES[0]);
+    await expectSelectSize(page.locator('#details-age-group'), 36);
+    await page.getByRole('button', { name: 'Add a custom level' }).click();
+    await expectSelectSize(page.locator('#custom-level-maps'), 36);
     await visit(page, '/app', 'Home');
     expect(await heightOf(page.getByRole('link', { name: `Manage ${tenant.name}` }))).toBeLessThan(
       TARGET,
