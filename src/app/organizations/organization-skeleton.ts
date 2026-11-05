@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'block bg-muted motion-safe:animate-pulse';
+const BAR = `rounded-md ${FILL}`;
 
 @Component({
   selector: 'app-organization-rows-skeleton',
@@ -39,7 +40,7 @@ export class OrganizationRowsSkeleton {
         <div
           class="flex flex-col gap-3 rounded-xl bg-card p-5 text-card-foreground shadow-xs ring-1 ring-foreground/10"
         >
-          <span aria-hidden="true" class="${BAR} h-5 w-28 rounded-full"></span>
+          <span aria-hidden="true" class="${FILL} h-5 w-28 rounded-full"></span>
           <span aria-hidden="true" class="${BAR} h-6 w-3/4"></span>
           <span aria-hidden="true" class="${BAR} h-4 w-1/3"></span>
           <span aria-hidden="true" class="${BAR} mt-2 h-4 w-2/3"></span>
@@ -68,7 +69,7 @@ export class OpenSeasonsSkeleton {
           <div class="flex items-start gap-3 md:items-center md:gap-4">
             <span
               aria-hidden="true"
-              class="${BAR} mt-0.5 size-8 shrink-0 rounded-lg md:mt-0 md:size-12 md:rounded-xl"
+              class="${FILL} mt-0.5 size-8 shrink-0 rounded-lg md:mt-0 md:size-12 md:rounded-xl"
             ></span>
             <span aria-hidden="true" class="${BAR} h-8 w-3/4 md:h-12 md:w-2/3"></span>
           </div>
@@ -82,7 +83,7 @@ export class OpenSeasonsSkeleton {
         @for (width of chipWidths; track $index) {
           <span
             aria-hidden="true"
-            class="${BAR} h-11 rounded-full md:h-9 pointer-coarse:min-h-11"
+            class="${FILL} h-11 rounded-full md:h-9 pointer-coarse:min-h-11"
             [class]="width"
           ></span>
         }

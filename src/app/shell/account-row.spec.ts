@@ -6,6 +6,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { AccountRow } from './account-row';
 
 @Component({
@@ -81,6 +82,17 @@ describe('AccountRow', () => {
     await authenticated();
     expect(row(page).querySelector('a')).toBeNull();
     expect(bar(page).querySelector('a')).toBeNull();
+  });
+
+  it('draws the skeleton avatar rounded-full and the sidebar text bars rounded-md', async () => {
+    const page = await open();
+    const pulsing = (host: HTMLElement) => host.querySelectorAll('[class*="animate-pulse"]');
+    expect(allRadiusClasses(pulsing(row(page)))).toEqual([
+      ['rounded-full'],
+      ['rounded-md'],
+      ['rounded-md'],
+    ]);
+    expect(allRadiusClasses(pulsing(bar(page)))).toEqual([['rounded-full']]);
   });
 
   describe('the sidebar foot', () => {

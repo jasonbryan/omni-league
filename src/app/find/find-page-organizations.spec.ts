@@ -8,6 +8,7 @@ import {
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../shell/testing/test-pages';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { FindPage } from './find-page';
 import { COED_RESULTS } from './testing/find-data';
 import {
@@ -242,6 +243,15 @@ describe('FindPage organizations: states', () => {
     await emit(harness, ORGANIZATIONS);
     expect(section(harness)!.querySelector('[role="status"]')).toBeNull();
     expect(section(harness)!.querySelectorAll('ul > li')).toHaveLength(3);
+  });
+
+  it('draws each skeleton logo rounded-xl', async () => {
+    const harness = await open();
+    const logos = section(harness)!.querySelectorAll(
+      '[data-testid="find-organizations-skeleton"] .flex > span',
+    );
+    expect(logos.length).toBeGreaterThan(0);
+    expect(allRadiusClasses(logos)).toEqual(Array.from(logos, () => ['rounded-xl']));
   });
 
   it('says no organization has published a league yet, with no page control', async () => {

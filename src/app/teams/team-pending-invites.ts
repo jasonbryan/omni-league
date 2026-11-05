@@ -34,7 +34,8 @@ type Notice = { kind: 'revoked'; email: string } | { kind: 'failed' } | { kind: 
 
 const PANEL =
   'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
-const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'bg-muted motion-safe:animate-pulse';
+const SKELETON = `rounded-md ${FILL}`;
 
 /** Revoke acts at once, with no confirmation; the status above the list takes focus, because the button that had it is gone. */
 @Component({
@@ -160,7 +161,7 @@ const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
         <div aria-hidden="true" class="divide-y divide-border">
           @for (placeholder of placeholders; track placeholder) {
             <div class="flex gap-3 px-4 py-3.5 md:px-5">
-              <div class="${SKELETON} size-9 shrink-0 rounded-lg"></div>
+              <div class="${FILL} size-9 shrink-0 rounded-lg"></div>
               <div class="flex-1">
                 <div class="${SKELETON} h-5 w-48 max-w-full"></div>
                 <div class="${SKELETON} mt-2 h-5 w-36 max-w-full"></div>

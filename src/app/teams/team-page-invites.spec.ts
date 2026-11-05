@@ -4,6 +4,7 @@ import { INVITE_MESSAGES } from '../../../convex/lib/inviteInput';
 import { TEAM_INVITE_MESSAGES } from '../../../convex/lib/teamInviteInput';
 import { ConvexOfflineError } from '../core/data/convex';
 import { openAdmin, text } from '../organizations/admin/testing/admin-harness';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { TeamPage } from './team-page';
 
 const GET = 'teams:getForMember';
@@ -89,6 +90,20 @@ describe('TeamPage: invites', () => {
     o.convex.calls[0].resolve({ inviteId: 'ti_new', token: TOKEN, expiresAt: NOW + 14 * DAY });
     await o.flush();
   }
+
+  it('while the pending list loads, each row mark is rounded-lg and its text bars are rounded-md', async () => {
+    await open(SHARKS, null);
+    const loading = pendingSection()!.querySelector('[aria-hidden="true"].divide-y')!;
+    const rows = loading.querySelectorAll(':scope > div');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(allRadiusClasses(row.querySelectorAll('[class*="animate-pulse"]'))).toEqual([
+        ['rounded-lg'],
+        ['rounded-md'],
+        ['rounded-md'],
+      ]);
+    }
+  });
 
   it('the captain sees the pending count beside the roster count, the pending list, and the form', async () => {
     await open();

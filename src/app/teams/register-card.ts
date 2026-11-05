@@ -6,7 +6,8 @@ import { formatCalendarDate } from '../../../convex/lib/seasonInput';
 import { seasonDates } from '../organizations/league/season-dates';
 import type { RegistrationAnswer } from './register-team-state';
 
-const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'bg-muted motion-safe:animate-pulse';
+const SKELETON = `rounded-md ${FILL}`;
 
 export function rosterRange(minimumRosterSize: number, maxRosterSize?: number): string {
   if (maxRosterSize === undefined) return `At least ${minimumRosterSize} players`;
@@ -121,7 +122,7 @@ export class RegisterCard {
             @if (withNameField()) {
               <div class="${SKELETON} mt-5 h-9 w-full"></div>
             }
-            <div class="${SKELETON} mt-6 h-9 w-full rounded-lg"></div>
+            <div class="${FILL} mt-6 h-9 w-full rounded-lg"></div>
           </div>
         </div>
       </div>

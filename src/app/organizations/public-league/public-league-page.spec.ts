@@ -9,6 +9,7 @@ import {
   type FakeSubscription,
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PlainTestPage } from '../../shell/testing/test-pages';
+import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { PublicLeaguePage } from './public-league-page';
 import {
   at,
@@ -139,6 +140,19 @@ describe('PublicLeaguePage queries', () => {
     await settle(harness);
     expect(text(host(harness).querySelector('main h1'))).toBe('Sunday Reverse Coed 4s');
     expect(host(harness).querySelector('[data-testid="league-skeleton"]')).toBeNull();
+  });
+
+  it('draws each skeleton badge rounded-full', async () => {
+    const harness = await open();
+    const results = leagueQueryResults();
+    subscription(ORG).emit(results[ORG]);
+    subscription(LEAGUE).emit(results[LEAGUE]);
+    await settle(harness);
+    const badges = host(harness).querySelectorAll(
+      '[data-testid="league-skeleton"] .divide-y > div > span:last-child',
+    );
+    expect(badges.length).toBeGreaterThan(0);
+    expect(allRadiusClasses(badges)).toEqual(Array.from(badges, () => ['rounded-full']));
   });
 });
 
