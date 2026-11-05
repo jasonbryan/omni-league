@@ -1,6 +1,6 @@
-// Fails when one class list holds two border-radius classes. Tailwind emits `rounded-full`,
-// `rounded-lg`, `rounded-md`, `rounded-sm`, `rounded-xl` in that order, so the later rule wins
-// whatever order the classes have in the attribute, and a second radius class can silently lose.
+// Tailwind emits `rounded-full`, `rounded-lg`, `rounded-md`, `rounded-sm`, `rounded-xl` in that
+// order, so of two radius classes on one element the later rule wins, whatever their order in
+// the attribute.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
