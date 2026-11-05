@@ -76,76 +76,75 @@ const TEAM_INPUT_NAME = 'place-team';
       <p>
         They join the team’s roster and can open its page. A person can be on one team in a season.
       </p>
-      <ng-container ngProjectAs="[confirm-body]"
-        ><fieldset
-          id="place-team"
-          data-slot="field-set"
-          [class]="fieldSetClass"
-          [attr.aria-describedby]="unchosen() ? 'place-team-error' : null"
-        >
-          <legend data-slot="field-legend" data-variant="label" [class]="legendClass">Team</legend>
-          <div data-slot="radio-group" class="grid gap-3">
-            @for (team of options(); track team.teamId) {
-              <div
-                role="group"
-                data-slot="field"
-                data-orientation="horizontal"
-                [attr.data-disabled]="team.full ? 'true' : null"
-                [class]="fieldHorizontalClass"
-              >
-                <span
-                  data-slot="radio-group-item"
-                  [attr.data-checked]="chosen() === team.teamId ? 'true' : null"
-                  [class]="
-                    radioItemClass +
-                    ' ' +
-                    (unchosen() ? radioEdgeInvalid : radioEdge) +
-                    (team.full ? ' opacity-50' : '')
-                  "
-                  ><input
-                    type="radio"
-                    [id]="'place-team-' + team.teamId"
-                    [name]="teamInputName"
-                    [value]="team.teamId"
-                    [disabled]="team.full"
-                    [checked]="chosen() === team.teamId"
-                    [attr.aria-describedby]="'place-team-' + team.teamId + '-description'"
-                    (change)="choose(team.teamId)"
-                    [class]="radioInputClass" /><span
-                    aria-hidden="true"
-                    [class]="radioIndicatorClass"
-                  ></span
-                ></span>
-                <div data-slot="field-content" [class]="fieldContentClass">
-                  <label
-                    [for]="'place-team-' + team.teamId"
-                    data-slot="field-label"
-                    [class]="labelClass"
-                    >{{ team.name }}</label
-                  >
-                  <p
-                    data-slot="field-description"
-                    [id]="'place-team-' + team.teamId + '-description'"
-                    [class]="fieldDescriptionClass"
-                  >
-                    {{ team.roster }}
-                  </p>
-                </div>
+      <fieldset
+        ngProjectAs="[confirm-body]"
+        id="place-team"
+        data-slot="field-set"
+        [class]="fieldSetClass"
+        [attr.aria-describedby]="unchosen() ? 'place-team-error' : null"
+      >
+        <legend data-slot="field-legend" data-variant="label" [class]="legendClass">Team</legend>
+        <div data-slot="radio-group" class="grid gap-3">
+          @for (team of options(); track team.teamId) {
+            <div
+              role="group"
+              data-slot="field"
+              data-orientation="horizontal"
+              [attr.data-disabled]="team.full ? 'true' : null"
+              [class]="fieldHorizontalClass"
+            >
+              <span
+                data-slot="radio-group-item"
+                [attr.data-checked]="chosen() === team.teamId ? 'true' : null"
+                [class]="
+                  radioItemClass +
+                  ' ' +
+                  (unchosen() ? radioEdgeInvalid : radioEdge) +
+                  (team.full ? ' opacity-50' : '')
+                "
+                ><input
+                  type="radio"
+                  [id]="'place-team-' + team.teamId"
+                  [name]="teamInputName"
+                  [value]="team.teamId"
+                  [disabled]="team.full"
+                  [checked]="chosen() === team.teamId"
+                  [attr.aria-describedby]="'place-team-' + team.teamId + '-description'"
+                  (change)="choose(team.teamId)"
+                  [class]="radioInputClass" /><span
+                  aria-hidden="true"
+                  [class]="radioIndicatorClass"
+                ></span
+              ></span>
+              <div data-slot="field-content" [class]="fieldContentClass">
+                <label
+                  [for]="'place-team-' + team.teamId"
+                  data-slot="field-label"
+                  [class]="labelClass"
+                  >{{ team.name }}</label
+                >
+                <p
+                  data-slot="field-description"
+                  [id]="'place-team-' + team.teamId + '-description'"
+                  [class]="fieldDescriptionClass"
+                >
+                  {{ team.roster }}
+                </p>
               </div>
-            }
-          </div>
-          @if (unchosen()) {
-            <div role="alert" data-slot="field-error" id="place-team-error" [class]="errorClass">
-              <ng-icon
-                name="lucideCircleAlert"
-                class="mt-0.5 shrink-0 text-base"
-                aria-hidden="true"
-              />
-              <span>Choose a team.</span>
             </div>
           }
-        </fieldset></ng-container
-      >
+        </div>
+        @if (unchosen()) {
+          <div role="alert" data-slot="field-error" id="place-team-error" [class]="errorClass">
+            <ng-icon
+              name="lucideCircleAlert"
+              class="mt-0.5 shrink-0 text-base"
+              aria-hidden="true"
+            />
+            <span>Choose a team.</span>
+          </div>
+        }
+      </fieldset>
     </app-confirm-dialog>
   `,
 })
