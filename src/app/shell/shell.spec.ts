@@ -247,6 +247,26 @@ describe('Shell', () => {
       expect(column(harness).querySelector('app-account-row')).not.toBeNull();
     });
 
+    it('shapes the loading skeleton as the loaded sidebar: a head with a mark and two bars, 4 rows, and the account row', async () => {
+      const harness = await render(PendingTestPage);
+      const skeleton = column(harness);
+      const head = skeleton.querySelector('[data-slot="sidebar-head-skeleton"]');
+      expect(head).not.toBeNull();
+      const mark = head!.querySelector('[data-slot="sidebar-mark-skeleton"]');
+      expect([...mark!.classList]).toEqual(
+        expect.arrayContaining(['size-9', 'rounded-lg', 'bg-muted']),
+      );
+      expect(mark!.classList).not.toContain('bg-sidebar-primary');
+      expect(head!.querySelectorAll('[data-slot="sidebar-text-skeleton"]')).toHaveLength(2);
+      expect(skeleton.querySelectorAll('[data-slot="sidebar-row-skeleton"]')).toHaveLength(4);
+      expect(skeleton.querySelector('app-account-row')).not.toBeNull();
+      const navigation = [...skeleton.querySelectorAll('[role="status"]')].filter(
+        (status) => status.textContent === 'Loading navigation.',
+      );
+      expect(navigation).toHaveLength(1);
+      expect(navigation[0].classList).toContain('sr-only');
+    });
+
     it('styles the menu button as hlmBtn variant="ghost" size="icon-lg"', async () => {
       const harness = await render(SidebarTestPage);
       const expected = hlm(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), '-ms-1.5');

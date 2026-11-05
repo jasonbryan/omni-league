@@ -1,13 +1,13 @@
 // Tests sign a user up and seed an organization, so they need the local Convex backend.
-import type { Locator, Page } from '@playwright/test';
-import { expectAccessible } from './support/a11y';
+import type { BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { tokensSettled } from './support/auth-tokens';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
-import { seedTenant } from './support/tenant';
+import { dateFromToday, seedSeasons, seedTenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -360,6 +360,245 @@ test.describe('the app shell', () => {
       expect(
         await page.evaluate(() => (window as Window & { aliceShown?: boolean }).aliceShown),
       ).toBe(false);
+    });
+  });
+
+  test.describe('loading and offline', () => {
+    const CONVEX_SOCKET = /\/api\/[^/]+\/sync$/;
+    const SEASON_SLUG = 'summer-open';
+    const NOTE_Y_BELOW_SLIM_BAR = 56;
+    const COLUMN_WIDTH = 256;
+
+    async function adminWithSeason(page: Page) {
+      const { tenant, base } = await member(page, 'orgAdmin');
+      await seedSeasons(tenant, ASSIGNED, [
+        {
+          name: 'Summer Open',
+          slug: SEASON_SLUG,
+          startDate: dateFromToday(40),
+          endDate: dateFromToday(100),
+          registrationDeadline: dateFromToday(20),
+        },
+      ]);
+      return base;
+    }
+
+    /** Playwright has no unroute for WebSocket routes, so the handler switches to passing sockets through. */
+    async function refuseSocket(page: Page) {
+      const socket = { refuse: true };
+      await page.routeWebSocket(CONVEX_SOCKET, (ws) => {
+        if (socket.refuse) void ws.close();
+        else ws.connectToServer();
+      });
+      await page.clock.install();
+      return socket;
+    }
+
+    async function reconnectLogged(consoleGuard: { logMessages: readonly string[] }) {
+      await expect
+        .poll(() =>
+          consoleGuard.logMessages.some((message) => message.startsWith('Attempting reconnect')),
+        )
+        .toBe(true);
+    }
+
+    const note = (page: Page) => page.locator('app-offline-note');
+    const column = (page: Page) => page.locator('div.w-64.bg-sidebar');
+
+    async function expectNoteBox(page: Page, isMobile: boolean) {
+      const width = page.viewportSize()!.width;
+      await expect(note(page).locator('[data-offline-note]')).toBeVisible();
+      expect(await note(page).boundingBox()).toMatchObject(
+        isMobile
+          ? { x: 0, y: NOTE_Y_BELOW_SLIM_BAR, width }
+          : { x: COLUMN_WIDTH, y: 0, width: width - COLUMN_WIDTH },
+      );
+    }
+
+    async function expectAxe(page: Page, label: string) {
+      const results = await axeScan(page);
+      expect(describeViolations(results.violations), `axe violations: ${label}`).toEqual([]);
+    }
+
+    async function expectSkeletonColumn(page: Page, isMobile: boolean) {
+      if (isMobile) {
+        await expect(column(page)).toBeHidden();
+        return;
+      }
+      await expect(page.locator('.bg-sidebar:visible')).toHaveCount(1);
+      expect(await column(page).boundingBox()).toMatchObject({ x: 0, width: COLUMN_WIDTH });
+      await expect(column(page).locator('[data-slot="sidebar-mark-skeleton"]')).toBeVisible();
+      await expect(column(page).locator('[data-slot="sidebar-text-skeleton"]')).toHaveCount(2);
+      await expect(column(page).locator('[data-slot="sidebar-row-skeleton"]')).toHaveCount(4);
+      await expect(column(page).getByText('Loading your account.')).toBeAttached();
+      await expect(page.locator('main .bg-sidebar')).toHaveCount(0);
+      const outsideColumn = await page
+        .locator('main *:visible')
+        .evaluateAll(
+          (elements) =>
+            elements.filter((element) => element.getBoundingClientRect().x < 256).length,
+        );
+      expect(outsideColumn).toBe(0);
+    }
+
+    /** `loaded` is the `main` heading of the page once it has its data. */
+    async function walkStates(
+      page: Page,
+      context: BrowserContext,
+      testInfo: TestInfo,
+      {
+        url,
+        key,
+        host,
+        loadedHost,
+        loadedHeading,
+        headLink,
+        consoleGuard,
+        isMobile,
+      }: {
+        url: string;
+        key: string;
+        host?: string;
+        loadedHost?: string;
+        loadedHeading: string;
+        headLink?: string;
+        consoleGuard: { logMessages: readonly string[] };
+        isMobile: boolean;
+      },
+    ) {
+      const socket = await refuseSocket(page);
+      await page.goto(url);
+      await reconnectLogged(consoleGuard);
+      await page.clock.fastForward(5_000);
+      await expectNoteBox(page, isMobile);
+      await expectSkeletonColumn(page, isMobile);
+      // The column is hidden below 1024px, so its status is out of the accessibility tree until the sheet opens.
+      await expect(page.getByRole('status').filter({ hasText: 'Loading navigation.' })).toHaveCount(
+        isMobile ? 0 : 1,
+      );
+      const skeletonHead = isMobile
+        ? null
+        : await column(page).locator('[data-slot="sidebar-head-skeleton"]').boundingBox();
+      const hostBox = host ? await page.locator(host).boundingBox() : null;
+      await expectAxe(page, `${key} loading and offline`);
+      await screenshot(page, testInfo, `shell-loading-offline-${key}`);
+
+      socket.refuse = false;
+      await page.clock.fastForward(10_000);
+      await expect(page.getByRole('heading', { level: 1, name: loadedHeading })).toBeVisible();
+      await expect(note(page).locator('[data-offline-note]')).toBeHidden();
+      if (!isMobile && headLink) {
+        const loadedHead = await page.locator(headLink).first().boundingBox();
+        expect(Math.abs(loadedHead!.y - skeletonHead!.y)).toBeLessThanOrEqual(2);
+        expect(Math.abs(loadedHead!.height - skeletonHead!.height)).toBeLessThanOrEqual(2);
+      }
+      if (hostBox && loadedHost) {
+        const loadedBox = await page.locator(loadedHost).boundingBox();
+        expect(Math.abs(loadedBox!.x - hostBox.x)).toBeLessThanOrEqual(1);
+        expect(Math.abs(loadedBox!.width - hostBox.width)).toBeLessThanOrEqual(1);
+      }
+
+      await context.setOffline(true);
+      await expect(note(page).locator('[data-offline-note]')).toBeVisible({ timeout: 2_000 });
+      await expectNoteBox(page, isMobile);
+      await expectAxe(page, `${key} loaded and offline`);
+      await screenshot(page, testInfo, `shell-loaded-offline-${key}`);
+      await context.setOffline(false);
+    }
+
+    test('the admin Overview shows one sidebar skeleton and the note where it sits once loaded', async ({
+      page,
+      context,
+      consoleGuard,
+      isMobile,
+    }, testInfo) => {
+      const base = await adminWithSeason(page);
+      await walkStates(page, context, testInfo, {
+        url: base,
+        key: 'admin',
+        host: 'app-admin-loading',
+        loadedHost: 'app-admin-overview',
+        loadedHeading: 'Overview',
+        headLink: 'div.w-64.bg-sidebar nav a',
+        consoleGuard,
+        isMobile,
+      });
+    });
+
+    test('the league management page shows one sidebar skeleton and the note where it sits once loaded', async ({
+      page,
+      context,
+      consoleGuard,
+      isMobile,
+    }, testInfo) => {
+      const base = await adminWithSeason(page);
+      await walkStates(page, context, testInfo, {
+        url: `${base}/leagues/${ASSIGNED}`,
+        key: 'league',
+        loadedHeading: 'Coed 7v7 Rec',
+        headLink: 'div.w-64.bg-sidebar nav a',
+        consoleGuard,
+        isMobile,
+      });
+    });
+
+    test('the season management page shows one sidebar skeleton and the note where it sits once loaded', async ({
+      page,
+      context,
+      consoleGuard,
+      isMobile,
+    }, testInfo) => {
+      const base = await adminWithSeason(page);
+      await walkStates(page, context, testInfo, {
+        url: `${base}/leagues/${ASSIGNED}/seasons/${SEASON_SLUG}`,
+        key: 'season',
+        loadedHeading: 'Summer Open',
+        headLink: 'div.w-64.bg-sidebar nav a',
+        consoleGuard,
+        isMobile,
+      });
+    });
+
+    test('the note on Home sits where it does on the other pages, loading and loaded', async ({
+      page,
+      context,
+      consoleGuard,
+      isMobile,
+    }) => {
+      await adminWithSeason(page);
+      const socket = await refuseSocket(page);
+      await page.goto('/app');
+      await reconnectLogged(consoleGuard);
+      await page.clock.fastForward(5_000);
+      await expectNoteBox(page, isMobile);
+      socket.refuse = false;
+      await page.clock.fastForward(10_000);
+      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+      await context.setOffline(true);
+      await expect(note(page).locator('[data-offline-note]')).toBeVisible({ timeout: 2_000 });
+      await expectNoteBox(page, isMobile);
+      await context.setOffline(false);
+    });
+
+    test('the phone sheet shows the same skeleton while the admin area loads offline', async ({
+      page,
+      consoleGuard,
+      isMobile,
+    }) => {
+      test.skip(!isMobile, 'the phone sheet runs at phone widths only');
+      const base = await adminWithSeason(page);
+      await refuseSocket(page);
+      await page.goto(base);
+      await reconnectLogged(consoleGuard);
+      await page.clock.fastForward(5_000);
+      await expectNoteBox(page, isMobile);
+      await tap(page, menuButton(page));
+      const sheet = dialogOf(page);
+      await expect(sheet.locator('[data-slot="sidebar-head-skeleton"]')).toBeVisible();
+      await expect(sheet.locator('[data-slot="sidebar-mark-skeleton"]')).toBeVisible();
+      await expect(sheet.locator('[data-slot="sidebar-row-skeleton"]')).toHaveCount(4);
+      await expect(sheet.getByText('Loading your account.')).toBeAttached();
+      await expectAxe(page, 'the phone sheet while loading and offline');
     });
   });
 });

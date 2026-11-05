@@ -98,10 +98,27 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
           <ng-container [ngTemplateOutlet]="sidebar.template" />
         } @else if (sidebarPending()) {
           <p role="status" class="sr-only">Loading navigation.</p>
-          <div aria-hidden="true" class="flex flex-col gap-2 px-2">
-            @for (width of skeletonWidths; track $index) {
-              <div [class]="'h-9 rounded-lg bg-muted motion-safe:animate-pulse ' + width"></div>
-            }
+          <div aria-hidden="true" class="flex flex-col gap-4">
+            <div data-slot="sidebar-head-skeleton" class="flex min-h-11 items-center gap-3 p-2">
+              <div
+                data-slot="sidebar-mark-skeleton"
+                [class]="'size-9 shrink-0 rounded-lg ' + pulse"
+              ></div>
+              <div class="flex min-w-0 flex-1 flex-col gap-2">
+                <div data-slot="sidebar-text-skeleton" [class]="'h-3.5 w-36 ' + pulse"></div>
+                <div data-slot="sidebar-text-skeleton" [class]="'h-3 w-20 ' + pulse"></div>
+              </div>
+            </div>
+            <div class="flex flex-col gap-0.5">
+              @for (width of rowWidths; track $index) {
+                <div
+                  data-slot="sidebar-row-skeleton"
+                  class="flex min-h-9 items-center px-3 pointer-coarse:min-h-11"
+                >
+                  <div [class]="'h-5 ' + width + ' ' + pulse"></div>
+                </div>
+              }
+            </div>
           </div>
         } @else {
           <app-home-sidebar />
@@ -128,7 +145,8 @@ export class Shell {
   protected readonly title = computed(
     () => this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
   );
-  protected readonly skeletonWidths = ['w-full', 'w-5/6', 'w-4/6', 'w-5/6'];
+  protected readonly pulse = 'rounded-md bg-muted motion-safe:animate-pulse';
+  protected readonly rowWidths = ['w-28', 'w-24', 'w-24', 'w-20'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
   private readonly sidebarBodyTemplate = viewChild.required<TemplateRef<unknown>>('sidebarBody');
