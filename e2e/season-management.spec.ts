@@ -232,6 +232,7 @@ test.describe('Season management: an org admin', () => {
   test('past 200 waiting free agents, the page shows the first 200 and says so', async ({
     page,
   }, testInfo) => {
+    test.slow(); // a 201-account seed and an axe Tab walk over about 210 tab stops
     const tenant = await asOrgAdmin(page);
     await convexRun('testing:seedWaitingFreeAgents', {
       organizationSlug: tenant.slug,
