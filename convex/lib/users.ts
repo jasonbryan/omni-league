@@ -2,6 +2,7 @@ import type { Doc } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { deleteUserMemberships } from './memberships';
 import { MAX_SUBSCRIPTIONS_PER_USER } from './pushSubscription';
+import { TEST_SEND_LIMIT } from './pushTestSend';
 
 export async function insertUserRecord(
   ctx: Pick<MutationCtx, 'db'>,
@@ -25,6 +26,11 @@ export async function deleteUserRecord(
     .withIndex('by_userId', (q) => q.eq('userId', user._id))
     .take(MAX_SUBSCRIPTIONS_PER_USER * 2);
   for (const row of subscriptions) await ctx.db.delete('pushSubscriptions', row._id);
+  const testSends = await ctx.db
+    .query('pushTestSends')
+    .withIndex('by_userId_and_sentAt', (q) => q.eq('userId', user._id))
+    .take(TEST_SEND_LIMIT * 2);
+  for (const row of testSends) await ctx.db.delete('pushTestSends', row._id);
   await deleteUserMemberships(ctx, user._id);
   await ctx.db.delete('users', user._id);
 }

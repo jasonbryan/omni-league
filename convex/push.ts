@@ -10,12 +10,14 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { requireUser } from './lib/access';
+import { TEST_MESSAGE } from './lib/pushMessage';
 import {
   isP256PublicKey,
   MAX_ENDPOINT_LENGTH,
   MAX_SUBSCRIPTIONS_PER_USER,
   pushSubscriptionProblem,
 } from './lib/pushSubscription';
+import { TEST_SEND_LIMIT, TEST_SEND_WINDOW_MS } from './lib/pushTestSend';
 
 export const PUSH_SUBSCRIPTION_INVALID_CODE = 'pushSubscriptionInvalid';
 
@@ -107,6 +109,58 @@ export const getMyDeviceStatus = query({
     const user = await requireUser(ctx);
     const row = await rowByEndpoint(ctx, endpoint);
     return row?.userId === user._id;
+  },
+});
+
+const sendTestResult = v.union(
+  v.object({ status: v.literal('sent'), devices: v.number() }),
+  v.object({ status: v.literal('noDevice') }),
+  v.object({ status: v.literal('rateLimited'), retryAfterSeconds: v.number() }),
+);
+
+export const sendTest = mutation({
+  args: {},
+  returns: sendTestResult,
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const now = Date.now();
+    const windowStart = now - TEST_SEND_WINDOW_MS;
+    const past = await ctx.db
+      .query('pushTestSends')
+      .withIndex('by_userId_and_sentAt', (q) => q.eq('userId', user._id).lte('sentAt', windowStart))
+      .take(TEST_SEND_LIMIT * 2);
+    for (const send of past) await ctx.db.delete('pushTestSends', send._id);
+
+    const devices = await ctx.db
+      .query('pushSubscriptions')
+      .withIndex('by_userId', (q) => q.eq('userId', user._id))
+      .take(MAX_SUBSCRIPTIONS_PER_USER);
+    if (devices.length === 0) return { status: 'noDevice' as const };
+
+    const recent = await ctx.db
+      .query('pushTestSends')
+      .withIndex('by_userId_and_sentAt', (q) => q.eq('userId', user._id).gt('sentAt', windowStart))
+      .take(TEST_SEND_LIMIT);
+    const oldest = recent[0];
+    if (oldest && recent.length >= TEST_SEND_LIMIT) {
+      return {
+        status: 'rateLimited' as const,
+        retryAfterSeconds: Math.ceil((oldest.sentAt + TEST_SEND_WINDOW_MS - now) / 1000),
+      };
+    }
+
+    const sendId = await ctx.db.insert('pushTestSends', { userId: user._id, sentAt: now });
+    await ctx.scheduler.runAfter(TEST_SEND_WINDOW_MS, internal.pushSend.expireTestSend, {
+      id: sendId,
+    });
+    for (const device of devices) {
+      await ctx.scheduler.runAfter(0, internal.pushSend.deliver, {
+        subscriptionId: device._id,
+        userId: user._id,
+        message: TEST_MESSAGE,
+      });
+    }
+    return { status: 'sent' as const, devices: devices.length };
   },
 });
 

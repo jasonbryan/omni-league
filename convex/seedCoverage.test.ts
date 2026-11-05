@@ -13,6 +13,9 @@ export const SEED_EXCEPTIONS: Readonly<Record<string, string>> = {
   ipRateLimits: 'Per-IP limit state from sign-in and sign-up requests, not demo content.',
   pushSubscriptions:
     'Only a browser can create a push subscription; a seeded endpoint would be fake and every send to it would fail.',
+  pushVapidTokens:
+    'Cached sending tokens, created by the first send to a push service, not demo content.',
+  pushTestSends: 'Rate-limit state from test notifications, not demo content.',
 };
 
 export function missingSeedTables(
