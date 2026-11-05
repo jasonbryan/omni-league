@@ -265,6 +265,28 @@ test.describe('League management: a draft league', () => {
   );
 
   test(
+    'the link to the Leagues page navigates in the app without reloading the document',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${SLOW_PITCH}`);
+      await expect(note(page)).toContainText('Publish the league first');
+      await page.evaluate(() => {
+        (window as unknown as { documentMarker: boolean }).documentMarker = true;
+      });
+      await note(page)
+        .getByRole('link', { name: 'Publish Tuesday Coed Slow-Pitch in Leagues' })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`${base}/leagues$`));
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { documentMarker?: boolean }).documentMarker,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  test(
     'a league organizer sees "Ask an org admin to publish the league" with no link, and no Publish button',
     VIEWPORT_AGNOSTIC,
     async ({ page }) => {
