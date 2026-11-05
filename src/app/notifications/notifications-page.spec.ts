@@ -591,6 +591,236 @@ describe('NotificationsPage', () => {
     });
   });
 
+  describe('test notification', () => {
+    async function openOn() {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      device.permission.set('granted');
+      await open();
+      await emitConfig(VAPID_KEY);
+      await emitStatus(true);
+    }
+    const testButton = () =>
+      [...panel().querySelectorAll('button')].find(
+        (b) => text(b).includes('test notification') || text(b) === 'Sending…',
+      ) ?? null;
+    const resultAlert = () =>
+      panel().querySelector<HTMLElement>('app-test-notification [data-slot="alert"]');
+    const alertTitle = () => text(resultAlert()?.querySelector('[data-slot="alert-title"]'));
+    const alertDescription = () =>
+      text(resultAlert()?.querySelector('[data-slot="alert-description"]'));
+
+    async function press() {
+      testButton()!.click();
+      await settle();
+    }
+    async function answer(value: unknown) {
+      convex.calls.find((c) => c.name === 'push:sendTest')!.resolve(value);
+      await settle();
+    }
+
+    it.each([
+      [
+        'off',
+        async () => {
+          await open();
+          await emitConfig(VAPID_KEY);
+        },
+      ],
+      [
+        'blocked',
+        async () => {
+          device.permission.set('denied');
+          await open();
+          await emitConfig(VAPID_KEY);
+        },
+      ],
+      [
+        'not available',
+        async () => {
+          await open();
+          await emitConfig(null);
+        },
+      ],
+      [
+        'checking',
+        async () => {
+          await open();
+        },
+      ],
+      [
+        'on a device whose subscription is another user’s',
+        async () => {
+          swPush.subscription.next(fakeSubscription(ENDPOINT));
+          await open();
+          await emitConfig(VAPID_KEY);
+          await emitStatus(false);
+        },
+      ],
+    ])('has no test button while %s', async (_state, arrange) => {
+      await arrange();
+      expect(testButton()).toBeNull();
+      expect(text(panel())).not.toContain('test notification');
+    });
+
+    it('is offered with Turn off when this device is on, below it', async () => {
+      await openOn();
+      expect(badge()).toBe('On');
+      expect(text(button())).toBe('Turn off');
+      expect(text(testButton())).toBe('Send a test notification');
+      expect(testButton()!.getAttribute('data-slot')).toBe('button');
+      expect(testButton()!.hasAttribute('aria-disabled')).toBe(false);
+      expect(alertBox()).toBeNull();
+      expect(
+        button()!.compareDocumentPosition(testButton()!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('a press calls push.sendTest once, shows the pending label, and keeps focus on the button', async () => {
+      await openOn();
+      testButton()!.focus();
+      testButton()!.click();
+      await settle();
+
+      expect(convex.calls.map((c) => [c.name, c.args])).toEqual([['push:sendTest', {}]]);
+      expect(text(testButton())).toBe('Sending…');
+      expect(testButton()!.getAttribute('aria-disabled')).toBe('true');
+      expect(text(panel().querySelector('app-test-notification [role="status"]'))).toBe(
+        'Sending the test notification.',
+      );
+      testButton()!.click();
+      await settle();
+      expect(convex.calls).toHaveLength(1);
+      expect(document.activeElement).toBe(testButton());
+    });
+
+    it.each([
+      [1, 'It should arrive on your device in a few seconds.'],
+      [3, 'It should arrive on your 3 devices in a few seconds.'],
+    ])(
+      'sent to %i device(s): a success status, the button is ready again, focus stays',
+      async (devices, description) => {
+        await openOn();
+        testButton()!.focus();
+        await press();
+        await answer({ status: 'sent', devices });
+
+        expect(resultAlert()!.getAttribute('role')).toBe('status');
+        expect(alertTitle()).toBe('Test notification sent.');
+        expect(alertDescription()).toBe(description);
+        // Below the button, so the result does not move the button the user just pressed.
+        expect(
+          testButton()!.compareDocumentPosition(resultAlert()!) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(text(testButton())).toBe('Send a test notification');
+        expect(testButton()!.hasAttribute('aria-disabled')).toBe(false);
+        expect(document.activeElement).toBe(testButton());
+      },
+    );
+
+    it('a new press clears the previous result', async () => {
+      await openOn();
+      await press();
+      await answer({ status: 'sent', devices: 1 });
+      expect(resultAlert()).not.toBeNull();
+      testButton()!.click();
+      await settle();
+      expect(resultAlert()).toBeNull();
+    });
+
+    it('no device: an alert that says what to do', async () => {
+      await openOn();
+      await press();
+      await answer({ status: 'noDevice' });
+
+      expect(resultAlert()!.getAttribute('role')).toBe('alert');
+      expect(alertTitle()).toBe('No device to send to.');
+      expect(alertDescription()).toBe('Turn notifications on for a device, then try again.');
+      expect(document.activeElement).not.toBe(resultAlert());
+    });
+
+    it.each([
+      [421, '8 minutes'],
+      [60, '1 minute'],
+      [1, '1 minute'],
+    ])(
+      'rate limited with %i seconds to wait: an alert that says how long',
+      async (retryAfterSeconds, wait) => {
+        await openOn();
+        await press();
+        await answer({ status: 'rateLimited', retryAfterSeconds });
+
+        expect(resultAlert()!.getAttribute('role')).toBe('alert');
+        expect(alertTitle()).toBe('Too many tests.');
+        expect(alertDescription()).toBe(
+          `You can send 3 tests every 10 minutes. Try again in ${wait}.`,
+        );
+      },
+    );
+
+    it('a server error: a failed alert, and the button works again', async () => {
+      await openOn();
+      await press();
+      convex.calls.find((c) => c.name === 'push:sendTest')!.reject(new Error('Server Error'));
+      await settle();
+
+      expect(resultAlert()!.getAttribute('role')).toBe('alert');
+      expect(alertTitle()).toBe('The test notification could not be sent.');
+      expect(alertDescription()).toBe('Check your connection and try again.');
+      expect(testButton()!.hasAttribute('aria-disabled')).toBe(false);
+    });
+
+    it('not set up on the server: a failed alert that says to try later', async () => {
+      await openOn();
+      await press();
+      await answer({ status: 'unconfigured' });
+
+      expect(resultAlert()!.getAttribute('role')).toBe('alert');
+      expect(alertTitle()).toBe('The test notification could not be sent.');
+      expect(alertDescription()).toBe(
+        'Notifications are not available right now. Try again later.',
+      );
+    });
+
+    it('refused for lack of a connection: the offline alert with its cause', async () => {
+      await openOn();
+      await press();
+      convex.calls
+        .find((c) => c.name === 'push:sendTest')!
+        .reject(new ConvexOfflineError('offline'));
+      await settle();
+
+      expect(resultAlert()!.getAttribute('role')).toBe('alert');
+      expect(alertTitle()).toBe("You're offline. Nothing was sent.");
+      expect(alertDescription()).toBe("Try again when you're connected.");
+      expect(text(testButton())).toBe('Send a test notification');
+    });
+
+    it('offline: the button looks disabled and says why, and a press sends nothing but shows the offline alert', async () => {
+      await openOn();
+      await goOffline();
+
+      expect(testButton()!.getAttribute('aria-disabled')).toBe('true');
+      expect(testButton()!.classList.contains('opacity-50')).toBe(true);
+      expect(testButton()!.hasAttribute('disabled')).toBe(false);
+      const help = panel().querySelector(
+        `#${testButton()!.getAttribute('aria-describedby') ?? ''}`,
+      );
+      expect(text(help)).toBe('Connect to the internet to send a test.');
+
+      testButton()!.click();
+      await settle();
+      expect(convex.calls).toEqual([]);
+      expect(alertTitle()).toBe("You're offline. Nothing was sent.");
+    });
+
+    it('does not take over the page’s own result status', async () => {
+      await openOn();
+      await press();
+      await answer({ status: 'sent', devices: 1 });
+      expect(changeStatus()).toBe('');
+    });
+  });
+
   it('offline and off: a press asks for no permission and shows the offline alert', async () => {
     await open();
     await emitConfig(VAPID_KEY);

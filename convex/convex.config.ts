@@ -16,6 +16,10 @@ const app = defineApp({
     DEMO_ACCOUNT_PASSWORD: v.optional(v.string()),
     // Public by design: push.getConfig hands it to every browser that subscribes.
     VAPID_PUBLIC_KEY: v.optional(v.string()),
+    // Secret: never returned or logged.
+    VAPID_PRIVATE_KEY: v.optional(v.string()),
+    // A `mailto:` or `https:` contact the push services can reach; Apple rejects anything else.
+    VAPID_SUBJECT: v.optional(v.string()),
   },
 });
 

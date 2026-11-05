@@ -862,7 +862,15 @@ export const AREAS = [
   {
     name: 'convex push',
     test: (file) =>
-      named('convex/', ['push'])(file) || named('convex/lib/', ['pushSubscription'])(file),
+      named('convex/', ['push', 'pushSend'])(file) ||
+      named('convex/lib/', [
+        'pushSubscription',
+        'pushConfig',
+        'pushMessage',
+        'pushResponse',
+        'pushTestSend',
+        'pushTestKit',
+      ])(file),
     specs: ['notifications'],
   },
   {

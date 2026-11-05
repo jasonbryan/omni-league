@@ -46,6 +46,7 @@ import {
 import { Shell } from '../shell';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from '../ui/button/button-classes';
 import { PUSH_DEVICE } from './push-device';
+import { TestNotification } from './test-notification';
 
 export { PushSubscriptionLifecycle } from './push-subscription-lifecycle';
 
@@ -63,7 +64,7 @@ const STEP_NUMBER =
 
 @Component({
   selector: 'app-notifications-page',
-  imports: [AdminAlert, AdminOfflineAlert, NgIcon, RouterLink, Shell],
+  imports: [AdminAlert, AdminOfflineAlert, NgIcon, RouterLink, Shell, TestNotification],
   providers: [
     provideIcons({
       lucideBell,
@@ -281,6 +282,7 @@ const STEP_NUMBER =
                     Connect to the internet to change this.
                   </p>
                 }
+                <app-test-notification class="w-full" />
               }
               @default {
                 <p class="text-sm">
