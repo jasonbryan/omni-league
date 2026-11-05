@@ -45,6 +45,18 @@ describe('AdminArea', () => {
       ]);
     });
 
+    it('draws one sidebar skeleton, in the shell’s column, and none inside the loading view', async () => {
+      const { page } = await openAdmin(ROUTES, OVERVIEW);
+      expect(page.querySelector('app-admin-loading')).not.toBeNull();
+      expect(page.querySelector('app-admin-loading [class*="bg-sidebar"]')).toBeNull();
+      expect(page.querySelectorAll('main [class*="bg-sidebar"]')).toHaveLength(0);
+      const statuses = [...page.querySelectorAll('[role="status"].sr-only')].map((status) =>
+        text(status),
+      );
+      expect(statuses.filter((status) => status === 'Loading the admin area.')).toHaveLength(1);
+      expect(statuses.filter((status) => status === 'Loading navigation.')).toHaveLength(1);
+    });
+
     it('draws the sidebar and panel placeholders, with the menu button and no navigation until the sidebar is known', async () => {
       const { page } = await openAdmin(ROUTES, OVERVIEW);
       expect(page.querySelector('button[aria-label="Open navigation"]')).not.toBeNull();
