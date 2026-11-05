@@ -21,6 +21,8 @@ updates:
       npm-minor-patch:
         applies-to: version-updates
         update-types: [minor, patch]
+        # A grouped PR would hide a version change of a one-maintainer package that runs with every deployment secret.
+        exclude-patterns: ['@block65/webcrypto-web-push']
     labels: [type:chore, area:infra]
     commit-message:
       prefix: chore

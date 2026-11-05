@@ -263,6 +263,37 @@ test.describe('sign-up', () => {
     await expect(fieldError(page, 'password')).toHaveText(short);
   });
 
+  test('Password is checked once focus leaves it and its Show button, by tap', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, 'a tap needs the touch project');
+    const short = 'Use at least 15 characters. This password has 10.';
+    const showHide = page.locator('button[aria-controls="password"]');
+    await page.goto('/sign-up');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeVisible();
+
+    await field(page, 'password').fill('tenletters');
+    await showHide.tap();
+    await expect(field(page, 'password')).toHaveAttribute('type', 'text');
+    await expect(fieldError(page, 'password')).toHaveCount(0);
+    await expect(showHide).toBeFocused();
+    await field(page, 'name').tap();
+    await expect(fieldError(page, 'password')).toHaveText(short);
+    await expect(field(page, 'password')).toHaveAttribute('aria-invalid', 'true');
+
+    await page.reload();
+    await field(page, 'password').fill('tenletters');
+    await showHide.tap();
+    await expect(field(page, 'password')).toHaveAttribute('type', 'text');
+    await showHide.tap();
+    await expect(field(page, 'password')).toHaveAttribute('type', 'password');
+    await expect(fieldError(page, 'password')).toHaveCount(0);
+    await expect(showHide).toBeFocused();
+  });
+
   test('the Password error is announced as an alert, linked to the field, and passes axe', async ({
     page,
   }) => {
