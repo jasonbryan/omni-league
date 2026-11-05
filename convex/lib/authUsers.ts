@@ -18,7 +18,6 @@ export async function authEmailOf(ctx: Ctx, authUserId: string): Promise<string 
 }
 
 // One component call for the whole list: a call per row takes about 2 s for 200 rows.
-// Ids with no user are left out, so callers read the map by id, never by position.
 export async function authEmailsOf(
   ctx: Ctx,
   authUserIds: readonly string[],
