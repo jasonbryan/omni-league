@@ -199,6 +199,7 @@ test.describe('Leagues: publishing a draft', () => {
       await expect(alert).toContainText("You're offline. Nothing was sent.");
       await expect(alert).toBeFocused();
       await screenshot(page, testInfo, '69-publish-error');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     } finally {
       await page.context().setOffline(false);
     }

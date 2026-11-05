@@ -821,7 +821,7 @@ describe('SeasonPage', () => {
       await open(COED, FULL_VIEW, FREE_AGENTS, WAITLIST);
       expect(text(page.querySelector('[data-testid="waitlist-tile"]'))).toBe('2');
       expect(text(page.querySelector('[data-testid="waitlist-count"]'))).toBe('2 waiting');
-      expect(text(page.querySelector('#waitlist [role="note"]'))).toBe(
+      expect(text(page.querySelector('#waitlist [data-slot="alert"]'))).toBe(
         'The season is full Raise the maximum teams to promote a waiting team.',
       );
       expect(page.querySelector('#waitlist-list')?.tagName).toBe('OL');
@@ -839,7 +839,7 @@ describe('SeasonPage', () => {
 
     it('with room while teams wait: says to promote to fill the places', async () => {
       await open(COED, ROOM_VIEW, FREE_AGENTS, WAITLIST);
-      expect(text(page.querySelector('#waitlist [role="note"]'))).toBe(
+      expect(text(page.querySelector('#waitlist [data-slot="alert"]'))).toBe(
         'Room for 2 more teams While teams are waiting, new teams still join the waitlist, so promote to fill the places.',
       );
     });

@@ -4,6 +4,7 @@ import { axeScan, describeViolations, expectAccessible, tabKey } from './support
 import { convexRun } from './support/convex';
 import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
 import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
@@ -366,16 +367,7 @@ test.describe('Season management: placing a free agent, while the placement is h
   }, testInfo) => {
     const { tenant, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
     await waitingPage.context().close();
-    let release: () => void = () => undefined;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.routeWebSocket(/.*/, (ws) => {
-      const server = ws.connectToServer();
-      ws.onMessage(async (message) => {
-        if (typeof message === 'string' && message.includes('"Mutation"')) await held;
-        server.send(message);
-      });
-      server.onMessage((message) => ws.send(message));
-    });
+    const held = await holdMutations(page);
     await page.goto(seasonPath(tenant, SUMMER));
     await freeAgentRows(page)
       .filter({ hasText: waiting.name })
@@ -383,12 +375,13 @@ test.describe('Season management: placing a free agent, while the placement is h
       .click();
     const dialog = placeDialog(page);
     await dialog.getByRole('radio', { name: 'Dig Deep' }).check();
+    held.hold();
     await dialog.getByRole('button', { name: 'Place on team' }).click();
     const placing = dialog.getByRole('button', { name: 'Placing…' });
     await expect(placing).toHaveAttribute('aria-disabled', 'true');
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '135-placing');
-    release();
+    held.release();
     await expect(dialog).toHaveCount(0);
   });
 });
@@ -766,5 +759,53 @@ test.describe('Season management: maximum roster size', () => {
     await expect(dialog.getByRole('radio', { name: 'Dig Deep' })).toBeFocused();
     expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await screenshot(page, testInfo, '144-place-full-team');
+  });
+});
+
+test.describe('Season management: placing a free agent, with no team chosen or offline', () => {
+  async function openPlaceDialog(page: Page, browser: Browser) {
+    const { tenant, waiting, waitingPage } = await placeAsOrgAdmin(page, browser);
+    await waitingPage.context().close();
+    await page.goto(seasonPath(tenant, SUMMER));
+    await freeAgentRows(page)
+      .filter({ hasText: waiting.name })
+      .getByRole('button', { name: `Place on team: ${waiting.name}` })
+      .click();
+    return placeDialog(page);
+  }
+
+  test('pressing Place on team with no team chosen shows the field error, and the dialog stays accessible', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const dialog = await openPlaceDialog(page, browser);
+    await dialog.getByRole('button', { name: 'Place on team' }).click();
+    await expect(dialog.getByText('Choose a team.')).toBeVisible();
+    await expect(dialog.getByRole('radio', { name: 'Block Party' })).toBeFocused();
+    await screenshot(page, testInfo, '135-place-unchosen');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+  });
+
+  test('offline, the confirm button looks disabled and a press shows the offline alert in the dialog, focused', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const dialog = await openPlaceDialog(page, browser);
+    await dialog.getByRole('radio', { name: 'Dig Deep' }).check();
+    await page.context().setOffline(true);
+    try {
+      const confirm = dialog.getByRole('button', { name: 'Place on team' });
+      await expect(confirm).toHaveAttribute('aria-disabled', 'true');
+      await confirm.click({ force: true });
+      const alert = dialog.locator('[data-slot="alert"]');
+      await expect(alert).toContainText("You're offline. Nothing was sent.");
+      await expect(alert).toBeFocused();
+      await screenshot(page, testInfo, '135-place-offline');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    } finally {
+      await page.context().setOffline(false);
+    }
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
   });
 });

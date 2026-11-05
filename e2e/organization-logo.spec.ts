@@ -1,10 +1,12 @@
 import type { Page } from '@playwright/test';
 import { demoLogoBytes } from '../convex/seedAssets';
 import { initials } from '../src/app/organizations/initials';
-import { expectAccessible } from './support/a11y';
+import { axeScan, describeViolations, expectAccessible } from './support/a11y';
 import { convexRun } from './support/convex';
 import { baseURL, remoteBaseUrl } from './support/env';
+import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
+import { holdMutations } from './support/hold-mutations';
 import { expectLogoLoaded } from './support/organization-mark';
 import { overlayPanes } from './support/overlay';
 import { RAW_HTTP } from './support/raw-http';
@@ -164,6 +166,7 @@ test.describe('the Details page: Logo', () => {
     expect(await overlayPanes(page)).toEqual([{ inContainer: true, inPopover: false }]);
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await screenshot(page, testInfo, '251-logo-remove-confirm');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(removeButton(page)).toBeFocused();
@@ -301,5 +304,81 @@ test.describe('the public organization page: the logo mark', () => {
     await expect(mark).toHaveText(initials(tenant.name));
     await expect(mark.locator('img')).toHaveCount(0);
     await context.setOffline(false);
+  });
+});
+
+test.describe('the Details page: Logo, the remove dialog', () => {
+  const removeDialog = (page: Page) => page.getByRole('alertdialog', { name: 'Remove the logo?' });
+
+  async function openRemoveDialog(page: Page): Promise<void> {
+    await openDetails(page);
+    await upload(page);
+    await transitionsFinished(page);
+    await removeButton(page).click();
+    await expect(removeDialog(page)).toBeVisible();
+  }
+
+  test('while the removal is held, the Removing… button is disabled and the dialog stays accessible', async ({
+    page,
+  }, testInfo) => {
+    const held = await holdMutations(page);
+    await openRemoveDialog(page);
+    held.hold();
+    await removeDialog(page).getByRole('button', { name: 'Remove logo' }).click();
+    await expect(removeDialog(page).getByRole('button', { name: 'Removing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(removeDialog(page).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await screenshot(page, testInfo, '251-logo-removing');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    held.release();
+    await expect(removeDialog(page)).toHaveCount(0);
+  });
+
+  test.describe('when the removal fails', () => {
+    test.use({ expectedConvexErrors: ['organizations:removeLogo'] });
+
+    test('the dialog shows its failure alert with focus, and the logo stays', async ({
+      page,
+    }, testInfo) => {
+      await failMutation(page, 'organizations:removeLogo');
+      await openRemoveDialog(page);
+      await removeDialog(page).getByRole('button', { name: 'Remove logo' }).click();
+      const alert = removeDialog(page).getByRole('alert');
+      await expect(alert).toContainText('The logo could not be removed.');
+      await expect(alert).toBeFocused();
+      await screenshot(page, testInfo, '251-logo-remove-error');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+      await removeDialog(page).getByRole('button', { name: 'Cancel' }).click();
+      await expect(previewImage(page)).toHaveCount(1);
+    });
+  });
+
+  test('offline, the confirm button looks disabled and a press shows the offline alert in the dialog, focused', async ({
+    page,
+  }, testInfo) => {
+    await openRemoveDialog(page);
+    await page.context().setOffline(true);
+    try {
+      const confirm = removeDialog(page).getByRole('button', { name: 'Remove logo' });
+      await expect(confirm).toHaveAttribute('aria-disabled', 'true');
+      await confirm.click({ force: true });
+      const alert = removeDialog(page).locator('[data-slot="alert"]');
+      await expect(alert).toContainText("You're offline. Nothing was sent.");
+      await expect(alert).toContainText(
+        "The logo is still in place. Try again when you're connected.",
+      );
+      await expect(alert).toBeFocused();
+      await screenshot(page, testInfo, '251-logo-remove-offline');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    } finally {
+      await page.context().setOffline(false);
+    }
+    await removeDialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(previewImage(page)).toHaveCount(1);
   });
 });

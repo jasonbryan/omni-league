@@ -36,12 +36,12 @@ describe('the admin alert note kind', () => {
 class InfoHost {}
 
 describe('the admin alert info kind', () => {
-  it('is a role="note" box in the neutral classes that draws the info icon', async () => {
+  it('is a box with no role in the neutral classes that draws the info icon', async () => {
     const fixture = TestBed.createComponent(InfoHost);
     await fixture.whenStable();
     const host = fixture.nativeElement as HTMLElement;
     const box = host.querySelector('[data-slot="alert"]')!;
-    expect(box.getAttribute('role')).toBe('note');
+    expect(box.hasAttribute('role')).toBe(false);
     const classes = box.className.split(' ');
     expect(classes).toEqual(expect.arrayContaining(['bg-card', 'text-card-foreground']));
     expect(classes).not.toContain('text-destructive');

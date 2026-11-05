@@ -5,6 +5,7 @@ import { remoteBaseUrl } from './support/env';
 import { failMutation } from './support/fail-mutation';
 import { expect, test } from './support/fixtures';
 import { overlayPanes } from './support/overlay';
+import { holdMutations } from './support/hold-mutations';
 import { fetchRawHtml } from './support/raw-html';
 import { screenshot } from './support/screenshot';
 import { otherUser, signUp } from './support/session';
@@ -213,6 +214,7 @@ test.describe('League management: publishing a season', () => {
       );
       await expect(alert).toBeFocused();
       await screenshot(page, testInfo, '126-publish-offline');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
     } finally {
       await page.context().setOffline(false);
     }
@@ -259,6 +261,28 @@ test.describe('League management: a draft league', () => {
       await expect(
         page.getByRole('button', { name: 'Publish Tuesday Coed Slow-Pitch' }),
       ).toBeVisible();
+    },
+  );
+
+  test(
+    'the link to the Leagues page navigates in the app without reloading the document',
+    VIEWPORT_AGNOSTIC,
+    async ({ page }) => {
+      const { base } = await memberOf(page, 'orgAdmin');
+      await page.goto(`${base}/leagues/${SLOW_PITCH}`);
+      await expect(note(page)).toContainText('Publish the league first');
+      await page.evaluate(() => {
+        (window as unknown as { documentMarker: boolean }).documentMarker = true;
+      });
+      await note(page)
+        .getByRole('link', { name: 'Publish Tuesday Coed Slow-Pitch in Leagues' })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`${base}/leagues$`));
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { documentMarker?: boolean }).documentMarker,
+        ),
+      ).toBe(true);
     },
   );
 
@@ -403,7 +427,7 @@ test.describe('League management: publishing the season just created', () => {
 
     test('the dialog shows its failure alert with focus, and Cancel returns focus to Publish season', async ({
       page,
-    }) => {
+    }, testInfo) => {
       await failMutation(page, 'seasons:publish');
       const { base } = await memberOf(page, 'orgAdmin');
       await page.goto(`${base}/leagues/${COED}`);
@@ -413,6 +437,8 @@ test.describe('League management: publishing the season just created', () => {
       const alert = dialog(page).getByRole('alert');
       await expect(alert).toContainText('The season could not be published.');
       await expect(alert).toBeFocused();
+      await screenshot(page, testInfo, '446-publish-error');
+      expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
       await dialog(page).getByRole('button', { name: 'Cancel' }).click();
       await expect(footerPublish(page)).toBeFocused();
       await expect(status(page, 'Fall 2028')).toHaveText('Draft');
@@ -469,4 +495,30 @@ test.describe('League management: publishing the season just created', () => {
       ).toBeVisible();
     },
   );
+});
+
+test.describe('League management: publishing a season, while the publish is held', () => {
+  test('the Publishing… button is disabled and the dialog stays accessible', async ({
+    page,
+  }, testInfo) => {
+    const held = await holdMutations(page);
+    const { base } = await memberOf(page, 'orgAdmin');
+    await page.goto(`${base}/leagues/${COED}`);
+    await publishButton(page, 'Fall 2027').click();
+    held.hold();
+    await dialog(page).getByRole('button', { name: 'Publish season' }).click();
+    await expect(dialog(page).getByRole('button', { name: 'Publishing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(dialog(page).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await screenshot(page, testInfo, '126-publishing');
+    expect(describeViolations((await axeScan(page)).violations)).toEqual([]);
+    held.release();
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(status(page, 'Fall 2027')).toHaveText('Published');
+  });
 });

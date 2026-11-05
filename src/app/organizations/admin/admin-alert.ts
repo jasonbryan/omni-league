@@ -54,7 +54,8 @@ export class AdminAlert {
 
   protected readonly role = computed(() => {
     const kind = this.kind();
-    return kind === 'success' ? 'status' : kind === 'note' || kind === 'info' ? 'note' : 'alert';
+    if (kind === 'info') return null;
+    return kind === 'success' ? 'status' : kind === 'note' ? 'note' : 'alert';
   });
   protected readonly classes = computed(() =>
     this.kind() === 'error' ? ALERT_DESTRUCTIVE : ALERT_NEUTRAL,
