@@ -423,6 +423,20 @@ describe('deleting a user', () => {
 
     expect((await s.rows()).map((row) => row.userId)).toEqual([s.users.b]);
   });
+
+  test('deletes that user’s test-send rows only', async () => {
+    const s = await setup();
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert('pushTestSends', { userId: s.users.a, sentAt: NOW });
+      await ctx.db.insert('pushTestSends', { userId: s.users.a, sentAt: NOW - 1000 });
+      await ctx.db.insert('pushTestSends', { userId: s.users.b, sentAt: NOW });
+    });
+
+    await s.t.run((ctx) => deleteUserRecord(ctx, 'auth-a'));
+
+    const left = await s.t.run((ctx) => ctx.db.query('pushTestSends').collect());
+    expect(left.map((row) => row.userId)).toEqual([s.users.b]);
+  });
 });
 
 describe('push.pruneUnseen', () => {

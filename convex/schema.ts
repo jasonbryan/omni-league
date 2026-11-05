@@ -288,4 +288,21 @@ export default defineSchema({
     .index('by_endpoint', ['endpoint'])
     .index('by_userId', ['userId'])
     .index('by_lastSeenAt', ['lastSeenAt']),
+
+  // Reused for most of its 12 hours because Apple asks for no more than one new token an hour.
+  // Never returned by a public function.
+  pushVapidTokens: defineTable({
+    origin: v.string(),
+    publicKey: v.string(),
+    subject: v.string(),
+    authorization: v.string(),
+    expiresAt: v.number(),
+  })
+    .index('by_origin', ['origin'])
+    .index('by_expiresAt', ['expiresAt']),
+
+  pushTestSends: defineTable({
+    userId: v.id('users'),
+    sentAt: v.number(),
+  }).index('by_userId_and_sentAt', ['userId', 'sentAt']),
 });
