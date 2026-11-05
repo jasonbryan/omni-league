@@ -59,7 +59,6 @@ class FakeRegistration {
   }
 }
 
-/** What `SwPush.subscription` emits; a value put on it is also what the registration holds. */
 class SwPushSubscriptions extends BehaviorSubject<PushSubscription | null> {
   constructor(private readonly registration: FakeRegistration) {
     super(null);

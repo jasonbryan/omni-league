@@ -470,6 +470,6 @@ It amends section 7, "Lifecycle", and adds a note to section 5, "Client".
 - **Start-up and every sign-in.** A `false` status unsubscribes through `SwPush.unsubscribe()` when `SwPush.isEnabled` and a worker controls the page, so an open notifications page shows "off". In every other case it calls `unsubscribe()` on the subscription read from the registration. A `true` status saves the row again as before. When the key differs or `expirationTime` has passed, the client subscribes again only on a controlled page; an uncontrolled page changes nothing, and the next controlled load's check replaces it.
 - **Sign-out** calls `push.unsubscribe` and then the same browser unsubscribe. It no longer waits for a read that may never answer, so it takes no longer on an uncontrolled page.
 
-**Section 5, Client.** Only `SwPush.requestSubscription` needs a controlling worker, because `PushManager.subscribe()` needs an active worker on the registration. Reading and removing a subscription do not.
+**Section 5, Client.** Of the client's push steps, only subscribing needs a controlling worker: `SwPush.requestSubscription` waits for one, while `PushManager.subscribe()` itself needs only an active worker on the registration. Reading and removing a subscription go through the registration and need neither.
 
 **Open.** On an uncontrolled page the notifications page shows "off" while the device may still be subscribed (#558).
