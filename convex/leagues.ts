@@ -44,6 +44,7 @@ import {
   type LeagueEarlier,
   MAX_DRAFT_SEASONS_UPDATED,
   publishLeague,
+  recountDraftLeagues,
   restoreLeague,
   updateLeague,
   type LeagueDivision,
@@ -182,6 +183,11 @@ export const create = mutation({
     const locationIds = [...new Set(args.locationIds)];
     const locationsError = checkLeagueLocations(locationIds.length);
     if (locationsError) refuse(locationsError);
+    // Distinct ids beyond the organization's locations include one that is not its own.
+    const organization = await ctx.db.get('organizations', args.organizationId);
+    if (locationIds.length > (organization?.locationCount ?? Infinity)) {
+      throw new Error('Not allowed');
+    }
     for (const id of locationIds) {
       const location = await ctx.db.get('locations', id);
       if (location?.organizationId !== args.organizationId) throw new Error('Not allowed');
@@ -307,6 +313,16 @@ export const publishedCount = query({
     await requireOrgAdmin(ctx, organizationId);
     const organization = await ctx.db.get('organizations', organizationId);
     return organization?.leagueCount ?? 0;
+  },
+});
+
+export const draftCount = query({
+  args: { organizationId: v.id('organizations') },
+  returns: v.number(),
+  handler: async (ctx, { organizationId }) => {
+    await requireOrgAdmin(ctx, organizationId);
+    const organization = await ctx.db.get('organizations', organizationId);
+    return organization?.draftLeagueCount ?? (await recountDraftLeagues(ctx, organizationId));
   },
 });
 

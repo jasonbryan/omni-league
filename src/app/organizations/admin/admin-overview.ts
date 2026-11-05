@@ -14,9 +14,9 @@ import { adminPath } from './admin-path';
 import { OUTLINE_BUTTON } from './button-classes';
 
 /**
- * The published count is the organization's counter, which holds past the 200 rows the league list stops at, and the drafts are counted from that list,
- * so a draft past row 200 is not counted. The list hides once any league is published (by the counter), and is not drawn while the counter loads,
- * so an established organization never sees it flash. The Staff count is the organization's counter too, since the member list stops at 200 rows.
+ * The Leagues tile reads the organization's published and draft counters, which hold past the 200 rows the league list stops at. The setup list hides
+ * once any league is published (by the counter), and is not drawn while the counter loads, so an established organization never sees it flash.
+ * The Staff count is the organization's counter too, since the member list stops at 200 rows.
  */
 @Component({
   selector: 'app-admin-overview',
@@ -223,7 +223,7 @@ export class AdminOverview {
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
-  private readonly leagues = injectQuery(api.leagues.listForAdmin, () => {
+  private readonly drafts = injectQuery(api.leagues.draftCount, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
@@ -232,12 +232,11 @@ export class AdminOverview {
     if (this.published.error()) return { count: '–', note: 'Could not be loaded' };
     const published = this.published.value();
     if (published === undefined) return null;
-    if (this.leagues.error()) {
+    if (this.drafts.error()) {
       return { count: String(published), note: 'Drafts could not be loaded' };
     }
-    const rows = this.leagues.value();
-    if (rows === undefined) return null;
-    const drafts = rows.filter((row) => row.status !== 'published').length;
+    const drafts = this.drafts.value();
+    if (drafts === undefined) return null;
     const parts = [
       published > 0 ? `${published} published` : null,
       drafts > 0 ? `${drafts} ${drafts === 1 ? 'draft' : 'drafts'}` : null,

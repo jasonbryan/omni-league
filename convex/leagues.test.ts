@@ -416,7 +416,7 @@ describe('leagues.create', () => {
     expect(league?.locationIds).toEqual([s.bravo, s.alpha]);
   });
 
-  test('a draft changes no counter and writes no sportLocations row', async () => {
+  test('a draft changes only the draft counter and writes no sportLocations row', async () => {
     const s = await setup();
     const before = await snapshot(s.t);
     await s.adminA.mutation(api.leagues.create, {
@@ -426,7 +426,13 @@ describe('leagues.create', () => {
       locationIds: [s.bravo],
     });
     const after = await snapshot(s.t);
-    expect(after.organizations).toEqual(before.organizations);
+    expect(after.organizations).toEqual(
+      before.organizations.map((organization) =>
+        organization._id === s.organizationA
+          ? { ...organization, draftLeagueCount: 1 }
+          : organization,
+      ),
+    );
     expect(after.sportLocations).toEqual(before.sportLocations);
     expect(after.leagues).toHaveLength(before.leagues.length + 1);
   });
@@ -550,6 +556,38 @@ describe('leagues.create', () => {
       message: 'Choose at least one location.',
     });
     expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('refuses more locations than the organization has, without reading them', async () => {
+    const s = await setup();
+    await s.t.run((ctx) => ctx.db.patch('organizations', s.organizationA, { locationCount: 1 }));
+    const before = await snapshot(s.t);
+    await expect(
+      s.adminA.mutation(api.leagues.create, { ...valid(s), locationIds: [s.bravo, s.alpha] }),
+    ).rejects.toThrow('Not allowed');
+    expect(await snapshot(s.t)).toEqual(before);
+  });
+
+  test('accepts as many locations as the organization has', async () => {
+    const s = await setup();
+    const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+      ...valid(s),
+      locationIds: [s.bravo, s.alpha],
+    });
+    const league = await s.t.run((ctx) => ctx.db.get('leagues', leagueId));
+    expect(league?.locationIds).toEqual([s.bravo, s.alpha]);
+  });
+
+  test('bounds nothing while the location counter is not set yet', async () => {
+    const s = await setup();
+    await s.t.run((ctx) =>
+      ctx.db.patch('organizations', s.organizationA, { locationCount: undefined }),
+    );
+    const { leagueId } = await s.adminA.mutation(api.leagues.create, {
+      ...valid(s),
+      locationIds: [s.bravo, s.alpha],
+    });
+    expect(leagueId).toBeDefined();
   });
 
   test("refuses another organization's location, alone or among its own", async () => {

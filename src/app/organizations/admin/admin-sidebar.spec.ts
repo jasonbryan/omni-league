@@ -28,7 +28,7 @@ class Host {
 }
 
 const PUBLISHED_COUNT = 'leagues:publishedCount';
-const LIST_LEAGUES = 'leagues:listForAdmin';
+const DRAFT_COUNT = 'leagues:draftCount';
 const LIST_LOCATIONS = 'locations:listForAdmin';
 const STAFF_COUNT = 'memberships:staffCount';
 
@@ -115,7 +115,7 @@ describe('AdminSidebar', () => {
       expect(convex.subscriptions).toEqual([]);
       authenticate();
       expect(convex.activeSubscriptions.map((s) => [s.name, s.args]).sort()).toEqual(
-        [PUBLISHED_COUNT, LIST_LEAGUES, LIST_LOCATIONS, STAFF_COUNT]
+        [PUBLISHED_COUNT, DRAFT_COUNT, LIST_LOCATIONS, STAFF_COUNT]
           .map((name) => [name, { organizationId: COASTAL.organizationId }])
           .sort(),
       );
@@ -131,13 +131,7 @@ describe('AdminSidebar', () => {
       const { host, authenticate, answer } = await render(BASE);
       authenticate();
       await answer(PUBLISHED_COUNT, 3);
-      await answer(LIST_LEAGUES, [
-        { status: 'published' },
-        { status: 'published' },
-        { status: 'published' },
-        { status: 'draft' },
-        { status: 'draft' },
-      ]);
+      await answer(DRAFT_COUNT, 2);
       await answer(LIST_LOCATIONS, COASTAL_LOCATIONS);
       await answer(STAFF_COUNT, 4);
       const counts = [...host.querySelectorAll('nav ul:first-of-type li')].map((li) => [
@@ -151,6 +145,14 @@ describe('AdminSidebar', () => {
         ['Staff', '4'],
         ['Details', null],
       ]);
+    });
+
+    it('counts leagues from the counters, past the 200 rows the league list stops at', async () => {
+      const { host, authenticate, answer } = await render(BASE);
+      authenticate();
+      await answer(PUBLISHED_COUNT, 450);
+      await answer(DRAFT_COUNT, 320);
+      expect(text(host.querySelector(`a[href="${BASE}/leagues"] .tabular-nums`))).toBe('770');
     });
 
     it('shows no count for one that failed, and the others stay', async () => {

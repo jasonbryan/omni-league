@@ -15,9 +15,9 @@ import {
 
 const ROUTES = adminRoutes(AdminArea, [{ path: '', component: AdminOverview }]);
 const URL = `/app/organizations/${COASTAL.slug}`;
-// The "Get set up" rule and the published part of the Leagues tile read the organization's counter, not the admin list, which stops at 200 rows; the drafts are counted from that list.
+// The "Get set up" rule and the Leagues tile read the organization's counters, not the admin list, which stops at 200 rows.
 const PUBLISHED_COUNT = 'leagues:publishedCount';
-const LIST_LEAGUES = 'leagues:listForAdmin';
+const DRAFT_COUNT = 'leagues:draftCount';
 const STAFF_COUNT = 'memberships:staffCount';
 const LIST_PENDING = 'invites:listPending';
 
@@ -27,15 +27,6 @@ const invite = (id: string) => ({
   role: 'orgAdmin',
   leagueNames: [],
   expiresAt: 1,
-});
-
-const league = (id: string, status: 'draft' | 'published') => ({
-  leagueId: id,
-  name: id,
-  slug: id,
-  sportName: 'Soccer',
-  status,
-  locationNames: [],
 });
 
 async function open() {
@@ -65,13 +56,13 @@ describe('AdminOverview', () => {
     expect(TestBed.inject(Title).getTitle()).toBe('Overview | Coastal Bend Rec Club | Omni League');
   });
 
-  it('asks the location list, the published-league counter, the league list, the staff counter, and the pending invites with the organization id', async () => {
+  it('asks the location list, the published-league counter, the draft-league counter, the staff counter, and the pending invites with the organization id', async () => {
     const { convex, subscription } = await open();
     expectPageAndShellSubscriptions(convex, [
       [GET_ADMIN_CONTEXT, { slug: COASTAL.slug }],
       [LIST_FOR_ADMIN, { organizationId: COASTAL.organizationId }],
       [PUBLISHED_COUNT, { organizationId: COASTAL.organizationId }],
-      [LIST_LEAGUES, { organizationId: COASTAL.organizationId }],
+      [DRAFT_COUNT, { organizationId: COASTAL.organizationId }],
       [STAFF_COUNT, { organizationId: COASTAL.organizationId }],
       [LIST_PENDING, { organizationId: COASTAL.organizationId }],
     ]);
@@ -107,40 +98,40 @@ describe('AdminOverview', () => {
     it('with none at all, reads 0 and "None yet"', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.emit(0);
-      subscription(LIST_LEAGUES)!.emit([]);
+      subscription(DRAFT_COUNT)!.emit(0);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['0', 'None yet']);
     });
 
-    it('adds the published counter to the drafts and splits them: "N published, M drafts"', async () => {
+    it('adds the published counter to the draft counter and splits them: "N published, M drafts"', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.emit(2);
-      subscription(LIST_LEAGUES)!.emit([
-        league('a', 'published'),
-        league('b', 'draft'),
-        league('c', 'published'),
-        league('d', 'draft'),
-      ]);
+      subscription(DRAFT_COUNT)!.emit(2);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['4', '2 published, 2 drafts']);
     });
 
-    it('takes the published part from the counter, past the list’s 200 rows', async () => {
+    it('takes both parts from the counters, past the 200 rows the league list stops at', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.emit(450);
-      subscription(LIST_LEAGUES)!.emit([league('a', 'published'), league('b', 'draft')]);
+      subscription(DRAFT_COUNT)!.emit(320);
       await flush();
-      expect([...tile(page)].map(text)).toEqual(['451', '450 published, 1 draft']);
+      expect([...tile(page)].map(text)).toEqual(['770', '450 published, 320 drafts']);
+    });
+
+    it('asks no league list', async () => {
+      const { convex } = await open();
+      expect(convex.activeSubscriptions.map((s) => s.name)).not.toContain('leagues:listForAdmin');
     });
 
     it('uses the singular for one draft, and leaves out a part that is 0', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.emit(0);
-      subscription(LIST_LEAGUES)!.emit([league('a', 'draft')]);
+      subscription(DRAFT_COUNT)!.emit(1);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
       subscription(PUBLISHED_COUNT)!.emit(2);
-      subscription(LIST_LEAGUES)!.emit([league('a', 'published'), league('b', 'published')]);
+      subscription(DRAFT_COUNT)!.emit(0);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['2', '2 published']);
     });
@@ -148,28 +139,28 @@ describe('AdminOverview', () => {
     it('follows both live as a league is published', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.emit(0);
-      subscription(LIST_LEAGUES)!.emit([league('a', 'draft')]);
+      subscription(DRAFT_COUNT)!.emit(1);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['1', '1 draft']);
       subscription(PUBLISHED_COUNT)!.emit(1);
-      subscription(LIST_LEAGUES)!.emit([league('a', 'published')]);
+      subscription(DRAFT_COUNT)!.emit(0);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['1', '1 published']);
     });
 
-    it('draws a placeholder until both the counter and the list have loaded', async () => {
+    it('draws a placeholder until both counters have loaded', async () => {
       const { page, subscription, flush } = await open();
       expect(text(tile(page)[0])).toBe('');
       expect(tile(page)[0].querySelector('[aria-hidden="true"]')).not.toBeNull();
       subscription(PUBLISHED_COUNT)!.emit(1);
       await flush();
       expect(text(tile(page)[0])).toBe('');
-      subscription(LIST_LEAGUES)!.emit([]);
+      subscription(DRAFT_COUNT)!.emit(0);
       await flush();
       expect([...tile(page)].map(text)).toEqual(['1', '1 published']);
     });
 
-    it('reads "–" with a note when the counter fails, never the error message', async () => {
+    it('reads "–" with a note when the published counter fails, never the error message', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.fail(new Error('Server Error: secret'));
       await flush();
@@ -177,10 +168,10 @@ describe('AdminOverview', () => {
       expect(page.textContent).not.toContain('secret');
     });
 
-    it('keeps the published count and says the drafts could not be loaded when the list fails', async () => {
+    it('keeps the published count and says the drafts could not be loaded when the draft counter fails', async () => {
       const { page, subscription, flush } = await open();
       subscription(PUBLISHED_COUNT)!.emit(3);
-      subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+      subscription(DRAFT_COUNT)!.fail(new Error('Server Error: secret'));
       await flush();
       expect([...tile(page)].map(text)).toEqual(['3', 'Drafts could not be loaded']);
       expect(page.textContent).not.toContain('secret');
