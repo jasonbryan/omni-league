@@ -105,8 +105,14 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
                 [class]="'size-9 shrink-0 rounded-lg ' + pulse"
               ></div>
               <div class="flex min-w-0 flex-1 flex-col gap-2">
-                <div data-slot="sidebar-text-skeleton" [class]="'h-3.5 w-36 ' + pulse"></div>
-                <div data-slot="sidebar-text-skeleton" [class]="'h-3 w-20 ' + pulse"></div>
+                <div
+                  data-slot="sidebar-text-skeleton"
+                  [class]="'h-3.5 w-36 rounded-md ' + pulse"
+                ></div>
+                <div
+                  data-slot="sidebar-text-skeleton"
+                  [class]="'h-3 w-20 rounded-md ' + pulse"
+                ></div>
               </div>
             </div>
             <div class="flex flex-col gap-0.5">
@@ -115,7 +121,7 @@ export const LOAD_SHELL_SHEET = new InjectionToken<() => Promise<typeof import('
                   data-slot="sidebar-row-skeleton"
                   class="flex min-h-9 items-center px-3 pointer-coarse:min-h-11"
                 >
-                  <div [class]="'h-5 ' + width + ' ' + pulse"></div>
+                  <div [class]="'h-5 rounded-md ' + width + ' ' + pulse"></div>
                 </div>
               }
             </div>
@@ -145,7 +151,7 @@ export class Shell {
   protected readonly title = computed(
     () => this.sidebar()?.appShellOrganizationName() ?? 'Omni League',
   );
-  protected readonly pulse = 'rounded-md bg-muted motion-safe:animate-pulse';
+  protected readonly pulse = 'bg-muted motion-safe:animate-pulse';
   protected readonly rowWidths = ['w-28', 'w-24', 'w-24', 'w-20'];
   private readonly main = viewChild.required<ElementRef<HTMLElement>>('main');
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');

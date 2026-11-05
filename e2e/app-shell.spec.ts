@@ -441,7 +441,6 @@ test.describe('the app shell', () => {
       expect(outsideColumn).toBe(0);
     }
 
-    /** `loaded` is the `main` heading of the page once it has its data. */
     async function walkStates(
       page: Page,
       context: BrowserContext,
@@ -501,6 +500,7 @@ test.describe('the app shell', () => {
       await context.setOffline(true);
       await expect(note(page).locator('[data-offline-note]')).toBeVisible({ timeout: 2_000 });
       await expectNoteBox(page, isMobile);
+      if (isMobile) await expect(column(page)).toBeHidden();
       await expectAxe(page, `${key} loaded and offline`);
       await screenshot(page, testInfo, `shell-loaded-offline-${key}`);
       await context.setOffline(false);
@@ -598,6 +598,9 @@ test.describe('the app shell', () => {
       await expect(sheet.locator('[data-slot="sidebar-mark-skeleton"]')).toBeVisible();
       await expect(sheet.locator('[data-slot="sidebar-row-skeleton"]')).toHaveCount(4);
       await expect(sheet.getByText('Loading your account.')).toBeAttached();
+      await expect(
+        sheet.getByRole('status').filter({ hasText: 'Loading navigation.' }),
+      ).toHaveCount(1);
       await expectAxe(page, 'the phone sheet while loading and offline');
     });
   });

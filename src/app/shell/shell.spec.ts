@@ -257,6 +257,7 @@ describe('Shell', () => {
         expect.arrayContaining(['size-9', 'rounded-lg', 'bg-muted']),
       );
       expect(mark!.classList).not.toContain('bg-sidebar-primary');
+      expect(mark!.classList).not.toContain('rounded-md');
       expect(head!.querySelectorAll('[data-slot="sidebar-text-skeleton"]')).toHaveLength(2);
       expect(skeleton.querySelectorAll('[data-slot="sidebar-row-skeleton"]')).toHaveLength(4);
       expect(skeleton.querySelector('app-account-row')).not.toBeNull();
