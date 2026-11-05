@@ -363,12 +363,36 @@ test.describe('Staff: undoing a revoke', () => {
     await expect(pendingRows(page)).toHaveCount(1);
     await screenshot(page, testInfo, '228-staff-revoke-waits-for-undo');
     await expectAccessible(page);
+    // The accessibility check moves focus, and a reply takes focus only from the pressed button.
+    await working.focus();
 
     undo?.release();
     await expect(
       page.getByRole('status').filter({ hasText: `Invite to ${email} restored.` }),
     ).toBeFocused();
     await expect(revokeButton(page, other)).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  test('a reply to Undo leaves focus where the user moved while it was in flight', async ({
+    page,
+  }) => {
+    const email = 'dana@example.com';
+    let undo: { release: () => void } | undefined;
+    await openStaffWithInvite(page, email, {
+      beforeOpen: async () => {
+        undo = await interceptMutation(page, 'invites:restore', 'hold');
+      },
+    });
+    await revokeButton(page, email).click();
+    await undoButton(page, email).click();
+    await expect(page.getByRole('button', { name: 'Undoing…' })).toBeVisible();
+    await page.locator('#email').focus();
+
+    undo?.release();
+    await expect(
+      page.getByRole('status').filter({ hasText: `Invite to ${email} restored.` }),
+    ).toBeVisible();
+    await expect(page.locator('#email')).toBeFocused();
   });
 
   test('a revoke in flight reads "Revoking…" on its own button and waits on the others', async ({
@@ -391,6 +415,7 @@ test.describe('Staff: undoing a revoke', () => {
     await expect(revokeButton(page, other)).toHaveAttribute('aria-disabled', 'true');
     await screenshot(page, testInfo, '228-staff-revoking');
     await expectAccessible(page);
+    await page.getByRole('button', { name: 'Revoking…' }).focus();
 
     revoke?.release();
     await expect(

@@ -1,4 +1,4 @@
-import { NgTemplateOutlet } from '@angular/common';
+import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -78,6 +78,8 @@ function refusalOf(failure: unknown): RestoreRefusal | null {
   const code = codeOf(failure);
   return code !== null && RESTORE_REFUSALS.includes(code) ? (code as RestoreRefusal) : null;
 }
+
+const MAIN = '#main';
 
 const ROLE_LABEL: Record<Role, string> = {
   orgAdmin: 'Org admin',
@@ -337,7 +339,7 @@ const ROLE_LABEL: Record<Role, string> = {
                               : destructiveButton
                           "
                           [attr.aria-disabled]="revokeDimmed() ? 'true' : null"
-                          (click)="revoke(row.inviteId, row.email)"
+                          (click)="revoke(row.inviteId, row.email, $event.currentTarget)"
                         >
                           @if (revokingId() === row.inviteId) {
                             <ng-icon
@@ -436,6 +438,7 @@ const ROLE_LABEL: Record<Role, string> = {
 export class AdminStaff {
   private readonly context = inject(AdminContext);
   private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
   private readonly revokeCall = injectMutation(api.invites.revoke);
   private readonly restoreCall = injectMutation(api.invites.restore);
 
@@ -494,6 +497,7 @@ export class AdminStaff {
 
   private readonly undoWindowOpen = signal(false);
   private undoWindowTimer: ReturnType<typeof setTimeout> | undefined;
+  private pressedRevoke: EventTarget | null = null;
 
   protected readonly undoTarget = computed(() => {
     const notice = this.notice();
@@ -527,8 +531,13 @@ export class AdminStaff {
     panel.focusFirst();
   }
 
-  protected async revoke(inviteId: Id<'invites'>, email: string): Promise<void> {
+  protected async revoke(
+    inviteId: Id<'invites'>,
+    email: string,
+    pressed: EventTarget | null,
+  ): Promise<void> {
     if (this.revokeCall.pending() || this.restoreCall.pending()) return;
+    this.pressedRevoke = pressed;
     this.notice.set(null);
     if (!this.online()) {
       this.show({ kind: 'offline' });
@@ -565,7 +574,7 @@ export class AdminStaff {
     }
   }
 
-  /** The status takes focus either way, because Undo has gone or the alert replaced it. */
+  /** The reply takes focus only where `show` allows, so a user who has moved on keeps their place. */
   protected async restore(inviteId: Id<'invites'>, email: string): Promise<void> {
     if (this.restoreCall.pending()) return;
     if (!this.online()) {
@@ -614,9 +623,20 @@ export class AdminStaff {
     if (holdsFocus) this.focusNotice();
   }
 
+  /**
+   * Focus moves to the status only from inside it, from the pressed Revoke, or from nowhere: the pressed element went,
+   * or WebKit did not focus it and `<main>` still holds the focus of the last navigation.
+   */
   private show(notice: Notice): void {
+    const active = this.document.activeElement;
+    const focusIsFree =
+      active === null ||
+      active === this.document.body ||
+      active === this.document.querySelector(MAIN) ||
+      active === this.pressedRevoke ||
+      (this.noticeHost()?.nativeElement.contains(active) ?? false);
     this.notice.set(notice);
-    this.focusNotice();
+    if (focusIsFree) this.focusNotice();
   }
 
   private focusNotice(): void {

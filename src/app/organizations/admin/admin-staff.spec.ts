@@ -1134,6 +1134,43 @@ describe('AdminStaff', () => {
       expect(revokeButton(0).classList.contains('opacity-50')).toBe(false);
     });
 
+    it('a failed revoke moves focus from the pressed Revoke, which is still on the page, to the status', async () => {
+      await openFull();
+      revokeButton(0).focus();
+      await press(0);
+      expect(document.activeElement).toBe(revokeButton(0));
+      o.convex.calls[0].reject(new Error('Server Error: secret'));
+      await o.flush();
+      expect(document.activeElement).toBe(statusBox());
+    });
+
+    describe('a user who moves on to Email while the revoke is in flight keeps focus there', () => {
+      const replies: [string, () => void][] = [
+        ['success', () => o.convex.calls[0].resolve(null)],
+        ['offline', () => o.convex.calls[0].reject(new ConvexOfflineError())],
+        ['a server error', () => o.convex.calls[0].reject(new Error('Server Error: secret'))],
+        [
+          'a refusal',
+          () =>
+            o.convex.calls[0].reject(
+              new ConvexError({ code: 'notPending', message: INVITE_MESSAGES.revokeNotPending }),
+            ),
+        ],
+      ];
+      for (const [name, reply] of replies) {
+        it(name, async () => {
+          await openFull();
+          await press(0);
+          const email = input('email');
+          email.focus();
+          reply();
+          await o.flush();
+          expect(statusBox()).not.toBeNull();
+          expect(document.activeElement).toBe(email);
+        });
+      }
+    });
+
     it('a press while offline shows the offline alert and sends nothing', async () => {
       await openFull();
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
@@ -1527,6 +1564,46 @@ describe('AdminStaff', () => {
           expect(undoButton()).toBeUndefined();
           expect(document.activeElement).toBe(statusBox());
         });
+      });
+
+      it('a failed Undo moves focus from Undoing…, which is in the status, to the replacing alert', async () => {
+        await revokeDana();
+        undoButton()!.focus();
+        await pressUndo();
+        expect(document.activeElement).toBe(undoButton());
+        o.convex.calls[1].reject(new Error('Server Error: secret'));
+        await o.flush();
+        expect(document.activeElement).toBe(statusBox());
+      });
+
+      describe('a user who moves on to Email while an Undo is in flight keeps focus there', () => {
+        const replies: [string, () => void][] = [
+          ['success', () => o.convex.calls[1].resolve(null)],
+          ['offline', () => o.convex.calls[1].reject(new ConvexOfflineError())],
+          ['a server error', () => o.convex.calls[1].reject(new Error('Server Error: secret'))],
+          [
+            'a refusal',
+            () =>
+              o.convex.calls[1].reject(
+                new ConvexError({ code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked }),
+              ),
+          ],
+        ];
+        for (const [name, reply] of replies) {
+          for (const windowPassed of [false, true]) {
+            it(`${name}, with the window ${windowPassed ? 'passed' : 'open'}`, async () => {
+              await revokeDana();
+              await pressUndo();
+              const email = input('email');
+              email.focus();
+              if (windowPassed) await windowPasses();
+              reply();
+              await o.flush();
+              expect(statusBox()).not.toBeNull();
+              expect(document.activeElement).toBe(email);
+            });
+          }
+        }
       });
 
       it('keeps the button while an Undo is in flight, and the answer replaces the status', async () => {
