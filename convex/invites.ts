@@ -22,6 +22,7 @@ import {
   type InviteRevokeError,
 } from './lib/inviteInput';
 import { findUsableInvite } from './lib/inviteLookup';
+import { insertPendingInvite, recountPendingInvites, setInviteStatus } from './lib/inviteWrites';
 import { generateInviteToken, hashInviteToken, timingSafeEqual } from './lib/inviteToken';
 import { insertMembership } from './lib/memberships';
 import { roleValidator, type Role } from './lib/roles';
@@ -145,14 +146,13 @@ export const insertPending = internalMutation({
     });
 
     const expiresAt = Date.now() + INVITE_LIFETIME_MS;
-    const inviteId = await ctx.db.insert('invites', {
+    const inviteId = await insertPendingInvite(ctx, {
       organizationId: args.organizationId,
       email,
       role: args.role,
       leagueIds,
       tokenHash: args.tokenHash,
       expiresAt,
-      status: 'pending',
     });
     return { inviteId, expiresAt };
   },
@@ -173,7 +173,7 @@ export const revoke = mutation({
         message: INVITE_MESSAGES.revokeNotPending,
       } satisfies InviteRevokeError);
     }
-    await ctx.db.patch('invites', inviteId, { status: 'revoked', revokedAt: Date.now() });
+    await setInviteStatus(ctx, inviteId, { status: 'revoked', revokedAt: Date.now() });
     return null;
   },
 });
@@ -212,8 +212,18 @@ export const restore = mutation({
         message: INVITE_MESSAGES.restoreLeaguesGone,
       } satisfies InviteRestoreError);
     });
-    await ctx.db.patch('invites', inviteId, { status: 'pending', revokedAt: undefined });
+    await setInviteStatus(ctx, inviteId, { status: 'pending', revokedAt: undefined });
     return null;
+  },
+});
+
+export const pendingCount = query({
+  args: { organizationId: v.id('organizations') },
+  returns: v.number(),
+  handler: async (ctx, { organizationId }) => {
+    await requireOrgAdmin(ctx, organizationId);
+    const organization = await ctx.db.get('organizations', organizationId);
+    return organization?.pendingInviteCount ?? (await recountPendingInvites(ctx, organizationId));
   },
 });
 
@@ -366,7 +376,7 @@ export const accept = mutation({
       invite.role,
       invite.role === 'orgAdmin' ? [] : leagueIds,
     );
-    await ctx.db.patch('invites', invite._id, { status: 'accepted' });
+    await setInviteStatus(ctx, invite._id, { status: 'accepted' });
     return { organizationName, organizationSlug, role: invite.role, leagueNames, leagues };
   },
 });

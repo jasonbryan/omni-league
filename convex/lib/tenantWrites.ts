@@ -223,6 +223,7 @@ export async function insertOrganization(
     draftLeagueCount: 0,
     locationCount: 0,
     staffCount: 0,
+    pendingInviteCount: 0,
     sportLeagueCounts: {},
     sportLocationCounts: {},
   });
