@@ -46,6 +46,7 @@ import type * as lib_publicLeague from "../lib/publicLeague.js";
 import type * as lib_publicList from "../lib/publicList.js";
 import type * as lib_publicPage from "../lib/publicPage.js";
 import type * as lib_publicSeason from "../lib/publicSeason.js";
+import type * as lib_pushConfig from "../lib/pushConfig.js";
 import type * as lib_pushMessage from "../lib/pushMessage.js";
 import type * as lib_pushResponse from "../lib/pushResponse.js";
 import type * as lib_pushSubscription from "../lib/pushSubscription.js";
@@ -131,6 +132,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicList": typeof lib_publicList;
   "lib/publicPage": typeof lib_publicPage;
   "lib/publicSeason": typeof lib_publicSeason;
+  "lib/pushConfig": typeof lib_pushConfig;
   "lib/pushMessage": typeof lib_pushMessage;
   "lib/pushResponse": typeof lib_pushResponse;
   "lib/pushSubscription": typeof lib_pushSubscription;

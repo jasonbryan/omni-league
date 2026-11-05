@@ -10,6 +10,7 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { requireUser } from './lib/access';
+import { missingPushConfig } from './lib/pushConfig';
 import { TEST_MESSAGE } from './lib/pushMessage';
 import {
   isP256PublicKey,
@@ -115,6 +116,7 @@ export const getMyDeviceStatus = query({
 const sendTestResult = v.union(
   v.object({ status: v.literal('sent'), devices: v.number() }),
   v.object({ status: v.literal('noDevice') }),
+  v.object({ status: v.literal('unconfigured') }),
   v.object({ status: v.literal('rateLimited'), retryAfterSeconds: v.number() }),
 );
 
@@ -123,6 +125,7 @@ export const sendTest = mutation({
   returns: sendTestResult,
   handler: async (ctx) => {
     const user = await requireUser(ctx);
+    if (missingPushConfig().length > 0) return { status: 'unconfigured' as const };
     const now = Date.now();
     const windowStart = now - TEST_SEND_WINDOW_MS;
     const past = await ctx.db

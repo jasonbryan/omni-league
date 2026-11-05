@@ -865,6 +865,7 @@ export const AREAS = [
       named('convex/', ['push', 'pushSend'])(file) ||
       named('convex/lib/', [
         'pushSubscription',
+        'pushConfig',
         'pushMessage',
         'pushResponse',
         'pushTestSend',

@@ -769,6 +769,18 @@ describe('NotificationsPage', () => {
       expect(testButton()!.hasAttribute('aria-disabled')).toBe(false);
     });
 
+    it('not set up on the server: a failed alert that says to try later', async () => {
+      await openOn();
+      await press();
+      await answer({ status: 'unconfigured' });
+
+      expect(resultAlert()!.getAttribute('role')).toBe('alert');
+      expect(alertTitle()).toBe('The test notification could not be sent.');
+      expect(alertDescription()).toBe(
+        'Notifications are not available right now. Try again later.',
+      );
+    });
+
     it('refused for lack of a connection: the offline alert with its cause', async () => {
       await openOn();
       await press();
@@ -779,7 +791,7 @@ describe('NotificationsPage', () => {
 
       expect(resultAlert()!.getAttribute('role')).toBe('alert');
       expect(alertTitle()).toBe("You're offline. Nothing was sent.");
-      expect(alertDescription()).toBe("The test was not sent. Try again when you're connected.");
+      expect(alertDescription()).toBe("Try again when you're connected.");
       expect(text(testButton())).toBe('Send a test notification');
     });
 

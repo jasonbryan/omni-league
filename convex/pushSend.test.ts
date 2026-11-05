@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { TEST_MESSAGE, pushPayload } from './lib/pushMessage';
+import { MAX_PAYLOAD_BYTES, TEST_MESSAGE, pushPayload } from './lib/pushMessage';
 import {
   SERVER_ERROR_BACKOFF_SECONDS,
   FAILURES_BEFORE_DELETE,
@@ -395,6 +395,38 @@ describe('deliver: the push service answers', () => {
     expect(await s.row(device.id)).toBeNull();
   });
 
+  test.each([
+    [401, 'ExpiredJwtToken'],
+    [403, 'BadJwtToken'],
+  ])(
+    'a %i with %s drops the cached token, so the next send signs a new one',
+    async (status, reason) => {
+      const s = await setup();
+      const device = await s.addDevice(s.users.a);
+      await deliver(s, device, s.users.a);
+      const first = sentHeaders().get('authorization');
+      expect(await s.tokens()).toHaveLength(1);
+
+      respond(status, { body: JSON.stringify({ reason }) });
+      await deliver(s, device, s.users.a);
+      expect(await s.tokens()).toEqual([]);
+
+      vi.setSystemTime(NOW + 2000);
+      fetchMock.mockClear();
+      await deliver(s, device, s.users.a);
+      expect(sentHeaders().get('authorization')).not.toBe(first);
+    },
+  );
+
+  test('another 403 reason keeps the cached token', async () => {
+    const s = await setup();
+    const device = await s.addDevice(s.users.a);
+    await deliver(s, device, s.users.a);
+    respond(403, { body: JSON.stringify({ reason: 'Forbidden' }) });
+    await deliver(s, device, s.users.a);
+    expect(await s.tokens()).toHaveLength(1);
+  });
+
   test('the logs name the push service host and status, and no endpoint, key, token, or secret', async () => {
     const s = await setup();
     const device = await s.addDevice(s.users.a, {
@@ -523,6 +555,40 @@ describe('deliver: what it will not send', () => {
       expect(logged.join('\n')).toContain(name);
     },
   );
+
+  test.each([
+    ['a SITE_URL that is not a URL', () => vi.stubEnv('SITE_URL', 'not a url'), TEST_MESSAGE],
+    [
+      'a message over the payload limit',
+      () => undefined,
+      { ...TEST_MESSAGE, body: 'x'.repeat(MAX_PAYLOAD_BYTES) },
+    ],
+  ])(
+    '%s is a server fault: nothing is sent and the row is not counted against',
+    async (_case, arrange, message) => {
+      const s = await setup();
+      const device = await s.addDevice(s.users.a, { failureCount: 4 });
+      arrange();
+
+      await s.t.action(internal.pushSend.deliver, {
+        subscriptionId: device.id,
+        userId: s.users.a,
+        message,
+      });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(await s.row(device.id)).toMatchObject({ failureCount: 4 });
+      expect(await s.pendingDeliveries()).toEqual([]);
+      expect(logged.length).toBeGreaterThan(0);
+    },
+  );
+
+  test('a malformed endpoint on a row is refused without a throw', async () => {
+    const s = await setup();
+    const device = await s.addDevice(s.users.a, { endpoint: 'not a url' });
+    await expect(deliver(s, device, s.users.a)).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
   test('a private key that is not a key leaves every row alone', async () => {
     const s = await setup();

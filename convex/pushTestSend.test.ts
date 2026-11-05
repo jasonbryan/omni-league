@@ -136,8 +136,10 @@ describe('push.sendTest', () => {
     vi.setSystemTime(NOW + 3 * MINUTE_MS);
     const refused = await s.a.mutation(api.push.sendTest, {});
     expect(refused).toMatchObject({ status: 'rateLimited' });
-    // The window opened at the first send, 3 minutes before this call.
-    expect(refused).toHaveProperty('retryAfterSeconds', expect.closeTo(7 * 60, -1));
+    expect(refused).toHaveProperty(
+      'retryAfterSeconds',
+      expect.closeTo((TEST_SEND_WINDOW_MS - 3 * MINUTE_MS) / 1000, -1),
+    );
 
     expect(await s.sends()).toHaveLength(TEST_SEND_LIMIT);
     expect(await s.jobs('deliver')).toHaveLength(before);
@@ -165,6 +167,20 @@ describe('push.sendTest', () => {
     expect(left).toHaveLength(1);
     expect(left[0]?.sentAt).toBeGreaterThanOrEqual(later);
   });
+
+  test.each(['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT', 'SITE_URL'])(
+    'with %s unset: reports it as unconfigured, schedules nothing, and uses none of the limit',
+    async (name) => {
+      const s = await setup();
+      await s.addDevice(s.users.a, 'a-1');
+      vi.stubEnv(name, '');
+
+      expect(await s.a.mutation(api.push.sendTest, {})).toEqual({ status: 'unconfigured' });
+
+      expect(await s.jobs('deliver')).toEqual([]);
+      expect(await s.sends()).toEqual([]);
+    },
+  );
 
   test('a caller with no device gets "no device", schedules nothing, and uses none of the limit', async () => {
     const s = await setup();

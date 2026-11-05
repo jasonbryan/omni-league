@@ -6,12 +6,12 @@ import {
 import { v, type ObjectType } from 'convex/values';
 import { internal } from './_generated/api';
 import {
-  env,
   internalAction,
   internalMutation,
   internalQuery,
   type ActionCtx,
 } from './_generated/server';
+import { missingPushConfig, readPushConfig, type PushConfig } from './lib/pushConfig';
 import { pushMessageValidator, pushPayload } from './lib/pushMessage';
 import {
   FAILURES_BEFORE_DELETE,
@@ -28,6 +28,8 @@ const TOKEN_REFRESH_MARGIN_MS = 60 * 60 * 1000;
 const MAX_RATE_LIMIT_RETRIES = 1;
 const MAX_REASON_LENGTH = 40;
 const STALE_TOKEN_BATCH = 20;
+// A cached token the push service refuses would otherwise fail every send to that origin until it expires.
+const TOKEN_REJECTIONS: ReadonlySet<string> = new Set(['BadJwtToken', 'ExpiredJwtToken']);
 
 const target = v.union(
   v.object({
@@ -123,6 +125,19 @@ export const saveToken = internalMutation({
   },
 });
 
+export const dropToken = internalMutation({
+  args: { origin: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { origin }) => {
+    const rows = await ctx.db
+      .query('pushVapidTokens')
+      .withIndex('by_origin', (q) => q.eq('origin', origin))
+      .take(STALE_TOKEN_BATCH);
+    for (const row of rows) await ctx.db.delete('pushVapidTokens', row._id);
+    return null;
+  },
+});
+
 export const expireTestSend = internalMutation({
   args: { id: v.id('pushTestSends') },
   returns: v.null(),
@@ -131,35 +146,6 @@ export const expireTestSend = internalMutation({
     return null;
   },
 });
-
-interface Config {
-  vapid: { subject: string; publicKey: string; privateKey: string };
-  siteUrl: string;
-}
-
-function readConfig(): Config | null {
-  const values = {
-    VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY?.trim(),
-    VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY?.trim(),
-    VAPID_SUBJECT: env.VAPID_SUBJECT?.trim(),
-    SITE_URL: env.SITE_URL?.trim(),
-  };
-  const missing = Object.entries(values)
-    .filter(([, value]) => !value)
-    .map(([name]) => name);
-  if (missing.length > 0) {
-    console.error(`Web Push is not configured: set ${missing.join(', ')}`);
-    return null;
-  }
-  return {
-    vapid: {
-      publicKey: values.VAPID_PUBLIC_KEY ?? '',
-      privateKey: values.VAPID_PRIVATE_KEY ?? '',
-      subject: values.VAPID_SUBJECT ?? '',
-    },
-    siteUrl: values.SITE_URL ?? '',
-  };
-}
 
 // Only a short word from the push service is logged: a body could echo the endpoint.
 async function reasonOf(response: Response): Promise<string | null> {
@@ -189,7 +175,7 @@ type DeliverArgs = ObjectType<typeof deliverArgs>;
 async function authorizationFor(
   ctx: ActionCtx,
   subscription: PushSubscription,
-  vapid: Config['vapid'],
+  vapid: PushConfig['vapid'],
 ): Promise<string | null> {
   const key = {
     origin: new URL(subscription.endpoint).origin,
@@ -232,19 +218,32 @@ export const deliver = internalAction({
   args: deliverArgs,
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
-    const config = readConfig();
-    if (!config) return null;
+    const config = readPushConfig();
+    if (!config) {
+      console.error(`Web Push is not configured: set ${missingPushConfig().join(', ')}`);
+      return null;
+    }
+    // A fault here is the server's, so it never counts against the device.
+    let payload: string;
+    try {
+      payload = pushPayload(args.message, config.siteUrl);
+    } catch (error) {
+      console.error(
+        `Push payload not built (${error instanceof Error ? error.name : 'error'}): check SITE_URL and the message`,
+      );
+      return null;
+    }
     const row = await ctx.runMutation(internal.pushSend.prepare, {
       subscriptionId: args.subscriptionId,
       userId: args.userId,
     });
     if (row.status === 'skip') return null;
 
-    const host = new URL(row.endpoint).hostname;
     if (!isAllowedPushEndpoint(row.endpoint)) {
-      console.error(`Push refused: ${host} is not an allowed push service`);
+      console.error('Push refused: the endpoint is not an allowed push service');
       return null;
     }
+    const host = new URL(row.endpoint).hostname;
     const subscription = {
       endpoint: row.endpoint,
       expirationTime: row.expirationTime ?? null,
@@ -256,10 +255,7 @@ export const deliver = internalAction({
 
     let body: Uint8Array<ArrayBuffer>;
     try {
-      body = await encryptNotification(
-        subscription,
-        new TextEncoder().encode(pushPayload(args.message, config.siteUrl)),
-      );
+      body = await encryptNotification(subscription, new TextEncoder().encode(payload));
     } catch (error) {
       console.error(`Push to ${host} not built: ${error instanceof Error ? error.name : 'error'}`);
       await ctx.runMutation(internal.pushSend.recordOutcome, {
@@ -320,6 +316,15 @@ export const deliver = internalAction({
     } else {
       const reason = await reasonOf(response);
       console.error(`Push to ${host} rejected (${response.status})${reason ? `: ${reason}` : ''}`);
+      if (
+        (response.status === 401 || response.status === 403) &&
+        reason !== null &&
+        TOKEN_REJECTIONS.has(reason)
+      ) {
+        await ctx.runMutation(internal.pushSend.dropToken, {
+          origin: new URL(row.endpoint).origin,
+        });
+      }
       await ctx.runMutation(internal.pushSend.recordOutcome, {
         subscriptionId: args.subscriptionId,
         outcome: 'rejected',

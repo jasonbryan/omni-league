@@ -11,6 +11,7 @@ type Result =
   | { kind: 'sent'; devices: number }
   | { kind: 'noDevice' }
   | { kind: 'rateLimited'; minutes: number }
+  | { kind: 'unconfigured' }
   | { kind: 'offline' }
   | { kind: 'failed' };
 
@@ -80,10 +81,18 @@ const SECONDS_PER_MINUTE = 60;
               [description]="rateLimitedDescription(result.minutes)"
             />
           }
+          @case ('unconfigured') {
+            <app-admin-alert
+              class="w-full"
+              kind="error"
+              title="The test notification could not be sent."
+              description="Notifications are not available right now. Try again later."
+            />
+          }
           @case ('offline') {
             <app-admin-offline-alert
               class="w-full"
-              description="The test was not sent. Try again when you're connected."
+              description="Try again when you're connected."
             />
           }
           @default {
@@ -135,7 +144,7 @@ export class TestNotification {
             }
           : answer.status === 'sent'
             ? { kind: 'sent', devices: answer.devices }
-            : { kind: 'noDevice' },
+            : { kind: answer.status },
       );
     } catch (error) {
       this.result.set({ kind: error instanceof ConvexOfflineError ? 'offline' : 'failed' });
