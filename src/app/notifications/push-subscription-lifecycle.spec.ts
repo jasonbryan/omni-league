@@ -43,9 +43,38 @@ function fakeSubscription(
   } as unknown as PushSubscription;
 }
 
+/** What the browser holds for the page, shared by the fakes the way the real registration is shared by SwPush and the container. */
+class FakeRegistration {
+  held: PushSubscription | null = null;
+  directUnsubscribes = 0;
+
+  constructor(private readonly log: string[]) {}
+
+  /** A `PushSubscription.unsubscribe()`: it clears the registration but does not reach `SwPush.subscription`. */
+  unsubscribeDirectly(): Promise<boolean> {
+    this.log.push('PushSubscription.unsubscribe');
+    this.directUnsubscribes++;
+    this.held = null;
+    return Promise.resolve(true);
+  }
+}
+
+class SwPushSubscriptions extends BehaviorSubject<PushSubscription | null> {
+  constructor(private readonly registration: FakeRegistration) {
+    super(null);
+  }
+
+  override next(value: PushSubscription | null): void {
+    this.registration.held = value;
+    super.next(value);
+  }
+}
+
+const never = <T>() => new Promise<T>(() => undefined);
+
 class FakeSwPush {
   isEnabled = true;
-  readonly subscription = new BehaviorSubject<PushSubscription | null>(null);
+  readonly subscription: SwPushSubscriptions;
   readonly pushSubscriptionChanges = new Subject<{
     oldSubscription: PushSubscription | null;
     newSubscription: PushSubscription | null;
@@ -56,11 +85,18 @@ class FakeSwPush {
   private releaseHeldRequest: (() => void) | null = null;
   unsubscribes = 0;
 
-  constructor(private readonly log: string[]) {}
+  constructor(
+    private readonly log: string[],
+    registration: FakeRegistration,
+    private readonly controlled: () => boolean,
+  ) {
+    this.subscription = new SwPushSubscriptions(registration);
+  }
 
   requestSubscription(options: { serverPublicKey: string }): Promise<PushSubscription> {
     this.log.push('SwPush.requestSubscription');
     this.requests.push(options);
+    if (!this.controlled()) return never();
     const next = this.nextSubscription;
     const answer = (): Promise<PushSubscription> => {
       if (next instanceof Error) return Promise.reject(next);
@@ -82,6 +118,7 @@ class FakeSwPush {
   unsubscribe(): Promise<void> {
     this.log.push('SwPush.unsubscribe');
     this.unsubscribes++;
+    if (!this.controlled()) return never();
     const answer = (): Promise<void> => {
       if (!this.subscription.value) return Promise.reject(new Error('Not subscribed'));
       this.subscription.next(null);
@@ -103,8 +140,34 @@ class FakePushDevice implements PushDevice {
   needsHomeScreenInstall = false;
   readonly permission = signal<DevicePermission>('granted');
   readonly controlled = signal(true);
+  readsFail = false;
+  private heldReads = 0;
+  private readonly releases: (() => void)[] = [];
+
+  constructor(private readonly registration: FakeRegistration) {}
+
   requestPermission(): Promise<NotificationPermission> {
     return Promise.resolve('granted');
+  }
+
+  /** The next `count` reads wait for `releaseReads()` and then answer with what the registration held when they began. */
+  holdNextReads(count = 1): void {
+    this.heldReads = count;
+  }
+
+  releaseReads(): void {
+    for (const release of this.releases.splice(0)) release();
+  }
+
+  subscription(): Promise<PushSubscription | null> {
+    if (this.readsFail) return Promise.reject(new Error('InvalidStateError'));
+    const { held } = this.registration;
+    const answer = held
+      ? { ...held, unsubscribe: () => this.registration.unsubscribeDirectly() }
+      : null;
+    if (this.heldReads === 0) return Promise.resolve(answer);
+    this.heldReads--;
+    return new Promise<void>((resolve) => this.releases.push(resolve)).then(() => answer);
   }
 }
 
@@ -116,12 +179,16 @@ describe('PushSubscriptionLifecycle', () => {
   let auth: FakeAuthClient;
   let convex: FakeConvexClient;
   let swPush: FakeSwPush;
+  let device: FakePushDevice;
+  let registration: FakeRegistration;
 
   beforeEach(() => {
     log = [];
     auth = new FakeAuthClient();
     convex = new FakeConvexClient();
-    swPush = new FakeSwPush(log);
+    registration = new FakeRegistration(log);
+    device = new FakePushDevice(registration);
+    swPush = new FakeSwPush(log, registration, () => device.controlled());
     const signOut = auth.signOut;
     Object.assign(auth, {
       signOut: () => {
@@ -142,7 +209,7 @@ describe('PushSubscriptionLifecycle', () => {
         provideFakeAuthClient(auth),
         { provide: CONVEX_CLIENT, useValue: convex },
         { provide: SwPush, useValue: swPush },
-        { provide: PUSH_DEVICE, useValue: new FakePushDevice() },
+        { provide: PUSH_DEVICE, useValue: device },
         provideRouter([
           { path: 'app/notifications', component: NotificationsPage },
           { path: 'app/account', component: AccountSettingsPage },
@@ -286,16 +353,76 @@ describe('PushSubscriptionLifecycle', () => {
       });
     }
 
-    it('does nothing without a browser subscription, or without a worker', async () => {
+    it('does nothing without a browser subscription', async () => {
       await signedIn();
       await convexAccepts();
-      expect(statusQueries()).toEqual([]);
 
+      expect(statusQueries()).toEqual([]);
+      expect(log).toEqual([]);
+    });
+
+    it('reads the subscription without a worker too, and unsubscribes it directly when the row is not the user’s', async () => {
       swPush.isEnabled = false;
       swPush.subscription.next(fakeSubscription(ENDPOINT));
+      await signedIn();
       await convexAccepts();
-      expect(statusQueries()).toEqual([]);
+      await answerStatus(false);
+
+      expect(log).toEqual(['PushSubscription.unsubscribe']);
       expect(swPush.unsubscribes).toBe(0);
+    });
+
+    describe('on a page no worker controls', () => {
+      beforeEach(() => {
+        device.controlled.set(false);
+      });
+
+      it('asks about the held subscription and unsubscribes it once, without subscribing, when the row is not the user’s', async () => {
+        registration.held = fakeSubscription(ENDPOINT);
+        await signedIn();
+        await convexAccepts();
+        expect(statusQueries().map((s) => s.args)).toEqual([{ endpoint: ENDPOINT }]);
+
+        await answerStatus(false);
+
+        expect(registration.directUnsubscribes).toBe(1);
+        expect(registration.held).toBeNull();
+        expect(swPush.unsubscribes).toBe(0);
+        expect(convex.calls).toEqual([]);
+      });
+
+      it('saves the same endpoint again once when the row is the user’s and the key is current', async () => {
+        registration.held = fakeSubscription(ENDPOINT);
+        await signedIn();
+        await convexAccepts();
+        await answerStatus(true);
+        await answerConfig();
+
+        expect(
+          callsTo('push:subscribe').map((c) => (c.args as { endpoint: string }).endpoint),
+        ).toEqual([ENDPOINT]);
+        expect(registration.directUnsubscribes).toBe(0);
+      });
+
+      for (const [title, options] of [
+        ['an old key', { key: OLD_KEY }],
+        ['a past expirationTime', { expirationTime: Date.now() - 1000 }],
+      ] as const) {
+        it(`changes nothing when the row is the user’s but has ${title}`, async () => {
+          registration.held = fakeSubscription(ENDPOINT, options);
+          await signedIn();
+          await convexAccepts();
+          await answerStatus(true);
+          await answerConfig();
+          await settleCalls();
+
+          expect(swPush.requests).toEqual([]);
+          expect(swPush.unsubscribes).toBe(0);
+          expect(registration.directUnsubscribes).toBe(0);
+          expect(convex.calls).toEqual([]);
+          expect(registration.held?.endpoint).toBe(ENDPOINT);
+        });
+      }
     });
   });
 
@@ -432,6 +559,22 @@ describe('PushSubscriptionLifecycle', () => {
       expect(callsTo('push:subscribe')).toEqual([]);
       expect(badge(page)).toBe('Off');
     });
+
+    it('shows Off when the browser refuses to subscribe again and removing the old row fails offline', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT, { key: OLD_KEY }));
+      swPush.nextSubscription = new Error('NotAllowedError');
+      const page = await openPage();
+
+      await answerStatus(true);
+      await answerConfig();
+      for (const call of callsTo('push:unsubscribe'))
+        call.reject(new ConvexOfflineError('offline'));
+      await flush();
+
+      expect(log).toEqual(['SwPush.unsubscribe', 'SwPush.requestSubscription', 'push:unsubscribe']);
+      expect(registration.directUnsubscribes).toBe(0);
+      expect(badge(page)).toBe('Off');
+    });
   });
 
   describe('sign-out', () => {
@@ -481,7 +624,10 @@ describe('PushSubscriptionLifecycle', () => {
     });
 
     /** Signs out while the check waits on a status query that never answers, past the bounded wait. */
-    async function signOutPastTheWait(button: HTMLButtonElement) {
+    async function signOutPastTheWait(
+      button: HTMLButtonElement,
+      browserUnsubscribe = 'SwPush.unsubscribe',
+    ) {
       vi.useFakeTimers();
       try {
         button.click();
@@ -494,7 +640,7 @@ describe('PushSubscriptionLifecycle', () => {
         vi.useRealTimers();
       }
       await flush();
-      expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
+      expect(log).toEqual(['push:unsubscribe', browserUnsubscribe, 'session ends']);
     }
 
     const signOutOutcome = () => log.slice(log.indexOf('session ends') + 1);
@@ -645,15 +791,175 @@ describe('PushSubscriptionLifecycle', () => {
       expect(TestBed.inject(Router).url).toBe('/');
     });
 
-    it('calls neither without a worker, and goes to /', async () => {
+    it('unsubscribes the held subscription directly without a worker, and goes to /', async () => {
       swPush.isEnabled = false;
       swPush.subscription.next(fakeSubscription(ENDPOINT));
       await signOutFromAccountSettings();
+      for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+      await flush();
 
-      expect(callsTo('push:unsubscribe')).toEqual([]);
+      expect(log).toEqual(['push:unsubscribe', 'PushSubscription.unsubscribe', 'session ends']);
       expect(swPush.unsubscribes).toBe(0);
-      expect(log).toEqual(['session ends']);
       expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('unsubscribes through SwPush on a controlled page, so the subscription stream emits null', async () => {
+      swPush.subscription.next(fakeSubscription(ENDPOINT));
+      const emitted: (string | undefined)[] = [];
+      const watch = swPush.subscription.subscribe((value) => emitted.push(value?.endpoint));
+      await signOutFromAccountSettings();
+      for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+      await flush();
+      watch.unsubscribe();
+
+      expect(log).toEqual(['push:unsubscribe', 'SwPush.unsubscribe', 'session ends']);
+      expect(emitted).toEqual([ENDPOINT, undefined]);
+      expect(registration.directUnsubscribes).toBe(0);
+    });
+
+    describe('with no clock moving', () => {
+      /** Fake timers that never advance past the current instant, so a wait the sign-out hides fails the test. */
+      async function settleWithoutTime() {
+        for (let i = 0; i < 10; i++) {
+          TestBed.tick();
+          await vi.advanceTimersByTimeAsync(0);
+        }
+      }
+
+      async function signOutWithoutTime(button: HTMLButtonElement) {
+        vi.useFakeTimers();
+        try {
+          button.click();
+          await settleWithoutTime();
+          for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+          await settleWithoutTime();
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+
+      async function failStatusQueries() {
+        for (const sub of statusQueries()) sub.fail(new Error('Sign in required'));
+        await flush();
+      }
+
+      it('unsubscribes the held subscription directly on a page no worker controls', async () => {
+        device.controlled.set(false);
+        registration.held = fakeSubscription(ENDPOINT);
+        const button = await openAccountSettings();
+        await failStatusQueries();
+
+        await signOutWithoutTime(button);
+
+        expect(log).toEqual(['push:unsubscribe', 'PushSubscription.unsubscribe', 'session ends']);
+        expect(callsTo('push:unsubscribe').map((c) => c.args)).toEqual([{ endpoint: ENDPOINT }]);
+        expect(registration.held).toBeNull();
+        expect(swPush.unsubscribes).toBe(0);
+        expect(TestBed.inject(Router).url).toBe('/');
+      });
+
+      for (const controlled of [true, false]) {
+        it(`only ends the session when there is no registration (controlled: ${controlled})`, async () => {
+          device.controlled.set(controlled);
+          const button = await openAccountSettings();
+
+          await signOutWithoutTime(button);
+
+          expect(log).toEqual(['session ends']);
+          expect(TestBed.inject(Router).url).toBe('/');
+        });
+      }
+
+      it('still ends the session when reading the subscription rejects', async () => {
+        registration.held = fakeSubscription(ENDPOINT);
+        const button = await openAccountSettings();
+        await failStatusQueries();
+        device.readsFail = true;
+
+        await signOutWithoutTime(button);
+
+        expect(log).toEqual(['session ends']);
+        expect(TestBed.inject(Router).url).toBe('/');
+      });
+
+      it('starts no status query for a check whose read finishes after sign-out', async () => {
+        device.controlled.set(false);
+        registration.held = fakeSubscription(ENDPOINT);
+        device.holdNextReads();
+        await signedIn();
+        const harness = await RouterTestingHarness.create('/app/account');
+        await convexAccepts();
+        const button = [...harness.routeNativeElement!.querySelectorAll('button')].find((b) =>
+          b.textContent?.includes('Sign out'),
+        )!;
+        expect(statusQueries()).toEqual([]);
+
+        vi.useFakeTimers();
+        try {
+          button.click();
+          await vi.advanceTimersByTimeAsync(SIGN_OUT_CHECK_WAIT_MS + 100);
+          for (const call of callsTo('push:unsubscribe')) call.resolve(null);
+          await vi.advanceTimersByTimeAsync(100);
+        } finally {
+          vi.useRealTimers();
+        }
+        device.releaseReads();
+        await flush();
+
+        expect(log).toEqual(['push:unsubscribe', 'PushSubscription.unsubscribe', 'session ends']);
+        expect(statusQueries()).toEqual([]);
+        expect(callsTo('push:subscribe')).toEqual([]);
+      });
+    });
+
+    describe('on a page no worker controls', () => {
+      beforeEach(() => {
+        device.controlled.set(false);
+      });
+
+      it('a late true status after the wait saves nothing', async () => {
+        registration.held = fakeSubscription(ENDPOINT);
+        const button = await openAccountSettings();
+        await signOutPastTheWait(button, 'PushSubscription.unsubscribe');
+
+        await answerStatus(true);
+        await answerConfig();
+
+        expect(signOutOutcome()).toEqual([]);
+        expect(callsTo('push:subscribe')).toEqual([]);
+        expect(swPush.requests).toEqual([]);
+      });
+
+      it('a late false status after the wait leaves the next user’s subscription alone', async () => {
+        registration.held = fakeSubscription(ENDPOINT);
+        const button = await openAccountSettings();
+        await signOutPastTheWait(button, 'PushSubscription.unsubscribe');
+        const [staleQuery] = statusQueries();
+
+        registration.held = fakeSubscription(NEW_ENDPOINT);
+        auth.emitSession({ id: 's2' });
+        await convexAccepts();
+        staleQuery.emit(false);
+        await flush();
+
+        expect(signOutOutcome()).toEqual([]);
+        expect(registration.held?.endpoint).toBe(NEW_ENDPOINT);
+        expect(statusQueries().map((s) => s.args)).toEqual([{ endpoint: NEW_ENDPOINT }]);
+      });
+
+      it('leaves the browser subscription alone when sign-out starts while the unsubscribe reads it', async () => {
+        registration.held = fakeSubscription(ENDPOINT);
+        const button = await openAccountSettings();
+        device.holdNextReads();
+        await answerStatus(false);
+
+        await signOutPastTheWait(button, 'PushSubscription.unsubscribe');
+        device.releaseReads();
+        await flush();
+
+        expect(log).toEqual(['push:unsubscribe', 'PushSubscription.unsubscribe', 'session ends']);
+        expect(registration.directUnsubscribes).toBe(1);
+      });
     });
   });
 });

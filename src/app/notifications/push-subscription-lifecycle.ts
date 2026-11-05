@@ -1,16 +1,13 @@
 import { DestroyRef, Injectable, inject } from '@angular/core';
 import { SwPush } from '@angular/service-worker';
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server';
-import type { Observable, Subscription } from 'rxjs';
 import {
   isAllowedPushEndpoint,
   unpaddedBase64UrlBytesOrNull,
 } from '../../../convex/lib/pushSubscription';
 import { AuthService } from '../core/auth/auth.service';
 import { CONVEX_CLIENT, api, injectMutation, type ConvexClientLike } from '../core/data/convex';
-
-/** SwPush emits nothing while no worker controls the page, so a read gives up rather than hold up sign-out. */
-export const SUBSCRIPTION_READ_TIMEOUT_MS = 2_000;
+import { PUSH_DEVICE } from './push-device';
 
 /** Offline, the running check's query pauses rather than fails, so sign-out waits for it only this long. */
 export const SIGN_OUT_CHECK_WAIT_MS = 3_000;
@@ -49,23 +46,6 @@ function queryOnce<Q extends FunctionReference<'query'>>(
   });
 }
 
-function firstWithin<T>(source: Observable<T>, ms: number): Promise<T | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const handle: { subscription?: Subscription } = {};
-    const settle = (value: T | null) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      handle.subscription?.unsubscribe();
-      resolve(value);
-    };
-    const timer = setTimeout(() => settle(null), ms);
-    handle.subscription = source.subscribe({ next: settle, error: () => settle(null) });
-    if (settled) handle.subscription.unsubscribe();
-  });
-}
-
 function sameBytes(a: ArrayBuffer, b: Uint8Array): boolean {
   const bytes = new Uint8Array(a);
   return bytes.length === b.length && bytes.every((byte, i) => byte === b[i]);
@@ -99,6 +79,7 @@ export class PushSubscriptionLifecycle {
   private readonly swPush = inject(SwPush, { optional: true });
   private readonly client = inject(CONVEX_CLIENT, { optional: true }) ?? null;
   private readonly auth = inject(AuthService);
+  private readonly device = inject(PUSH_DEVICE);
   private readonly save = injectMutation(api.push.subscribe);
   private readonly remove = injectMutation(api.push.unsubscribe);
   private queue: Promise<void> = Promise.resolve();
@@ -162,9 +143,7 @@ export class PushSubscriptionLifecycle {
   }
 
   private browserSubscription(): Promise<PushSubscription | null> {
-    const swPush = this.enabledSwPush();
-    if (!swPush) return Promise.resolve(null);
-    return firstWithin(swPush.subscription, SUBSCRIPTION_READ_TIMEOUT_MS);
+    return this.device.subscription().catch(() => null);
   }
 
   private async checkEndpoint(
@@ -185,7 +164,7 @@ export class PushSubscriptionLifecycle {
     if (this.signingOutSince(run)) return;
     if (!owned) {
       // Another user's row, or none: the next user gets nothing without turning notifications on.
-      await this.unsubscribeBrowser();
+      await this.unsubscribeBrowser(run);
       return;
     }
     const vapidPublicKey = await queryOnce(client, api.push.getConfig, {}).then(
@@ -212,8 +191,10 @@ export class PushSubscriptionLifecycle {
     vapidPublicKey: string | null,
   ): Promise<void> {
     const swPush = this.enabledSwPush();
-    if (!swPush || !vapidPublicKey || this.signingOutSince(run)) return;
-    await this.unsubscribeBrowser();
+    // requestSubscription never settles on an uncontrolled page; the next controlled load's check replaces it.
+    if (!swPush || !vapidPublicKey || !this.device.controlled() || this.signingOutSince(run))
+      return;
+    await this.unsubscribeBrowser(run);
     if (this.signingOutSince(run)) {
       await this.removeRow(oldEndpoint);
       return;
@@ -239,7 +220,15 @@ export class PushSubscriptionLifecycle {
     await this.remove.run({ endpoint }).catch(() => undefined);
   }
 
-  private async unsubscribeBrowser(): Promise<void> {
-    await this.swPush?.unsubscribe().catch(() => undefined);
+  // Only SwPush.unsubscribe() emits null for an open notifications page, and it never settles on an uncontrolled page.
+  private async unsubscribeBrowser(run?: number): Promise<void> {
+    const swPush = this.enabledSwPush();
+    if (swPush && this.device.controlled()) {
+      await swPush.unsubscribe().catch(() => undefined);
+      return;
+    }
+    const subscription = await this.browserSubscription();
+    if (run !== undefined && this.signingOutSince(run)) return;
+    await subscription?.unsubscribe().catch(() => undefined);
   }
 }
