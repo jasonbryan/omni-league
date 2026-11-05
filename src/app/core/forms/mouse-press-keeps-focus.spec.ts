@@ -11,6 +11,15 @@ import { MousePressKeepsFocus } from './mouse-press-keeps-focus';
 })
 class Host {}
 
+@Component({
+  imports: [MousePressKeepsFocus],
+  template: `
+    <input />
+    <button type="button" appMousePressKeepsFocus appTouchKeepsFocus>Show</button>
+  `,
+})
+class TouchHost {}
+
 describe('MousePressKeepsFocus', () => {
   let input: HTMLInputElement;
   let button: HTMLButtonElement;
@@ -69,6 +78,51 @@ describe('MousePressKeepsFocus', () => {
 
   it('does not carry a press released elsewhere over to a later keyboard click', () => {
     press('mouse');
+    click(0);
+    expect(document.activeElement).toBe(input);
+  });
+});
+
+describe('MousePressKeepsFocus with appTouchKeepsFocus', () => {
+  let input: HTMLInputElement;
+  let button: HTMLButtonElement;
+
+  beforeEach(async () => {
+    const fixture = TestBed.createComponent(TouchHost);
+    document.body.append(fixture.nativeElement as HTMLElement);
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    input = root.querySelector('input')!;
+    button = root.querySelector('button')!;
+    input.focus();
+  });
+
+  afterEach(() => document.body.replaceChildren());
+
+  function press(pointerType: string): MouseEvent {
+    const pointer = new Event('pointerdown', { bubbles: true });
+    Object.defineProperty(pointer, 'pointerType', { value: pointerType });
+    button.dispatchEvent(pointer);
+    const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    button.dispatchEvent(mousedown);
+    return mousedown;
+  }
+
+  const click = (detail = 1) =>
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail }));
+
+  it.each(['touch', 'pen', 'mouse'])(
+    'default-prevents a %s press, so focus stays in the field, and the click focuses the button',
+    (pointerType) => {
+      expect(press(pointerType).defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(input);
+      click();
+      expect(document.activeElement).toBe(button);
+    },
+  );
+
+  it('moves no focus on a keyboard click after a touch press that was released elsewhere', () => {
+    press('touch');
     click(0);
     expect(document.activeElement).toBe(input);
   });
