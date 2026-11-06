@@ -5,7 +5,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
-  effect,
+  afterRenderEffect,
   inject,
   input,
   signal,
@@ -24,6 +24,7 @@ import {
 } from '@ng-icons/lucide';
 import type { Id } from '../../../../convex/_generated/dataModel';
 import { api, injectAction, injectOnline } from '../../core/data/convex';
+import { MainFocusRecord } from '../../core/replaced-focus';
 import { Checkbox } from '../../ui/checkbox';
 import { AdminAlert } from './admin-alert';
 import { AdminOfflineAlert } from './admin-offline-alert';
@@ -178,8 +179,9 @@ const TEXTAREA =
       <section
         id="invite"
         #section
+        tabindex="-1"
         aria-labelledby="invite-heading"
-        class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10"
+        class="overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10 focus:outline-none"
       >
         <div
           class="flex min-h-13 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 md:px-5"
@@ -449,6 +451,7 @@ const TEXTAREA =
         } @else if (leaguesFailed()) {
           <div class="px-4 py-4 md:px-5">
             <app-admin-alert
+              #leaguesAlert
               kind="error"
               title="The leagues could not be loaded."
               description="Check your connection and try again."
@@ -497,37 +500,30 @@ export class StaffInvitePanel {
   protected readonly created = signal<CreatedInvite | null>(null);
   protected readonly copied = signal<CopyOutcome>(null);
 
-  private readonly pendingFocusRequest = signal<{ readonly from: Element | null } | null>(null);
-
   private readonly section = viewChild<ElementRef<HTMLElement>>('section');
   private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('email');
   private readonly leagueBoxes = viewChildren(Checkbox);
   private readonly failureAlert = viewChild<AdminAlert | AdminOfflineAlert>('failureAlert');
   private readonly linkHeading = viewChild<ElementRef<HTMLElement>>('linkHeading');
+  private readonly leaguesAlertHost = viewChild<unknown, ElementRef<HTMLElement>>('leaguesAlert', {
+    read: ElementRef,
+  });
+  private readonly focusRecord = inject(MainFocusRecord);
 
   constructor() {
-    effect(() => {
-      const request = this.pendingFocusRequest();
-      if (!request) return;
-      const email = this.emailInput();
-      if (email) {
-        this.pendingFocusRequest.set(null);
-        // Focus moved since the press (Revoke, the menu sheet): leave it there.
-        if (this.document.activeElement !== request.from) return;
-        // Not `preventScroll`: the form grew the section after the jump, so Email may be below it.
-        email.nativeElement.focus();
-      } else if (this.leaguesFailed()) {
-        // The leagues did not load, so there is no form to focus; do not steal focus later.
-        this.pendingFocusRequest.set(null);
+    let shownAlert: HTMLElement | undefined;
+    afterRenderEffect(() => {
+      const host = this.leaguesAlertHost()?.nativeElement;
+      if (host) {
+        shownAlert = host;
+        return;
+      }
+      const heldFocus = shownAlert && this.focusRecord.lastIsInside(shownAlert);
+      shownAlert = undefined;
+      if (heldFocus && this.focusRecord.focusFellWithRemovedElement()) {
+        this.section()?.nativeElement.focus({ preventScroll: true });
       }
     });
-  }
-
-  /** While the leagues load there is no form yet, so the request waits and Email takes focus when the form renders. */
-  focusFirst(): void {
-    const target = this.emailInput() ?? this.linkHeading();
-    if (target) target.nativeElement.focus({ preventScroll: true });
-    else this.pendingFocusRequest.set({ from: this.document.activeElement });
   }
 
   scrollTarget(): HTMLElement | undefined {
