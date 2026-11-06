@@ -16,7 +16,7 @@ import { OUTLINE_BUTTON } from './button-classes';
 /**
  * The Leagues tile reads the organization's published and draft counters, which hold past the 200 rows the league list stops at. The setup list hides
  * once any league is published (by the counter), and is not drawn while the counter loads, so an established organization never sees it flash.
- * The Staff count is the organization's counter too, since the member list stops at 200 rows.
+ * The Staff tile reads the organization's `staffCount` and `pendingInviteCount`, since the member list and the pending-invite list stop at 200 rows.
  */
 @Component({
   selector: 'app-admin-overview',
@@ -252,7 +252,7 @@ export class AdminOverview {
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
 
-  private readonly invites = injectQuery(api.invites.listPending, () => {
+  private readonly pendingInvites = injectQuery(api.invites.pendingCount, () => {
     const organization = this.context.organization();
     return organization ? { organizationId: organization.organizationId } : skipToken;
   });
@@ -262,13 +262,13 @@ export class AdminOverview {
     const staff = this.staff.value();
     if (staff === undefined) return null;
     const count = String(staff);
-    if (this.invites.error()) return { count, note: 'Pending invites could not be loaded' };
-    const invites = this.invites.value();
-    if (invites === undefined) return null;
+    if (this.pendingInvites.error()) return { count, note: 'Pending invites could not be loaded' };
+    const pending = this.pendingInvites.value();
+    if (pending === undefined) return null;
     const note =
-      invites.length === 0
+      pending === 0
         ? 'No pending invites'
-        : `${invites.length} pending ${invites.length === 1 ? 'invite' : 'invites'}`;
+        : `${pending} pending ${pending === 1 ? 'invite' : 'invites'}`;
     return { count, note };
   });
 
