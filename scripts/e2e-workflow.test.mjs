@@ -4,10 +4,17 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { PROBLEMS_FILE, PRODUCTION_RUNS } from './e2e-production-check.mjs';
 
 const SETUP_MINUTES = 2;
 const SPARE_MINUTES = 1;
+const SHARDS = 10;
+const SHARD_NUMBERS = Array.from({ length: SHARDS }, (_, index) => index + 1);
+const GLOBAL_TIMEOUT_MS = 1_800_000;
+const E2E_SETUP_MINUTES = 13;
+const E2E_MARGIN_MINUTES = 2;
+const RESULTS = ['failure', 'cancelled', 'success', 'skipped'];
 
 const workflow = readFileSync(
   join(import.meta.dirname, '..', '.github', 'workflows', 'e2e.yml'),
@@ -75,13 +82,37 @@ describe('the nightly full run', () => {
     assert.deepEqual(triggers, ['schedule', 'workflow_dispatch']);
   });
 
-  it('opens the issue in a job after both e2e jobs, only for a scheduled run that failed', () => {
+  it('opens the issue in a job after both e2e jobs, for a scheduled run that failed or was cancelled', () => {
     const issue = job('nightly-issue');
     assert.match(issue, /^ {4}needs: \[e2e, e2e-production\]$/m);
-    assert.match(
-      issue,
-      /^ {4}if: \$\{\{ !cancelled\(\) && \(needs\.e2e\.result == 'failure' \|\| needs\.e2e-production\.result == 'failure'\) && github\.event_name == 'schedule' \}\}$/m,
-    );
+    const condition = /^ {4}if: (.+)$/m.exec(issue)?.[1] ?? '';
+    assert.match(condition, /^\$\{\{ always\(\) && /, 'a timed-out job concludes cancelled');
+    const holds = (e2e, production, event = 'schedule') => {
+      const script = condition
+        .replace(/^\$\{\{ | \}\}$/g, '')
+        .replaceAll('needs.e2e-production.result', 'production')
+        .replaceAll('needs.e2e.result', 'e2e')
+        .replaceAll('github.event_name', 'event')
+        .replaceAll('always()', 'true')
+        .replaceAll('==', '===');
+      assert.match(script.replace(/'[a-z_]+'/g, ''), /^[\s&|()=a-z0-9!]*$/, script);
+      return runInNewContext(script, { e2e, production, event });
+    };
+    for (const e2e of RESULTS) {
+      for (const production of RESULTS) {
+        const unfinished = ['failure', 'cancelled'];
+        assert.equal(
+          holds(e2e, production),
+          unfinished.includes(e2e) || unfinished.includes(production),
+          `${e2e} and ${production}`,
+        );
+        assert.equal(
+          holds(e2e, production, 'workflow_dispatch'),
+          false,
+          `dispatch ${e2e} ${production}`,
+        );
+      }
+    }
   });
 
   it('gives the issue job issues: write and nothing else, with the workflow token only', () => {
@@ -118,14 +149,38 @@ describe('the nightly full run', () => {
       step?.condition,
       "${{ !cancelled() && github.event_name == 'schedule' && steps.e2e.outcome == 'failure' }}",
     );
-    assert.match(job('e2e'), /e2e_failures: \$\{\{ steps\.failures\.outputs\.failures \}\}/);
-    assert.match(
-      job('nightly-issue'),
-      /^ {6}E2E_FAILURES: \$\{\{ needs\.e2e\.outputs\.e2e_failures \}\}$/m,
-    );
+    for (const shard of SHARD_NUMBERS) {
+      assert.match(
+        job('e2e'),
+        new RegExp(
+          `^ {6}e2e_failures_${shard}: \\$\\{\\{ matrix\\.shard == ${shard} && steps\\.failures\\.outputs\\.failures \\|\\| '' \\}\\}$`,
+          'm',
+        ),
+        `e2e_failures_${shard}`,
+      );
+      assert.match(
+        job('nightly-issue'),
+        new RegExp(
+          `^ {6}E2E_FAILURES_${shard}: \\$\\{\\{ needs\\.e2e\\.outputs\\.e2e_failures_${shard} \\}\\}$`,
+          'm',
+        ),
+        `E2E_FAILURES_${shard}`,
+      );
+    }
     assert.match(
       job('nightly-issue'),
       /^ {6}PRODUCTION_FAILURES: \$\{\{ needs\.e2e-production\.outputs\.e2e_failures \}\}$/m,
+    );
+  });
+
+  it('feeds the issue step the shard count and both job results from the workflow', () => {
+    const issue = job('nightly-issue');
+    assert.match(issue, new RegExp(`^ {6}E2E_SHARDS: ${SHARDS}$`, 'm'), 'the shard count');
+    assert.match(issue, /^ {6}E2E_RESULT: \$\{\{ needs\.e2e\.result \}\}$/m, 'the e2e result');
+    assert.match(
+      issue,
+      /^ {6}PRODUCTION_RESULT: \$\{\{ needs\.e2e-production\.result \}\}$/m,
+      'the e2e-production result',
     );
   });
 });
@@ -302,29 +357,86 @@ describe('the e2e-production job', () => {
 });
 
 describe('the e2e job', () => {
-  const names = e2eSteps().map((step) => step.name);
+  const steps = e2eSteps();
+  const names = steps.map((step) => step.name);
+  const step = (name) => {
+    const found = steps.find((candidate) => candidate.name === name);
+    assert.ok(found, `step ${name} not found in ${names.join(', ')}`);
+    return found;
+  };
 
-  it('runs every spec, with no selection', () => {
-    assert.ok(!names.includes('e2e specs'), names.join(', '));
-    const e2e = /^ {6}- name: e2e\n([\s\S]*?)(?=^ {6}- name:)/m.exec(workflow)?.[1] ?? '';
-    assert.match(e2e, /^ {12}npm run e2e$/m);
+  it(`is ${SHARDS} shards that all run to the end`, () => {
+    const strategy = /^ {4}strategy:\n((?: {6}.*\n)+)/m.exec(job('e2e'))?.[1] ?? '';
+    assert.match(strategy, /^ {6}fail-fast: false$/m);
+    const matrix = /^ {8}shard: \[([\d, ]+)\]$/m.exec(strategy)?.[1] ?? '';
+    assert.deepEqual(matrix.split(',').map(Number), SHARD_NUMBERS);
   });
 
-  it('runs only webkit-mobile on a WebKit dispatch, and the plain command otherwise', () => {
-    const run = e2eSteps().find((candidate) => candidate.name === 'e2e')?.run ?? '';
+  it('runs every spec, split across the shards, with no selection', () => {
+    assert.ok(!names.includes('e2e specs'), names.join(', '));
+    const run = step('e2e').run ?? '';
+    assert.doesNotMatch(run, /\.spec\.ts|--grep/);
+    assert.equal(step('e2e').env.SHARD, '${{ matrix.shard }}');
+  });
+
+  it('runs one shard of the suite under a global timeout, and only webkit-mobile on a WebKit dispatch', () => {
+    const flags = `--shard="$SHARD/${SHARDS}" --global-timeout=${GLOBAL_TIMEOUT_MS}`;
     assert.equal(
-      run,
-      'if [ "$E2E_WEBKIT" = "1" ]; then\n  npm run e2e -- --project=webkit-mobile\nelse\n  npm run e2e\nfi\n',
+      step('e2e').run,
+      `if [ "$E2E_WEBKIT" = "1" ]; then\n  npm run e2e -- --project=webkit-mobile ${flags}\nelse\n  npm run e2e -- ${flags}\nfi\n`,
+    );
+  });
+
+  it('keeps the job limit at 45 minutes, with room after the global timeout for setup and the report', () => {
+    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e'))?.[1]);
+    assert.equal(limit, 45);
+    const globalMinutes = GLOBAL_TIMEOUT_MS / 60_000;
+    assert.ok(
+      globalMinutes + E2E_SETUP_MINUTES + E2E_MARGIN_MINUTES <= limit,
+      `${globalMinutes} minutes of tests, ${E2E_SETUP_MINUTES} of setup and ${E2E_MARGIN_MINUTES} spare do not fit in ${limit}`,
     );
   });
 
   it('runs e2e after a drift failure, but only once the backend is up', () => {
-    const step = e2eSteps().find((candidate) => candidate.name === 'e2e');
-    assert.equal(step?.condition, "${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}");
+    assert.equal(
+      step('e2e').condition,
+      "${{ !cancelled() && steps.e2e-backend.outcome == 'success' }}",
+    );
   });
 
   it('adds WebKit only on a dispatch that asks for it', () => {
     assert.match(job('e2e'), /E2E_WEBKIT: \$\{\{ inputs\.webkit == true && '1' \|\| '0' \}\}/);
+  });
+
+  it('uploads each shard under its own artifact name', () => {
+    const upload = step('e2e report');
+    assert.match(upload.block, /^ {10}name: e2e-report-\$\{\{ matrix\.shard \}\}$/m);
+  });
+
+  it('ends with a done step that marks the shard unless the job was cancelled', () => {
+    assert.equal(names.at(-1), 'done');
+    assert.equal(step('done').condition, '${{ !cancelled() }}');
+    assert.equal(step('done').id, 'done');
+    assert.equal(step('done').run, 'echo \'done=1\' >> "$GITHUB_OUTPUT"');
+    for (const shard of SHARD_NUMBERS) {
+      assert.match(
+        job('e2e'),
+        new RegExp(
+          `^ {6}e2e_done_${shard}: \\$\\{\\{ matrix\\.shard == ${shard} && steps\\.done\\.outputs\\.done \\|\\| '' \\}\\}$`,
+          'm',
+        ),
+        `e2e_done_${shard}`,
+      );
+      assert.match(
+        job('nightly-issue'),
+        new RegExp(
+          `^ {6}E2E_DONE_${shard}: \\$\\{\\{ needs\\.e2e\\.outputs\\.e2e_done_${shard} \\}\\}$`,
+          'm',
+        ),
+        `E2E_DONE_${shard}`,
+      );
+    }
+    assert.doesNotMatch(job('e2e'), new RegExp(`e2e_(?:failures|done)_${SHARDS + 1}:`));
   });
 });
 
@@ -361,6 +473,10 @@ describe('the nightly issue step', () => {
           RUN_URL: 'https://github.com/o/r/actions/runs/7',
           COMMIT: 'abcdef0123456789',
           ISSUE_TITLE: 'Nightly e2e failed on main',
+          E2E_RESULT: 'failure',
+          PRODUCTION_RESULT: 'success',
+          E2E_SHARDS: String(SHARDS),
+          ...Object.fromEntries(SHARD_NUMBERS.map((shard) => [`E2E_DONE_${shard}`, '1'])),
           ...env,
         },
       });
@@ -373,7 +489,7 @@ describe('the nightly issue step', () => {
 
   it('opens a type:bug issue with the failing tests and a run link', { skip }, () => {
     const calls = runIssueStep({
-      E2E_FAILURES: JSON.stringify(['chromium-desktop: e2e/a.spec.ts:3: boom']),
+      E2E_FAILURES_1: JSON.stringify(['chromium-desktop: e2e/a.spec.ts:3: boom']),
     });
     assert.match(calls, /ARGS: \[issue\] \[create\] \[--title\] \[Nightly e2e failed on main\]/);
     assert.match(calls, /\[--label\] \[type:bug\] \[--label\] \[status:ready\]/);
@@ -387,7 +503,7 @@ describe('the nightly issue step', () => {
     { skip },
     () => {
       const calls = runIssueStep({
-        E2E_FAILURES: JSON.stringify([
+        E2E_FAILURES_1: JSON.stringify([
           'chromium-desktop: e2e/a.spec.ts:3: ping @owner about #12 `x`',
         ]),
       });
@@ -408,21 +524,22 @@ describe('the nightly issue step', () => {
     assert.match(calls, /bang/);
   });
 
-  it('lists the failures of both e2e jobs in one comment', { skip }, () => {
+  it('lists the failures of every shard and of e2e-production in one comment', { skip }, () => {
     const calls = runIssueStep({
-      E2E_FAILURES: JSON.stringify(['chromium-desktop: e2e/a.spec.ts:3: boom']),
+      E2E_FAILURES_1: JSON.stringify(['chromium-desktop: e2e/a.spec.ts:3: boom']),
+      E2E_FAILURES_3: JSON.stringify(['chromium-mobile: e2e/b.spec.ts:5: crash']),
       PRODUCTION_FAILURES: JSON.stringify(['chromium-mobile: e2e/pwa.spec.ts:120: offline']),
     });
     assert.match(
       calls,
-      /- `chromium-desktop: e2e\/a\.spec\.ts:3: boom`\n- `chromium-mobile: e2e\/pwa\.spec\.ts:120: offline`/,
+      /- `chromium-desktop: e2e\/a\.spec\.ts:3: boom`\n- `chromium-mobile: e2e\/b\.spec\.ts:5: crash`\n- `chromium-mobile: e2e\/pwa\.spec\.ts:120: offline`/,
     );
   });
 
-  it("keeps one job's list when the other is empty or unreadable", { skip }, () => {
+  it(`keeps one list when the other ${SHARDS} shards are empty or unreadable`, { skip }, () => {
     for (const other of ['', '[]', 'not json', '{"a":1}']) {
       const calls = runIssueStep({
-        E2E_FAILURES: other,
+        ...Object.fromEntries(SHARD_NUMBERS.map((shard) => [`E2E_FAILURES_${shard}`, other])),
         PRODUCTION_FAILURES: JSON.stringify(['chromium-mobile: e2e/pwa-update.spec.ts:4: update']),
       });
       assert.match(calls, /- `chromium-mobile: e2e\/pwa-update\.spec\.ts:4: update`/, other);
@@ -432,11 +549,143 @@ describe('the nightly issue step', () => {
 
   it('says no failing test was recorded when the list is empty or unreadable', { skip }, () => {
     for (const failures of ['[]', '', 'not json']) {
-      const calls = runIssueStep({ E2E_FAILURES: failures, PRODUCTION_FAILURES: failures });
+      const calls = runIssueStep({ E2E_FAILURES_2: failures, PRODUCTION_FAILURES: failures });
       assert.match(calls, /\[create\]/, failures);
       assert.match(calls, /No failing test was recorded/, failures);
       assert.match(calls, /Run: https:\/\/github\.com\/o\/r\/actions\/runs\/7/, failures);
     }
+  });
+
+  const firstLine = (calls) => /\[--body\] \[([^\n]*)/.exec(calls)?.[1];
+  const tests = (count, prefix) =>
+    Array.from(
+      { length: count },
+      (_, index) => `chromium-mobile: e2e/${prefix}.spec.ts:${index + 1}: t`,
+    );
+
+  it('says FAIL and names no shard when every shard finished', { skip }, () => {
+    const calls = runIssueStep({ E2E_FAILURES_2: JSON.stringify(tests(1, 'a')) });
+    assert.equal(firstLine(calls), 'Nightly e2e: FAIL (main abcdef0)');
+    assert.doesNotMatch(calls, /did not finish/);
+  });
+
+  it(
+    'says CANCELLED when e2e was cancelled, and names each shard with no done marker',
+    { skip },
+    () => {
+      const calls = runIssueStep({
+        E2E_RESULT: 'cancelled',
+        E2E_DONE_2: '',
+        E2E_DONE_4: '',
+        E2E_FAILURES_1: JSON.stringify(tests(1, 'a')),
+      });
+      assert.equal(firstLine(calls), 'Nightly e2e: CANCELLED (main abcdef0)');
+      assert.match(calls, new RegExp(`- \`e2e\` shard 2 of ${SHARDS} did not finish`));
+      assert.match(calls, new RegExp(`- \`e2e\` shard 4 of ${SHARDS} did not finish`));
+      assert.doesNotMatch(calls, /shard [13] of/);
+      assert.match(calls, /- `chromium-mobile: e2e\/a\.spec\.ts:1: t`/);
+    },
+  );
+
+  it(
+    'says CANCELLED and names the shard when one shard failed and another never finished',
+    { skip },
+    () => {
+      const calls = runIssueStep({
+        E2E_RESULT: 'failure',
+        E2E_DONE_3: '',
+        E2E_FAILURES_1: JSON.stringify(tests(2, 'a')),
+      });
+      assert.equal(firstLine(calls), 'Nightly e2e: CANCELLED (main abcdef0)');
+      assert.match(calls, new RegExp(`- \`e2e\` shard 3 of ${SHARDS} did not finish`));
+      assert.match(calls, /a\.spec\.ts:2: t/);
+    },
+  );
+
+  it(
+    'says CANCELLED for a cancelled e2e-production, with e2e failed or cancelled',
+    { skip },
+    () => {
+      for (const e2e of ['failure', 'cancelled']) {
+        const calls = runIssueStep({ E2E_RESULT: e2e, PRODUCTION_RESULT: 'cancelled' });
+        assert.equal(firstLine(calls), 'Nightly e2e: CANCELLED (main abcdef0)', e2e);
+        assert.match(calls, /- `e2e-production` did not finish/, e2e);
+        assert.doesNotMatch(calls, /`e2e` shard/, e2e);
+      }
+    },
+  );
+
+  it(
+    'says CANCELLED when e2e failed and e2e-production was cancelled, or the reverse',
+    { skip },
+    () => {
+      const failed = runIssueStep({
+        E2E_RESULT: 'failure',
+        PRODUCTION_RESULT: 'cancelled',
+        E2E_FAILURES_1: JSON.stringify(tests(1, 'a')),
+      });
+      assert.equal(firstLine(failed), 'Nightly e2e: CANCELLED (main abcdef0)');
+      const reverse = runIssueStep({
+        E2E_RESULT: 'cancelled',
+        PRODUCTION_RESULT: 'failure',
+        PRODUCTION_FAILURES: JSON.stringify(tests(1, 'p')),
+        ...Object.fromEntries(SHARD_NUMBERS.map((shard) => [`E2E_DONE_${shard}`, ''])),
+      });
+      assert.equal(firstLine(reverse), 'Nightly e2e: CANCELLED (main abcdef0)');
+      assert.match(reverse, /p\.spec\.ts:1: t/);
+    },
+  );
+
+  it('names no shard when e2e was skipped', { skip }, () => {
+    const calls = runIssueStep({
+      E2E_RESULT: 'skipped',
+      PRODUCTION_RESULT: 'failure',
+      PRODUCTION_FAILURES: JSON.stringify(tests(1, 'p')),
+      ...Object.fromEntries(SHARD_NUMBERS.map((shard) => [`E2E_DONE_${shard}`, ''])),
+    });
+    assert.equal(firstLine(calls), 'Nightly e2e: FAIL (main abcdef0)');
+    assert.doesNotMatch(calls, /did not finish/);
+  });
+
+  it(
+    'lists 30 tests and one "and <total> more" line for a night that fails in every shard',
+    { skip },
+    () => {
+      const legs = Object.fromEntries(
+        SHARD_NUMBERS.map((shard) => [
+          `E2E_FAILURES_${shard}`,
+          JSON.stringify([...tests(30, `leg${shard}`), 'and 5 more']),
+        ]),
+      );
+      const calls = runIssueStep(legs);
+      assert.equal(calls.match(/^- `chromium-mobile: /gm)?.length, 30);
+      const total = SHARDS * 5 + (SHARDS * 30 - 30);
+      assert.equal(total, 320);
+      assert.equal(calls.match(/^- `and \d+ more`\]?$/gm)?.length, 1);
+      assert.match(calls, /^- `and 320 more`\]?$/m);
+    },
+  );
+
+  it('adds no "and <total> more" line when nothing is over the cap', { skip }, () => {
+    const calls = runIssueStep({
+      E2E_FAILURES_1: JSON.stringify(tests(20, 'a')),
+      E2E_FAILURES_2: JSON.stringify(tests(10, 'b')),
+    });
+    assert.equal(calls.match(/^- `chromium-mobile: /gm)?.length, 30);
+    assert.doesNotMatch(calls, / more`/);
+  });
+
+  it('keeps every expected tests and run error line when it caps the list', { skip }, () => {
+    const calls = runIssueStep({
+      E2E_FAILURES_1: JSON.stringify([...tests(40, 'a'), 'run error: Timed out waiting 1800s']),
+      E2E_FAILURES_2: JSON.stringify(['run error: webServer failed']),
+      PRODUCTION_FAILURES: JSON.stringify(['expected tests: pwa.spec.ts listed 9, expected 10']),
+    });
+    assert.equal(calls.match(/^- `chromium-mobile: /gm)?.length, 30);
+    assert.match(calls, /^- `and 10 more`$/m);
+    assert.match(calls, /^- `run error: Timed out waiting 1800s`\]?$/m);
+    assert.match(calls, /^- `run error: webServer failed`\]?$/m);
+    assert.match(calls, /^- `expected tests: pwa\.spec\.ts listed 9, expected 10`$/m);
   });
 });
 
@@ -550,5 +799,81 @@ describe('skipping a quiet night', () => {
       assert.equal(run.outputs, 'skip=false\n', JSON.stringify(lookup));
       assert.doesNotMatch(run.stdout, /::notice::/);
     }
+  });
+});
+
+describe('a shard that reaches the global timeout', () => {
+  const steps = e2eSteps();
+  const found = (name) => steps.find((step) => step.name === name);
+
+  it('still uploads its report after a failed e2e step, and before it is marked done', () => {
+    assert.equal(
+      found('e2e report')?.condition,
+      "${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}",
+    );
+    const names = steps.map((step) => step.name);
+    assert.ok(names.indexOf('e2e report') < names.indexOf('done'), names.join(', '));
+  });
+
+  it('leaves the e2e step to fail by itself, with no continue-on-error to hide it', () => {
+    assert.doesNotMatch(found('e2e')?.block ?? '', /continue-on-error/);
+  });
+
+  it('keeps the global timeout shorter than the job limit by the setup and report budget', () => {
+    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e'))?.[1]);
+    const globalMs = Number(/--global-timeout=(\d+)/.exec(found('e2e')?.run ?? '')?.[1]);
+    assert.equal(globalMs, GLOBAL_TIMEOUT_MS);
+    assert.ok(globalMs < limit * 60_000);
+  });
+});
+
+describe('the sharded nightly in the docs', () => {
+  const read = (...path) => readFileSync(join(import.meta.dirname, '..', ...path), 'utf8');
+  const ci = read('docs', 'process', 'ci.md');
+  const adr = read('docs', 'decisions', '0009-ci-pipeline.md');
+  const amendment = 'Amendment: sharded nightly e2e and a reported cancel';
+
+  it('amends the CI pipeline decision in a header line and in a section', () => {
+    assert.match(adr, new RegExp(`^- \\*\\*Amended:\\*\\* 2026-11-05 .*"${amendment}`, 'm'));
+    assert.match(adr, new RegExp(`^## ${amendment} \\(2026-11-05\\)$`, 'm'));
+  });
+
+  it('defines the term Shard in the glossary', () => {
+    assert.match(read('docs', 'glossary.md'), /^- \*\*Shard:\*\* /m);
+  });
+
+  it('names the sharded e2e command and the per-shard artifact in ci.md', () => {
+    assert.ok(
+      ci.includes(`npm run e2e -- --shard=<n>/${SHARDS} --global-timeout=${GLOBAL_TIMEOUT_MS}`),
+    );
+    const reportRow = ci.split('\n').find((line) => line.startsWith('| `e2e report`'));
+    assert.match(reportRow ?? '', /`e2e-report-<n>`/);
+    const inventoryRow = ci
+      .split('\n')
+      .find((line) => line.startsWith('| `actions/upload-artifact`'));
+    assert.match(inventoryRow ?? '', /`e2e-report-<n>`/);
+  });
+
+  it('records the shard runs, and names the re-shard trigger and the browser cache decision in ci.md', () => {
+    for (const run of ['42126470169', '42130571352', '42135507342']) {
+      assert.ok(ci.includes(`actions/runs/${run}`), run);
+    }
+    for (const leadIn of [
+      'Re-shard trigger',
+      'Why there is no browser cache',
+      'Why shards are uneven',
+    ]) {
+      assert.ok(ci.includes(`**${leadIn}.**`), leadIn);
+    }
+    assert.ok(ci.includes('`run error: Timed out waiting`'), 'the line the trigger reads');
+  });
+
+  it('gives the batch run fallback the measured nightly runner minutes, not the one-job 25 minutes', () => {
+    const measured =
+      /^\| Nightly full run on `main`, sharded, measured .*?\*\*(\d+) minutes\*\*/m.exec(ci)?.[1];
+    assert.ok(measured, 'the measured row of ci.md');
+    const devCycle = read('docs', 'process', 'dev-cycle.md');
+    assert.doesNotMatch(devCycle, /about 25 CI minutes/);
+    assert.ok(devCycle.includes(`${measured} runner minutes`), `${measured} runner minutes`);
   });
 });

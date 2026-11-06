@@ -1,0 +1,201 @@
+{
+  "config": {},
+  "suites": [
+    {
+      "title": "accept-invite.spec.ts",
+      "file": "accept-invite.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "signs up with the invited email, accepts, and holds the league organizer role for its league only; the token reaches no URL",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-mobile",
+              "projectName": "chromium-mobile",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5810,
+                  "errors": [],
+                  "retry": 0,
+                  "startTime": "2026-11-05T22:53:51.939Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d1c0a7095d2497e79d34-62d56216bd3f838fcb18",
+          "file": "accept-invite.spec.ts",
+          "line": 104,
+          "column": 7
+        },
+        {
+          "title": "signs up with the invited email, accepts, and holds the league organizer role for its league only; the token reaches no URL",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "d1c0a7095d2497e79d34-adbdc66e9e13f9050bab",
+          "file": "accept-invite.spec.ts",
+          "line": 104,
+          "column": 7
+        }
+      ]
+    },
+    {
+      "title": "account-settings.spec.ts",
+      "file": "account-settings.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "shows the title, the h1, the name and email, and Sign out",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-mobile",
+              "projectName": "chromium-mobile",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 1,
+                  "status": "passed",
+                  "duration": 1876,
+                  "errors": [],
+                  "retry": 0,
+                  "startTime": "2026-11-05T22:53:51.939Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5c01cc71bc571b99a628-6a1c4c3d27e0b3feff49",
+          "file": "account-settings.spec.ts",
+          "line": 79,
+          "column": 7
+        },
+        {
+          "title": "shows the title, the h1, the name and email, and Sign out",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "5c01cc71bc571b99a628-d9950f0bb01465f223c5",
+          "file": "account-settings.spec.ts",
+          "line": 79,
+          "column": 7
+        }
+      ]
+    },
+    {
+      "title": "after-sign-in.spec.ts",
+      "file": "after-sign-in.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "an org admin sees their organization with a way to manage it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-mobile",
+              "projectName": "chromium-mobile",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 2,
+                  "status": "passed",
+                  "duration": 3880,
+                  "errors": [],
+                  "retry": 0,
+                  "startTime": "2026-11-05T22:53:51.937Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0bf644046304b370c34d-8ceb74435519a45fc562",
+          "file": "after-sign-in.spec.ts",
+          "line": 189,
+          "column": 9
+        },
+        {
+          "title": "an org admin sees their organization with a way to manage it",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "0bf644046304b370c34d-753a76ed0a360e6a0e0f",
+          "file": "after-sign-in.spec.ts",
+          "line": 189,
+          "column": 9
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "message": "Timed out waiting 60s for the test suite to run"
+    },
+    {
+      "message": "Timed out waiting 60s for the teardown for test suite to run"
+    }
+  ],
+  "stats": {
+    "startTime": "2026-11-05T22:53:47.681Z",
+    "duration": 60001.913,
+    "expected": 134,
+    "skipped": 1611,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

@@ -233,7 +233,7 @@ The **batch SHA** is the SHA of the last green batch run. It covers a `main` SHA
 
 Merges continue while a run is in progress; a PR merged during the run belongs to the next batch.
 
-**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git fetch origin main`, `git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 25 CI minutes, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check runs on a `main` SHA that the batch SHA covers ([batch SHA rule](#batch-run)). The nightly `E2E` run stays as the backstop.
+**How it runs.** By default, a local `npm run e2e` in a worktree detached at `origin/main` (`git fetch origin main`, `git worktree add --detach <path> origin/main`, then `npm ci`), under the machine lock. When the local run cannot complete, the fallback is `gh workflow run E2E --ref main` (about 21 minutes of wall clock and 126 runner minutes over 11 jobs, none billed on a public repository, [CI, Minutes](ci.md#minutes)). The orchestrator runs these commands itself, as it watches `ci`, and writes no code. The deployer's staging check runs on a `main` SHA that the batch SHA covers ([batch SHA rule](#batch-run)). The nightly `E2E` run stays as the backstop.
 
 **On failure.** The orchestrator re-runs the failing specs once. A spec that passes on the re-run is flaky: the batch counts as `PASS`, and a `type:bug` issue records the flaky test. A spec that fails twice is a regression:
 
