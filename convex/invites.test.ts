@@ -154,7 +154,6 @@ async function addStaff(
   return { authUserId: account._id, userId };
 }
 
-// The first name is the org admin who calls the list; members are created in the given order.
 async function staffOf(s: Setup, slug: string, names: string[]) {
   const { organizationId, accounts } = await s.t.run(async (ctx) => {
     const organizationId = await insertTenant(ctx, {
