@@ -28,6 +28,7 @@ import type * as lib_inviteInput from "../lib/inviteInput.js";
 import type * as lib_inviteLookup from "../lib/inviteLookup.js";
 import type * as lib_inviteStatus from "../lib/inviteStatus.js";
 import type * as lib_inviteToken from "../lib/inviteToken.js";
+import type * as lib_inviteWrites from "../lib/inviteWrites.js";
 import type * as lib_ipRateLimit from "../lib/ipRateLimit.js";
 import type * as lib_leagueDivision from "../lib/leagueDivision.js";
 import type * as lib_leagueFilters from "../lib/leagueFilters.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inviteLookup": typeof lib_inviteLookup;
   "lib/inviteStatus": typeof lib_inviteStatus;
   "lib/inviteToken": typeof lib_inviteToken;
+  "lib/inviteWrites": typeof lib_inviteWrites;
   "lib/ipRateLimit": typeof lib_ipRateLimit;
   "lib/leagueDivision": typeof lib_leagueDivision;
   "lib/leagueFilters": typeof lib_leagueFilters;
