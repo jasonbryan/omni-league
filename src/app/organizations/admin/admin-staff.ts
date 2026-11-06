@@ -45,7 +45,10 @@ import { adminPath } from './admin-path';
 import { DESTRUCTIVE_BUTTON, OUTLINE_BUTTON } from './button-classes';
 import { BADGE_SECONDARY } from './field-classes';
 import { formatDay } from './format-day';
+import { injectSectionJump } from './section-jump';
 import { StaffInvitePanel } from './staff-invite-panel';
+
+const EMAIL_THEN_LINK_THEN_ALERT = ['#email', '#invite-link-heading', '[data-slot="alert"]'];
 
 type RestoreRefusal =
   'windowPassed' | 'expired' | 'alreadyInvited' | 'alreadyMember' | 'leaguesGone' | 'notRevoked';
@@ -510,6 +513,13 @@ export class AdminStaff {
   });
 
   private readonly panel = viewChild(StaffInvitePanel);
+  private readonly sectionJump = injectSectionJump((section) => {
+    for (const selector of EMAIL_THEN_LINK_THEN_ALERT) {
+      const target = section.querySelector<HTMLElement>(selector);
+      if (target) return target;
+    }
+    return null;
+  });
   private readonly noticeAlert = viewChild<AdminAlert | AdminOfflineAlert>('noticeAlert');
   private readonly noticeHost = viewChild<unknown, ElementRef<HTMLElement>>('noticeAlert', {
     read: ElementRef,
@@ -527,12 +537,10 @@ export class AdminStaff {
 
   protected jumpToPanel(event: MouseEvent): void {
     if (!isPlainClick(event)) return;
-    const panel = this.panel();
-    const section = panel?.scrollTarget();
-    if (!panel || !section) return;
+    const section = this.panel()?.scrollTarget();
+    if (!section) return;
     event.preventDefault();
-    section.scrollIntoView();
-    panel.focusFirst();
+    this.sectionJump.jump(section);
   }
 
   protected async revoke(

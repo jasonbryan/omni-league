@@ -442,6 +442,16 @@ describe('AdminStaff', () => {
     describe('pressed while the leagues are still loading', () => {
       const jump = () => page.querySelector<HTMLAnchorElement>('main a[data-slot="button"]')!;
 
+      // jsdom has no scrollIntoView, which the jump calls on the target once it renders.
+      const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+      beforeEach(() => {
+        Element.prototype.scrollIntoView = vi.fn();
+      });
+      afterEach(() => {
+        if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original);
+        else delete (Element.prototype as Partial<Element>).scrollIntoView;
+      });
+
       it('focuses Email as soon as the form appears, and scrolls only once', async () => {
         await open({ members: MEMBERS, pending: PENDING });
         expect(page.querySelector('#invite form')).toBeNull();
@@ -471,23 +481,113 @@ describe('AdminStaff', () => {
         expect(input('email').value).toBe('jordan@example.com');
       });
 
-      it('the leagues fail: the alert shows and nothing takes focus', async () => {
+      it('the leagues fail: the alert takes focus, and the form that replaces it gives focus to the section', async () => {
         await open({ members: MEMBERS, pending: PENDING });
         page.querySelector<HTMLElement>('#invite')!.scrollIntoView = vi.fn();
         jump().click();
         await o.flush();
         o.subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
         await o.flush();
-        expect(text(page.querySelector('#invite [role="alert"]'))).toBe(
+        const alert = page.querySelector<HTMLElement>('#invite [role="alert"]')!;
+        expect(text(alert)).toBe(
           'The leagues could not be loaded. Check your connection and try again.',
         );
         expect(page.querySelector('#email')).toBeNull();
+        expect(document.activeElement).toBe(alert);
 
-        // A later successful answer renders the form: the failed press must not steal focus then.
         o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
         await o.flush();
         expect(input('email')).not.toBeNull();
+        expect(document.activeElement).toBe(page.querySelector('#invite'));
         expect(document.activeElement).not.toBe(input('email'));
+      });
+
+      it('the leagues fail with no press: nothing takes focus, and the form that arrives later moves nothing', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        const before = document.activeElement;
+        o.subscription(LIST_LEAGUES)!.fail(new Error('Server Error: secret'));
+        await o.flush();
+        expect(page.querySelector('#invite [role="alert"]')).not.toBeNull();
+        expect(document.activeElement).toBe(before);
+
+        o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+        await o.flush();
+        expect(input('email')).not.toBeNull();
+        expect(document.activeElement).toBe(before);
+      });
+
+      it('holds focus on the section, which takes it with tabindex -1, while the leagues load', async () => {
+        await open({ members: MEMBERS, pending: PENDING });
+        const section = page.querySelector<HTMLElement>('#invite')!;
+        section.scrollIntoView = vi.fn();
+        expect(section.getAttribute('tabindex')).toBe('-1');
+        expect(section.classList.contains('focus:outline-none')).toBe(true);
+        jump().click();
+        await o.flush();
+        expect(document.activeElement).toBe(section);
+      });
+
+      describe('a WebKit tap leaves <main> focused; a later choice or scroll cancels the jump', () => {
+        const section = () => page.querySelector<HTMLElement>('#invite')!;
+        async function tapJumpLeavingMainFocused() {
+          await open({ members: MEMBERS, pending: PENDING });
+          main().focus();
+          jump().click();
+          await o.flush();
+          expect(document.activeElement).toBe(section());
+        }
+
+        async function leaguesArrive() {
+          o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+          await o.flush();
+          expect(input('email')).not.toBeNull();
+          expect(document.activeElement).not.toBe(input('email'));
+        }
+
+        it('a click on a main button that takes no focus', async () => {
+          await tapJumpLeavingMainFocused();
+          const button = page.querySelector<HTMLElement>('main #pending-list button')!;
+          button.click();
+          await leaguesArrive();
+          expect(document.activeElement).not.toBe(button);
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('<main> focused again, as a tap on page text does', async () => {
+          await tapJumpLeavingMainFocused();
+          main().focus();
+          await leaguesArrive();
+          expect(document.activeElement).toBe(main());
+        });
+
+        it('a wheel event', async () => {
+          await tapJumpLeavingMainFocused();
+          page.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+          await leaguesArrive();
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('a touchmove event', async () => {
+          await tapJumpLeavingMainFocused();
+          page.dispatchEvent(new Event('touchmove', { bubbles: true }));
+          await leaguesArrive();
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('a PageDown keydown', async () => {
+          await tapJumpLeavingMainFocused();
+          section().dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }));
+          await leaguesArrive();
+          expect(document.activeElement).toBe(section());
+        });
+
+        it('a click on the panel heading keeps the jump', async () => {
+          await tapJumpLeavingMainFocused();
+          page.querySelector<HTMLElement>('#invite-heading')!.click();
+          o.subscription(LIST_LEAGUES)!.emit(LEAGUES);
+          await o.flush();
+          expect(document.activeElement).toBe(input('email'));
+        });
       });
 
       it('drops the press when focus moved elsewhere before the form appeared', async () => {

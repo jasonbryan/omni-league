@@ -62,6 +62,51 @@ const staffTile = (page: Page) => main(page).locator('dl > div').filter({ hasTex
 const linkField = (page: Page) => page.locator('#invite-link');
 const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
+async function holdLeaguesAnswer(page: Page) {
+  const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
+  // Convex applies transitions in order, so holding the answer to the leagues query holds every
+  // frame after it; the form is not rendered while the leagues load.
+  let leaguesQuery: number | undefined;
+  let holding = false;
+  const held: string[] = [];
+  let release: () => void = () => undefined;
+  interface Change {
+    type: string;
+    queryId: number;
+    udfPath?: string;
+  }
+  const changes = (message: string | Buffer): Change[] =>
+    (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
+  await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      for (const change of changes(message)) {
+        if (change.type === 'Add' && change.udfPath === 'leagues:listForAdmin') {
+          leaguesQuery = change.queryId;
+        }
+      }
+      server.send(message);
+    });
+    release = () => {
+      holding = false;
+      for (const frame of held.splice(0)) ws.send(frame);
+    };
+    server.onMessage((message) => {
+      const answersLeagues = changes(message).some(
+        (change) => change.type === 'QueryUpdated' && change.queryId === leaguesQuery,
+      );
+      if (answersLeagues) holding = true;
+      if (holding) held.push(String(message));
+      else ws.send(message);
+    });
+  });
+  await page.goto(`${org.base}/staff`);
+  await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
+  await expect(page.getByText('Loading the leagues.')).toBeAttached();
+  await expect.poll(() => holding).toBe(true);
+  return { release: () => release() };
+}
+
 async function invite(page: Page, email: string, leagues: string[] = []) {
   await page.locator('#email').fill(email);
   if (leagues.length === 0) await page.getByRole('radio', { name: 'Org admin' }).check();
@@ -509,57 +554,82 @@ test.describe('Staff: members and the Overview tile', () => {
     await expect(page.locator('#email')).toBeInViewport();
   });
 
+  const jumpLink = (page: Page) => main(page).getByRole('link', { name: 'Invite staff' });
+  const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+
   test('"Invite staff" pressed while the leagues load focuses Email once the form appears (360)', async ({
     page,
   }) => {
     test.skip(isDesktop(page), 'the link is hidden from 1024px');
-    const org = await memberOf(page, 'orgAdmin', { locations: LOCATIONS, leagues: LEAGUES });
-    // Convex applies transitions in order, so holding the answer to the leagues query holds every
-    // frame after it; the form is not rendered while the leagues load.
-    let leaguesQuery: number | undefined;
-    let holding = false;
-    const held: string[] = [];
-    let release: () => void = () => undefined;
-    interface Change {
-      type: string;
-      queryId: number;
-      udfPath?: string;
-    }
-    const changes = (message: string | Buffer): Change[] =>
-      (JSON.parse(String(message)) as { modifications?: Change[] }).modifications ?? [];
-    await page.routeWebSocket(/\/api\/[^/]+\/sync$/, (ws) => {
-      const server = ws.connectToServer();
-      ws.onMessage((message) => {
-        for (const change of changes(message)) {
-          if (change.type === 'Add' && change.udfPath === 'leagues:listForAdmin') {
-            leaguesQuery = change.queryId;
-          }
-        }
-        server.send(message);
-      });
-      release = () => {
-        holding = false;
-        for (const frame of held.splice(0)) ws.send(frame);
-      };
-      server.onMessage((message) => {
-        const answersLeagues = changes(message).some(
-          (change) => change.type === 'QueryUpdated' && change.queryId === leaguesQuery,
-        );
-        if (answersLeagues) holding = true;
-        if (holding) held.push(String(message));
-        else ws.send(message);
-      });
-    });
-    await page.goto(`${org.base}/staff`);
-    await expect(main(page).getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
-    await expect(page.getByText('Loading the leagues.')).toBeAttached();
-    await expect.poll(() => holding).toBe(true);
-
-    await main(page).getByRole('link', { name: 'Invite staff' }).click();
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
     await expect(form(page)).toHaveCount(0);
-    release();
+    leagues.release();
     await expect(page.locator('#email')).toBeFocused();
     await expect(page.locator('#email')).toBeInViewport();
+  });
+
+  test('"Invite staff" pressed while the leagues load focuses the section at once (360)', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await expect(page.locator('#invite')).toBeFocused();
+    await expect(form(page)).toHaveCount(0);
+  });
+
+  test('"Invite staff" then a click on the page text while the leagues load leaves Email unfocused and the page where it is', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await main(page).getByText('Org admins manage everything here').click();
+    const before = await scrollY(page);
+    leagues.release();
+    await expect(form(page)).toBeAttached();
+    await expect(page.locator('#email')).not.toBeFocused();
+    await expect(main(page)).toBeFocused();
+    expect(await scrollY(page)).toBe(before);
+  });
+
+  test('"Invite staff" then a click on the panel heading while the leagues load keeps the jump (360)', async ({
+    page,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    const leagues = await holdLeaguesAnswer(page);
+    await jumpLink(page).click();
+    await page.locator('#invite-heading').click();
+    leagues.release();
+    await expect(page.locator('#email')).toBeFocused();
+  });
+
+  test('"Invite staff" then a scroll while the leagues load leaves Email unfocused and the page where it is', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(isDesktop(page), 'the link is hidden from 1024px');
+    test.skip(browserName === 'webkit', 'Playwright mobile WebKit has no mouse wheel');
+    const leagues = await holdLeaguesAnswer(page);
+    // The page is short while the form is missing, so a spacer gives the wheel room to scroll.
+    // Scroll anchoring would otherwise follow the spacer down when the form arrives above it.
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '2000px';
+      spacer.style.overflowAnchor = 'none';
+      document.querySelector('main')!.append(spacer);
+    });
+    await jumpLink(page).click();
+    await expect(page.locator('#invite')).toBeFocused();
+    const jumped = await scrollY(page);
+    await page.mouse.wheel(0, 600);
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(jumped);
+    const before = await scrollY(page);
+    leagues.release();
+    await expect(form(page)).toBeAttached();
+    await expect(page.locator('#email')).not.toBeFocused();
+    expect(await scrollY(page)).toBe(before);
   });
 });
 
