@@ -9,7 +9,7 @@ import { initialsOf } from './initials';
 import { pathWithoutQueryOrTrailingSlash } from './url-path';
 
 const ACCOUNT_PATH = '/app/account';
-const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
+const PULSE = 'bg-muted motion-safe:animate-pulse';
 
 /**
  * `users.me` is asked only once Convex has accepted the token, so the first answer is the caller's own and a shared device never shows the previous user's email.
@@ -27,8 +27,8 @@ const PULSE = 'rounded-md bg-muted motion-safe:animate-pulse';
         <div aria-hidden="true" class="flex min-h-11 items-center gap-3 p-2">
           <span [class]="pulse + ' size-9 shrink-0 rounded-full'"></span>
           <span class="min-w-0 flex-1">
-            <span [class]="pulse + ' block h-4 w-28 max-w-full'"></span>
-            <span [class]="pulse + ' mt-1.5 block h-3 w-36 max-w-full'"></span>
+            <span [class]="pulse + ' block h-4 w-28 max-w-full rounded-md'"></span>
+            <span [class]="pulse + ' mt-1.5 block h-3 w-36 max-w-full rounded-md'"></span>
           </span>
         </div>
       } @else {

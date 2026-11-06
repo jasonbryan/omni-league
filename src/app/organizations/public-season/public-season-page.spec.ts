@@ -10,6 +10,7 @@ import {
 } from '../../core/data/convex/testing/fake-convex-client';
 import { PAGE_LOAD_WAIT_MS } from '../../public-layout/page-load-wait-ms';
 import { PlainTestPage } from '../../shell/testing/test-pages';
+import { allRadiusClasses } from '../../ui/testing/radius-classes';
 import { PublicSeasonPage } from './public-season-page';
 import {
   NO_TEAMS,
@@ -148,6 +149,19 @@ describe('PublicSeasonPage queries', () => {
       'Sunday Reverse Coed 4s · Summer 2027',
     );
     expect(host(harness).querySelector('[data-testid="season-skeleton"]')).toBeNull();
+  });
+
+  it('draws both skeleton badges rounded-full and each fact icon rounded-lg', async () => {
+    const harness = await open();
+    await settle(harness);
+    const skeleton = host(harness).querySelector('[data-testid="season-skeleton"]')!;
+    const badges = skeleton.querySelectorAll('span.h-5\\.5');
+    expect(allRadiusClasses(badges)).toEqual([['rounded-full'], ['rounded-full']]);
+    const icons = skeleton.querySelectorAll(
+      '[data-testid="season-skeleton-details"] .flex.gap-4 > span',
+    );
+    expect(icons.length).toBeGreaterThan(0);
+    expect(allRadiusClasses(icons)).toEqual(Array.from(icons, () => ['rounded-lg']));
   });
 });
 

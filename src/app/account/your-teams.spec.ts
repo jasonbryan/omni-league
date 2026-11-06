@@ -11,6 +11,7 @@ import {
 } from '../core/data/convex/testing/fake-convex-client';
 import { BADGE_SECONDARY } from '../organizations/admin/field-classes';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { YourTeams } from './your-teams';
 
 @Component({
@@ -106,6 +107,19 @@ describe('YourTeams', () => {
     );
     expect(section.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(2);
     expect(section.querySelector('a')).toBeNull();
+  });
+
+  it('draws each placeholder row with a rounded-lg mark and rounded-md text bars', async () => {
+    await open();
+    const pieces = section.querySelectorAll('[aria-hidden="true"].divide-y [aria-hidden="true"]');
+    expect(allRadiusClasses(pieces)).toEqual([
+      ['rounded-lg'],
+      ['rounded-md'],
+      ['rounded-md'],
+      ['rounded-lg'],
+      ['rounded-md'],
+      ['rounded-md'],
+    ]);
   });
 
   it('none (state 2): "No teams yet" and how to join, with no link', async () => {

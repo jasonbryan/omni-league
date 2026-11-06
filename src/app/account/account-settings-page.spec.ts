@@ -7,6 +7,7 @@ import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { AccountSettingsPage } from './account-settings-page';
 
 @Component({ template: 'home' })
@@ -102,6 +103,15 @@ describe('AccountSettingsPage', () => {
     expect(status?.textContent?.trim()).toBe('Loading your account details.');
     expect(status?.classList.contains('sr-only')).toBe(true);
     expect(signOutButton(page)?.textContent?.trim()).toBe('Sign out');
+  });
+
+  it('draws the skeleton avatar rounded-full and its text bars rounded-md', async () => {
+    const page = await open();
+    accepted();
+    await harness.fixture.whenStable();
+
+    const pieces = page.querySelectorAll('main [aria-hidden="true"] [class*="animate-pulse"]');
+    expect(allRadiusClasses(pieces)).toEqual([['rounded-full'], ['rounded-md'], ['rounded-md']]);
   });
 
   it('shows the skeleton, not an answer, while the token is not yet accepted', async () => {

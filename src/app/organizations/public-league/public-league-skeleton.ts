@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 
-const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'block bg-muted motion-safe:animate-pulse';
+const BAR = `rounded-md ${FILL}`;
 
 /** Its heading bar sits where the page's `h1` does, so the page replaces it without a jump. */
 @Component({
@@ -33,7 +34,7 @@ const BAR = 'block rounded-md bg-muted motion-safe:animate-pulse';
               <div class="flex flex-col gap-2 py-4">
                 <span aria-hidden="true" class="${BAR} h-5 w-1/3"></span>
                 <span aria-hidden="true" class="${BAR} h-4 w-1/2"></span>
-                <span aria-hidden="true" class="${BAR} h-5 w-32 rounded-full"></span>
+                <span aria-hidden="true" class="${FILL} h-5 w-32 rounded-full"></span>
               </div>
             }
           </div>

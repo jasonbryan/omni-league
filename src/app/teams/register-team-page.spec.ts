@@ -7,6 +7,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { FakeAuthClient, provideFakeAuthClient } from '../core/auth/testing/fake-auth-client';
 import { CONVEX_CLIENT } from '../core/data/convex';
 import { FakeConvexClient } from '../core/data/convex/testing/fake-convex-client';
+import { radiusClasses } from '../ui/testing/radius-classes';
 import { RegisterTeamPage } from './register-team-page';
 
 @Component({ template: 'elsewhere' })
@@ -121,6 +122,12 @@ describe('RegisterTeamPage', () => {
       await open();
       expect(registration()?.args).toEqual(SLUGS);
       expect(text(page.querySelector('main [role="status"]'))).toBe('Loading the season.');
+    });
+
+    it('while loading, the button placeholder is rounded-lg', async () => {
+      await open();
+      const button = page.querySelector('[data-testid="register-skeleton"] .pb-6 > div:last-child');
+      expect(radiusClasses(button)).toEqual(['rounded-lg']);
     });
 
     it('not found: shows the not-found view and calls no mutation, signed in or not', async () => {

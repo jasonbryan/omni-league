@@ -10,6 +10,7 @@ import {
   type FakeSubscription,
 } from '../core/data/convex/testing/fake-convex-client';
 import { buttonVariants } from '../ui/button/hlm-button';
+import { allRadiusClasses } from '../ui/testing/radius-classes';
 import { YourOrganizations, organizationInitials } from './your-organizations';
 
 @Component({
@@ -102,6 +103,19 @@ describe('YourOrganizations', () => {
     );
     expect(section.querySelectorAll('[aria-hidden="true"].divide-y > div')).toHaveLength(2);
     expect(section.querySelector('a')).toBeNull();
+  });
+
+  it('draws each placeholder row with a rounded-lg mark and rounded-md text bars', async () => {
+    await open();
+    const pieces = section.querySelectorAll('[aria-hidden="true"].divide-y [aria-hidden="true"]');
+    expect(allRadiusClasses(pieces)).toEqual([
+      ['rounded-lg'],
+      ['rounded-md'],
+      ['rounded-md'],
+      ['rounded-lg'],
+      ['rounded-md'],
+      ['rounded-md'],
+    ]);
   });
 
   it('none (state 2): the empty state with the Create an organization and Find a league buttons', async () => {

@@ -7,6 +7,7 @@ import { ConvexOfflineError } from '../../core/data/convex';
 import { AdminArea } from './admin-area';
 import { AdminLeagues } from './admin-leagues';
 import { OUTLINE_BUTTON, PRIMARY_BUTTON } from './button-classes';
+import { allRadiusClasses, radiusClasses } from '../../ui/testing/radius-classes';
 import { STICKY_FOOTER_CLEARANCE } from './sticky-footer';
 import {
   adminRoutes,
@@ -533,6 +534,20 @@ describe('AdminLeagues', () => {
         await locationsArrive();
         expect(skeleton()).toBeNull();
         expect(text(section())).not.toContain('Loading the locations.');
+      });
+
+      it('while the locations load, the inputs are rounded-lg, the chips rounded-full, and the checkbox rounded-sm', async () => {
+        await open([], null);
+        const shown = skeleton()!;
+        expect(allRadiusClasses(shown.querySelectorAll('[data-slot="skeleton-input"]'))).toEqual([
+          ['rounded-lg'],
+          ['rounded-lg'],
+        ]);
+        const chips = shown.querySelectorAll('[data-slot="skeleton-chip"]');
+        expect(chips.length).toBeGreaterThan(0);
+        expect(allRadiusClasses(chips)).toEqual(Array.from(chips, () => ['rounded-full']));
+        const checkbox = shown.querySelector('[data-slot="skeleton-location"] > :first-child');
+        expect(radiusClasses(checkbox)).toEqual(['rounded-sm']);
       });
     });
   });

@@ -63,7 +63,8 @@ interface RosterNotice {
   description?: string;
 }
 
-const SKELETON = 'rounded-md bg-muted motion-safe:animate-pulse';
+const FILL = 'bg-muted motion-safe:animate-pulse';
+const SKELETON = `rounded-md ${FILL}`;
 const PANEL =
   'overflow-hidden rounded-xl bg-card text-card-foreground shadow-xs ring-1 ring-foreground/10';
 const BACK_LINK =
@@ -159,7 +160,7 @@ export interface TeamPageNavigationState {
                 <div class="divide-y divide-border">
                   @for (row of skeletonRows; track row) {
                     <div class="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                      <div class="${SKELETON} size-9 shrink-0 rounded-full"></div>
+                      <div class="${FILL} size-9 shrink-0 rounded-full"></div>
                       <div class="flex-1">
                         <div class="${SKELETON} h-5 w-40 max-w-full"></div>
                         <div class="${SKELETON} mt-2 h-5 w-20"></div>
