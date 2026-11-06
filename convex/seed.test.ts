@@ -32,6 +32,7 @@ const NONE = {
   pendingInviteCounts: 0,
   waitlistCounts: 0,
   staffCounts: 0,
+  staffInviteCounts: 0,
   draftLeagueCounts: 0,
 };
 const NO_ROWS = { organizations: 0, locations: 0, customLevels: 0, leagues: 0, seasons: 0 };
@@ -814,6 +815,7 @@ describe('seed:demo', () => {
         pendingInviteCounts: 0,
         waitlistCounts: 0,
         staffCounts: 2,
+        staffInviteCounts: 2,
         draftLeagueCounts: 2,
       },
       updated: { organizations: 1, leagues: 0 },
@@ -946,6 +948,7 @@ describe('seed:demo', () => {
         leagues: 3,
         leagueDivisions: 3,
         staffCounts: 1,
+        staffInviteCounts: 1,
         draftLeagueCounts: 1,
       },
       updated: { organizations: 0, leagues: 0 },
@@ -1135,6 +1138,7 @@ describe('seed:demo backfill against a recount', () => {
       pendingInviteCounts: 0,
       waitlistCounts: 0,
       staffCounts: 1,
+      staffInviteCounts: 1,
       draftLeagueCounts: 1,
     });
     await expectCountersMatchRecount(t);

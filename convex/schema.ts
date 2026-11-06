@@ -42,6 +42,7 @@ export default defineSchema({
     draftLeagueCount: v.optional(v.number()),
     locationCount: v.optional(v.number()),
     staffCount: v.optional(v.number()),
+    pendingInviteCount: v.optional(v.number()),
     sportLeagueCounts: v.optional(sportCountsValidator),
     sportLocationCounts: v.optional(sportCountsValidator),
     sortName: v.optional(v.string()),
@@ -61,6 +62,7 @@ export default defineSchema({
     .index('by_organizationId', ['organizationId'])
     .index('by_userId_and_organizationId', ['userId', 'organizationId']),
 
+  // Written only through `convex/lib/inviteWrites.ts`, which keeps the organization's `pendingInviteCount`; the one exception is `testing:resetSchemaBatch`, which empties every table, organizations included.
   invites: defineTable({
     organizationId: v.id('organizations'),
     email: v.string(),
