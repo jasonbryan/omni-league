@@ -6,6 +6,7 @@ import { api, components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { INVITE_LIFETIME_MS, INVITE_MESSAGES, INVITE_RESTORE_WINDOW_MS } from './lib/inviteInput';
 import { hashInviteToken } from './lib/inviteToken';
+import { insertMembership } from './lib/memberships';
 import { insertTenant } from './lib/tenantWrites';
 import schema from './schema';
 import { modules } from './test.setup';
@@ -122,6 +123,62 @@ async function setup() {
 }
 
 type Setup = Awaited<ReturnType<typeof setup>>;
+
+type StaffCtx = Parameters<Parameters<Setup['t']['run']>[0]>[0];
+
+async function addStaff(
+  ctx: StaffCtx,
+  organizationId: Id<'organizations'>,
+  name: string,
+  role: Role,
+) {
+  const now = Date.now();
+  const account = (await ctx.runMutation(components.betterAuth.adapter.create, {
+    input: {
+      model: 'user',
+      data: {
+        name,
+        email: `${name}@example.test`,
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+  } as never)) as { _id: string };
+  const userId = await ctx.db.insert('users', {
+    authUserId: account._id,
+    name,
+    adultConfirmedAt: 1,
+  });
+  await insertMembership(ctx, userId, organizationId, role);
+  return { authUserId: account._id, userId };
+}
+
+// The first name is the org admin who calls the list; members are created in the given order.
+async function staffOf(s: Setup, slug: string, names: string[]) {
+  const { organizationId, accounts } = await s.t.run(async (ctx) => {
+    const organizationId = await insertTenant(ctx, {
+      organization: { name: slug, slug },
+      locations: [],
+      leagues: [],
+    });
+    const accounts: Record<string, { authUserId: string; userId: Id<'users'> }> = {};
+    for (const [index, name] of names.entries()) {
+      accounts[name] = await addStaff(
+        ctx,
+        organizationId,
+        name,
+        index === 0 ? 'orgAdmin' : 'leagueOrganizer',
+      );
+    }
+    return { organizationId, accounts };
+  });
+  return {
+    organizationId,
+    accounts,
+    asAdmin: s.t.withIdentity(identity(accounts[names[0]].authUserId)),
+  };
+}
 
 const invite = (
   s: Setup,
@@ -795,6 +852,84 @@ describe('memberships.listForOrganization', () => {
         isYou: false,
       },
     ]);
+  });
+
+  test('gives a member whose auth user is deleted an empty email, and the others their own', async () => {
+    const s = await setup();
+    const { organizationId, asAdmin, accounts } = await staffOf(s, 'org-c', [
+      'admin-c',
+      'gone-middle',
+      'organizer-c',
+    ]);
+    await s.t.run((ctx) =>
+      ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: {
+          model: 'user',
+          where: [{ field: '_id', value: accounts['gone-middle'].authUserId }],
+        },
+      } as never),
+    );
+    const rows = await asAdmin.query(api.memberships.listForOrganization, { organizationId });
+    expect(rows.map((row) => [row.name, row.email])).toEqual([
+      ['admin-c', 'admin-c@example.test'],
+      ['gone-middle', ''],
+      ['organizer-c', 'organizer-c@example.test'],
+    ]);
+  });
+
+  test('leaves out a member whose user record is missing and keeps the others’ emails', async () => {
+    const s = await setup();
+    const { organizationId, asAdmin, accounts } = await staffOf(s, 'org-d', [
+      'admin-c',
+      'no-record',
+      'organizer-c',
+    ]);
+    await s.t.run((ctx) => ctx.db.delete('users', accounts['no-record'].userId));
+    const rows = await asAdmin.query(api.memberships.listForOrganization, { organizationId });
+    expect(rows.map((row) => [row.name, row.email])).toEqual([
+      ['admin-c', 'admin-c@example.test'],
+      ['organizer-c', 'organizer-c@example.test'],
+    ]);
+  });
+
+  test('lists the first 200 members in name order, each with their own email', async () => {
+    const s = await setup();
+    const extra = Array.from(
+      { length: 201 },
+      (_, index) => `member-${String(index + 1).padStart(3, '0')}`,
+    );
+    await s.t.run(async (ctx) => {
+      for (const name of extra) await addStaff(ctx, s.organizationA, name, 'leagueOrganizer');
+    });
+    const rows = await s.asAdminA.query(api.memberships.listForOrganization, {
+      organizationId: s.organizationA,
+    });
+    const expected = ['admin-a', ...extra.slice(0, 198), 'organizer-a'];
+    expect(rows.map((row) => row.name)).toEqual(expected);
+    expect(rows.map((row) => row.email)).toEqual(expected.map((name) => `${name}@example.test`));
+  });
+
+  test('carries the membership id, which stays distinct for members with no auth user', async () => {
+    const s = await setup();
+    for (const who of [s.adminA, s.organizerA]) {
+      await s.t.run((ctx) =>
+        ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+          input: { model: 'user', where: [{ field: '_id', value: who.authUserId }] },
+        } as never),
+      );
+    }
+    const rows = await s.asAdminA.query(api.memberships.listForOrganization, {
+      organizationId: s.organizationA,
+    });
+    expect(rows.map((row) => row.email)).toEqual(['', '']);
+    const stored = await s.t.run((ctx) =>
+      ctx.db
+        .query('memberships')
+        .withIndex('by_organizationId', (q) => q.eq('organizationId', s.organizationA))
+        .collect(),
+    );
+    expect(rows.map((row) => row.membershipId).sort()).toEqual(stored.map((m) => m._id).sort());
+    expect(new Set(rows.map((row) => row.membershipId)).size).toBe(2);
   });
 
   test('never lists another organization’s members', async () => {
