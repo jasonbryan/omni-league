@@ -790,3 +790,72 @@ describe('skipping a quiet night', () => {
     }
   });
 });
+
+describe('a shard that reaches the global timeout', () => {
+  const steps = e2eSteps();
+  const found = (name) => steps.find((step) => step.name === name);
+
+  it('still uploads its report after a failed e2e step, and before it is marked done', () => {
+    assert.equal(
+      found('e2e report')?.condition,
+      "${{ !cancelled() && (steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure') }}",
+    );
+    const names = steps.map((step) => step.name);
+    assert.ok(names.indexOf('e2e report') < names.indexOf('done'), names.join(', '));
+  });
+
+  it('leaves the e2e step to fail by itself, with no continue-on-error to hide it', () => {
+    assert.doesNotMatch(found('e2e')?.block ?? '', /continue-on-error/);
+  });
+
+  it('keeps the global timeout shorter than the job limit by the setup and report budget', () => {
+    const limit = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job('e2e'))?.[1]);
+    const globalMs = Number(/--global-timeout=(\d+)/.exec(found('e2e')?.run ?? '')?.[1]);
+    assert.equal(globalMs, GLOBAL_TIMEOUT_MS);
+    assert.ok(globalMs < limit * 60_000);
+  });
+});
+
+describe('the sharded nightly in the docs', () => {
+  const read = (...path) => readFileSync(join(import.meta.dirname, '..', ...path), 'utf8');
+  const ci = read('docs', 'process', 'ci.md');
+  const adr = read('docs', 'decisions', '0009-ci-pipeline.md');
+  const amendment = 'Amendment: sharded nightly e2e and a reported cancel';
+
+  it('amends the CI pipeline decision in a header line and in a section', () => {
+    assert.match(adr, new RegExp(`^- \\*\\*Amended:\\*\\* 2026-11-05 .*"${amendment}`, 'm'));
+    assert.match(adr, new RegExp(`^## ${amendment} \\(2026-11-05\\)$`, 'm'));
+  });
+
+  it('defines the term Shard in the glossary', () => {
+    assert.match(read('docs', 'glossary.md'), /^- \*\*Shard:\*\* /m);
+  });
+
+  it('names the sharded e2e command and the per-shard artifact in ci.md', () => {
+    assert.ok(
+      ci.includes(`npm run e2e -- --shard=<n>/${SHARDS} --global-timeout=${GLOBAL_TIMEOUT_MS}`),
+    );
+    const reportRow = ci.split('\n').find((line) => line.startsWith('| `e2e report`'));
+    assert.match(reportRow ?? '', /`e2e-report-<n>`/);
+    const inventoryRow = ci
+      .split('\n')
+      .find((line) => line.startsWith('| `actions/upload-artifact`'));
+    assert.match(inventoryRow ?? '', /`e2e-report-<n>`/);
+  });
+
+  it('records the shard runs, the re-shard trigger, and why there is no browser cache in ci.md', () => {
+    for (const run of ['42126470169', '42130571352', '42135507342']) {
+      assert.ok(ci.includes(`actions/runs/${run}`), run);
+    }
+    assert.match(ci, /^\*\*Re-shard trigger\.\*\* .*`run error: Timed out waiting`/m);
+    assert.match(ci, /^\*\*Why there is no browser cache\.\*\* .*apt-get/m);
+    assert.match(
+      ci,
+      /^\*\*Why shards are uneven\.\*\* .*Playwright 1\.64.*no weights.*1\.21 times/m,
+    );
+  });
+
+  it('gives the batch run fallback a sharded figure, not the one-job 25 minutes', () => {
+    assert.doesNotMatch(read('docs', 'process', 'dev-cycle.md'), /about 25 CI minutes/);
+  });
+});
