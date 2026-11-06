@@ -627,11 +627,7 @@ export class AdminStaff {
     if (holdsFocus) this.focusNotice();
   }
 
-  /**
-   * Focus moves to the status only when the user's last press or focus in the page was the pressed Revoke or inside the
-   * status, so a reply never pulls someone who pressed or focused elsewhere. WebKit does not focus a clicked button, so
-   * `document.activeElement` cannot say which that was.
-   */
+  /** WebKit does not focus a clicked button, so `document.activeElement` cannot say what the user pressed last. */
   private show(notice: Notice): void {
     const host = this.noticeHost()?.nativeElement;
     const focusIsFree =
