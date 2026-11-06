@@ -467,11 +467,9 @@ test.describe('Season management: callers who may not open it', () => {
     const otherOrganizer = newUser('Other organizer');
     const captain = newUser('Captain');
     const stranger = newUser('Stranger');
-    const pages = [
-      await otherUser(browser, otherOrganizer),
-      await otherUser(browser, captain),
-      await otherUser(browser, stranger),
-    ];
+    const pages = await Promise.all(
+      [otherOrganizer, captain, stranger].map((user) => otherUser(browser, user)),
+    );
     try {
       const organizerOfOtherLeague = {
         email: otherOrganizer.email,

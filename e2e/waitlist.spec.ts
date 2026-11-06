@@ -119,9 +119,8 @@ test.describe('Waitlist: an organizer', () => {
     browser,
   }, testInfo) => {
     const captain = newUser('Late');
-    const captainPage = await otherUser(browser, captain);
     const admin = newUser('Admin');
-    await signUp(page, admin);
+    const [captainPage] = await Promise.all([otherUser(browser, captain), signUp(page, admin)]);
     const { tenant } = await seedFullSeason({
       waitlist: [
         {
