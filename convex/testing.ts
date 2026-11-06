@@ -551,8 +551,8 @@ async function createAccounts(
 }
 
 /**
- * An account with no credential, for a person a test never signs in as: no password is stored, so
- * none skips `hashPassword`. The adapter runs no trigger, so the `users` row is written here.
+ * An account with no credential, for a person a test never signs in as: it stores no password, so
+ * no password goes around `hashPassword`. The adapter runs no trigger, so the `users` row is written here.
  */
 async function createAccount(
   ctx: MutationCtx,
