@@ -150,6 +150,10 @@ class FakePushDevice implements PushDevice {
     return Promise.resolve('granted');
   }
 
+  workerActivated(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+
   /** The next `count` reads wait for `releaseReads()` and then answer with what the registration held when they began. */
   holdNextReads(count = 1): void {
     this.heldReads = count;

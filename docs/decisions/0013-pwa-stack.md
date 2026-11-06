@@ -7,7 +7,7 @@
 - **Amended:** 2026-10-10, by #81 (PR #119) and #80 (PR #113): registration follows the `serviceWorker` build option, and `netlify.toml` sets the manifest's `Content-Type`. See "Amendment: one kill switch and the manifest content type (2026-10-10)" at the end. Where the sections above disagree with the amendment, the amendment applies.
 - **Amended:** 2026-10-27, by #384: a new version applies itself when nothing on the page can be lost, and the 14-day forced-reload rule is removed. See "Amendment: new versions apply themselves (2026-10-27)" at the end. Where section 4 disagrees with it, the amendment applies.
 - **Amended:** 2026-10-28, by #385: the note and form alerts name the cause, and an old version whose Convex deployment is gone checks for an update early and reloads at once. See "Amendment: an old version whose Convex deployment is gone (2026-10-28)" at the end. Where sections 3 and 4 disagree with it, the amendment applies.
-- **Amended:** 2026-11-05, by #533: the client reads and removes this browser's push subscription on a page no service worker controls. See "Amendment: push cleanup on a page no service worker controls (2026-11-05)" at the end. Where section 7's Lifecycle bullets disagree with it, the amendment applies.
+- **Amended:** 2026-11-05, by #533 and #558: the client reads and removes this browser's push subscription on a page no service worker controls, and the notifications page shows it. See "Amendment: push cleanup on a page no service worker controls (2026-11-05)" at the end. Where section 7's Lifecycle bullets disagree with it, the amendment applies.
 
 ## Context
 
@@ -472,4 +472,10 @@ It amends section 7, "Lifecycle", and adds a note to section 5, "Client".
 
 **Section 5, Client.** Of the client's push steps, only subscribing needs a controlling worker: `SwPush.requestSubscription` waits for one, while `PushManager.subscribe()` itself needs only an active worker on the registration. Reading and removing a subscription go through the registration and need neither.
 
-**Open.** On an uncontrolled page the notifications page shows "off" while the device may still be subscribed (#558).
+**Notifications page (#558).** On an uncontrolled page, with `SwPush.isEnabled`, the page reads the subscription once from the registration and shows it by the same rule as a controlled page: On when `push.getMyDeviceStatus` says the endpoint is the caller's. It also reads whether the registration's worker is activated, and shows the checking skeleton until both reads answer.
+
+- **Turn off** calls `push.unsubscribe` and then `unsubscribe()` on the subscription it read, never `SwPush.unsubscribe()`. The page then shows Off, even when the browser call rejects or resolves `false`, because the row is gone.
+- **Off with an activated worker** (the hard-reload case) disables Turn on, asks for no permission and requests no subscription, and shows "Reload this page to turn notifications on." with a Reload page button. Offline, both say "Connect to the internet to change this." and a press does not reload. With no activated worker (first visit), the page keeps "Getting this device ready" until the worker takes control.
+- **A worker taking control** (`controllerchange`) keeps the badge On until `SwPush.subscription` emits the same subscription, which it does after a promise. From then on `SwPush` is the source, and Turn off goes through `SwPush.unsubscribe()`.
+
+**Open.** Subscribing on an uncontrolled page through `PushManager.subscribe()` is not done: `SwPush.subscription` would not see it, and section 5 keeps subscribing on `SwPush`. The page shows what the server holds for the endpoint, so an old key or a past `expirationTime` stays until the next controlled load replaces it.
