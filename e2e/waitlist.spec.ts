@@ -24,7 +24,7 @@ const managementPath = (tenant: Tenant) =>
   `/app/organizations/${tenant.slug}/leagues/${LEAGUE_SLUG}/seasons/${FULL}`;
 const waitlist = (page: Page) => page.locator('#waitlist');
 
-/** A published season at its maximum of 2 teams, open for registration, seeded in one call with `extra`. */
+/** A published season at its maximum of 2 teams, open for registration. */
 async function seedFullSeason(
   ...extra: SeedBatch[]
 ): Promise<{ tenant: Tenant; teamIds: string[] }> {

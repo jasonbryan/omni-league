@@ -35,7 +35,6 @@ interface SeasonOptions {
   sharks?: Pick<BatchTeam, 'playerEmails' | 'minors'>;
 }
 
-/** The tenant, its season, and the teams Sand Sharks and Block Party, in one call. */
 async function seedSeason({
   captain,
   accounts = [],

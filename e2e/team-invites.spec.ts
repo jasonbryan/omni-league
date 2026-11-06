@@ -22,7 +22,6 @@ const SEASON_DATES = {
   registrationDeadline: dateFromToday(20),
 };
 
-/** The tenant, its season, and Sand Sharks, captained by `captain`, in one call with `extra`. */
 async function seedTeam(
   captain: TestUser,
   ...extra: SeedBatch[]
@@ -220,10 +219,6 @@ test.describe('team invites: refusals', () => {
 test.describe('team invites: a full team', () => {
   const FULL = 'roster-cap';
 
-  /**
-   * Sand Sharks of a season capped at 4: the captain, `member`, another player, and a minor of
-   * `member`, with an invite from before the minor filled it. `accounts` are people who never sign in.
-   */
   async function seedFullTeam(
     captain: TestUser,
     member: TestUser,

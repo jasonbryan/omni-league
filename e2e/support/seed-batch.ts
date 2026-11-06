@@ -43,8 +43,7 @@ const LISTS = [
   'freeAgents',
 ] as const;
 
-/** Parts merge in order, each list after the previous part's. */
-export function mergeBatches(...parts: SeedBatch[]): SeedBatch {
+function mergeBatches(...parts: SeedBatch[]): SeedBatch {
   const merged: SeedBatch = {};
   for (const part of parts) {
     if (part.tenant) merged.tenant = part.tenant;

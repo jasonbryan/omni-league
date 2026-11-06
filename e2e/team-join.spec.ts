@@ -31,7 +31,6 @@ const SEASON_DATES = {
   registrationDeadline: dateFromToday(20),
 };
 
-/** The tenant, its season, and Sand Sharks, captained by `captain`, in one call with `extra`. */
 async function seedTeam(
   captain: TestUser,
   ...extra: SeedBatch[]

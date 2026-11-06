@@ -592,7 +592,6 @@ const batchTeamValidator = v.object({
 const batchRowsFields = {
   tenant: v.optional(tenantValidator),
   organizationSlug: v.optional(v.string()),
-  /** People who never sign in: an account and a `users` row, with no credential and no password. */
   accounts: v.optional(v.array(v.object({ name: v.string(), email: v.string() }))),
   memberships: v.optional(
     v.array(
@@ -636,10 +635,8 @@ function batchOrganizationSlug({
 
 const batchResultValidator = v.object({ slug: v.string(), teamIds: v.array(v.id('teams')) });
 
-/**
- * A test's whole seed in one CLI call, since each call starts a CLI process. `users` sign up through
- * Better Auth's own sign-up, so each has a real password hash; everything else is one transaction.
- */
+// A test's whole seed in one CLI call, since each call starts a CLI process. `users` sign up
+// through Better Auth's own sign-up, so each password gets a real hash; `accounts` store none.
 export const seedBatch = internalAction({
   args: { ...batchRowsFields, users: v.optional(v.array(seedUserValidator)) },
   returns: batchResultValidator,

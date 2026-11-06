@@ -53,7 +53,6 @@ export interface TenantArgs {
   leagues: LeagueSeed[];
 }
 
-/** A uniquely named tenant and the `testing:` arguments that create it, for `seedTenant` or a seed batch. */
 export function newTenant(seed: TenantSeed = {}): { tenant: Tenant; args: TenantArgs } {
   const id = randomBytes(4).toString('hex');
   const name = `${seed.name ?? 'E2E Org'} ${id}`;
@@ -111,7 +110,6 @@ export interface SeasonSeed {
   status?: 'draft' | 'published';
 }
 
-/** The `testing:` fields of `season`, with its defaults filled in. */
 export function seasonArgs(season: SeasonSeed) {
   return {
     name: season.name,

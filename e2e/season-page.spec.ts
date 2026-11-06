@@ -78,11 +78,9 @@ const DRAFT_SEASON: SeasonSeed = {
 interface SeededSeason {
   tenant: Tenant;
   path: string;
-  /** The ids of the teams in `extra`, in order. */
   teamIds: string[];
 }
 
-/** The tenant, its seasons, and `extra` in one call. */
 async function seed(...extra: SeedBatch[]): Promise<SeededSeason> {
   const { tenant, args } = newTenant({
     name: 'E2E Season Page',
@@ -909,7 +907,7 @@ test.describe('public season page: signed in and on a team', () => {
   const REGISTRATION = 'seasons:getForRegistration';
   const OPEN_PATH = (tenant: Tenant) => `${tenant.path}/leagues/${LEAGUE_SLUG}/seasons/fall-open`;
 
-  /** Signed up in the page, so the page holds the captain's session; seed the batch with `seed`. */
+  /** Signed up in the page, so the page holds the captain's session. */
   async function captainOfSandSharks(page: Page): Promise<SeedBatch> {
     const captain = newUser('Captain');
     await signUp(page, captain);

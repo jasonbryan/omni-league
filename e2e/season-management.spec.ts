@@ -79,7 +79,7 @@ interface Season {
 
 const SUMMER_TEAMS = ['Block Party', 'Dig Deep', 'Sand Sharks'];
 
-/** `captains` have signed up in a browser; the rest of the 3 captains, 7 players, and 2 free agents never sign in. */
+/** `captains` have signed up in a browser; the other people never sign in, so they are accounts. */
 function summer(captains: TestUser[] = []): Season {
   const all = [
     ...captains,
@@ -111,7 +111,6 @@ function summer(captains: TestUser[] = []): Season {
 const teamIdsByName = (teamIds: string[]): Record<string, string> =>
   Object.fromEntries(SUMMER_TEAMS.map((name, i) => [name, teamIds[i]]));
 
-/** Signs up an org admin in the browser, then seeds the leagues, the membership, and `extra` in one call. */
 async function asOrgAdmin(
   page: Page,
   ...extra: SeedBatch[]
@@ -621,7 +620,6 @@ test.describe('Season management: maximum roster size', () => {
   const field = (page: Page) => page.locator('#edit-maximum-roster-size');
   const saveButton = (page: Page) => limits(page).getByRole('button', { name: 'Save changes' });
 
-  /** Block Party is full at 4 of 4; Dig Deep has its captain only. */
   function capSeason(): { waiting: TestUser; batch: SeedBatch } {
     const captains = [newUser('Captain'), newUser('Captain')];
     const players = [newUser('Player'), newUser('Player'), newUser('Player')];
