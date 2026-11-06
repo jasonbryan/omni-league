@@ -1200,6 +1200,44 @@ describe('NotificationsPage', () => {
       expect(badge()).toBe('Off');
       expect(reloadButton()).toBeNull();
     });
+
+    it.each([
+      ['there is no service worker', () => (swPush.isEnabled = false)],
+      ['the browser has no Push API', () => (device.hasPushApis = false)],
+    ])('makes no registration read and shows Not available when %s', async (_case, arrange) => {
+      arrange();
+      await open();
+      await emitConfig(VAPID_KEY);
+
+      expect(device.subscriptionReads).toBe(0);
+      expect(badge()).toBe('Not available');
+      expect(button()).toBeNull();
+      expect(reloadButton()).toBeNull();
+    });
+
+    it('shows Blocked with no Turn on or Reload page when permission is denied', async () => {
+      device.permission.set('denied');
+      await open();
+      await emitConfig(VAPID_KEY);
+
+      expect(badge()).toBe('Blocked');
+      expect(button()).toBeNull();
+      expect(reloadButton()).toBeNull();
+    });
+
+    it('two quick presses of Turn off remove the row and the subscription once each', async () => {
+      await openOn();
+      button()!.click();
+      button()!.click();
+      await settle();
+      convex.calls[0].resolve(null);
+      await settle();
+
+      expect(convex.calls).toHaveLength(1);
+      expect(subscriptionUnsubscribes()).toBe(1);
+      expect(swPush.unsubscribes).toBe(0);
+      expectReloadState();
+    });
   });
 
   it('offline and off: a press asks for no permission and shows the offline alert', async () => {
