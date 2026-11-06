@@ -6,6 +6,7 @@ import {
   afterNextRender,
   afterRenderEffect,
   computed,
+  resource,
   inject,
   signal,
   untracked,
@@ -384,12 +385,24 @@ export class NotificationsPage {
   private readonly swSubscription = toSignal(
     this.swPush.isEnabled ? this.swPush.subscription : EMPTY,
   );
-  private readonly registrationRead = signal<RegistrationRead | undefined>(undefined);
+  // Decided once: a controllerchange must not idle the resource and bring the skeleton back.
+  private readonly readsRegistration =
+    this.swPush.isEnabled && this.device.hasPushApis && !this.device.controlled();
+  private readonly registrationRead = resource({
+    params: () => (this.readsRegistration ? {} : undefined),
+    loader: async (): Promise<RegistrationRead> => {
+      const [subscription, activated] = await Promise.all([
+        this.device.subscription(),
+        this.device.workerActivated(),
+      ]);
+      return { subscription, activated };
+    },
+  });
   // SwPush is the only source that sees requestSubscription and SwPush.unsubscribe(), so it wins once it has emitted.
   private readonly subscription = computed(() => {
     const swSubscription = this.swSubscription();
-    if (this.device.controlled() && swSubscription !== undefined) return swSubscription;
-    return this.registrationRead()?.subscription;
+    if (swSubscription !== undefined) return swSubscription;
+    return this.registrationRead.value()?.subscription;
   });
   private readonly endpoint = computed(() => this.subscription()?.endpoint ?? null);
   private readonly status = injectQuery(api.push.getMyDeviceStatus, () => {
@@ -413,16 +426,13 @@ export class NotificationsPage {
   protected readonly controlled = this.device.controlled;
   // Turning on needs SwPush, which waits for a controller, and a worker claims a page only when it first activates.
   protected readonly needsReload = computed(
-    () => !this.controlled() && this.registrationRead()?.activated === true,
+    () => !this.controlled() && this.registrationRead.value()?.activated === true,
   );
   protected readonly busy = signal<Busy>('idle');
   protected readonly alert = signal<Alert>(null);
   protected readonly changed = signal<Change | null>(null);
 
   constructor() {
-    if (this.swPush.isEnabled && this.device.hasPushApis && !this.controlled()) {
-      void this.readRegistration();
-    }
     afterRenderEffect(() => {
       const wanted = this.focusButtonIn();
       const button = this.deviceButton();
@@ -442,7 +452,7 @@ export class NotificationsPage {
     }
     if (this.device.permission() === 'denied') return 'blocked';
     if (!this.controlled()) {
-      const read = this.registrationRead();
+      const read = this.registrationRead.value();
       if (read === undefined) return 'checking';
       if (!read.activated) return 'off';
     }
@@ -453,6 +463,16 @@ export class NotificationsPage {
     if (this.status.value() === undefined && this.status.error() === undefined) return 'checking';
     return 'off';
   });
+
+  protected readonly turnOnClasses = computed(() => {
+    if (this.needsReload()) return `${this.primaryButton} opacity-50`;
+    return (
+      this.offlineAware(this.primaryButton) + (this.controlled() ? '' : ' disabled:opacity-50')
+    );
+  });
+  protected readonly turnOnAriaDisabled = computed(() =>
+    this.busy() !== 'idle' || !this.online() || this.needsReload() ? 'true' : null,
+  );
 
   protected readonly crumbLink = CRUMB_LINK;
   protected readonly currentCrumbLink = CURRENT_CRUMB_LINK;
@@ -474,17 +494,6 @@ export class NotificationsPage {
 
   protected offlineAware(classes: string): string {
     return this.online() ? classes : `${classes} opacity-50`;
-  }
-
-  protected turnOnClasses(): string {
-    if (this.needsReload()) return `${this.primaryButton} opacity-50`;
-    return (
-      this.offlineAware(this.primaryButton) + (this.controlled() ? '' : ' disabled:opacity-50')
-    );
-  }
-
-  protected turnOnAriaDisabled(): 'true' | null {
-    return this.busy() !== 'idle' || !this.online() || this.needsReload() ? 'true' : null;
   }
 
   protected reload(): void {
@@ -583,7 +592,7 @@ export class NotificationsPage {
       if (this.controlled()) {
         await this.swPush.unsubscribe();
       } else {
-        await this.registrationRead()?.subscription?.unsubscribe();
+        await this.registrationRead.value()?.subscription?.unsubscribe();
       }
     } catch {
       // Nothing to undo: the page shows what the server holds.
@@ -593,14 +602,6 @@ export class NotificationsPage {
 
   private forgetRegistrationSubscription(): void {
     this.registrationRead.update((read) => read && { ...read, subscription: null });
-  }
-
-  private async readRegistration(): Promise<void> {
-    const [subscription, activated] = await Promise.all([
-      this.device.subscription(),
-      this.device.workerActivated(),
-    ]);
-    this.registrationRead.set({ subscription, activated });
   }
 
   private announceChange(change: Change): void {

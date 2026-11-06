@@ -66,12 +66,12 @@ class FakePushDevice implements PushDevice {
   readonly permission = signal<DevicePermission>('default');
   readonly controlled = signal(true);
   readonly permissionRequests: number[] = [];
-  /** What the registration holds, read directly when no worker controls the page. */
-  held: PushSubscription | null = null;
+  registrationSubscription: PushSubscription | null = null;
   activated = false;
   subscriptionReads = 0;
-  /** A read waits for its gate; a test replaces one to keep that read unanswered. */
-  gates = { subscription: Promise.resolve(), activated: Promise.resolve() };
+  /** A pending read keeps `whenStable` from settling, so `settle` skips it while one is held. */
+  holdingRead = false;
+  private gates = { subscription: Promise.resolve(), activated: Promise.resolve() };
   private answer: ((permission: NotificationPermission) => void) | null = null;
   /** The order of calls across the fakes, so a test can check what came first. */
   constructor(private readonly log: string[]) {}
@@ -89,11 +89,22 @@ class FakePushDevice implements PushDevice {
 
   subscription(): Promise<PushSubscription | null> {
     this.subscriptionReads++;
-    return this.gates.subscription.then(() => this.held);
+    return this.gates.subscription.then(() => this.registrationSubscription);
   }
 
   workerActivated(): Promise<boolean> {
     return this.gates.activated.then(() => this.activated);
+  }
+
+  /** Keeps one read unanswered until the returned function is called. */
+  holdRead(read: 'subscription' | 'activated'): () => void {
+    this.holdingRead = true;
+    let release!: () => void;
+    this.gates[read] = new Promise<void>((resolve) => (release = resolve));
+    return () => {
+      this.holdingRead = false;
+      release();
+    };
   }
 
   respond(permission: NotificationPermission): void {
@@ -153,10 +164,10 @@ describe('NotificationsPage', () => {
 
   async function settle() {
     TestBed.tick();
-    await harness.fixture.whenStable();
+    if (!device.holdingRead) await harness.fixture.whenStable();
     await new Promise((resolve) => setTimeout(resolve, 0));
     TestBed.tick();
-    await harness.fixture.whenStable();
+    if (!device.holdingRead) await harness.fixture.whenStable();
   }
 
   const subscriptionsTo = (name: string) =>
@@ -854,14 +865,14 @@ describe('NotificationsPage', () => {
     const RELOAD_TEXT = 'Reload this page to turn notifications on.';
     const OFFLINE_TEXT = 'Connect to the internet to change this.';
 
-    let held: PushSubscription;
+    let registrationSubscription: PushSubscription;
     let unsubscribeHeld: Mock<() => Promise<boolean>>;
     beforeEach(() => {
       unsubscribeHeld = vi.fn(() => Promise.resolve(true));
-      held = fakeSubscription(ENDPOINT, unsubscribeHeld);
+      registrationSubscription = fakeSubscription(ENDPOINT, unsubscribeHeld);
       device.controlled.set(false);
       device.activated = true;
-      device.held = held;
+      device.registrationSubscription = registrationSubscription;
       swPush.subscription = new Subject<PushSubscription | null>();
     });
 
@@ -911,8 +922,7 @@ describe('NotificationsPage', () => {
       });
 
       it('shows the checking skeleton and its status until the subscription read answers', async () => {
-        let answer!: () => void;
-        device.gates.subscription = new Promise((resolve) => (answer = resolve));
+        const answer = device.holdRead('subscription');
         await open();
         await emitConfig(VAPID_KEY);
 
@@ -932,9 +942,8 @@ describe('NotificationsPage', () => {
       });
 
       it('shows the checking skeleton until the read of whether the worker is activated answers', async () => {
-        let answer!: () => void;
-        device.gates.activated = new Promise((resolve) => (answer = resolve));
-        device.held = null;
+        const answer = device.holdRead('activated');
+        device.registrationSubscription = null;
         await open();
         await emitConfig(VAPID_KEY);
 
@@ -979,7 +988,7 @@ describe('NotificationsPage', () => {
       });
 
       it('shows the reload state when the registration holds no subscription', async () => {
-        device.held = null;
+        device.registrationSubscription = null;
         await open();
         await emitConfig(VAPID_KEY);
 
@@ -1074,7 +1083,7 @@ describe('NotificationsPage', () => {
 
     describe('Turn on and Reload page', () => {
       beforeEach(() => {
-        device.held = null;
+        device.registrationSubscription = null;
       });
 
       it('Turn on asks for no permission and requests no subscription, and a press does nothing', async () => {
@@ -1130,7 +1139,7 @@ describe('NotificationsPage', () => {
     describe('before the worker is activated (first visit)', () => {
       beforeEach(() => {
         device.activated = false;
-        device.held = null;
+        device.registrationSubscription = null;
       });
 
       it('keeps "Getting this device ready" and a disabled button, with no Reload page', async () => {
@@ -1174,7 +1183,7 @@ describe('NotificationsPage', () => {
       TestBed.tick();
       expect(badge()).toBe('On');
 
-      swPush.subscription.next(held);
+      swPush.subscription.next(registrationSubscription);
       await settle();
       expect(badge()).toBe('On');
       expect(text(button())).toBe('Turn off');
