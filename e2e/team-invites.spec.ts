@@ -5,7 +5,8 @@ import { remoteBaseUrl } from './support/env';
 import { expect, test } from './support/fixtures';
 import { signUp } from './support/session';
 import { screenshot } from './support/screenshot';
-import { dateFromToday, seedSeasons, seedTenant, type Tenant } from './support/tenant';
+import { seedBatch, type SeedBatch } from './support/seed-batch';
+import { dateFromToday, newTenant, type Tenant } from './support/tenant';
 import { newUser, seedUser, type TestUser } from './support/users';
 
 test.skip(remoteBaseUrl !== undefined, 'E2E_BASE_URL is set: no local Convex backend to seed');
@@ -15,8 +16,18 @@ const LEAGUE_SLUG = 'sunday-reverse-coed-4s';
 const SEASON = 'summer-open';
 const DAY = 24 * 60 * 60 * 1000;
 
-async function seedTeam(captain: TestUser): Promise<{ tenant: Tenant; teamId: string }> {
-  const tenant = await seedTenant({
+const SEASON_DATES = {
+  startDate: dateFromToday(40),
+  endDate: dateFromToday(100),
+  registrationDeadline: dateFromToday(20),
+};
+
+/** The tenant, its season, and Sand Sharks, captained by `captain`, in one call with `extra`. */
+async function seedTeam(
+  captain: TestUser,
+  ...extra: SeedBatch[]
+): Promise<{ tenant: Tenant; teamId: string; teamIds: string[] }> {
+  const { tenant, args } = newTenant({
     name: 'E2E Team Invites',
     locations: [{ name: 'Alpha Beach', address: '1 Alpha Road, Corpus Christi, TX 78412' }],
     leagues: [
@@ -28,23 +39,22 @@ async function seedTeam(captain: TestUser): Promise<{ tenant: Tenant; teamId: st
       },
     ],
   });
-  await seedSeasons(tenant, LEAGUE_SLUG, [
+  const { teamIds } = await seedBatch(
     {
-      name: 'Summer Open',
-      slug: SEASON,
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
+      tenant: args,
+      seasons: [{ leagueSlug: LEAGUE_SLUG, name: 'Summer Open', slug: SEASON, ...SEASON_DATES }],
+      teams: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          seasonSlug: SEASON,
+          name: 'Sand Sharks',
+          captainEmail: captain.email,
+        },
+      ],
     },
-  ]);
-  const { teamId } = (await convexRun('testing:seedTeam', {
-    organizationSlug: tenant.slug,
-    leagueSlug: LEAGUE_SLUG,
-    seasonSlug: SEASON,
-    name: 'Sand Sharks',
-    captainEmail: captain.email,
-  })) as { teamId: string };
-  return { tenant, teamId };
+    ...extra,
+  );
+  return { tenant, teamId: teamIds[0], teamIds };
 }
 
 const addInvite = (teamId: string, email: string, expiresAt = Date.now() + 14 * DAY) =>
@@ -210,37 +220,40 @@ test.describe('team invites: refusals', () => {
 test.describe('team invites: a full team', () => {
   const FULL = 'roster-cap';
 
-  async function seedFullTeam(captain: TestUser, member: TestUser): Promise<string> {
-    const { tenant } = await seedTeam(captain);
-    await convexRun('testing:seedSeason', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      name: 'Roster Cap',
-      slug: FULL,
-      startDate: dateFromToday(40),
-      endDate: dateFromToday(100),
-      registrationDeadline: dateFromToday(20),
-      minimumRosterSize: 4,
-      maxRosterSize: 4,
-      status: 'published',
+  /**
+   * Sand Sharks of a season capped at 4: the captain, `member`, another player, and a minor of
+   * `member`, with an invite from before the minor filled it. `accounts` are people who never sign in.
+   */
+  async function seedFullTeam(
+    captain: TestUser,
+    member: TestUser,
+    accounts: TestUser[],
+  ): Promise<string> {
+    const other = newUser('Player');
+    const { teamIds } = await seedTeam(captain, {
+      accounts: [...accounts, other],
+      seasons: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          name: 'Roster Cap',
+          slug: FULL,
+          ...SEASON_DATES,
+          maxRosterSize: 4,
+        },
+      ],
+      teams: [
+        {
+          leagueSlug: LEAGUE_SLUG,
+          seasonSlug: FULL,
+          name: 'Sand Sharks',
+          captainEmail: captain.email,
+          playerEmails: [member.email, other.email],
+          invites: [{ email: 'before@example.com', expiresAt: Date.now() + 14 * DAY }],
+          minors: [{ guardianEmail: member.email, minorName: 'Theo Bell' }],
+        },
+      ],
     });
-    const { teamId } = (await convexRun('testing:seedTeam', {
-      organizationSlug: tenant.slug,
-      leagueSlug: LEAGUE_SLUG,
-      seasonSlug: FULL,
-      name: 'Sand Sharks',
-      captainEmail: captain.email,
-    })) as { teamId: string };
-    const other = await seedUser(newUser('Player'));
-    await convexRun('testing:addToTeam', { teamId, email: member.email });
-    await convexRun('testing:addToTeam', { teamId, email: other.email });
-    await addInvite(teamId, 'before@example.com');
-    await convexRun('testing:addMinorToTeam', {
-      teamId,
-      guardianEmail: member.email,
-      minorName: 'Theo Bell',
-    });
-    return teamId;
+    return teamIds[1];
   }
 
   test('the captain sees 4 of 4 players, the full note, and no invite form; the pending invite stays listed', async ({
@@ -248,8 +261,8 @@ test.describe('team invites: a full team', () => {
   }, testInfo) => {
     const captain = newUser('Captain');
     await signUp(page, captain);
-    const member = await seedUser(newUser('Member'));
-    const teamId = await seedFullTeam(captain, member);
+    const member = newUser('Member');
+    const teamId = await seedFullTeam(captain, member, [member]);
     await openTeam(page, teamId);
     await expect(page.getByTestId('roster-count')).toHaveText('4 of 4 players');
     await expect(page.getByTestId('roster-note')).toHaveText(
@@ -268,10 +281,10 @@ test.describe('team invites: a full team', () => {
   });
 
   test('a teammate sees Add a minor give way to the full note', async ({ page }, testInfo) => {
-    const captain = await seedUser(newUser('Captain'));
+    const captain = newUser('Captain');
     const member = newUser('Member');
     await signUp(page, member);
-    const teamId = await seedFullTeam(captain, member);
+    const teamId = await seedFullTeam(captain, member, [captain]);
     await openTeam(page, teamId);
     await expect(page.getByTestId('roster-count')).toHaveText('4 of 4 players');
     await expect(page.locator('#minor-name')).toHaveCount(0);

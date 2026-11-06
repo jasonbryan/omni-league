@@ -47,12 +47,14 @@ const byName = <T extends { name: string }>(items: T[]): T[] =>
     return x < y ? -1 : x > y ? 1 : 0;
   });
 
-/**
- * Call it from the test, so tests assert only on their own tenant and no reset runs between them. A
- * worker-scoped fixture may call it once for read-only tests to share; a test that writes still
- * seeds its own. Local runs only.
- */
-export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
+export interface TenantArgs {
+  organization: { name: string; slug: string; cityState?: string };
+  locations: { name: string; address: string }[];
+  leagues: LeagueSeed[];
+}
+
+/** A uniquely named tenant and the `testing:` arguments that create it, for `seedTenant` or a seed batch. */
+export function newTenant(seed: TenantSeed = {}): { tenant: Tenant; args: TenantArgs } {
   const id = randomBytes(4).toString('hex');
   const name = `${seed.name ?? 'E2E Org'} ${id}`;
   const slug = `e2e-${id}`;
@@ -63,14 +65,27 @@ export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
     slug,
     ...(seed.cityState !== undefined && { cityState: seed.cityState }),
   };
-  await convexRun('testing:seedLeague', { organization, locations, leagues });
   return {
-    name,
-    slug,
-    path: `/organizations/${slug}`,
-    locations: byName(locations),
-    leagues: byName(leagues),
+    tenant: {
+      name,
+      slug,
+      path: `/organizations/${slug}`,
+      locations: byName(locations),
+      leagues: byName(leagues),
+    },
+    args: { organization, locations, leagues },
   };
+}
+
+/**
+ * Call it from the test, so tests assert only on their own tenant and no reset runs between them. A
+ * worker-scoped fixture may call it once for read-only tests to share; a test that writes still
+ * seeds its own. Local runs only.
+ */
+export async function seedTenant(seed: TenantSeed = {}): Promise<Tenant> {
+  const { tenant, args } = newTenant(seed);
+  await convexRun('testing:seedLeague', { ...args });
+  return tenant;
 }
 
 export function numberedLocations(count: number): { name: string; address: string }[] {
@@ -89,7 +104,27 @@ export interface SeasonSeed {
   registrationDeadline?: string;
   /** Defaults to 4, which suits soccer and beach volleyball. */
   playersPerSide?: number;
+  /** Defaults to `playersPerSide`. */
+  minimumRosterSize?: number;
+  maxTeams?: number;
+  maxRosterSize?: number;
   status?: 'draft' | 'published';
+}
+
+/** The `testing:` fields of `season`, with its defaults filled in. */
+export function seasonArgs(season: SeasonSeed) {
+  return {
+    name: season.name,
+    slug: season.slug,
+    startDate: season.startDate,
+    endDate: season.endDate,
+    registrationDeadline: season.registrationDeadline ?? '2025-12-01',
+    playersPerSide: season.playersPerSide ?? 4,
+    minimumRosterSize: season.minimumRosterSize ?? season.playersPerSide ?? 4,
+    ...(season.maxTeams !== undefined && { maxTeams: season.maxTeams }),
+    ...(season.maxRosterSize !== undefined && { maxRosterSize: season.maxRosterSize }),
+    status: season.status ?? 'published',
+  };
 }
 
 /**
@@ -122,16 +157,7 @@ export async function seedSeasons(
   await convexRun('testing:seedSeasons', {
     organizationSlug: tenant.slug,
     leagueSlug,
-    seasons: seasons.map((season) => ({
-      name: season.name,
-      slug: season.slug,
-      startDate: season.startDate,
-      endDate: season.endDate,
-      registrationDeadline: season.registrationDeadline ?? '2025-12-01',
-      playersPerSide: season.playersPerSide ?? 4,
-      minimumRosterSize: season.playersPerSide ?? 4,
-      status: season.status ?? 'published',
-    })),
+    seasons: seasons.map(seasonArgs),
   });
 }
 
