@@ -228,12 +228,12 @@ Agents never push to `main` directly.
 
 ## Actions inventory and policy
 
-| Action / tool             | Version | Pin                                                                        | Used for                                                                                         |
-| ------------------------- | ------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `actions/checkout`        | v7.0.1  | `3d3c42e5aac5ba805825da76410c181273ba90b1`                                 | Checkout, always `persist-credentials: false`                                                    |
-| `actions/setup-node`      | v7.0.0  | `820762786026740c76f36085b0efc47a31fe5020`                                 | Node from `package.json`, automatic npm cache                                                    |
-| actionlint (binary)       | 1.7.12  | SHA-256 `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8` | Workflow lint, `linux_amd64` tarball from the GitHub release                                     |
-| `actions/upload-artifact` | v7.0.1  | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`                                 | `e2e-report-<n>` artifact, one per `e2e` shard, `retention-days: 7` (#13); not v7.0.2 (ADR 0009) |
+| Action / tool             | Version | Pin                                                                        | Used for                                                                  |
+| ------------------------- | ------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `actions/checkout`        | v7.0.1  | `3d3c42e5aac5ba805825da76410c181273ba90b1`                                 | Checkout, always `persist-credentials: false`                             |
+| `actions/setup-node`      | v7.0.0  | `820762786026740c76f36085b0efc47a31fe5020`                                 | Node from `package.json`, automatic npm cache                             |
+| actionlint (binary)       | 1.7.12  | SHA-256 `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8` | Workflow lint, `linux_amd64` tarball from the GitHub release              |
+| `actions/upload-artifact` | v7.0.2  | `cf430e030ddbb5b0abf93d22962f4752f3646cd9`                                 | `e2e-report-<n>` artifact, one per `e2e` shard, `retention-days: 7` (#13) |
 
 - **Only GitHub-owned actions** (`actions/*`, `github/*`), each pinned to a full 40-character commit SHA with `# vX.Y.Z` on the same line. Dependabot (`.github/dependabot.yml`, monthly, grouped minor and patch) updates the SHA and the comment.
 - **actionlint** is not an action: the `ci` job downloads the tarball, checks it with `sha256sum --check --strict`, and runs it. Its version and hash live in the workflow's top-level `env:` and are bumped by hand, because Dependabot does not track it. The PR reviewer checks the actionlint release about quarterly; a patch or minor bump needs no gate.

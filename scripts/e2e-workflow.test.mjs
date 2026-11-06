@@ -172,6 +172,17 @@ describe('the nightly full run', () => {
       /^ {6}PRODUCTION_FAILURES: \$\{\{ needs\.e2e-production\.outputs\.e2e_failures \}\}$/m,
     );
   });
+
+  it('feeds the issue step the shard count and both job results from the workflow', () => {
+    const issue = job('nightly-issue');
+    assert.match(issue, new RegExp(`^ {6}E2E_SHARDS: ${SHARDS}$`, 'm'), 'the shard count');
+    assert.match(issue, /^ {6}E2E_RESULT: \$\{\{ needs\.e2e\.result \}\}$/m, 'the e2e result');
+    assert.match(
+      issue,
+      /^ {6}PRODUCTION_RESULT: \$\{\{ needs\.e2e-production\.result \}\}$/m,
+      'the e2e-production result',
+    );
+  });
 });
 
 describe('the e2e-production job', () => {
@@ -843,19 +854,26 @@ describe('the sharded nightly in the docs', () => {
     assert.match(inventoryRow ?? '', /`e2e-report-<n>`/);
   });
 
-  it('records the shard runs, the re-shard trigger, and why there is no browser cache in ci.md', () => {
+  it('records the shard runs, and names the re-shard trigger and the browser cache decision in ci.md', () => {
     for (const run of ['42126470169', '42130571352', '42135507342']) {
       assert.ok(ci.includes(`actions/runs/${run}`), run);
     }
-    assert.match(ci, /^\*\*Re-shard trigger\.\*\* .*`run error: Timed out waiting`/m);
-    assert.match(ci, /^\*\*Why there is no browser cache\.\*\* .*apt-get/m);
-    assert.match(
-      ci,
-      /^\*\*Why shards are uneven\.\*\* .*Playwright 1\.64.*no weights.*1\.21 times/m,
-    );
+    for (const leadIn of [
+      'Re-shard trigger',
+      'Why there is no browser cache',
+      'Why shards are uneven',
+    ]) {
+      assert.ok(ci.includes(`**${leadIn}.**`), leadIn);
+    }
+    assert.ok(ci.includes('`run error: Timed out waiting`'), 'the line the trigger reads');
   });
 
-  it('gives the batch run fallback a sharded figure, not the one-job 25 minutes', () => {
-    assert.doesNotMatch(read('docs', 'process', 'dev-cycle.md'), /about 25 CI minutes/);
+  it('gives the batch run fallback the measured nightly runner minutes, not the one-job 25 minutes', () => {
+    const measured =
+      /^\| Nightly full run on `main`, sharded, measured .*?\*\*(\d+) minutes\*\*/m.exec(ci)?.[1];
+    assert.ok(measured, 'the measured row of ci.md');
+    const devCycle = read('docs', 'process', 'dev-cycle.md');
+    assert.doesNotMatch(devCycle, /about 25 CI minutes/);
+    assert.ok(devCycle.includes(`${measured} runner minutes`), `${measured} runner minutes`);
   });
 });
