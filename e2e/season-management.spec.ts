@@ -117,6 +117,14 @@ async function asOrgAdmin(
 ): Promise<{ tenant: Tenant; teamIds: string[] }> {
   const admin = newUser('Admin');
   await signUp(page, admin);
+  return seedForOrgAdmin(admin, ...extra);
+}
+
+/** `admin` has signed up in a browser. */
+async function seedForOrgAdmin(
+  admin: TestUser,
+  ...extra: SeedBatch[]
+): Promise<{ tenant: Tenant; teamIds: string[] }> {
   const { tenant, batch } = leagues();
   const { teamIds } = await seedBatch(
     batch,
@@ -265,9 +273,10 @@ test.describe('Season management: an org admin', () => {
 const placeDialog = (page: Page) => page.getByRole('dialog');
 
 async function placeAsOrgAdmin(page: Page, browser: Browser) {
+  const admin = newUser('Admin');
   const waiting = newUser('Waiting');
-  const waitingPage = await otherUser(browser, waiting);
-  const { tenant, teamIds } = await asOrgAdmin(page, summer().batch, {
+  const [waitingPage] = await Promise.all([otherUser(browser, waiting), signUp(page, admin)]);
+  const { tenant, teamIds } = await seedForOrgAdmin(admin, summer().batch, {
     freeAgents: [{ leagueSlug: LEAGUE_SLUG, seasonSlug: SUMMER, email: waiting.email }],
   });
   return { tenant, teamIds: teamIdsByName(teamIds), waiting, waitingPage };
@@ -463,20 +472,22 @@ test.describe('Season management: callers who may not open it', () => {
     page,
     browser,
   }, testInfo) => {
+    const admin = newUser('Admin');
     const otherOrganizer = newUser('Other organizer');
     const captain = newUser('Captain');
     const stranger = newUser('Stranger');
-    const pages = await Promise.all(
-      [otherOrganizer, captain, stranger].map((user) => otherUser(browser, user)),
-    );
+    const [, ...pages] = await Promise.all([
+      signUp(page, admin),
+      ...[otherOrganizer, captain, stranger].map((user) => otherUser(browser, user)),
+    ]);
     try {
       const organizerOfOtherLeague = {
         email: otherOrganizer.email,
         role: 'leagueOrganizer' as const,
         leagueSlugs: [OTHER_LEAGUE_SLUG],
       };
-      const { tenant } = await asOrgAdmin(
-        page,
+      const { tenant } = await seedForOrgAdmin(
+        admin,
         { memberships: [organizerOfOtherLeague] },
         summer([captain]).batch,
       );

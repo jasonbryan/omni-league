@@ -175,7 +175,7 @@ test.describe('a guardian on the team page', () => {
   test.use({ expectedConvexErrors: ['rosterEntries:addMinor'] });
 
   test('adds a second minor from the team page and renames one', async ({ page }, testInfo) => {
-    test.slow(); // REASON
+    test.slow(); // six axe scans and Tab walks: about 13 s of its 19 s on a GitHub runner
     const guardian = named('Guardian', 'Marcus Bell');
     await signUp(page, guardian);
     const s = await seedSeason({
