@@ -147,6 +147,7 @@ describe('AdminStaff', () => {
     if (lists.leagues) o.subscription(LIST_LEAGUES)!.emit(lists.leagues);
     await o.flush();
   }
+  const main = () => document.querySelector<HTMLElement>('main#main')!;
   const openFull = () => open({ members: MEMBERS, pending: PENDING, leagues: LEAGUES });
 
   const input = (id: string) => page.querySelector<HTMLInputElement>(`#${id}`)!;
@@ -1215,20 +1216,21 @@ describe('AdminStaff', () => {
       expect(document.activeElement).toBe(statusBox());
     });
 
+    const revokeReplies: [string, () => void][] = [
+      ['success', () => o.convex.calls[0].resolve(null)],
+      ['offline', () => o.convex.calls[0].reject(new ConvexOfflineError())],
+      ['a server error', () => o.convex.calls[0].reject(new Error('Server Error: secret'))],
+      [
+        'a refusal',
+        () =>
+          o.convex.calls[0].reject(
+            new ConvexError({ code: 'notPending', message: INVITE_MESSAGES.revokeNotPending }),
+          ),
+      ],
+    ];
+
     describe('a user who moves on to Email while the revoke is in flight keeps focus there', () => {
-      const replies: [string, () => void][] = [
-        ['success', () => o.convex.calls[0].resolve(null)],
-        ['offline', () => o.convex.calls[0].reject(new ConvexOfflineError())],
-        ['a server error', () => o.convex.calls[0].reject(new Error('Server Error: secret'))],
-        [
-          'a refusal',
-          () =>
-            o.convex.calls[0].reject(
-              new ConvexError({ code: 'notPending', message: INVITE_MESSAGES.revokeNotPending }),
-            ),
-        ],
-      ];
-      for (const [name, reply] of replies) {
+      for (const [name, reply] of revokeReplies) {
         it(name, async () => {
           await openFull();
           await press(0);
@@ -1238,6 +1240,76 @@ describe('AdminStaff', () => {
           await o.flush();
           expect(statusBox()).not.toBeNull();
           expect(document.activeElement).toBe(email);
+        });
+      }
+    });
+
+    describe('focus after the reply to a Revoke follows what the user pressed or focused last', () => {
+      const description = () => page.querySelector<HTMLElement>('h1 + p')!;
+      const pressWithoutFocus = async () => {
+        main().focus();
+        await press(0);
+        expect(document.activeElement).toBe(main());
+      };
+
+      for (const [name, reply] of revokeReplies) {
+        describe(name, () => {
+          it('takes focus when Revoke was clicked without taking it and nothing else was pressed', async () => {
+            await openFull();
+            await pressWithoutFocus();
+            reply();
+            await o.flush();
+            expect(document.activeElement).toBe(statusBox());
+          });
+
+          const moves: [string, () => void][] = [
+            ['plain text in the page', () => description().click()],
+            ['a Role radio', () => input('role-admin').click()],
+            ['a league check box', () => league(1).click()],
+          ];
+          for (const [move, click] of moves) {
+            it(`leaves focus on <main> after a click on ${move} without focus`, async () => {
+              await openFull();
+              await pressWithoutFocus();
+              click();
+              reply();
+              await o.flush();
+              expect(statusBox()).not.toBeNull();
+              expect(document.activeElement).toBe(main());
+            });
+          }
+
+          it('leaves focus on <body> after the pressed Revoke lost focus to it', async () => {
+            await openFull();
+            revokeButton(0).focus();
+            await press(0);
+            revokeButton(0).blur();
+            await o.flush();
+            expect(document.activeElement).toBe(document.body);
+            reply();
+            await o.flush();
+            expect(statusBox()).not.toBeNull();
+            expect(document.activeElement).toBe(document.body);
+          });
+
+          it('leaves focus on <body> after a click on plain text outside the page, as in WebKit', async () => {
+            await openFull();
+            await pressWithoutFocus();
+            const outside = document.createElement('p');
+            document.body.append(outside);
+            try {
+              outside.click();
+              main().blur();
+              await o.flush();
+              expect(document.activeElement).toBe(document.body);
+              reply();
+              await o.flush();
+              expect(statusBox()).not.toBeNull();
+              expect(document.activeElement).toBe(document.body);
+            } finally {
+              outside.remove();
+            }
+          });
         });
       }
     });
@@ -1288,6 +1360,19 @@ describe('AdminStaff', () => {
       undoButton()!.click();
       await o.flush();
     }
+
+    const undoReplies: [string, () => void][] = [
+      ['success', () => o.convex.calls[1].resolve(null)],
+      ['offline', () => o.convex.calls[1].reject(new ConvexOfflineError())],
+      ['a server error', () => o.convex.calls[1].reject(new Error('Server Error: secret'))],
+      [
+        'a refusal',
+        () =>
+          o.convex.calls[1].reject(
+            new ConvexError({ code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked }),
+          ),
+      ],
+    ];
 
     async function goOffline() {
       vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
@@ -1648,19 +1733,7 @@ describe('AdminStaff', () => {
       });
 
       describe('a user who moves on to Email while an Undo is in flight keeps focus there', () => {
-        const replies: [string, () => void][] = [
-          ['success', () => o.convex.calls[1].resolve(null)],
-          ['offline', () => o.convex.calls[1].reject(new ConvexOfflineError())],
-          ['a server error', () => o.convex.calls[1].reject(new Error('Server Error: secret'))],
-          [
-            'a refusal',
-            () =>
-              o.convex.calls[1].reject(
-                new ConvexError({ code: 'notRevoked', message: INVITE_MESSAGES.restoreNotRevoked }),
-              ),
-          ],
-        ];
-        for (const [name, reply] of replies) {
+        for (const [name, reply] of undoReplies) {
           for (const windowPassed of [false, true]) {
             it(`${name}, with the window ${windowPassed ? 'passed' : 'open'}`, async () => {
               await revokeDana();
@@ -1703,6 +1776,21 @@ describe('AdminStaff', () => {
         await o.harness.navigateByUrl('/app');
         expect(cleared).toHaveBeenCalledWith(started.mock.results[call].value);
       });
+    });
+
+    describe('focus after the reply to an Undo follows what the user pressed or focused last', () => {
+      for (const [name, reply] of undoReplies) {
+        it(`stays on <main> after a click on plain text, with ${name}`, async () => {
+          await revokeDana();
+          main().focus();
+          await pressUndo();
+          page.querySelector<HTMLElement>('h1 + p')!.click();
+          reply();
+          await o.flush();
+          expect(statusBox()).not.toBeNull();
+          expect(document.activeElement).toBe(main());
+        });
+      }
     });
 
     describe('Revoke while an Undo is in flight', () => {

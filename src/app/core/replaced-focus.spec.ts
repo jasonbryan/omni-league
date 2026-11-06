@@ -8,6 +8,7 @@ import { NotSavedView } from '../offline/not-saved-view';
 import { PublicLayout } from '../public-layout/public-layout';
 import { ServerErrorView } from '../server-error/server-error-view';
 import { Shell } from '../shell/shell';
+import { MainFocusRecord } from './replaced-focus';
 
 type Shown = 'content' | 'view' | 'other view';
 
@@ -308,3 +309,81 @@ describe.each(VIEWS)(
     });
   },
 );
+
+@Component({
+  selector: 'app-main-focus-record-test-page',
+  imports: [PublicLayout],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <app-public-layout>
+      <a href="/next" id="pressed">Next page</a>
+      <p id="blank">Text with no control</p>
+      <input type="radio" name="choice" id="radio" />
+    </app-public-layout>
+  `,
+})
+class RecordTestPage {}
+
+describe('MainFocusRecord', () => {
+  let fixture: ComponentFixture<RecordTestPage>;
+  let record: MainFocusRecord;
+  let outside: HTMLElement;
+
+  beforeEach(async () => {
+    const auth = new FakeAuthClient();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeAuthClient(auth),
+        { provide: CONVEX_CLIENT, useValue: new FakeConvexClient() },
+        provideRouter([]),
+      ],
+    });
+    auth.emitSession(null);
+    fixture = TestBed.createComponent(RecordTestPage);
+    await fixture.whenStable();
+    record = TestBed.inject(MainFocusRecord);
+    outside = document.createElement('p');
+    document.body.append(outside);
+  });
+
+  afterEach(() => {
+    outside.remove();
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+
+  const find = (selector: string) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(selector)!;
+  const click = (element: HTMLElement) =>
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+
+  it('records a click on a radio in main that does not take focus', () => {
+    click(find('#radio'));
+    expect(record.lastIs(find('#radio'))).toBe(true);
+  });
+
+  it('records main for a click on plain text in main while main holds focus, after an earlier press', () => {
+    find('main#main').focus();
+    click(find('#pressed'));
+    expect(record.lastIs(find('#pressed'))).toBe(true);
+    click(find('#blank'));
+    expect(record.lastIs(find('main#main'))).toBe(true);
+    expect(record.lastIs(find('#pressed'))).toBe(false);
+  });
+
+  it.each([
+    ['main holds focus', () => find('main#main').focus()],
+    ['the pressed link holds focus', () => find('#pressed').focus()],
+  ])('clears the record for a click on plain text outside main when %s', (_label, focus) => {
+    focus();
+    click(find('#pressed'));
+    expect(record.lastIs(find('#pressed'))).toBe(true);
+    click(outside);
+    expect(record.lastIs(find('#pressed'))).toBe(false);
+    expect(record.lastIsInside(find('main#main'))).toBe(false);
+  });
+
+  it('names no element when nothing in main was pressed or focused', () => {
+    expect(record.lastIs(find('#pressed'))).toBe(false);
+    expect(record.lastIs(null)).toBe(false);
+  });
+});
