@@ -42,7 +42,6 @@ export default defineSchema({
     draftLeagueCount: v.optional(v.number()),
     locationCount: v.optional(v.number()),
     staffCount: v.optional(v.number()),
-    /** The organization's `pending` invites, expired ones included. */
     pendingInviteCount: v.optional(v.number()),
     sportLeagueCounts: v.optional(sportCountsValidator),
     sportLocationCounts: v.optional(sportCountsValidator),
