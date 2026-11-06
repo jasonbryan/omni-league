@@ -2,6 +2,7 @@
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
+import { recountPendingInvites } from './lib/inviteWrites';
 import { hashInviteToken } from './lib/inviteToken';
 import { insertTeamWithCaptain } from './lib/rosterWrites';
 import { insertSeason, insertTenant } from './lib/tenantWrites';
@@ -86,6 +87,54 @@ describe('testing:addInvite', () => {
     await expect(
       t.mutation(internal.testing.addInvite, { ...INVITE, leagueNames: ['Missing'] }),
     ).rejects.toThrow(/No league/);
+    expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
+  });
+});
+
+describe('testing:seedPendingInvites', () => {
+  const SEED = { organizationSlug: 'org-a', count: 3, emailPrefix: 'many' };
+  const organization = (t: Awaited<ReturnType<typeof setup>>) =>
+    t.run(async (ctx) => (await ctx.db.query('organizations').first())!);
+
+  test.each([undefined, 'false', 'TRUE', ''])(
+    'throws with IS_TEST %j and writes nothing',
+    async (value) => {
+      vi.stubEnv('IS_TEST', value);
+      const t = await setup();
+      const before = (await organization(t)).pendingInviteCount;
+      await expect(t.mutation(internal.testing.seedPendingInvites, SEED)).rejects.toThrow(
+        /IS_TEST/,
+      );
+      expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
+      expect((await organization(t)).pendingInviteCount).toBe(before);
+    },
+  );
+
+  test('writes the given number of pending invites with distinct emails, and the counter equals a recount', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    await t.mutation(internal.testing.seedPendingInvites, SEED);
+    const rows = await t.run((ctx) => ctx.db.query('invites').collect());
+    expect(rows.map((row) => row.email)).toEqual([
+      'many-001@example.test',
+      'many-002@example.test',
+      'many-003@example.test',
+    ]);
+    expect(rows.map((row) => row.status)).toEqual(['pending', 'pending', 'pending']);
+    expect(rows.every((row) => row.role === 'orgAdmin' && row.leagueIds.length === 0)).toBe(true);
+    expect(new Set(rows.map((row) => row.tokenHash)).size).toBe(3);
+    expect(rows.every((row) => row.expiresAt > Date.now())).toBe(true);
+    const row = await organization(t);
+    expect(row.pendingInviteCount).toBe(3);
+    expect(await t.run((ctx) => recountPendingInvites(ctx, row._id))).toBe(3);
+  });
+
+  test('refuses an unknown organization slug and writes nothing', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const t = await setup();
+    await expect(
+      t.mutation(internal.testing.seedPendingInvites, { ...SEED, organizationSlug: 'nope' }),
+    ).rejects.toThrow(/No organization/);
     expect(await t.run((ctx) => ctx.db.query('invites').collect())).toEqual([]);
   });
 });

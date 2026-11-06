@@ -39,6 +39,7 @@ import {
 } from '../admin/field-classes';
 import { formatDay } from '../admin/format-day';
 import { ROW_TITLE_LINK } from '../admin/link-classes';
+import { CAP_NOTE } from '../admin/note-classes';
 import { CURRENT_CRUMB_LINK, LEAGUE_CRUMB_LINK, NAME_CRUMB } from '../league/league-breadcrumb';
 import { leaguePath } from '../league/league-path';
 import { seasonDates } from '../league/season-dates';
@@ -65,7 +66,6 @@ const EMPTY = 'flex flex-col items-center px-6 py-10 text-center';
 const EMPTY_ICON =
   'flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground';
 const EMPTY_TEXT = 'mt-1 max-w-xs text-sm text-balance text-muted-foreground';
-const CAP_NOTE = 'border-t border-border px-4 py-3 text-sm text-muted-foreground md:px-5';
 const PANEL_NOTE = 'border-b border-border px-4 py-3 md:px-5';
 const EMAIL_LINK =
   'inline-flex items-center break-all underline underline-offset-4 hover:text-foreground pointer-coarse:min-h-11';

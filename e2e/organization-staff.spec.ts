@@ -633,6 +633,66 @@ test.describe('Staff: members and the Overview tile', () => {
   });
 });
 
+test.describe('Staff: past 200 rows', () => {
+  const CAPPED_ORG = 'E2E Staff capped';
+  const prefix = () => `capped-${randomBytes(4).toString('hex')}`;
+  const staffPath = (slug: string) => `/app/organizations/${slug}/staff`;
+  const sectionNote = (page: Page, text: string) => main(page).getByText(text, { exact: true });
+
+  test('201 pending invites list 200 and say so; revoking the first drops the note and Undo brings it back', async ({
+    page,
+  }, testInfo) => {
+    test.slow(); // a 201-invite seed and an axe Tab walk over about 210 tab stops
+    const emailPrefix = prefix();
+    const { tenant } = await memberOf(page, 'orgAdmin', { name: CAPPED_ORG });
+    await convexRun('testing:seedPendingInvites', {
+      organizationSlug: tenant.slug,
+      count: 201,
+      emailPrefix,
+    });
+    const first = `${emailPrefix}-001@example.test`;
+    const note = sectionNote(page, 'Showing the first 200 of 201 pending invites.');
+    await page.goto(staffPath(tenant.slug));
+    await expect(pendingRows(page)).toHaveCount(200);
+    await expect(pendingRows(page).first().locator('h3')).toHaveText(first);
+    await expect(note).toBeVisible();
+    await expectAccessible(page);
+    await screenshot(page, testInfo, '568-staff-invites-capped');
+
+    await page.getByRole('button', { name: `Revoke the invite to ${first}` }).click();
+    await expect(page.getByText(`Invite to ${first} revoked.`)).toBeVisible();
+    await expect(pendingRows(page)).toHaveCount(200);
+    await expect(note).toHaveCount(0);
+
+    await page.getByRole('button', { name: `Undo revoking the invite to ${first}` }).click();
+    await expect(page.getByText(`Invite to ${first} restored.`)).toBeVisible();
+    await expect(pendingRows(page)).toHaveCount(200);
+    await expect(pendingRows(page).first().locator('h3')).toHaveText(first);
+    await expect(note).toBeVisible();
+  });
+
+  test('202 members list the 200 added first and say so', async ({ page }, testInfo) => {
+    test.slow(); // a 201-account seed and an axe Tab walk over about 210 tab stops
+    const emailPrefix = prefix();
+    const { tenant } = await memberOf(page, 'orgAdmin', { name: CAPPED_ORG });
+    await convexRun('testing:seedStaff', {
+      organizationSlug: tenant.slug,
+      count: 201,
+      emailPrefix,
+    });
+    await page.goto(staffPath(tenant.slug));
+    await expect(memberRows(page)).toHaveCount(200);
+    await expect(memberRows(page).filter({ hasText: '(you)' })).toHaveCount(1);
+    await expect(memberRows(page).locator('h3', { hasText: 'Staff 199' })).toHaveCount(1);
+    await expect(memberRows(page).locator('h3', { hasText: /^\s*Staff 20[01]\s*$/ })).toHaveCount(
+      0,
+    );
+    await expect(sectionNote(page, 'Showing the 200 added first, of 202 members.')).toBeVisible();
+    await expectAccessible(page);
+    if (!isDesktop(page)) await screenshot(page, testInfo, '568-staff-members-capped');
+  });
+});
+
 test.describe('Staff: who may open it', () => {
   function sentFrames(page: Page): string[] {
     const frames: string[] = [];
