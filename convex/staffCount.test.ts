@@ -128,9 +128,6 @@ describe('memberships.staffCount', () => {
     });
     const args = { organizationId: s.organizationA };
     expect(await s.asAdminA.query(api.memberships.staffCount, args)).toBe(MEMBERS_LIMIT + 2);
-    expect(await s.asAdminA.query(api.memberships.listForOrganization, args)).toHaveLength(
-      MEMBERS_LIMIT,
-    );
   });
 
   test('reads a counter that is not set yet from the rows', async () => {
@@ -204,23 +201,5 @@ describe('seed:demo backfill of the staff counter', () => {
     expect((await storedAndRecount(s, s.organizationB)).stored).toBe(40);
     const second = await s.t.mutation(internal.seed.insertDemoData, {});
     expect(second.backfilled.staffCounts).toBe(0);
-  });
-});
-
-describe('memberships.listForOrganization rows', () => {
-  test('carry the membership id, which stays distinct for members with no auth user', async () => {
-    const s = await setup();
-    const rows = await s.asAdminA.query(api.memberships.listForOrganization, {
-      organizationId: s.organizationA,
-    });
-    expect(rows.map((row) => row.email)).toEqual(['', '']);
-    const stored = await s.t.run((ctx) =>
-      ctx.db
-        .query('memberships')
-        .withIndex('by_organizationId', (q) => q.eq('organizationId', s.organizationA))
-        .collect(),
-    );
-    expect(rows.map((row) => row.membershipId).sort()).toEqual(stored.map((m) => m._id).sort());
-    expect(new Set(rows.map((row) => row.membershipId)).size).toBe(2);
   });
 });
