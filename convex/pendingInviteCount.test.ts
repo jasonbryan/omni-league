@@ -279,6 +279,30 @@ describe('the pending-invite counter', () => {
     expect(await storedAndRecount(s, s.organizationA)).toEqual({ stored: 2, recount: 2 });
   });
 
+  test('stays exact past 200 pending invites when one is revoked and restored through the app', async () => {
+    vi.stubEnv('IS_TEST', 'true');
+    const s = await setup();
+    for (let n = 0; n < PENDING_INVITES_LIMIT + 5; n++) {
+      await s.t.mutation(internal.testing.addInvite, {
+        organizationSlug: 'org-a',
+        email: `p${n}@example.com`,
+        role: 'orgAdmin',
+        expiresAt: NOW + 1_000,
+      });
+    }
+    const args = { organizationId: s.organizationA };
+    expect(await s.asAdminA.query(api.invites.pendingCount, args)).toBe(PENDING_INVITES_LIMIT + 5);
+    const [first] = await s.asAdminA.query(api.invites.listPending, args);
+    await revoke(s, first.inviteId);
+    expect(await s.asAdminA.query(api.invites.pendingCount, args)).toBe(PENDING_INVITES_LIMIT + 4);
+    await restore(s, first.inviteId);
+    expect(await s.asAdminA.query(api.invites.pendingCount, args)).toBe(PENDING_INVITES_LIMIT + 5);
+    expect(await storedAndRecount(s, s.organizationA)).toEqual({
+      stored: PENDING_INVITES_LIMIT + 5,
+      recount: PENDING_INVITES_LIMIT + 5,
+    });
+  });
+
   test('stays put when a write is refused', async () => {
     const s = await setup();
     await create(s, 'kept@example.com');
